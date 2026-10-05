@@ -40,8 +40,13 @@ const routeFor = (
         enrolled?: boolean;
         online?: boolean;
         knownTools?: unknown;
-        beforeCall?: (payload: unknown, call: { readonly id: string; readonly conversationId: string | undefined }) => Promise<{ refusal: string } | undefined>;
+        beforeCall?: (
+            payload: unknown,
+            call: { readonly id: string; readonly conversationId: string | undefined },
+        ) => Promise<{ refusal: string } | undefined>;
         sealAnswer?: (id: string, tool: string, answer: unknown) => unknown;
+        wake?: { send: (id: string) => Promise<boolean>; waitMs: number };
+        whenOnline?: (id: string, timeoutMs: number) => Promise<boolean>;
     } = {},
 ) => {
     const remembered: unknown[] = [];
@@ -51,6 +56,7 @@ const routeFor = (
         state: () => ({ online: overrides.online ?? true, announced: { version: "0.1.0" } }),
         knownTools: () => overrides.knownTools,
         rememberTools: (_id: string, result: unknown) => void remembered.push(result),
+        whenOnline: overrides.whenOnline ?? (async () => false),
     } as unknown as Hub;
     const store = { enrolled: async () => overrides.enrolled ?? true } as unknown as PeerStore<Record<never, never>>;
     const routes = createPeerRoutes({ logger: { warn: () => {} } } as unknown as Services, door, {
@@ -59,6 +65,7 @@ const routeFor = (
         summaries: async () => [],
         ...(overrides.beforeCall === undefined ? {} : { beforeCall: overrides.beforeCall }),
         ...(overrides.sealAnswer === undefined ? {} : { sealAnswer: overrides.sealAnswer }),
+        ...(overrides.wake === undefined ? {} : { wake: overrides.wake }),
     });
     const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:1/mcp" });
     const { token } = mounts.lease("conv-1").open({ name: "laptop", target: { kind: "device", id: "laptop" } });
@@ -231,7 +238,10 @@ test("a door without a bridge answers every message with that, and reaches for n
 test("the door's judgement is told which machine and which conversation a call came from", async () => {
     const beforeCall = jest.fn(async () => undefined);
     await post(routeFor({ beforeCall }), { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "run_command" } });
-    expect(beforeCall).toHaveBeenCalledWith({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "run_command" } }, { id: "laptop", conversationId: "conv-1" });
+    expect(beforeCall).toHaveBeenCalledWith(
+        { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "run_command" } },
+        { id: "laptop", conversationId: "conv-1" },
+    );
 });
 
 // The hello frame resolves which peer is knocking; the card decides whether anything still grants it a machine, and its
@@ -334,4 +344,42 @@ test("a grant the hub could not deliver ends the greeting without asking the pee
     expect(run.client.describe).not.toHaveBeenCalled();
     expect(run.hangUp).not.toHaveBeenCalled();
     expect(run.onConnected).not.toHaveBeenCalled();
+});
+
+// A phone in a pocket holds no socket: a tool call wakes it and waits for it rather than answering "asleep" at once.
+test("a tool call to an asleep peer that can be woken wakes it, waits for it, and is answered by it", async () => {
+    let online = false;
+    const send = jest.fn(async () => true);
+    const whenOnline = jest.fn(async () => {
+        online = true;
+        return true;
+    });
+    const mcp = jest.fn(async () => (online ? { jsonrpc: "2.0", id: 7, result: { content: [] } } : Promise.reject(new Error("asleep"))));
+    const app = routeFor({ online: false, mcp, wake: { send, waitMs: 20_000 }, whenOnline });
+    const answered = (await (await post(app, { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "screenshot" } })).json()) as {
+        result?: unknown;
+    };
+    expect(send).toHaveBeenCalledWith("laptop");
+    expect(whenOnline).toHaveBeenCalledWith("laptop", 20_000);
+    expect(answered.result).toEqual({ content: [] });
+});
+
+test("a peer that could not be woken answers asleep at once, without waiting out the deadline", async () => {
+    const whenOnline = jest.fn(async () => true);
+    const mcp = jest.fn(async () => {
+        throw new Error("asleep and did not come");
+    });
+    const app = routeFor({ online: false, mcp, wake: { send: async () => false, waitMs: 20_000 }, whenOnline });
+    const answered = (await (await post(app, { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "screenshot" } })).json()) as {
+        error?: { message: string };
+    };
+    expect(whenOnline).not.toHaveBeenCalled();
+    expect(answered.error?.message).toBe("asleep and did not come");
+});
+
+test("listing an asleep peer's tools does not wake it", async () => {
+    const send = jest.fn(async () => true);
+    const app = routeFor({ online: false, knownTools: { tools: [] }, wake: { send, waitMs: 20_000 } });
+    await post(app, { jsonrpc: "2.0", id: 9, method: "tools/list" });
+    expect(send).not.toHaveBeenCalled();
 });

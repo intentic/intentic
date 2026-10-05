@@ -98,6 +98,7 @@ const paneOn = (selected: CapabilityCatalogEntry | undefined) => {
         sources: ref<ConnectionSources>({
             host: (id) => hosts.find((found) => found.id === id),
             browser: () => undefined,
+            phone: () => undefined,
             vpn: [],
             netdisk: [],
             devices: [],

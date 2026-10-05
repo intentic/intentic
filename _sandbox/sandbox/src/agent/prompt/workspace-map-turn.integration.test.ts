@@ -105,6 +105,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
         webextReach: async () => undefined,
+        phoneReach: async () => undefined,
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
         async *codexAgent() {},

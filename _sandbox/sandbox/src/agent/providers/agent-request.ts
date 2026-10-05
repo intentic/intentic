@@ -20,6 +20,7 @@ import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
 import type { HeavyCommands } from "../../system/resources/heavy-commands.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
+import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { GuidanceVariant, SearchTool } from "../prompt/guidance.js";
@@ -161,6 +162,8 @@ export interface TurnTools {
     readonly hostDevices?: HostDeviceReach | undefined;
     // The owner's own browsers this turn carries servers for, so the prompt can say the one they watch is right here.
     readonly ownBrowsers?: OwnBrowserReach | undefined;
+    // The owner's own phones this turn carries servers for, so the prompt can say one is in their pocket.
+    readonly ownPhones?: OwnPhoneReach | undefined;
     // Directory for browser tool artifacts (the `--output-dir` value); drives the redirect hook and read-back path.
     readonly browserOutputDir?: string;
     // Each browser profile owner's CDP debugging port, so the first browser call can register a watchable session.

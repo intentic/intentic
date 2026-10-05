@@ -1,5 +1,14 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { extensionGrantablesFrom, FULL_POWERS, personaSlug, personaStartDirs, personasStartingIn, powersDraftOf, storedPowers } from "./personaRules";
+import {
+    extensionGrantablesFrom,
+    FULL_POWERS,
+    grantablesFrom,
+    personaSlug,
+    personaStartDirs,
+    personasStartingIn,
+    powersDraftOf,
+    storedPowers,
+} from "./personaRules";
 
 // Rules shared by both persona-card surfaces: an id differing by a hyphen upserts a different persona, and a powers
 // block should only be written once some shelf is off.
@@ -103,4 +112,17 @@ describe(`extensionGrantablesFrom`, () => {
             { id: `acme.notes`, kind: `extension`, label: `notes`, detail: `acme.notes` },
         ]);
     });
+});
+
+test(`a phone is offered with the computers, on the one devices list a persona grants`, () => {
+    expect(
+        grantablesFrom([
+            { id: `pixel`, kind: `phone` },
+            { id: `rog`, kind: `device` },
+            { id: `chrome`, kind: `webext` },
+        ]),
+    ).toEqual([
+        { id: `pixel`, kind: `device`, label: `pixel` },
+        { id: `rog`, kind: `device`, label: `rog` },
+    ]);
 });

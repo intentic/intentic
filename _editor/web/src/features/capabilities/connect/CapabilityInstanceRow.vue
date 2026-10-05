@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import type { HostSummary, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
@@ -18,6 +18,8 @@ const props = defineProps<{
     host?: HostSummary | undefined;
     /** The same, for a webext-kind one: the browser this extension is installed in. */
     browser?: WebExtSummary | undefined;
+    /** The same, for a phone-kind one: the phone the Intentic Device app runs on. */
+    phone?: PhoneSummary | undefined;
     /** The state in the reader's words: read from the same place the Connected inventory reads it. */
     state: ConnectionState;
     /** What this connection says about itself: a tunnel's address, a machine's OS, a database's host. */
@@ -28,12 +30,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: [] }>();
 
-// A device connects by running a command on it; a browser, by pasting a code into it. One that's never checked in
-// is waiting on that step; one that has is merely asleep, which a fresh pairing won't wake.
+// A device connects by running a command on it; a browser, by pasting a code into it; a phone, by scanning a code
+// with it. One that's never checked in is waiting on that step; one that has is merely asleep, which a fresh pairing
+// won't wake.
 const isHost = computed(() => props.entry.kind === `device`);
 const isBrowser = computed(() => props.entry.kind === `webext`);
-const pairs = computed(() => isHost.value || isBrowser.value);
-const paired = computed(() => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen));
+const isPhone = computed(() => props.entry.kind === `phone`);
+const pairs = computed(() => isHost.value || isBrowser.value || isPhone.value);
+const paired = computed(() => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen ?? props.phone?.lastSeen));
 
 // A browser capability connects via a live login window; once signed in, the same window is how the user acts in it.
 const signsIn = computed(() => signsInByHand(props.entry.kind));
@@ -57,7 +61,11 @@ const pairingCode = computed(() => props.instance.status.code);
 // the way back in. Undefined is fine, e.g. an MCP server has nothing to press.
 const primary = computed<{ label: string; icon: IconName; run: () => void } | undefined>(() => {
     if (pairs.value) {
-        return { label: paired.value ? `Reconnect` : `Connect`, icon: isBrowser.value ? `globe` : `desktop`, run: () => emit(`connect`) };
+        return {
+            label: paired.value ? `Reconnect` : `Connect`,
+            icon: isBrowser.value ? `globe` : isPhone.value ? `mobile` : `desktop`,
+            run: () => emit(`connect`),
+        };
     }
     if (signsIn.value) {
         return connected.value

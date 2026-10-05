@@ -431,14 +431,15 @@ RUN fileq git-attributes > /etc/gitattributes \
 # both, and extensionRuntimeAbsent is all-or-nothing per extension, so shipping the CLI from context here would
 # make the watcher's absence on a core image invisible rather than stated.
 #
-# The five data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
-# handler (a cli connector, a social platform, an OS pack, an ACP preset, the Pi agent) is one of these manifest
+# The data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
+# handler (a cli connector, a social platform, an OS pack, a browser or phone family, an ACP preset, the Pi agent) is one of these manifest
 # entries, so switching a pack off removes exactly its cards. Miss a COPY and those cards silently vanish from
 # the grid.
 COPY _extensions/connectors /opt/extensions/connectors
 COPY _extensions/social /opt/extensions/social
 COPY _extensions/devices /opt/extensions/devices
 COPY _extensions/browsers /opt/extensions/browsers
+COPY _extensions/phones /opt/extensions/phones
 COPY _extensions/acp-agents /opt/extensions/acp-agents
 COPY _extensions/pi-agent /opt/extensions/pi-agent
 COPY _extensions/discord/intentic-extension.json /opt/extensions/discord/

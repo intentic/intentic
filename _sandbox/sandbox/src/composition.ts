@@ -104,6 +104,7 @@ import { statePath } from "./state-paths.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import type { HostsSlice } from "./hosts/hosts-slice.js";
 import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
+import { createPhonesSlice, type PhonesSlice } from "./phones/phone-slice.js";
 import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { connectorHostDefaults } from "./secrets/host-guards.js";
@@ -141,6 +142,7 @@ export interface Services
         AuthSlice,
         HostsSlice,
         WebextSlice,
+        PhonesSlice,
         RunnersSlice,
         CapabilitiesSlice,
         SecretsSlice,
@@ -607,6 +609,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...createGitSlice(),
         ...createHostsSlice({ ...peerDoors, whole }),
         ...createWebextSlice(peerDoors),
+        ...createPhonesSlice(peerDoors),
         ...createRunnersSlice(peerDoors),
         ...createResourcesSlice({
             workspaceRoot: workspace.root,
@@ -681,6 +684,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         runnerHub: services.runnerHub,
         webexts: services.webexts,
         webextHub: services.webextHub,
+        phones: services.phones,
+        phoneHub: services.phoneHub,
         issues: services.issues,
         cursorHooks: services.cursorHooks,
     });

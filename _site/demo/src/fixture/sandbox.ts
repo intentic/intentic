@@ -78,6 +78,25 @@ const CODE_PANELS: PanelSummary[] = [
 // One capability per system the agents operate. `config` is the secret-stripped echo the daemon returns; `secrets`
 // names the stripped keys so a form can show dots for them.
 export const demoCapabilities = (): CapabilitySummary[] => [
+    // A phone added and never paired, so its row offers Connect and the pairing dialog draws its QR code (it shows
+    // only where the phones extension is switched on).
+    {
+        id: `pixel`,
+        kind: `phone`,
+        status: { state: `pending`, detail: `click Connect and scan the code with that phone's camera` },
+        config: {
+            platform: `android`,
+            screen: `on`,
+            control: `on`,
+            files: `on`,
+            write: `off`,
+            notifications: `off`,
+            apps: `on`,
+            destructive: `off`,
+            confirm: `sensitive`,
+        },
+        secrets: [],
+    },
     { id: `github`, kind: `cli`, status: { state: `active` }, config: { provider: `github`, git: `on` }, secrets: [`token`] },
     {
         id: `postgres`,
@@ -162,6 +181,36 @@ export const demoLocalModelFit = (): LocalModelFitResponse => {
 
 // No `enabled` here; `demoExtensions()` below applies demo mode's on/off once.
 const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
+    // The Android phone card, copied from `_extensions/phones`, so the demo can open its pairing dialog (the fixture
+    // daemon mints a pairing nothing can redeem, and the QR code it draws is a real one).
+    {
+        id: `intentic.phones`,
+        commit: `7d1e2a9`,
+        source: `builtin`,
+        manifest: {
+            publisher: `intentic`,
+            name: `phones`,
+            version: `1.0.0`,
+            engines: { intentic: `^2.0.0` },
+            contributes: {
+                capabilities: [
+                    {
+                        id: `android`,
+                        kind: `phone`,
+                        install: `https://intentic.dev/phone`,
+                        catalog: {
+                            name: `Android phone`,
+                            logo: `android`,
+                            description: `Your own Android phone: its screen, the apps you allow, the folders you pick.`,
+                            category: `devices`,
+                        },
+                        fields: [],
+                        skill: `skills/android/SKILL.md`,
+                    },
+                ],
+            },
+        },
+    },
     {
         id: `intentic.connectors`,
         commit: `9f2c41d`,

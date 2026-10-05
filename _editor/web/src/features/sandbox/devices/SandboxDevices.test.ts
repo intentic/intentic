@@ -102,6 +102,8 @@ jest.mock(`./usePeerConnect`, () => ({
     // The door's own descriptor is real, so the dialog is mounted on the same one the app opens.
     ...usePeerConnectOriginal,
     usePeerConnect: () => ({
+        // No phone is paired here: the board's phone rows read this roster and draw nothing for it.
+        peers: ref([]),
         peerFor: () => undefined,
         pairToken: ref(`pair_abc`),
         minting: ref(false),

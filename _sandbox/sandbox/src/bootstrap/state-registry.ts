@@ -38,10 +38,21 @@ import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
-import { hostEnrollmentsDocument, hostPairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
+import {
+    hostEnrollmentsDocument,
+    hostPairConsumedDocument,
+    phoneEnrollmentsDocument,
+    phonePairConsumedDocument,
+    runnerEnrollmentsDocument,
+    runnerPairConsumedDocument,
+    syncPairConsumedDocument,
+    webextEnrollmentsDocument,
+    webextPairConsumedDocument,
+} from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
 import { conversationGrantsDocument } from "../personas/conversation-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
+import { phoneWakeDocument } from "../phones/phone-wake.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { definitionDocument } from "../portability/definition.js";
 import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
@@ -127,6 +138,8 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     needsDocument,
     hostEnrollmentsDocument,
     hostPairConsumedDocument,
+    phoneEnrollmentsDocument,
+    phonePairConsumedDocument,
     runnerEnrollmentsDocument,
     runnerPairConsumedDocument,
     syncPairConsumedDocument,
@@ -135,6 +148,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     peerToolsDocument,
     conversationGrantsDocument,
     personasDocument,
+    phoneWakeDocument,
     bundleManifestDocument,
     definitionDocument,
     privacyLedgerDocument,
@@ -181,4 +195,12 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
-    [automationsRelocationStep, pre1308ImportStep, conversationsSchemaStep, landCheckLeftoversStep, pushChecksLeftoversStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));
+    [
+        automationsRelocationStep,
+        pre1308ImportStep,
+        conversationsSchemaStep,
+        landCheckLeftoversStep,
+        pushChecksLeftoversStep,
+        stateRegroupStep,
+        workflowGateTokensStep,
+    ].toSorted((a, b) => a.id.localeCompare(b.id));

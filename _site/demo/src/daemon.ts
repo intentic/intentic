@@ -127,7 +127,11 @@ const withNeeds = (agent: AgentSummary): AgentSummary => {
     const open = demoNeeds().filter((need) => need.conversationId === agent.id && (need.status === `open` || need.status === `working`));
     return open.length === 0
         ? agent
-        : { ...agent, attention: { ...agent.attention, need: true }, needs: open.map((need) => ({ id: need.id, kind: need.subject.kind, title: need.title, status: need.status })) };
+        : {
+              ...agent,
+              attention: { ...agent.attention, need: true },
+              needs: open.map((need) => ({ id: need.id, kind: need.subject.kind, title: need.title, status: need.status })),
+          };
 };
 const boardAgents = (): AgentSummary[] => roster.agents.map(withNeeds);
 
@@ -242,7 +246,9 @@ const attach = (conversationId: string): Frames<AttachFrame> => {
 const AGENT_STEP_MS = 450;
 
 // The machine's own words for each op, as the real agent prints them (_devices/machine/src/device/tools/agent.ts).
-const DEAD_LINKS = [`b055ea494d4d`, `d1143f54bc31`, `04d00cfa2fc0`, `52c0a0524bcb`, `db30f83623ad`].map((id) => `https://sandbox-${id}.sbx.intentic.dev`);
+const DEAD_LINKS = [`b055ea494d4d`, `d1143f54bc31`, `04d00cfa2fc0`, `52c0a0524bcb`, `db30f83623ad`].map(
+    (id) => `https://sandbox-${id}.sbx.intentic.dev`,
+);
 const agentSaid = (id: string, op: string): { lines: string[]; result: string; after?: () => void } => {
     if (op === `restart`) {
         return { lines: [`Stopping the agent loop on ${id}.`], result: `The agent loop was restarted on this device.` };
@@ -326,10 +332,14 @@ const writeQueue = (id: string, queue: ConversationQueue): ConversationQueue => 
 
 // A booking's hold, or nothing when what it would wait for has already come: a time past, or an agent with nothing
 // running and nothing left to land (work-landed.ts, read here off its card).
-const holdOf = (booking: { readonly sendAt?: number | undefined; readonly sendAfter?: string | undefined }): Pick<ConversationQueue, `until` | `after`> | undefined => {
+const holdOf = (booking: {
+    readonly sendAt?: number | undefined;
+    readonly sendAfter?: string | undefined;
+}): Pick<ConversationQueue, `until` | `after`> | undefined => {
     if (booking.sendAfter !== undefined) {
         const awaited = roster.agents.find((agent) => agent.id === booking.sendAfter);
-        const done = awaited === undefined || ((awaited.status === `landed` || awaited.status === `idle`) && (awaited.queue?.items.length ?? 0) === 0);
+        const done =
+            awaited === undefined || ((awaited.status === `landed` || awaited.status === `idle`) && (awaited.queue?.items.length ?? 0) === 0);
         return done ? undefined : { after: booking.sendAfter };
     }
     return booking.sendAt === undefined || booking.sendAt <= Date.now() ? undefined : { until: booking.sendAt };
@@ -342,7 +352,10 @@ const armBooking = (id: string, until: number | undefined): void => {
     clearTimeout(bookingTimers.get(id));
     bookingTimers.delete(id);
     if (until !== undefined) {
-        bookingTimers.set(id, setTimeout(() => letGo(id), Math.min(Math.max(0, until - Date.now()), LONGEST_TIMER_MS)));
+        bookingTimers.set(
+            id,
+            setTimeout(() => letGo(id), Math.min(Math.max(0, until - Date.now()), LONGEST_TIMER_MS)),
+        );
     }
 };
 
@@ -389,7 +402,13 @@ const book = (input: SandboxHandlerInput<`agent`, `run`>, id: string, hold: Pick
         roster.agents = [bookedCard(input, id, now), ...roster.agents];
     }
     const queue = queueOf(id);
-    const item = { id: input.messageId ?? crypto.randomUUID(), text: input.prompt, voice: `person` as const, queuedAt: now, revision: queue.revision + 1 };
+    const item = {
+        id: input.messageId ?? crypto.randomUUID(),
+        text: input.prompt,
+        voice: `person` as const,
+        queuedAt: now,
+        revision: queue.revision + 1,
+    };
     writeQueue(id, { items: [...queue.items, item], revision: item.revision, paused: `scheduled`, ...hold });
     armBooking(id, hold.until);
     return { delivered: `queued` as const };
@@ -445,7 +464,11 @@ const queueDoors = {
             return refuse(`That message was changed since you read it.`, 412);
         }
         const next = queue.revision + 1;
-        return writeQueue(conversationId, { ...queue, items: queue.items.map((waiting) => (waiting === item ? { ...waiting, text, revision: next } : waiting)), revision: next });
+        return writeQueue(conversationId, {
+            ...queue,
+            items: queue.items.map((waiting) => (waiting === item ? { ...waiting, text, revision: next } : waiting)),
+            revision: next,
+        });
     },
 };
 
@@ -719,7 +742,8 @@ export const procedures = {
         react: reactToAgent,
         assign: assignAgent,
         // As the registry does: `null` clears the conversation's own answer back to the sandbox's.
-        autoLand: ({ id, autoLand }) => agentAnswer(amendAgent(id, ({ autoLand: _held, ...card }) => (autoLand === null ? card : { ...card, autoLand }))),
+        autoLand: ({ id, autoLand }) =>
+            agentAnswer(amendAgent(id, ({ autoLand: _held, ...card }) => (autoLand === null ? card : { ...card, autoLand }))),
         breakPolicy: setBreakPolicy,
         keepWarm: keepWarmAgent,
         // Ends a job the way the daemon's answer reads once it has: stopped by the person, its wait and hand-over over.
@@ -768,7 +792,14 @@ export const procedures = {
         restore: ({ trashed }) => restoreEntry(trashed) ?? refuse(`That is no longer in the trash.`, 404),
         repos: () => ({ repos: [...REPOS] }),
         search: ({ query, mode, literal, word, caseSensitive, include = ``, dir = `` }) =>
-            searchWorkspace(query, { smart: mode === `q`, literal: literal === true, word: word === true, caseSensitive: caseSensitive === true, include, dir }),
+            searchWorkspace(query, {
+                smart: mode === `q`,
+                literal: literal === true,
+                word: word === true,
+                caseSensitive: caseSensitive === true,
+                include,
+                dir,
+            }),
     },
     git: {
         repos: () => ({ repos: [...REPOS] }),
@@ -797,7 +828,12 @@ export const procedures = {
         accounts: () => DEMO_TRANSLATOR_ACCOUNTS,
         // Starts a routed sign-in so ConnectFlow is reachable here: without it the panel a new user meets first
         // could only be seen against a real daemon. `redirect` is the shape Google uses (a loopback dead-end).
-        connect: ({ provider }) => ({ url: `https://accounts.google.com/o/oauth2/auth?demo=${provider}`, code: ``, state: DEMO_CONNECT_STATE, flow: `redirect` }),
+        connect: ({ provider }) => ({
+            url: `https://accounts.google.com/o/oauth2/auth?demo=${provider}`,
+            code: ``,
+            state: DEMO_CONNECT_STATE,
+            flow: `redirect`,
+        }),
         // Never resolves: the demo has no browser trip to complete, and "waiting" is the state worth being able to look at.
         status: () => ({ status: `wait` }),
         complete: () => ({ ok: true }),
@@ -964,7 +1000,9 @@ export const procedures = {
     needs: {
         list: ({ conversationId, open }) => ({
             needs: demoNeeds().filter(
-                (need) => (conversationId === undefined || need.conversationId === conversationId) && (open !== true || need.status === `open` || need.status === `working`),
+                (need) =>
+                    (conversationId === undefined || need.conversationId === conversationId) &&
+                    (open !== true || need.status === `open` || need.status === `working`),
             ),
         }),
         answer: ({ id, answer }) => {
@@ -1088,6 +1126,10 @@ export const raw = {
     "GET /health": () => json({ error: `The demo has no local daemon to shortcut to.` }, 404),
     // A WebSocket can't carry a bearer header, so this ticket stands in for one per upgrade.
     "POST /system/ws-ticket": () => json({ ticket: `demo-ticket` }),
+    // No phone is paired in the demo, but adding the Android card mints a pairing, so its QR code can be seen; nothing
+    // can ever redeem this one.
+    "GET /system/phones": () => json({ phones: [] }),
+    "POST /system/phones/pair": () => json({ token: `demo-pairing-never-redeemable`, expiresIn: 600_000 }),
     // intentic-front's own answer in a real sandbox: a daemon that is up, idle and never restarted.
     "GET /system/vitals": () =>
         json({

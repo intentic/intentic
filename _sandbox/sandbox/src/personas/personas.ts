@@ -91,7 +91,9 @@ const allowsCapability = (capability: Capability, persona: Persona, powers: Pers
         // Connector credentials reach the shell; an ungranted id keeps its env vars out of the turn entirely.
         case "cli":
             return powers.connectors === undefined || powers.connectors.includes(capability.id);
+        // A phone is one of the owner's own devices, on the same shelf as their computers.
         case "device":
+        case "phone":
             return powers.devices === undefined || powers.devices.includes(capability.id);
         case "mcp":
             return powers.mcp === undefined || powers.mcp.includes(capability.id);

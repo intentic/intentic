@@ -246,8 +246,21 @@ export const CapabilityContributionSchema = z
             .object({
                 ...contributionBase,
                 kind: z.literal("webext"),
-                install: z.url().optional().describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
+                install: z
+                    .url()
+                    .optional()
+                    .describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
                 skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent to drive this browser."),
+            })
+            .meta({ mintsServer: true }),
+        // A phone family the user connects their own phone of, through an app installed on it; `install` is where that
+        // app comes from (a store listing, or a page offering the build), omitted until one exists.
+        z
+            .object({
+                ...contributionBase,
+                kind: z.literal("phone"),
+                install: z.url().optional().describe("Where this phone's app is installed from: its store listing, or a page offering the build."),
+                skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent to work on this phone."),
             })
             .meta({ mintsServer: true }),
         // A preset over a core kind: no payload, just a name, a logo and a filled-in form.
@@ -275,10 +288,14 @@ export type SkillContribution = Extract<CapabilityContribution, { skill: string 
 
 // The config key a kind's cards pin to their own id, so a stored capability traces back to its card. `agent` has none:
 // its cards differ only in defaults.
-const DISCRIMINATOR = { cli: "provider", browser: "platform", device: "platform", webext: "platform", agent: undefined } satisfies Record<
-    CapabilityContribution["kind"],
-    string | undefined
->;
+const DISCRIMINATOR = {
+    cli: "provider",
+    browser: "platform",
+    device: "platform",
+    webext: "platform",
+    phone: "platform",
+    agent: undefined,
+} satisfies Record<CapabilityContribution["kind"], string | undefined>;
 export const contributionDiscriminator = (kind: string): string | undefined => DISCRIMINATOR[kind as keyof typeof DISCRIMINATOR];
 
 // Which contributed card a configured capability was added from, undefined when none was: the only link between a
@@ -309,11 +326,15 @@ export const contributedServerMintingKinds = (): ReadonlySet<CapabilityContribut
     const kinds = new Set<CapabilityContribution["kind"]>();
     for (const option of CapabilityContributionSchema.options) {
         const shape = option.shape as Record<string, z.ZodType>;
-        const kind = (shape["kind"]?._zod.def as { values?: readonly string[] } | undefined)?.values?.[0] as CapabilityContribution["kind"] | undefined;
+        const kind = (shape["kind"]?._zod.def as { values?: readonly string[] } | undefined)?.values?.[0] as
+            CapabilityContribution["kind"] | undefined;
         if (kind === undefined) {
             continue;
         }
-        if (unwrapMeaning(option).meaning.mintsServer === true || [...fieldMeanings(option).values()].some((meaning) => meaning.mintsServer === true)) {
+        if (
+            unwrapMeaning(option).meaning.mintsServer === true ||
+            [...fieldMeanings(option).values()].some((meaning) => meaning.mintsServer === true)
+        ) {
             kinds.add(kind);
         }
     }

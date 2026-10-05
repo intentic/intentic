@@ -144,6 +144,13 @@ export const RAW_ROUTES = {
     "GET /system/webext": { control: "never" },
     "DELETE /system/webext/{id}": { control: "never" },
     "GET /system/webext/connect": { auth: "door", beforeBoot: true, control: "never" },
+    "POST /system/phones/pair": { control: "never" },
+    "POST /system/phones/enroll": { auth: "door", control: "never" },
+    "GET /system/phones": { control: "never" },
+    "DELETE /system/phones/{id}": { control: "never" },
+    "GET /system/phones/connect": { auth: "door", beforeBoot: true, control: "never" },
+    // The editor hands over the push-relay channel it registered for a phone, so the sandbox can wake it.
+    "POST /system/phones/{id}/wake": { control: "never" },
     "POST /system/runners/pair": { control: "never" },
     "POST /system/runners/enroll": { auth: "door", control: "never" },
     "GET /system/runners": { control: "never" },

@@ -20,6 +20,14 @@ import { describeText } from "./tools/describe.js";
 import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
+import {
+    createAndroid,
+    DEFAULT_LOG_LINES as DEFAULT_ANDROID_LOG_LINES,
+    DEFAULT_SHELL_TIMEOUT_MS as DEFAULT_ANDROID_TIMEOUT_MS,
+    machineAndroidDeps,
+    MAX_LOG_LINES as MAX_ANDROID_LOG_LINES,
+    MAX_SHELL_TIMEOUT_MS as MAX_ANDROID_TIMEOUT_MS,
+} from "./tools/android.js";
 import { act, describeAction, settle } from "./tools/device.js";
 import { actOnElement, listElements } from "./tools/elements.js";
 import { elementRefs, frames } from "./tools/view.js";
@@ -92,12 +100,21 @@ const confirmingLook = async (said: string, scopes: DeviceScopes): Promise<Recor
 let webHandle: ReturnType<typeof browser> | undefined;
 const web = (): ReturnType<typeof browser> => (webHandle ??= browser());
 
+// The Android phones attached to this machine over adb: their frames and element refs live for the process's life,
+// one set per phone, apart from the desktop's.
+const android = createAndroid(machineAndroidDeps());
+
 // A pixel pair, as the model is shown it and as the desktop takes it. Exactly two numbers.
 const point = z.tuple([z.number(), z.number()]);
 
 // A non-empty string: "" would reach the filesystem or the page as a lookup that cannot succeed, and whose
 // failure says nothing about what went wrong.
 const required = z.string().min(1);
+
+// Which Android phone a call is about, on every android_* tool.
+const phoneSerial = required
+    .optional()
+    .describe("The phone's serial from android_devices. Default: the only one attached; refused when several are, so pass it then.");
 
 // The tool list. Descriptions carry the judgement calls the schema cannot: writes are off by default, there is
 // no delete, one big command beats ten small ones over a link like this.
@@ -113,7 +130,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "run_command",
         description:
-            "Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). On a Windows PC with WSL, `in: \"wsl:<distro>\"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: \"windows\"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. At the deadline the command is stopped together with everything it started. The call returns once the command itself exits: a process it leaves running in the background keeps running, but nothing it prints after that is collected, so start one with its output redirected to a file (`> out.log 2>&1`). Very long output comes back as its start and its end, with the middle cut and counted. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device's \"Run destructive commands\" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
+            'Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user\'s login shell elsewhere (see describe). On a Windows PC with WSL, `in: "wsl:<distro>"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: "windows"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. At the deadline the command is stopped together with everything it started. The call returns once the command itself exits: a process it leaves running in the background keeps running, but nothing it prints after that is collected, so start one with its output redirected to a file (`> out.log 2>&1`). Very long output comes back as its start and its end, with the middle cut and counted. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device\'s "Run destructive commands" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody\'s laptop.',
         effect: "destructive",
         input: z.object({
             command: required.describe("The command line to run, in the shell of the environment it runs in."),
@@ -135,7 +152,10 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .describe(`How long to wait before killing it. Default ${DEFAULT_TIMEOUT_MS}, maximum ${MAX_TIMEOUT_MS}.`),
         }),
         run: async ({ command, cwd, timeoutMs, in: target }, scopes) => {
-            const result = await runCommand({ command, ...(cwd === undefined ? {} : { cwd }), ...(target === undefined ? {} : { in: target }), timeoutMs }, scopes);
+            const result = await runCommand(
+                { command, ...(cwd === undefined ? {} : { cwd }), ...(target === undefined ? {} : { in: target }), timeoutMs },
+                scopes,
+            );
             // A non-zero exit is a real answer, not a tool failure; the model reads the code and the streams and
             // decides.
             // Only a command that could not be run comes back as an error.
@@ -173,7 +193,9 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         input: z.object({
             path: required,
             content: z.string(),
-            revision: required.optional().describe("The file's revision from read_file. Required to replace a file that exists; omit it to create one."),
+            revision: required
+                .optional()
+                .describe("The file's revision from read_file. Required to replace a file that exists; omit it to create one."),
         }),
         run: async ({ path, content, revision }, scopes) => textResult(await writeTextFile(path, content, revision, scopes)),
     }),
@@ -340,10 +362,14 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 "wait",
             ]),
             coordinate: point.optional().describe("[x, y] in pixels of the latest screenshot; every pointer action needs this or `element`."),
-            element: required.optional().describe("An element ref from ui_elements, pointed at instead of a coordinate: exact, wherever the element now is."),
+            element: required
+                .optional()
+                .describe("An element ref from ui_elements, pointed at instead of a coordinate: exact, wherever the element now is."),
             frame: required
                 .optional()
-                .describe("The id of the screenshot the coordinate was read off. Refused if a newer one was taken since, rather than clicking where the screen used to be."),
+                .describe(
+                    "The id of the screenshot the coordinate was read off. Refused if a newer one was taken since, rather than clicking where the screen used to be.",
+                ),
             to: point.optional().describe("[x, y] the drag ends at (left_click_drag)."),
             text: z.string().optional().describe('The text to type, or the key combination to press: "Return", "ctrl+c", "alt+Tab", "super+e".'),
             direction: z.enum(["up", "down", "left", "right"]).optional().describe("Scroll direction. Default down."),
@@ -412,6 +438,104 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         run: async ({ element, action, value }, scopes) =>
             await confirmingLook(await actOnElement(desktop(), { element, action, value }, scopes, elementRefs), scopes),
     }),
+    // An Android phone attached to this machine through adb (USB or wireless debugging), driven like the desktop.
+    tool({
+        name: "android_devices",
+        description:
+            'The Android phones and emulators attached to this device through adb (USB or wireless debugging), as JSON: each one\'s serial, state, model, product, transport (usb, wireless, emulator), and for a ready one its Android version, SDK level and screen size. A state other than "device" comes with what to do about it: "unauthorized" means the person must unlock the phone and accept the "Allow USB debugging?" prompt on it. Call this first: the other android_* tools take a `serial`, needed when several are attached. Requires the \'Run commands\' permission.',
+        effect: "read",
+        input: NO_ARGS,
+        run: async (_args, scopes) => textResult(await android.devices(scopes)),
+    }),
+    tool({
+        name: "android_screenshot",
+        description:
+            "Capture the attached Android phone's screen, as an image with an id (phone-…), shrunk to fit what you can read. Coordinates you send to android_act are read in the newest phone screenshot, never in a desktop screenshot, and the two never stand in for each other. An app that blocks screenshots (banking, DRM video) shows as black. Requires the 'See the screen' permission.",
+        effect: "read",
+        input: z.object({ serial: phoneSerial }),
+        run: async ({ serial }, scopes) => await android.screenshot(serial, scopes),
+    }),
+    tool({
+        name: "android_ui_elements",
+        description:
+            "The phone screen's controls and text, read from Android's accessibility dump (uiautomator): each with a ref like e12, its class, text, description, resource id, where its centre falls in a phone screenshot, and whether it is clickable, scrollable, checked or focused. Tapping by ref (android_act with `element`) is exact where a coordinate read off a shrunk screenshot is a guess, so list first and prefer refs. Refs hold until the next listing; list again after anything that changes the screen. Pass `query` to find elements by text, description, id or class. A screen that never stops moving (a video, a game) cannot be dumped: use android_screenshot there. Requires the 'See the screen' permission.",
+        effect: "read",
+        input: z.object({
+            serial: phoneSerial,
+            query: required.optional().describe("Only elements whose text, description, resource id or class contains this (case-insensitive)."),
+        }),
+        run: async ({ serial, query }, scopes) => textResult(await android.uiElements({ serial, query }, scopes)),
+    }),
+    tool({
+        name: "android_act",
+        description:
+            "Touch the attached Android phone through adb: tap, long_press or swipe at an element ref from android_ui_elements (`element`) or at [x, y] in the newest phone screenshot (`coordinate`, with its id as `frame`); type text into the focused field; press a key (an Android key code like ENTER, BACK, VOLUME_UP, or its number); back, home and recents; scroll a list (`direction`, `amount` swipes, at an element or the middle of the screen). `type` carries printable ASCII only (a newline presses Enter); other characters are refused by name. Keys that turn the screen off or lock the phone (POWER, SLEEP) are refused: nothing here can unlock it again. Typing a command that would delete needs the 'Run destructive commands' switch, as on the desktop. Every action answers with a fresh phone screenshot, or says the screen did not change. Requires the 'Use the mouse and keyboard' permission.",
+        // Whatever the owner could do with the phone in their hand: send, buy, delete.
+        effect: "destructive",
+        input: z.object({
+            serial: phoneSerial,
+            action: z.enum(["tap", "long_press", "swipe", "type", "key", "back", "home", "recents", "scroll"]),
+            element: required.optional().describe("An element ref from the latest android_ui_elements, like e12: tapped at its centre."),
+            coordinate: point
+                .optional()
+                .describe("[x, y] in pixels of the newest phone screenshot; tap, long_press and swipe need this or `element`."),
+            frame: required
+                .optional()
+                .describe("The id of the phone screenshot the coordinates were read off (phone-…). Refused if a newer one was taken since."),
+            to: point.optional().describe("[x, y] where a swipe lifts, in the same screenshot."),
+            text: z.string().optional().describe('The text to type, or the key to press: "ENTER", "BACK", "VOLUME_UP", "TAB", "66".'),
+            direction: z.enum(["up", "down", "left", "right"]).optional().describe("Which way to scroll the content. Default down."),
+            amount: z.int().positive().max(10).optional().describe("How many swipes to scroll by. Default 1."),
+            ms: z.int().positive().max(10_000).optional().describe("How long a swipe or long_press lasts, in milliseconds. Default 300 and 800."),
+        }),
+        run: async (input, scopes) => await android.act(input, scopes),
+    }),
+    tool({
+        name: "android_shell",
+        description:
+            "Run a command in the attached Android phone's own shell (`adb shell`), as the shell user, and get back its exit code, stdout and stderr: `pm list packages`, `am start -n <package>/<activity>`, `dumpsys battery`, `getprop`, `ls /sdcard`. Commands that lose something the phone does not give back need the 'Run destructive commands' switch, which is off unless its owner turned it on: deleting recursively, `pm uninstall`, `pm clear`, `settings put`, `svc`, `reboot`, a wipe. Note that `svc wifi disable` over wireless debugging cuts the link you are using. There is no terminal: a command that waits for input is stopped at the deadline. Requires the 'Run commands' permission.",
+        effect: "destructive",
+        input: z.object({
+            serial: phoneSerial,
+            command: required.describe("The command line, as the phone's sh reads it."),
+            timeoutMs: z
+                .int()
+                .positive()
+                .max(MAX_ANDROID_TIMEOUT_MS)
+                .default(DEFAULT_ANDROID_TIMEOUT_MS)
+                .describe(`How long to wait before stopping it. Default ${DEFAULT_ANDROID_TIMEOUT_MS}, maximum ${MAX_ANDROID_TIMEOUT_MS}.`),
+        }),
+        run: async ({ serial, command, timeoutMs }, scopes) => textResult(await android.shell({ serial, command, timeoutMs }, scopes)),
+    }),
+    tool({
+        name: "android_install",
+        description:
+            "Install an APK file from this device onto the attached Android phone (`adb install -r`): a newer build of an app already there replaces it and keeps its data. The path must be inside the folders this device allows. The phone may ask its owner to confirm an install from a computer. Requires the 'Run commands' and 'Create and change files' permissions.",
+        // Replaces the installed version, which nothing here can put back.
+        effect: "destructive",
+        input: z.object({ serial: phoneSerial, path: required.describe("The .apk file on this device.") }),
+        run: async ({ serial, path }, scopes) => textResult(await android.install({ serial, path }, scopes)),
+    }),
+    tool({
+        name: "android_logcat",
+        description:
+            "The tail of the attached Android phone's log (`adb logcat -d`): what an app printed, and the stack trace of a crash. Narrow it to one running app with `package`, to one tag with `tag`, or to a minimum `priority` (E for errors only). Requires the 'Run commands' permission.",
+        effect: "read",
+        input: z.object({
+            serial: phoneSerial,
+            lines: z
+                .int()
+                .positive()
+                .max(MAX_ANDROID_LOG_LINES)
+                .optional()
+                .describe(`How many of the last lines to read. Default ${DEFAULT_ANDROID_LOG_LINES}, maximum ${MAX_ANDROID_LOG_LINES}.`),
+            package: required.optional().describe("Only lines from this running app's process, like com.example.app."),
+            tag: required.optional().describe("Only lines with this tag, like ActivityManager or AndroidRuntime."),
+            priority: z.enum(["V", "D", "I", "W", "E", "F"]).optional().describe("The lowest priority shown: V, D, I, W, E or F."),
+        }),
+        run: async ({ serial, lines, package: app, tag, priority }, scopes) =>
+            textResult(await android.logcat({ serial, lines, package: app, tag, priority }, scopes)),
+    }),
     tool({
         name: "list_sandboxes",
         description:
@@ -442,7 +566,9 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             hash: required.optional().describe("sha256 of the approved overlay, required for 'rebuild', ignored otherwise."),
             to: required
                 .optional()
-                .describe("'rollback' only: a version or image from the sandbox's `rollbackTargets` (list_sandboxes) to go back to instead of the previous one."),
+                .describe(
+                    "'rollback' only: a version or image from the sandbox's `rollbackTargets` (list_sandboxes) to go back to instead of the previous one.",
+                ),
         }),
         run: async ({ op, slug, hash, to }, scopes) => textResult(await swapSandbox(op, slug, hash, scopes, () => {}, to)),
     }),
@@ -453,7 +579,9 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         effect: "write",
         input: SandboxResourcesAskFieldsSchema.extend({
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
-            when: SandboxShapeWhenSchema.optional().describe("`now` restarts onto the shape; `nextRestart` saves it for the sandbox's next restart through ic. Required with any field."),
+            when: SandboxShapeWhenSchema.optional().describe(
+                "`now` restarts onto the shape; `nextRestart` saves it for the sandbox's next restart through ic. Required with any field.",
+            ),
             forget: z.boolean().optional().describe("Drop the shape saved for the next restart. Takes no fields and no `when`."),
         }),
         run: async ({ slug, when, forget, ...fields }, scopes) => {
@@ -465,7 +593,9 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 return textResult(await forgetShape(slug, scopes, () => {}));
             }
             if (!named || when === undefined) {
-                throw new Error("Nothing was changed: give at least one field (memoryGib, cpus, privileged, gpu) and `when` (\"now\" or \"nextRestart\"), or `forget: true`. To apply what is saved, use manage_sandbox restart.");
+                throw new Error(
+                    'Nothing was changed: give at least one field (memoryGib, cpus, privileged, gpu) and `when` ("now" or "nextRestart"), or `forget: true`. To apply what is saved, use manage_sandbox restart.',
+                );
             }
             return textResult(await shapeSandbox(slug, fields, when, scopes, () => {}));
         },
@@ -506,12 +636,14 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     }),
 ];
 
-// Arguments are logged verbatim except typed text, which is redacted to its length: a `device` "type",
+// Arguments are logged verbatim except typed text, which is redacted to its length: a `device` or `android_act` "type",
 // `clipboard` "write" or `ui_act` set_value call routinely carries a password. A key combination is not redacted; there is nothing
 // in it to leak.
 const auditDetail = (name: string, args: McpAuditEntry["args"]): string => {
     const redact =
-        (name === "device" && args["action"] === "type") || (name === "clipboard" && args["action"] === "write") || name === "browser_fill";
+        ((name === "device" || name === "android_act") && args["action"] === "type") ||
+        (name === "clipboard" && args["action"] === "write") ||
+        name === "browser_fill";
     const safe = redact
         ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` }
         : name === "ui_act" && args["value"] !== undefined
@@ -528,5 +660,9 @@ export const handleMcpMessage = createMcpServer<DeviceScopes>({
     refused: (error) => error instanceof ScopeError,
     errorMessage,
     audit: ({ tool: name, args, ok, failure }) =>
-        audit({ tool: name, ok, detail: failure === undefined ? auditDetail(name, args) : `${failure.refused ? "refused" : "failed"}: ${failure.message}` }),
+        audit({
+            tool: name,
+            ok,
+            detail: failure === undefined ? auditDetail(name, args) : `${failure.refused ? "refused" : "failed"}: ${failure.message}`,
+        }),
 });

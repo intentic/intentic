@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The touch service of the direct build. It reads the screen's element tree, performs gestures and takes screenshots, for
+    the ui_elements, ui_act, device and screenshot tools, in the apps the person allowed. It does not filter key events
+    (flagRequestFilterKeyEvents is not set), so it never sees what is typed on the keyboard.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:description="@string/touch_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="dev.intentic.device.ui.MainActivity" />

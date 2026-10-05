@@ -36,6 +36,7 @@ test("the late seams answer once composing has returned", async () => {
     expect(Object.keys(services.providerCatalogs).sort()).toEqual(services.providerModules.map((module) => module.id).sort());
     expect(await services.hostReach([])).toBeUndefined();
     expect(await services.webextReach([])).toBeUndefined();
+    expect(await services.phoneReach([])).toBeUndefined();
     expect(services.outboxStreamFor(undefined)).toBeUndefined();
     expect(services.reach.status()).toEqual({ state: "off" });
 });

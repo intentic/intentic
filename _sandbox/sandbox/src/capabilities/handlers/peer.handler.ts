@@ -1,3 +1,4 @@
+import type { PeerKind } from "../../peers/peer.js";
 import type { PeerHub } from "../../peers/peer-hub.js";
 import type { PeerStore } from "../../peers/peer-store.js";
 import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
@@ -9,7 +10,7 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 // token on /history, never the manifest: rotating means re-pairing, not a /secrets edit.
 
 export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
-    readonly kind: "device" | "webext";
+    readonly kind: PeerKind;
     readonly noun: string;
     // Where the permissions take effect once pushed: "on that device", "in that browser".
     readonly where: string;
@@ -24,6 +25,15 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes" | "rekey">;
     // Every field is a permission, none secret: the entry renders the grant back to the owner.
     readonly echo: (config: Scopes) => Record<string, string | number | boolean>;
+    // What else the door keeps per peer outside its enrollment (a phone's wake channel), moved with a rename and
+    // dropped with a removal.
+    // Whether an enrolled peer holding no socket is still within reach: a phone the sandbox can wake is, and its card
+    // reads active rather than away, since the agent's first call brings it.
+    readonly wakeable?: (ctx: CapabilityCtx, id: string) => Promise<boolean>;
+    readonly kept?: {
+        readonly rekey: (ctx: CapabilityCtx, from: string, to: string) => Promise<void>;
+        readonly forget: (ctx: CapabilityCtx, id: string) => Promise<void>;
+    };
 }
 
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
@@ -36,6 +46,7 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
         carry: async (ctx, from, to) => {
             for (const moved of await spec.store(ctx).relabelCard(from, to)) {
                 spec.hub(ctx).rekey(moved.from, moved.to);
+                await spec.kept?.rekey(ctx, moved.from, moved.to);
             }
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
@@ -73,7 +84,10 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
         if (!(await spec.store(ctx).enrolled(id))) {
             return { state: "pending", detail: spec.pairHint };
         }
-        return spec.hub(ctx).online(id) ? { state: "active" } : { state: "pending", detail: spec.awayHint };
+        if (spec.hub(ctx).online(id)) {
+            return { state: "active" };
+        }
+        return (await spec.wakeable?.(ctx, id)) === true ? { state: "active", detail: spec.awayHint } : { state: "pending", detail: spec.awayHint };
     },
     // Revokes the peer's key and cuts its socket; the software installed over there stays; only someone at that
     // keyboard can remove it, and it can no longer reach this sandbox once revoked.
@@ -82,6 +96,7 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
     remove: async (ctx, id) => {
         for (const held of await spec.store(ctx).revokeCard(id)) {
             spec.hub(ctx).disconnect(held, `this ${spec.noun} was disconnected from the sandbox`);
+            await spec.kept?.forget(ctx, held);
         }
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },

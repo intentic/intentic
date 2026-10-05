@@ -2,6 +2,7 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
+import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { guidanceBlock, type GuidanceVariant, type SearchTool } from "./guidance.js";
@@ -172,6 +173,8 @@ export interface SdkSystemPromptInput {
     readonly hostDevices?: HostDeviceReach | undefined;
     // The owner's own browsers granted this turn: `browsers` get the connected paragraph, `unlisted` the absent one.
     readonly ownBrowsers?: OwnBrowserReach | undefined;
+    // The owner's own phones granted this turn: `phones` get the connected paragraph, `unlisted` the unpaired one.
+    readonly ownPhones?: OwnPhoneReach | undefined;
     // What the model's window will not pay for; carried this far so the composed prompt and the disclosed one shed the
     // same pieces.
     readonly trim?: PromptTrim;
@@ -186,7 +189,7 @@ export interface SdkSystemPromptInput {
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "guidance" | "search">;
     readonly policy: Pick<TurnPolicy, "unattended">;
-    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers">;
+    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones">;
 }
 
 // Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
@@ -211,6 +214,7 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     terminal,
     hostDevices: tools.hostDevices,
     ownBrowsers: tools.ownBrowsers,
+    ownPhones: tools.ownPhones,
     ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
     ...(spec.guidance === undefined ? {} : { guidance: spec.guidance }),
     ...(spec.search === undefined ? {} : { search: spec.search }),
@@ -231,20 +235,26 @@ export const harnessGuidance = ({
     terminal,
     hostDevices,
     ownBrowsers,
+    ownPhones,
 }: Omit<SdkSystemPromptInput, "mode" | "model" | "custom">): string[] => [
     ...(trim?.guidance === true
         ? []
         : [
-              guidanceBlock(guidance, {
-                  unattended,
-                  browserOutputDir,
-                  browserAccounts: browserAccounts === true,
-                  desktop: desktop === true,
-                  diagnostics: diagnostics === true,
-                  terminal: terminal === true,
-                  hostDevices,
-                  ownBrowsers,
-              }, search),
+              guidanceBlock(
+                  guidance,
+                  {
+                      unattended,
+                      browserOutputDir,
+                      browserAccounts: browserAccounts === true,
+                      desktop: desktop === true,
+                      diagnostics: diagnostics === true,
+                      terminal: terminal === true,
+                      hostDevices,
+                      ownBrowsers,
+                      ownPhones,
+                  },
+                  search,
+              ),
           ]),
     ...(append === undefined ? [] : [append]),
 ];

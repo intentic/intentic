@@ -72,6 +72,22 @@ describe(`the step a pending add still waits on`, () => {
     }
 });
 
+describe(`a phone's pending add`, () => {
+    const added = connection(`pixel`, `phone`, { platform: `android` });
+    const summary = (lastSeen: number | undefined) => ({
+        id: `pixel`,
+        platform: `android`,
+        online: false,
+        wake: `none` as const,
+        ...(lastSeen === undefined ? {} : { lastSeen }),
+    });
+    it(`waits on its code being scanned until the phone has checked in`, () => {
+        expect(handOffOf(`phone`, added, undefined, undefined, undefined)).toBe(`pair-phone`);
+        expect(handOffOf(`phone`, added, undefined, undefined, summary(undefined))).toBe(`pair-phone`);
+        expect(handOffOf(`phone`, added, undefined, undefined, summary(NOW))).toBeUndefined();
+    });
+});
+
 const DEVICE: CapabilityCatalogEntry = {
     id: `linux`,
     name: `Linux PC`,
@@ -122,6 +138,11 @@ const pairing = (rosters: { hosts?: readonly HostSummary[]; browsers?: readonly 
         },
         browsers: {
             peerFor: (id: string) => rosters.browsers?.find((found) => found.id === id),
+            revoke: jest.fn<(id: string) => Promise<void>>(async () => {}),
+            refresh: jest.fn(async () => {}),
+        },
+        phones: {
+            peerFor: (_id: string) => undefined,
             revoke: jest.fn<(id: string) => Promise<void>>(async () => {}),
             refresh: jest.fn(async () => {}),
         },
@@ -266,4 +287,25 @@ describe(`a pending add`, () => {
         pair.handOff(DEVICE, connection(`linux`, `device`, { platform: `linux` }));
         expect([pair.connectVisible.value, pair.browserConnectVisible.value, pair.profileVisible.value]).toEqual([false, false, false]);
     });
+});
+
+it(`a phone's Connect opens the phone dialog with its install link and grant, and its revoke reaches the phone roster`, async () => {
+    const { state, pair } = pairing();
+    const pixel = connection(`pixel`, `phone`, { platform: `android`, screen: `on`, control: `on`, apps: `on`, files: `off` });
+    const ANDROID = {
+        id: `android`,
+        name: `Android phone`,
+        kind: `phone`,
+        category: `devices`,
+        description: ``,
+        fields: [],
+    } as unknown as CapabilityCatalogEntry;
+    pair.openPairing(ANDROID, pixel);
+    expect(pair.phoneConnectVisible.value).toBe(true);
+    expect(pair.phoneConnectId.value).toBe(`pixel`);
+    expect(pair.phonePermissions.value).toBe(`see the screen, tap, swipe and type in the apps you allow, open apps and links`);
+    expect(pair.connectVisible.value).toBe(false);
+    await pair.removePairedAccess(ANDROID, `pixel`);
+    expect(state.phones.revoke).toHaveBeenCalledWith(`pixel`);
+    expect(state.hosts.revoke).not.toHaveBeenCalled();
 });

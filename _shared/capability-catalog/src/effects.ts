@@ -46,6 +46,9 @@ export type CapabilityEffect =
     // The person's own browser, reached through an extension in it; its own member since the grant is bounded to sites
     // they allow one at a time, not the whole machine.
     | { readonly kind: "own-browser"; readonly platform: string; readonly grants: readonly string[] }
+    // The person's own phone, reached through the app on it; its own member since what it may touch is what the person
+    // also switched on in Android for that app, one kind of access at a time.
+    | { readonly kind: "own-phone"; readonly platform: string; readonly grants: readonly string[] }
     // Where a conversation's turns go, nothing else changes; `url` is named to catch a typo'd host before the add.
     | { readonly kind: "endpoint"; readonly url: string }
     // Lets the agent spend real money; the only effect measured in dollars. The two ceilings are per-payment/per-day;
@@ -112,7 +115,11 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         // baked, and over-disclosing is the safe direction), an MCP server for a card that serves tools, whether through
         // its own `mcp` or its extension's `contributes.tools` naming it.
         const meant = new Set(input.contribution === undefined ? [] : contributionEffectsOf(input.contribution));
-        if (input.contribution !== undefined && input.manifest !== undefined && toolServersOf(input.manifest).some((server) => server.perCard === input.contribution?.id)) {
+        if (
+            input.contribution !== undefined &&
+            input.manifest !== undefined &&
+            toolServersOf(input.manifest).some((server) => server.perCard === input.contribution?.id)
+        ) {
             meant.add("mcp");
         }
         if (meant.has("image")) {
@@ -139,11 +146,15 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         // its processes, an MCP server for its tools.
         const meant = new Set<EffectMeaning>();
         if (input.manifest !== undefined) {
-            walkMeaning(ExtensionManifestSchema, { ...input.manifest, contributes: { ...input.manifest.contributes, capabilities: undefined } }, (meaning) => {
-                if (meaning.effect !== undefined) {
-                    meant.add(meaning.effect);
-                }
-            });
+            walkMeaning(
+                ExtensionManifestSchema,
+                { ...input.manifest, contributes: { ...input.manifest.contributes, capabilities: undefined } },
+                (meaning) => {
+                    if (meaning.effect !== undefined) {
+                        meant.add(meaning.effect);
+                    }
+                },
+            );
         }
         if (meant.has("image")) {
             effects.push({ kind: "image" });
@@ -246,7 +257,23 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             ...(input.config["screenshot"] === "on" ? ["take screenshots"] : []),
             ...(input.config["cookies"] === "on" ? ["hand a site's session to this sandbox"] : []),
         ];
-        return [{ kind: "own-browser", platform: String(input.config["platform"] ?? ""), grants }, { kind: "skill", name: input.id }, { kind: "mcp" }];
+        return [
+            { kind: "own-browser", platform: String(input.config["platform"] ?? ""), grants },
+            { kind: "skill", name: input.id },
+            { kind: "mcp" },
+        ];
+    },
+    phone: (input) => {
+        // Unset falls to the schema defaults the untouched form posts.
+        const grants = [
+            ...(input.config["screen"] === "off" ? [] : ["see the screen"]),
+            ...(input.config["control"] === "on" ? ["tap, swipe and type in the apps you allow"] : []),
+            ...(input.config["files"] === "off" ? [] : ["read the folders you pick"]),
+            ...(input.config["write"] === "on" ? ["change files in them"] : []),
+            ...(input.config["notifications"] === "on" ? ["read notifications"] : []),
+            ...(input.config["apps"] === "off" ? [] : ["open apps and links"]),
+        ];
+        return [{ kind: "own-phone", platform: String(input.config["platform"] ?? ""), grants }, { kind: "skill", name: input.id }, { kind: "mcp" }];
     },
     endpoint: (input) => {
         // No `image`/`process` row: it rides the translator already in the image and already running.

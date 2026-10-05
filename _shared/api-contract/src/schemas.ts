@@ -1039,16 +1039,19 @@ export const DeploymentSchema = z.object({
 });
 export type Deployment = z.infer<typeof DeploymentSchema>;
 
-// APNs relay: Apple only accepts pushes from the app's own vendor, so a native install can't post directly.
-// The daemon posts sessionless, proven by its per-device secret; each side holds only the half it needs.
+// Push relay: Apple and Firebase only accept pushes from the app's own vendor, so a native install can't be posted to
+// directly. The daemon posts sessionless, proven by its per-device secret; each side holds only the half it needs.
 
-// The one platform relayed to; Android's TWA app uses the daemon's own web-push instead.
-export const PushPlatformSchema = z.enum(["ios"]);
+// ios: the editor's iPhone app, notified through APNs. android: the Intentic Device app on a phone, WOKEN through FCM
+// (a wake channel only: the relay sends it a data-only message and drops the title and body). The editor's Android app
+// is a TWA and uses the daemon's own web push instead.
+export const PushPlatformSchema = z.enum(["ios", "android"]);
 export type PushPlatform = z.infer<typeof PushPlatformSchema>;
 
 export const PushDeviceInputSchema = z.object({
     platform: PushPlatformSchema,
-    // The APNs device token as the shell reports it (hex); opaque here, only the forwarder interprets it.
+    // The APNs device token as the shell reports it (hex), or the phone app's FCM registration token; opaque here, only
+    // the forwarder interprets it.
     token: z.string().min(1).max(400),
 });
 

@@ -139,6 +139,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "webext-enrollments.json", portability: "identity", note: "Pair your browser again from its card: the extension is still installed." },
     // The browser pairing burn list; a redeemed pairing must not read as fresh wherever this file travels.
     { path: "webext-pair-consumed.json", portability: "identity" },
+    // A phone's enrollment and its wake channel, paired to this sandbox; the app on the phone stays installed.
+    { path: "phone-enrollments.json", portability: "identity", note: "Pair your phone again from its card: the app is still installed." },
+    { path: "phone-pair-consumed.json", portability: "identity" },
+    { path: "phone-wake.json", portability: "identity" },
     // Setup-device pairing burn list; carrying it would mark another sandbox's fresh pairing as spent.
     { path: "host-pair-consumed.json", portability: "identity" },
     // A runner's enrollment names this sandbox as parent; elsewhere its digest would dial the old parent.

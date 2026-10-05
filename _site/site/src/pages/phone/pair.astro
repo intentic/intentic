@@ -1,0 +1,47 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* WHERE A PHONE PAIRING CODE LANDS WHEN THE APP DID NOT OPEN IT. The QR code in the sandbox is a link to this page with
+   the code in its fragment, which no server ever receives: Android opens Intentic Device for it when the app is
+   installed and its link verified. Otherwise the phone's browser shows this page, which hands the code to the app by
+   its own scheme, or says where to get the app. The code never leaves the browser. */
+---
+
+<BaseLayout breadcrumbs={[{ name: "Intentic Device", path: "/phone/" }, { name: "Pair", path: "/phone/pair/" }]} noindex>
+    <Nav />
+    <main class="flex-1">
+        <section class="below-bar mx-auto max-w-3xl px-6 pb-24">
+            <h1 class="display text-3xl font-semibold">Connect this phone</h1>
+            <p id="pair-has-code" class="mt-4 hidden max-w-copy text-lg text-muted">
+                This link carries a one-time code for Intentic Device. Open it in the app to connect this phone to the sandbox that made
+                it.
+            </p>
+            <p id="pair-no-code" class="mt-4 max-w-copy text-lg text-muted">
+                This page opens a pairing code in Intentic Device. Scan the QR code on your phone's card in the sandbox to get one.
+            </p>
+            <div class="mt-8 flex flex-wrap items-center gap-4">
+                <a id="pair-open" href="/phone/" class="btn btn-primary hidden">Open in Intentic Device</a>
+                <a href="/phone/apk" data-download-cta class="text-sm text-link hover:underline">Don't have the app? Download it</a>
+            </div>
+            <p class="mt-6 max-w-copy text-xs text-subtle">
+                The code works once and expires about ten minutes after it was made. If it has expired, press Connect on the phone's card
+                again for a fresh one.
+            </p>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>
+
+<script>
+    // The code is the fragment; hand it to the app's own scheme. Nothing here sends it anywhere.
+    const code = window.location.hash.slice(1);
+    if (code.startsWith("ixp1_")) {
+        const open = document.getElementById("pair-open");
+        open?.setAttribute("href", `intentic-device://pair#${code}`);
+        open?.classList.remove("hidden");
+        document.getElementById("pair-has-code")?.classList.remove("hidden");
+        document.getElementById("pair-no-code")?.classList.add("hidden");
+    }
+</script>

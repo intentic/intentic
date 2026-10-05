@@ -12,7 +12,7 @@ import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { rawRouteServer } from "../http/raw-route-server.js";
-import type { PeerDoor } from "./peer.js";
+import type { PeerDoor, PeerKind } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
 import type { PeerStore } from "./peer-store.js";
 
@@ -40,17 +40,28 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     // Every enrolled peer plus what the hub knows now; must distinguish never-connected from connected-but-away.
     readonly summaries: () => Promise<readonly unknown[]>;
     // Refusal returns as a tool result, not an error, so the model reads it; the peer's own scopes stay the floor.
-    readonly beforeCall?: (payload: unknown, call: { readonly id: string; readonly conversationId: string | undefined }) => Promise<{ readonly refusal: string } | undefined>;
+    readonly beforeCall?: (
+        payload: unknown,
+        call: { readonly id: string; readonly conversationId: string | undefined },
+    ) => Promise<{ readonly refusal: string } | undefined>;
     // A peer came up and said what it is. Fire-and-forget by contract: the hosts door uses it to put an agent in the
     // rest of that computer, and a connect must not wait on a download.
     readonly onConnected?: (id: string, facts: Facts) => void;
     // What a `tools/call` answer becomes on its way back to the model, by tool name.
     readonly sealAnswer?: (id: string, tool: string, answer: unknown) => unknown;
+    // The typed client over a socket that just said hello; absent means oRPC's own WebSocket link, which every door
+    // but the phone's speaks. The phone's app is not TypeScript, so its door speaks plain JSON-RPC instead
+    // (phones/json-rpc-link.ts) behind the same client shape.
+    readonly client?: (socket: WebSocket) => Client;
+    // How a peer that holds no socket is brought back for a call that needs it: `send` asks it to dial in (a push to a
+    // phone) and answers whether anything was sent, then the call waits up to `waitMs` for the socket. Absent for doors
+    // whose peer cannot be woken from here, where an offline peer answers at once.
+    readonly wake?: { readonly send: (id: string) => Promise<boolean>; readonly waitMs: number };
 }
 
 // Grant pushed on connect: the capability's own config, for kinds whose config is the grant. Narrowed by kind before
 // the cast, tying the shape to Scopes.
-const scopesOf = async <Scopes>(services: Services, kind: "device" | "webext", id: string): Promise<Scopes | undefined> => {
+const scopesOf = async <Scopes>(services: Services, kind: PeerKind, id: string): Promise<Scopes | undefined> => {
     const capability = (await services.capabilities.list()).find((entry) => entry.id === id && entry.kind === kind);
     return capability === undefined ? undefined : (capability.config as Scopes);
 };
@@ -59,8 +70,7 @@ const scopesOf = async <Scopes>(services: Services, kind: "device" | "webext", i
 // socket 1008, which ends the far end's dial loop for good and costs someone a walk to that machine — so it is
 // reserved for the one refusal that is genuinely about the credential.
 export type PeerAdmission<Scopes> =
-    | { readonly id: string; readonly scopes: Scopes | undefined }
-    | { readonly refusal: string; readonly retry: boolean };
+    { readonly id: string; readonly scopes: Scopes | undefined } | { readonly refusal: string; readonly retry: boolean };
 
 // Who is at the socket and what still grants them anything: the enrollment says which peer, the card says whether the
 // owner is still lending it a machine. Only a store this daemon could READ and that holds no such token is final; a
@@ -87,9 +97,7 @@ export const admitPeer = async <Scopes>(
     // The grant is the CARD's, which a connection may be finer than: every environment of one machine is admitted on
     // the one set of switches its owner ticked for that machine. The record says which card; nothing re-parses the id.
     const scopes = await scopesOf<Scopes>(services, door.scopesKind, card);
-    return scopes === undefined
-        ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true }
-        : { id, scopes };
+    return scopes === undefined ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true } : { id, scopes };
 };
 
 // Tells a just-attached peer its grant, then asks what it is. Never rejects: nothing awaits a socket handler's promise,
@@ -137,7 +145,11 @@ const answeredLocally = (
         return {
             jsonrpc: "2.0",
             id: request.id ?? null,
-            result: { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: serverName, version: version ?? "offline" } },
+            result: {
+                protocolVersion: MCP_PROTOCOL_VERSION,
+                capabilities: { tools: {} },
+                serverInfo: { name: serverName, version: version ?? "offline" },
+            },
         };
     }
     if (request.method === "tools/list") {
@@ -234,7 +246,7 @@ export const createPeerRoutes = <
                 // `.raw` is the real `ws` socket with the surface oRPC's link needs; WSContext is only a send/close
                 // façade.
                 const socket = ws.raw as unknown as WebSocket;
-                const client = createORPCClient(new RPCLink({ websocket: socket })) as unknown as Client;
+                const client = deps.client?.(socket) ?? (createORPCClient(new RPCLink({ websocket: socket })) as unknown as Client);
                 detach = hub.attach(id, { client, close: (code, reason) => ws.close(code, reason), announced: door.hello.announced(hello.data) });
                 await greetPeer(services, door.slug, hub, {
                     id,
@@ -263,10 +275,14 @@ export const createPeerRoutes = <
     const mcp = async (target: { readonly id: string }, message: RpcMessage, call: MountCall): Promise<RpcMessage | undefined> => {
         const { id } = target;
         if (mcpSpec === undefined) {
-            return message.id === undefined ? undefined : { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `a ${door.noun} has no MCP bridge` } };
+            return message.id === undefined
+                ? undefined
+                : { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `a ${door.noun} has no MCP bridge` } };
         }
         if (!(await store.enrolled(id))) {
-            return message.id === undefined ? undefined : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: `no connected ${door.noun} named "${id}"` } };
+            return message.id === undefined
+                ? undefined
+                : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: `no connected ${door.noun} named "${id}"` } };
         }
         const stopped = deps.beforeCall === undefined ? undefined : await deps.beforeCall(message, { id, conversationId: call.conversationId });
         if (stopped !== undefined) {
@@ -277,7 +293,22 @@ export const createPeerRoutes = <
             void hub.mcp(id, message).catch(() => undefined);
             return undefined;
         }
-        return (hub.online(id) ? undefined : answeredLocally(hub, mcpSpec.serverName(id), id, message)) ?? (await forwarded(hub, deps.sealAnswer, id, message));
+        const local = hub.online(id) ? undefined : answeredLocally(hub, mcpSpec.serverName(id), id, message);
+        if (local !== undefined) {
+            return local;
+        }
+        // A tool call to a peer that can be woken: ask it to dial in and give it a moment, rather than answering
+        // "asleep" for a phone in a pocket that would have come in seconds. Whatever happens, the call below says.
+        if (!hub.online(id) && deps.wake !== undefined && message.method === "tools/call") {
+            const sent = await deps.wake.send(id).catch((error: unknown) => {
+                services.logger.warn({ err: error, id }, `${door.slug}: could not wake this ${door.noun}`);
+                return false;
+            });
+            if (sent) {
+                await hub.whenOnline(id, deps.wake.waitMs);
+            }
+        }
+        return await forwarded(hub, deps.sealAnswer, id, message);
     };
 
     return {

@@ -37,9 +37,11 @@ export type MountTarget =
     // A server living in this daemon (a turn's own browser router, or the sandbox desktop's); closed with the lease
     // that opened it.
     | { readonly kind: "browser"; readonly router: InProcessServer }
-    // A connected machine (device card) or one of the owner's own browsers (webext card), through its peer socket.
+    // A connected machine (device card), one of the owner's own browsers (webext card) or phones (phone card), through
+    // its peer socket.
     | { readonly kind: "device"; readonly id: string }
     | { readonly kind: "webext"; readonly id: string }
+    | { readonly kind: "phone"; readonly id: string }
     // An extension's tools (`contributes.tools`), answered by its backend host from `api.tools.serve`; `card` names the
     // card a per-card server was mounted for, whose settings the door hands over with each message.
     | { readonly kind: "tools"; readonly extension: string; readonly card?: string }

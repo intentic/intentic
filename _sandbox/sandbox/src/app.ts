@@ -53,6 +53,7 @@ import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "./runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "./webext/webext-peer.js";
+import { createPhoneWakeRoute, PHONE_PEER, phonePeerRoutes } from "./phones/phone-peer.js";
 import { createWebExtLendRoute, createWebExtSessionRoute } from "./webext/webext.routes.js";
 import { createRunnerDefinitionSyncRoute } from "./runners/runner.routes.js";
 import {
@@ -472,11 +473,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const sync = createSyncRoutes(services);
     serve("POST /system/sync/pair", sync.pair);
 
-    // The peer doors: each device, browser and runner gets pairing, enrollment, roster, revoke and socket.
+    // The peer doors: each device, browser, phone and runner gets pairing, enrollment, roster, revoke and socket.
     const hostRoutes = hostPeerRoutes(services);
     const webextRoutes = webextPeerRoutes(services);
+    const phoneRoutes = phonePeerRoutes(services);
     mountPeerRoutes(serve, HOST_PEER, hostRoutes);
     mountPeerRoutes(serve, WEBEXT_PEER, webextRoutes);
+    mountPeerRoutes(serve, PHONE_PEER, phoneRoutes);
+    // The editor hands over the push-relay channel it registered for a phone, which is what lets a call wake it.
+    serve("POST /system/phones/{id}/wake", createPhoneWakeRoute(services));
     mountPeerRoutes(serve, RUNNER_PEER, runnerPeerRoutes(services));
     // Every MCP server a turn mounted in this daemon, behind one door: its browser routers, the machines and browsers
     // it was granted (their peer bridges), and its extension cards' endpoints on the backend host.
@@ -486,6 +491,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             browser: (target, message, call) => target.router.handle(message, call.signal),
             device: hostRoutes.mcp,
             webext: webextRoutes.mcp,
+            phone: phoneRoutes.mcp,
             tools: createExtensionToolsEndpoint(services),
             extension: createExtensionMcpEndpoint(services),
         }),

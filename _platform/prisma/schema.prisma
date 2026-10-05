@@ -867,8 +867,9 @@ model PushDevice {
     id         String   @id @default(cuid())
     userId     String
     user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    // "ios" — the forwarder this token belongs to. The Android app is a TWA riding web push, so it never
-    // registers here.
+    // "ios" or "android": the forwarder this token belongs to. "ios" is the editor's iPhone app (APNs); "android" is the
+    // Intentic Device app on a phone, registered by the editor so its sandbox can wake it (FCM, data-only). The editor's
+    // own Android app is a TWA riding web push, so it never registers here.
     platform   String
     // The APNs device token as the shell reported it. Rotates on reinstall; the unique key makes a
     // re-registration replace the row rather than stack a second send per notification.

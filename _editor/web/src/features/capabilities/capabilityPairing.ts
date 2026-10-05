@@ -1,28 +1,29 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { CapabilityKind, HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, HostSummary, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type Ref, ref } from "vue";
 import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import type { usePeerConnect } from "../sandbox/devices/usePeerConnect";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
-import { awaitingLogin, browserGrants, machineGrants, signsInByHand } from "./model/connections";
+import { awaitingLogin, browserGrants, machineGrants, phoneGrants, signsInByHand } from "./model/connections";
 import { type ContributionOf, contributionFor } from "./model/effects";
 import { isDefaultName } from "./model/tiles";
 
 // The windows a connection is finished in: a live browser signed into by hand, a one-time command run on a device of
-// the user's own, a one-time code pasted into a browser of theirs. This page owns which is open and on what; rosters
+// the user's own, a one-time code pasted into a browser of theirs, a code their phone scans. This page owns which is open and on what; rosters
 // and revokes live in the shared peer composable.
 
 // The step a pending add still waits on, opened at once rather than left for its row to name.
-export type HandOff = `pair-device` | `pair-browser` | `sign-in`;
+export type HandOff = `pair-device` | `pair-browser` | `pair-phone` | `sign-in`;
 
 export const handOffOf = (
     kind: CapabilityKind,
     added: CapabilitySummary,
     host: HostSummary | undefined,
     browser: WebExtSummary | undefined,
+    phone?: PhoneSummary | undefined,
 ): HandOff | undefined => {
     // A machine that's never checked in is waiting on the one-liner; one that has is merely asleep.
     if (kind === `device` && host?.lastSeen === undefined) {
@@ -31,6 +32,10 @@ export const handOffOf = (
     // A browser that's never checked in is waiting on the pairing code.
     if (kind === `webext` && browser?.lastSeen === undefined) {
         return `pair-browser`;
+    }
+    // A phone that's never checked in is waiting on its code to be scanned.
+    if (kind === `phone` && phone?.lastSeen === undefined) {
+        return `pair-phone`;
     }
     // An identity's sign-in is a manual login: open the window immediately, as for a fresh account.
     return signsInByHand(kind) && awaitingLogin(added) ? `sign-in` : undefined;
@@ -44,13 +49,14 @@ type Peers<Summary extends { readonly id: string; readonly online: boolean }> = 
 export interface PairingHost {
     readonly hosts: Peers<HostSummary>;
     readonly browsers: Peers<WebExtSummary>;
+    readonly phones: Peers<PhoneSummary>;
     readonly contributionOf: ContributionOf;
     // Re-reads the capability list: a finished pairing or sign-in flips a connection from pending to active.
     readonly refetch: () => unknown;
     readonly error: Ref<NoticeModel | null>;
 }
 
-export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch, error }: PairingHost) => {
+export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, refetch, error }: PairingHost) => {
     // The live-browser window, a signed-in session rather than a token, opened on one connection: a tile holds several.
     const profileVisible = ref(false);
     const profileCapability = ref(``);
@@ -93,6 +99,19 @@ export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch,
         browserConnectVisible.value = true;
     };
 
+    // A phone of the user's own pairs by a code its camera scans, or a link opened on it.
+    const phoneConnectVisible = ref(false);
+    const phoneConnectId = ref(``);
+    const phoneInstall = ref(``);
+    const phonePermissions = ref(``);
+    const openPhoneConnect = (instance: CapabilitySummary): void => {
+        const contribution = contributionFor(contributionOf, instance.kind, instance.config);
+        phoneConnectId.value = instance.id;
+        phoneInstall.value = (contribution?.kind === `phone` ? contribution.install : undefined) ?? ``;
+        phonePermissions.value = phoneGrants(instance);
+        phoneConnectVisible.value = true;
+    };
+
     return {
         profileVisible,
         profileCapability,
@@ -108,6 +127,10 @@ export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch,
         browserConnectId,
         browserInstall,
         browserPermissions,
+        phoneConnectVisible,
+        phoneConnectId,
+        phoneInstall,
+        phonePermissions,
         // An ACP agent's interactive sign-in: starts loginCommand in the capability's job session and opens its terminal.
         startAgentLogin: async (id: string): Promise<void> => {
             try {
@@ -117,12 +140,12 @@ export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch,
                 error.value = noticeFrom(caught, `Sign-in could not start.`);
             }
         },
-        // Which of the two pairing dialogs a row's Connect means; the row itself draws one button for both kinds.
+        // Which of the three pairing dialogs a row's Connect means; the row itself draws one button for every kind.
         openPairing: (entry: CapabilityCatalogEntry, instance: CapabilitySummary): void =>
-            entry.kind === `webext` ? openBrowserConnect(instance) : openConnect(instance),
+            entry.kind === `webext` ? openBrowserConnect(instance) : entry.kind === `phone` ? openPhoneConnect(instance) : openConnect(instance),
         removePairedAccess: async (entry: CapabilityCatalogEntry, id: string): Promise<void> => {
             try {
-                await (entry.kind === `webext` ? browsers.revoke(id) : hosts.revoke(id));
+                await (entry.kind === `webext` ? browsers.revoke(id) : entry.kind === `phone` ? phones.revoke(id) : hosts.revoke(id));
             } catch (caught) {
                 // A refused revoke leaves the access in place; the row must not read as removed.
                 error.value = noticeFrom(caught, `Access could not be removed.`);
@@ -131,6 +154,10 @@ export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch,
         },
         onBrowserExtConnected: (): void => {
             void browsers.refresh();
+            void refetch();
+        },
+        onPhoneConnected: (): void => {
+            void phones.refresh();
             void refetch();
         },
         // A machine coming online flips the capability pending -> active; refetch so the tile follows.
@@ -148,12 +175,15 @@ export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch,
         // A pending add has not finished: the dialog-based steps open at once; a rebuild step only links to the Sandbox
         // screen, from its row.
         handOff: (entry: CapabilityCatalogEntry, added: CapabilitySummary): void => {
-            const step = handOffOf(entry.kind, added, hosts.peerFor(added.id), browsers.peerFor(added.id));
+            const step = handOffOf(entry.kind, added, hosts.peerFor(added.id), browsers.peerFor(added.id), phones.peerFor(added.id));
             if (step === `pair-device`) {
                 openConnect(added);
             }
             if (step === `pair-browser`) {
                 openBrowserConnect(added);
+            }
+            if (step === `pair-phone`) {
+                openPhoneConnect(added);
             }
             if (step === `sign-in`) {
                 openBrowser(added.id, added.id);

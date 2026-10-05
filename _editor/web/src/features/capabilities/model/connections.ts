@@ -99,6 +99,13 @@ export const browserGrants = (instance: CapabilitySummary): string => {
     return grants.length === 0 ? `nothing until you turn a switch on` : grants.join(`, `);
 };
 
+// What a phone's switches add up to, read off the same effects the tile renders.
+export const phoneGrants = (instance: CapabilitySummary): string => {
+    const phone = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find((effect) => effect.kind === `own-phone`);
+    const grants = phone === undefined ? [] : phone.grants;
+    return grants.length === 0 ? `nothing until you turn a switch on` : grants.join(`, `);
+};
+
 // The kinds whose sign-in is a window the user drives themselves, rather than a credential they paste.
 const SIGNS_IN_BY_HAND = new Set<CapabilityKind>([`browser`, `identity`]);
 

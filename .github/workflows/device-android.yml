@@ -1,0 +1,127 @@
+# Intentic Device, the Android app that connects a phone to a sandbox (_devices/android).
+#
+#   build    every push and pull request that touches it: the unit tests of both flavors (they read the contract's
+#            golden wire, _shared/sandbox-contract/golden/phone-wire.json, so a change there runs them too) and a
+#            debug APK of each, on a GitHub-hosted runner, touching no secret.
+#   release  called by release.yml once a release is published, with its tag: the `direct` flavor built at that
+#            version, signed with the app's key, and attached to the Release as intentic-device-<version>.apk with
+#            intentic-device.json beside it (version, url, sha256), which the app's own updater and
+#            intentic.dev/phone/apk read. A call rather than a `release: published` trigger, since the Release is
+#            published with GITHUB_TOKEN, whose events start no workflow.
+#
+# Gradle is the version scripts/gradle.sh pins and digest-checks; there is no wrapper jar in the repository.
+name: Intentic Device (Android)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "_devices/android/**"
+      - "_shared/sandbox-contract/golden/phone-wire.json"
+      - ".github/workflows/device-android.yml"
+  pull_request:
+    paths:
+      - "_devices/android/**"
+      - "_shared/sandbox-contract/golden/phone-wire.json"
+      - ".github/workflows/device-android.yml"
+  workflow_call:
+    inputs:
+      tag:
+        description: The published Release's tag (v1.2.3) to build the app at and attach it to.
+        type: string
+        required: true
+  workflow_dispatch:
+
+concurrency:
+  group: device-android-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: inputs.tag == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Test and build both flavors
+        run: >-
+          bash _devices/android/scripts/gradle.sh --no-daemon
+          :app:testDirectDebugUnitTest :app:testPlayDebugUnitTest
+          :app:assembleDirectDebug :app:assemblePlayDebug
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: intentic-device-debug
+          path: _devices/android/app/build/outputs/apk/**/debug/*.apk
+          retention-days: 7
+
+  release:
+    if: inputs.tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      # The version code must only ever grow: major, minor and patch packed into one integer (1.324.2 → 1324002).
+      - name: Read the version
+        id: version
+        run: |
+          version="${TAG#v}"
+          IFS=. read -r major minor patch <<<"$version"
+          echo "name=$version" >>"$GITHUB_OUTPUT"
+          echo "code=$(( major * 1000000 + minor * 1000 + patch ))" >>"$GITHUB_OUTPUT"
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.INTENTIC_DEVICE_KEYSTORE_BASE64 }}
+        run: printf '%s' "$KEYSTORE_BASE64" | base64 -d >"$RUNNER_TEMP/intentic-device.keystore"
+      # AGP's injected signing properties: the build script holds no signing config, so no key path is ever committed.
+      - name: Build and sign the direct flavor
+        env:
+          STORE_PASSWORD: ${{ secrets.INTENTIC_DEVICE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.INTENTIC_DEVICE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.INTENTIC_DEVICE_KEY_PASSWORD }}
+          FCM_API_KEY: ${{ secrets.INTENTIC_DEVICE_FCM_API_KEY }}
+          FCM_APP_ID: ${{ secrets.INTENTIC_DEVICE_FCM_APP_ID }}
+          FCM_PROJECT_ID: ${{ secrets.INTENTIC_DEVICE_FCM_PROJECT_ID }}
+          FCM_SENDER_ID: ${{ secrets.INTENTIC_DEVICE_FCM_SENDER_ID }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: >-
+          bash _devices/android/scripts/gradle.sh --no-daemon :app:assembleDirectRelease
+          -Pintentic.versionName="$VERSION_NAME"
+          -Pintentic.versionCode="$VERSION_CODE"
+          -Pintentic.fcm.apiKey="$FCM_API_KEY" -Pintentic.fcm.appId="$FCM_APP_ID"
+          -Pintentic.fcm.projectId="$FCM_PROJECT_ID" -Pintentic.fcm.senderId="$FCM_SENDER_ID"
+          -Pandroid.injected.signing.store.file="$RUNNER_TEMP/intentic-device.keystore"
+          -Pandroid.injected.signing.store.password="$STORE_PASSWORD"
+          -Pandroid.injected.signing.key.alias="$KEY_ALIAS"
+          -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+      - name: Attach the APK and its manifest to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          apk="intentic-device-$VERSION.apk"
+          cp _devices/android/app/build/outputs/apk/direct/release/*.apk "$apk"
+          sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${apk}"
+          printf '{"version":"%s","url":"%s","sha256":"%s"}\n' "$VERSION" "$url" "$sha" >intentic-device.json
+          gh release upload "$TAG" "$apk" intentic-device.json --clobber --repo "$GITHUB_REPOSITORY"

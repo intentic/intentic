@@ -70,6 +70,7 @@
                 "_extensions/git-history",
                 "_extensions/google-workspace",
                 "_extensions/imap",
+                "_extensions/phones",
                 "_extensions/pi-agent",
                 "_extensions/pipelines",
                 "_extensions/preview",
@@ -89,6 +90,7 @@
             "name": "Your devices",
             "oneLiner": "How an agent reaches a machine of your own — with your permission, within your switches.",
             "packages": [
+                "_devices/android",
                 "_devices/browser",
                 "_devices/desktop-automation",
                 "_devices/local-agent",

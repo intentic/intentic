@@ -1,0 +1,13 @@
+# Gradle and Android Studio output
+build/
+.gradle/
+.kotlin/
+.idea/
+*.iml
+local.properties
+captures/
+
+# Signing keys and the Firebase client file: neither belongs in git. Firebase is configured from Gradle properties.
+*.keystore
+*.jks
+google-services.json

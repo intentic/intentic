@@ -39,6 +39,7 @@ const RUNTIME_DOMAINS = [
     // carries a device reading that landed too late for the reader waiting on it (hosts/device-reports.ts).
     { domain: "hosts", invalidates: [["capabilities"], ["devices"]] },
     { domain: "webext", invalidates: [["capabilities"]] },
+    { domain: "phones", invalidates: [["capabilities"], ["phones"]] },
     { domain: "runners", invalidates: [["runners"]] },
 
     // Watched because rows act on their own while nobody's watching (coming due, a turn writing back).

@@ -7,6 +7,7 @@ import { NetdiskConfigSchema } from "./netdisk.js";
 import { VpnConfigSchema } from "./vpn.js";
 // One-way: the browser extension bundles webext.js alone, so nothing there may reach back into this file.
 import { WebExtConfigSchema } from "./webext.js";
+import { PhoneConfigSchema } from "./phone.js";
 // Everything a user adds is a capability with an idempotent apply plus a status check; the manifest is the source of
 // truth for what's active, and `mcp`-kind entries also feed the agent's MCP servers each turn.
 
@@ -26,6 +27,7 @@ export const CapabilityKindSchema = z.enum([
     "identity",
     "device",
     "webext",
+    "phone",
     "agent",
     "endpoint",
     "localmodel",
@@ -62,7 +64,9 @@ export const PluginConfigSchema = z.object({
         .string()
         .min(1)
         .optional()
-        .describe("A branch, tag or commit to install from. Leave it out for the default branch. The install pins the commit it names at that moment."),
+        .describe(
+            "A branch, tag or commit to install from. Leave it out for the default branch. The install pins the commit it names at that moment.",
+        ),
     path: z
         .string()
         .min(1)
@@ -141,7 +145,9 @@ const STASHED_PREFIX = "__intentic_stashed__:";
 export const stashedMarker = (token: string): string => `${STASHED_PREFIX}${token}`;
 // The token a marker names; undefined for anything else (a real key, VAULTED, a blank).
 export const stashedToken = (value: unknown): string | undefined =>
-    typeof value === "string" && value.startsWith(STASHED_PREFIX) && value.length > STASHED_PREFIX.length ? value.slice(STASHED_PREFIX.length) : undefined;
+    typeof value === "string" && value.startsWith(STASHED_PREFIX) && value.length > STASHED_PREFIX.length
+        ? value.slice(STASHED_PREFIX.length)
+        : undefined;
 // What is optional about the in-sandbox Docker Engine: `gpu` is an IMAGE option (rides the Dockerfile overlay, needs a
 // rebuild), everything else is an ENGINE option (rewrites daemon.json, restarts dockerd, no rebuild but stops running
 // containers). Flat strings, not nested booleans, to match the manifest's own two-state convention.
@@ -402,6 +408,10 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // from `browser`, the sandbox's own Chromium profile: this one is the person's, already signed into everything,
     // only ever borrowed.
     z.object({ id: entryId, kind: z.literal("webext"), config: WebExtConfigSchema }),
+    // The user's own phone, through the app they installed on it; one capability per phone. Its own kind rather than a
+    // `device` platform: a phone has no shell and no home folder, and what it grants (screen, apps, picked folders,
+    // notifications) is a different set of switches.
+    z.object({ id: entryId, kind: z.literal("phone"), config: PhoneConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
     // The id becomes `endpoint/<id>` in the chat picker, the `agent` kind's precedent, since these two are the only
     // kinds that mint providers.

@@ -4,7 +4,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 // slice orders the inventory it builds from them.
 import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import type { Device, HostSummary, NetdiskLink, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
+import type { Device, HostSummary, NetdiskLink, PhoneSummary, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
 import {
     type ConnectionRow,
     type ConnectionSources,
@@ -14,6 +14,7 @@ import {
     groupConnections,
     hostFacts,
     liveState,
+    phoneFacts,
     tileRowFacts,
 } from "./connectionRows";
 import type { DeviceConnection } from "./deviceConnections";
@@ -85,9 +86,28 @@ const disk = (id: string): NetdiskLink => ({
     autoMount: true,
 });
 
+const phone = (id: string, wake: PhoneSummary[`wake`], paused = false): PhoneSummary => ({
+    id,
+    platform: `android`,
+    online: false,
+    lastSeen: NOW,
+    wake,
+    facts: {
+        device: `Google Pixel 8`,
+        android: `16`,
+        sdk: 36,
+        build: `direct`,
+        paused,
+        access: { accessibility: true, notifications: false, screenCapture: `accessibility` },
+        folders: [],
+        apps: [],
+    },
+});
+
 interface Live {
     readonly hosts?: readonly HostSummary[];
     readonly browsers?: readonly WebExtSummary[];
+    readonly phones?: readonly PhoneSummary[];
     readonly vpn?: readonly VpnLink[];
     readonly netdisk?: readonly NetdiskLink[];
     readonly devices?: readonly Device[];
@@ -95,6 +115,7 @@ interface Live {
 const sources = (live: Live = {}): ConnectionSources => ({
     host: (id) => live.hosts?.find((candidate) => candidate.id === id),
     browser: (id) => live.browsers?.find((candidate) => candidate.id === id),
+    phone: (id) => live.phones?.find((candidate) => candidate.id === id),
     vpn: live.vpn ?? [],
     netdisk: live.netdisk ?? [],
     devices: live.devices ?? [],
@@ -265,5 +286,31 @@ describe(`the Connected slice`, () => {
             [`Your devices`, [`pc`]],
             [`Servers`, [`z`, `a`, `b`]],
         ]);
+    });
+});
+
+describe(`a phone's row`, () => {
+    const pixel = instance(`pixel`, `phone`, { platform: `android` });
+    it(`names the phone and its Android, and says only what needs the owner: no wake yet, or paused on the phone`, () => {
+        expect(phoneFacts(pixel, sources({ phones: [phone(`pixel`, `ready`)] }))).toBe(`Google Pixel 8 · Android 16`);
+        expect(phoneFacts(pixel, sources({ phones: [phone(`pixel`, `register`)] }))).toBe(`Google Pixel 8 · Android 16 · wake not set up yet`);
+        expect(phoneFacts(pixel, sources({ phones: [phone(`pixel`, `none`, true)] }))).toBe(
+            `Google Pixel 8 · Android 16 · paused on the phone · answers only while its app is open`,
+        );
+        expect(tileRowFacts(`phone`, pixel, sources({ phones: [phone(`pixel`, `ready`)] }))).toBe(`Google Pixel 8 · Android 16`);
+    });
+    it(`takes its online answer from the phone roster, not the machines'`, () => {
+        const ANDROID: CapabilityCatalogEntry = {
+            id: `android`,
+            name: `Android phone`,
+            kind: `phone`,
+            category: `devices`,
+            description: `Your own Android phone.`,
+            fields: [{ key: `platform`, label: ``, value: `android` }],
+        };
+        const awake = { ...phone(`pixel`, `ready`), online: true };
+        expect(liveState(ANDROID, pixel, sources({ phones: [awake], hosts: [host(`pixel`, undefined, false)] })).tone).toBe(
+            liveState(ANDROID, pixel, sources({ phones: [awake] })).tone,
+        );
     });
 });

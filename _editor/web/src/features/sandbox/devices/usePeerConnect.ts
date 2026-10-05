@@ -3,16 +3,16 @@ import { onRuntimeChanged } from "../live/runtimeEvents";
 import { sandboxRequest } from "../client/sandboxClient";
 import { refusalText, SandboxHttpError, wordsOf } from "../client/sandboxHttpError";
 
-// Drives Connect for a peer capability (host or browser) sharing one door shape. Connect mints a single-use
+// Drives Connect for a peer capability (host, browser or phone) sharing one door shape. Connect mints a single-use
 // token bound to this capability; the door pushes a runtime-change event on pairing, so the card updates
 // without a timer. The token is shown once and never stored.
 export interface PeerDoor {
     // The path segment this door is served under: /system/<slug>, /system/<slug>/pair, /system/<slug>/:id.
-    readonly slug: "hosts" | "webext";
+    readonly slug: "hosts" | "webext" | "phones";
     // The runtime-change domain the daemon announces the door's liveness on.
-    readonly domain: "hosts" | "webext";
+    readonly domain: "hosts" | "webext" | "phones";
     // The key the roster answers under.
-    readonly listKey: "hosts" | "browsers";
+    readonly listKey: "hosts" | "browsers" | "phones";
     readonly noun: string;
 }
 
@@ -45,7 +45,10 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
         try {
             const response = await sandboxRequest(`/system/${door.slug}/pair?id=${encodeURIComponent(id)}`, { method: `POST` });
             if (!response.ok) {
-                error.value = response.status === 403 ? `Only the sandbox's owner or a maintainer can connect a ${door.noun}.` : `Couldn't start the connection (${response.status}).`;
+                error.value =
+                    response.status === 403
+                        ? `Only the sandbox's owner or a maintainer can connect a ${door.noun}.`
+                        : `Couldn't start the connection (${response.status}).`;
                 return;
             }
             pairToken.value = ((await response.json()) as { token: string }).token;
@@ -90,3 +93,4 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
 
 export const HOST_DOOR: PeerDoor = { slug: `hosts`, domain: `hosts`, listKey: `hosts`, noun: `device` };
 export const WEBEXT_DOOR: PeerDoor = { slug: `webext`, domain: `webext`, listKey: `browsers`, noun: `browser` };
+export const PHONE_DOOR: PeerDoor = { slug: `phones`, domain: `phones`, listKey: `phones`, noun: `phone` };

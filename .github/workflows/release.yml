@@ -557,3 +557,16 @@ jobs:
           subject-name: ghcr.io/intentic/dind-host
           subject-digest: ${{ steps.digests.outputs.dind_host }}
           push-to-registry: true
+
+  # Intentic Device, the Android phone app, built at the version just published and attached to that Release
+  # (device-android.yml). After publish rather than one of its gates: a phone app that fails to build must not hold
+  # back the sandbox, and the APK only ever names a Release that exists.
+  device-android:
+    needs: [plan, publish]
+    if: ${{ needs.publish.result == 'success' && needs.plan.outputs.version != '' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/device-android.yml
+    with:
+      tag: v${{ needs.plan.outputs.version }}
+    secrets: inherit

@@ -27,6 +27,8 @@ export const OBJECT_GLYPHS = {
     hammer: { outline: `m3 20 3 2 9-12-3-2Z M8 5l4-3 9 7-3 4Z` },
     image: { outline: `M3 3h18v18H3Z M3 17l6-6 4 4 3-3 5 5`, solid: `m16 5 2 2-2 2-2-2Z` },
     key: { outline: `M12 7a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z M10 11l10 10 2-2 M15 16l3-3`, solid: `M6 6h2v2H6Z` },
+    // A phone held upright: the body, and the bar a modern one draws at its bottom edge instead of a button.
+    mobile: { outline: `M6 2h12v20H6Z M10 18h4` },
     microphone: { outline: `M8 6a4 4 0 0 1 8 0v6a4 4 0 0 1-8 0Z M4 10v2a8 8 0 0 0 16 0v-2 M12 20v2` },
     palette: { outline: `M12 3a9 9 0 1 0 0 18h1c2 0 3-2 1-4s0-4 2-4h2c5 0 3-10-6-10Z`, solid: `M7 7h2v2H7Z M13 6h2v2h-2Z M5 12h2v2H5Z` },
     paperclip: { outline: `m9 15 7-7a2 2 0 0 1 3 3l-9 9a4 4 0 0 1-6-6L15 3` },

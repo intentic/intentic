@@ -79,7 +79,8 @@ const noClaudeAccounts = (): Pick<Services, "claudeStore" | "claudeSeats" | "cla
 
 // OpenCode with no xAI sign-in, booted the way the privacy shield wants it (off here): nothing to delegate to, nothing
 // to restart.
-const idleOpenCode = (): Services["openCode"] => unstubbed<Services["openCode"]>("openCode", { connected: async () => false, shielded: async () => true });
+const idleOpenCode = (): Services["openCode"] =>
+    unstubbed<Services["openCode"]>("openCode", { connected: async () => false, shielded: async () => true });
 
 export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
@@ -129,6 +130,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         hostReach: async () => undefined,
         // Same for the owner's own browsers: none connected, which every planned turn asks about too.
         webextReach: async () => undefined,
+        phoneReach: async () => undefined,
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.

@@ -900,6 +900,19 @@
             "pasteIntoExtensionsPopup": "Collez-le dans la fenêtre de l'extension. Le code fonctionne une fois et expire dans une dizaine de minutes. Cette fenêtre se met à jour toute seule quand le navigateur se connecte.",
             "press": ") et appuyez sur"
         },
+        "phoneConnectDialog": {
+            "intro": "Installez Intentic Device sur le téléphone à connecter, puis scannez ce code avec l'appareil photo du téléphone. Le téléphone ne se connecte à ce sandbox que lorsque l'agent en a besoin, affiche une notification tant qu'il est connecté et peut être mis en pause depuis ses réglages rapides. Rien n'est ouvert sur votre réseau.",
+            "connected": "est connecté. L'agent peut y travailler dès son prochain tour.",
+            "wakeReady": "L'agent peut le réveiller lorsqu'il est en veille.",
+            "wakeUnavailable": "Il répond tant que l'app Intentic Device est ouverte ou réglée pour rester connectée : cette plateforme ne peut pas le réveiller.",
+            "wakeFailed": "Le réveil n'a pas encore pu être configuré. Une nouvelle tentative aura lieu la prochaine fois que vous ouvrirez Capacités.",
+            "getApp": "Obtenir Intentic Device →",
+            "openOnThisPhone": "Ouvrir dans Intentic Device",
+            "qrLabel": "Code d'appairage pour l'appareil photo du téléphone",
+            "scanWithCamera": "Pointez l'appareil photo du téléphone vers le code et ouvrez le lien affiché. Le code fonctionne une fois et expire au bout d'environ dix minutes. Cette fenêtre se met à jour d'elle-même quand le téléphone se connecte.",
+            "cantScan": "Impossible de le scanner ? Afficher le code à coller dans l'app",
+            "onlyWhatYouAllow": ", et seulement dans les apps et dossiers que vous autorisez sur le téléphone lui-même. C'est le téléphone qui l'applique, pas ce sandbox. Mettez-le en pause depuis les réglages rapides du téléphone, ou révoquez-le ici, et il s'arrête aussitôt."
+        },
         "words": {
             "access": "Accès",
             "needsSandboxRebuild": "Nécessite une reconstruction du sandbox",
@@ -2481,9 +2494,13 @@
             "filterByDeviceSandbox": "Filtrer par appareil, sandbox, dossier ou port",
             "filterDevices": "Filtrer les appareils",
             "intenticIconInTray": ", depuis l'icône Intentic de votre barre d'état.",
-            "noDevicePairedSandbox": "Aucun appareil n'est encore appairé avec ce sandbox. Ajoutez-en un pour y travailler depuis votre propre éditeur, ou connectez un PC Linux/Windows depuis Capacités pour que l'agent puisse y travailler.",
+            "noDevicePairedSandbox": "Aucun appareil n'est encore appairé avec ce sandbox. Ajoutez-en un pour y travailler depuis votre propre éditeur, ou connectez un PC Linux/Windows ou un téléphone Android depuis Capacités pour que l'agent puisse y travailler.",
             "noDeviceSandboxHere": "Aucun appareil ni sandbox ici ne correspond à « {query} ».",
             "readingDevices": "Lecture de vos appareils…"
+        },
+        "phoneRows": {
+            "phones": "Téléphones",
+            "manage": "Gérer"
         },
         "deviceBoardCard": {
             "more": "… et {more} de plus",

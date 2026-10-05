@@ -21,6 +21,9 @@ running.
   offers to email the link back to that screen.
 - The repository also holds Android and iOS shells that load the same URL. Do not promise a store listing; the
   web app on the Home Screen is the route that always exists.
+- That is the editor on a phone. Letting the agent WORK on the phone (its screen, apps, folders, notifications) is a
+  different thing: the Intentic Device app from intentic.dev/phone, paired by scanning the QR code on an Android phone
+  card in Capabilities. It is Android-only.
 
 ## The desktop app
 

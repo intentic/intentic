@@ -11,6 +11,7 @@ import {
     type WindowInfo,
 } from "@intentic/desktop-automation";
 import type { IndicatorDeps } from "./indicator.js";
+import type { AdbOutput, AdbRunner } from "./tools/android.js";
 
 // The fake desktop the tool tests drive (this repo's `testing.ts` convention, excluded from the build), so both
 // tool suites share one double. @intentic/desktop-automation's methods move a real cursor on a real screen and
@@ -98,7 +99,11 @@ const appMethods = (state: FakeState): Pick<Desktop, "windows" | "focusWindow" |
 });
 
 const elementMethods = (state: FakeState): Pick<Desktop, "elements" | "element" | "elementAct"> => ({
-    elements: async (window?: string) => ({ window: { id: window ?? "1", title: "Untitled", app: "app" }, elements: state.elements, truncated: false }),
+    elements: async (window?: string) => ({
+        window: { id: window ?? "1", title: "Untitled", app: "app" },
+        elements: state.elements,
+        truncated: false,
+    }),
     element: async (_window: string, id: string) => state.elements.find((element) => element.id === id),
     elementAct: async (window, id, action, value) =>
         void state.calls.push(`${action} ${window}/${id}${value === undefined || value === "" ? "" : ` ${value}`}`),
@@ -166,5 +171,116 @@ export const fakeIndicatorDeps = ({
         helpers,
         audited,
         saved: () => saved,
+    };
+};
+
+// --- Android over adb ---------------------------------------------------------------------------------------------------
+
+// A dump node as uiautomator writes it: every attribute present, false unless given.
+export const uiNode = (attributes: Record<string, string>, children: readonly string[] = []): string => {
+    const all = {
+        index: "0",
+        text: "",
+        "resource-id": "",
+        class: "android.view.View",
+        package: "com.example.app",
+        "content-desc": "",
+        checkable: "false",
+        checked: "false",
+        clickable: "false",
+        enabled: "true",
+        focusable: "false",
+        focused: "false",
+        scrollable: "false",
+        "long-clickable": "false",
+        password: "false",
+        selected: "false",
+        bounds: "[0,0][1080,2400]",
+        ...attributes,
+    };
+    const open = `<node ${Object.entries(all)
+        .map(([name, value]) => `${name}="${value}"`)
+        .join(" ")}`;
+    return children.length === 0 ? `${open} />` : `${open}>${children.join("")}</node>`;
+};
+
+export const uiDump = (rotation: number, ...nodes: string[]): string =>
+    `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="${rotation}">${nodes.join("")}</hierarchy>UI hierchary dumped to: /dev/tty\n`;
+
+// A settings screen: a scrolling list with a row named by its two lines, a switch, an icon button with only an id, a
+// search field, a plain label, and a node with no place on the screen.
+export const SETTINGS_DUMP = uiDump(
+    0,
+    uiNode({ class: "android.widget.FrameLayout" }, [
+        uiNode(
+            {
+                class: "androidx.recyclerview.widget.RecyclerView",
+                "resource-id": "com.android.settings:id/recycler_view",
+                scrollable: "true",
+                focusable: "true",
+                bounds: "[0,200][1080,2400]",
+            },
+            [
+                uiNode({ class: "android.widget.LinearLayout", clickable: "true", focusable: "true", bounds: "[0,200][1080,400]" }, [
+                    uiNode({
+                        class: "android.widget.TextView",
+                        text: "Network &amp; internet",
+                        "resource-id": "android:id/title",
+                        bounds: "[40,220][600,300]",
+                    }),
+                    uiNode({
+                        class: "android.widget.TextView",
+                        text: "Wi&#8209;Fi, &quot;mobile&quot;",
+                        "resource-id": "android:id/summary",
+                        bounds: "[40,300][600,380]",
+                    }),
+                ]),
+                uiNode({
+                    class: "android.widget.Switch",
+                    "resource-id": "com.android.settings:id/switch_widget",
+                    checkable: "true",
+                    checked: "true",
+                    clickable: "true",
+                    bounds: "[900,420][1040,500]",
+                }),
+                uiNode({
+                    class: "android.widget.ImageButton",
+                    "resource-id": "com.example.app:id/fab",
+                    clickable: "true",
+                    bounds: "[880,2100][1040,2260]",
+                }),
+                uiNode({
+                    class: "android.widget.EditText",
+                    "resource-id": "com.example.app:id/search",
+                    clickable: "true",
+                    focusable: "true",
+                    focused: "true",
+                    bounds: "[40,520][1040,620]",
+                }),
+                uiNode({ class: "android.widget.TextView", text: "Version 1.0", bounds: "[40,700][400,760]" }),
+                uiNode({ class: "android.widget.TextView", text: "offscreen", bounds: "[0,0][0,0]" }),
+            ],
+        ),
+    ]),
+);
+
+// A phone's screen as screencap sends it: one grey, so a change of shade is a change of screen.
+export const phonePng = (width: number, height: number, shade: number): Buffer => solidPng(width, height, shade);
+
+export interface FakeAdb {
+    readonly run: AdbRunner;
+    // Every invocation's argv, in order, joined with spaces so a test reads as a transcript.
+    readonly calls: string[];
+}
+
+// adb that answers from `respond`, by argv; anything it does not answer exits 0 with no output.
+export const fakeAdb = (respond: (args: readonly string[]) => Partial<AdbOutput> | undefined): FakeAdb => {
+    const calls: string[] = [];
+    return {
+        calls,
+        run: async (args) => {
+            calls.push(args.join(" "));
+            return { code: 0, stdout: Buffer.alloc(0), stderr: "", timedOut: false, ...respond(args) };
+        },
     };
 };

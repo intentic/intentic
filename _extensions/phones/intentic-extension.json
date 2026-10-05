@@ -1,0 +1,35 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "phones",
+    "version": "1.0.0",
+    "category": "connections",
+    "logo": "android",
+    "engines": { "intentic": "^2.0.0" },
+    "contributes": {
+        "capabilities": [
+            {
+                "id": "android",
+                "kind": "phone",
+                "install": "https://intentic.dev/phone",
+                "catalog": {
+                    "name": "Android phone",
+                    "logo": "android",
+                    "description": "Your own Android phone: its screen, the apps you allow, the folders you pick.",
+                    "category": "devices",
+                    "hint": "For what only your phone has: an app with no web version, a code that arrives as a notification, a photo or a file on it. The app on the phone shows when the agent is connected, and you can pause it from Quick Settings.",
+                    "guide": {
+                        "steps": [
+                            "Add the phone here: a QR code appears straight away, and `Connect` on its card brings it back later.",
+                            "Install Intentic Device on the phone from intentic.dev/phone, then scan the code with the phone's camera.",
+                            "Nothing is opened on your network: the phone connects out to this sandbox, and only while the agent needs it.",
+                            "Choose on the phone which apps and folders the agent may use. Pause it from Quick Settings, or revoke it from this card, at any time."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/android/SKILL.md"
+            }
+        ]
+    }
+}

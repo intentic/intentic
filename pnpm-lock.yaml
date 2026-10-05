@@ -558,6 +558,9 @@ catalogs:
     unpdf:
       specifier: 1.8.1
       version: 1.8.1
+    uqr:
+      specifier: 0.1.3
+      version: 0.1.3
     vite:
       specifier: 8.3.1
       version: 8.3.1
@@ -1502,6 +1505,9 @@ importers:
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
+      uqr:
+        specifier: 'catalog:'
+        version: 0.1.3
       vue:
         specifier: 'catalog:'
         version: 3.5.43(typescript@6.0.3)
@@ -1861,6 +1867,8 @@ importers:
       vue-tsc:
         specifier: 'catalog:'
         version: 3.3.11(typescript@6.0.3)
+
+  _extensions/phones: {}
 
   _extensions/pi-agent: {}
 
@@ -12384,6 +12392,9 @@ packages:
     peerDependencies:
       browserslist: '>= 4.21.0'
 
+  uqr@0.1.3:
+    resolution: {integrity: sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==}
+
   url-join@5.0.0:
     resolution: {integrity: sha512-n2huDr9h9yzd6exQVnH/jU5mr+Pfx08LRXXZhkLLetAMESRj+anQsTAh940iMrIetKAmry9coFuZQ2jY8/p3WA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -21219,6 +21230,8 @@ snapshots:
       browserslist: 4.29.1
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uqr@0.1.3: {}
 
   url-join@5.0.0: {}
 

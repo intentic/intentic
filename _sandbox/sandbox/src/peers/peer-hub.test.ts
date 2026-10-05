@@ -295,3 +295,30 @@ test("a rekeyed peer's heartbeat still drops it under its new id", async () => {
         jest.useRealTimers();
     }
 });
+
+test("a caller waiting for a peer is told once it has connected and described itself, not merely attached", async () => {
+    const live = hub();
+    const peer = fakePeer();
+    let told: boolean | undefined;
+    const waiting = live.whenOnline("phone", 5_000).then((up) => {
+        told = up;
+    });
+    live.attach("phone", peer.connection);
+    await Promise.resolve();
+    expect(told).toBeUndefined();
+    live.observe("phone", facts);
+    await waiting;
+    expect(told).toBe(true);
+    expect(await live.whenOnline("phone", 5_000)).toBe(true);
+});
+
+test("a peer that never comes leaves its waiter told no at the deadline", async () => {
+    jest.useFakeTimers();
+    try {
+        const waiting = hub().whenOnline("phone", 20_000);
+        await advanceTimersByTimeAsync(20_000);
+        expect(await waiting).toBe(false);
+    } finally {
+        jest.useRealTimers();
+    }
+});

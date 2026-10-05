@@ -1,0 +1,322 @@
+{
+  "hello": {
+    "type": "hello",
+    "token": "iph_example-enrollment-token",
+    "version": "1.0.0"
+  },
+  "exchanges": [
+    {
+      "name": "describe",
+      "call": {
+        "path": [
+          "describe"
+        ]
+      },
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "describe"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "device": "Google Pixel 8",
+          "android": "16",
+          "sdk": 36,
+          "build": "direct",
+          "paused": false,
+          "access": {
+            "accessibility": true,
+            "notifications": false,
+            "screenCapture": "accessibility"
+          },
+          "folders": [
+            {
+              "name": "Download",
+              "writable": true
+            }
+          ],
+          "apps": [
+            {
+              "package": "com.android.chrome",
+              "label": "Chrome",
+              "mode": "act"
+            }
+          ],
+          "battery": {
+            "level": 81,
+            "charging": false
+          },
+          "wake": {
+            "fcm": "fcm-token-example"
+          },
+          "features": [
+            "touch",
+            "notifications"
+          ]
+        }
+      },
+      "resolves": {
+        "device": "Google Pixel 8",
+        "android": "16",
+        "sdk": 36,
+        "build": "direct",
+        "paused": false,
+        "access": {
+          "accessibility": true,
+          "notifications": false,
+          "screenCapture": "accessibility"
+        },
+        "folders": [
+          {
+            "name": "Download",
+            "writable": true
+          }
+        ],
+        "apps": [
+          {
+            "package": "com.android.chrome",
+            "label": "Chrome",
+            "mode": "act"
+          }
+        ],
+        "battery": {
+          "level": 81,
+          "charging": false
+        },
+        "wake": {
+          "fcm": "fcm-token-example"
+        },
+        "features": [
+          "touch",
+          "notifications"
+        ]
+      }
+    },
+    {
+      "name": "setScopes",
+      "call": {
+        "path": [
+          "setScopes"
+        ],
+        "input": {
+          "screen": "on",
+          "control": "off",
+          "files": "on",
+          "write": "off",
+          "notifications": "off",
+          "apps": "on",
+          "destructive": "off",
+          "confirm": "sensitive",
+          "platform": "android"
+        }
+      },
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "setScopes",
+        "params": {
+          "screen": "on",
+          "control": "off",
+          "files": "on",
+          "write": "off",
+          "notifications": "off",
+          "apps": "on",
+          "destructive": "off",
+          "confirm": "sensitive",
+          "platform": "android"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "ok": true
+        }
+      },
+      "resolves": {
+        "ok": true
+      }
+    },
+    {
+      "name": "ping",
+      "call": {
+        "path": [
+          "ping"
+        ]
+      },
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "ping"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "ok": true
+        }
+      },
+      "resolves": {
+        "ok": true
+      }
+    },
+    {
+      "name": "mcp tools/list",
+      "call": {
+        "path": [
+          "mcp"
+        ],
+        "input": {
+          "jsonrpc": "2.0",
+          "id": "phones-tools",
+          "method": "tools/list",
+          "params": {}
+        }
+      },
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "mcp",
+        "params": {
+          "jsonrpc": "2.0",
+          "id": "phones-tools",
+          "method": "tools/list",
+          "params": {}
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "jsonrpc": "2.0",
+          "id": "phones-tools",
+          "result": {
+            "tools": [
+              {
+                "name": "screenshot",
+                "description": "What the phone's screen shows now, as an image with a frame id.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                },
+                "annotations": {
+                  "readOnlyHint": true
+                }
+              }
+            ]
+          }
+        }
+      },
+      "resolves": {
+        "jsonrpc": "2.0",
+        "id": "phones-tools",
+        "result": {
+          "tools": [
+            {
+              "name": "screenshot",
+              "description": "What the phone's screen shows now, as an image with a frame id.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "mcp tools/call",
+      "call": {
+        "path": [
+          "mcp"
+        ],
+        "input": {
+          "jsonrpc": "2.0",
+          "id": 9,
+          "method": "tools/call",
+          "params": {
+            "name": "ui_act",
+            "arguments": {
+              "ref": "e4",
+              "action": "tap"
+            }
+          }
+        }
+      },
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "mcp",
+        "params": {
+          "jsonrpc": "2.0",
+          "id": 9,
+          "method": "tools/call",
+          "params": {
+            "name": "ui_act",
+            "arguments": {
+              "ref": "e4",
+              "action": "tap"
+            }
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "jsonrpc": "2.0",
+          "id": 9,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Tapped [e4] \"Send\"."
+              }
+            ]
+          }
+        }
+      },
+      "resolves": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Tapped [e4] \"Send\"."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "refused",
+      "call": {
+        "path": [
+          "describe"
+        ]
+      },
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "describe"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "error": {
+          "code": -32001,
+          "message": "The person paused the agent on this phone."
+        }
+      },
+      "rejects": "The person paused the agent on this phone."
+    }
+  ]
+}

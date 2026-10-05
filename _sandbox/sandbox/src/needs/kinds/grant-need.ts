@@ -34,7 +34,6 @@ export interface GrantNeedDeps {
     readonly siteAllowed?: (site: string) => Promise<boolean>;
 }
 
-
 const SHELF_WORDS: Readonly<Record<GrantShelf, { readonly label: string; readonly verb: string }>> = {
     files: { label: "creating and changing files", verb: "create and change files" },
     shell: { label: "the shell", verb: "run commands" },
@@ -98,18 +97,35 @@ export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
         if (ask.subject === "capability") {
             const capability = (await deps.capabilities()).find((entry) => entry.id === ask.what);
             if (capability === undefined) {
-                return { kind: "refused", code: "not_connected", message: `Nothing is connected as "${ask.what}": ask for it with \`capabilities request\` instead.` };
+                return {
+                    kind: "refused",
+                    code: "not_connected",
+                    message: `Nothing is connected as "${ask.what}": ask for it with \`capabilities request\` instead.`,
+                };
             }
             if (standing === undefined || standing.granted.includes(capability.id) || !standing.withheldByPersona.includes(capability.id)) {
-                return { kind: "met", message: `"${capability.id}" is not withheld from this conversation: use it. If a gate holds it for an approver, \`secrets gates\` says who.` };
+                return {
+                    kind: "met",
+                    message: `"${capability.id}" is not withheld from this conversation: use it. If a gate holds it for an approver, \`secrets gates\` says who.`,
+                };
             }
-            const subject: GrantNeed = { kind: "grant", subject: "capability", what: capability.id, label: `"${capability.id}" (${capability.kind})`, ...withPersona };
+            const subject: GrantNeed = {
+                kind: "grant",
+                subject: "capability",
+                what: capability.id,
+                label: `"${capability.id}" (${capability.kind})`,
+                ...withPersona,
+            };
             return { kind: "raise", subject, title: `Let this conversation use "${capability.id}"` };
         }
         if (ask.subject === "folder") {
             const folder = folderOf(ask.what);
             if (folder === "" || folder.split("/").includes("..")) {
-                return { kind: "refused", code: "invalid", message: "Name a folder inside the workspace, relative to its root, such as `refs/other-repo`." };
+                return {
+                    kind: "refused",
+                    code: "invalid",
+                    message: "Name a folder inside the workspace, relative to its root, such as `refs/other-repo`.",
+                };
             }
             if (standing?.fence === undefined || within(folder, standing.fence)) {
                 return { kind: "met", message: `This conversation already reaches ${folder}.` };
@@ -146,11 +162,12 @@ export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
         const capability = subject.subject === "capability" ? (await deps.capabilities()).find((entry) => entry.id === subject.what) : undefined;
         const base: PersonaPowers = persona.powers ?? PersonaPowersSchema.parse({});
         // Undefined is "every one of them" already, so only a list the persona keeps gains the grant.
-        const listed = (list: readonly string[] | undefined): string[] | undefined => (list === undefined ? undefined : [...new Set([...list, subject.what])]);
+        const listed = (list: readonly string[] | undefined): string[] | undefined =>
+            list === undefined ? undefined : [...new Set([...list, subject.what])];
         let next: Persona;
         if (subject.subject === "capability" && (capability?.kind === "browser" || capability?.kind === "identity")) {
             next = { ...persona, capabilities: [...new Set([...persona.capabilities, subject.what])] };
-        } else if (subject.subject === "capability" && capability?.kind === "device") {
+        } else if (subject.subject === "capability" && (capability?.kind === "device" || capability?.kind === "phone")) {
             next = { ...persona, powers: { ...base, devices: listed(base.devices) } };
         } else if (subject.subject === "capability" && capability?.kind === "mcp") {
             next = { ...persona, powers: { ...base, mcp: listed(base.mcp) } };
@@ -158,7 +175,10 @@ export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
             next = { ...persona, powers: { ...base, connectors: listed(base.connectors) } };
         } else if (subject.subject === "folder") {
             const folders = persona.workspace?.folders;
-            next = folders === undefined ? persona : { ...persona, workspace: { ...persona.workspace, folders: [...new Set([...folders, subject.what])] } };
+            next =
+                folders === undefined
+                    ? persona
+                    : { ...persona, workspace: { ...persona.workspace, folders: [...new Set([...folders, subject.what])] } };
         } else if (isShelf(subject.what)) {
             next = { ...persona, powers: openShelf(base, subject.what) };
         } else {
@@ -199,12 +219,16 @@ export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
             }
             return {
                 status: "met",
-                result: answer.scope === "persona" ? `Allowed on the persona "${subject.persona ?? ""}": ${subject.label}.` : `Allowed for this conversation: ${subject.label}.`,
+                result:
+                    answer.scope === "persona"
+                        ? `Allowed on the persona "${subject.persona ?? ""}": ${subject.label}.`
+                        : `Allowed for this conversation: ${subject.label}.`,
                 use: nextTurnUse,
             };
         },
         // A site is live in the browser the moment it is allowed; everything else reaches only the next turn's mounts.
         nextTurn: (need) => subjectOf(need)?.subject !== "site",
-        key: (subject: NeedSubject) => (subject.kind === "grant" ? `${subject.subject}|${subject.subject === "site" ? grantSite(subject.what) : subject.what}` : ""),
+        key: (subject: NeedSubject) =>
+            subject.kind === "grant" ? `${subject.subject}|${subject.subject === "site" ? grantSite(subject.what) : subject.what}` : "",
     };
 };

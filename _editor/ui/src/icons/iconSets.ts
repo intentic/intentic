@@ -93,6 +93,7 @@ export const ICONS = {
     lock: STATUS_GLYPHS[`lock`],
     maintenance: NAVIGATION_GLYPHS[`maintenance`],
     microphone: OBJECT_GLYPHS[`microphone`],
+    mobile: OBJECT_GLYPHS[`mobile`],
     moon: STATUS_GLYPHS[`moon`],
     palette: OBJECT_GLYPHS[`palette`],
     paperclip: OBJECT_GLYPHS[`paperclip`],

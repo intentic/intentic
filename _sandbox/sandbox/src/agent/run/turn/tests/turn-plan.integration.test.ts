@@ -99,6 +99,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
         webextReach: async () => undefined,
+        phoneReach: async () => undefined,
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },

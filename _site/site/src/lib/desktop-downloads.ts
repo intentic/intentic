@@ -44,6 +44,9 @@ export const DESKTOP_ROUTES: Record<string, DesktopRoute> = {
     "/desktop/linux": { staged: "Intentic.AppImage", asset: (v) => `Intentic-${v}-x86_64.AppImage` },
     "/desktop/deb": { staged: "Intentic.deb", asset: (v) => `Intentic-${v}-amd64.deb` },
     "/desktop/rpm": { staged: "Intentic.rpm", asset: (v) => `Intentic-${v}-x86_64.rpm` },
+    // Intentic Device, the Android app that connects a phone to a sandbox: the direct-download build, the one that can
+    // tap and type (Google Play forbids that to an AI agent). Not a desktop build, but the same vanity-path mechanics.
+    "/phone/apk": { staged: "intentic-device.apk", asset: (v) => `intentic-device-${v}.apk` },
 };
 
 /** A tray with an arrow into it. The neutral stand-in, shown until a platform is recognised. */

@@ -29,7 +29,8 @@ export const localModelGb = (bytes: number): string => {
 
 // Cache cost of a window, from the contract's measured q8_0 rate: a new rung prices itself rather than needing a row
 // here, which is what the hand-written table this replaced could not promise.
-const windowLabel = (tokens: LocalModelWindow): string => `${Number(tokens) / 1024}k · ${localModelGb(Number(tokens) * LOCAL_MODEL_KV_BYTES_PER_TOKEN)}`;
+const windowLabel = (tokens: LocalModelWindow): string =>
+    `${Number(tokens) / 1024}k · ${localModelGb(Number(tokens) * LOCAL_MODEL_KV_BYTES_PER_TOKEN)}`;
 
 // RAM ask computed from the form: the contract's KV rate per token, on top of the chosen weights. Either half missing
 // (custom GGUF, unparsed window) leaves its figure and the total undefined; wrong is worse than none.
@@ -260,6 +261,88 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         optional: true,
         multiline: true,
         placeholder: "One folder per line. Leave empty for your home folder.",
+    },
+];
+
+// Permission switches every phone tile carries. What Android itself must also allow (the accessibility service, the
+// notification listener, a screen capture) is the person's to switch on in the app on the phone; these are the
+// sandbox's half.
+const PHONE_SCOPE_FIELDS: readonly CapabilityField[] = [
+    {
+        key: "screen",
+        label: "See the screen",
+        default: "on",
+        options: [
+            { value: "on", label: "Allowed" },
+            { value: "off", label: "Blocked" },
+        ],
+    },
+    {
+        key: "control",
+        label: "Tap, swipe and type",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Works in the apps you allow on the phone, through the app's accessibility service. Only the build from intentic.dev can do this.",
+    },
+    {
+        key: "files",
+        label: "Read the folders you pick",
+        default: "on",
+        options: [
+            { value: "on", label: "Allowed" },
+            { value: "off", label: "Blocked" },
+        ],
+    },
+    {
+        key: "write",
+        label: "Change files in those folders",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+    },
+    {
+        key: "notifications",
+        label: "Read notifications",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Every app's notifications, including one-time codes and messages.",
+    },
+    {
+        key: "apps",
+        label: "Open apps and links",
+        default: "on",
+        options: [
+            { value: "on", label: "Allowed" },
+            { value: "off", label: "Blocked" },
+        ],
+    },
+    {
+        key: "destructive",
+        label: "Destructive actions",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Typing a destructive command, and acting in an app you marked sensitive on the phone.",
+    },
+    {
+        key: "confirm",
+        label: "Ask on the phone first",
+        default: "sensitive",
+        options: [
+            { value: "sensitive", label: "For passwords, payments and deleting" },
+            { value: "always", label: "For every action" },
+            { value: "never", label: "Never" },
+        ],
     },
 ];
 
@@ -521,7 +604,13 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             // The discriminator: SMB today; NFS would be a second arm here and on the contract.
             { key: "provider", label: "Protocol", default: "smb", options: [{ value: "smb", label: "SMB / CIFS (Windows share, NAS)" }] },
             { key: "server", label: "Server", placeholder: "nas.local or 192.168.1.20", when: "provider == 'smb'" },
-            { key: "share", label: "Share", placeholder: "projects", hint: "The name after the server in \\\\server\\share.", when: "provider == 'smb'" },
+            {
+                key: "share",
+                label: "Share",
+                placeholder: "projects",
+                hint: "The name after the server in \\\\server\\share.",
+                when: "provider == 'smb'",
+            },
             {
                 key: "path",
                 label: "Folder inside the share",
@@ -536,7 +625,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "provider == 'smb'",
             },
             { key: "password", label: "Password", secret: true, optional: true, placeholder: "empty for a guest share", when: "provider == 'smb'" },
-            { key: "domain", label: "Domain / workgroup", optional: true, advanced: true, placeholder: "only if the server asks", when: "provider == 'smb'" },
+            {
+                key: "domain",
+                label: "Domain / workgroup",
+                optional: true,
+                advanced: true,
+                placeholder: "only if the server asks",
+                when: "provider == 'smb'",
+            },
             // The decision this tile exists for: read-only is the default, and it is the mount flag AND the advice above.
             {
                 key: "access",
@@ -997,7 +1093,11 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         hint: "A connected Geo exit: this account then browses from that country.",
     },
 ];
-const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { device: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
+const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = {
+    device: HOST_SCOPE_FIELDS,
+    phone: PHONE_SCOPE_FIELDS,
+    browser: BROWSER_CREDENTIAL_FIELDS,
+};
 
 // A contribution rendered as a catalog tile; the manifest is the single source of name/logo/fields/guide. The
 // contribution's id becomes the tile id and the pinned discriminator; an unknown category lands under "extend".

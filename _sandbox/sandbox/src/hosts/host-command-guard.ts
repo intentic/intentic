@@ -33,9 +33,11 @@ const DEADLINE_MS = 10 * 60_000;
 // routed around. The card itself stays up for DEADLINE_MS; an answer given after this is kept for the same call.
 const CALL_BUDGET_MS = 45_000;
 
-// The call shape this gate was built for. File and screen tools carry no program to classify; the input tools that
-// carry text a terminal could run are read below, by typedInCall.
+// The call shapes this gate was built for: a command for the machine's own shell, and one for the shell of an Android
+// phone attached to it, which the machine runs as `adb shell <command>`. File and screen tools carry no program to
+// classify; the input tools that carry text a terminal could run are read below, by typedInCall.
 const RUN_COMMAND = "run_command";
+const ANDROID_SHELL = "android_shell";
 
 // Every command here leaves the container, so locus is fixed (mirrors SANDBOX in guard/command-guard.ts).
 const DEVICE: CommandLocus = "device";
@@ -64,7 +66,7 @@ const stillWaiting = (machine: string, typed: boolean): string =>
           `Their answer is kept for this exact text: make the same call again with exactly the same text to wait for it. ` +
           `Nothing is broken on the device. Do not type a different command to do the same thing.`
         : `Still waiting for the owner: a card asks them to approve running this on "${machine}", and it has not run yet. ` +
-          `Their answer is kept for this exact command: call run_command again with exactly the same command to wait for it. ` +
+          `Their answer is kept for this exact command: make the same call again, with exactly the same command, to wait for it. ` +
           `Nothing is broken on the device. Do not run a different command to do the same thing.`;
 
 // What the agent reads when the device's own "Run destructive commands" switch is off: the device would refuse the
@@ -118,21 +120,38 @@ const awaitAnswer = async (
     }
 };
 
-// The command inside a run_command tools/call, or undefined for anything else; a hostile or notification-shaped payload
-// is forwarded to the machine rather than gated, since there'd be nowhere to send a refusal.
+// A phone's serial as adb prints one (a USB serial, `ip:port`, an mDNS name), and nothing else: a serial is spliced into
+// the program judged below, where a `#` or a quote in it could make the command after it read as inert.
+const AdbSerialSchema = z.string().regex(/^[\w.:-]+$/);
+
+// The command inside a run_command or android_shell tools/call, or undefined for anything else; a hostile or
+// notification-shaped payload is forwarded to the machine rather than gated, since there'd be nowhere to send a
+// refusal. A phone's command is judged as the program the machine runs for it, `adb shell <command>`: the classifier
+// reads the command where the phone's shell would run it, the card shows what crosses to the phone, and an answer kept
+// for it is never collected by the same words run on the machine itself.
 export const commandInCall = (payload: unknown): string | undefined => {
     const request = payload as { id?: unknown; method?: unknown; params?: { name?: unknown; arguments?: unknown } };
-    if (request.id === undefined || request.method !== "tools/call" || request.params?.name !== RUN_COMMAND) {
+    const name = request.params?.name;
+    if (request.id === undefined || request.method !== "tools/call" || (name !== RUN_COMMAND && name !== ANDROID_SHELL)) {
         return undefined;
     }
-    const command = (request.params.arguments as Record<string, unknown> | undefined)?.["command"];
-    return typeof command === "string" && command.trim() !== "" ? command : undefined;
+    const args = request.params?.arguments as Record<string, unknown> | undefined;
+    const command = args?.["command"];
+    if (typeof command !== "string" || command.trim() === "") {
+        return undefined;
+    }
+    if (name === RUN_COMMAND) {
+        return command;
+    }
+    const serial = AdbSerialSchema.safeParse(args?.["serial"]);
+    return `adb ${serial.success ? `-s ${serial.data} ` : ""}shell ${command}`;
 };
 
-/* Text an input tool would put into whatever has the keyboard: typed (`device` type), pasted (`clipboard` write) or
-   set into a field (`ui_act` set_value). Typing into a terminal IS running a command, so this text is judged the same
-   way, by the same classifier: ordinary prose matches nothing and passes at no cost, and `rm -rf ~` typed into a
-   shell is asked about as if run_command had sent it. Read off a call the bridge already parsed (DeviceToolCallSchema). */
+/* Text an input tool would put into whatever has the keyboard: typed (`device` type, or `android_act` type into a
+   phone), pasted (`clipboard` write) or set into a field (`ui_act` set_value). Typing into a terminal IS running a
+   command, so this text is judged the same way, by the same classifier: ordinary prose matches nothing and passes at
+   no cost, and `rm -rf ~` typed into a shell is asked about as if run_command had sent it. Read off a call the bridge
+   already parsed (DeviceToolCallSchema). */
 const TypedArgumentsSchema = z.looseObject({ action: z.string().optional(), text: z.string().optional(), value: z.string().optional() });
 
 export const typedInCall = (call: DeviceToolCall): string | undefined => {
@@ -142,7 +161,8 @@ export const typedInCall = (call: DeviceToolCall): string | undefined => {
     }
     const { action, text, value } = parsed.data;
     const typed =
-        (call.params.name === "device" && action === "type") || (call.params.name === "clipboard" && action === "write")
+        ((call.params.name === "device" || call.params.name === "android_act") && action === "type") ||
+        (call.params.name === "clipboard" && action === "write")
             ? text
             : call.params.name === "ui_act" && action === "set_value"
               ? value
@@ -165,7 +185,10 @@ const hostVerdict = async (
     const [policy, settings] = await Promise.all([services.safetyPolicy.text(), services.sandboxSettings.get()]);
     const judging = settings.commandJudge;
     if (judging === "off") {
-        return { judging, verdict: { decision: "allow", sentence: `The safety judge is turned off, so this was decided by the standing rule alone.` } };
+        return {
+            judging,
+            verdict: { decision: "allow", sentence: `The safety judge is turned off, so this was decided by the standing rule alone.` },
+        };
     }
     const verdict = await judgeCommand(
         services,
@@ -316,7 +339,9 @@ export const judgeHostCommand = async (
     const record = (outcome: "allowed" | "asked" | "refused", answer?: "allowed" | "declined"): void => {
         void services.safetyLog
             .record({ at, ...entry, outcome, ...(answer === undefined ? {} : { answer }) })
-            .catch((error: unknown) => services.logger.warn({ err: error, machine: input.machine }, "safety log: a judged device command was not recorded"));
+            .catch((error: unknown) =>
+                services.logger.warn({ err: error, machine: input.machine }, "safety log: a judged device command was not recorded"),
+            );
     };
     if (decision === "allow") {
         // Nothing was judged at "off", so no row is written: it would only repeat the setting back to the log.

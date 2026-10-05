@@ -8,7 +8,8 @@ import type { procedures, raw, sockets } from "./daemon";
 
 type ContractRoute = { readonly [G in SandboxGroup]: `${G}.${SandboxProcedure<G>}` }[SandboxGroup] | RawRouteKey;
 type Procedures = typeof procedures;
-type Served = { readonly [G in keyof Procedures]: `${G}.${keyof Procedures[G] & string}` }[keyof Procedures] | keyof typeof raw | keyof typeof sockets;
+type Served =
+    { readonly [G in keyof Procedures]: `${G}.${keyof Procedures[G] & string}` }[keyof Procedures] | keyof typeof raw | keyof typeof sockets;
 type Unserved = Exclude<ContractRoute, Served>;
 
 // Out of the demo by design: nothing the editor does reaches these, or they need something a browser tab can't fake.
@@ -93,6 +94,10 @@ export const UNSERVED = {
     "GET /system/webext": NOT_THE_EDITORS,
     "DELETE /system/webext/{id}": NOT_THE_EDITORS,
     "GET /system/webext/connect": NOT_THE_EDITORS,
+    "POST /system/phones/enroll": NOT_THE_EDITORS,
+    "DELETE /system/phones/{id}": REAL_MACHINE,
+    "GET /system/phones/connect": NOT_THE_EDITORS,
+    "POST /system/phones/{id}/wake": REAL_MACHINE,
     "POST /system/runners/pair": NOT_THE_EDITORS,
     "POST /system/runners/enroll": NOT_THE_EDITORS,
     "GET /system/runners/connect": NOT_THE_EDITORS,

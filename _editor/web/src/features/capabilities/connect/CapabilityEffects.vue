@@ -27,7 +27,11 @@ const describeRuntime = (level: `net-admin` | `privileged`): EffectRow =>
               warn: true,
               tip: { title: t(`capabilities.capabilityEffects.privileged`), tone: `warn`, note: t(`capabilities.capabilityEffects.forItsDocker`) },
           }
-        : { icon: `shield`, label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`), tip: t(`capabilities.capabilityEffects.networkAdmin`) };
+        : {
+              icon: `shield`,
+              label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`),
+              tip: t(`capabilities.capabilityEffects.networkAdmin`),
+          };
 
 // Writable is the warned half: a read-only mount can cost the server nothing, a writable one can.
 const describeMount = (target: string, writable: boolean): EffectRow => {
@@ -35,7 +39,9 @@ const describeMount = (target: string, writable: boolean): EffectRow => {
     if (writable) {
         return {
             icon: `server`,
-            label: named ? t(`capabilities.capabilityEffects.mountsTargetReadWrite`, { target }) : t(`capabilities.capabilityEffects.mountsShareReadWrite`),
+            label: named
+                ? t(`capabilities.capabilityEffects.mountsTargetReadWrite`, { target })
+                : t(`capabilities.capabilityEffects.mountsShareReadWrite`),
             warn: true,
         };
     }
@@ -101,6 +107,13 @@ const DESCRIBE: Describers = {
     "own-browser": (effect) => ({
         icon: `globe`,
         label: `Lets the agent ${effect.grants.join(`, `)} in your ${effect.platform === `edge` ? `Edge` : `Chrome`}, on the sites you allow it in the extension`,
+        warn: true,
+    }),
+    // Warned like `machine`; which apps it may act in is the person's own choice on the phone, which the reader must
+    // know before agreeing to this.
+    "own-phone": (effect) => ({
+        icon: `mobile`,
+        label: `Lets the agent ${effect.grants.join(`, `)} on your Android phone, in the apps you allow on the phone`,
         warn: true,
     }),
     // Named, not warned: pointing at a server is the point of this capability (as often a private choice, like a local

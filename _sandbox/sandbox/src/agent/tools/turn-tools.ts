@@ -54,6 +54,7 @@ export const turnToolsOf = async (
                 ...mcpToolsOf(granted),
                 ...peerToolsOf("device", granted, lease),
                 ...peerToolsOf("webext", granted, lease),
+                ...peerToolsOf("phone", granted, lease),
                 ...extension,
                 ...browser.servers,
                 ...desktop,

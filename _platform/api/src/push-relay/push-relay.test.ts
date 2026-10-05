@@ -143,11 +143,69 @@ describe(`send`, () => {
         });
 
         await expect(
-            call(pushRelayRoutes(() => forwarder(`transient`, `APNs answered 403 InvalidProviderToken`)).send, { deviceId: `d1`, secret, notification }, { context: ctx }),
+            call(
+                pushRelayRoutes(() => forwarder(`transient`, `APNs answered 403 InvalidProviderToken`)).send,
+                { deviceId: `d1`, secret, notification },
+                { context: ctx },
+            ),
         ).rejects.toMatchObject({ status: 502 });
         // The row survives: the device is fine, we are not.
         expect(remove).not.toHaveBeenCalled();
         // And the platform says why, since the daemon only ever hears "refused".
-        expect(ctx.logger.warn).toHaveBeenCalledWith({ deviceId: `d1`, reason: `APNs answered 403 InvalidProviderToken` }, `push relay: APNs did not take the send`);
+        expect(ctx.logger.warn).toHaveBeenCalledWith(
+            { deviceId: `d1`, platform: `ios`, reason: `APNs answered 403 InvalidProviderToken` },
+            `push relay: the push service did not take the send`,
+        );
+    });
+});
+
+describe(`android wake channels`, () => {
+    const minted = async (): Promise<{ secret: string; hash: string }> => {
+        const { createHash } = await import(`node:crypto`);
+        const secret = `w`.repeat(43);
+        return { secret, hash: createHash(`sha256`).update(secret).digest(`hex`) };
+    };
+
+    it(`registers an android token through the FCM forwarder, and 404s when no service account is configured`, async () => {
+        const upsert = jest.fn().mockImplementation(async (args: { create: { platform: string } }) => ({ id: `p1`, ...args.create }));
+        const ctx = context({ prisma: fakePrisma({ pushDevice: { upsert } }) });
+        const fcm = forwarder(`delivered`);
+        await call(
+            pushRelayRoutes(
+                () => forwarder(`delivered`),
+                () => fcm,
+            ).register,
+            { platform: `android`, token: `fcm-1` },
+            { context: ctx },
+        );
+        expect(upsert.mock.calls[0]?.[0].create.platform).toBe(`android`);
+        await expect(
+            call(
+                pushRelayRoutes(
+                    () => forwarder(`delivered`),
+                    () => ({ enabled: false, send: jest.fn() }),
+                ).register,
+                { platform: `android`, token: `t` },
+                { context: context() },
+            ),
+        ).rejects.toMatchObject({ code: `NOT_FOUND` });
+    });
+
+    it(`sends an android row through FCM and never through APNs`, async () => {
+        const { secret, hash } = await minted();
+        const apns = forwarder(`delivered`);
+        const fcm = forwarder(`delivered`);
+        const row = { id: `p1`, userId: `u1`, platform: `android`, token: `fcm-1`, secretHash: hash };
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row) } }) });
+        await call(
+            pushRelayRoutes(
+                () => apns,
+                () => fcm,
+            ).send,
+            { deviceId: `p1`, secret, notification },
+            { context: ctx },
+        );
+        expect(fcm.send).toHaveBeenCalledWith(`fcm-1`, notification);
+        expect(apns.send).not.toHaveBeenCalled();
     });
 });

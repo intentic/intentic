@@ -897,6 +897,19 @@
             "pasteIntoExtensionsPopup": "Fügen Sie ihn in das Popup der Erweiterung ein. Der Code funktioniert einmal und läuft in etwa zehn Minuten ab. Dieses Fenster aktualisiert sich von selbst, wenn der Browser verbunden ist.",
             "press": ") und drücken Sie"
         },
+        "phoneConnectDialog": {
+            "intro": "Installieren Sie Intentic Device auf dem Telefon, das Sie verbinden möchten, und scannen Sie dann diesen Code mit der Kamera des Telefons. Das Telefon verbindet sich nur dann mit dieser Sandbox, wenn der Agent es braucht, zeigt eine Benachrichtigung, solange es verbunden ist, und lässt sich in den Schnelleinstellungen pausieren. In Ihrem Netzwerk wird nichts geöffnet.",
+            "connected": "ist verbunden. Der Agent kann ab seinem nächsten Zug darauf arbeiten.",
+            "wakeReady": "Der Agent kann es wecken, wenn es schläft.",
+            "wakeUnavailable": "Es antwortet, solange die App Intentic Device offen ist oder verbunden bleiben soll: Diese Plattform kann es nicht wecken.",
+            "wakeFailed": "Das Wecken ließ sich noch nicht einrichten. Es wird erneut versucht, wenn Sie die Fähigkeiten das nächste Mal öffnen.",
+            "getApp": "Intentic Device holen →",
+            "openOnThisPhone": "In Intentic Device öffnen",
+            "qrLabel": "Kopplungscode für die Kamera des Telefons",
+            "scanWithCamera": "Richten Sie die Kamera des Telefons auf den Code und öffnen Sie den angezeigten Link. Der Code gilt einmal und läuft nach etwa zehn Minuten ab. Dieses Fenster aktualisiert sich von selbst, sobald das Telefon verbunden ist.",
+            "cantScan": "Scannen klappt nicht? Code zum Einfügen in die App anzeigen",
+            "onlyWhatYouAllow": ", und nur in den Apps und Ordnern, die Sie auf dem Telefon selbst erlauben. Das setzt das Telefon durch, nicht diese Sandbox. Pausieren Sie es in den Schnelleinstellungen des Telefons oder widerrufen Sie es hier, und es hört sofort auf."
+        },
         "words": {
             "access": "Zugriff",
             "needsSandboxRebuild": "Braucht einen Sandbox-Neubau",
@@ -2481,9 +2494,13 @@
             "filterByDeviceSandbox": "Nach Gerät, Sandbox, Ordner oder Port filtern",
             "filterDevices": "Geräte filtern",
             "intenticIconInTray": ", über das Intentic-Symbol in Ihrem Infobereich.",
-            "noDevicePairedSandbox": "Noch ist kein Gerät mit dieser Sandbox gekoppelt. Fügen Sie eines hinzu, um aus Ihrem eigenen Editor daran zu arbeiten, oder verbinden Sie unter „Fähigkeiten“ einen Linux-/Windows-PC, damit der Agent dort arbeiten kann.",
+            "noDevicePairedSandbox": "Noch ist kein Gerät mit dieser Sandbox gekoppelt. Fügen Sie eines hinzu, um aus Ihrem eigenen Editor daran zu arbeiten, oder verbinden Sie unter „Fähigkeiten“ einen Linux-/Windows-PC oder ein Android-Telefon, damit der Agent dort arbeiten kann.",
             "noDeviceSandboxHere": "Kein Gerät und keine Sandbox hier passt zu „{query}“.",
             "readingDevices": "Ihre Geräte werden gelesen…"
+        },
+        "phoneRows": {
+            "phones": "Telefone",
+            "manage": "Verwalten"
         },
         "deviceBoardCard": {
             "more": "… und {more} weitere",

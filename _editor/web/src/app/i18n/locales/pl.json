@@ -1062,6 +1062,19 @@
             "pasteIntoExtensionsPopup": "Wklej go w okienku rozszerzenia. Kod działa raz i wygasa po mniej więcej dziesięciu minutach. To okno zaktualizuje się samo, gdy przeglądarka się połączy.",
             "press": ") i naciśnij"
         },
+        "phoneConnectDialog": {
+            "intro": "Zainstaluj Intentic Device na telefonie, który chcesz podłączyć, a potem zeskanuj ten kod aparatem telefonu. Telefon łączy się z tym sandboxem tylko wtedy, gdy agent go potrzebuje, pokazuje powiadomienie, dopóki jest połączony, i można go wstrzymać z szybkich ustawień. W twojej sieci nic nie jest otwierane.",
+            "connected": "jest połączony. Agent może na nim pracować od następnej tury.",
+            "wakeReady": "Agent może go wybudzić, gdy śpi.",
+            "wakeUnavailable": "Odpowiada, gdy aplikacja Intentic Device jest otwarta lub ma pozostać połączona: ta platforma nie może go wybudzić.",
+            "wakeFailed": "Nie udało się jeszcze ustawić wybudzania. Spróbujemy ponownie, gdy następnym razem otworzysz Możliwości.",
+            "getApp": "Pobierz Intentic Device →",
+            "openOnThisPhone": "Otwórz w Intentic Device",
+            "qrLabel": "Kod parowania dla aparatu telefonu",
+            "scanWithCamera": "Skieruj aparat telefonu na kod i otwórz pokazany link. Kod działa raz i wygasa po około dziesięciu minutach. To okno odświeży się samo, gdy telefon się połączy.",
+            "cantScan": "Nie da się zeskanować? Pokaż kod do wklejenia w aplikacji",
+            "onlyWhatYouAllow": ", i tylko w aplikacjach i folderach, na które pozwolisz na samym telefonie. Pilnuje tego telefon, nie ten sandbox. Wstrzymaj go z szybkich ustawień telefonu albo cofnij dostęp tutaj, a zatrzyma się natychmiast."
+        },
         "words": {
             "access": "Dostęp",
             "activateAnyway": "Aktywuj mimo to",
@@ -3419,9 +3432,13 @@
             "filterByDeviceSandbox": "Filtruj po urządzeniu, sandboxie, folderze albo porcie",
             "filterDevices": "Filtruj urządzenia",
             "intenticIconInTray": ", z ikony Intentic w zasobniku.",
-            "noDevicePairedSandbox": "Z tym sandboxem nie jest jeszcze sparowane żadne urządzenie. Dodaj jedno, żeby pracować na nim z własnego edytora, albo podłącz komputer z Linuksem/Windowsem w Możliwościach, żeby agent mógł tam pracować.",
+            "noDevicePairedSandbox": "Z tym sandboxem nie jest jeszcze sparowane żadne urządzenie. Dodaj jedno, żeby pracować na nim z własnego edytora, albo podłącz komputer z Linuksem/Windowsem lub telefon z Androidem w Możliwościach, żeby agent mógł tam pracować.",
             "noDeviceSandboxHere": "Żadne urządzenie ani sandbox tutaj nie pasuje do „{query}”.",
             "readingDevices": "Odczytywanie Twoich urządzeń…"
+        },
+        "phoneRows": {
+            "phones": "Telefony",
+            "manage": "Zarządzaj"
         },
         "deviceBoardCard": {
             "more": "… i {more} więcej",

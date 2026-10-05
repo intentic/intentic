@@ -81,6 +81,8 @@ export { historyContract } from "./contracts/history.contract.js";
 export { deviceContract } from "./contracts/device.contract.js";
 // Same inversion, spoken over a browser extension's socket, with the extension implementing it.
 export { webextContract } from "./contracts/webext.contract.js";
+// Same inversion, spoken over a phone app's socket as JSON-RPC (protocol/phone-protocol.ts), with the app implementing it.
+export { phoneContract } from "./contracts/phone.contract.js";
 // Same inversion again: spoken over a runner's WebSocket, with the runner implementing it.
 export { runnerContract } from "./contracts/runner.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
@@ -164,6 +166,8 @@ export * from "./text/documents.js";
 export * from "./protocol/host-protocol.js";
 export * from "./protocol/webext-protocol.js";
 export * from "./protocol/webext-links.js";
+export * from "./protocol/phone-protocol.js";
+export * from "./protocol/phone-links.js";
 export * from "./protocol/runner-protocol.js";
 export * from "./protocol/listener-protocol.js";
 export * from "./protocol/container-requirements.js";
@@ -247,6 +251,7 @@ export * from "./schemas/providers/usage.js";
 export * from "./schemas/vpn.js";
 export * from "./schemas/offload.js";
 export * from "./schemas/webext.js";
+export * from "./schemas/phone.js";
 export * from "./schemas/workflows.js";
 export * from "./schemas/workspace/workspace-repos.js";
 export * from "./schemas/workspace/workspace-search.js";

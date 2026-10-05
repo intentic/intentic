@@ -53,6 +53,12 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-09-04",
     },
     // Answers the quickstart's objection; description leads with what the app removes, not what it's built with.
+    "/phone/": {
+        title: "Intentic Device: let your agent work on your Android phone",
+        description:
+            "Connect your own Android phone to your intentic sandbox. The agent sees the screen and works in the apps and folders you allow, and you can pause it from Quick Settings.",
+        datePublished: "2026-10-05",
+    },
     "/download/": {
         title: "Download Intentic for Windows and Linux",
         description:

@@ -29,6 +29,19 @@ flowchart LR
   pasted or set into a field that the command classifier reads as destructive needs "Run destructive commands",
   as running it would. The sandbox also judges that text with the owner's safety policy before it crosses
   (`hosts/host-command-guard.ts`, `typedInCall`).
+- An Android phone attached to the machine over adb, by USB or wireless debugging, gets its own tools
+  ([`tools/android.ts`](src/device/tools/android.ts), its parsers in `android-parse.ts`): `android_devices`,
+  `android_screenshot`, `android_ui_elements`, `android_act`, `android_shell`, `android_install` and
+  `android_logcat`. adb is found in `ANDROID_HOME`, `ANDROID_SDK_ROOT`, Android Studio's SDK, then `PATH`, afresh
+  on every call; without it each tool answers how to install platform-tools. A call names a phone by `serial` and
+  is refused when several are attached and none is named. Phone screenshots are frames like the desktop's, in a
+  `FrameLog` per phone and shown as `phone-…`, so a desktop frame is never read as a phone one. Element refs
+  (`e1`…) come from the uiautomator dump and hold until the next listing. The switches are the desktop's:
+  `screen` to look, `control` to touch, `shell` for the shell, logcat and the device list, `shell` and `write` to
+  install. Keys that lock the phone (POWER, SLEEP) are refused, and a command or typed text the classifiers read
+  as destructive (the shared one, plus `pm uninstall`, `pm clear`, `rm -r`, `settings put`, `svc`, `reboot`, a
+  wipe) needs "Run destructive commands". The sandbox judges `android_shell` as `adb shell <command>` and text
+  typed with `android_act` like the desktop's, before either crosses.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). `diagnose_sandbox` is

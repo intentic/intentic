@@ -88,7 +88,7 @@ const raise = (subject: CapabilityNeed): Resolved => ({ kind: "raise", subject, 
 const refused = (code: string, message: string): Resolved => ({ kind: "refused", code, message });
 
 // The kinds whose connection a turn mounts at its start, so a later grant or connection reaches only the next turn.
-const MOUNTED = new Set(["browser", "identity", "device", "webext", "mcp", "agent", "plugin"]);
+const MOUNTED = new Set(["browser", "identity", "device", "webext", "phone", "mcp", "agent", "plugin"]);
 
 export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
     const entryFor = async (asked: string): Promise<{ entry: CapabilityCatalogEntry; instance?: Capability } | undefined> => {
@@ -148,7 +148,9 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             kind: "met",
             message: [
                 `${entry.name} is connected as "${capability.id}", after this turn started, so its tools and skill load on your next turn.`,
-                ...(now.length > 0 ? [`In this turn, set its variables from their references, which the sandbox fills in at execution: ${now.join(" ")}`] : []),
+                ...(now.length > 0
+                    ? [`In this turn, set its variables from their references, which the sandbox fills in at execution: ${now.join(" ")}`]
+                    : []),
                 ...(MOUNTED.has(capability.kind) ? ["Finish what you can and end this turn: nothing mounts it mid-turn."] : []),
             ].join(" "),
         };
@@ -181,7 +183,12 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             );
         }
         const all = instancesOf(entry, await deps.capabilities());
-        const matching = found.instance !== undefined ? [found.instance] : ask.target === undefined ? all : all.filter((capability) => servesTarget(capability, ask.target ?? ""));
+        const matching =
+            found.instance !== undefined
+                ? [found.instance]
+                : ask.target === undefined
+                  ? all
+                  : all.filter((capability) => servesTarget(capability, ask.target ?? ""));
         const statuses = await Promise.all(matching.map(async (capability) => ({ capability, status: await deps.status(capability) })));
         const live = statuses.find(({ status }) => status.state === "active");
         const connected = live ?? statuses[0];
@@ -198,7 +205,9 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         if (connected !== undefined) {
             // Connected but not working (or said to be refusing): a new credential, not a second connection.
             const reported = ask.reconnect === true && live !== undefined;
-            const reason = reported ? "The agent says its credential is being refused, though the connection still answers." : connected.status.detail;
+            const reason = reported
+                ? "The agent says its credential is being refused, though the connection still answers."
+                : connected.status.detail;
             return raise({
                 kind: "capability",
                 entry: entry.id,
@@ -219,7 +228,9 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             ...(ask.target === undefined ? {} : { target: ask.target }),
             ...(Object.keys(prefill).length === 0 ? {} : { prefill }),
             ...(all.length > 0 && ask.target !== undefined
-                ? { reason: `${all.map((capability) => `"${capability.id}"`).join(", ")} ${all.length === 1 ? "is" : "are"} connected, but not for ${hostOf(ask.target)}.` }
+                ? {
+                      reason: `${all.map((capability) => `"${capability.id}"`).join(", ")} ${all.length === 1 ? "is" : "are"} connected, but not for ${hostOf(ask.target)}.`,
+                  }
                 : {}),
         });
     };
@@ -285,11 +296,20 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             // says so right after it saves, so its buttons go at once instead of inviting a second press.
             if (subject.mode === "change") {
                 const met = await check(need);
-                return met === undefined ? { refused: `The change is not on ${subject.name} "${subject.instance ?? ""}" yet: apply it again.` } : { status: "met", ...met };
+                return met === undefined
+                    ? { refused: `The change is not on ${subject.name} "${subject.instance ?? ""}" yet: apply it again.` }
+                    : { status: "met", ...met };
             }
             // The person says it is done: a working connection meets it, a reconnect included.
             const entry = (await deps.entries()).find((candidate) => candidate.id === subject.entry);
-            const instance = entry === undefined ? undefined : instancesOf(entry, await deps.capabilities()).find((capability) => subject.instance === undefined ? subject.target === undefined || servesTarget(capability, subject.target) : capability.id === subject.instance);
+            const instance =
+                entry === undefined
+                    ? undefined
+                    : instancesOf(entry, await deps.capabilities()).find((capability) =>
+                          subject.instance === undefined
+                              ? subject.target === undefined || servesTarget(capability, subject.target)
+                              : capability.id === subject.instance,
+                      );
             if (instance === undefined || (await deps.status(instance)).state !== "active") {
                 return { refused: `${subject.name} is not working yet: finish its setup first, then press again.` };
             }

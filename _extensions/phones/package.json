@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-phones",
+    "version": "1.0.0",
+    "description": "The phone families a user can connect their own phone of (Android) as a pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

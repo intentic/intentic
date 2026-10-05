@@ -66,6 +66,9 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     readonly rememberTools: (id: string, result: unknown) => void;
     readonly knownTools: (id: string) => unknown | undefined;
     readonly online: (id: string) => boolean;
+    // Resolves true the moment this peer is connected and greeted (at once if it already holds a socket), false once
+    // `timeoutMs` passes without one: how a call to a phone the sandbox just woke waits for it to dial in.
+    readonly whenOnline: (id: string, timeoutMs: number) => Promise<boolean>;
     // Every peer holding a socket now; checked against the enrollment store by the peers invariant.
     readonly connected: () => readonly string[];
     // Those plus the ones remembered since they dropped: what a machine's environment list is built from, since a
@@ -91,6 +94,15 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
     memory: PeerToolMemory = memoryPeerTools(),
 ): PeerHub<Client, Announced, Facts, Scopes> => {
     const live = new Map<string, LivePeer<Client, Announced, Facts>>();
+    // Callers waiting for a peer to come up, by id; each is told once, by an attach or its own deadline.
+    const waiting = new Map<string, Set<(up: boolean) => void>>();
+    const arrived = (id: string): void => {
+        const waiters = waiting.get(id);
+        waiting.delete(id);
+        for (const tell of waiters ?? []) {
+            tell(true);
+        }
+    };
     const seen = new Map<string, { announced: Announced; facts: Facts | undefined; lastSeen: number }>();
     // One file serves every door, so a peer's tools are keyed by the door they came through as well as its own name.
     const toolKey = (id: string): string => `${spec.domain}:${id}`;
@@ -184,6 +196,9 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             peer.lastSeen = Date.now();
             // Fires once per hello; unlike `refresh`, safe to publish from without looping.
             said();
+            // Told here rather than at attach: a peer has its grant by the time it described itself (greetPeer pushes
+            // scopes first), so a call that waited for it is never refused for a grant still on its way.
+            arrived(id);
         },
         refresh: async (id, timeoutMs) => {
             const peer = live.get(id);
@@ -269,6 +284,25 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             said();
         },
         online: (id) => live.has(id),
+        whenOnline: (id, timeoutMs) =>
+            live.has(id)
+                ? Promise.resolve(true)
+                : new Promise<boolean>((resolve) => {
+                      const waiters = waiting.get(id) ?? new Set<(up: boolean) => void>();
+                      waiting.set(id, waiters);
+                      const timer = setTimeout(() => {
+                          waiters.delete(tell);
+                          if (waiters.size === 0 && waiting.get(id) === waiters) {
+                              waiting.delete(id);
+                          }
+                          resolve(false);
+                      }, timeoutMs);
+                      const tell = (up: boolean): void => {
+                          clearTimeout(timer);
+                          resolve(up);
+                      };
+                      waiters.add(tell);
+                  }),
         connected: () => [...live.keys()],
         // Every peer this hub can say anything about: holding a socket now, or remembered since it dropped. What a
         // machine's environment list is built from, where `connected` alone would lose a distro that went to sleep.

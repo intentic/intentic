@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="touch_service_label">Intentic Device</string>
+    <string name="touch_service_description">Lets the AI agent you connected to this phone read the screen and tap, swipe and type in the apps you allow. You can pause it from Quick Settings at any time.</string>
+</resources>

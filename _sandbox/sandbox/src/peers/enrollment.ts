@@ -24,6 +24,7 @@ export const syncPairConsumedDocument = defineDocument(burnFile("sync-pair-consu
 export const hostPairConsumedDocument = defineDocument(burnFile("host-pair-consumed.json"));
 export const webextPairConsumedDocument = defineDocument(burnFile("webext-pair-consumed.json"));
 export const runnerPairConsumedDocument = defineDocument(burnFile("runner-pair-consumed.json"));
+export const phonePairConsumedDocument = defineDocument(burnFile("phone-pair-consumed.json"));
 export type BurnDocument = typeof syncPairConsumedDocument;
 
 // Where a door records the pairings it burned: its document, and the file it opens (under /history, or a test's own).
@@ -202,7 +203,10 @@ export const hostEnrollmentsDocument = defineDocument({
             transform(
                 "names the card, environment and machine of an enrollment that only spelled them in its id",
                 (entry: JsonObject): entry is LegacyHostEnrollment =>
-                    typeof entry["id"] === "string" && typeof entry["hash"] === "string" && typeof entry["enrolledAt"] === "number" && !Object.hasOwn(entry, "card"),
+                    typeof entry["id"] === "string" &&
+                    typeof entry["hash"] === "string" &&
+                    typeof entry["enrolledAt"] === "number" &&
+                    !Object.hasOwn(entry, "card"),
                 (entry: LegacyHostEnrollment) => {
                     const { card, environment } = parseHostConnection(entry.id);
                     return { ...entry, card, environment, machineId: derivedMachineId(card) };
@@ -215,6 +219,11 @@ export const webextEnrollmentsDocument = defineDocument({
     root: "history",
     path: "webext-enrollments.json",
     schema: enrollmentsSchema("browsers", {}),
+});
+export const phoneEnrollmentsDocument = defineDocument({
+    root: "history",
+    path: "phone-enrollments.json",
+    schema: enrollmentsSchema("phones", {}),
 });
 export const runnerEnrollmentsDocument = defineDocument({
     root: "history",

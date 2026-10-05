@@ -906,6 +906,19 @@
             "pasteIntoExtensionsPopup": "Pégalo en el popup de la extensión. El código funciona una vez y caduca en unos diez minutos. Esta ventana se actualiza sola cuando el navegador conecta.",
             "press": ") y pulsa"
         },
+        "phoneConnectDialog": {
+            "intro": "Instala Intentic Device en el teléfono que quieres conectar y escanea este código con la cámara del teléfono. El teléfono se conecta a este sandbox solo cuando el agente lo necesita, muestra una notificación mientras está conectado y se puede pausar desde sus ajustes rápidos. No se abre nada en tu red.",
+            "connected": "está conectado. El agente puede trabajar en él desde su próximo turno.",
+            "wakeReady": "El agente puede despertarlo cuando esté dormido.",
+            "wakeUnavailable": "Responde mientras la app Intentic Device esté abierta o configurada para seguir conectada: esta plataforma no puede despertarlo.",
+            "wakeFailed": "Todavía no se pudo configurar el despertar. Se volverá a intentar la próxima vez que abras Capacidades.",
+            "getApp": "Obtener Intentic Device →",
+            "openOnThisPhone": "Abrir en Intentic Device",
+            "qrLabel": "Código de emparejamiento para la cámara del teléfono",
+            "scanWithCamera": "Apunta la cámara del teléfono al código y abre el enlace que muestra. El código funciona una vez y caduca en unos diez minutos. Esta ventana se actualiza sola cuando el teléfono se conecta.",
+            "cantScan": "¿No puedes escanearlo? Muestra el código para pegarlo en la app",
+            "onlyWhatYouAllow": ", y solo en las apps y carpetas que permitas en el propio teléfono. Eso lo hace cumplir el teléfono, no este sandbox. Páusalo desde los ajustes rápidos del teléfono, o revócalo aquí, y se detiene al instante."
+        },
         "words": {
             "access": "Acceso",
             "needsSandboxRebuild": "Necesita reconstruir el sandbox",
@@ -2491,9 +2504,13 @@
             "filterByDeviceSandbox": "Filtrar por dispositivo, sandbox, carpeta o puerto",
             "filterDevices": "Filtrar dispositivos",
             "intenticIconInTray": ", desde el icono de Intentic en tu bandeja.",
-            "noDevicePairedSandbox": "Todavía no hay ningún dispositivo emparejado con este sandbox. Añade uno para trabajar en él desde tu propio editor, o conecta un PC Linux/Windows desde Capacidades para que el agente pueda trabajar allí.",
+            "noDevicePairedSandbox": "Todavía no hay ningún dispositivo emparejado con este sandbox. Añade uno para trabajar en él desde tu propio editor, o conecta un PC Linux/Windows o un teléfono Android desde Capacidades para que el agente pueda trabajar allí.",
             "noDeviceSandboxHere": "Ningún dispositivo ni sandbox de aquí coincide con «{query}».",
             "readingDevices": "Leyendo tus dispositivos…"
+        },
+        "phoneRows": {
+            "phones": "Teléfonos",
+            "manage": "Gestionar"
         },
         "deviceBoardCard": {
             "more": "… y {more} más",

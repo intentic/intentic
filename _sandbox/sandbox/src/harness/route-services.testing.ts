@@ -34,6 +34,7 @@ import { resourcesSliceFake } from "../system/resources/resources-slice.testing.
 import { testConfig, testTurnMounts } from "../testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { webextSliceFake } from "../webext/webext-slice.testing.js";
+import { phonesSliceFake } from "../phones/phone-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
 import { type WorkspaceFakeOverrides, workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
@@ -122,6 +123,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         privacyShield: privacySliceFake().privacyShield,
         ...sessionsSliceFake(context),
         ...webextSliceFake(),
+        ...phonesSliceFake(),
         ...workspaceSliceFake({ iq }),
         ...claudeSliceFake({ claudeStore }),
         ...codexSliceFake(),
@@ -191,11 +193,23 @@ export interface TurnWrites {
     readonly providerRefusals: { readonly provider: string; readonly refusal: Parameters<Services["providerRefusals"]["record"]>[1] }[];
     readonly refusalsCleared: { readonly provider: string; readonly account: string | undefined }[];
     readonly headroomRefreshes: Parameters<Services["headroom"]["refresh"]>[0][];
-    readonly headroomRecords: { readonly provider: string; readonly account: string; readonly usage: Parameters<Services["headroom"]["record"]>[2] }[];
+    readonly headroomRecords: {
+        readonly provider: string;
+        readonly account: string;
+        readonly usage: Parameters<Services["headroom"]["record"]>[2];
+    }[];
     readonly seatsRefused: { readonly account: string; readonly reason: string }[];
     readonly seatsCleared: string[];
-    readonly modelRefusals: { readonly provider: string; readonly model: string; readonly refusal: Parameters<Services["modelRefusals"]["record"]>[2] }[];
-    readonly modelCooldowns: { readonly provider: string; readonly model: string; readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2] }[];
+    readonly modelRefusals: {
+        readonly provider: string;
+        readonly model: string;
+        readonly refusal: Parameters<Services["modelRefusals"]["record"]>[2];
+    }[];
+    readonly modelCooldowns: {
+        readonly provider: string;
+        readonly model: string;
+        readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2];
+    }[];
     readonly observedLimits: {
         readonly provider: string;
         readonly account: string;
@@ -216,7 +230,9 @@ export interface TurnWrites {
 // The stores a turn writes while it runs and as it settles, each recording every write and otherwise answering like an
 // empty one, and the spans it times; `snapshot` is the id every history capture answers with. Spread `overrides` into
 // `services`.
-export const recordingTurnStores = (options: { readonly snapshot?: string } = {}): { readonly writes: TurnWrites; readonly overrides: ServiceOverrides } => {
+export const recordingTurnStores = (
+    options: { readonly snapshot?: string } = {},
+): { readonly writes: TurnWrites; readonly overrides: ServiceOverrides } => {
     const writes: TurnWrites = {
         activity: [],
         usage: [],
@@ -258,7 +274,10 @@ export const recordingTurnStores = (options: { readonly snapshot?: string } = {}
                 refuse: async (account, reason) => void writes.seatsRefused.push({ account, reason }),
                 clear: async (account) => void writes.seatsCleared.push(account),
             },
-            modelRefusals: { refused: async () => new Set(), record: async (provider, model, refusal) => void writes.modelRefusals.push({ provider, model, refusal }) },
+            modelRefusals: {
+                refused: async () => new Set(),
+                record: async (provider, model, refusal) => void writes.modelRefusals.push({ provider, model, refusal }),
+            },
             modelCooldowns: {
                 cooling: async () => new Map(),
                 record: async (provider, model, cooldown) => void writes.modelCooldowns.push({ provider, model, cooldown }),

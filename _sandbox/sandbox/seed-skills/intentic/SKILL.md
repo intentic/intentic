@@ -36,8 +36,8 @@ What the daemon does around you:
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
   an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser
-  accounts and identities, their own devices, Docker, MCP servers, a wallet. Each connected one ships a
-  skill and its tools. A missing one is asked for with the `capabilities` skill, never set up by hand.
+  accounts and identities, their own devices (computers, and Android phones through the Intentic Device app), Docker,
+  MCP servers, a wallet. Each connected one ships a skill and its tools. A missing one is asked for with the `capabilities` skill, never set up by hand.
 - **Personas** are cards the owner writes that decide what a turn IS and MAY DO: which accounts it speaks
   through, which shelves of the toolbox are open (files, shell, web, browser, connectors, delegation…), which
   folder it may touch, which model it opens on, which system prompt it runs on. Enforcement is by absence: a

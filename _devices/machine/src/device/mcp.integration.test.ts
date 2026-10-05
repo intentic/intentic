@@ -17,7 +17,11 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
 });
 
 // `text` is the first block, the one a program reading a tool's answer takes; `texts` is every block, in order.
-const call = async (name: string, args: Record<string, unknown>, grant: DeviceScopes): Promise<{ text: string; texts: string[]; isError: boolean }> => {
+const call = async (
+    name: string,
+    args: Record<string, unknown>,
+    grant: DeviceScopes,
+): Promise<{ text: string; texts: string[]; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, grant)) as {
         result: { content: { text?: string }[]; isError: boolean };
     };
@@ -59,6 +63,13 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "screenshot",
         "ui_elements",
         "ui_act",
+        "android_devices",
+        "android_screenshot",
+        "android_ui_elements",
+        "android_act",
+        "android_shell",
+        "android_install",
+        "android_logcat",
         "list_sandboxes",
         "manage_sandbox",
         "swap_sandbox",
@@ -198,6 +209,10 @@ test("every tool says what a call can do to the device", async () => {
         "browser_read",
         "screenshot",
         "ui_elements",
+        "android_devices",
+        "android_screenshot",
+        "android_ui_elements",
+        "android_logcat",
         "list_sandboxes",
         "sandbox_logs",
         "diagnose_sandbox",
@@ -212,6 +227,9 @@ test("every tool says what a call can do to the device", async () => {
         "browser_key",
         "device",
         "ui_act",
+        "android_act",
+        "android_shell",
+        "android_install",
         "remove_sandbox",
     ]);
 });
@@ -284,6 +302,21 @@ test("describe names the shell, the home and the boundary: what the agent needs 
     expect(described.text).toContain("Shell for run_command:");
     expect(described.text).toContain(root);
     expect(described.text).toMatch(/Permissions: run commands on/);
+});
+
+// Decided on this machine before adb or a phone is looked for, so these hold on a computer with neither.
+test("the Android tools answer a switched-off scope, or a command that would lose something, as a readable refusal", async () => {
+    const shell = await call("android_shell", { command: "pm uninstall com.example.app" }, scopes({ destructive: "off" }));
+    expect(shell.isError).toBe(true);
+    expect(shell.text).toMatch(/^Refused: on the phone this command would uninstall an app, and "Run destructive commands" is switched off/);
+    const driven = await call("android_act", { action: "home" }, scopes({ control: "off" }));
+    expect(driven.isError).toBe(true);
+    expect(driven.text).toMatch(/Use the mouse and keyboard/);
+    const watched = await call("android_screenshot", {}, scopes({ screen: "off" }));
+    expect(watched.text).toMatch(/See the screen/);
+    const badAction = await call("android_act", { action: "power" }, scopes());
+    expect(badAction.isError).toBe(true);
+    expect(badAction.text).toMatch(/action/);
 });
 
 test("an unknown tool answers plainly rather than throwing", async () => {

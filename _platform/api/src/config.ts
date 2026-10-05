@@ -235,6 +235,16 @@ export const configSchema = z.object({
             url: z.url().default(`https://api.push.apple.com`),
         })
         .prefault({}),
+    // Push relay's Firebase credential: the only way a sandbox can wake the Intentic Device app on an Android phone, since
+    // FCM only accepts sends from the app's publisher. Empty disables Android wake channels; the relay then 404s them.
+    fcm: z
+        .object({
+            // The Firebase project's service account key, the whole JSON file as one string.
+            serviceAccount: z.string().default(``).meta({ secret: true }),
+            // Google's FCM HTTP v1 endpoint; point elsewhere only for a test double.
+            url: z.url().default(`https://fcm.googleapis.com`),
+        })
+        .prefault({}),
     // Pino logging: level sets verbosity, pretty toggles colorized dev output vs single-line JSON in prod.
     log: z
         .object({
@@ -268,6 +278,7 @@ export const CONFIG_SECRETS = [
     `hostedPlan.stripeSecretKey`,
     `hostedPlan.stripeWebhookSecret`,
     `apns.keyP8`,
+    `fcm.serviceAccount`,
 ];
 
 export const loadConfig = (): Config => loadPuristicConfig(definition);

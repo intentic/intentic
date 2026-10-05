@@ -1082,6 +1082,19 @@
             "pasteIntoExtensionsPopup": "Paste it into the extension's popup. The code works once and expires in about ten minutes. This window updates by itself when the browser connects.",
             "press": ") and press"
         },
+        "phoneConnectDialog": {
+            "intro": "Install Intentic Device on the phone you want to connect, then scan this code with the phone's camera. The phone connects out to this sandbox only while the agent needs it, shows a notification whenever it is connected, and can be paused from its Quick Settings. Nothing is opened on your network.",
+            "connected": "is connected. The agent can work on it from its next turn.",
+            "wakeReady": "The agent can wake it when it is asleep.",
+            "wakeUnavailable": "It answers while the Intentic Device app is open or set to stay connected: this platform cannot wake it.",
+            "wakeFailed": "Waking it could not be set up yet. It is tried again the next time you open Capabilities.",
+            "getApp": "Get Intentic Device →",
+            "openOnThisPhone": "Open in Intentic Device",
+            "qrLabel": "Pairing code for the phone's camera",
+            "scanWithCamera": "Point the phone's camera at the code and open the link it shows. The code works once and expires in about ten minutes. This window updates by itself when the phone connects.",
+            "cantScan": "Can't scan it? Show the code to paste into the app",
+            "onlyWhatYouAllow": ", and only in the apps and folders you allow on the phone itself. The phone enforces that part, not this sandbox. Pause it from the phone's Quick Settings, or Revoke here, and it stops immediately."
+        },
         "words": {
             "access": "Access",
             "activateAnyway": "Activate anyway",
@@ -3708,9 +3721,13 @@
             "filterByDeviceSandbox": "Filter by device, sandbox, folder or port",
             "filterDevices": "Filter devices",
             "intenticIconInTray": ", from the Intentic icon in your tray.",
-            "noDevicePairedSandbox": "No device is paired with this sandbox yet. Add one to work on it from your own editor, or connect a Linux/Windows PC from Capabilities to let the agent work there.",
+            "noDevicePairedSandbox": "No device is paired with this sandbox yet. Add one to work on it from your own editor, or connect a Linux/Windows PC or an Android phone from Capabilities to let the agent work there.",
             "noDeviceSandboxHere": "No device or sandbox here matches \"{query}\".",
             "readingDevices": "Reading your devices…"
+        },
+        "phoneRows": {
+            "phones": "Phones",
+            "manage": "Manage"
         },
         "deviceBoardCard": {
             "more": "… and {more} more",

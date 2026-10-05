@@ -35,7 +35,7 @@ const connection = (id: string, kind: CapabilitySummary[`kind`], config: Record<
     config,
     secrets: [],
 });
-const SOURCES: ConnectionSources = { host: () => undefined, browser: () => undefined, vpn: [], netdisk: [], devices: [] };
+const SOURCES: ConnectionSources = { host: () => undefined, browser: () => undefined, phone: () => undefined, vpn: [], netdisk: [], devices: [] };
 // A laptop syncing files, listed on the Linux tile it has not been connected on.
 const SYNCED: DeviceConnection = {
     id: `device:rog`,

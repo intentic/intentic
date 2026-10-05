@@ -33,7 +33,7 @@ export type HarnessPlanDeps = HarnessCredentialDeps &
     HarnessHooksDeps &
     HarnessServersDeps &
     TurnToolsDeps &
-    Pick<Services, "agent" | "capabilities" | "files" | "heavyCommands" | "hostReach" | "perf" | "sandboxSettings" | "webextReach">;
+    Pick<Services, "agent" | "capabilities" | "files" | "heavyCommands" | "hostReach" | "perf" | "phoneReach" | "sandboxSettings" | "webextReach">;
 
 // The schema's own defaults, so an untouched setting can be told from one the owner set to the same value; not restated
 // here to avoid a second, driftable copy.
@@ -163,6 +163,7 @@ export const planHarnessTurn = async (
     // Services, since the hosts and webext subsystems reach back into this one.
     const hostDevices = await deps.hostReach(granted);
     const ownBrowsers = await deps.webextReach(granted);
+    const ownPhones = await deps.phoneReach(granted);
     // Resolved by planTurn and already applied to `granted`; the open, attended fallback is only for the bench.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     // Resolved once and read twice (the plugin list and `iqAvailable`), so the notice and the load can't disagree.
@@ -182,6 +183,7 @@ export const planHarnessTurn = async (
         ...(sdkServers["diagnostics"] === undefined ? {} : { diagnostics: true }),
         hostDevices,
         ownBrowsers,
+        ownPhones,
         iqAvailable: iqLoaded,
         ...harnessAccounts(deps, input, context, granted),
         ...shellTools(deps, settings),

@@ -19,11 +19,13 @@ const door = (enrolled: readonly string[], connected: readonly string[]) => ({
 const card = (id: string, kind: CapabilityKind): Capability => ({ id, kind, config: {} }) as unknown as Capability;
 
 // Which door each check reads, so one fixture can be pointed at any of them and the others stay empty.
-const DOORS: Record<string, "hosts" | "webexts" | "runners"> = {
+const DOORS: Record<string, "hosts" | "webexts" | "phones" | "runners"> = {
     "live-hosts-are-enrolled": "hosts",
     "enrolled-devices-have-cards": "hosts",
     "live-browsers-are-enrolled": "webexts",
     "enrolled-browsers-have-cards": "webexts",
+    "live-phones-are-enrolled": "phones",
+    "enrolled-phones-have-cards": "phones",
     "live-runners-are-enrolled": "runners",
     "one-card-per-machine-environment": "hosts",
 };
@@ -33,7 +35,7 @@ const run = async (
     name: string,
     enrolled: readonly string[],
     connected: readonly string[],
-    cards: readonly Capability[] = enrolled.flatMap((id) => [card(id, "device"), card(id, "webext")]),
+    cards: readonly Capability[] = enrolled.flatMap((id) => [card(id, "device"), card(id, "webext"), card(id, "phone")]),
 ): Promise<void> => {
     const quiet = door([], []);
     const under = door(enrolled, connected);
@@ -43,6 +45,8 @@ const run = async (
         hostHub: at("hosts").hub,
         webexts: at("webexts").store,
         webextHub: at("webexts").hub,
+        phones: at("phones").store,
+        phoneHub: at("phones").hub,
         runners: at("runners").store,
         runnerHub: at("runners").hub,
         capabilities: { list: async () => [...cards] },
@@ -91,6 +95,16 @@ test("a machine's other OS installs are held by the machine's card, and named wh
     );
 });
 
+test("a phone's door is checked like a browser's: a stray socket and a card-less enrollment are each named", async () => {
+    await expect(run("live-phones-are-enrolled", ["pixel"], ["pixel", "old-pixel"])).rejects.toThrow(
+        /does not hold \(old-pixel\).*phone the owner disconnected/,
+    );
+    await expect(run("enrolled-phones-have-cards", ["pixel"], [], [card("pixel", "device")])).rejects.toThrow(
+        /no capability card \(pixel\).*phone app/,
+    );
+    await expect(run("enrolled-phones-have-cards", ["pixel"], ["pixel"])).resolves.toBeUndefined();
+});
+
 test("a card of another kind is not a grant: same name, different door", async () => {
     await expect(run("enrolled-devices-have-cards", ["laptop"], [], [card("laptop", "webext")])).rejects.toThrow(/\(laptop\)/);
 });
@@ -104,6 +118,8 @@ test("names a machine environment enrolled under two cards, and nothing when eac
         hostHub: { connected: () => [] },
         webexts: { list: async () => [] },
         webextHub: { connected: () => [] },
+        phones: { list: async () => [] },
+        phoneHub: { connected: () => [] },
         runners: { list: async () => [] },
         runnerHub: { connected: () => [] },
         capabilities: { list: async () => [] },

@@ -128,8 +128,11 @@ sandbox, a command on the owner's machine, a spawned subagent) raises its card t
 ## Peers
 
 `peers/` gives every outside party one door shape: a short-lived pairing, a durable enrollment token, a socket and an
-MCP bridge. The owner's computers (`hosts/`), the browser extension (`webext/`) and runners (`runners/`) are its three
-users; a bearer route admits one through `bearerPeer`. Desktop sync (`hosts/desktop-sync.ts`) keeps its own token store,
+MCP bridge. The owner's computers (`hosts/`), the browser extension (`webext/`), the owner's phones (`phones/`) and
+runners (`runners/`) are its four users; a bearer route admits one through `bearerPeer`. The phone door is the one that
+speaks plain JSON-RPC rather than oRPC frames (`phones/json-rpc-link.ts`, behind the same typed client), and the one
+whose peer can be woken: a tool call to a phone holding no socket pushes it awake through the platform's relay
+(`phones/phone-wake.ts`) and waits for it to dial in. Desktop sync (`hosts/desktop-sync.ts`) keeps its own token store,
 but answers a store it cannot read the way the doors do: unavailable, never unauthorized.
 
 ## Shared primitives

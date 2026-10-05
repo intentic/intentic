@@ -19,6 +19,7 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     // burst, and a flapping connection's own reconnect backoff into one frame.
     hosts: 250,
     webext: 250,
+    phones: 250,
     // A list's worth of background probes settles within moments of each other; one frame says all of it.
     capabilities: 250,
     runners: 250,

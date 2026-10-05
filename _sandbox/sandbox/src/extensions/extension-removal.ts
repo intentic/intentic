@@ -44,6 +44,8 @@ const effectOf = (capability: Capability): string => {
             return "that machine's key is revoked and its link to this sandbox cut; nothing on the machine itself is deleted";
         case "webext":
             return "that browser's pairing is revoked; the extension installed over there stays, disconnected";
+        case "phone":
+            return "that phone's pairing is revoked; the app installed on it stays, disconnected";
         default:
             return "its configuration is torn down and its stored values deleted";
     }
@@ -118,14 +120,22 @@ const storedSettingsOf = async (services: Services, extension: InstalledExtensio
 const deletedDirsOf = async (services: Services, extension: InstalledExtension): Promise<ExtensionRemovalPlan["files"]> => {
     const root = services.workspace.root;
     if (extension.source === "workspace") {
-        return [{ path: relative(root, extension.dir), detail: "its source, authored here; the deletion lands as a tracked change you can review or undo" }];
+        return [
+            {
+                path: relative(root, extension.dir),
+                detail: "its source, authored here; the deletion lands as a tracked change you can review or undo",
+            },
+        ];
     }
     if (extension.source !== "installed") {
         return [];
     }
     const kept = await previousVersionOf(services, extension.id, undefined);
     return [
-        { path: relative(root, extensionDir(root, extension.id)), detail: `the checkout at ${extension.manifest.version}, re-clonable from its source` },
+        {
+            path: relative(root, extensionDir(root, extension.id)),
+            detail: `the checkout at ${extension.manifest.version}, re-clonable from its source`,
+        },
         ...(kept === undefined
             ? []
             : [

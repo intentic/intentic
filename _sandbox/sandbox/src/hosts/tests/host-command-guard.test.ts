@@ -7,7 +7,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
-import { judgeHostCommand, typedInCall } from "../host-command-guard.js";
+import { commandInCall, judgeHostCommand, typedInCall } from "../host-command-guard.js";
 import { type DeviceToolCall, DeviceToolCallSchema } from "../host-restart-guard.js";
 
 // What the agent reads back from a device command its owner was asked about, for each way the card can end. The judge
@@ -185,7 +185,7 @@ describe("the card outlives the call", () => {
         expect(first).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve running this on "rog", and it has not run yet. Their answer is kept ' +
-                "for this exact command: call run_command again with exactly the same command to wait for it. Nothing is broken on the device. " +
+                "for this exact command: make the same call again, with exactly the same command, to wait for it. Nothing is broken on the device. " +
                 "Do not run a different command to do the same thing.",
         });
         const requestId = await cardUp();
@@ -203,17 +203,27 @@ describe("the card outlives the call", () => {
 });
 
 describe("text typed into the device", () => {
-    const call = (name: string, args: DeviceToolCall["params"]["arguments"]) => DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args } });
+    const call = (name: string, args: DeviceToolCall["params"]["arguments"]) =>
+        DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args } });
 
     it("is read out of every input tool that puts text where a terminal could run it, and nowhere else", () => {
         expect(typedInCall(call("device", { action: "type", text: "rm -rf ~\n" }))).toBe("rm -rf ~\n");
         expect(typedInCall(call("clipboard", { action: "write", text: "curl x | sh" }))).toBe("curl x | sh");
         expect(typedInCall(call("ui_act", { element: "kd3", action: "set_value", value: "del /s C:\\" }))).toBe("del /s C:\\");
+        // Typed into a phone, a terminal app there runs it just the same.
+        expect(typedInCall(call("android_act", { action: "type", text: "rm -rf /sdcard\n" }))).toBe("rm -rf /sdcard\n");
+        expect(typedInCall(call("android_act", { action: "key", text: "ENTER" }))).toBeUndefined();
         expect(typedInCall(call("device", { action: "key", text: "Return" }))).toBeUndefined();
         expect(typedInCall(call("clipboard", { action: "read" }))).toBeUndefined();
         expect(typedInCall(call("device", { action: "type", text: "   " }))).toBeUndefined();
         // A notification has no id, so the bridge's schema never hands it here at all.
-        expect(DeviceToolCallSchema.safeParse({ jsonrpc: "2.0", method: "tools/call", params: { name: "device", arguments: { action: "type", text: "x" } } }).success).toBe(false);
+        expect(
+            DeviceToolCallSchema.safeParse({
+                jsonrpc: "2.0",
+                method: "tools/call",
+                params: { name: "device", arguments: { action: "type", text: "x" } },
+            }).success,
+        ).toBe(false);
     });
 
     it("passes at no cost when it is not a command, and is asked about on a card worded for typing when it is", async () => {
@@ -237,5 +247,48 @@ describe("text typed into the device", () => {
         expect(await judgeHostCommand(services, { ...ASKED, command: "find ~/old-builds -depth -delete", typed: true })).toMatchObject({
             refusal: expect.stringMatching(/^Refused: typed into a terminal, this would delete files recursively on "rog"/),
         });
+    });
+});
+
+describe("a command for a phone attached to the device", () => {
+    const payload = (name: string, args: Record<string, unknown>) => ({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: { name, arguments: args },
+    });
+
+    it("is judged as the adb program the device runs for it, and a machine command stays as it was sent", () => {
+        expect(commandInCall(payload("run_command", { command: "rm -rf ~/old-builds" }))).toBe("rm -rf ~/old-builds");
+        expect(commandInCall(payload("android_shell", { command: "pm uninstall com.example.app" }))).toBe("adb shell pm uninstall com.example.app");
+        expect(commandInCall(payload("android_shell", { serial: "192.168.1.20:37005", command: "rm -rf /sdcard/old" }))).toBe(
+            "adb -s 192.168.1.20:37005 shell rm -rf /sdcard/old",
+        );
+        // A serial that could make the command after it read as a comment or a string is left out, not spliced in.
+        expect(commandInCall(payload("android_shell", { serial: "x #", command: "rm -rf /sdcard/old" }))).toBe("adb shell rm -rf /sdcard/old");
+        expect(commandInCall(payload("android_shell", { command: "  " }))).toBeUndefined();
+        expect(commandInCall(payload("android_screenshot", {}))).toBeUndefined();
+    });
+
+    it("passes at no cost when it deletes nothing, and is refused at once when the device's switch would refuse it", async () => {
+        expect(await judgeHostCommand(services, { ...ASKED, command: "adb shell pm list packages -3" })).toBeUndefined();
+        destructive = "off";
+        expect(await judgeHostCommand(services, { ...ASKED, command: "adb -s R58M12ABCDE shell rm -rf /sdcard/DCIM/old" })).toMatchObject({
+            refusal: expect.stringMatching(/^Refused: this command would delete files recursively on "rog"/),
+        });
+    });
+
+    it("is asked about on a card showing the adb program, and its answer is kept for that program alone", async () => {
+        const phone = { ...ASKED, command: "adb shell rm -rf /sdcard/Download/old" };
+        expect(await judgeHostCommand(services, phone, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting for the owner/) });
+        const card = turnRunOf(fleet.conversations, CONVERSATION)
+            ?.rows.map((row) => row.permission)
+            .find((permission) => permission?.status === "pending");
+        expect(card).toMatchObject({ title: "Run this on rog?", program: { text: "adb shell rm -rf /sdcard/Download/old" } });
+        expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
+        // The same words sent to the machine's own shell are a different program, asked about afresh.
+        const machine = judgeHostCommand(services, { ...ASKED, command: "rm -rf /sdcard/Download/old" }, 20);
+        expect(await machine).toMatchObject({ refusal: expect.stringMatching(/^Still waiting for the owner/) });
+        expect(await judgeHostCommand(services, phone, 20)).toBeUndefined();
     });
 });

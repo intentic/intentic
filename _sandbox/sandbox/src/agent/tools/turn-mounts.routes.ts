@@ -26,6 +26,7 @@ export interface MountEndpoints {
     readonly browser: RpcEndpoint<TargetOf<"browser">>;
     readonly device: RpcEndpoint<TargetOf<"device">>;
     readonly webext: RpcEndpoint<TargetOf<"webext">>;
+    readonly phone: RpcEndpoint<TargetOf<"phone">>;
     readonly tools: RpcEndpoint<TargetOf<"tools">>;
     // The whole exchange, forwarded to the backend host or the process (extension-mcp.ts).
     readonly extension: (target: TargetOf<"extension">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
@@ -40,6 +41,8 @@ const rpcOf = (endpoints: MountEndpoints, target: Exclude<MountTarget, TargetOf<
             return (message: RpcMessage) => endpoints.device(target, message, call);
         case "webext":
             return (message: RpcMessage) => endpoints.webext(target, message, call);
+        case "phone":
+            return (message: RpcMessage) => endpoints.phone(target, message, call);
         case "tools":
             return (message: RpcMessage) => endpoints.tools(target, message, call);
     }

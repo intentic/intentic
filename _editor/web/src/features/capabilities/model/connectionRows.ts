@@ -1,6 +1,6 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import type { CapabilityKind, Device, HostSummary, NetdiskLink, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, Device, HostSummary, NetdiskLink, PhoneSummary, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
 import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, vpnFacts } from "./connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
@@ -17,14 +17,32 @@ import { entryIcon } from "./tiles";
 export interface ConnectionSources {
     readonly host: (id: string) => HostSummary | undefined;
     readonly browser: (id: string) => WebExtSummary | undefined;
+    readonly phone: (id: string) => PhoneSummary | undefined;
     readonly vpn: readonly VpnLink[];
     readonly netdisk: readonly NetdiskLink[];
     readonly devices: readonly Device[];
 }
 
-// A connection's state, with the machine/browser roster's online answer folded in where there is one.
+// The roster's answer for a peer connection: the browser, phone or machine at the far end, by the tile's kind.
+const peerOf = (kind: CapabilityKind, id: string, sources: ConnectionSources): { readonly online: boolean } | undefined =>
+    kind === `webext` ? sources.browser(id) : kind === `phone` ? sources.phone(id) : sources.host(id);
+
+// A connection's state, with the machine/browser/phone roster's online answer folded in where there is one.
 export const liveState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary, sources: ConnectionSources): ConnectionState =>
-    connectionState(entry.kind, instance, (entry.kind === `webext` ? sources.browser(instance.id) : sources.host(instance.id))?.online);
+    connectionState(entry.kind, instance, peerOf(entry.kind, instance.id, sources)?.online);
+
+// A phone names itself and its Android release, and says when it cannot be woken yet: asleep is its usual state, so
+// "can't be woken" is the one thing worth the owner's attention.
+export const phoneFacts = (instance: CapabilitySummary, sources: ConnectionSources): string => {
+    const phone = sources.phone(instance.id);
+    if (phone?.facts === undefined) {
+        return connectionFacts(instance);
+    }
+    const wake = phone.wake === `ready` ? `` : phone.wake === `register` ? `wake not set up yet` : `answers only while its app is open`;
+    return [`${phone.facts.device} · Android ${phone.facts.android}`, phone.facts.paused ? `paused on the phone` : ``, wake]
+        .filter((fact) => fact !== ``)
+        .join(` · `);
+};
 
 // A device's facts line: its OS, and the other doors onto the same PC when it has any, so two ids that are one
 // computer read as one on this screen too.
@@ -38,6 +56,9 @@ export const hostFacts = (instance: CapabilitySummary, sources: ConnectionSource
 export const tileRowFacts = (kind: CapabilityKind | undefined, instance: CapabilitySummary, sources: ConnectionSources): string => {
     if (kind === `device`) {
         return hostFacts(instance, sources);
+    }
+    if (kind === `phone`) {
+        return phoneFacts(instance, sources);
     }
     // A browser names itself and how many sites it may work on; no stored config can answer either.
     if (kind === `webext`) {
@@ -64,7 +85,11 @@ export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, so
     const facts =
         (tile.entry.kind === `vpn` ? vpnFacts(instance.id, sources.vpn) : undefined) ??
         (tile.entry.kind === `netdisk` ? netdiskFacts(instance.id, sources.netdisk) : undefined) ??
-        (tile.entry.kind === `device` ? hostFacts(instance, sources) : connectionFacts(instance));
+        (tile.entry.kind === `device`
+            ? hostFacts(instance, sources)
+            : tile.entry.kind === `phone`
+              ? phoneFacts(instance, sources)
+              : connectionFacts(instance));
     // An unnamed connection took the tile's id; the tile is then the name, and the line below is free for facts.
     const named = instance.id !== tile.entry.id;
     const name = entryName(tile.entry);

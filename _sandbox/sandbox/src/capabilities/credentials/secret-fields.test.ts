@@ -29,7 +29,11 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     ssh: [
         { id: "build-box", kind: "ssh", config: { auth: "key", host: "h.example.com", port: 22, user: "root", privateKey: "-----BEGIN-----" } },
         // A key the sandbox generated: its echo adds the public half, which must not keep the private one out of the vault.
-        { id: "made-box", kind: "ssh", config: { auth: "generated", host: "h.example.com", port: 22, user: "root", privateKey: generateSshKey("c").privateKey } },
+        {
+            id: "made-box",
+            kind: "ssh",
+            config: { auth: "generated", host: "h.example.com", port: 22, user: "root", privateKey: generateSshKey("c").privateKey },
+        },
         { id: "jump", kind: "ssh", config: { auth: "password", host: "h.example.com", port: 22, user: "root", password: "pw" } },
     ],
     vpn: [
@@ -145,6 +149,24 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             id: "my-chrome",
             kind: "webext",
             config: { platform: "chrome", read: "on", act: "on", screenshot: "on", cookies: "on", confirm: "always" },
+        },
+    ],
+    // Every phone field is a permission, not a credential; the echo must be total or a switch is vaulted.
+    phone: [
+        {
+            id: "my-pixel",
+            kind: "phone",
+            config: {
+                platform: "android",
+                screen: "on",
+                control: "on",
+                files: "on",
+                write: "on",
+                notifications: "on",
+                apps: "on",
+                destructive: "on",
+                confirm: "always",
+            },
         },
     ],
     agent: [{ id: "codex", kind: "agent", config: { command: "codex", name: "Codex", env: "KEY=value", loginCommand: "codex login" } }],

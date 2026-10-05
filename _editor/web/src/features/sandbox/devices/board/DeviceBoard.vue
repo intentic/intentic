@@ -14,6 +14,7 @@ import {
 } from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
+import PhoneRows from "../phones/PhoneRows.vue";
 import { type MachineRow, rowMatches, showFilter } from "../deviceRows";
 import { desktopApp } from "../../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
@@ -56,7 +57,6 @@ const inDesktopApp = desktopApp() !== undefined;
 
     <!-- `flat`: the cards bring their own surfaces, and one drawn around them would nest a card in a card. -->
     <RowGroup flat undivided>
-
         <div class="flex flex-col gap-3">
             <p v-if="inDesktopApp" class="flex items-center gap-2 px-1 text-xs text-muted">
                 <Icon name="desktop" class="shrink-0" aria-hidden="true" />
@@ -101,6 +101,9 @@ const inDesktopApp = desktopApp() !== undefined;
                     {{ t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query }) }}
                 </p>
             </div>
+
+            <!-- The owner's phones: no folders or sandboxes on them, so a row each rather than a machine's card. -->
+            <PhoneRows />
         </div>
     </RowGroup>
 </template>

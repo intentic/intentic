@@ -8,6 +8,8 @@ packages:
   # that actually builds it, so the shared lockfile and turbo graph stay free of mobile toolchains.
   - "!_editor/ios-app"
   - "!_editor/android-app"
+  # The Intentic Device phone app is a Gradle project with no node toolchain at all.
+  - "!_devices/android"
   - "_extensions/*"
   - "_platform/*"
   - "_sandbox/*"
@@ -394,6 +396,9 @@ catalog:
   # fileq's pdf deriver: a serverless pdf.js build that extracts text layers in plain Node — no worker, no
   # canvas, no DOM shims — at a fraction of pdfjs-dist's install.
   unpdf: 1.8.1
+  # QR codes drawn in the browser (the phone pairing dialog): the code carries a live pairing token, so it is never
+  # rendered by a third-party service. Zero dependencies.
+  uqr: 0.1.3
   vite: 8.3.1
   vitest: 5.0.2
   vue: 3.5.43

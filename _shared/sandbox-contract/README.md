@@ -7,7 +7,7 @@ flowchart LR
     web["Editor<br/>typed oRPC client"] --> contract(["sandboxContract"])
     ext["Extensions<br/>api.sandbox.rpc"] --> contract
     contract --> daemon["Sandbox daemon<br/>route factories"]
-    daemon -- "device · webext<br/>runner contracts" --> peers["Machines · browser extension<br/>runners"]
+    daemon -- "device · webext · phone<br/>runner contracts" --> peers["Machines · browser extension<br/>phones · runners"]
     contract -. "contract.lock.json" .-> shrink["contract-shrink<br/>CI check"]
     contract -. "generated from" .-> openapi["sandbox-openapi"]
 ```
@@ -18,8 +18,10 @@ flowchart LR
 - Policy sits beside each route: `procedure()` declares how a request authenticates, which member tier it needs and how
   far a control token reaches. Routes outside oRPC (streams, WebSocket upgrades, `/health`) are listed in
   `RAW_ROUTES`.
-- Three contracts run the other way. `deviceContract`, `webextContract` and `runnerContract` are served by a user's
-  machine, the browser extension and a runner over the socket each one opens, with the daemon as the client.
+- Four contracts run the other way. `deviceContract`, `webextContract`, `phoneContract` and `runnerContract` are served
+  by a user's machine, the browser extension, the phone app and a runner over the socket each one opens, with the
+  daemon as the client. The phone's is carried as plain JSON-RPC (`src/protocol/phone-protocol.ts`), since its far end is
+  a Kotlin app; `golden/phone-wire.json` holds example frames that both ends test against.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers

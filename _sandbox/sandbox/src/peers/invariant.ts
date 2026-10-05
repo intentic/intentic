@@ -10,7 +10,9 @@ import type { PeerHub } from "./peer-hub.js";
 
 type Roster = { readonly list: () => Promise<readonly { readonly id: string; readonly card: string }[]> };
 // The hosts door's roster, whose records also say which computer and which OS install on it each enrollment is.
-type MachineRoster = { readonly list: () => Promise<readonly { readonly id: string; readonly card: string; readonly machineId: string; readonly environment: string }[]> };
+type MachineRoster = {
+    readonly list: () => Promise<readonly { readonly id: string; readonly card: string; readonly machineId: string; readonly environment: string }[]>;
+};
 type Sockets = Pick<PeerHub<never, unknown, unknown, unknown>, "connected">;
 
 export interface PeerRegistryDeps {
@@ -18,9 +20,11 @@ export interface PeerRegistryDeps {
     readonly hostHub: Sockets;
     readonly webexts: Roster;
     readonly webextHub: Sockets;
+    readonly phones: Roster;
+    readonly phoneHub: Sockets;
     readonly runners: Roster;
     readonly runnerHub: Sockets;
-    // What the owner has actually granted; a runner has no card, so only the two gated doors are judged against it.
+    // What the owner has actually granted; a runner has no card, so only the gated doors are judged against it.
     readonly capabilities: Pick<CapabilitiesStore, "list">;
 }
 
@@ -81,8 +85,12 @@ const machineCheck = (store: MachineRoster): InvariantCheck => ({
         }
         const shared = [...cardsBy.entries()].filter(([, cards]) => cards.size > 1);
         if (shared.length > 0) {
-            const named = shared.map(([key, cards]) => `${key.split(" ")[1] ?? ""} of machine ${key.split(" ")[0] ?? ""} under ${[...cards].toSorted().join(" and ")}`);
-            fail(`${shared.length} machine environment(s) are enrolled under more than one card (${named.join("; ")}): two grants over one agent, whose switches can disagree`);
+            const named = shared.map(
+                ([key, cards]) => `${key.split(" ")[1] ?? ""} of machine ${key.split(" ")[0] ?? ""} under ${[...cards].toSorted().join(" and ")}`,
+            );
+            fail(
+                `${shared.length} machine environment(s) are enrolled under more than one card (${named.join("; ")}): two grants over one agent, whose switches can disagree`,
+            );
         }
     },
 });
@@ -90,14 +98,28 @@ const machineCheck = (store: MachineRoster): InvariantCheck => ({
 export const checks = (deps: PeerRegistryDeps): readonly InvariantCheck[] => [
     registryCheck("live-hosts-are-enrolled", deps.hosts, deps.hostHub, "a device the owner disconnected that the agent can still drive"),
     registryCheck("live-browsers-are-enrolled", deps.webexts, deps.webextHub, "a browser the owner disconnected that the agent can still drive"),
+    registryCheck("live-phones-are-enrolled", deps.phones, deps.phoneHub, "a phone the owner disconnected that the agent can still drive"),
     registryCheck("live-runners-are-enrolled", deps.runners, deps.runnerHub, "a revoked runner still receiving this sandbox's turns and credentials"),
-    grantCheck("enrolled-devices-have-cards", deps.hosts, deps.capabilities, "device", "a key into this sandbox that no screen lists and no button can withdraw"),
+    grantCheck(
+        "enrolled-devices-have-cards",
+        deps.hosts,
+        deps.capabilities,
+        "device",
+        "a key into this sandbox that no screen lists and no button can withdraw",
+    ),
     grantCheck(
         "enrolled-browsers-have-cards",
         deps.webexts,
         deps.capabilities,
         "webext",
         "a browser extension still paired to a sandbox whose card for it is gone",
+    ),
+    grantCheck(
+        "enrolled-phones-have-cards",
+        deps.phones,
+        deps.capabilities,
+        "phone",
+        "a phone app still paired to a sandbox whose card for it is gone",
     ),
     machineCheck(deps.hosts),
 ];

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import type { HostSummary, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import {
     BrandMark,
     Button,
@@ -16,14 +16,14 @@ import {
     useDevice,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LiveLinkRows from "../../components/LiveLinkRows.vue";
 import { startAgent } from "../agents/fleet/agentActions";
 import { useExtensions } from "../extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../sandbox/devices/useDevices";
-import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
+import { HOST_DOOR, PHONE_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
 import { useLiveLinks } from "../sandbox/devices/useLiveLinks";
 import { useRole } from "../sandbox/secrets/useRole";
 import { useBackgroundProcesses, viewProcessLogs } from "../terminal/useBackgroundProcesses";
@@ -47,6 +47,8 @@ import HostConnectDialog from "./connect/hosts/HostConnectDialog.vue";
 import PluginRegistryBrowse from "./connect/PluginRegistryBrowse.vue";
 import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
 import WebExtConnectDialog from "./connect/WebExtConnectDialog.vue";
+import PhoneConnectDialog from "./connect/PhoneConnectDialog.vue";
+import { registerWakeOnce } from "./connect/phoneWake";
 import { useCapabilities } from "./connect/useCapabilities";
 import { useConnectionActions } from "./connectionActions";
 import { auditPrompt } from "./model/audit";
@@ -81,11 +83,13 @@ const { rows: processRows, busy: processBusy, start: startProcess, stop: stopPro
 // Desktop sync, the other door a machine arrives through, holds no tile; read off the Devices tab's list, never polled here.
 const { devices: fleet, readAt: fleetReadAt, refetch: refetchFleet } = useDevices({ poll: false });
 const { mobile } = useDevice();
-// Devices (host-kind) and browsers (webext-kind) of the user's own, each paired through its own door.
+// Devices (host-kind), browsers (webext-kind) and phones (phone-kind) of the user's own, each paired through its own door.
 const hosts = usePeerConnect<HostSummary>(HOST_DOOR);
 const browsers = usePeerConnect<WebExtSummary>(WEBEXT_DOOR);
+const phones = usePeerConnect<PhoneSummary>(PHONE_DOOR);
 const { peerFor: hostFor } = hosts;
 const { peerFor: browserFor } = browsers;
+const { peerFor: phoneFor } = phones;
 // Counts from whatever the registry cache already holds (`read: false`); absent until something has actually browsed.
 const { entries: publishedExtensions } = useRegistry({ read: false });
 
@@ -93,6 +97,7 @@ const entries = computed(() => catalogEntries(enabledExtensions.value, capabilit
 const sources = computed<ConnectionSources>(() => ({
     host: hostFor,
     browser: browserFor,
+    phone: phoneFor,
     vpn: vpnLinks.value,
     netdisk: netdiskLinks.value,
     devices: fleet.value,
@@ -147,10 +152,11 @@ const { probing, canProbe, runProbe } = useCapabilityProbe({ selected, form, err
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
 
-const pairing = useCapabilityPairing({ hosts, browsers, contributionOf, refetch, error });
+const pairing = useCapabilityPairing({ hosts, browsers, phones, contributionOf, refetch, error });
 const { profileVisible, profileCapability, profileLabel, profileMode, openBrowser, startAgentLogin, openPairing, removePairedAccess } = pairing;
 const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, onHostConnected, onHostRenamed } = pairing;
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
+const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, onPhoneConnected } = pairing;
 const { submit, submitting } = useCapabilitySubmit({
     selected,
     editing,
@@ -183,6 +189,15 @@ onMounted(hosts.start);
 onBeforeUnmount(hosts.stop);
 onMounted(browsers.start);
 onBeforeUnmount(browsers.stop);
+onMounted(phones.start);
+onBeforeUnmount(phones.stop);
+// A phone whose push token rotated, or that paired while no dialog was open, is made wakeable again from here: only a
+// page signed in to the platform can register it with the push relay.
+watch(phones.peers, (listed) => {
+    for (const phone of listed) {
+        void registerWakeOnce(phone).then((outcome) => (outcome === `ready` ? phones.refresh() : undefined));
+    }
+});
 onMounted(() => {
     window.addEventListener(`dragover`, swallowFileDrag);
     window.addEventListener(`drop`, swallowFileDrag);
@@ -260,7 +275,8 @@ onBeforeUnmount(() => {
                             class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
                         >
                             <Icon name="exclamation-triangle" />
-                            {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`) }}{{ t(`capabilities.capabilities.finishSetup`) }}
+                            {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`)
+                            }}{{ t(`capabilities.capabilities.finishSetup`) }}
                         </RouterLink>
 
                         <form class="flex flex-col gap-3" @submit.prevent="submit">
@@ -285,6 +301,7 @@ onBeforeUnmount(() => {
                                     :instance="instance"
                                     :host="hostFor(instance.id)"
                                     :browser="browserFor(instance.id)"
+                                    :phone="phoneFor(instance.id)"
                                     :state="rowState(selected, instance)"
                                     :facts="cardRowFacts(instance)"
                                     :editing="editing?.id === instance.id"
@@ -781,6 +798,15 @@ onBeforeUnmount(() => {
                 :unnamed="connectUnnamed"
                 @connected="onHostConnected"
                 @renamed="onHostRenamed"
+            />
+
+            <!-- QR code a phone of the user's own scans to pair (phone-kind capabilities). -->
+            <PhoneConnectDialog
+                v-model:visible="phoneConnectVisible"
+                :id="phoneConnectId"
+                :install="phoneInstall"
+                :permissions="phonePermissions"
+                @connected="onPhoneConnected"
             />
 
             <!-- One-time code that connects a browser of the user's own (webext-kind capabilities). -->

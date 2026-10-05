@@ -34,6 +34,13 @@ the ones you need). Then:
 | \`mcp__\${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
 | \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
 | \`mcp__\${id}__device\` | Use the mouse and keyboard: click (a coordinate or an element ref), type, press a chord, scroll, drag. |
+| \`mcp__\${id}__android_devices\` | The Android phones attached to this machine over adb (USB or wireless debugging): serial, state, model, Android version, screen size. |
+| \`mcp__\${id}__android_ui_elements\` | The phone screen's controls from its accessibility dump, each with a ref like \`e12\`; \`query\` finds one. |
+| \`mcp__\${id}__android_act\` | Touch the phone: tap, long_press or swipe at a ref or a coordinate, type, press a key, back, home, recents, scroll. |
+| \`mcp__\${id}__android_screenshot\` | The phone's screen as an image with an id (\`phone-…\`), apart from the desktop's screenshots. |
+| \`mcp__\${id}__android_shell\` | Run a command in the phone's own shell (\`adb shell\`): \`am start\`, \`pm list packages\`, \`dumpsys\`. |
+| \`mcp__\${id}__android_install\` | Install an APK from this machine onto the phone. |
+| \`mcp__\${id}__android_logcat\` | The tail of the phone's log, narrowed to one app, tag or priority: where a crash's stack trace is. |
 | \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
 | \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this device' permission, and stopping the sandbox you are running in severs your own connection. |
 | \`mcp__\${id}__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
@@ -187,4 +194,56 @@ Things that will bite you:
 - **Nothing is undoable.** A click can confirm a dialog nobody read. Say what you are about to click and why
   before you click anything consequential, exactly as you would before deleting a file.
 - **If \`device\` says the permission is off**, that is the owner's decision. Ask for the switch on a card,
-  \`capabilities request \${id} --set control=on --why "…"\`, and do not look for another route in.`;
+  \`capabilities request \${id} --set control=on --why "…"\`, and do not look for another route in.
+
+## An Android phone on this machine
+
+When the owner's phone is plugged into this machine by USB, or paired with it over wireless debugging, the
+\`android_*\` tools drive it through adb. adb has to be installed here (Android SDK Platform-Tools), and the phone needs
+Developer options and USB debugging switched on. They take the same switches as the desktop: \`android_screenshot\` and
+\`android_ui_elements\` need "See the screen", \`android_act\` needs "Use the mouse and keyboard", \`android_shell\`,
+\`android_logcat\` and \`android_devices\` need "Run commands", and \`android_install\` needs that and "Create and change
+files".
+
+The loop:
+
+1. \`android_devices\`: which phones are attached, and whether each is ready. With more than one, pass \`serial\` to every
+   other \`android_*\` call; without it they refuse rather than guess.
+2. \`android_ui_elements\`: the screen's controls, each with a ref like \`e4\`. Tap by ref (\`android_act\` with \`element\`),
+   not by coordinates: a ref is the element's own centre, a coordinate is a guess read off a shrunk image. Refs hold
+   until the next listing, so list again after anything that changes the screen.
+3. \`android_act\`: tap, type, press a key, go back or home, scroll.
+4. Read the screenshot the action answers with before the next step. \`android_screenshot\` takes one on its own, with
+   an id like \`phone-k2-4\`. Coordinates you give \`android_act\` are pixels in the newest one, passed with its id as
+   \`frame\`. A desktop screenshot's id is refused there: it is another screen.
+
+\`\`\`
+android_devices      → 1 Android device is attached … "serial": "R58M12ABCDE", "state": "device", "model": "SM G991B" …
+android_ui_elements  → e5 EditText id=email at 328,346 [clickable focusable]
+                       e9 Button "Sign in" at 328,1210 [clickable]
+android_act          { action: "tap", element: "e5" }
+android_act          { action: "type", text: "someone@example.com" }
+android_act          { action: "tap", element: "e9" }
+                     → Tapped e9 "Sign in". Phone screenshot phone-k2-4: 655×1456 …
+\`\`\`
+
+Things to know:
+
+- **"unauthorized" means the phone has not trusted this computer yet.** Ask the person to unlock the phone and accept
+  the "Allow USB debugging?" prompt on it. Nothing on this side can answer it for them. "offline" means replug it.
+- **Wireless debugging** (Android 11 and later): on the phone, Settings > Developer options > Wireless debugging >
+  Pair device with pairing code. Then run \`adb pair <ip>:<pairing port> <code>\` on this machine with the code the
+  phone shows, and \`adb connect <ip>:<port>\` with the port the Wireless debugging screen itself shows, which is not
+  the pairing port. Both are \`run_command\` calls, and the code has to come from the person holding the phone.
+- **\`type\` carries plain ASCII.** A newline presses Enter. Accented letters and emoji are refused by name: tap them on
+  the phone's own keyboard instead.
+- **Keys that lock the phone (POWER, SLEEP) are refused**, in \`android_act\` and in \`android_shell\`: nothing driving
+  it from here could unlock it again.
+- **\`android_shell\` follows the rules of \`run_command\`.** Deleting recursively, \`pm uninstall\`, \`pm clear\`,
+  \`settings put\`, \`svc\`, \`reboot\` and a wipe need "Run destructive commands", and a command the owner's safety
+  policy flags (a recursive delete, for one) is judged before it reaches the machine, as \`run_command\`'s are. Text
+  typed with \`android_act\` is judged the same way. \`svc wifi disable\` over wireless debugging cuts the link you are
+  using.
+- **Prefer a command when there is one.** \`am start -n <package>/<activity>\` opens an app exactly, \`pm list packages\`
+  lists them, \`dumpsys\` reads state, and \`android_logcat\` shows why an app crashed. Use the screen for what has no
+  command.`;

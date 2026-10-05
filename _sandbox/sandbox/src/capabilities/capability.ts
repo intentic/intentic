@@ -9,6 +9,8 @@ import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import type { HostHub, HostStore } from "../hosts/host-peer.js";
 import type { WebExtHub, WebExtStore } from "../webext/webext-peer.js";
+import type { PhoneHub, PhoneStore } from "../phones/phone-peer.js";
+import type { PhoneWake } from "../phones/phone-wake.js";
 import type { ResolvedContribution } from "./contributions.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
@@ -31,6 +33,10 @@ export interface CapabilityCtx {
     // Same pair for the user's browsers, same reason: hub is the live subject, store enrollment is the status.
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
+    // And for the user's phones, plus the wake channel a removed or renamed phone card takes with it.
+    readonly phones: PhoneStore;
+    readonly phoneHub: PhoneHub;
+    readonly phoneWake: PhoneWake;
     // What a configured model API serves; the same catalog the picker and translator read, so a entry can't disagree
     // with it.
     readonly endpointModels: EndpointCatalog;
@@ -98,6 +104,9 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         hostHub: services.hostHub,
         webexts: services.webexts,
         webextHub: services.webextHub,
+        phones: services.phones,
+        phoneHub: services.phoneHub,
+        phoneWake: services.phoneWake,
         endpointModels: services.endpointModels,
         syncEndpoints: () => syncEndpointCompat(services),
         extensionsDir: services.config.extensionsDir,

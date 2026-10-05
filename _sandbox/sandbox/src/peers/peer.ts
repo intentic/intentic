@@ -3,7 +3,7 @@ import type { z } from "zod";
 import type { BurnDocument, CardRule, EnrollmentsDocument } from "./enrollment.js";
 
 // A peer is something of the user's that dials this sandbox and serves a contract back over the socket it opened: their
-// computer (hosts/), their browser (webext/), or one of this sandbox's own runners (runners/). A door is the data that
+// computer (hosts/), their browser (webext/), their phone (phones/), or one of this sandbox's own runners (runners/). A door is the data that
 // varies between them, declared beside the code that is genuinely its own. What a door declares:
 // - slug: path segment every route sits under; also what the far end dials, so it can't change casually
 // - noun: the word every sentence uses for the thing on the other end
@@ -13,7 +13,7 @@ import type { BurnDocument, CardRule, EnrollmentsDocument } from "./enrollment.j
 // - hello: first frame's schema and what of it is worth remembering
 // - scopesKind: capability kind whose config is the grant pushed on connect; absent with no owner-ticked grant
 // - mcp: present when reachable through the loopback bridge, with its judge/seal hooks
-export type PeerSlug = "hosts" | "webext" | "runners";
+export type PeerSlug = "hosts" | "webext" | "phones" | "runners";
 
 export interface PeerStoreSpec<Shape extends z.ZodRawShape> {
     // Two documents on /history, each where its own spec says: digests, and spent pairings.
@@ -59,11 +59,14 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
         // What of the hello is kept beside the socket: a build number, or a runner's whole parity claim.
         readonly announced: (hello: Hello) => Announced;
     };
-    readonly scopesKind?: "device" | "webext";
+    readonly scopesKind?: PeerKind;
     readonly mcp?: PeerMcpSpec;
     // The sentence a spent or unknown pairing is refused with, naming where a fresh one comes from.
     readonly expired: string;
 }
 
+// The capability kinds whose card is a peer: a computer, a browser, a phone.
+export type PeerKind = "device" | "webext" | "phone";
+
 // Doors reachable through the MCP bridge, by capability kind, so the turn planner needn't import a door's code.
-export const PEER_BRIDGES = { device: "hosts", webext: "webext" } as const satisfies Record<"device" | "webext", PeerSlug>;
+export const PEER_BRIDGES = { device: "hosts", webext: "webext", phone: "phones" } as const satisfies Record<PeerKind, PeerSlug>;
