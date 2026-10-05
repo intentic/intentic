@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { ContextMenu, useHoverIntent, useLoadingReveal } from "@intentic/ui";
+import { ContextMenu, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { localFace } from "../../../app/environments/local";
@@ -168,6 +168,9 @@ const hiddenByCap = computed(() => hiddenIn(homeDir.value));
 
 const loading = computed(() => (homeDir.value === `` ? isLoading.value : children.value === undefined && lazyLoading.value.has(homeDir.value)));
 const revealed = useLoadingReveal(loading, homeDir);
+// What the wait draws: the tiles as they last stood. The top folder keeps its own, since it is the wait that opens the
+// app; any other folder draws the last one seen below it, as one key per folder would crowd every other view's out.
+const homeImprint = computed(() => (homeDir.value === workspaceDir.value ? `workspace.home` : `workspace.home.folder`));
 
 // --- Where you are -------------------------------------------------------------------------------------------------
 // A desktop app's window on a folder of this computer names it as the folder it is, not as a workspace.
@@ -578,13 +581,16 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     :aria-label="t(`workspace.homeView.contents`, { here })"
                 >
                     <!-- A wait long enough to show: tile-shaped placeholders, still. -->
-                    <div v-if="revealed" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
-                        <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
-                            <div class="skeleton h-9 w-9 rounded-lg"></div>
-                            <div class="skeleton h-3 w-14"></div>
+                    <SkeletonSnapshot v-if="revealed" :of="homeImprint">
+                        <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
+                            <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
+                                <div class="skeleton h-9 w-9 rounded-lg"></div>
+                                <div class="skeleton h-3 w-14"></div>
+                            </div>
                         </div>
-                    </div>
-                    <template v-else>
+                    </SkeletonSnapshot>
+                    <!-- One element, so its imprint is everything the wait stood in for; a block, as the listbox is. -->
+                    <div v-else v-skeleton-source="homeImprint">
                         <!-- The entry being named, drawn first in the open folder before it exists; the field owns its keys. -->
                         <div v-if="edit.kind === 'creating'" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5 pt-3">
                             <div class="flex flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2">
@@ -666,7 +672,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 </div>
                             </template>
                         </div>
-                    </template>
+                    </div>
                     <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
                         {{ t(`workspace.homeView.toolingHidden`, { count: hiddenTooling.toLocaleString() }, hiddenTooling) }}
                     </p>

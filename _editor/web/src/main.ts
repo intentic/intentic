@@ -16,6 +16,7 @@ import { installDesktopLinks, installDesktopOpener } from "./app/environments/de
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
 import { installRenderTrace } from "./app/renderTrace";
 import { queryClient } from "./lib/queryPersistence";
+import { installSkeletonPersistence } from "./lib/skeletonPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
 import "./features/sandbox/client/sandboxScope";
@@ -75,6 +76,10 @@ startAudienceSync();
 // same tick; on any other language it is one chunk, and paying for it here is what buys a first paint that is
 // already correct instead of one that corrects itself.
 await startAppI18n();
+
+// Loading placeholders drawn in their content's last shape remember it per sandbox, in IndexedDB; before anything
+// mounts, so the first placeholder already reads the active sandbox's.
+installSkeletonPersistence();
 
 // Minimal app-wide wiring: router, PrimeVue, vue-query; server state in useQuery, client state in composables.
 const app = createApp(App);

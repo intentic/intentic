@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Tip, type TipRow, ui } from "@intentic/ui";
+import { SkeletonSnapshot, type Tip, type TipRow, ui, vSkeletonSource } from "@intentic/ui";
 import { useRowReveal } from "@intentic/ui/motion";
 import { computed, onMounted, ref } from "vue";
 import ChatCapacityLane from "./ChatCapacityLane.vue";
@@ -214,16 +214,18 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
         </div>
 
         <!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->
-        <div v-if="!accountsLoaded" class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
-            <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
-                <span class="skeleton block h-2.5 w-24" />
-                <span class="skeleton block h-1 w-full rounded-full" />
+        <SkeletonSnapshot v-if="!accountsLoaded" of="chat.capacity" :label="t(`sandbox.words.readingConnections`)">
+            <div class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
+                <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
+                    <span class="skeleton block h-2.5 w-24" />
+                    <span class="skeleton block h-1 w-full rounded-full" />
+                </div>
             </div>
-        </div>
+        </SkeletonSnapshot>
 
         <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
-        <div v-else ref="column" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
+        <div v-else ref="column" v-skeleton-source="`chat.capacity`" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
             <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
             <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
 

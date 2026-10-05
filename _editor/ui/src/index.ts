@@ -247,6 +247,19 @@ export { seriesColor } from "./components/charts/seriesAccent.js";
 // Loading placeholder built from real <Row>s so it can't drift from the list it stands in for. A single bar
 // needs no component: use the `skeleton` class directly.
 export { default as SkeletonRows } from "./components/feedback/SkeletonRows.vue";
+// A placeholder drawn exactly as its content last looked in this sandbox: `v-skeleton-source="name"` on the content
+// takes its imprint once settled, `<SkeletonSnapshot of="name">` draws it, with its slot as the fallback until one exists.
+export { default as SkeletonSnapshot } from "./components/feedback/SkeletonSnapshot.vue";
+export { vSkeletonSource } from "./lib/skeletonSource.js";
+export {
+    adoptImprints,
+    clearImprints,
+    configureSkeletonSnapshots,
+    loadImprintScope,
+    type SkeletonPersistence,
+    type SkeletonSnapshotOptions,
+} from "./lib/skeletonStore.js";
+export { IMPRINT_VERSION, type SkeletonImprint } from "./lib/skeletonImprint.js";
 // Index-and-body screen layout.
 export { default as SplitView } from "./components/layout/SplitView.vue";
 // Whether the screen has folded its index above its body; lets a rail match the shell's compact-width breakpoint.

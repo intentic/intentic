@@ -12,9 +12,11 @@ import {
     RowNote,
     SegmentedControl,
     SkeletonRows,
+    SkeletonSnapshot,
     StatusBadge,
     type StatusVariant,
     timeAgo,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useSafetyLog } from "../../environment/useSafetyPolicy";
@@ -157,7 +159,14 @@ const commandSummary = (program: string): string => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <!-- The filter bar and the list stand in as one, drawn as they last looked in this sandbox, so the bar does not push
+         the list down when it arrives. Until then the list's group alone, as no filter is drawn before there are entries. -->
+    <SkeletonSnapshot v-if="isLoading" of="sandbox.agent.safety-log">
+        <div class="flex flex-col gap-3">
+            <RowGroup :label="t(`sandbox.words.recentDecisions`)"><SkeletonRows :rows="4" description /></RowGroup>
+        </div>
+    </SkeletonSnapshot>
+    <div v-else v-skeleton-source="`sandbox.agent.safety-log`" class="flex flex-col gap-3">
         <FilterBar
             v-if="entries.length > 0"
             v-model="query"
@@ -171,9 +180,7 @@ const commandSummary = (program: string): string => {
         </FilterBar>
 
         <RowGroup :label="t(`sandbox.words.recentDecisions`)">
-            <SkeletonRows v-if="isLoading" :rows="4" description />
-
-            <RowNote v-else-if="error !== undefined" variant="block">
+            <RowNote v-if="error !== undefined" variant="block">
                 <Notice tone="danger">{{ error }}</Notice>
             </RowNote>
 

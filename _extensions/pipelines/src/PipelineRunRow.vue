@@ -21,9 +21,11 @@ import {
     formatTimestamp,
     Icon,
     Modal,
+    SkeletonSnapshot,
     StatusBadge,
     timeAgo,
     useAgentRunPick,
+    vSkeletonSource,
 } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, computed, ref } from "vue";
 import type { CiFix } from "./fixes/ciFixes";
@@ -72,6 +74,10 @@ const emit = defineEmits<{
 const runRef = computed(() => props.run);
 const { jobs, isLoading: jobsLoading } = useRunJobs(runRef);
 const stages = computed(() => pipelineStages(jobs.value));
+// The stage circles and the job graph are remembered per pipeline (repo and workflow): that, not the run, decides
+// how many stages and jobs a run draws.
+const stagesSkeleton = computed(() => `pipelines.stages:${props.run.repo}:${props.run.workflow ?? ``}`);
+const jobsSkeleton = computed(() => `pipelines.jobs:${props.run.repo}:${props.run.workflow ?? ``}`);
 
 // Seeded once from `autoOpen`, not bound: the row is keyed by its run (PipelinesView's `actionKey`), so later polls
 // re-render it without resetting this. A closed row stays closed; a run finishing mid-view keeps its graph open.
@@ -403,14 +409,16 @@ const openStartOver = (): void => {
                 <!-- `basis-0` with a ~3-circle floor: the graph is the one element here that can give ground, but not below legibility. -->
                 <!-- Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both scrollbars. -->
                 <div class="flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
-                    <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
+                    <PipelineGraph v-if="stages.length > 0" v-skeleton-source="stagesSkeleton" :stages="stages" :recurring="recurring" />
                     <!-- Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. -->
-                    <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">
-                        <template v-for="i in 3" :key="i">
-                            <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
-                            <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
-                        </template>
-                    </div>
+                    <SkeletonSnapshot v-else-if="jobsLoading" :of="stagesSkeleton">
+                        <div class="flex items-center" aria-hidden="true">
+                            <template v-for="i in 3" :key="i">
+                                <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
+                                <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
+                            </template>
+                        </div>
+                    </SkeletonSnapshot>
                 </div>
 
                 <!-- Time + actions -->
@@ -513,18 +521,26 @@ const openStartOver = (): void => {
 
         <!-- Expanded shows only the job graph: the agent facts it once repeated here now live entirely on the header chip. -->
         <template #below>
-            <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" :aria-label="t(`pipelineRunRow.loadingJobs`)">
-                <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
-                    <template v-for="i in 3" :key="i">
-                        <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
-                        <span class="skeleton h-12 w-48 shrink-0 rounded-md"></span>
-                    </template>
+            <SkeletonSnapshot v-if="jobsLoading" :of="jobsSkeleton" :label="t(`pipelineRunRow.loadingJobs`)">
+                <div class="flex flex-col gap-2" role="status" aria-busy="true" :aria-label="t(`pipelineRunRow.loadingJobs`)">
+                    <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
+                        <template v-for="i in 3" :key="i">
+                            <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
+                            <span class="skeleton h-12 w-48 shrink-0 rounded-md"></span>
+                        </template>
+                    </div>
                 </div>
-            </div>
+            </SkeletonSnapshot>
 
-            <PipelineDagGraph v-else-if="stages.length > 0" :stages="stages" :recurring="recurring" @expand="fullscreen = true" />
+            <PipelineDagGraph
+                v-else-if="stages.length > 0"
+                v-skeleton-source="jobsSkeleton"
+                :stages="stages"
+                :recurring="recurring"
+                @expand="fullscreen = true"
+            />
 
-            <div v-else-if="run.failedJobs?.length">
+            <div v-else-if="run.failedJobs?.length" v-skeleton-source="jobsSkeleton">
                 <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`pipelineRunRow.failedJobs`) }}</div>
                 <div class="flex flex-wrap gap-1.5">
                     <span
@@ -538,7 +554,7 @@ const openStartOver = (): void => {
                 </div>
             </div>
 
-            <p v-else class="py-2 text-xs text-muted">{{ t(`pipelineRunRow.noJobDetailsAvailable`) }}</p>
+            <p v-else v-skeleton-source="jobsSkeleton" class="py-2 text-xs text-muted">{{ t(`pipelineRunRow.noJobDetailsAvailable`) }}</p>
 
             <!-- Same graph, given the window: worth reading whole exactly when panning inside the row would be needed. -->
             <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="t(`pipelineRunRow.jobGraph`, { headline })">

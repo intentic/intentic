@@ -132,6 +132,11 @@ export {
     useLoadingReveal,
     // Renders real `<Row>`s rather than divs, so its height matches what replaces it and the page doesn't jump.
     SkeletonRows,
+    // A placeholder drawn exactly as its content last looked in this sandbox: `v-skeleton-source="name"` on the
+    // content takes its imprint once settled, `<SkeletonSnapshot of="name">` draws it, its slot the fallback until then.
+    // Prefix the name with the extension's id, since every extension's imprints share the sandbox's store.
+    SkeletonSnapshot,
+    vSkeletonSource,
     SplitView,
     StatStrip,
     StatusBadge,

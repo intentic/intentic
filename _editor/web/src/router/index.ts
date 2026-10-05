@@ -17,6 +17,7 @@ import { conversationRedirect } from "./conversationLink";
 import { mobileChatPath } from "../shell/tabRoots";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
+import { restoreImprints } from "../lib/skeletonPersistence";
 import { useAccount } from "../shell/useAccount";
 import { useAuth } from "../features/auth/useAuth";
 import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
@@ -77,13 +78,14 @@ const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
 };
 
 // Signed in, with a user in hand: hydrate the query cache from IndexedDB (per-user buster) before any route mounts, so
-// a reload paints the last-known workspace instead of blocking on the daemon.
+// a reload paints the last-known workspace instead of blocking on the daemon, and the active sandbox's remembered
+// loading shapes beside it, so whatever the cache cannot paint yet is outlined in the shape it last had.
 const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     const resolved = await resolveUser(to);
     if (!(`user` in resolved)) {
         return resolved.redirect;
     }
-    await restorePersistedQueries(resolved.user.id);
+    await Promise.all([restorePersistedQueries(resolved.user.id), restoreImprints()]);
     return true;
 };
 

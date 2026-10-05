@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, ui } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useSandbox } from "../client/useSandbox";
@@ -35,19 +35,30 @@ const restore = async (trashId: string): Promise<void> => {
     <div class="flex flex-col gap-6">
         <Notice v-if="notice" :of="notice" />
 
-        <RowGroup v-if="trash.deleted.value === undefined && trash.readError.value === undefined" :label="t(`sandbox.words.recentlyDeleted`)">
-            <div role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`sandbox.sandboxDeleted.reading`) }}</span>
-                <SkeletonRows :rows="2" description control />
-            </div>
-        </RowGroup>
+        <!-- Drawn as the list (or its empty state) last looked from this sandbox. -->
+        <SkeletonSnapshot
+            v-if="trash.deleted.value === undefined && trash.readError.value === undefined"
+            of="sandbox.deleted"
+            :label="t(`sandbox.sandboxDeleted.reading`)"
+        >
+            <RowGroup :label="t(`sandbox.words.recentlyDeleted`)">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`sandbox.sandboxDeleted.reading`) }}</span>
+                    <SkeletonRows :rows="2" description control />
+                </div>
+            </RowGroup>
+        </SkeletonSnapshot>
 
-        <div v-else-if="trash.recoverable.value.length === 0" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
+        <div
+            v-else-if="trash.recoverable.value.length === 0"
+            v-skeleton-source="`sandbox.deleted`"
+            :class="ui.emptyState('flex flex-col items-center gap-3 py-8')"
+        >
             <Icon name="trash" class="text-xl text-subtle" />
             <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxDeleted.nothingToRestore`) }}</span>
         </div>
 
-        <RowGroup v-else :label="t(`sandbox.words.recentlyDeleted`)" equal-rows>
+        <RowGroup v-else v-skeleton-source="`sandbox.deleted`" :label="t(`sandbox.words.recentlyDeleted`)" equal-rows>
             <Row
                 v-for="row in trash.recoverable.value"
                 :key="row.id"

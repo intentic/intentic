@@ -97,6 +97,12 @@
         border-radius: 0.25rem;
         background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
     }
+    /* A placeholder drawn from its content's imprint (<SkeletonSnapshot>): it keeps the content's surfaces, as a
+       hand-drawn skeleton keeps its card, and nothing in it answers the pointer or a selection. */
+    .skeleton-snapshot {
+        pointer-events: none;
+        user-select: none;
+    }
 }
 
 /* Selectable rows share hover and selected tints. */

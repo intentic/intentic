@@ -1,5 +1,16 @@
 <script setup lang="ts">
-import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, vAction } from "@intentic/ui";
+import {
+    BarChart,
+    Card,
+    ui,
+    Notice,
+    type NoticeModel,
+    NoticeStack,
+    SegmentedControl,
+    SkeletonSnapshot,
+    vAction,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { modelPinKey, parsePinned } from "@intentic/sandbox-contract";
 import { localZone, sameClock, UTC } from "@intentic/sandbox-contract/time";
 import { computed, ref } from "vue";
@@ -229,39 +240,49 @@ const hasSpend = computed(() => current.value.length > 0);
 
         <!-- Refetch dims the previous render instead of swapping in skeletons: no layout jump, numbers stay readable. -->
         <div class="flex flex-col gap-6 transition-opacity" :class="isFetching && !isLoading ? `opacity-60` : ``">
-            <!-- Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger sums. -->
-            <div v-if="isLoading && outline" role="status" aria-busy="true" class="flex flex-col gap-6">
-                <span class="sr-only">{{ t(`sandbox.sandboxUsage.readingLedger`) }}</span>
-                <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4" aria-hidden="true">
-                    <Card v-for="tile in 4" :key="tile" class="flex min-w-0 flex-col gap-2" :class="tile === 1 || tile === 4 ? `col-span-2 @lg:col-span-1` : ``">
-                        <span class="skeleton block h-2.5 w-16" />
-                        <span class="skeleton block" :class="tile === 1 ? `h-8 w-32` : `h-5 w-20`" />
-                        <span class="skeleton mt-auto block h-2 w-24" />
+            <!-- Drawn as the page last looked in this sandbox, so a returning reader recognises it while the ledger sums; until
+                 then, a skeleton mirroring the real layout (hero, tiles, chart). -->
+            <SkeletonSnapshot v-if="isLoading && outline" of="sandbox.usage" :label="t(`sandbox.sandboxUsage.readingLedger`)">
+                <div role="status" aria-busy="true" class="flex flex-col gap-6">
+                    <span class="sr-only">{{ t(`sandbox.sandboxUsage.readingLedger`) }}</span>
+                    <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4" aria-hidden="true">
+                        <Card
+                            v-for="tile in 4"
+                            :key="tile"
+                            class="flex min-w-0 flex-col gap-2"
+                            :class="tile === 1 || tile === 4 ? `col-span-2 @lg:col-span-1` : ``"
+                        >
+                            <span class="skeleton block h-2.5 w-16" />
+                            <span class="skeleton block" :class="tile === 1 ? `h-8 w-32` : `h-5 w-20`" />
+                            <span class="skeleton mt-auto block h-2 w-24" />
+                        </Card>
+                    </div>
+                    <Card class="flex flex-col gap-3" aria-hidden="true">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <span class="skeleton block h-3.5 w-32" />
+                            <span class="skeleton block h-3.5 w-16" />
+                        </div>
+                        <!-- Uneven column heights preserve the chart's data shape. -->
+                        <div class="flex h-28 items-end gap-1.5">
+                            <span
+                                v-for="(height, index) in [`h-1/3`, `h-2/3`, `h-1/2`, `h-full`, `h-1/4`, `h-3/5`, `h-4/5`, `h-2/5`, `h-3/4`, `h-1/2`]"
+                                :key="index"
+                                class="skeleton block min-w-0 flex-1"
+                                :class="height"
+                            />
+                        </div>
                     </Card>
                 </div>
-                <Card class="flex flex-col gap-3" aria-hidden="true">
-                    <div class="flex items-baseline justify-between gap-3">
-                        <span class="skeleton block h-3.5 w-32" />
-                        <span class="skeleton block h-3.5 w-16" />
-                    </div>
-                    <!-- Uneven column heights preserve the chart's data shape. -->
-                    <div class="flex h-28 items-end gap-1.5">
-                        <span
-                            v-for="(height, index) in [`h-1/3`, `h-2/3`, `h-1/2`, `h-full`, `h-1/4`, `h-3/5`, `h-4/5`, `h-2/5`, `h-3/4`, `h-1/2`]"
-                            :key="index"
-                            class="skeleton block min-w-0 flex-1"
-                            :class="height"
-                        />
-                    </div>
-                </Card>
-            </div>
+            </SkeletonSnapshot>
 
             <!-- `!isLoading`, not just the outline: a still-reading ledger hasn't earned the right to say "never run". -->
-            <p v-else-if="!isLoading && rows.length === 0" :class="ui.emptyState(`py-8`)">
+            <p v-else-if="!isLoading && rows.length === 0" v-skeleton-source="`sandbox.usage`" :class="ui.emptyState(`py-8`)">
                 {{ t(`sandbox.sandboxUsage.noUsageYet`) }}
             </p>
 
-            <template v-else-if="!isLoading">
+            <!-- Everything the ledger draws, in one box spaced as the column: its imprint is the whole page below the filters,
+                 while the column itself (which also holds the skeleton and takes the refetch dim) is never imprinted. -->
+            <div v-else-if="!isLoading" v-skeleton-source="`sandbox.usage`" class="flex flex-col gap-6">
                 <!-- Spend alone is hero-sized, the rest are stat tiles. Two to a row even on a phone, with the hero and the one
                      tile that is a sentence rather than a chart spanning it: one to a row, four tiles were a screen and a
                      half of mostly empty card before the first chart. -->
@@ -446,7 +467,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         </p>
                     </div>
                 </Card>
-            </template>
+            </div>
         </div>
     </div>
 </template>

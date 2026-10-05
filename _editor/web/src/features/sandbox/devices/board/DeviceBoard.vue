@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { Icon, Notice, type NoticeModel, PageAction, PageHeader, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
+import {
+    Icon,
+    Notice,
+    type NoticeModel,
+    PageAction,
+    PageHeader,
+    RowGroup,
+    SearchBar,
+    SkeletonRows,
+    SkeletonSnapshot,
+    ui,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import { type MachineRow, rowMatches, showFilter } from "../deviceRows";
@@ -66,23 +78,29 @@ const inDesktopApp = desktopApp() !== undefined;
 
             <Notice v-if="notice" :of="notice" />
             <div v-else-if="isLoading" role="status" aria-busy="true">
-                <!-- The outline is a card like the ones it stands in for, so the board does not jump when they land. -->
-                <RowGroup v-if="outline">
-                    <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
-                    <SkeletonRows :rows="2" description />
-                </RowGroup>
+                <!-- Drawn as the board last looked in this sandbox; until it has been seen once, the outline is a card like
+                     the ones it stands in for, so the board does not jump when they land. -->
+                <SkeletonSnapshot v-if="outline" of="sandbox.devices.board" :label="t(`sandbox.deviceBoard.readingDevices`)">
+                    <RowGroup>
+                        <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
+                        <SkeletonRows :rows="2" description />
+                    </RowGroup>
+                </SkeletonSnapshot>
             </div>
-            <p v-else-if="rows.length === 0" :class="ui.emptyState()">
+            <p v-else-if="rows.length === 0" v-skeleton-source="`sandbox.devices.board`" :class="ui.emptyState()">
                 {{ t(`sandbox.deviceBoard.noDevicePairedSandbox`) }}
             </p>
 
-            <!-- One column, as every sandbox list is: a card's rows read across, and a second column halves them. -->
-            <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
+            <!-- One box for the cards, so the next wait can draw them; spaced as the column it sits in. -->
+            <div v-if="rows.length > 0" v-skeleton-source="`sandbox.devices.board`" class="flex flex-col gap-3">
+                <!-- One column, as every sandbox list is: a card's rows read across, and a second column halves them. -->
+                <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
 
-            <!-- A filter that matched nothing says so, rather than leaving a board that looks empty by accident. -->
-            <p v-if="shown.length === 0 && rows.length > 0" :class="ui.emptyState()" role="status">
-                {{ t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query }) }}
-            </p>
+                <!-- A filter that matched nothing says so, rather than leaving a board that looks empty by accident. -->
+                <p v-if="shown.length === 0" :class="ui.emptyState()" role="status">
+                    {{ t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query }) }}
+                </p>
+            </div>
         </div>
     </RowGroup>
 </template>

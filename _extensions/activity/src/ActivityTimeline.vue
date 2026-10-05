@@ -1,5 +1,16 @@
 <script setup lang="ts">
-import { ui, Icon, Notice, noticeOf, ScrollFrame, SkeletonRows, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
+import {
+    ui,
+    Icon,
+    Notice,
+    noticeOf,
+    ScrollFrame,
+    SkeletonRows,
+    SkeletonSnapshot,
+    timeWindowWords,
+    type TimeWindow,
+    vSkeletonSource,
+} from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -31,32 +42,38 @@ const days = computed(() => byDay(episodes, Date.now()));
 
         <!-- The ROWS own the horizontal padding now (it is their density tier's, not this frame's). -->
         <div class="pb-2">
-            <!-- THE FEED'S OWN SHAPE WHILE IT IS FETCHED, rather than a blank box that fills in one jump: a day divider and a run of rows, at the row's real spacing. -->
-            <div v-if="isLoading && episodes.length === 0" role="status" aria-busy="true" :aria-label="t(`activityTimeline.loadingActivity`)">
-                <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
-                    <span class="skeleton block h-2 w-16" />
-                    <span class="skeleton block h-2 w-12" />
+            <!-- THE FEED'S OWN SHAPE WHILE IT IS FETCHED, rather than a blank box that fills in one jump: the feed as it last
+                 looked here, or until it has been seen once, a day divider and a run of rows at the row's real spacing. -->
+            <SkeletonSnapshot v-if="isLoading && episodes.length === 0" of="activity.feed" :label="t(`activityTimeline.loadingActivity`)">
+                <div role="status" aria-busy="true" :aria-label="t(`activityTimeline.loadingActivity`)">
+                    <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
+                        <span class="skeleton block h-2 w-16" />
+                        <span class="skeleton block h-2 w-12" />
+                    </div>
+                    <!-- The outline is the ROW's own, at the tier the feed actually draws, rather than a second hand-built guess at this row's shape. -->
+                    <div class="flex flex-col divide-y divide-line-subtle/50">
+                        <SkeletonRows :rows="6" density="compact" description />
+                    </div>
                 </div>
-                <!-- The outline is the ROW's own, at the tier the feed actually draws, rather than a second hand-built guess at this row's shape. -->
-                <div class="flex flex-col divide-y divide-line-subtle/50">
-                    <SkeletonRows :rows="6" density="compact" description />
+            </SkeletonSnapshot>
+
+            <!-- One element around the days, so the feed is imprinted whole. -->
+            <div v-else-if="days.length > 0" v-skeleton-source="`activity.feed`">
+                <!-- Day labels are sticky signposts, not dividers, and they stick to the PAGE now that the card has no scroller of its own. -->
+                <div v-for="(day, dayIndex) in days" :key="day.label" :class="dayIndex > 0 ? `mt-2` : ``">
+                    <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
+                        <span class="text-2xs tabular-nums text-subtle">
+                            {{ day.episodes.length }} {{ day.episodes.length === 1 ? `entry` : `entries` }}
+                        </span>
+                    </div>
+                    <div class="flex flex-col divide-y divide-line-subtle/50">
+                        <EpisodeRow v-for="episode in day.episodes" :key="episode.key" :episode="episode" />
+                    </div>
                 </div>
             </div>
 
-            <!-- Day labels are sticky signposts, not dividers, and they stick to the PAGE now that the card has no scroller of its own. -->
-            <div v-for="(day, dayIndex) in days" :key="day.label" :class="dayIndex > 0 ? `mt-2` : ``">
-                <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
-                    <span class="text-2xs tabular-nums text-subtle">
-                        {{ day.episodes.length }} {{ day.episodes.length === 1 ? `entry` : `entries` }}
-                    </span>
-                </div>
-                <div class="flex flex-col divide-y divide-line-subtle/50">
-                    <EpisodeRow v-for="episode in day.episodes" :key="episode.key" :episode="episode" />
-                </div>
-            </div>
-
-            <p v-if="episodes.length === 0 && !isLoading" :class="ui.emptyState('px-4 py-10')">
+            <p v-else-if="episodes.length === 0 && !isLoading" v-skeleton-source="`activity.feed`" :class="ui.emptyState('px-4 py-10')">
                 {{ t(`activityTimeline.nothingEntriesAppearMessage`, { window: timeWindowWords(window) }) }}
             </p>
 

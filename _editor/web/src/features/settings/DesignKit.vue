@@ -50,12 +50,14 @@ import {
     SearchBar,
     SegmentedControl,
     SkeletonRows,
+    SkeletonSnapshot,
     StatStrip,
     StatusBadge,
     type StatusVariant,
     useTextSize,
     useTheme,
     Verdict,
+    vSkeletonSource,
 } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { ref } from "vue";
@@ -410,7 +412,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Rows</h2>
                 <div class="grid gap-4 md:grid-cols-2">
-                    <RowGroup label="States" :count="4">
+                    <RowGroup v-skeleton-source="`kit.rows`" label="States" :count="4">
                         <Row title="Plain row" description="A title and its description" />
                         <Row title="With facts" description="Facts are muted and never focusable">
                             <template #meta><span class="text-2xs text-subtle">3 files</span><DiffStat :additions="12" :deletions="4" /></template>
@@ -420,9 +422,12 @@ const pickedTier = ref(`collaborator`);
                         </Row>
                         <Row title="Navigational" description="Interactive, with a chevron" interactive chevron />
                     </RowGroup>
-                    <RowGroup label="Loading">
-                        <SkeletonRows :rows="4" description control />
-                    </RowGroup>
+                    <!-- The States group's own imprint once it has settled: until then, the hand-drawn rows. -->
+                    <SkeletonSnapshot of="kit.rows">
+                        <RowGroup label="Loading">
+                            <SkeletonRows :rows="4" description control />
+                        </RowGroup>
+                    </SkeletonSnapshot>
                     <!-- Default `#below` is full-width; `indent` starts it under the row's name, for a block rather than a continuing sentence. -->
                     <RowGroup label="Below: flush, and indented">
                         <Row icon="sitemap" title="Flush" description="The default: the block starts at the group's edge">

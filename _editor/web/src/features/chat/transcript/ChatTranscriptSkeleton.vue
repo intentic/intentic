@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { Button, Icon } from "@intentic/ui";
+import { Button, Icon, SkeletonSnapshot } from "@intentic/ui";
 import { onScopeDispose, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Placeholder for a transcript that hasn't arrived: previews the layout (prompt, tool rows, answer) content will
 // occupy, so arrival fills its own outline instead of replacing a spinner. Anchored to the bottom, since that's where a
-// restored transcript lands (useStickToBottom).
-
-// Per-turn skeleton shapes, newest last; fixed uneven widths so the outline doesn't reshuffle on re-render.
+// restored transcript lands (useStickToBottom). The bars are drawn only until the conversation has been seen once; from
+// then on its own last turns, as they were last drawn, stand in for them.
 const t = useT();
 
+const { of } = defineProps<{
+    // The name ChatPaneTurns keeps this conversation's turns under (`v-skeleton-source`).
+    of: string;
+}>();
+
+// Per-turn skeleton shapes, newest last; fixed uneven widths so the outline doesn't reshuffle on re-render.
 const TURNS = [
     { bubble: `w-[52%]`, prompt: [`w-full`, `w-1/2`], tools: [`w-1/3`], answer: [`w-full`, `w-5/6`] },
     { bubble: `w-[34%]`, prompt: [`w-full`], tools: [`w-2/5`, `w-1/4`], answer: [`w-full`, `w-full`, `w-3/4`, `w-2/5`] },
@@ -48,26 +53,32 @@ const retry = (): void => {
     <!-- Absolutely positioned so it adds no intrinsic size; in flow it would grow the shared scroller. -->
     <div class="relative min-h-0 flex-1" role="status" aria-busy="true">
         <span class="sr-only">{{ t(`chat.chatTranscriptSkeleton.loadingConversation`) }}</span>
-        <div class="chat-skeleton absolute inset-0 flex flex-col justify-end gap-1 overflow-hidden pb-2">
-            <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
-                <!-- Padding here matches .chat-prompt's own vertical padding. -->
-                <div class="flex justify-end pt-3 pb-2">
-                    <div class="chat-surface flex flex-col gap-1.5 rounded-lg px-3 py-2" :class="turn.bubble">
-                        <span v-for="(line, lineIndex) in turn.prompt" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
+        <!-- The remembered turns (`data-skeleton-snapshot`) take the top when they fit, as a short chat's own turns do,
+             and the bottom when they don't, as a long one opens on its last. -->
+        <div class="chat-skeleton absolute inset-0 flex flex-col justify-end gap-1 overflow-hidden pb-2 [&>[data-skeleton-snapshot]]:mb-auto">
+            <!-- Only the bars are remembered: the notes below keep timing the wait and offering to ask again. The status
+                 above already announces it, so the remembered turns stay silent. -->
+            <SkeletonSnapshot :of="of">
+                <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
+                    <!-- Padding here matches .chat-prompt's own vertical padding. -->
+                    <div class="flex justify-end pt-3 pb-2">
+                        <div class="chat-surface flex flex-col gap-1.5 rounded-lg px-3 py-2" :class="turn.bubble">
+                            <span v-for="(line, lineIndex) in turn.prompt" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
+                        </div>
+                    </div>
+                    <!-- Tool calls are bare rows at the meta tier: a glyph, a name, a target, not cards. -->
+                    <div class="flex flex-col gap-0.5">
+                        <span v-for="(target, toolIndex) in turn.tools" :key="toolIndex" class="flex items-center gap-1.5">
+                            <span class="h-2.5 w-2.5 shrink-0 rounded bg-content/25" />
+                            <span class="h-2 w-10 shrink-0 rounded bg-content/10" />
+                            <span class="h-2 rounded bg-content/10" :class="target" />
+                        </span>
+                    </div>
+                    <div class="chat-surface-assistant flex flex-col gap-2 rounded-lg px-3.5 py-2.5">
+                        <span v-for="(line, lineIndex) in turn.answer" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
                     </div>
                 </div>
-                <!-- Tool calls are bare rows at the meta tier: a glyph, a name, a target, not cards. -->
-                <div class="flex flex-col gap-0.5">
-                    <span v-for="(target, toolIndex) in turn.tools" :key="toolIndex" class="flex items-center gap-1.5">
-                        <span class="h-2.5 w-2.5 shrink-0 rounded bg-content/25" />
-                        <span class="h-2 w-10 shrink-0 rounded bg-content/10" />
-                        <span class="h-2 rounded bg-content/10" :class="target" />
-                    </span>
-                </div>
-                <div class="chat-surface-assistant flex flex-col gap-2 rounded-lg px-3.5 py-2.5">
-                    <span v-for="(line, lineIndex) in turn.answer" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
-                </div>
-            </div>
+            </SkeletonSnapshot>
             <p v-if="stalled" class="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 pt-2 text-2xs text-subtle" role="alert">
                 <span>{{ t(`chat.chatTranscriptSkeleton.takingLonger`) }}</span>
                 <Button size="small" severity="secondary" @click="retry">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>

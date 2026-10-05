@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AccountFix, providerLabel } from "@intentic/sandbox-contract";
-import { Card, SearchBar, type Tip, ui } from "@intentic/ui";
+import { Card, SearchBar, SkeletonSnapshot, type Tip, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
@@ -185,7 +185,7 @@ const roster = computed(() => {
 
 <template>
     <!-- `@container` over the section: the columns follow the panel's width, not the window's. -->
-    <section v-if="rows.length > 0" id="accounts" class="@container">
+    <section v-if="rows.length > 0" id="accounts" v-skeleton-source="`sandbox.plan-limits`" class="@container">
         <div class="mb-2.5 px-1">
             <span :class="ui.sectionLabel()">{{ t(`shared.planLimits`) }}</span>
         </div>
@@ -513,36 +513,39 @@ const roster = computed(() => {
         </div>
     </section>
 
-    <!-- An unread state is not an empty one: drawn as the panel itself (summary card beside provider cards), not a "Reading..." sentence in its place. -->
-    <section v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
-        <div class="mb-2.5 px-1"><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></div>
-        <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
-        <div :class="SPLIT" aria-hidden="true">
-            <Card class="flex flex-col gap-3 @2xl:col-start-2 @2xl:row-start-1">
-                <div class="flex flex-col gap-1.5">
-                    <span class="skeleton block h-4 w-44" />
-                    <span class="skeleton block h-2.5 w-32" />
-                </div>
-                <!-- Matches the strip's actual height; a thicker placeholder would promise more than the real thing. -->
-                <span class="skeleton block h-1.5 w-full rounded-full" />
-                <div class="flex flex-wrap gap-x-3 gap-y-1.5 @2xl:flex-col">
-                    <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
-                </div>
-            </Card>
-            <div class="flex min-w-0 flex-col gap-3 @2xl:col-start-1 @2xl:row-start-1">
-                <Card v-for="card in 2" :key="card" class="flex gap-2.5">
-                    <span class="skeleton block size-5 shrink-0 rounded-md" />
-                    <div class="flex min-w-0 flex-1 flex-col gap-3">
-                        <span class="skeleton block h-3.5 w-28" />
-                        <span class="skeleton block h-1.5 w-full rounded-full" />
+    <!-- An unread state is not an empty one: drawn as the panel itself, as it last looked in this sandbox, or until then
+         an outline of it (summary card beside provider cards), not a "Reading..." sentence in its place. -->
+    <SkeletonSnapshot v-else-if="!accountsLoaded && outline" of="sandbox.plan-limits" :label="t(`sandbox.words.readingConnections`)">
+        <section class="@container" role="status" aria-busy="true">
+            <div class="mb-2.5 px-1"><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></div>
+            <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
+            <div :class="SPLIT" aria-hidden="true">
+                <Card class="flex flex-col gap-3 @2xl:col-start-2 @2xl:row-start-1">
+                    <div class="flex flex-col gap-1.5">
+                        <span class="skeleton block h-4 w-44" />
+                        <span class="skeleton block h-2.5 w-32" />
+                    </div>
+                    <!-- Matches the strip's actual height; a thicker placeholder would promise more than the real thing. -->
+                    <span class="skeleton block h-1.5 w-full rounded-full" />
+                    <div class="flex flex-wrap gap-x-3 gap-y-1.5 @2xl:flex-col">
+                        <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
                     </div>
                 </Card>
+                <div class="flex min-w-0 flex-col gap-3 @2xl:col-start-1 @2xl:row-start-1">
+                    <Card v-for="card in 2" :key="card" class="flex gap-2.5">
+                        <span class="skeleton block size-5 shrink-0 rounded-md" />
+                        <div class="flex min-w-0 flex-1 flex-col gap-3">
+                            <span class="skeleton block h-3.5 w-28" />
+                            <span class="skeleton block h-1.5 w-full rounded-full" />
+                        </div>
+                    </Card>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
+    </SkeletonSnapshot>
 
     <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->
-    <p v-else-if="accountsLoaded" :class="ui.emptyState()">
+    <p v-else-if="accountsLoaded" v-skeleton-source="`sandbox.plan-limits`" :class="ui.emptyState()">
         {{ t(`sandbox.planLimitsPanel.noAiAccountConnected`) }}
     </p>
 </template>

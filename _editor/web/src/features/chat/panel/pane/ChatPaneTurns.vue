@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon } from "@intentic/ui";
+import { Button, Icon, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref } from "vue";
 import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
@@ -87,6 +87,8 @@ const viewer = useShotViewer(turns, turnShots);
 provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
 // The column whose `path:line` links raise a preview of the file (FileRefPeek).
 const column = ref<HTMLElement>();
+// What this conversation's next wait draws (ChatTranscriptSkeleton): its turns as they last stood, kept per conversation.
+const imprint = computed(() => `chat.transcript:${conversation.value.conversationId}`);
 </script>
 
 <template>
@@ -114,7 +116,8 @@ const column = ref<HTMLElement>();
             v-if="!conversation.transcript.historyMore.value && whole && messages.length > 0 && !props.subagent"
             :conversation-id="conversation.conversationId"
         />
-        <template v-if="messages.length > 0">
+        <!-- The turns as one element, so the skeleton has one thing to remember them by; stacked by the column's own gap. -->
+        <div v-if="messages.length > 0" v-skeleton-source="imprint" class="chat-stack flex flex-col">
             <!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
             <!-- `index` is for the day marker below, the one row that cares about its column position, not its turn. -->
             <template v-for="(turn, index) in shownTurns" :key="turn.id">
@@ -168,9 +171,9 @@ const column = ref<HTMLElement>();
                     <ChatForkCut v-if="!props.subagent" class="chat-cut-row" :cut="forkCuts.get(turn.id) ?? messages.length" />
                 </section>
             </template>
-        </template>
+        </div>
         <!-- The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data loss, not loading. -->
-        <ChatTranscriptSkeleton v-else-if="skeleton" @retry="retryHydrate(conversation)" />
+        <ChatTranscriptSkeleton v-else-if="skeleton" :of="imprint" @retry="retryHydrate(conversation)" />
         <!-- A read that did not answer, with nothing painted to fall back on: said, with the press that asks again, never the empty invitation to start a conversation. -->
         <div
             v-else-if="refresh?.kind === `failed`"

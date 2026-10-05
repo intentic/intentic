@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import type { EngineRow } from "@intentic/api-contract";
-import { BrandMark, Button, Notice, Picker, type PickerOption, Row, RowGroup, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
+import {
+    BrandMark,
+    Button,
+    Notice,
+    Picker,
+    type PickerOption,
+    Row,
+    RowGroup,
+    SkeletonRows,
+    SkeletonSnapshot,
+    StatusBadge,
+    ui,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { useEngines } from "./useEngines";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useRole } from "../secrets/useRole";
@@ -62,7 +75,29 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.enginesCard.agentEngines`)">
+    <!-- The whole card is the outline, drawn as it last looked in this sandbox: the rows sit straight in the group, so
+         nothing smaller than the group can hold their imprint. -->
+    <SkeletonSnapshot v-if="isLoading && outline" of="sandbox.environment.engines" :label="t(`sandbox.enginesCard.readingSandboxsAgentEngines`)">
+        <!-- Until it has been seen once: the header with its refresh, over rows. -->
+        <RowGroup :label="t(`sandbox.enginesCard.agentEngines`)">
+            <template #actions>
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`ui.action.refresh`)"
+                    v-tooltip.top="t(`ui.action.refresh`)"
+                    @click="query.refetch()"
+                >
+                    <Icon name="refresh" class="text-sm" :spin="isFetching" />
+                </button>
+            </template>
+            <div role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`sandbox.enginesCard.readingSandboxsAgentEngines`) }}</span>
+                <SkeletonRows :rows="5" description control />
+            </div>
+        </RowGroup>
+    </SkeletonSnapshot>
+    <RowGroup v-else v-skeleton-source="`sandbox.environment.engines`" :label="t(`sandbox.enginesCard.agentEngines`)">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <Button
@@ -91,12 +126,8 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
             </div>
         </template>
 
-        <div v-if="isLoading" role="status" aria-busy="true">
-            <template v-if="outline">
-                <span class="sr-only">{{ t(`sandbox.enginesCard.readingSandboxsAgentEngines`) }}</span>
-                <SkeletonRows :rows="5" description control />
-            </template>
-        </div>
+        <!-- The brief wait before the outline: still a wait, with nothing drawn yet. -->
+        <div v-if="isLoading" role="status" aria-busy="true" />
 
         <Row v-for="engine in engines" v-else :key="engine.id">
             <template #lead="{ mark }">

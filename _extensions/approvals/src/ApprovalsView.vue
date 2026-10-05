@@ -21,6 +21,7 @@ import {
     Row,
     RowGroup,
     SkeletonRows,
+    SkeletonSnapshot,
     SplitView,
     StatusBadge,
     timeAgo,
@@ -29,6 +30,7 @@ import {
     useLoadingReveal,
     useNow,
     vAction,
+    vSkeletonSource,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import ActionBody from "./ActionBody.vue";
@@ -401,23 +403,26 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
 
         <template #detail>
             <div class="flex flex-col">
-                <!-- Skeleton rows distinguish loading from an empty approvals queue. -->
+                <!-- Skeleton rows distinguish loading from an empty approvals queue: the queue (or its empty note) as it last
+                     looked here, hand-drawn rows until it has been seen once. -->
                 <template v-if="isLoading">
-                    <RowGroup v-if="outline" role="status" aria-busy="true">
-                        <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
-                        <span class="sr-only">{{ t(`approvalsView.readingApprovalsQueue`) }}</span>
-                        <SkeletonRows :rows="3" description control />
-                    </RowGroup>
+                    <SkeletonSnapshot v-if="outline" of="approvals.queue" :label="t(`approvalsView.readingApprovalsQueue`)">
+                        <RowGroup role="status" aria-busy="true">
+                            <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
+                            <span class="sr-only">{{ t(`approvalsView.readingApprovalsQueue`) }}</span>
+                            <SkeletonRows :rows="3" description control />
+                        </RowGroup>
+                    </SkeletonSnapshot>
                 </template>
 
                 <!-- Nothing at all. A reader arriving deliberately is owed an explanation, and the way to everything else that
                      waits on them: what agents ask while they work is answered from Needs you, never here. -->
-                <div v-else-if="isEmpty" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
+                <div v-else-if="isEmpty" v-skeleton-source="`approvals.queue`" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
                     <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
                     <a v-bind="needsLink" :class="ui.linkButton()">{{ t(`approvalsView.seeWhatNeedsYou`) }}</a>
                 </div>
 
-                <div v-else class="flex flex-col gap-6">
+                <div v-else v-skeleton-source="`approvals.queue`" class="flex flex-col gap-6">
                     <!-- Broken first: the only state where the queue already tried and stopped. -->
                     <RowGroup v-if="failed.length > 0" :label="t(`approvalsView.failed`)" :count="failed.length">
                         <Row v-for="item in failed" :key="item.id">

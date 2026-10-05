@@ -2,7 +2,7 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
 import { type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract";
-import { Button, Icon, type IconName, ui } from "@intentic/ui";
+import { Button, Icon, type IconName, SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
@@ -200,12 +200,14 @@ const stateTone = (entry: CapabilitySummary): string =>
 
 <template>
     <div class="flex flex-col gap-3">
-        <!-- Nothing is offered before the machine has answered; a skeleton beats a number we would have to take back. -->
-        <p v-if="fit === undefined" class="flex items-center gap-1.5 text-xs text-subtle">
-            <Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}
-        </p>
+        <!-- Nothing is offered before the machine has answered; a skeleton beats a number we would have to take back. The
+             lane as this machine last drew it, once it has been seen; until then the words. -->
+        <SkeletonSnapshot v-if="fit === undefined" of="connect.local-model" :label="t(`connect.localModelLane.measuring`)">
+            <p class="flex items-center gap-1.5 text-xs text-subtle"><Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}</p>
+        </SkeletonSnapshot>
 
-        <template v-else>
+        <!-- One element, so its imprint is the whole lane; spaced as the column it sits in. -->
+        <div v-else v-skeleton-source="`connect.local-model`" class="flex flex-col gap-3">
             <p class="text-xs text-muted">
                 {{ memoryLine }} <span class="text-subtle">{{ gpuLine }}</span>
                 <span v-if="fullSpeedLine" class="text-subtle">{{ fullSpeedLine }}</span>
@@ -292,6 +294,6 @@ const stateTone = (entry: CapabilitySummary): string =>
             <RouterLink to="/capabilities/localmodel" :class="ui.linkButton(`text-2xs`)">
                 {{ t(`connect.localModelLane.moreModels`) }}<Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
-        </template>
+        </div>
     </div>
 </template>

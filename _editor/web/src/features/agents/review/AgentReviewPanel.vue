@@ -8,10 +8,12 @@ import {
     iconForEntry,
     ResizeSeam,
     SegmentedControl,
+    SkeletonSnapshot,
     type Tip,
     useDevice,
     useExplorerStyle,
     useLoadingReveal,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
@@ -716,11 +718,15 @@ const seamWidth = computed<number>({
         </div>
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
+        <!-- The last review seen draws the wait, empty or not; AgentDetail's own wait draws the same one. -->
         <template v-if="waiting">
-            <AgentReviewOutline v-if="outline" :label="waitLabel" />
+            <SkeletonSnapshot v-if="outline" of="agents.review" :label="waitLabel">
+                <AgentReviewOutline :label="waitLabel" />
+            </SkeletonSnapshot>
         </template>
         <div
             v-else-if="changes.count.value === 0 && history.count.value === 0"
+            v-skeleton-source="`agents.review`"
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
@@ -742,7 +748,7 @@ const seamWidth = computed<number>({
 
         <!-- List | diff share one screen on a phone: the diff takes over on pick, with no route change either way. -->
         <!-- No select-none while dragging: ResizeSeam already claims the whole document's selection for the drag. -->
-        <div v-else class="flex min-h-0 flex-1">
+        <div v-else v-skeleton-source="`agents.review`" class="flex min-h-0 flex-1">
             <aside
                 v-if="!mobile || selected === undefined"
                 class="flex min-h-0 min-w-0 flex-col"
@@ -1027,21 +1033,31 @@ const seamWidth = computed<number>({
 
                     <div class="min-h-0 flex-1">
                         <p v-if="diffError !== undefined" class="p-4 text-xs text-danger">{{ diffError }}</p>
-                        <!-- File reads open from the existing diff outline. -->
-                        <template v-else-if="diff === undefined"><DiffSkeleton v-if="diffOutline" /></template>
-                        <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
-                        <FileDiffPane
-                            v-else
-                            :key="diffKey"
-                            :path="selected.change.path"
-                            :before="diff.before"
-                            :after="diff.after"
-                            :binary="diff.binary"
-                            :partial="diff.partial"
-                            :before-raw="rawSides.beforeRaw"
-                            :after-raw="rawSides.afterRaw"
-                            :at="at"
-                        />
+                        <!-- A file read draws that file's diff as it last looked, here or in the workspace, else the shared diff outline. -->
+                        <template v-else-if="diff === undefined">
+                            <SkeletonSnapshot
+                                v-if="diffOutline"
+                                :of="`diff:${selected.change.path}`"
+                                :label="t(`workspace.diffSkeleton.readingFile`)"
+                            >
+                                <DiffSkeleton />
+                            </SkeletonSnapshot>
+                        </template>
+                        <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
+                        <div v-else v-skeleton-source="`diff:${selected.change.path}`" class="h-full">
+                            <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
+                            <FileDiffPane
+                                :key="diffKey"
+                                :path="selected.change.path"
+                                :before="diff.before"
+                                :after="diff.after"
+                                :binary="diff.binary"
+                                :partial="diff.partial"
+                                :before-raw="rawSides.beforeRaw"
+                                :after-raw="rawSides.afterRaw"
+                                :at="at"
+                            />
+                        </div>
                     </div>
                 </template>
                 <p v-else class="p-4 text-2xs text-subtle">{{ t(`agents.agentReviewPanel.pickFileToSee`) }}</p>

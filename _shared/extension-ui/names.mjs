@@ -86,6 +86,8 @@ export const extensionUiNames = [
     "similarity",
     "sinceOf",
     "SkeletonRows",
+    "SkeletonSnapshot",
+    "vSkeletonSource",
     "SplitView",
     "StatStrip",
     "StatusBadge",

@@ -1,12 +1,13 @@
-import { loadChunk, Notice, useLoadingReveal } from "@intentic/ui";
-import { type Component, computed, defineComponent, h, ref, shallowRef } from "vue";
+import { loadChunk, Notice, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { type Component, computed, defineComponent, h, ref, shallowRef, withDirectives } from "vue";
 import { useRouter } from "vue-router";
 import { t } from "@intentic/ui/i18n";
 
 // Wraps a route's `() => import(...)` so navigation completes immediately; `outline` shows only past the same
 // reveal-delay thresholds data skeletons use. Owns the failure path, invisible to router.onError once navigation lands:
 // a dead chunk gets `loadChunk`'s one reload onto the page just landed on (the outline stays while it goes), anything
-// else a notice with retry.
+// else a notice with retry. A view with an outline is imprinted per path once it has drawn (`v-skeleton-source`), so the
+// next wait for its chunk draws that page as it last looked, and `outline` only until it has been seen once.
 
 type Loader = () => Promise<{ readonly default: Component }>;
 
@@ -71,10 +72,13 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
                 loading,
                 computed(() => ``),
             );
+            // Per path, not per route: one hub's sections are different pages.
+            const imprint = computed(() => `route:${router.currentRoute.value.path}`);
 
             return () => {
                 if (resolved.value !== undefined) {
-                    return h(resolved.value);
+                    const view = h(resolved.value);
+                    return outline === undefined ? view : withDirectives(view, [[vSkeletonSource, imprint.value]]);
                 }
                 if (failure.value !== undefined) {
                     return h(`div`, { class: `ui-page` }, [
@@ -88,7 +92,7 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
                         }),
                     ]);
                 }
-                return revealed.value && outline !== undefined ? h(outline) : null;
+                return revealed.value && outline !== undefined ? h(SkeletonSnapshot, { of: imprint.value }, { default: () => h(outline) }) : null;
             };
         },
     });

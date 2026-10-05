@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, SkeletonRows } from "@intentic/ui";
+import { Row, RowGroup, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed } from "vue";
 import { useRepoChecks } from "../../environment/useRepoChecks";
 import { useSandboxOutline } from "../../overview/useSandboxOutline";
@@ -19,13 +19,22 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
-        <div v-if="repos === undefined" role="status" aria-busy="true">
-            <template v-if="outline">
+    <!-- The whole group is the outline, drawn as it last looked in this sandbox: its rows sit straight in it. -->
+    <SkeletonSnapshot
+        v-if="repos === undefined && outline"
+        of="sandbox.agent.repo-checks"
+        :label="t(`sandbox.agentRepoChecks.readingWhatWorkspacesRepositories`)"
+    >
+        <RowGroup :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
+            <div role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.agentRepoChecks.readingWhatWorkspacesRepositories`) }}</span>
                 <SkeletonRows :rows="2" description control />
-            </template>
-        </div>
+            </div>
+        </RowGroup>
+    </SkeletonSnapshot>
+    <RowGroup v-else v-skeleton-source="`sandbox.agent.repo-checks`" :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
+        <!-- The brief wait before the outline: still a wait, with nothing drawn yet. -->
+        <div v-if="repos === undefined" role="status" aria-busy="true" />
 
         <Row
             v-else-if="error !== undefined"

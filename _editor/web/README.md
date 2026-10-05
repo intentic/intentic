@@ -32,9 +32,13 @@ flowchart LR
   its selection and actions. Settings wraps the shared tile in `PersonaSelector.vue` for renaming and removal directly
   on the selector. It saves a queued edit against its original persona when the selection changes.
 - **Live state.** Server state lives in vue-query, mirrored per user to IndexedDB so a reload paints the last-known
-  workspace. One `/events` stream per active sandbox (`useSandboxLiveness.ts`) invalidates what each frame makes
-  stale (`systemEvents.ts`). Push refreshes let an in-flight read finish and queue one catch-up when another frame
-  arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
+  workspace. What the cache cannot paint yet is outlined as it last looked. Each loading placeholder is drawn from an
+  imprint `@intentic/ui` took of its content, stored in IndexedDB as one record per sandbox and view
+  (`lib/skeletonPersistence.ts`). The active sandbox's imprints are read before the first route mounts, and every
+  other sandbox's at the first idle moment, so a switch draws them on its first frame. They survive a new build,
+  which the query cache does not, and a sign-out clears both. One `/events` stream per active sandbox
+  (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
+  in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
   frames missed while disconnected. Terminals and the browser view use WebSockets opened with a short-lived ticket
   (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
   edge serves one (`features/terminal/channel/`).

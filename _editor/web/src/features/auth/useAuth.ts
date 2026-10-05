@@ -5,6 +5,7 @@ import { reloadOnHotUpdate } from "../../app/hotReload";
 import { announceDesktopRoster } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
 import { localFace } from "../../app/environments/local";
+import { clearImprints } from "@intentic/ui/skeleton-store";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
 import { useSandboxSession } from "../sandbox/session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
@@ -36,7 +37,8 @@ onPlatformAuthInvalidated(async () => {
     clearSessions();
     // The desktop app's local windows list this account's sandboxes from what this page told it; none are theirs now.
     announceDesktopRoster([]);
-    await clearPersistedQueries();
+    // The remembered loading imprints are the account's sandboxes' too: how many secrets, rows, agents each one held.
+    await Promise.all([clearPersistedQueries(), clearImprints()]);
 });
 
 const refresh = async (): Promise<User | null> => {

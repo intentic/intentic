@@ -25,10 +25,12 @@ import {
     RowNote,
     SegmentedControl,
     SkeletonRows,
+    SkeletonSnapshot,
     StatusBadge,
     type StatusVariant,
     timeAgo,
     ui,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatFixed } from "@intentic/ui/format";
@@ -230,10 +232,13 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)">
-            <SkeletonRows v-if="isLoading" :rows="1" description />
-
-            <RowNote v-else-if="error !== undefined" variant="block"
+        <!-- Each group waits on its own read, so each stands in whole, drawn as it last looked in this sandbox: their
+             rows sit straight in the group, so nothing smaller can hold the imprint. -->
+        <SkeletonSnapshot v-if="isLoading" of="sandbox.agent.privacy-shield">
+            <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)"><SkeletonRows :rows="1" description /></RowGroup>
+        </SkeletonSnapshot>
+        <RowGroup v-else v-skeleton-source="`sandbox.agent.privacy-shield`" :label="t(`sandbox.agentPrivacyShield.title`)">
+            <RowNote v-if="error !== undefined" variant="block"
                 ><Notice tone="danger">{{ error }}</Notice></RowNote
             >
 
@@ -408,10 +413,21 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
             <RowNote v-if="saveNotice !== undefined && writtenFrom === `trusted`" variant="block"><Notice :of="saveNotice" /></RowNote>
         </RowGroup>
 
-        <RowGroup v-if="showSources" :label="t(`sandbox.agentPrivacyShield.datasets`)">
-            <SkeletonRows v-if="sourcesLoading" :rows="2" description />
-
-            <RowNote v-else-if="sourcesError !== undefined" variant="block"
+        <!-- The note on how a dataset arrives is drawn under the outline too, as it is under the list. -->
+        <SkeletonSnapshot v-if="showSources && sourcesLoading" of="sandbox.agent.privacy-datasets">
+            <RowGroup :label="t(`sandbox.agentPrivacyShield.datasets`)">
+                <SkeletonRows :rows="2" description />
+                <RowNote>
+                    <i18n-t keypath="sandbox.agentPrivacyShield.datasetsNote" tag="span" scope="global">
+                        <template #command
+                            ><code class="ui-code whitespace-nowrap">{{ LEARN_COMMAND }}</code></template
+                        >
+                    </i18n-t>
+                </RowNote>
+            </RowGroup>
+        </SkeletonSnapshot>
+        <RowGroup v-else-if="showSources" v-skeleton-source="`sandbox.agent.privacy-datasets`" :label="t(`sandbox.agentPrivacyShield.datasets`)">
+            <RowNote v-if="sourcesError !== undefined" variant="block"
                 ><Notice tone="danger">{{ sourcesError }}</Notice></RowNote
             >
 
@@ -448,10 +464,11 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
             <RowNote v-if="forgetNotice !== undefined" variant="block"><Notice :of="forgetNotice" /></RowNote>
         </RowGroup>
 
-        <RowGroup v-if="showActivity" :label="t(`sandbox.agentPrivacyShield.activity`)">
-            <SkeletonRows v-if="logLoading" :rows="3" description />
-
-            <RowNote v-else-if="logError !== undefined" variant="block"
+        <SkeletonSnapshot v-if="showActivity && logLoading" of="sandbox.agent.privacy-activity">
+            <RowGroup :label="t(`sandbox.agentPrivacyShield.activity`)"><SkeletonRows :rows="3" description /></RowGroup>
+        </SkeletonSnapshot>
+        <RowGroup v-else-if="showActivity" v-skeleton-source="`sandbox.agent.privacy-activity`" :label="t(`sandbox.agentPrivacyShield.activity`)">
+            <RowNote v-if="logError !== undefined" variant="block"
                 ><Notice tone="danger">{{ logError }}</Notice></RowNote
             >
 

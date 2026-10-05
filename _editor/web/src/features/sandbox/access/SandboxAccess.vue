@@ -14,10 +14,12 @@ import {
     RowGroup,
     RowNote,
     SkeletonRows,
+    SkeletonSnapshot,
     StatusBadge,
     type StatusVariant,
     ui,
     useDevice,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
@@ -674,9 +676,14 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- Machine access other than sign-ins and tokens is listed separately. -->
-        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
-            <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
-            <template v-else>
+        <template v-if="canShip">
+            <!-- The whole group stands in, drawn as it last looked in this sandbox: its rows sit straight in it. -->
+            <SkeletonSnapshot v-if="inventoryLoading" of="sandbox.access.other-ways-in">
+                <RowGroup :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
+                    <div role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
+                </RowGroup>
+            </SkeletonSnapshot>
+            <RowGroup v-else v-skeleton-source="`sandbox.access.other-ways-in`" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
                 <Row icon="bolt" :title="t(`sandbox.sandboxAccess.webhooks`)" :description="webhooksLine" />
                 <Row icon="shield" :title="t(`sandbox.sandboxAccess.releaseGates`)" :description="gatesLine" />
                 <Row icon="sitemap" :title="t(`sandbox.sandboxAccess.ciNotifications`)" :description="ciLine" />
@@ -685,8 +692,8 @@ const revoke = async (target: string): Promise<void> => {
                     :title="t(`sandbox.sandboxAccess.pairedDevicesRunners`)"
                     :description="t(`sandbox.sandboxAccess.eachHoldsOwnEnrollment`)"
                 />
-            </template>
-        </RowGroup>
+            </RowGroup>
+        </template>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->
         <RowGroup :label="t(`shared.hereNow`)">

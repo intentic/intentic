@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { Icon, Notice, noticeOf, openForwardedPort, RowGroup, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
+import {
+    Icon,
+    Notice,
+    noticeOf,
+    openForwardedPort,
+    RowGroup,
+    SkeletonRows,
+    SkeletonSnapshot,
+    useLoadingReveal,
+    vSkeletonSource,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import PortRow from "./PortRow.vue";
@@ -54,41 +64,48 @@ const openTerminal = (session: string): void => host().terminal.open(session);
     <div class="flex flex-col gap-4">
         <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
 
-        <RowGroup :label="t(`portsView.services`)">
-            <!-- An empty scan result would read as 'nothing found' with less confidence; skeleton rows stand in while loading. -->
-            <div v-if="isLoading && outline" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`portsView.scanningListeningPorts`) }}</span>
-                <SkeletonRows :rows="3" density="compact" description control />
-            </div>
+        <!-- An empty scan result would read as 'nothing found' with less confidence; skeleton rows stand in while loading. -->
+        <SkeletonSnapshot v-if="isLoading && outline" of="preview.ports" :label="t(`portsView.scanningListeningPorts`)">
+            <RowGroup :label="t(`portsView.services`)">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`portsView.scanningListeningPorts`) }}</span>
+                    <SkeletonRows :rows="3" density="compact" description control />
+                </div>
+            </RowGroup>
+        </SkeletonSnapshot>
 
-            <div v-else-if="!isLoading && workspacePorts.length === 0" class="flex flex-col items-center gap-2 py-10 text-center">
-                <Icon name="ports" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">{{ t(`portsView.nothingYoursListeningYet`) }}</p>
-                <p class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</p>
-            </div>
+        <!-- One element, so its imprint holds both groups; spaced as the column it sits in. -->
+        <div v-else v-skeleton-source="`preview.ports`" class="flex flex-col gap-4">
+            <RowGroup :label="t(`portsView.services`)">
+                <div v-if="!isLoading && workspacePorts.length === 0" class="flex flex-col items-center gap-2 py-10 text-center">
+                    <Icon name="ports" class="text-2xl text-subtle" />
+                    <p class="text-sm text-muted">{{ t(`portsView.nothingYoursListeningYet`) }}</p>
+                    <p class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</p>
+                </div>
 
-            <PortRow
-                v-for="entry in workspacePorts"
-                :key="entry.port"
-                :entry="entry"
-                :busy="busy !== undefined"
-                @preview="openPreview(entry.port)"
-                @stop="stop(entry.port)"
-                @terminal="openTerminal"
-            />
-        </RowGroup>
+                <PortRow
+                    v-for="entry in workspacePorts"
+                    :key="entry.port"
+                    :entry="entry"
+                    :busy="busy !== undefined"
+                    @preview="openPreview(entry.port)"
+                    @stop="stop(entry.port)"
+                    @terminal="openTerminal"
+                />
+            </RowGroup>
 
-        <!-- Listed for transparency, muted since nobody previews these; forwarding stays possible, just de-emphasized. -->
-        <RowGroup v-if="systemPorts.length > 0" :label="t(`portsView.sandboxInternals`)" class="opacity-70">
-            <PortRow
-                v-for="entry in systemPorts"
-                :key="entry.port"
-                :entry="entry"
-                :busy="busy !== undefined"
-                @preview="openPreview(entry.port)"
-                @stop="stop(entry.port)"
-                @terminal="openTerminal"
-            />
-        </RowGroup>
+            <!-- Listed for transparency, muted since nobody previews these; forwarding stays possible, just de-emphasized. -->
+            <RowGroup v-if="systemPorts.length > 0" :label="t(`portsView.sandboxInternals`)" class="opacity-70">
+                <PortRow
+                    v-for="entry in systemPorts"
+                    :key="entry.port"
+                    :entry="entry"
+                    :busy="busy !== undefined"
+                    @preview="openPreview(entry.port)"
+                    @stop="stop(entry.port)"
+                    @terminal="openTerminal"
+                />
+            </RowGroup>
+        </div>
     </div>
 </template>

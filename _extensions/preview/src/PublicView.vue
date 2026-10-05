@@ -1,5 +1,16 @@
 <script setup lang="ts">
-import { Button, ui, CopyButton, Icon, Notice, noticeOf, StatusBadge, useLoadingReveal } from "@intentic/extension-ui";
+import {
+    Button,
+    ui,
+    CopyButton,
+    Icon,
+    Notice,
+    noticeOf,
+    SkeletonSnapshot,
+    StatusBadge,
+    useLoadingReveal,
+    vSkeletonSource,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
@@ -71,23 +82,27 @@ const size = (bytes: number): string => {
                 {{ t(`publicView.sandboxNoPublicAddress`) }}
             </div>
 
-            <!-- Empty list reads as 'nothing published' too quietly; skeleton rows (icon, path, size) stand in while loading. -->
-            <div v-if="isLoading && outline" class="rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
-                <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
-                    <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
-                        <span class="skeleton block h-3.5 w-3.5 shrink-0" />
-                        <div class="flex min-w-0 flex-1 flex-col gap-1">
-                            <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
-                            <span class="skeleton block h-2 w-12" />
+            <!-- Empty list reads as 'nothing published' too quietly; skeleton rows (icon, path, size) stand in while loading,
+                 until the list or its empty card has been seen once and can be drawn as it was. -->
+            <SkeletonSnapshot v-if="isLoading && outline" of="preview.public-files" :label="t(`publicView.readingPublishedFiles`)">
+                <div class="rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
+                    <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
+                        <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
+                            <span class="skeleton block h-3.5 w-3.5 shrink-0" />
+                            <div class="flex min-w-0 flex-1 flex-col gap-1">
+                                <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
+                                <span class="skeleton block h-2 w-12" />
+                            </div>
+                            <span class="skeleton block h-3.5 w-10 shrink-0" />
                         </div>
-                        <span class="skeleton block h-3.5 w-10 shrink-0" />
                     </div>
                 </div>
-            </div>
+            </SkeletonSnapshot>
 
             <div
                 v-else-if="files.length === 0 && !isLoading"
+                v-skeleton-source="`preview.public-files`"
                 class="flex flex-col items-center gap-2 rounded-lg bg-card shadow-sm py-10 text-center"
             >
                 <Icon name="globe" class="text-2xl text-subtle" />
@@ -98,7 +113,11 @@ const size = (bytes: number): string => {
                 </p>
             </div>
 
-            <div v-else-if="files.length > 0" class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm">
+            <div
+                v-else-if="files.length > 0"
+                v-skeleton-source="`preview.public-files`"
+                class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm"
+            >
                 <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
                     <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
                     <div class="min-w-0 flex-1">

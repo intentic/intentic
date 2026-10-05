@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { STATE_DIR } from "@intentic/constants";
-import { ui, useLoadingReveal } from "@intentic/ui";
+import { SkeletonSnapshot, ui, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { computed, provide } from "vue";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
@@ -134,21 +134,28 @@ const diffOutline = useLoadingReveal(
                 :deletions="activeTab.deletions"
             />
             <div class="min-h-0 flex-1">
-                <!-- Wait for file type detection before mounting a viewer. -->
-                <template v-if="activeTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
-                <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, shared with the two other surfaces rendering this diff. -->
-                <FileDiffPane
-                    v-else
-                    :key="activeTab.id"
-                    :path="activeTab.path"
-                    :before="activeTab.before"
-                    :after="activeTab.after"
-                    :binary="activeTab.binary"
-                    :partial="activeTab.partial"
-                    :before-raw="activeTab.beforeRaw"
-                    :after-raw="activeTab.afterRaw"
-                    @stat="setDiffStat"
-                />
+                <!-- Wait for file type detection before mounting a viewer. The wait draws this file's diff as it last
+                     looked, here or in an agent's review, and the shared diff outline before it has been seen. -->
+                <template v-if="activeTab.pending">
+                    <SkeletonSnapshot v-if="diffOutline" :of="`diff:${activeTab.path}`" :label="t(`workspace.diffSkeleton.readingFile`)">
+                        <DiffSkeleton />
+                    </SkeletonSnapshot>
+                </template>
+                <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
+                <div v-else v-skeleton-source="`diff:${activeTab.path}`" class="h-full">
+                    <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, shared with the two other surfaces rendering this diff. -->
+                    <FileDiffPane
+                        :key="activeTab.id"
+                        :path="activeTab.path"
+                        :before="activeTab.before"
+                        :after="activeTab.after"
+                        :binary="activeTab.binary"
+                        :partial="activeTab.partial"
+                        :before-raw="activeTab.beforeRaw"
+                        :after-raw="activeTab.afterRaw"
+                        @stat="setDiffStat"
+                    />
+                </div>
             </div>
         </template>
         <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">

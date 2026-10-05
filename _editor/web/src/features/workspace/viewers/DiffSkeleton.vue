@@ -4,9 +4,10 @@ import { computed } from "vue";
 import { useLayout } from "../../../shell/window/useLayout";
 import { useT } from "@intentic/ui/i18n";
 
-// Outline of a diff whose content hasn't arrived (what a `pending` tab shows). Drawn as the eventual layout, not
-// a spinner, since the reader already knows which file; the toolbar above already gives status and ± counts. Split
-// follows the same preference the real viewer reads, so the outline never promises a layout the diff then contradicts.
+// Outline of a diff whose content hasn't arrived: what a `pending` tab shows until that file's diff has been seen once
+// (its `diff:${path}` imprint stands in after that). Drawn as the eventual layout, not a spinner, since the reader
+// already knows which file; the toolbar above already gives status and ± counts. Split follows the same preference the
+// real viewer reads, so the outline never promises a layout the diff then contradicts.
 
 const t = useT();
 

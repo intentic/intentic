@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
+import { ui, ResponsiveOverlay, SkeletonRows, SkeletonSnapshot, vAction, vSkeletonSource } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { sharedWorkspaceTreeKey } from "../../workspace/health/workspaceTreeKey";
 import { sandboxRpc } from "../client/sandboxRpc";
@@ -170,13 +170,18 @@ const remove = (path: string): void => {
 
         <!-- Opens downward rather than the overlay's own default (above), which would land the tree over the field's own section heading. -->
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" :header="t(`sandbox.folderPicker.chooseFolder`)" panel-class="w-80 p-1">
-            <!-- Holds the panel's height steady while the tree loads, rather than jumping once rows arrive. -->
+            <!-- Holds the panel's height steady while the tree loads, rather than jumping once rows arrive. One name for the
+                 whole tree, whichever folders were open: the last listing seen is the likeliest next one. -->
             <div v-if="query.isPending.value" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.folderPicker.readingWorkspace`) }}</span>
-                <SkeletonRows v-if="outline" :rows="5" density="dense" :control="false" />
+                <SkeletonSnapshot v-if="outline" of="sandbox.folder-picker">
+                    <SkeletonRows :rows="5" density="dense" :control="false" />
+                </SkeletonSnapshot>
             </div>
-            <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">{{ t(`sandbox.folderPicker.noFoldersInWorkspace`) }}</div>
-            <div v-else class="flex max-h-72 flex-col overflow-y-auto">
+            <div v-else-if="rows.length === 0" v-skeleton-source="`sandbox.folder-picker`" :class="ui.emptyState('py-4 text-xs')">
+                {{ t(`sandbox.folderPicker.noFoldersInWorkspace`) }}
+            </div>
+            <div v-else v-skeleton-source="`sandbox.folder-picker`" class="flex max-h-72 flex-col overflow-y-auto">
                 <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
                     <!-- Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer so names stay in one column. -->
                     <button

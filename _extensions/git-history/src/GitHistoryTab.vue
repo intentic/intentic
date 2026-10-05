@@ -9,10 +9,12 @@ import {
     type MenuItem,
     Modal,
     SegmentedControl,
+    SkeletonSnapshot,
     timeAgo,
     ui,
     useLoadingReveal,
     vAction,
+    vSkeletonSource,
 } from "@intentic/extension-ui";
 import type { GitActionResult, GitChange, GitCommit, GitDiffSide } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, watch } from "vue";
@@ -596,200 +598,208 @@ const runPending = async (): Promise<void> => {
             <!-- Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. -->
             <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`gitHistoryTab.readingRepositorysHistory`) }}</span>
-                <div v-for="row in outline ? 8 : 0" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
-                    <span class="skeleton block h-2 w-2 shrink-0 rounded-full" />
-                    <div class="flex min-w-0 flex-1 flex-col gap-1">
-                        <span class="skeleton block h-2.5" :class="[`w-64`, `w-48`, `w-72`, `w-56`][row % 4]" />
-                        <span class="skeleton block h-2" :class="[`w-28`, `w-36`][row % 2]" />
+                <SkeletonSnapshot v-if="outline" of="git-history.commits">
+                    <div v-for="row in 8" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
+                        <span class="skeleton block h-2 w-2 shrink-0 rounded-full" />
+                        <div class="flex min-w-0 flex-1 flex-col gap-1">
+                            <span class="skeleton block h-2.5" :class="[`w-64`, `w-48`, `w-72`, `w-56`][row % 4]" />
+                            <span class="skeleton block h-2" :class="[`w-28`, `w-36`][row % 2]" />
+                        </div>
                     </div>
-                </div>
+                </SkeletonSnapshot>
             </div>
-            <p v-else-if="commits.length === 0" class="px-3 py-3 text-2xs text-subtle">{{ t(`gitHistoryTab.noCommitsYetIn`) }}</p>
+            <p v-else-if="commits.length === 0" v-skeleton-source="`git-history.commits`" class="px-3 py-3 text-2xs text-subtle">
+                {{ t(`gitHistoryTab.noCommitsYetIn`) }}
+            </p>
             <p v-else-if="searching && matched.length === 0" class="px-3 py-3 text-2xs text-subtle">
                 {{ t(`gitHistoryTab.noLoadedCommitMatches`) }}
             </p>
-            <!-- A @container per row: which columns fit depends on this panel's width, which the reader controls. -->
-            <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
-                <button
-                    type="button"
-                    class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left transition-opacity"
-                    :class="{ 'ui-row-select-on': commit.sha === openSha, 'opacity-40': dimmed(row.color) }"
-                    :style="{ height: `${ROW_H}px` }"
-                    @click="toggle(commit.sha)"
-                    @contextmenu.prevent.stop="openMenu($event, commit)"
-                    @mouseenter="hovered = row.color"
-                    @mouseleave="hovered = undefined"
-                >
-                    <svg :width="gutterWidth" :height="ROW_H" class="shrink-0" aria-hidden="true">
-                        <!-- Each segment fades by its own branch colour, not the row's, so a hovered branch stays lit behind others. -->
-                        <line
-                            v-for="(edge, index) in row.up"
-                            :key="`u${index}`"
-                            :x1="laneX(edge.from)"
-                            :y1="0"
-                            :x2="laneX(edge.to)"
-                            :y2="ROW_H / 2"
-                            :stroke="laneColor(edge.color)"
-                            :opacity="dimmed(edge.color) ? 0.25 : 1"
-                            stroke-width="1.5"
-                        />
-                        <line
-                            v-for="(edge, index) in row.down"
-                            :key="`d${index}`"
-                            :x1="laneX(edge.from)"
-                            :y1="ROW_H / 2"
-                            :x2="laneX(edge.to)"
-                            :y2="ROW_H"
-                            :stroke="laneColor(edge.color)"
-                            :opacity="dimmed(edge.color) ? 0.25 : 1"
-                            stroke-width="1.5"
-                        />
-                        <!-- Hollow for row zero, since it isn't a real object yet; filled for a commit, ringed for HEAD. -->
-                        <circle
-                            :cx="laneX(row.col)"
-                            :cy="ROW_H / 2"
-                            :r="commit.head ? NODE_R + 1 : NODE_R"
-                            :fill="commit.sha === WORKING ? 'var(--color-canvas)' : laneColor(row.color)"
-                            :stroke="commit.sha === WORKING ? laneColor(row.color) : commit.head ? 'var(--color-content)' : 'none'"
-                            stroke-width="1.5"
-                        />
-                    </svg>
-                    <!-- A stash wears its ref as a pill, like a branch or tag; the name is also the handle its verbs take. -->
-                    <span
-                        v-if="stashBySha.get(commit.sha)"
-                        class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
-                        v-tooltip.top="t(`gitHistoryTab.stashedWork`)"
-                        >{{ stashBySha.get(commit.sha)!.ref }}</span
+            <!-- One block around every row, so its imprint is the whole list. Not taken while it holds row zero alone (before
+                 the log lands, or in a repo with no commits), which would teach the next wait a one-row list. -->
+            <div v-if="graphRows.length > 0" v-skeleton-source="commits.length > 0 ? `git-history.commits` : undefined">
+                <!-- A @container per row: which columns fit depends on this panel's width, which the reader controls. -->
+                <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
+                    <button
+                        type="button"
+                        class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left transition-opacity"
+                        :class="{ 'ui-row-select-on': commit.sha === openSha, 'opacity-40': dimmed(row.color) }"
+                        :style="{ height: `${ROW_H}px` }"
+                        @click="toggle(commit.sha)"
+                        @contextmenu.prevent.stop="openMenu($event, commit)"
+                        @mouseenter="hovered = row.color"
+                        @mouseleave="hovered = undefined"
                     >
-                    <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">{{
-                        t(`gitHistoryTab.head`)
-                    }}</span>
-                    <!-- Right-clickable, so acting on a ref doesn't mean hunting for it in the commit's own menu. -->
-                    <span
-                        v-for="ref in commit.refs.slice(0, 3)"
-                        :key="ref"
-                        class="shrink-0 cursor-context-menu rounded px-1 text-3xs"
-                        :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
-                        v-tooltip.top="{ title: t(`gitHistoryTab.actions`), keys: t(`gitHistoryTab.rightClick`) }"
-                        @contextmenu.prevent.stop="openRefMenu($event, ref, commit)"
-                        >{{ refBadge(ref).label }}</span
-                    >
-                    <span class="min-w-0 flex-1 truncate text-xs" :class="commit.sha === openSha ? 'text-content' : 'text-content/90'">{{
-                        commit.subject
-                    }}</span>
-                    <!-- Row zero has no author, date or sha yet; instead it shows how much is uncommitted and whether any is blocking. -->
-                    <template v-if="commit.sha === WORKING">
-                        <span v-if="working.conflicted.value > 0" class="shrink-0 text-2xs text-danger">{{
-                            t(`gitHistoryTab.conflicted`, { conflicted: working.conflicted.value })
-                        }}</span>
-                        <span class="shrink-0 text-2xs text-subtle">{{ t(`gitHistoryTab.changed`, { count: working.changes.value.length }) }}</span>
-                    </template>
-                    <!-- A stash's three verbs sit on the row, not a menu nobody would open for them; Pop leads as the common case. -->
-                    <template v-else-if="stashBySha.get(commit.sha)">
-                        <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
+                        <svg :width="gutterWidth" :height="ROW_H" class="shrink-0" aria-hidden="true">
+                            <!-- Each segment fades by its own branch colour, not the row's, so a hovered branch stays lit behind others. -->
+                            <line
+                                v-for="(edge, index) in row.up"
+                                :key="`u${index}`"
+                                :x1="laneX(edge.from)"
+                                :y1="0"
+                                :x2="laneX(edge.to)"
+                                :y2="ROW_H / 2"
+                                :stroke="laneColor(edge.color)"
+                                :opacity="dimmed(edge.color) ? 0.25 : 1"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                v-for="(edge, index) in row.down"
+                                :key="`d${index}`"
+                                :x1="laneX(edge.from)"
+                                :y1="ROW_H / 2"
+                                :x2="laneX(edge.to)"
+                                :y2="ROW_H"
+                                :stroke="laneColor(edge.color)"
+                                :opacity="dimmed(edge.color) ? 0.25 : 1"
+                                stroke-width="1.5"
+                            />
+                            <!-- Hollow for row zero, since it isn't a real object yet; filled for a commit, ringed for HEAD. -->
+                            <circle
+                                :cx="laneX(row.col)"
+                                :cy="ROW_H / 2"
+                                :r="commit.head ? NODE_R + 1 : NODE_R"
+                                :fill="commit.sha === WORKING ? 'var(--color-canvas)' : laneColor(row.color)"
+                                :stroke="commit.sha === WORKING ? laneColor(row.color) : commit.head ? 'var(--color-content)' : 'none'"
+                                stroke-width="1.5"
+                            />
+                        </svg>
+                        <!-- A stash wears its ref as a pill, like a branch or tag; the name is also the handle its verbs take. -->
                         <span
-                            v-for="verb in [
-                                {
-                                    label: 'Pop',
-                                    tip: { title: t(`gitHistoryTab.restoreWork`), note: t(`gitHistoryTab.removesStash`) },
-                                    run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, true),
-                                },
-                                {
-                                    label: 'Apply',
-                                    tip: { title: t(`gitHistoryTab.restoreWork`), note: t(`gitHistoryTab.keepsStash`) },
-                                    run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, false),
-                                },
-                                {
-                                    label: 'Drop',
-                                    tip: { title: t(`gitHistoryTab.discardStash`), note: t(`gitHistoryTab.restorePointSaved`) },
-                                    run: () => stashes.drop(stashBySha.get(commit.sha)!.ref),
-                                },
-                            ]"
-                            :key="verb.label"
-                            class="shrink-0 cursor-pointer rounded px-1 text-2xs text-subtle transition-colors hover:bg-overlay hover:text-content"
-                            :class="{ 'pointer-events-none opacity-40': stashes.busy.value }"
-                            v-tooltip.top="verb.tip"
-                            @click.stop="verb.run()"
-                            >{{ verb.label }}</span
+                            v-if="stashBySha.get(commit.sha)"
+                            class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
+                            v-tooltip.top="t(`gitHistoryTab.stashedWork`)"
+                            >{{ stashBySha.get(commit.sha)!.ref }}</span
                         >
-                    </template>
-                    <template v-else>
-                        <span class="hidden shrink-0 truncate text-2xs text-subtle @2xl:block @2xl:max-w-32">{{ commit.author }}</span>
-                        <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
-                        <span class="shrink-0 font-mono text-3xs text-subtle">{{ commit.short }}</span>
-                    </template>
-                </button>
-
-                <!-- Inline detail: commit metadata and its changed files; click a file for a diff at that commit. -->
-                <div v-if="commit.sha === openSha" class="border-y border-line bg-card px-3 py-2">
-                    <!-- Row zero has no sha, parents, author or date; it opens straight to its file list, the rest lives in Changes. -->
-                    <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
-                        <dt class="text-subtle">{{ t(`gitHistoryTab.commit`) }}</dt>
-                        <dd class="flex items-center gap-1 font-mono text-muted">
-                            {{ commit.sha }}
-                            <button
-                                type="button"
-                                class="text-subtle hover:text-content"
-                                @click="copy(commit.sha)"
-                                v-tooltip.top="t(`gitHistoryTab.copySha`)"
+                        <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">{{
+                            t(`gitHistoryTab.head`)
+                        }}</span>
+                        <!-- Right-clickable, so acting on a ref doesn't mean hunting for it in the commit's own menu. -->
+                        <span
+                            v-for="ref in commit.refs.slice(0, 3)"
+                            :key="ref"
+                            class="shrink-0 cursor-context-menu rounded px-1 text-3xs"
+                            :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
+                            v-tooltip.top="{ title: t(`gitHistoryTab.actions`), keys: t(`gitHistoryTab.rightClick`) }"
+                            @contextmenu.prevent.stop="openRefMenu($event, ref, commit)"
+                            >{{ refBadge(ref).label }}</span
+                        >
+                        <span class="min-w-0 flex-1 truncate text-xs" :class="commit.sha === openSha ? 'text-content' : 'text-content/90'">{{
+                            commit.subject
+                        }}</span>
+                        <!-- Row zero has no author, date or sha yet; instead it shows how much is uncommitted and whether any is blocking. -->
+                        <template v-if="commit.sha === WORKING">
+                            <span v-if="working.conflicted.value > 0" class="shrink-0 text-2xs text-danger">{{
+                                t(`gitHistoryTab.conflicted`, { conflicted: working.conflicted.value })
+                            }}</span>
+                            <span class="shrink-0 text-2xs text-subtle">{{ t(`gitHistoryTab.changed`, { count: working.changes.value.length }) }}</span>
+                        </template>
+                        <!-- A stash's three verbs sit on the row, not a menu nobody would open for them; Pop leads as the common case. -->
+                        <template v-else-if="stashBySha.get(commit.sha)">
+                            <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
+                            <span
+                                v-for="verb in [
+                                    {
+                                        label: 'Pop',
+                                        tip: { title: t(`gitHistoryTab.restoreWork`), note: t(`gitHistoryTab.removesStash`) },
+                                        run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, true),
+                                    },
+                                    {
+                                        label: 'Apply',
+                                        tip: { title: t(`gitHistoryTab.restoreWork`), note: t(`gitHistoryTab.keepsStash`) },
+                                        run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, false),
+                                    },
+                                    {
+                                        label: 'Drop',
+                                        tip: { title: t(`gitHistoryTab.discardStash`), note: t(`gitHistoryTab.restorePointSaved`) },
+                                        run: () => stashes.drop(stashBySha.get(commit.sha)!.ref),
+                                    },
+                                ]"
+                                :key="verb.label"
+                                class="shrink-0 cursor-pointer rounded px-1 text-2xs text-subtle transition-colors hover:bg-overlay hover:text-content"
+                                :class="{ 'pointer-events-none opacity-40': stashes.busy.value }"
+                                v-tooltip.top="verb.tip"
+                                @click.stop="verb.run()"
+                                >{{ verb.label }}</span
                             >
-                                <Icon name="copy" class="text-3xs" />
-                            </button>
-                        </dd>
-                        <template v-if="commit.parents.length > 0">
-                            <dt class="text-subtle">{{ t(`gitHistoryTab.parents`) }}</dt>
-                            <dd class="font-mono text-muted">{{ commit.parents.map((parent) => parent.slice(0, 8)).join(", ") }}</dd>
                         </template>
-                        <dt class="text-subtle">{{ t(`gitHistoryTab.author`) }}</dt>
-                        <dd class="text-muted">
-                            {{ commit.author }}<span v-if="commit.email" class="text-subtle"> &lt;{{ commit.email }}&gt;</span>
-                        </dd>
-                        <dt class="text-subtle">{{ t(`gitHistoryTab.date`) }}</dt>
-                        <dd class="text-muted">{{ timeAgo(commit.at) }}</dd>
-                    </dl>
-                    <pre v-if="commit.body" class="mt-1.5 whitespace-pre-wrap font-sans text-2xs text-muted">{{ commit.body }}</pre>
-
-                    <div class="mt-2 pt-1.5" :class="commit.sha === WORKING ? '' : 'border-t border-line-subtle'">
-                        <p v-if="filesError" class="text-2xs text-danger">{{ filesError }}</p>
-                        <p v-else-if="filesLoading" class="text-2xs text-subtle">{{ t(`gitHistoryTab.loadingChangedFiles`) }}</p>
                         <template v-else>
-                            <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-subtle">
-                                {{ t(`gitHistoryTab.changedFiles`, { count: files.length }, files.length) }}
-                            </p>
-                            <!-- Changed files form a collapsible tree beside the diff. -->
-                            <div class="max-h-64 overflow-auto">
-                                <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">
-                                    <button
-                                        v-if="row.kind === 'dir'"
-                                        type="button"
-                                        class="flex w-full items-center gap-1.5 py-0.5 text-left text-xs text-muted transition-colors hover:bg-overlay"
-                                        :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
-                                        @click="toggleDir(row.path)"
-                                    >
-                                        <Icon :name="row.expanded ? 'chevron-down' : 'chevron-right'" class="w-2.5 shrink-0 text-3xs text-subtle" />
-                                        <Icon name="folder" class="shrink-0 text-2xs text-subtle" />
-                                        <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
-                                    </button>
-                                    <button
-                                        v-else
-                                        type="button"
-                                        class="ui-row-select flex w-full items-center gap-1.5 py-0.5 text-left text-xs transition-colors"
-                                        :class="{
-                                            'ui-row-select-on': showing?.sha === commit.sha && showing?.path === row.file.path,
-                                        }"
-                                        :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
-                                        v-tooltip.top="{ title: t(`gitHistoryTab.keepTab`), keys: t(`gitHistoryTab.doubleClick`) }"
-                                        @click="openFileDiff(commit, row.file)"
-                                        @dblclick="openFileDiff(commit, row.file, 'keep')"
-                                    >
-                                        <span class="w-2.5 shrink-0"></span>
-                                        <ChangeStatusMark :status="row.file.status" />
-                                        <span class="min-w-0 flex-1 truncate text-content/90">{{ row.name }}</span>
-                                        <DiffStat :additions="row.file.additions" :deletions="row.file.deletions" />
-                                    </button>
-                                </template>
-                            </div>
+                            <span class="hidden shrink-0 truncate text-2xs text-subtle @2xl:block @2xl:max-w-32">{{ commit.author }}</span>
+                            <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
+                            <span class="shrink-0 font-mono text-3xs text-subtle">{{ commit.short }}</span>
                         </template>
+                    </button>
+
+                    <!-- Inline detail: commit metadata and its changed files; click a file for a diff at that commit. -->
+                    <div v-if="commit.sha === openSha" class="border-y border-line bg-card px-3 py-2">
+                        <!-- Row zero has no sha, parents, author or date; it opens straight to its file list, the rest lives in Changes. -->
+                        <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
+                            <dt class="text-subtle">{{ t(`gitHistoryTab.commit`) }}</dt>
+                            <dd class="flex items-center gap-1 font-mono text-muted">
+                                {{ commit.sha }}
+                                <button
+                                    type="button"
+                                    class="text-subtle hover:text-content"
+                                    @click="copy(commit.sha)"
+                                    v-tooltip.top="t(`gitHistoryTab.copySha`)"
+                                >
+                                    <Icon name="copy" class="text-3xs" />
+                                </button>
+                            </dd>
+                            <template v-if="commit.parents.length > 0">
+                                <dt class="text-subtle">{{ t(`gitHistoryTab.parents`) }}</dt>
+                                <dd class="font-mono text-muted">{{ commit.parents.map((parent) => parent.slice(0, 8)).join(", ") }}</dd>
+                            </template>
+                            <dt class="text-subtle">{{ t(`gitHistoryTab.author`) }}</dt>
+                            <dd class="text-muted">
+                                {{ commit.author }}<span v-if="commit.email" class="text-subtle"> &lt;{{ commit.email }}&gt;</span>
+                            </dd>
+                            <dt class="text-subtle">{{ t(`gitHistoryTab.date`) }}</dt>
+                            <dd class="text-muted">{{ timeAgo(commit.at) }}</dd>
+                        </dl>
+                        <pre v-if="commit.body" class="mt-1.5 whitespace-pre-wrap font-sans text-2xs text-muted">{{ commit.body }}</pre>
+
+                        <div class="mt-2 pt-1.5" :class="commit.sha === WORKING ? '' : 'border-t border-line-subtle'">
+                            <p v-if="filesError" class="text-2xs text-danger">{{ filesError }}</p>
+                            <p v-else-if="filesLoading" class="text-2xs text-subtle">{{ t(`gitHistoryTab.loadingChangedFiles`) }}</p>
+                            <template v-else>
+                                <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-subtle">
+                                    {{ t(`gitHistoryTab.changedFiles`, { count: files.length }, files.length) }}
+                                </p>
+                                <!-- Changed files form a collapsible tree beside the diff. -->
+                                <div class="max-h-64 overflow-auto">
+                                    <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">
+                                        <button
+                                            v-if="row.kind === 'dir'"
+                                            type="button"
+                                            class="flex w-full items-center gap-1.5 py-0.5 text-left text-xs text-muted transition-colors hover:bg-overlay"
+                                            :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
+                                            @click="toggleDir(row.path)"
+                                        >
+                                            <Icon :name="row.expanded ? 'chevron-down' : 'chevron-right'" class="w-2.5 shrink-0 text-3xs text-subtle" />
+                                            <Icon name="folder" class="shrink-0 text-2xs text-subtle" />
+                                            <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
+                                        </button>
+                                        <button
+                                            v-else
+                                            type="button"
+                                            class="ui-row-select flex w-full items-center gap-1.5 py-0.5 text-left text-xs transition-colors"
+                                            :class="{
+                                                'ui-row-select-on': showing?.sha === commit.sha && showing?.path === row.file.path,
+                                            }"
+                                            :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
+                                            v-tooltip.top="{ title: t(`gitHistoryTab.keepTab`), keys: t(`gitHistoryTab.doubleClick`) }"
+                                            @click="openFileDiff(commit, row.file)"
+                                            @dblclick="openFileDiff(commit, row.file, 'keep')"
+                                        >
+                                            <span class="w-2.5 shrink-0"></span>
+                                            <ChangeStatusMark :status="row.file.status" />
+                                            <span class="min-w-0 flex-1 truncate text-content/90">{{ row.name }}</span>
+                                            <DiffStat :additions="row.file.additions" :deletions="row.file.deletions" />
+                                        </button>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>

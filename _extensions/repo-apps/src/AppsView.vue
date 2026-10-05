@@ -8,8 +8,10 @@ import {
     Page,
     PageAction,
     PageHeader,
+    SkeletonSnapshot,
     StatusBadge,
     useLoadingReveal,
+    vSkeletonSource,
     type IconName,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef, watch } from "vue";
@@ -235,30 +237,32 @@ onMounted(async () => {
 
                 <!-- Startable app instances expose tests for their owned projects. -->
                 <section v-if="monorepo">
-                    <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps. -->
-                    <div
-                        v-if="isLoading && outline"
-                        class="overflow-hidden rounded-lg bg-card shadow-sm"
-                        role="status"
-                        aria-busy="true"
-                    >
-                        <span class="sr-only">{{ t(`appsView.readingRepositorysApps`) }}</span>
-                        <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
-                            <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2.5">
-                                <span class="skeleton block h-5 w-5 shrink-0" />
-                                <div class="flex min-w-0 flex-1 items-center gap-2">
-                                    <span class="skeleton block h-3.5" :class="[`w-32`, `w-24`, `w-40`][row % 3]" />
-                                    <span class="skeleton block h-3 w-14 shrink-0" />
+                    <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps.
+                         Remembered per repo, since each has its own apps; hand-drawn rows until a repo has been seen once. -->
+                    <SkeletonSnapshot v-if="isLoading && outline" :of="`repo-apps.apps:${repo}`" :label="t(`appsView.readingRepositorysApps`)">
+                        <div class="overflow-hidden rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
+                            <span class="sr-only">{{ t(`appsView.readingRepositorysApps`) }}</span>
+                            <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
+                                <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2.5">
+                                    <span class="skeleton block h-5 w-5 shrink-0" />
+                                    <div class="flex min-w-0 flex-1 items-center gap-2">
+                                        <span class="skeleton block h-3.5" :class="[`w-32`, `w-24`, `w-40`][row % 3]" />
+                                        <span class="skeleton block h-3 w-14 shrink-0" />
+                                    </div>
+                                    <span class="skeleton block h-7 w-20 shrink-0" />
                                 </div>
-                                <span class="skeleton block h-7 w-20 shrink-0" />
                             </div>
                         </div>
-                    </div>
+                    </SkeletonSnapshot>
 
-                    <div v-else-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
+                    <div v-else-if="appRows.length === 0 && !isLoading" v-skeleton-source="`repo-apps.apps:${repo}`" :class="ui.emptyState()">
                         {{ t(`appsView.noAppsYetUse`) }}
                     </div>
-                    <div v-else class="flex flex-col divide-y divide-line-subtle overflow-hidden rounded-lg bg-card shadow-sm">
+                    <div
+                        v-else
+                        v-skeleton-source="`repo-apps.apps:${repo}`"
+                        class="flex flex-col divide-y divide-line-subtle overflow-hidden rounded-lg bg-card shadow-sm"
+                    >
                         <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
                             <Icon :name="app.badge.icon" class="shrink-0 text-lg" :class="app.badge.tint" />
                             <div class="flex min-w-0 flex-1 items-center gap-2">

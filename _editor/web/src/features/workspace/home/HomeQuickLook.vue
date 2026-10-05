@@ -1,7 +1,7 @@
 <!-- The home's quick look: a card beside the hovered tile with a file's first lines, the picture itself, a document's first page, or what a folder holds. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Code, explorerColorClass, formatBytes, iconForEntry, placeAnchored, type Placement } from "@intentic/ui";
+import { Code, explorerColorClass, formatBytes, iconForEntry, placeAnchored, type Placement, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
 import { useLatest } from "@intentic/ui/async";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -278,19 +278,24 @@ onBeforeUnmount(() => controller?.abort());
                              card that takes no pointer can't be scrolled. -->
                         <div
                             v-else
+                            v-skeleton-source="`workspace.home.quicklook`"
                             class="[&_.shiki]:overflow-hidden [&_.shiki]:rounded-none [&_.shiki]:border-0 [&_pre]:overflow-hidden [&_pre]:rounded-none [&_pre]:border-0"
                         >
                             <Code :code="text" :lang="plan.lang" :copyable="false" />
                         </div>
                     </template>
-                    <!-- Reading: a few line-shaped placeholders, still (no animation), in the file's own measure. Above the
-                         document, so a document being fetched waits behind the same lines a file being read does. -->
-                    <div v-else-if="loading" class="flex flex-col gap-2 px-3 py-3" aria-hidden="true">
-                        <div class="skeleton h-3 w-2/3"></div>
-                        <div class="skeleton h-3 w-1/2"></div>
-                        <div class="skeleton h-3 w-3/4"></div>
-                        <div class="skeleton h-3 w-2/5"></div>
-                    </div>
+                    <!-- Reading: the last file looked at, its lines as bars, or until there is one a few line-shaped
+                         placeholders, still (no animation), in the file's own measure. Above the document, so a document
+                         being fetched waits behind the same lines a file being read does. Only text is remembered: every
+                         hover is another file, and an empty one's note or a document's page would stand in badly for it. -->
+                    <SkeletonSnapshot v-else-if="loading" of="workspace.home.quicklook">
+                        <div class="flex flex-col gap-2 px-3 py-3" aria-hidden="true">
+                            <div class="skeleton h-3 w-2/3"></div>
+                            <div class="skeleton h-3 w-1/2"></div>
+                            <div class="skeleton h-3 w-3/4"></div>
+                            <div class="skeleton h-3 w-2/5"></div>
+                        </div>
+                    </SkeletonSnapshot>
                     <!-- The file's own pages, drawn by the extension that owns the format, at the scale a thumbnail reads at:
                          the top of the first page is all a glance gets, since a card that takes no pointer can't be scrolled. -->
                     <div

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
 import { hostedShapeLine } from "@intentic/constants";
-import { Button, Notice, RowGroup, RowNote, useLoadingReveal } from "@intentic/ui";
+import { Button, Notice, RowGroup, RowNote, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -272,13 +272,14 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
 
         <Notice v-if="loadError" :of="{ tone: `danger`, title: `Couldn't load your plan.`, detail: loadError }" />
 
-        <RowGroup v-else-if="plan && !plan.enabled" :label="t(`settings.settingsBilling.billing`)">
+        <RowGroup v-else-if="plan && !plan.enabled" v-skeleton-source="`settings.billing`" :label="t(`settings.settingsBilling.billing`)">
             <RowNote variant="block">
                 <p class="text-xs text-muted">{{ t(`settings.settingsBilling.platformDoesntSellHosted`) }}</p>
             </RowNote>
         </RowGroup>
 
-        <template v-else-if="plan">
+        <!-- One element, so its imprint is the whole page the wait stood in for; spaced as the column it sits in. -->
+        <div v-else-if="plan" v-skeleton-source="`settings.billing`" class="flex flex-col gap-6">
             <!-- The plan: one line for where things stand, one door. -->
 
             <!-- Complimentary: the operator's comp list; nothing to manage or buy. -->
@@ -548,19 +549,21 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                     </dl>
                 </RowNote>
             </RowGroup>
-        </template>
+        </div>
 
-        <RowGroup v-else-if="outline" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`settings.settingsBilling.readingPlan`) }}</span>
-            <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
-            <RowNote variant="block">
-                <div class="flex flex-col gap-2" aria-hidden="true">
-                    <span class="skeleton block h-8 w-56" />
-                    <span class="skeleton block h-2.5 w-full max-w-md" />
-                    <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
-                </div>
-            </RowNote>
-        </RowGroup>
+        <SkeletonSnapshot v-else-if="outline" of="settings.billing" :label="t(`settings.settingsBilling.readingPlan`)">
+            <RowGroup role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`settings.settingsBilling.readingPlan`) }}</span>
+                <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
+                <RowNote variant="block">
+                    <div class="flex flex-col gap-2" aria-hidden="true">
+                        <span class="skeleton block h-8 w-56" />
+                        <span class="skeleton block h-2.5 w-full max-w-md" />
+                        <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
+                    </div>
+                </RowNote>
+            </RowGroup>
+        </SkeletonSnapshot>
 
         <Notice v-if="actionError" :of="{ tone: `danger`, title: `Couldn't open the payment page.`, detail: actionError }" />
     </div>

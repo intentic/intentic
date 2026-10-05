@@ -154,6 +154,14 @@
         "./worker-call": {
             "types": "./src/lib/workerCall.ts",
             "default": "./src/lib/workerCall.ts"
+        },
+        "./skeleton-imprint": {
+            "types": "./src/lib/skeletonImprint.ts",
+            "default": "./src/lib/skeletonImprint.ts"
+        },
+        "./skeleton-store": {
+            "types": "./src/lib/skeletonStore.ts",
+            "default": "./src/lib/skeletonStore.ts"
         }
     },
     "scripts": {

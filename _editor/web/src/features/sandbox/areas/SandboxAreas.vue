@@ -10,8 +10,10 @@ import {
     RowGroup,
     RowNote,
     SkeletonRows,
+    SkeletonSnapshot,
     StatusBadge,
     ui,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
@@ -250,19 +252,26 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
     <div>
         <Notice v-if="pageNotice" :of="pageNotice" class="mb-4" />
 
-        <!-- The empty state must not show before we know whether areas exist; the list's shape stands in while loading. -->
+        <!-- The empty state must not show before we know whether areas exist; the list's shape stands in while loading,
+             drawn as the list (or its empty state) last looked in this sandbox. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" :label="t(`sandbox.sandboxAreas.areas`)">
-                <div role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`sandbox.sandboxAreas.readingAreas`) }}</span>
-                    <SkeletonRows :rows="2" description control />
-                </div>
-            </RowGroup>
+            <SkeletonSnapshot v-if="outline" of="sandbox.areas" :label="t(`sandbox.sandboxAreas.readingAreas`)">
+                <RowGroup :label="t(`sandbox.sandboxAreas.areas`)">
+                    <div role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`sandbox.sandboxAreas.readingAreas`) }}</span>
+                        <SkeletonRows :rows="2" description control />
+                    </div>
+                </RowGroup>
+            </SkeletonSnapshot>
         </template>
 
         <template v-else>
             <!-- No area is a finished answer, not a half-set-up sandbox: it means everyone sees everything. -->
-            <div v-if="areas.length === 0 && !adding" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
+            <div
+                v-if="areas.length === 0 && !adding"
+                v-skeleton-source="`sandbox.areas`"
+                :class="ui.emptyState('flex flex-col items-center gap-3 py-8')"
+            >
                 <Icon name="folder-open" class="text-xl text-subtle" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAreas.everyoneSeesWhole`) }}</span>
@@ -274,7 +283,12 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                 <span v-else class="text-xs text-subtle">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</span>
             </div>
 
-            <RowGroup v-else :label="t(`sandbox.sandboxAreas.areas`)" :caption="t(`sandbox.sandboxAreas.grantedOnAccess`)">
+            <RowGroup
+                v-else
+                v-skeleton-source="`sandbox.areas`"
+                :label="t(`sandbox.sandboxAreas.areas`)"
+                :caption="t(`sandbox.sandboxAreas.grantedOnAccess`)"
+            >
                 <template #actions>
                     <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" severity="secondary" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>

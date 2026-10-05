@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import type { Persona } from "@intentic/sandbox-contract";
-import { Avatar, Button, ui, ConfirmDialog, Notice, type NoticeModel, PersonaFace, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
+import {
+    Avatar,
+    Button,
+    ui,
+    ConfirmDialog,
+    Notice,
+    type NoticeModel,
+    PersonaFace,
+    Row,
+    RowGroup,
+    RowNote,
+    SkeletonRows,
+    SkeletonSnapshot,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
@@ -294,21 +308,28 @@ const confirmRemove = async (): Promise<void> => {
 
         <Notice v-if="listNotice" :of="listNotice" />
         <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
-        <!-- The outline is a <RowGroup> like the list itself, so it lands on the same tier as what it stands in for. -->
+        <!-- Drawn as the list (or its empty state) last looked in this sandbox. Until then a <RowGroup> like the list itself,
+             so it lands on the same tier as what it stands in for. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" :label="t(`sandbox.sandboxPersonas.personas`)">
-                <div role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`sandbox.sandboxPersonas.readingSandboxsPersonas`) }}</span>
-                    <SkeletonRows :rows="2" description control />
-                </div>
-            </RowGroup>
+            <SkeletonSnapshot v-if="outline" of="sandbox.personas" :label="t(`sandbox.sandboxPersonas.readingSandboxsPersonas`)">
+                <RowGroup :label="t(`sandbox.sandboxPersonas.personas`)">
+                    <div role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`sandbox.sandboxPersonas.readingSandboxsPersonas`) }}</span>
+                        <SkeletonRows :rows="2" description control />
+                    </div>
+                </RowGroup>
+            </SkeletonSnapshot>
         </template>
 
         <template v-else>
             <!-- Personas may exist without connected accounts. -->
 
             <!-- The empty state names the effects of having no personas. -->
-            <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
+            <div
+                v-if="personas.length === 0 && newName === undefined"
+                v-skeleton-source="`sandbox.personas`"
+                :class="ui.emptyState('flex flex-col items-center gap-3 py-8')"
+            >
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxPersonas.noPersonasYet`) }}</span>
@@ -322,7 +343,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <RowGroup v-else :label="t(`sandbox.sandboxPersonas.personas`)" flat undivided>
+            <RowGroup v-else v-skeleton-source="`sandbox.personas`" :label="t(`sandbox.sandboxPersonas.personas`)" flat undivided>
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"

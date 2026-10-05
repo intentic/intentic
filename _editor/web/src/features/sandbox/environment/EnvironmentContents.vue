@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic/api-contract";
-import { BrandMark, Button, Code, DisclosureRow, Notice, RowGroup, RowNote, SkeletonRows, type Tip, ui } from "@intentic/ui";
+import {
+    BrandMark,
+    Button,
+    Code,
+    DisclosureRow,
+    Notice,
+    RowGroup,
+    RowNote,
+    SkeletonRows,
+    SkeletonSnapshot,
+    type Tip,
+    ui,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
@@ -112,175 +125,188 @@ const expandable = (item: EnvironmentItem): boolean =>
     <!-- Section spacing matches the hub pages, including the outline while the inventory loads. -->
     <!-- `@container`: what fits on a row is a fact about this list's width, and the hub's body is a pane the docked chat can leave far narrower than the window. -->
     <div class="@container flex flex-col gap-6">
-        <!-- `flat`: this list already sits inside the Environment group's own frame. -->
-        <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label">
-            <!-- Expandable rows keep their disclosure control in the lead slot. -->
+        <!-- One element, so its imprint is every section at once; spaced as the column it sits in. Only drawn with
+             something in it, or an empty box would add a gap of its own. -->
+        <div v-if="groups.length > 0" v-skeleton-source="`sandbox.environment.contents`" class="flex flex-col gap-6">
+            <!-- `flat`: this list already sits inside the Environment group's own frame. -->
+            <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label">
+                <!-- Expandable rows keep their disclosure control in the lead slot. -->
 
-            <DisclosureRow
-                v-for="item in group.items"
-                :key="item.id"
-                :disabled="!expandable(item)"
-                :class="item.state === `after-rebuild` ? `opacity-70` : undefined"
-                :open="open.has(item.id)"
-                @update:open="toggle(item.id)"
-            >
-                <!-- Idle marks an entry the recipe has but the container doesn't yet, readable even without color. -->
-                <template #lead="{ mark }">
-                    <BrandMark
-                        :size="mark"
-                        :name="item.name"
-                        :logo="environmentVisual(item).logo"
-                        :icon="environmentVisual(item).icon"
-                        :idle="item.state !== `active`"
-                    />
-                </template>
-                <!-- Names, versions, and purpose share one title line. -->
-                <template #title>
-                    <!-- The title line clips overflow while keeping the name visible. -->
-                    <span class="flex min-w-0 items-center gap-3 overflow-hidden">
-                        <span class="shrink-0">{{ item.name }}</span>
-                        <!-- Versions use monospace and occupy at most half the row. -->
-                        <span v-if="item.tools.length > 0" class="min-w-0 max-w-[50%] shrink-0 truncate font-mono text-2xs font-normal tabular-nums">
-                            <span v-for="tool in shownTools(item)" :key="tool.name" v-tooltip.bottom="provenance(tool)" class="mr-3 last:mr-0">
-                                <span v-if="toolLabel(item, tool) !== ``" class="text-muted">{{ toolLabel(item, tool) }}&nbsp;</span>
-                                <span v-if="tool.version !== undefined" class="text-subtle">{{ tool.version }}</span>
-                                <span v-else-if="toolLabel(item, tool) === ``" class="text-subtle">installed</span>
-                            </span>
-                            <span
-                                v-if="item.tools.length > SHOWN_TOOLS"
-                                v-tooltip.bottom="item.tools.map((tool) => tool.name).join(`, `)"
-                                class="text-subtle"
-                            >
-                                +{{ item.tools.length - SHOWN_TOOLS }} more
-                            </span>
-                        </span>
-                        <!-- Hides once open: the same sentence is the paragraph's own opening line just below it. -->
-                        <span
-                            v-if="item.purpose !== undefined && !open.has(item.id)"
-                            v-tooltip.bottom.overflow="item.purpose"
-                            class="hidden min-w-0 truncate text-2xs font-normal text-muted @xl:block"
-                        >
-                            {{ item.purpose }}
-                        </span>
-                    </span>
-                </template>
-                <!-- Only what's worth interrupting for: an attribution that isn't already obvious, and any non-default state. -->
-                <template #meta>
-                    <span v-if="attribution(item) !== undefined" class="hidden shrink-0 @md:inline">{{ attribution(item) }}</span>
-                    <span v-if="stateOf(item) !== undefined" :class="stateOf(item)?.tone" class="inline-flex items-center gap-1 font-medium">
-                        <Icon :name="stateOf(item)!.icon" />{{ stateOf(item)!.label }}
-                    </span>
-                </template>
-                <!-- The slot itself must be conditional, not just its contents, or every closed row still gets the gap above it. -->
-                <template #below>
-                    <!-- The disclosure header owns the hit area; the expanded body has no nested toggle. -->
-                    <div class="flex flex-col gap-3">
-                        <!-- Rendered as prose, not code: it was written to be read. -->
-                        <p class="whitespace-pre-line text-xs leading-relaxed text-muted">
-                            {{ full.has(item.id) ? explanation(item) : opening(item) }}
-                        </p>
-                        <button
-                            v-if="rest(item) !== ``"
-                            type="button"
-                            :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
-                            @click="toggleFull(item.id)"
-                        >
-                            {{ full.has(item.id) ? t(`ui.action.showLess`) : t(`sandbox.environmentContents.showMore`) }}
-                            <Icon :name="full.has(item.id) ? `chevron-up` : `chevron-down`" />
-                        </button>
-                        <!-- The plumbing count lives here, not the row: it's the least useful fact and was crowding the row's own line. -->
-                        <p v-if="item.extras !== undefined" class="text-2xs text-subtle">
-                            {{ t(`sandbox.environmentContents.plusLibrariesHeadersCommands`, { extras: item.extras }) }}
-                        </p>
-                        <!-- Clamped: a toolchain's install step can run to many lines and would push the next row off screen. -->
-                        <Code
-                            v-if="item.commands !== undefined"
-                            :code="item.commands"
-                            lang="docker"
-                            :label="t(`sandbox.environmentContents.whatInstalls`)"
-                            :clamp-lines="10"
+                <DisclosureRow
+                    v-for="item in group.items"
+                    :key="item.id"
+                    :disabled="!expandable(item)"
+                    :class="item.state === `after-rebuild` ? `opacity-70` : undefined"
+                    :open="open.has(item.id)"
+                    @update:open="toggle(item.id)"
+                >
+                    <!-- Idle marks an entry the recipe has but the container doesn't yet, readable even without color. -->
+                    <template #lead="{ mark }">
+                        <BrandMark
+                            :size="mark"
+                            :name="item.name"
+                            :logo="environmentVisual(item).logo"
+                            :icon="environmentVisual(item).icon"
+                            :idle="item.state !== `active`"
                         />
-                        <!-- Inside the opened row, under what it installs: taking a tool out is read about before it is pressed. -->
-                        <Button
-                            v-if="canRemove(item)"
-                            :label="t(`sandbox.environmentContents.removeFromEnvironment`)"
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            :disabled="busy"
-                            class="self-start"
-                            @click="emit(`remove`, item)"
-                        >
-                            <template #icon><Icon name="trash" /></template>
-                        </Button>
-                    </div>
-                </template>
-            </DisclosureRow>
-        </RowGroup>
-
-        <!-- The staples as a strip: many names and versions in a few lines instead of one row each. -->
-        <RowGroup v-if="staples !== undefined" flat :label="staples.label">
-            <!-- The strip and its description stay within one group note. -->
-            <RowNote variant="block">
-                <div class="flex flex-col gap-2">
-                    <div class="flex flex-wrap gap-1.5">
-                        <!-- The active staple is the tab's sole filled capsule. -->
-                        <button
-                            v-for="item in staples.items"
-                            :key="item.id"
-                            type="button"
-                            :disabled="item.purpose === undefined"
-                            class="ui-chip py-1 pl-1 pr-2.5"
-                            :class="picked === item.id ? `ui-chip-on` : ``"
-                            @click="pick(item.id)"
-                        >
-                            <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
-                            <span class="font-medium">{{ item.name }}</span>
+                    </template>
+                    <!-- Names, versions, and purpose share one title line. -->
+                    <template #title>
+                        <!-- The title line clips overflow while keeping the name visible. -->
+                        <span class="flex min-w-0 items-center gap-3 overflow-hidden">
+                            <span class="shrink-0">{{ item.name }}</span>
+                            <!-- Versions use monospace and occupy at most half the row. -->
                             <span
-                                v-if="item.tools[0]?.version !== undefined"
-                                v-tooltip.bottom="provenance(item.tools[0])"
-                                class="font-mono tabular-nums text-subtle"
+                                v-if="item.tools.length > 0"
+                                class="min-w-0 max-w-[50%] shrink-0 truncate font-mono text-2xs font-normal tabular-nums"
                             >
-                                {{ item.tools[0].version }}
+                                <span v-for="tool in shownTools(item)" :key="tool.name" v-tooltip.bottom="provenance(tool)" class="mr-3 last:mr-0">
+                                    <span v-if="toolLabel(item, tool) !== ``" class="text-muted">{{ toolLabel(item, tool) }}&nbsp;</span>
+                                    <span v-if="tool.version !== undefined" class="text-subtle">{{ tool.version }}</span>
+                                    <span v-else-if="toolLabel(item, tool) === ``" class="text-subtle">installed</span>
+                                </span>
+                                <span
+                                    v-if="item.tools.length > SHOWN_TOOLS"
+                                    v-tooltip.bottom="item.tools.map((tool) => tool.name).join(`, `)"
+                                    class="text-subtle"
+                                >
+                                    +{{ item.tools.length - SHOWN_TOOLS }} more
+                                </span>
                             </span>
-                        </button>
-                    </div>
-                    <!-- Under the strip, not beside the pill, so opening one never reflows the grid above it. -->
-                    <p v-if="pickedItem !== undefined" class="text-2xs text-muted">
-                        <span class="font-medium text-content">{{ pickedItem.name }}</span
-                        >: {{ pickedItem.purpose }}
-                    </p>
-                </div>
-            </RowNote>
-        </RowGroup>
-
-        <!-- Loading mirrors the loaded sections and staples strip. -->
-        <div v-if="loading && outline" class="flex flex-col gap-6" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`sandbox.environmentContents.checkingInstalledVersions`) }}</span>
-            <!-- Two sections, not three: a sandbox may have no capability group, and an extra one would over-promise height. -->
-            <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>
-                <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
-                <SkeletonRows :rows="section" />
+                            <!-- Hides once open: the same sentence is the paragraph's own opening line just below it. -->
+                            <span
+                                v-if="item.purpose !== undefined && !open.has(item.id)"
+                                v-tooltip.bottom.overflow="item.purpose"
+                                class="hidden min-w-0 truncate text-2xs font-normal text-muted @xl:block"
+                            >
+                                {{ item.purpose }}
+                            </span>
+                        </span>
+                    </template>
+                    <!-- Only what's worth interrupting for: an attribution that isn't already obvious, and any non-default state. -->
+                    <template #meta>
+                        <span v-if="attribution(item) !== undefined" class="hidden shrink-0 @md:inline">{{ attribution(item) }}</span>
+                        <span v-if="stateOf(item) !== undefined" :class="stateOf(item)?.tone" class="inline-flex items-center gap-1 font-medium">
+                            <Icon :name="stateOf(item)!.icon" />{{ stateOf(item)!.label }}
+                        </span>
+                    </template>
+                    <!-- The slot itself must be conditional, not just its contents, or every closed row still gets the gap above it. -->
+                    <template #below>
+                        <!-- The disclosure header owns the hit area; the expanded body has no nested toggle. -->
+                        <div class="flex flex-col gap-3">
+                            <!-- Rendered as prose, not code: it was written to be read. -->
+                            <p class="whitespace-pre-line text-xs leading-relaxed text-muted">
+                                {{ full.has(item.id) ? explanation(item) : opening(item) }}
+                            </p>
+                            <button
+                                v-if="rest(item) !== ``"
+                                type="button"
+                                :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
+                                @click="toggleFull(item.id)"
+                            >
+                                {{ full.has(item.id) ? t(`ui.action.showLess`) : t(`sandbox.environmentContents.showMore`) }}
+                                <Icon :name="full.has(item.id) ? `chevron-up` : `chevron-down`" />
+                            </button>
+                            <!-- The plumbing count lives here, not the row: it's the least useful fact and was crowding the row's own line. -->
+                            <p v-if="item.extras !== undefined" class="text-2xs text-subtle">
+                                {{ t(`sandbox.environmentContents.plusLibrariesHeadersCommands`, { extras: item.extras }) }}
+                            </p>
+                            <!-- Clamped: a toolchain's install step can run to many lines and would push the next row off screen. -->
+                            <Code
+                                v-if="item.commands !== undefined"
+                                :code="item.commands"
+                                lang="docker"
+                                :label="t(`sandbox.environmentContents.whatInstalls`)"
+                                :clamp-lines="10"
+                            />
+                            <!-- Inside the opened row, under what it installs: taking a tool out is read about before it is pressed. -->
+                            <Button
+                                v-if="canRemove(item)"
+                                :label="t(`sandbox.environmentContents.removeFromEnvironment`)"
+                                size="small"
+                                severity="danger"
+                                :text="true"
+                                :disabled="busy"
+                                class="self-start"
+                                @click="emit(`remove`, item)"
+                            >
+                                <template #icon><Icon name="trash" /></template>
+                            </Button>
+                        </div>
+                    </template>
+                </DisclosureRow>
             </RowGroup>
-            <!-- The staples strip skeleton: pill shapes, not row shapes, so it reads as a different shape at a glance. -->
-            <RowGroup flat>
-                <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
+
+            <!-- The staples as a strip: many names and versions in a few lines instead of one row each. -->
+            <RowGroup v-if="staples !== undefined" flat :label="staples.label">
+                <!-- The strip and its description stay within one group note. -->
                 <RowNote variant="block">
-                    <div class="flex flex-wrap gap-1.5" aria-hidden="true">
-                        <span
-                            v-for="(width, index) in [`w-24`, `w-20`, `w-28`, `w-16`, `w-24`, `w-20`, `w-32`, `w-20`]"
-                            :key="index"
-                            class="skeleton block h-6 rounded-full"
-                            :class="width"
-                        />
+                    <div class="flex flex-col gap-2">
+                        <div class="flex flex-wrap gap-1.5">
+                            <!-- The active staple is the tab's sole filled capsule. -->
+                            <button
+                                v-for="item in staples.items"
+                                :key="item.id"
+                                type="button"
+                                :disabled="item.purpose === undefined"
+                                class="ui-chip py-1 pl-1 pr-2.5"
+                                :class="picked === item.id ? `ui-chip-on` : ``"
+                                @click="pick(item.id)"
+                            >
+                                <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
+                                <span class="font-medium">{{ item.name }}</span>
+                                <span
+                                    v-if="item.tools[0]?.version !== undefined"
+                                    v-tooltip.bottom="provenance(item.tools[0])"
+                                    class="font-mono tabular-nums text-subtle"
+                                >
+                                    {{ item.tools[0].version }}
+                                </span>
+                            </button>
+                        </div>
+                        <!-- Under the strip, not beside the pill, so opening one never reflows the grid above it. -->
+                        <p v-if="pickedItem !== undefined" class="text-2xs text-muted">
+                            <span class="font-medium text-content">{{ pickedItem.name }}</span
+                            >: {{ pickedItem.purpose }}
+                        </p>
                     </div>
                 </RowNote>
             </RowGroup>
         </div>
+
+        <!-- Loading draws the sections as they last looked in this sandbox; until then, a mirror of the loaded sections and staples strip. -->
+        <SkeletonSnapshot
+            v-if="loading && outline"
+            of="sandbox.environment.contents"
+            :label="t(`sandbox.environmentContents.checkingInstalledVersions`)"
+        >
+            <div class="flex flex-col gap-6" role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`sandbox.environmentContents.checkingInstalledVersions`) }}</span>
+                <!-- Two sections, not three: a sandbox may have no capability group, and an extra one would over-promise height. -->
+                <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>
+                    <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
+                    <SkeletonRows :rows="section" />
+                </RowGroup>
+                <!-- The staples strip skeleton: pill shapes, not row shapes, so it reads as a different shape at a glance. -->
+                <RowGroup flat>
+                    <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
+                    <RowNote variant="block">
+                        <div class="flex flex-wrap gap-1.5" aria-hidden="true">
+                            <span
+                                v-for="(width, index) in [`w-24`, `w-20`, `w-28`, `w-16`, `w-24`, `w-20`, `w-32`, `w-20`]"
+                                :key="index"
+                                class="skeleton block h-6 rounded-full"
+                                :class="width"
+                            />
+                        </div>
+                    </RowNote>
+                </RowGroup>
+            </div>
+        </SkeletonSnapshot>
         <!-- Nothing drawn during the brief pre-outline delay; `loading` still decides which of the four states this is. -->
         <template v-else-if="loading" />
         <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
-        <div v-else-if="groups.length === 0" :class="ui.emptyState(`py-8`)">
+        <div v-else-if="groups.length === 0" v-skeleton-source="`sandbox.environment.contents`" :class="ui.emptyState(`py-8`)">
             {{ t(`sandbox.environmentContents.nothingAddedOnTop`) }}
         </div>
     </div>

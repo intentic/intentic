@@ -2,7 +2,7 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { Button, ui, type NoticeModel } from "@intentic/ui";
+import { Button, SkeletonSnapshot, ui, type NoticeModel, vSkeletonSource } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -321,47 +321,53 @@ const emptyNote = computed<string | undefined>(() => {
             <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
         </div>
 
-        <!-- Registry loading uses the real card grid shape. -->
-        <div v-if="isLoading && outline" class="@container" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
-            <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
-                <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm px-3 py-2.5">
-                    <div class="flex w-full items-start gap-2.5">
-                        <span class="skeleton block h-7 w-7 shrink-0 rounded-md" />
-                        <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-                            <span class="skeleton block h-3.5" :class="[`w-28`, `w-36`, `w-24`][card % 3]" />
-                            <span class="skeleton block h-2 w-20" />
+        <!-- Registry loading draws the listing as it last looked here; until it has been seen once, the real card grid shape. -->
+        <SkeletonSnapshot v-if="isLoading && outline" of="sandbox.extensions.browse" :label="t(`sandbox.extensionsBrowse.readingRegistry`)">
+            <div class="@container" role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
+                <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
+                    <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm px-3 py-2.5">
+                        <div class="flex w-full items-start gap-2.5">
+                            <span class="skeleton block h-7 w-7 shrink-0 rounded-md" />
+                            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                                <span class="skeleton block h-3.5" :class="[`w-28`, `w-36`, `w-24`][card % 3]" />
+                                <span class="skeleton block h-2 w-20" />
+                            </div>
                         </div>
+                        <span class="skeleton block h-2.5 w-full" />
+                        <span class="skeleton block h-2.5 w-3/5" />
                     </div>
-                    <span class="skeleton block h-2.5 w-full" />
-                    <span class="skeleton block h-2.5 w-3/5" />
                 </div>
             </div>
-        </div>
+        </SkeletonSnapshot>
 
-        <!-- Verified leads: the one claim on this page a human made. The other heading states what it's not, in the same size. -->
-        <div v-for="section in sections" :key="section.id" class="flex flex-col gap-2">
-            <div class="flex flex-wrap items-baseline gap-x-2">
-                <span :class="ui.sectionLabel()">{{ section.label }}</span>
-                <span v-if="section.caption" class="text-2xs text-muted">{{ section.caption }}</span>
-            </div>
-            <!-- Container query: how many cards fit depends on this pane's own width, not the viewport. -->
-            <div class="@container">
-                <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-4 @4xl:grid-cols-3">
-                    <DiscoverCard
-                        v-for="listing in section.listings"
-                        :key="listing.entry.name"
-                        :listing="listing"
-                        :installing="installsInFlight.has(listing.entry.name)"
-                        @open="openListing(listing)"
-                    />
+        <!-- The sections and the empty note as one box, so the next wait draws whichever was last on screen; only drawn
+             with something in it, or its gap would open a hole while the registry reads. -->
+        <div v-if="sections.length > 0 || emptyNote !== undefined" v-skeleton-source="`sandbox.extensions.browse`" class="flex flex-col gap-6">
+            <!-- Verified leads: the one claim on this page a human made. The other heading states what it's not, in the same size. -->
+            <div v-for="section in sections" :key="section.id" class="flex flex-col gap-2">
+                <div class="flex flex-wrap items-baseline gap-x-2">
+                    <span :class="ui.sectionLabel()">{{ section.label }}</span>
+                    <span v-if="section.caption" class="text-2xs text-muted">{{ section.caption }}</span>
+                </div>
+                <!-- Container query: how many cards fit depends on this pane's own width, not the viewport. -->
+                <div class="@container">
+                    <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-4 @4xl:grid-cols-3">
+                        <DiscoverCard
+                            v-for="listing in section.listings"
+                            :key="listing.entry.name"
+                            :listing="listing"
+                            :installing="installsInFlight.has(listing.entry.name)"
+                            @open="openListing(listing)"
+                        />
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
-            <span>{{ emptyNote }}</span>
-            <Button v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
+            <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
+                <span>{{ emptyNote }}</span>
+                <Button v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
+            </div>
         </div>
 
         <!-- The first place this app says publishing is possible, and how cheap it is (a repo topic, no account or queue). -->

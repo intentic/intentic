@@ -10,10 +10,12 @@ import {
     NoticeStack,
     PullToRefresh,
     SegmentedControl,
+    SkeletonSnapshot,
     useLoadingReveal,
     usePageBack,
     iconForEntry,
     ui,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -349,21 +351,28 @@ const onPick = (event: Event): void => {
             </div>
             <div class="min-h-0 flex-1">
                 <template v-if="diffTab">
-                    <!-- Still being read; whether the file is binary is part of the answer, so the viewer mounts once, with content. -->
-                    <template v-if="diffTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
-                    <!-- Bytes, a patch, or two sides: FileDiffPane decides, as on desktop; an image stacks its sides on a phone. -->
-                    <FileDiffPane
-                        v-else
-                        :key="diffTab.id"
-                        :path="diffTab.path"
-                        :before="diffTab.before"
-                        :after="diffTab.after"
-                        :binary="diffTab.binary"
-                        :partial="diffTab.partial"
-                        :before-raw="diffTab.beforeRaw"
-                        :after-raw="diffTab.afterRaw"
-                        @stat="setDiffStat"
-                    />
+                    <!-- Still being read; whether the file is binary is part of the answer, so the viewer mounts once, with content.
+                         Meanwhile this file's diff as it last looked stands in, or the shared diff outline before it has been seen. -->
+                    <template v-if="diffTab.pending">
+                        <SkeletonSnapshot v-if="diffOutline" :of="`diff:${diffTab.path}`" :label="t(`workspace.diffSkeleton.readingFile`)">
+                            <DiffSkeleton />
+                        </SkeletonSnapshot>
+                    </template>
+                    <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
+                    <div v-else v-skeleton-source="`diff:${diffTab.path}`" class="h-full">
+                        <!-- Bytes, a patch, or two sides: FileDiffPane decides, as on desktop; an image stacks its sides on a phone. -->
+                        <FileDiffPane
+                            :key="diffTab.id"
+                            :path="diffTab.path"
+                            :before="diffTab.before"
+                            :after="diffTab.after"
+                            :binary="diffTab.binary"
+                            :partial="diffTab.partial"
+                            :before-raw="diffTab.beforeRaw"
+                            :after-raw="diffTab.afterRaw"
+                            @stat="setDiffStat"
+                        />
+                    </div>
                 </template>
                 <FileViewer
                     v-else-if="openPath"

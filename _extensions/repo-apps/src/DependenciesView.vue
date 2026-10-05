@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
-import { Card, ui, DagGraph, Notice, noticeOf, ToggleSwitch, useLoadingReveal, type DagEdge, type DagNode } from "@intentic/extension-ui";
+import {
+    Card,
+    ui,
+    DagGraph,
+    Notice,
+    noticeOf,
+    SkeletonSnapshot,
+    ToggleSwitch,
+    useLoadingReveal,
+    vSkeletonSource,
+    type DagEdge,
+    type DagNode,
+} from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { useWorkspaceGraph } from "./useWorkspaceGraph";
 import { t } from "./i18n.js";
@@ -134,18 +146,26 @@ const dagEdges = computed<DagEdge[]>(() =>
                 </label>
             </div>
         </div>
-        <!-- Dependency skeletons use the real card dimensions and graph shape. -->
-        <div v-if="isLoading && outline" class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`dependenciesView.readingWorkspaceGraph`) }}</span>
-            <div class="flex flex-wrap gap-3" aria-hidden="true">
-                <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
+        <!-- The graph as it was last laid out here (its nodes are placed by transform, which the imprint keeps); until
+             then, cards of the real node dimensions. -->
+        <SkeletonSnapshot v-if="isLoading && outline" of="repo-apps.dependencies" :label="t(`dependenciesView.readingWorkspaceGraph`)">
+            <div class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`dependenciesView.readingWorkspaceGraph`) }}</span>
+                <div class="flex flex-wrap gap-3" aria-hidden="true">
+                    <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
+                </div>
             </div>
-        </div>
+        </SkeletonSnapshot>
 
-        <Card v-else-if="packages.length === 0 && !isLoading" dashed class="text-center text-sm text-muted">
+        <Card
+            v-else-if="packages.length === 0 && !isLoading"
+            v-skeleton-source="`repo-apps.dependencies`"
+            dashed
+            class="text-center text-sm text-muted"
+        >
             {{ t(`dependenciesView.noWorkspacePackagesFound`) }}
         </Card>
-        <div v-else class="min-h-0 flex-1">
+        <div v-else v-skeleton-source="`repo-apps.dependencies`" class="min-h-0 flex-1">
             <DagGraph v-model="selectedId" :nodes="dagNodes" :edges="dagEdges" :node-height="52" touch-pan>
                 <template #node="{ node }">
                     <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="barOf(node.data.group)"></span>

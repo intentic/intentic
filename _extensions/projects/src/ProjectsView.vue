@@ -1,6 +1,19 @@
 <!-- The workspace's repositories as tiles: press one to open it as its own tree, or New project to start one. -->
 <script setup lang="ts">
-import { appLink, Button, type FigureAccent, Icon, Notice, Page, PageHeader, seriesColor, ui, useAsyncAction } from "@intentic/extension-ui";
+import {
+    appLink,
+    Button,
+    type FigureAccent,
+    Icon,
+    Notice,
+    Page,
+    PageHeader,
+    seriesColor,
+    SkeletonSnapshot,
+    ui,
+    useAsyncAction,
+    vSkeletonSource,
+} from "@intentic/extension-ui";
 import { computed, nextTick, ref, useTemplateRef } from "vue";
 import { host } from "./host.js";
 import { freeProjectName, previewPath, slugOf, WORKSPACE_PATH } from "./projects.js";
@@ -80,7 +93,8 @@ const cancelNaming = (): void => {
         <!-- The grid counts columns off the pane it is drawn in, not the window: this view shares the screen. -->
         <div class="@container">
             <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @3xl:grid-cols-3">
-                <template v-if="isLoading">
+                <!-- The tiles as this sandbox last showed them, three plain ones until then; New project stays live beside them. -->
+                <SkeletonSnapshot v-if="isLoading" of="projects.tiles">
                     <div v-for="row in 3" :key="row" class="flex min-h-28 flex-col gap-3 rounded-xl bg-card shadow-sm p-4">
                         <div class="flex items-center gap-3">
                             <span class="skeleton size-9 shrink-0"></span>
@@ -89,56 +103,59 @@ const cancelNaming = (): void => {
                         <span class="skeleton h-3 w-full"></span>
                         <span class="skeleton h-3 w-2/3"></span>
                     </div>
-                </template>
+                </SkeletonSnapshot>
 
-                <div
-                    v-for="tile in tiles"
-                    :key="tile.id"
-                    class="group/tile relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-link"
-                    :class="tile.id === current ? `border-link` : `border-line hover:border-line-strong hover:bg-content/3`"
-                >
-                    <!-- The tile's own press covers the whole frame, so See it running can stay a link of its own inside it. -->
-                    <a
-                        v-bind="openProject(tile.id)"
-                        class="absolute inset-0 rounded-xl"
-                        :aria-label="t(`projectsView.open`, { name: tile.name })"
-                        :aria-current="tile.id === current ? `true` : undefined"
-                    ></a>
+                <!-- Boxless, so the tiles stay items of the grid while still being imprinted as one run. -->
+                <div v-else v-skeleton-source="`projects.tiles`" class="contents">
+                    <div
+                        v-for="tile in tiles"
+                        :key="tile.id"
+                        class="group/tile relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-link"
+                        :class="tile.id === current ? `border-link` : `border-line hover:border-line-strong hover:bg-content/3`"
+                    >
+                        <!-- The tile's own press covers the whole frame, so See it running can stay a link of its own inside it. -->
+                        <a
+                            v-bind="openProject(tile.id)"
+                            class="absolute inset-0 rounded-xl"
+                            :aria-label="t(`projectsView.open`, { name: tile.name })"
+                            :aria-current="tile.id === current ? `true` : undefined"
+                        ></a>
 
-                    <div class="flex items-start gap-3">
-                        <!-- Decoration, not information: the name it stands for is read out beside it. -->
-                        <span
-                            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold uppercase"
-                            aria-hidden="true"
-                            :style="plate(tile.accent)"
-                            >{{ tile.monogram }}</span
-                        >
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2">
-                                <span
-                                    class="min-w-0 truncate text-sm font-semibold text-content transition-colors group-hover/tile:text-link"
-                                    v-tooltip.top="tile.id"
-                                    >{{ tile.name }}</span
-                                >
-                                <span
-                                    v-if="tile.id === current"
-                                    class="shrink-0 rounded-full bg-link/10 px-2 py-0.5 text-2xs font-medium text-link"
-                                    >{{ t(`projectsView.open2`) }}</span
-                                >
+                        <div class="flex items-start gap-3">
+                            <!-- Decoration, not information: the name it stands for is read out beside it. -->
+                            <span
+                                class="flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold uppercase"
+                                aria-hidden="true"
+                                :style="plate(tile.accent)"
+                                >{{ tile.monogram }}</span
+                            >
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        class="min-w-0 truncate text-sm font-semibold text-content transition-colors group-hover/tile:text-link"
+                                        v-tooltip.top="tile.id"
+                                        >{{ tile.name }}</span
+                                    >
+                                    <span
+                                        v-if="tile.id === current"
+                                        class="shrink-0 rounded-full bg-link/10 px-2 py-0.5 text-2xs font-medium text-link"
+                                        >{{ t(`projectsView.open2`) }}</span
+                                    >
+                                </div>
+                                <span v-if="tile.id !== tile.name" class="block truncate text-2xs text-subtle">{{ tile.id }}</span>
                             </div>
-                            <span v-if="tile.id !== tile.name" class="block truncate text-2xs text-subtle">{{ tile.id }}</span>
                         </div>
-                    </div>
 
-                    <!-- Two lines whether or not there are two, so a row of tiles is one height and not four. -->
-                    <p v-if="tile.summary !== ``" class="line-clamp-2 min-h-8 text-xs text-muted">{{ tile.summary }}</p>
-                    <p v-else class="min-h-8 text-xs text-subtle">{{ t(`projectsView.noDescriptionInReadme`) }}</p>
+                        <!-- Two lines whether or not there are two, so a row of tiles is one height and not four. -->
+                        <p v-if="tile.summary !== ``" class="line-clamp-2 min-h-8 text-xs text-muted">{{ tile.summary }}</p>
+                        <p v-else class="min-h-8 text-xs text-subtle">{{ t(`projectsView.noDescriptionInReadme`) }}</p>
 
-                    <!-- Desktop widths only: the phone's shell mounts no preview panel, and its router sends /preview to the board. -->
-                    <div v-if="tile.hasPanel" class="mt-auto hidden border-t border-line-subtle pt-2 md:block">
-                        <a v-bind="linkTo(previewPath(tile.id))" :class="ui.linkButton(`relative z-1 my-0 min-h-0`)"
-                            ><Icon name="play" />{{ t(`projectsView.seeRunning`) }}</a
-                        >
+                        <!-- Desktop widths only: the phone's shell mounts no preview panel, and its router sends /preview to the board. -->
+                        <div v-if="tile.hasPanel" class="mt-auto hidden border-t border-line-subtle pt-2 md:block">
+                            <a v-bind="linkTo(previewPath(tile.id))" :class="ui.linkButton(`relative z-1 my-0 min-h-0`)"
+                                ><Icon name="play" />{{ t(`projectsView.seeRunning`) }}</a
+                            >
+                        </div>
                     </div>
                 </div>
 

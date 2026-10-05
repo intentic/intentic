@@ -6,9 +6,11 @@ import {
     explorerColorClass,
     formatBytes,
     iconForEntry,
+    SkeletonSnapshot,
     useHighlighter,
     useHoverIntent,
     useLatest,
+    vSkeletonSource,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -364,6 +366,9 @@ const rows = computed(() => {
 // Placeholder rows while reading, the card's full height, so it does not jump as the lines land. Uneven, like code.
 const PLACEHOLDER_WIDTHS = [58, 72, 44, 66, 30, 80, 52, 62, 38, 70, 48, 26];
 const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
+// Once a file has been seen, its next read is drawn as it looked: per file, since how tall the card stands (a short
+// file, a folder, a missing file's one line) is the thing the placeholder exists to hold.
+const imprintName = computed(() => `peek:${target.value?.written ?? ``}`);
 </script>
 
 <template>
@@ -389,7 +394,7 @@ const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
 
             <template v-if="view?.kind === 'lines' && !failed">
                 <!-- One row per line, number and code side by side, so the marked line is one row's tint rather than a band laid over a block. Lines are cut, not wrapped or scrolled: a card the pointer passes through is glanced at, not read across. -->
-                <div class="min-h-0 overflow-hidden bg-canvas py-1.5 font-mono text-2xs leading-relaxed [tab-size:4]">
+                <div v-skeleton-source="imprintName" class="min-h-0 overflow-hidden bg-canvas py-1.5 font-mono text-2xs leading-relaxed [tab-size:4]">
                     <div
                         v-for="row in rows"
                         :key="row.number"
@@ -418,20 +423,22 @@ const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
                     {{ t(`workspace.fileRefPeek.past`, { line: target.line.toLocaleString(), total: view.total.toLocaleString() }) }}
                 </p>
             </template>
-            <p v-else-if="note !== undefined" class="px-3 py-2.5 text-2xs text-muted">{{ note }}</p>
-            <ul v-else-if="view?.kind === 'folder'" class="flex flex-col gap-0.5 px-2 py-2">
+            <p v-else-if="note !== undefined" v-skeleton-source="imprintName" class="px-3 py-2.5 text-2xs text-muted">{{ note }}</p>
+            <ul v-else-if="view?.kind === 'folder'" v-skeleton-source="imprintName" class="flex flex-col gap-0.5 px-2 py-2">
                 <li v-for="child in view.names" :key="child" class="truncate px-1 text-xs text-content/80">{{ child }}</li>
                 <li v-if="view.count > view.names.length" class="px-1 pt-1 text-2xs text-subtle">
                     {{ t(`workspace.fileRefPeek.more`, { count: (view.count - view.names.length).toLocaleString() }) }}
                 </li>
             </ul>
             <!-- Reading: still placeholder rows in the code's own measure (no animation), so the card keeps its height. -->
-            <div v-else class="bg-canvas py-1.5 font-mono text-2xs leading-relaxed" aria-hidden="true">
-                <div v-for="(width, index) in placeholders" :key="index" class="flex items-center">
-                    <span class="w-12 shrink-0">&nbsp;</span>
-                    <span class="skeleton h-2" :style="{ width: `${width}%` }"></span>
+            <SkeletonSnapshot v-else :of="imprintName">
+                <div class="bg-canvas py-1.5 font-mono text-2xs leading-relaxed" aria-hidden="true">
+                    <div v-for="(width, index) in placeholders" :key="index" class="flex items-center">
+                        <span class="w-12 shrink-0">&nbsp;</span>
+                        <span class="skeleton h-2" :style="{ width: `${width}%` }"></span>
+                    </div>
                 </div>
-            </div>
+            </SkeletonSnapshot>
         </div>
     </AnchoredOverlay>
 </template>

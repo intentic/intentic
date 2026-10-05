@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract";
-import { Button, Modal, Notice, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
+import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, ui, vSkeletonSource } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
@@ -99,14 +99,18 @@ const processesLine = computed(() => {
         :header="t(`sandbox.extensionRemoveDialog.remove`, { publisher: extension?.manifest.publisher, name: extension?.manifest.name })"
         @update:open="emit(`close`)"
     >
+        <!-- Drawn as the last plan read, whichever extension it was for: every plan has the same sections, and one kept per
+             extension would mostly belong to extensions already removed. -->
         <div v-if="plan === undefined && failure === undefined" role="status" aria-busy="true">
             <span class="sr-only">{{ t(`sandbox.extensionRemoveDialog.workingOutWhatRemoving`) }}</span>
-            <SkeletonRows :rows="4" description />
+            <SkeletonSnapshot of="sandbox.extensions.remove">
+                <SkeletonRows :rows="4" description />
+            </SkeletonSnapshot>
         </div>
 
         <Notice v-else-if="failure" :of="{ tone: `danger`, title: `Couldn't read what this would remove.`, detail: failure }" />
 
-        <div v-else-if="plan" class="flex flex-col gap-4">
+        <div v-else-if="plan" v-skeleton-source="`sandbox.extensions.remove`" class="flex flex-col gap-4">
             <!-- Refusals are shown, not hidden behind a missing button: the row hides the affordance, but a plan read
                  while an image changed underneath still has to say why. -->
             <Notice v-if="plan.blocked" :of="{ tone: `warning`, title: `This one can't be removed.`, detail: plan.blocked }" />

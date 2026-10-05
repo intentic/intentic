@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxLogo, SandboxResourcesDialog, StatusBadge, ui, vAction } from "@intentic/ui";
+import {
+    AnchoredOverlay,
+    Card,
+    InlineRename,
+    resourcesSummary,
+    SandboxLogo,
+    SandboxResourcesDialog,
+    SkeletonSnapshot,
+    StatusBadge,
+    ui,
+    vAction,
+    vSkeletonSource,
+} from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
@@ -273,23 +285,26 @@ const removeLogo = async (): Promise<void> => {
                 </div>
             </div>
 
-            <!-- Reserves this card's second half while /info is still loading, since identity above renders instantly from the platform. -->
-            <div
+            <!-- Reserves this card's second half while /info is still loading, since identity above renders instantly from the
+                 platform: drawn as the facts last read in this sandbox, two placeholder lines before that. -->
+            <SkeletonSnapshot
                 v-if="sandbox.reachable.value && infoLoading && outline"
-                role="status"
-                aria-busy="true"
-                class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5"
+                of="sandbox.overview.facts"
+                :label="t(`sandbox.sandboxOverview.readingWhatSandboxReports`)"
             >
-                <span class="sr-only">{{ t(`sandbox.sandboxOverview.readingWhatSandboxReports`) }}</span>
-                <div v-for="row in 2" :key="row" class="flex items-center justify-between gap-3" aria-hidden="true">
-                    <span class="skeleton block h-2 w-16" />
-                    <span class="skeleton block h-2" :class="row === 1 ? `w-48` : `w-32`" />
+                <div role="status" aria-busy="true" class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5">
+                    <span class="sr-only">{{ t(`sandbox.sandboxOverview.readingWhatSandboxReports`) }}</span>
+                    <div v-for="row in 2" :key="row" class="flex items-center justify-between gap-3" aria-hidden="true">
+                        <span class="skeleton block h-2 w-16" />
+                        <span class="skeleton block h-2" :class="row === 1 ? `w-48` : `w-32`" />
+                    </div>
                 </div>
-            </div>
+            </SkeletonSnapshot>
 
             <!-- What the sandbox reports about itself, relayed via /info and never stored by the platform. -->
             <dl
                 v-else-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
+                v-skeleton-source="`sandbox.overview.facts`"
                 class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
             >
                 <div v-if="info?.image" class="flex items-start justify-between gap-3">

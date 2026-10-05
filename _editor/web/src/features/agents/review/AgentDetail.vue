@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { Avatar, Button, ui, Modal, Notice, ResponsiveOverlay, SegmentedControl, type Tip, useDevice, useLoadingReveal } from "@intentic/ui";
+import {
+    Avatar,
+    Button,
+    ui,
+    Modal,
+    Notice,
+    ResponsiveOverlay,
+    SegmentedControl,
+    SkeletonSnapshot,
+    type Tip,
+    useDevice,
+    useLoadingReveal,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -413,12 +426,15 @@ const confirmHandOver = async (): Promise<void> => {
             />
             <template v-else>
                 <!-- Nobody has named this agent yet: a bar in the title's own place, and no rename over a missing name. -->
-                <span v-if="unnamed" class="flex min-w-0 flex-1 items-center" aria-hidden="true">
-                    <span class="skeleton block h-3 w-40 max-w-full"></span>
-                </span>
+                <SkeletonSnapshot v-if="unnamed" of="agents.detail.title">
+                    <span class="flex min-w-0 flex-1 items-center" aria-hidden="true">
+                        <span class="skeleton block h-3 w-40 max-w-full"></span>
+                    </span>
+                </SkeletonSnapshot>
                 <!-- On a phone the title is the switcher's handle: the chats sheet opens from it, chevron and all. -->
                 <button
                     v-else-if="mobile"
+                    v-skeleton-source="`agents.detail.title`"
                     type="button"
                     class="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-md text-left active:bg-overlay"
                     :aria-expanded="switcherOpen"
@@ -428,7 +444,9 @@ const confirmHandOver = async (): Promise<void> => {
                     <span class="sr-only">{{ t(`agents.agentDetail.switchChat`) }}</span>
                     <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
                 </button>
-                <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
+                <span v-else v-skeleton-source="`agents.detail.title`" class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{
+                    title
+                }}</span>
             </template>
             <!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
             <span
@@ -450,6 +468,7 @@ const confirmHandOver = async (): Promise<void> => {
             <!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
                 v-if="statusShown && status !== undefined"
+                v-skeleton-source="`agents.detail.status`"
                 v-tooltip.top="status.label"
                 class="inline-flex shrink-0 items-center gap-1 text-2xs"
                 :class="status.class"
@@ -459,7 +478,9 @@ const confirmHandOver = async (): Promise<void> => {
                 <span :class="mobile ? `hidden @md:inline` : ``">{{ status.label }}</span>
             </span>
             <!-- Its place, held: the status arrives with the roster entry, and a header that grows one on arrival jumps. -->
-            <span v-else-if="headerOutline" class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
+            <SkeletonSnapshot v-else-if="headerOutline" of="agents.detail.status">
+                <span class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
+            </SkeletonSnapshot>
             <!-- What people have made of this session, beside the name of it. The size comes from this wrapper, not a
                  class on the component: its template is a fragment, so anything passed to it is dropped. -->
             <!-- On a phone they lead the session menu instead (AgentSessionMenu): the header's width is the title's there. -->
@@ -533,9 +554,11 @@ const confirmHandOver = async (): Promise<void> => {
             <ChatPanel v-if="chatMounted" :tabs="false" class="min-h-0 flex-1" />
             <div v-else class="min-h-0 flex-1" aria-hidden="true" />
         </template>
-        <!-- Still asking about this id: the review's own shape stands in. -->
+        <!-- Still asking about this id: the review's own shape stands in, as the panel below last drew it once there is one. -->
         <template v-else-if="looking">
-            <AgentReviewOutline v-if="outline" :label="t(`agents.agentDetail.openingAgentsReview`)" />
+            <SkeletonSnapshot v-if="outline" of="agents.review" :label="t(`agents.agentDetail.openingAgentsReview`)">
+                <AgentReviewOutline :label="t(`agents.agentDetail.openingAgentsReview`)" />
+            </SkeletonSnapshot>
         </template>
         <!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
         <p v-else-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">

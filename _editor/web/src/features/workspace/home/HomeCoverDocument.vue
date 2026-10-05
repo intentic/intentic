@@ -1,14 +1,14 @@
 <!-- One folder's cover on the home: the chosen file read and drawn in place, or, when the folder has none, where one is. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Code, formatBytes, Markdown, ui, useLatest, useLoadingReveal } from "@intentic/ui";
+import { Code, formatBytes, Markdown, SkeletonSnapshot, ui, useLatest, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { resolveFile } from "../explorer/fileType";
 import { readFileWindow } from "../files/fileWindow";
 import { openFileRefFromEvent } from "../files/refs/openFileRef";
-import { workspaceAgent } from "../health/workspaceScope";
+import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { quickLookPlan } from "./quickLookContent";
 import { picture } from "./thumbnails";
@@ -161,6 +161,8 @@ const revealed = useLoadingReveal(
     waiting,
     computed(() => folder),
 );
+// What the wait draws: the cover as it last stood. The top folder's keeps its own, as the home's tiles do (HomeView).
+const coverImprint = computed(() => (folder === workspaceDir.value ? `workspace.home.cover` : `workspace.home.cover.folder`));
 // Nothing this pane can draw of a file it has: a format that opens in its own tab, bytes after all, or a read refused.
 const undrawable = computed(
     () =>
@@ -193,16 +195,23 @@ watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0
         <!-- Takes focus on a click but is no tab stop, so the arrows and Space then scroll the page, as in any document; the
              tree beside it is where the keys move between folders. -->
         <div ref="scroller" class="ui-softscroll min-h-0 flex-1 overflow-auto focus:outline-none" tabindex="-1">
-            <!-- A wait long enough to show: line-shaped placeholders, still, in a document's measure. -->
-            <div v-if="revealed" class="mx-auto flex max-w-3xl flex-col gap-2.5 px-8 py-7" aria-hidden="true">
-                <div class="skeleton h-4 w-1/3"></div>
-                <div class="skeleton h-3 w-5/6"></div>
-                <div class="skeleton h-3 w-2/3"></div>
-                <div class="skeleton h-3 w-3/4"></div>
-            </div>
+            <!-- A wait long enough to show: line-shaped placeholders, still, in a document's measure. Whatever stands in
+                 their place below is remembered under one name, so the next wait draws the last one seen. -->
+            <SkeletonSnapshot v-if="revealed" :of="coverImprint">
+                <div class="mx-auto flex max-w-3xl flex-col gap-2.5 px-8 py-7" aria-hidden="true">
+                    <div class="skeleton h-4 w-1/3"></div>
+                    <div class="skeleton h-3 w-5/6"></div>
+                    <div class="skeleton h-3 w-2/3"></div>
+                    <div class="skeleton h-3 w-3/4"></div>
+                </div>
+            </SkeletonSnapshot>
 
             <!-- None here: said once, with the nearest folders below that have one, and the way back to the tiles. -->
-            <div v-else-if="entry === undefined && listed" class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <div
+                v-else-if="entry === undefined && listed"
+                v-skeleton-source="coverImprint"
+                class="flex flex-col items-center gap-3 px-6 py-14 text-center"
+            >
                 <Icon name="book" class="text-2xl text-subtle" aria-hidden="true" />
                 <p class="text-xs text-muted">{{ t(`workspace.homeCover.noneIn`, { name, here }) }}</p>
                 <template v-if="below.length > 0">
@@ -223,23 +232,33 @@ watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0
 
             <template v-else-if="entry !== undefined">
                 <!-- Prose, as the tab reads it; a click on a file it mentions opens that file. -->
-                <div v-if="look === `markdown` && text !== undefined" class="px-8 py-7" @click="openFileRefFromEvent">
+                <div
+                    v-if="look === `markdown` && text !== undefined"
+                    v-skeleton-source="coverImprint"
+                    class="px-8 py-7"
+                    @click="openFileRefFromEvent"
+                >
                     <Markdown :source="text.text" :decorate="decorate" class="mx-auto max-w-3xl" />
                 </div>
                 <!-- The block's own frame is dropped: the pane is already the frame, and a card inside it reads as a hole. -->
                 <div
                     v-else-if="look === `text` && text !== undefined"
+                    v-skeleton-source="coverImprint"
                     class="px-3 py-3 [&_pre]:rounded-none [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:px-2"
                 >
                     <Code :code="text.text" :lang="lang" :copyable="false" />
                 </div>
-                <div v-else-if="look === `picture` && drawn?.url !== undefined" class="flex h-full items-center justify-center p-6">
+                <div
+                    v-else-if="look === `picture` && drawn?.url !== undefined"
+                    v-skeleton-source="coverImprint"
+                    class="flex h-full items-center justify-center p-6"
+                >
                     <img :src="drawn.url" :alt="entry.name" class="max-h-full max-w-full rounded-sm object-contain ring-1 ring-line/60" />
                 </div>
-                <p v-else-if="look === `empty`" class="px-6 py-14 text-center text-xs text-muted">
+                <p v-else-if="look === `empty`" v-skeleton-source="coverImprint" class="px-6 py-14 text-center text-xs text-muted">
                     {{ t(`workspace.homeCover.empty`, { name: entry.name }) }}
                 </p>
-                <div v-else-if="undrawable" class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+                <div v-else-if="undrawable" v-skeleton-source="coverImprint" class="flex flex-col items-center gap-3 px-6 py-14 text-center">
                     <p class="text-xs text-muted">
                         {{
                             reading?.kind === `unreadable`

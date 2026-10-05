@@ -9,7 +9,7 @@ import {
     providerLabel,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Notice, type NoticeModel, RowGroup, RowNote } from "@intentic/ui";
+import { Button, formatTokens, Notice, type NoticeModel, RowGroup, RowNote, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { hasSignIn, providerReady } from "../../chat/session/access";
@@ -452,20 +452,23 @@ watch(() => route.query[`connect`], focusConnect);
 
         <Notice v-if="chatNotice" :of="chatNotice" class="m-3" />
 
-        <!-- Nothing read yet: an offline sandbox says so and stops; otherwise outlines in the real rows' shape hold the section's height until they land. -->
+        <!-- Nothing read yet: an offline sandbox says so and stops; otherwise the rows as they last looked for this provider
+             (outlines in their shape before there is such a look) hold the section's height until they land. -->
         <ConnectionRow
             v-if="!accountsLoaded && !reachable"
             :title="t(`sandbox.aiAccountSection.connectionsUnavailable`)"
             state="missing"
             :description="t(`sandbox.aiAccountSection.sandboxOfflineAccountsCant`)"
         />
-        <template v-else-if="!accountsLoaded">
+        <SkeletonSnapshot v-else-if="!accountsLoaded" :of="`sandbox.ai-accounts:${managedProvider}`">
             <ConnectionRow v-for="placeholder in 2" :key="`loading-${placeholder}`" state="unknown" pending aria-hidden="true">
                 <template #control><span class="skeleton block h-7 w-24 rounded-md" /></template>
             </ConnectionRow>
-        </template>
+        </SkeletonSnapshot>
 
-        <template v-else>
+        <!-- The rows alone, not the group: the provider switcher above stays live through the wait. A box of their own to
+             imprint, so it carries the group's hairlines itself. -->
+        <div v-else v-skeleton-source="`sandbox.ai-accounts:${managedProvider}`" class="divide-y divide-line-subtle">
             <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
             <RowNote v-if="accountsOutdated && totalAccountCount > 0" variant="block">
                 <SandboxOutdatedNotice :missing="t(`sandbox.aiAccountSection.outdatedMissing`)" />
@@ -585,6 +588,6 @@ watch(() => route.query[`connect`], focusConnect);
                 interactive
                 @click="expanded = !expanded"
             />
-        </template>
+        </div>
     </RowGroup>
 </template>

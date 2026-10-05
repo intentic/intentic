@@ -11,8 +11,10 @@ import {
     type PickerOption,
     type PickerOptions,
     RowGroup,
+    SkeletonSnapshot,
     SplitView,
     useNarrow,
+    vSkeletonSource,
     type AgentRunChoice,
     type TallyItem,
     ProjectChip,
@@ -265,7 +267,12 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
         <!-- Pipeline totals belong in the information slot, not the action group. -->
         <template #info>
             <!-- `min-w-0 flex-1`: the tally is what gives here. -->
-            <PipelinesTally v-if="showTally && !narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="ml-1 min-w-0 flex-1" />
+            <template v-if="showTally && !narrowBoard">
+                <SkeletonSnapshot v-if="isPending" of="pipelines.tally">
+                    <PipelinesTally skeleton class="ml-1 min-w-0 flex-1" />
+                </SkeletonSnapshot>
+                <PipelinesTally v-else v-skeleton-source="`pipelines.tally`" :items="counts" :rate="successRate" class="ml-1 min-w-0 flex-1" />
+            </template>
         </template>
 
         <template #actions>
@@ -304,13 +311,19 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
         <template #detail>
             <!-- No scroller or `min-h-0 flex-1`: nothing clamps this, so the column is as tall as its runs. -->
             <div ref="body" class="flex flex-col">
-                <!-- Narrow headers move orientation text above the list. -->
-                <PipelinesTally v-if="showTally && narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="mb-5" />
+                <!-- Narrow headers move orientation text above the list. Remembered apart from the title row's, whose margins differ. -->
+                <template v-if="showTally && narrowBoard">
+                    <SkeletonSnapshot v-if="isPending" of="pipelines.tally.narrow">
+                        <PipelinesTally skeleton class="mb-5" />
+                    </SkeletonSnapshot>
+                    <PipelinesTally v-else v-skeleton-source="`pipelines.tally.narrow`" :items="counts" :rate="successRate" class="mb-5" />
+                </template>
 
                 <!-- Also covers the window before the sandbox handshake unblocks the fetch. -->
                 <PipelinesSkeleton v-if="isPending" />
 
-                <template v-else>
+                <!-- One element in the skeleton's place, so its imprint (drawn by PipelinesSkeleton) is the whole board; laid out as the column. -->
+                <div v-else v-skeleton-source="`pipelines.board`" class="flex flex-col">
                     <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. -->
                     <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
                         <div class="flex items-center gap-2">
@@ -409,7 +422,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                             }}
                         </p>
                     </div>
-                </template>
+                </div>
             </div>
         </template>
     </SplitView>

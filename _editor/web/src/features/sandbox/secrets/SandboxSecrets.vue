@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import {
+    Button,
+    ui,
+    FilterBar,
+    type NoticeModel,
+    NoticeStack,
+    Row,
+    RowGroup,
+    RowNote,
+    SegmentedControl,
+    SkeletonRows,
+    SkeletonSnapshot,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
@@ -169,18 +182,21 @@ const pushToCi = async (): Promise<void> => {
     <div class="flex flex-col gap-6">
         <NoticeStack :of="[pushError]" />
 
-        <!-- Content waits for inventory; the outline waits for the reveal. -->
+        <!-- Content waits for inventory; the outline waits for the reveal, drawn as the page last looked in this sandbox. -->
         <template v-if="inventoryPending">
-            <!-- Shows the shape of the coming list (rows with a key and reveal control), not a spinner. -->
-            <RowGroup v-if="outline" :label="t(`sandbox.sandboxSecrets.secrets`)">
-                <div role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`sandbox.sandboxSecrets.readingSandboxsSecrets`) }}</span>
-                    <SkeletonRows :rows="4" control />
-                </div>
-            </RowGroup>
+            <SkeletonSnapshot v-if="outline" of="sandbox.secrets" :label="t(`sandbox.sandboxSecrets.readingSandboxsSecrets`)">
+                <!-- Until it has been seen once: the shape of the coming list (rows with a key and reveal control), not a spinner. -->
+                <RowGroup :label="t(`sandbox.sandboxSecrets.secrets`)">
+                    <div role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`sandbox.sandboxSecrets.readingSandboxsSecrets`) }}</span>
+                        <SkeletonRows :rows="4" control />
+                    </div>
+                </RowGroup>
+            </SkeletonSnapshot>
         </template>
 
-        <template v-else>
+        <!-- One element, so its imprint is the whole page below the notices; spaced as the column it sits in. -->
+        <div v-else v-skeleton-source="`sandbox.secrets`" class="flex flex-col gap-6">
             <!-- Filter and scope narrow everything below as one control; the CI push button is separate and chromeless. -->
             <div v-if="filterable || ciKnown" class="flex flex-wrap items-center justify-end gap-2">
                 <FilterBar
@@ -336,6 +352,6 @@ const pushToCi = async (): Promise<void> => {
                 <span>{{ emptyNote }}</span>
                 <Button v-if="rows.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="clearFilters" />
             </div>
-        </template>
+        </div>
     </div>
 </template>

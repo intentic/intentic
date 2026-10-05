@@ -25,9 +25,9 @@ const HEALED_MARKER = `intentic.selfHealed`;
 // localStorage: the one key that must outlive the reload that acts on it (everything else was just cleared).
 const WIPE_KEY = `intentic.wipeOnBoot`;
 
-// Fallback list when `indexedDB.databases()` is unavailable: the vue-query mirror's default store and the
-// transcript mirror.
-const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`];
+// Fallback list when `indexedDB.databases()` is unavailable: the vue-query mirror's default store, the transcript
+// mirror, and the loading placeholders' imprints (lib/skeletonPersistence.ts), which a render reads at boot too.
+const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`, `intentic.skeletons`];
 
 const startedAt = performance.now();
 let healing = false;

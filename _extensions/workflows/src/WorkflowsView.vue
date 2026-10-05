@@ -13,9 +13,11 @@ import {
     PageHeader,
     Row,
     RowGroup,
+    SkeletonSnapshot,
     StatusBadge,
     timeAgo,
     useLoadingReveal,
+    vSkeletonSource,
     type StatusVariant,
 } from "@intentic/extension-ui";
 import { type LoopDesign, loopDesignLine, type Workflow, type WorkflowRun, type WorkflowSummary } from "@intentic/sandbox-contract";
@@ -287,29 +289,31 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             </section>
 
             <!-- Skeleton matches the real card's height (mostly the diagram frame), so nothing jumps down the page once it lands. -->
-            <section v-if="isLoading && outline" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`workflowsView.readingWorkflows`) }}</span>
-                <div class="mb-2 flex items-center gap-2 px-0.5" aria-hidden="true">
-                    <span class="skeleton block h-2.5 w-24" />
-                </div>
-                <div class="flex flex-col gap-3" aria-hidden="true">
-                    <Card v-for="card in 2" :key="card" class="flex flex-col gap-3">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="flex min-w-0 flex-col gap-1.5">
-                                <span class="skeleton block h-3.5" :class="card === 1 ? `w-44` : `w-32`" />
-                                <span class="skeleton block h-2.5" :class="card === 1 ? `w-64` : `w-52`" />
+            <SkeletonSnapshot v-if="isLoading && outline" of="workflows.list" :label="t(`workflowsView.readingWorkflows`)">
+                <section role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`workflowsView.readingWorkflows`) }}</span>
+                    <div class="mb-2 flex items-center gap-2 px-0.5" aria-hidden="true">
+                        <span class="skeleton block h-2.5 w-24" />
+                    </div>
+                    <div class="flex flex-col gap-3" aria-hidden="true">
+                        <Card v-for="card in 2" :key="card" class="flex flex-col gap-3">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex min-w-0 flex-col gap-1.5">
+                                    <span class="skeleton block h-3.5" :class="card === 1 ? `w-44` : `w-32`" />
+                                    <span class="skeleton block h-2.5" :class="card === 1 ? `w-64` : `w-52`" />
+                                </div>
+                                <span class="skeleton block h-6 w-16 shrink-0" />
                             </div>
-                            <span class="skeleton block h-6 w-16 shrink-0" />
-                        </div>
-                        <!-- Loading cards preserve the workflow frame and height. -->
-                        <div class="flex h-36 w-full flex-col items-center justify-center gap-3 rounded-lg bg-content/4">
-                            <span v-for="node in 2" :key="node" class="skeleton block h-14 w-52 rounded-md" />
-                        </div>
-                    </Card>
-                </div>
-            </section>
+                            <!-- Loading cards preserve the workflow frame and height. -->
+                            <div class="flex h-36 w-full flex-col items-center justify-center gap-3 rounded-lg bg-content/4">
+                                <span v-for="node in 2" :key="node" class="skeleton block h-14 w-52 rounded-md" />
+                            </div>
+                        </Card>
+                    </div>
+                </section>
+            </SkeletonSnapshot>
 
-            <section v-else-if="!isLoading && workflows.length > 0">
+            <section v-else-if="!isLoading && workflows.length > 0" v-skeleton-source="`workflows.list`">
                 <div class="mb-2 px-0.5">
                     <span :class="ui.sectionLabel()">{{ t(`workflowsView.workflows2`) }}</span>
                 </div>

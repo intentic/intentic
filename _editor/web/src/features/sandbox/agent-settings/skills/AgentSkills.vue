@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic/api-contract";
-import { DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
+import { DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../../extensions/useExtensions";
@@ -55,6 +55,10 @@ const sources = computed<SkillSources>(() => ({ capabilities: capabilities.value
 // Which row is open; `adding` is its own flag since a new skill has no id yet.
 const openId = ref<string | undefined>();
 const adding = ref(false);
+// Nothing in the group yet but the wait: no list, no settings, no error, no skill being written. Only then does the whole
+// group stand in as it last looked; rows that arrive before the settings stay on screen, disabled, above the outline
+// drawn inside the group.
+const nothingYet = computed(() => error.value === undefined && settings.value === undefined && skills.value.length === 0 && !adding.value);
 // The open row's text, once fetched; its own ref rather than a suspense boundary since the row is already on screen.
 const openBody = ref<string | undefined>();
 const bodyError = ref<string | undefined>();
@@ -103,7 +107,17 @@ const removeSkill = (skill: SkillSummary): void => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentSkills.skills`)">
+    <SkeletonSnapshot v-if="outline && nothingYet" of="sandbox.agent.skills" :label="t(`sandbox.agentSkills.readingSandboxsSkills`)">
+        <!-- Until it has been seen once: the group as it reads while loading, the outline over the write action. -->
+        <RowGroup :label="t(`sandbox.agentSkills.skills`)">
+            <div role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
+                <SkeletonRows :rows="3" description control />
+            </div>
+            <RowNote variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
+        </RowGroup>
+    </SkeletonSnapshot>
+    <RowGroup v-else v-skeleton-source="`sandbox.agent.skills`" :label="t(`sandbox.agentSkills.skills`)">
         <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
         <template v-if="filterable" #actions>
             <SearchBar
