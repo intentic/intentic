@@ -4945,7 +4945,7 @@
             "areas": "Your areas",
             "grantedOnAccess": "Granted to people on Access.",
             "everyoneSeesWhole": "Everyone sees the whole workspace",
-            "whatAnAreaIs": "An area is a named part of it. Grant one and that person sees those folders and nothing else — in the file tree, in search, and in the conversations they open. It also decides who they can talk to: an assistant belongs to the area its starting folder is in.",
+            "whatAnAreaIs": "An area is a named slice of the workspace. Grant one and someone sees only those folders — in the tree, search, and conversations — and can talk only to people and assistants in that area. An assistant belongs to the area of its starting folder.",
             "readingAreas": "Reading this workspace’s areas.",
             "newArea": "New area",
             "nameIt": "Name it — Frontend, Docs, Billing",
