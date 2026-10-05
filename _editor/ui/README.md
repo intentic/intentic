@@ -37,7 +37,8 @@ flowchart LR
   motion is off, or when it is left at System and the OS asks for less. Under that attribute every duration token is
   0ms and every transition stops, so a component never checks reduced motion itself. Moves played from script ask
   `lessMotion()`: the tray fold and the column FLIP (`fold.ts`) and the row reveal (`reveal.ts`, `useRowReveal`),
-  which plays a list's `[data-reveal]` rows in reading order when it shows. Looping glyphs take their pace from
+  which plays a list's `[data-reveal]` rows in reading order when it shows, and `dismissRows`, which plays rows out in
+  the same order, quicker, before a press removes them (the chat rail's Clear). Looping glyphs take their pace from
   `loops.ts`. The CSS recipes are `ui-grow-x`, `ui-grow-y` and `ui-grow-wipe` (a figure growing from its
   baseline; `Meter`, `BarChart` and the hours meter opt in with `grow`) and `ui-enter` (the workspace arriving).
   Motion is for the few views where it shows something: the board and the chat's lanes, the usage charts, the
@@ -137,7 +138,7 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 | --- | --- |
 | `components/` | Components by role: primitives, layout, forms, rows, overlays, feedback, charts, markdown, brand, sandbox |
 | `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation |
-| `motion/` | Whether the interface moves, looping glyphs, folds, row reveals |
+| `motion/` | Whether the interface moves, looping glyphs, folds, rows arriving and leaving |
 | `markdown/` | The markdown engine: render, figures, frontmatter, code blocks, block editing, history |
 | `styles/` | Tokens, motion, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |
 | `icons/` | Native SVG glyph sets and file-type icons |

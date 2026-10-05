@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { receivePreferenceChange } from "@intentic/ui/preference";
-import { REVEAL_ROWS, REVEAL_STEP_MS, revealRows, rowsUnder } from "@intentic/ui/motion";
+import { DISMISS_STEP_MS, dismissRows, REVEAL_ROWS, REVEAL_STEP_MS, revealRows, rowsUnder, settleDismissed } from "@intentic/ui/motion";
 
 // The row reveal reads the page's own markup for what to play (`data-reveal`, `data-reveal-column`) and plays it as Web
 // Animations, which the test DOM does not run: each row's `animate` is recorded instead, which is all the reveal hands
@@ -92,5 +92,60 @@ describe(`revealRows`, () => {
         revealRows(rowsUnder(root));
 
         expect(played).toEqual([]);
+    });
+});
+
+// An exit the test DOM can await and cancel: `finished` settles at once, and a cancel is counted against its row.
+const recordExits = (root: HTMLElement): { played: Played[]; cancelled: string[] } => {
+    const played: Played[] = [];
+    const cancelled: string[] = [];
+    for (const row of root.querySelectorAll<HTMLElement>(`[data-reveal]`)) {
+        const runs: Animation[] = [];
+        row.animate = ((_frames: Keyframe[], timing: KeyframeAnimationOptions) => {
+            played.push({ row: row.id, delay: Number(timing.delay ?? 0) });
+            // SAFETY: dismissRows reads only `finished`, and settleDismissed only `id` and `cancel`.
+            const run = { id: timing.id, finished: Promise.resolve(), cancel: () => cancelled.push(row.id) } as unknown as Animation;
+            runs.push(run);
+            return run;
+        }) as HTMLElement[`animate`];
+        row.getAnimations = () => runs;
+    }
+    return { played, cancelled };
+};
+
+describe(`dismissRows`, () => {
+    it(`plays the rows out in reading order, quicker than they came in and on the same cap`, async () => {
+        const root = build(Array.from({ length: REVEAL_ROWS + 2 }, (_, index) => `<div id="r${index}" data-reveal></div>`).join(``));
+        const { played } = recordExits(root);
+
+        await dismissRows(rowsUnder(root)[0] ?? []);
+
+        expect(played.slice(0, 2)).toEqual([
+            { row: `r0`, delay: 0 },
+            { row: `r1`, delay: DISMISS_STEP_MS },
+        ]);
+        expect(DISMISS_STEP_MS).toBeLessThan(REVEAL_STEP_MS);
+        expect(Math.max(...played.map((entry) => entry.delay))).toBe((REVEAL_ROWS - 1) * DISMISS_STEP_MS);
+    });
+
+    it(`settles at once, having played nothing, when motion is off`, async () => {
+        receivePreferenceChange({ key: `ui-motion`, raw: `off` });
+        const root = build(`<div id="r1" data-reveal></div>`);
+        const { played } = recordExits(root);
+
+        await dismissRows(rowsUnder(root)[0] ?? []);
+
+        expect(played).toEqual([]);
+    });
+
+    it(`lets a row that outlived its removal be drawn again`, async () => {
+        const root = build(`<div id="r1" data-reveal></div><div id="r2" data-reveal></div>`);
+        const { cancelled } = recordExits(root);
+        const rows = rowsUnder(root)[0] ?? [];
+
+        await dismissRows(rows);
+        settleDismissed(rows);
+
+        expect(cancelled).toEqual([`r1`, `r2`]);
     });
 });

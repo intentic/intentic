@@ -144,3 +144,48 @@ export const useRowReveal = (root: Readonly<Ref<Element | null | undefined>>, { 
 
     return { settled };
 };
+
+// ROWS LEAVING, THE REVEAL PLAYED BACK. When a press takes a run of rows away together (the chat rail's Clear), they go
+// in the order they arrived: top to bottom, each fading as it settles back to the board's leaving scale, so the reader
+// sees what was taken before the column closes up over it. Quicker than the arrival, as an exit should be: each row on
+// the house `--motion-quick`, half the arrival's step, the same cap, so a full lane is gone in about a quarter second. The rows hold their last
+// frame (`forwards`) until whoever removes them does; the caller removes them once the promise settles, and cancels
+// what it plays on any that stay (`settleDismissed`). With motion off it settles at once, having played nothing.
+
+/** How long one row takes to leave. */
+export const DISMISS_MS = 150;
+/** The step between one row leaving and the next. */
+export const DISMISS_STEP_MS = REVEAL_STEP_MS / 2;
+/** The scale a leaving row settles to: the board's own leave (AgentsView's `lane-leave-to`). */
+const DISMISS_SCALE = 0.95;
+// Tags this module's exits among an element's animations, so `settleDismissed` cancels only its own.
+const DISMISS = `row-dismiss`;
+
+/** Plays rows out in reading order; resolves once the last has left, or at once with motion off. */
+export const dismissRows = async (rows: readonly Element[]): Promise<void> => {
+    if (lessMotion()) {
+        return;
+    }
+    const runs = rows.filter(canAnimate).map((row, index) =>
+        row.animate(
+            [
+                { opacity: 1, scale: `1` },
+                { opacity: 0, scale: `${DISMISS_SCALE}` },
+            ],
+            { duration: DISMISS_MS, delay: Math.min(index, REVEAL_ROWS - 1) * DISMISS_STEP_MS, easing: `ease-in`, fill: `forwards`, id: DISMISS },
+        ),
+    );
+    // A run cancelled under it (its row removed early, the view unmounting) counts as gone.
+    await Promise.all(runs.map((run) => run.finished.catch(() => undefined)));
+};
+
+/** Drops the exits `dismissRows` left holding, so a row that survived the removal it was played for is drawn again. */
+export const settleDismissed = (rows: readonly Element[]): void => {
+    for (const row of rows) {
+        for (const run of row.getAnimations?.() ?? []) {
+            if (run.id === DISMISS) {
+                run.cancel();
+            }
+        }
+    }
+};

@@ -13,7 +13,7 @@ import type { OpenChat } from "./cardView";
 import { useChatTrays } from "./chatTrays";
 import { CHILD_ROWS } from "../../agents/board/cards/childRows";
 import { closeSubagent, subagentOnScreen } from "../panel/subagent/subagentView";
-import { useFoldFlip, useRowReveal } from "@intentic/ui/motion";
+import { dismissRows, rowsUnder, settleDismissed, useFoldFlip, useRowReveal } from "@intentic/ui/motion";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered, steadyLanes } from "./laneOrder";
 import { personaOfAgent, personaOfTab, tabsInLane, tabsOfPersona } from "./tabs";
@@ -164,6 +164,42 @@ const CLEAR_LABEL: Record<FleetLane, (count: number) => string> = {
 };
 const clearLabel = (lane: (typeof LANES.value)[number]): string => CLEAR_LABEL[lane.key](clearing.value[lane.key].size);
 
+// CLEAR IS SEEN LEAVING, not blinked away: the cards it closes play out top to bottom (@intentic/ui/motion, dismissRows,
+// the lanes' row reveal played back), a lane left with nothing takes its heading with its last card, and only then do
+// the chats close, which the column answers by sliding what stood below up into the room (useFoldFlip, keyed on
+// `sweeps`). What closes is the set the press saw, so a chat that changed lanes mid-sweep is neither taken nor spared
+// by surprise. With motion off the close is immediate, as it always was. The press hands Button nothing to await, so
+// the quarter second of leaving never reads as work on its spinner.
+const sweeping = ref(false);
+const sweeps = ref(0);
+const clearLane = async (lane: FleetLane): Promise<void> => {
+    if (sweeping.value) {
+        return;
+    }
+    const ids = clearing.value[lane];
+    const section = scroller.value?.querySelector<HTMLElement>(`[data-rail-lane="${lane}"]`) ?? null;
+    // The lane's own rows only (a card's tray rides inside its card), and of those the cards this Clear closes: a run's
+    // row and the persona's chats not open here stay.
+    const rows = section === null ? [] : (rowsUnder(section)[0] ?? []);
+    const leaving = rows.filter((row) => ids.has(row.getAttribute(`data-chat-row`) ?? ``));
+    // Emptied means nothing of the lane is left to draw, a run the Finished window hides included.
+    const emptied = section !== null && leaving.length === rows.length && (lane !== `finished` || hiddenRuns.value === 0);
+    const played = emptied ? [...leaving, section] : leaving;
+    sweeping.value = true;
+    section?.style.setProperty(`pointer-events`, `none`);
+    try {
+        await dismissRows(played);
+        sweeps.value++;
+        emit(`close`, ids);
+        await nextTick();
+    } finally {
+        // Whatever the close left standing (a chat it could not take) is drawn again and answers the pointer.
+        settleDismissed(played);
+        section?.style.removeProperty(`pointer-events`);
+        sweeping.value = false;
+    }
+};
+
 // Lane visibility is filtered in JS, not `v-show`: `LANES` is compile-time so `v-for` yields a stable fragment,
 // and `v-show` (set only on mount) would freeze stale in a long-lived floating window.
 // A lane holding only a run, or only a persona's work not open here, still counts as occupied.
@@ -233,14 +269,15 @@ watch(
 // the docked sheet; a scope just picked starts at the top of its lanes.
 const scroller = ref<HTMLElement | null>(null);
 // What opens and shuts the trays under the cards (ChildRows' `shown`): the chats selected here and a subagent shown in
-// one's column. A render that moves it makes room below a tray by sliding what stands there (the `data-fold-unit`s).
+// one's column, and a lane's Clear (`sweeps`). A render that moves it makes room below a tray, or closes up over what a
+// Clear took, by sliding what stands there (the `data-fold-unit`s).
 useFoldFlip(
     scroller,
     () =>
         `${conversations.value
             .filter((conversation) => actions.isSelected(conversation.conversationId))
             .map((conversation) => conversation.conversationId)
-            .join(`,`)}|${subagentOnScreen.value?.id}`,
+            .join(`,`)}|${subagentOnScreen.value?.id}|${sweeps.value}`,
 );
 // THE LANES OPEN ROW BY ROW, as the board's do (@intentic/ui/motion, reveal.ts): the lane labels are there at once and
 // the cards arrive top to bottom. This rail is one column, so the order is simply down it. Unlike the board, whose
@@ -302,7 +339,7 @@ defineExpose({ beginRename: actions.beginRename });
             class="flex min-h-0 flex-1 flex-col items-stretch gap-5 overflow-y-auto"
         >
             <!-- An empty lane isn't drawn at all (see occupiedLanes). -->
-            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" data-fold-unit>
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :data-rail-lane="lane.key" data-fold-unit>
                 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
@@ -317,7 +354,7 @@ defineExpose({ beginRename: actions.beginRename });
                             rows: [{ label: t(`chat.chatTabList.chats`), value: clearing[lane.key].size }],
                             note: lane.keeps,
                         }"
-                        @click="emit('close', clearing[lane.key])"
+                        @click="void clearLane(lane.key)"
                     >
                         {{ t(`ui.action.clear`) }}
                     </Button>
