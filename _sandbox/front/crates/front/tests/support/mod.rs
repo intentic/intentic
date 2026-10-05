@@ -91,6 +91,8 @@ pub struct Harness {
     pub dir: PathBuf,
     socket: Arc<Mutex<OwnedWriteHalf>>,
     pub tunnel: watch::Receiver<Option<bool>>,
+    /// Every tunnel report the front sent, newest last.
+    pub reports: watch::Receiver<Vec<ToNode>>,
     synced: Mutex<mpsc::UnboundedReceiver<(u32, Vec<Option<u64>>)>>,
     _front: Child,
 }
@@ -134,6 +136,7 @@ impl Harness {
         let (mut reader, writer) = socket.into_split();
         let writer = Arc::new(Mutex::new(writer));
         let (tunnel_sender, tunnel) = watch::channel(None);
+        let (reports_sender, reports) = watch::channel(Vec::new());
         let (synced_sender, synced) = mpsc::unbounded_channel();
         let answering = writer.clone();
         tokio::spawn(async move {
@@ -193,8 +196,9 @@ impl Harness {
                             .await
                             .unwrap();
                     }
-                    ToNode::Tunnel { connected } => {
+                    report @ ToNode::Tunnel { connected, .. } => {
                         tunnel_sender.send_replace(Some(connected));
+                        reports_sender.send_modify(|reports| reports.push(report));
                     }
                     ToNode::Answer {
                         id,
@@ -212,6 +216,7 @@ impl Harness {
             dir,
             socket: writer,
             tunnel,
+            reports,
             synced: Mutex::new(synced),
             _front: front,
         }
@@ -252,6 +257,7 @@ impl Harness {
         self.send(&FromNode::Hello {
             build: "test".into(),
             pid: std::process::id(),
+            generation: None,
         })
         .await;
     }

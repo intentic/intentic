@@ -4,7 +4,16 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { Dialed } from "../../daemon-base.js";
 import type { Pairing } from "../config.js";
-import { bridgeConnection, createTunnelPool, sshSocketUrl, startSshTunnel, syncSshPort, tunnelReady, tunnelTargets } from "../tunnel.js";
+import {
+    bridgeConnection,
+    createTunnelPool,
+    sshSocketUrl,
+    startSshTunnel,
+    syncSshPort,
+    syncSshPorts,
+    tunnelReady,
+    tunnelTargets,
+} from "../tunnel.js";
 
 // The transport desktop sync runs on, exercised without a sandbox at the other end. Covers Mutagen's contract:
 // bytes flow both ways, either side closing closes the other, and the credential is on the request. Only the
@@ -107,11 +116,35 @@ describe("syncSshPort", () => {
     // number, clear of the sandbox's own loopback band.
     it("lands in its own quiet band", () => {
         for (const id of ["sandbox-0738cd6b5027", "sandbox-bce57bb9fe3b", "ffffff", "000000"]) {
-            expect(syncSshPort(id)).toBeGreaterThanOrEqual(24000);
-            expect(syncSshPort(id)).toBeLessThan(28000);
+            expect(syncSshPort(id, native)).toBeGreaterThanOrEqual(24000);
+            expect(syncSshPort(id, native)).toBeLessThan(28000);
         }
     });
+
+    // (2026-10-05) Under WSL's mirrored networking a distro's loopback IS the Windows side's: the same sandbox paired on
+    // both sides derived one port twice, and the second listener never bound.
+    it("never derives in a WSL distro a port the Windows side derives, and moves nothing outside WSL", () => {
+        const ubuntu = { name: "Ubuntu", wsl: true };
+        const ids = ["sandbox-0738cd6b5027", "sandbox-bce57bb9fe3b", "ffffff", "000000", "sandbox-2e8d89d75865"];
+        for (const id of ids) {
+            expect(syncSshPort(id, ubuntu)).toBeGreaterThanOrEqual(20000);
+            expect(syncSshPort(id, ubuntu)).toBeLessThan(24000);
+            expect(ids.map((other) => syncSshPort(other, { name: "windows", wsl: false }))).not.toContain(syncSshPort(id, ubuntu));
+            // Every native environment keeps the port it always had.
+            expect(syncSshPort(id, { name: "windows", wsl: false })).toBe(syncSshPort(id, { name: "macos", wsl: false }));
+        }
+        // Two distros of one PC apart from each other too, for the same sandbox.
+        expect(syncSshPort("sandbox-0738cd6b5027", ubuntu)).not.toBe(syncSshPort("sandbox-0738cd6b5027", { name: "Debian", wsl: true }));
+        // What a known_hosts cleanup strips: today's port and the one the distro derived before.
+        expect(syncSshPorts("sandbox-0738cd6b5027", ubuntu)).toEqual([
+            syncSshPort("sandbox-0738cd6b5027", ubuntu),
+            syncSshPort("sandbox-0738cd6b5027", native),
+        ]);
+        expect(syncSshPorts("sandbox-0738cd6b5027", native)).toEqual([syncSshPort("sandbox-0738cd6b5027", native)]);
+    });
 });
+
+const native = { name: "linux", wsl: false };
 
 describe("sshSocketUrl", () => {
     // Both schemes, since base isn't always public https: the loopback shortcut is plain http, and `wss://` there

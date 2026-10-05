@@ -233,6 +233,32 @@ const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined
     };
 };
 
+// The command that runs the agent's tidy-up on demand and says what it would do; `--fix` does it.
+const UPKEEP_COMMAND = `intentic-machine doctor`;
+
+// What the agent's own tidy-up (its upkeep pass: retired installs, stale sync, old trash, a second ic) left for a person
+// at its last pass, in this environment: a folder a process still runs from, a second \`ic\` it cannot replace. A machine
+// whose tidy-up found nothing to leave says nothing here, which is what a converged machine looks like; what it did fix
+// by itself is the agent's own log, not an errand. Counted from the machine's own reading, so it clears itself once a
+// pass comes back clean.
+const upkeepConcern = (device: Device, readAt: number): DeviceConcern | undefined => {
+    const upkeep = device.facts?.upkeep;
+    if (upkeep === undefined || upkeep.skipped.length === 0 || device.gap !== undefined) {
+        return undefined;
+    }
+    const [first] = upkeep.skipped;
+    const more = upkeep.skipped.length - 1;
+    const rest = more === 0 ? `` : more === 1 ? `, and one more` : `, and ${more} more`;
+    return {
+        key: `upkeep`,
+        tone: `info`,
+        icon: `maintenance`,
+        text: `Its tidy-up ${timeAgo(upkeep.at, { now: readAt })} left ${first?.what ?? `something`} for you${first === undefined ? `` : ` (${first.why})`}${rest}.`,
+        hint: { title: t(`sandbox.deviceAttention.leftovers`), note: t(`sandbox.deviceAttention.leftoversNote`) },
+        command: UPKEEP_COMMAND,
+    };
+};
+
 // The block alone, for a machine whose sandboxes are listed once under several environments: it is about the door
 // the buttons go through, not about any one environment, so it is drawn beside the list rather than under a row.
 export const blockAttention = (
@@ -283,6 +309,12 @@ export const deviceAttention = (
     const links = linksConcern(device, readAt);
     if (links !== undefined) {
         concerns.push(links);
+    }
+    // Beside the links, and for the same reason: something the machine holds that nobody needs, which its agent could
+    // not clear by itself.
+    const upkeep = upkeepConcern(device, readAt);
+    if (upkeep !== undefined) {
+        concerns.push(upkeep);
     }
     // Last, and quietest: nothing here is broken, it only explains an absence of buttons.
     if (block !== undefined) {

@@ -48,7 +48,8 @@ const badge = computed(() => {
         fixing: device.fixRunning.value ? device.fixName.value : undefined,
         waiting: device.setupMode.value || device.syncSetup.value?.error !== undefined,
         startingDocker: device.dockerStarting.value,
-        updateReady: device.update.value.kind === `ready`,
+        // A deb or rpm upgrade installed under the running app is one restart away too.
+        updateReady: device.update.value.kind === `ready` || device.update.value.kind === `installed`,
         machine: machineSandbox.value?.state,
     });
 });

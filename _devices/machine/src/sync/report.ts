@@ -124,7 +124,9 @@ export const deviceReport = async (mutagen: string | undefined): Promise<DeviceR
     const [state, agent, wsl] = await Promise.all([readState(), agentState(installedBuild()), wslEnvironment()]);
     // Read only when some pairing syncs files: a machine that only mirrors ports has no session to ask about.
     const syncing = mutagen !== undefined && state.pairings.some((pairing) => pairing.mode === "sync");
-    const sessions = syncing ? sessionsByName(readAllSessions(mutagen)) : undefined;
+    // A daemon that did not answer leaves every session status out, as Mutagen not consulted does: never "no session".
+    const listed = syncing ? readAllSessions(mutagen) : undefined;
+    const sessions = listed === undefined ? undefined : sessionsByName(listed);
     return buildReport(state, sessions, agent, Date.now(), wsl, machineId());
 };
 

@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Browser, BrowserContext } from "playwright";
 import type { BrowserFingerprint } from "./fingerprint.js";
+import { detachedStamp } from "../../seams/workload-stamp.js";
 
 // The owner's own sign-in window: Chromium started as a plain process, with Playwright attached afterwards over CDP.
 // Not launchPersistentContext: X's sign-in risk check refused a Google sign-in from every Playwright-launched window
@@ -169,7 +170,14 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
     await rm(portFile, { force: true });
     await seedLanguages(options.userDataDir, options.fingerprint.languages);
     const child = spawn(options.executablePath, ownerBrowserArgs(options), {
-        env: { ...process.env, DISPLAY: options.display, TZ: options.fingerprint.timezoneId, LANGUAGE: localeEnv(options.fingerprint.locale) },
+        // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
+        env: {
+            ...process.env,
+            ...detachedStamp("login-browser"),
+            DISPLAY: options.display,
+            TZ: options.fingerprint.timezoneId,
+            LANGUAGE: localeEnv(options.fingerprint.locale),
+        },
         stdio: "ignore",
     });
     let browser: Browser | undefined;

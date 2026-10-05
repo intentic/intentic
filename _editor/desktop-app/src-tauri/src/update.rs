@@ -57,6 +57,9 @@ pub enum Stage {
         reason: String,
         url: String,
     },
+    /// A deb or rpm upgrade already replaced this app on disk while it ran ([`replaced_on_disk`]): only a restart onto
+    /// it is left, and that is the offer, never a download of what is installed already.
+    Installed,
 }
 
 impl Stage {
@@ -74,6 +77,7 @@ impl Stage {
                 Some(version) => (format!("Download Intentic {version}"), true),
                 None => ("Download the latest Intentic".into(), true),
             },
+            Stage::Installed => ("Restart to use the new Intentic".into(), true),
         }
     }
 
@@ -189,6 +193,58 @@ fn updatable() -> Updatable {
     }
 }
 
+/* AN UPGRADE THE PACKAGE MANAGER ALREADY INSTALLED (2026-10-05).
+ *
+ * A deb or an rpm carries no maintainer script that ends or restarts this app (tauri.conf.json has none to give), so
+ * after `apt upgrade` the old app and its file server ran on until Quit, and the next check offered the very release the
+ * package manager had just installed, as a download. Linux keeps a running binary's file alive under the process even
+ * once its path names another one, so the app asks: is the file at the path it was started from (Tauri reads it before
+ * main) still the one running (`/proc/self/exe`)? Another file there is a newer install, and the offer becomes a
+ * restart onto it. Only for deb and rpm: the AppImage and the Windows installer replace the app through this module, and
+ * know it. No version is read off the new file: running it to ask would start a second copy of the app. */
+
+/// A file's identity: its device and inode.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+type FileId = (u64, u64);
+
+/// Whether the binary at the path this process started from is another file than the one it runs: replaced on disk.
+/// A path with nothing there any more (the app uninstalled under itself) is not an install to restart onto. Pure.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn replaced(running: Option<FileId>, on_disk: Option<FileId>) -> bool {
+    matches!((running, on_disk), (Some(running), Some(on_disk)) if running != on_disk)
+}
+
+#[cfg(target_os = "linux")]
+fn replaced_on_disk() -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let id = |metadata: std::io::Result<std::fs::Metadata>| {
+        metadata
+            .ok()
+            .map(|metadata| (metadata.dev(), metadata.ino()))
+    };
+    let Ok(started) = tauri::utils::platform::current_exe() else {
+        return false;
+    };
+    replaced(
+        id(std::fs::metadata("/proc/self/exe")),
+        id(std::fs::metadata(started)),
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+fn replaced_on_disk() -> bool {
+    false
+}
+
+/// Say so when a deb or rpm upgrade replaced this app on disk: true when it did (the stage is then [`Stage::Installed`]).
+fn installed_anew(app: &AppHandle) -> bool {
+    if updatable() != Updatable::OtherPackaging || !replaced_on_disk() {
+        return false;
+    }
+    set(app, Stage::Installed);
+    true
+}
+
 /// Where a verified download waits. The app's own cache directory: discardable by definition, per OS user like
 /// everything else this app keeps, and cleared of anything stale on the way in.
 fn staging_dir(app: &AppHandle) -> Option<PathBuf> {
@@ -234,6 +290,10 @@ pub fn start(app: &AppHandle) {
 /// is checked if the timer has already done it recently — this is a backstop for the sleep the interval cannot
 /// see, not a second schedule.
 pub fn nudge(app: &AppHandle) {
+    // Two file reads, so asked every time rather than on the check's schedule.
+    if installed_anew(app) {
+        return;
+    }
     let due = {
         let state = app.state::<UpdateState>();
         let last = *state.last_check.lock().unwrap();
@@ -259,6 +319,10 @@ async fn check_now(app: &AppHandle) {
         return;
     }
     if *app.state::<UpdateState>().failures.lock().unwrap() >= GIVE_UP_AFTER {
+        return;
+    }
+    // Installed already, by the package manager: nothing to ask the network about.
+    if installed_anew(app) {
         return;
     }
     /* What was true before this pass, so a failure can put it back. */
@@ -494,6 +558,12 @@ pub fn take_offer(app: &AppHandle) -> Result<(), String> {
     }
     match stage(app) {
         Stage::Ready { .. } => install(app, true),
+        // The package manager installed it already: the offer is the restart onto it, once nothing runs that a
+        // restart would leave behind.
+        Stage::Installed => match refusal(app) {
+            Some(refusal) => Err(refusal.to_string()),
+            None => restart_onto_update(app),
+        },
         Stage::Manual { url, .. } => {
             use tauri_plugin_opener::OpenerExt;
             app.opener()
@@ -591,6 +661,36 @@ mod tests {
             url: DOWNLOADS_URL.into(),
         };
         assert!(unknown.tray().1);
+    }
+
+    /// A deb or rpm upgraded under the running app: the offer is the restart, and it is one.
+    #[test]
+    fn an_upgrade_already_installed_is_offered_as_a_restart() {
+        let (text, enabled) = Stage::Installed.tray();
+        assert!(enabled);
+        assert!(text.starts_with("Restart"), "{text}");
+        assert_eq!(Stage::Installed.ready_version(), None);
+        assert_eq!(
+            serde_json::to_value(Stage::Installed).unwrap(),
+            serde_json::json!({ "kind": "installed" })
+        );
+    }
+
+    /// The file at the path the app started from is another one than it runs: a newer install. The same file, or none
+    /// at all there any more, is not.
+    #[test]
+    fn a_binary_replaced_on_disk_is_told_from_one_still_in_place() {
+        assert!(replaced(Some((1, 10)), Some((1, 11))));
+        assert!(replaced(Some((1, 10)), Some((2, 10))));
+        assert!(!replaced(Some((1, 10)), Some((1, 10))));
+        assert!(!replaced(Some((1, 10)), None));
+        assert!(!replaced(None, Some((1, 10))));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_running_binary_still_in_place_is_not_replaced() {
+        assert!(!replaced_on_disk());
     }
 
     #[test]

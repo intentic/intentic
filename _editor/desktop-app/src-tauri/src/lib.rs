@@ -1,5 +1,6 @@
 mod account;
 mod agent_status;
+mod agents;
 mod auth;
 mod badge;
 mod commands;
@@ -189,6 +190,7 @@ pub fn run() {
             machine_sandbox::machine_sandbox_start,
             machine_sandbox::machine_sandbox_end_session,
             found::found_on_machine,
+            agents::machine_agents,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);
@@ -277,6 +279,13 @@ pub fn run() {
             // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
             // (machine_sandbox.rs): a setup the last quit cut short is picked up here.
             machine_sandbox::start(app.handle());
+            // What earlier runs left on disk (2026-10-05): run transcripts past the newest few (scripts.rs), and the paths
+            // files of bring-backs a crash cut short (project.rs). Off the launch's thread: it is a folder or two read.
+            let sweeping = app.handle().clone();
+            std::thread::spawn(move || {
+                scripts::prune_logs();
+                project::sweep_paths_files(&sweeping);
+            });
             // The file server a few seconds in, when a local window is likely: an install that has opened any is likely
             // to again.
             if !app.state::<state::AppState>().recents().is_empty() {

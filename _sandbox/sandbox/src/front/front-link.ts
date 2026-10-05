@@ -29,11 +29,16 @@ export interface FrontLink {
 // A question of the front's that the daemon decides; a ping the link answers itself.
 export type FrontAsks = Exclude<Question, { readonly question: "ping" }>;
 
+// Where the front's ingress tunnel stands, as it reports it: held or not, why not in its own words, and whether it
+// stopped redialling at its usual pace (another copy of this sandbox holds the tunnel, or the platform deleted it). An
+// older front sends `connected` alone.
+export type TunnelReport = Extract<ToNode, { readonly kind: "tunnel" }>;
+
 export interface FrontLinkOptions {
     readonly path: string;
     // Answers the front's questions; a throw goes back as a refusal carrying its message.
     readonly answer: (question: FrontAsks) => Promise<Answer>;
-    readonly onTunnel: (connected: boolean) => void;
+    readonly onTunnel: (connected: boolean, report: TunnelReport) => void;
     readonly onClose: () => void;
     // How long a question of Node's waits for the front; ASK_PATIENCE_MS unless a test says otherwise.
     readonly patienceMs?: number;
@@ -114,7 +119,7 @@ export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink
         switch (message.kind) {
             case "tunnel":
                 tunnel = message.connected;
-                options.onTunnel(message.connected);
+                options.onTunnel(message.connected, message);
                 return;
             case "answer":
                 settle(message.id, message.answer);

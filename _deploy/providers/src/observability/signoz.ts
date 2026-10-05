@@ -1,6 +1,7 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import { type SshExecutor, type SshSession, sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "../services/compose-service.js";
 
 const signozSchema = serviceSchema.extend({
@@ -26,7 +27,7 @@ const internalUrl = (parsed: SignozInputs): string => `http://${parsed.internalI
 
 // SigNoz v0.129 reference stack: ZooKeeper, ClickHouse (+ config.d drop-in + UDF), the telemetrystore migrator,
 // the SigNoz server, and the OTel collector. Image refs are inlined so a bump recreates the service on `up -d`.
-const composeYaml = (parsed: SignozInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: SignozInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         // Fetch the histogram-quantile UDF binary into the shared user_scripts volume before ClickHouse starts.
@@ -94,7 +95,7 @@ const composeYaml = (parsed: SignozInputs, id: string, hash: string): string =>
         "      - SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db",
         "    env_file: ./.env",
         "    volumes: [ sqlite:/var/lib/signoz/ ]",
-        `    labels: [ "intentic.id=${id}", "intentic.type=signoz", "intentic.hash=${hash}" ]`,
+        stampLabels("signoz", stamp),
         "  otel-collector:",
         `    image: ${parsed.otelImage}`,
         "    restart: unless-stopped",
@@ -316,8 +317,8 @@ export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provi
             port: UI_PORT,
             // The UI answers 200 here once ClickHouse is migrated and the query service is serving.
             healthPath: "/api/v1/health",
-            files: (parsed, id, hash) => ({
-                "compose.yaml": composeYaml(parsed, id, hash),
+            files: (parsed, stamp) => ({
+                "compose.yaml": composeYaml(parsed, stamp),
                 "init-clickhouse.sh": initScript(),
                 "cluster.xml": clusterXml(),
                 "custom-function.xml": customFunctionXml(),

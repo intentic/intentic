@@ -11,6 +11,7 @@ import type {
     LocalRecent,
     LocalRoster,
     LocalSandbox,
+    MachineEnvironment,
     MachineFolder,
     MachineSandbox,
     MachineStanding,
@@ -141,8 +142,23 @@ const sandboxesOf = (machine: Machine): SandboxStatus[] =>
         ? [
               { slug: `574ea8038415`, container: `intentic-574ea8038415`, name: `shop`, running: true, image: `ghcr.io/intentic/sandbox:stable`, tunnelRunning: true, resources: RESOURCES },
               { slug: `8a8171848c91`, container: `intentic-8a8171848c91`, name: `research`, running: false, image: `ghcr.io/intentic/sandbox:stable`, resources: RESOURCES },
+              {
+                  slug: `b1e2c3d4e5f6`,
+                  container: `intentic-b1e2c3d4e5f6`,
+                  name: `wsl-work`,
+                  running: true,
+                  image: `ghcr.io/intentic/sandbox:stable`,
+                  resources: RESOURCES,
+                  keptElsewhere: `linux`,
+              },
           ]
         : [];
+
+// This PC's environments as agents.rs reads them: Windows' own agent, and one in a running WSL distro.
+const ENVIRONMENTS: MachineEnvironment[] = [
+    { kind: `windows`, here: true, agent: true, running: true, ic: true },
+    { kind: `wsl`, distro: `archlinux`, here: false, agent: true, running: true, ic: true },
+];
 
 const reportOf = (machine: Machine): string | null =>
     machine === `fresh`
@@ -393,6 +409,7 @@ type Answer =
     | LocalRoster
     | UpdateStage
     | SandboxStatus[]
+    | MachineEnvironment[]
     | SetupArgs
     | ProjectPreview
     | MachineSandbox
@@ -465,6 +482,8 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`hosts_sandboxes`, signedIn],
     [`docker_engine`, () => ({ memoryBytes: 16 * 1024 ** 3, cpus: 8 })],
     [`sandbox_list`, sandboxesOf],
+    // A PC whose WSL distro runs its own agent beside Windows', keeping the third sandbox of `?machine=host`.
+    [`machine_agents`, (machine) => (machine === `host` ? ENVIRONMENTS : [])],
     [`machine_report`, reportOf],
     [`take_pending_setup`, (machine) => (machine === `setup` ? { code: `dev`, name: `shop` } : null)],
     [`take_pending_docker`, () => false],

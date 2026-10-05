@@ -16,6 +16,8 @@ import {
     JOB_MAX_MS,
     jobReport,
     jobStatusPath,
+    keptJobDirs,
+    keptJobSessions,
     noteJobNotice,
     noteJobShell,
     noteModelRequest,
@@ -227,6 +229,23 @@ describe("background job registry", () => {
         restoreBackgroundJobs(actors, old.startedAt + JOB_MAX_MS + 1);
         expect(backgroundJobSessions(actors)).not.toContain(done.session);
         expect(backgroundJobSessions(actors)).not.toContain(old.session);
+    });
+
+    // 2026-10-05: a server the agent kept for the person was forgotten six hours in, and its session killed at the next
+    // restart, though the comment on the job said it outlives both.
+    it("keeps a job left running for the person past the ceiling, across a restart, and names its session to the boot sweep", () => {
+        const kept = planted("conv-kept", { handed: true, ports: [5173], startedAt: Date.now() - JOB_MAX_MS - 60_000 });
+        const awaited = planted("conv-kept-awaited", { adopted: true });
+        const root = tmpdir();
+        expect(keptJobDirs(root)).toContain(kept.dir);
+        expect(keptJobDirs(root)).not.toContain(awaited.dir);
+        expect(keptJobSessions(root)).toContain(kept.session);
+        expect(restoreBackgroundJobs(actors, Date.now()).map((job) => job.id)).toContain(kept.id);
+        expect(backgroundJobSessions(actors, Date.now())).toContain(kept.session);
+        // Once it exits it is an ordinary ending, and nothing spares its session any more.
+        finish(kept);
+        expect(keptJobDirs(root)).not.toContain(kept.dir);
+        expect(backgroundJobSessions(actors, Date.now())).not.toContain(kept.session);
     });
 
     it("ignores a dir that carries no readable job of its own, or one whose routing is not a routing", () => {

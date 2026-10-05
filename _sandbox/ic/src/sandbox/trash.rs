@@ -207,7 +207,26 @@ pub fn stash(slug: &str) {
         docker::quiet(&["stop", &live]);
         docker::quiet(&["rename", &live, &trashed]);
     }
-    docker::quiet(&["volume", "create", &marker_name(slug, now_secs())]);
+    mark(slug);
+}
+
+/// The marker that starts a sandbox's recovery window, labelled like everything ic makes (labels.rs).
+fn mark(slug: &str) -> bool {
+    let mut args: Vec<String> = vec!["volume".to_string(), "create".to_string()];
+    args.extend(crate::sandbox::labels::here(
+        slug,
+        crate::sandbox::labels::Kind::TrashMarker,
+    ));
+    args.push(marker_name(slug, now_secs()));
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    docker::ok(&refs)
+}
+
+/// Put a set of volumes no container, record or marker claims into the trash: nothing is renamed or deleted, the
+/// marker alone starts the same recovery window a removal does, so `ic sandbox restore` and the week's grace apply to
+/// it as to any removed sandbox (tidy.rs). True when the marker was made.
+pub fn adopt_orphan(slug: &str) -> bool {
+    markers_for(slug).is_empty() && mark(slug)
 }
 
 /// A swap's parked container, before the sandbox goes to the trash. Beside a live container it is the previous version
@@ -257,7 +276,11 @@ pub fn restore(slug: &str) {
 
 /// Deletes one sandbox for good — both namespaces, since a purge may be aimed at a slug that was never trashed.
 /// Idempotent: every step no-ops on what is already gone.
-pub fn purge(slug: &str) {
+///
+/// The marker goes only once every data volume has (2026-10-05): it is the one record that these volumes are the
+/// trash's, and dropping it beside a volume docker refused to remove left that volume claimed by nothing, for good
+/// (rog's `sandbox-fc55412d2c28`). Err names what is still there, or that docker would not say.
+pub fn purge(slug: &str) -> std::result::Result<(), String> {
     // A parked container holds the same volumes, and docker refuses to remove a volume any container still names.
     docker::quiet(&["rm", "-f", &crate::sandbox::parked_of(slug)]);
     for (live, trashed) in container_pairs(slug) {
@@ -268,9 +291,31 @@ pub fn purge(slug: &str) {
         docker::quiet(&["volume", "rm", &volume]);
     }
     docker::quiet(&["network", "rm", &network(slug)]);
+    let Some(names) = docker::try_capture(&["volume", "ls", "--format", "{{.Name}}"]) else {
+        return Err(format!(
+            "docker would not list its volumes, so {slug} stays in the trash until the next try"
+        ));
+    };
+    let left = still_there(slug, &names);
+    if !left.is_empty() {
+        return Err(format!(
+            "docker would not remove {} of {slug}, so it stays in the trash until the next try",
+            left.join(", ")
+        ));
+    }
     for marker in markers_for(slug) {
         docker::quiet(&["volume", "rm", &marker]);
     }
+    Ok(())
+}
+
+/// Which of a sandbox's data volumes a volume listing still holds. Pure.
+pub fn still_there(slug: &str, listing: &str) -> Vec<String> {
+    let names: Vec<&str> = listing.lines().map(str::trim).collect();
+    data_volumes(slug)
+        .into_iter()
+        .filter(|volume| names.contains(&volume.as_str()))
+        .collect()
 }
 
 /// Purges everything past its grace period. Runs at the head of the verbs that touch this machine's sandboxes,
@@ -288,10 +333,19 @@ pub fn sweep() -> Vec<String> {
         .filter(|entry| entry.expired(now))
         .map(|entry| entry.slug)
         .collect();
-    for slug in &due {
-        purge(slug);
+    let mut purged = Vec::new();
+    for slug in due {
+        // A sandbox another ic run on this side is working on (a restore of it, say) waits for the next sweep.
+        let Ok(Some(_held)) = crate::sandbox::lock::hold(&slug, crate::sandbox::lock::Wait::Skip)
+        else {
+            continue;
+        };
+        match purge(&slug) {
+            Ok(()) => purged.push(slug),
+            Err(why) => eprintln!("intentic: {why}."),
+        }
     }
-    due
+    purged
 }
 
 #[cfg(test)]
@@ -356,6 +410,17 @@ mod tests {
         };
         assert_eq!(entry.days_left(1), 7);
         assert_eq!(entry.days_left(DAY + 1), 6);
+    }
+
+    #[test]
+    fn a_purge_is_done_only_once_no_volume_of_the_sandbox_is_listed() {
+        let listing = "intentic-workspace-abc\nintentic-history-abcd\nintentic-trashed-1-abc\n";
+        assert_eq!(still_there("abc", listing), vec!["intentic-workspace-abc"]);
+        assert!(still_there("abc", "intentic-history-abcd\n").is_empty());
+        assert_eq!(
+            still_there("abc", "intentic-dind-docker-abc\n"),
+            vec!["intentic-dind-docker-abc"]
+        );
     }
 
     #[test]

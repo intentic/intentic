@@ -9,6 +9,7 @@ import { gitProvider, hasPendingRef, parseInputs, sshSchema, sshTarget } from ".
 import { containerLabel } from "../core/backing-ssh.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels, stampOf } from "../core/stamp.js";
 
 const komodoSchema = sshSchema.extend({
     internalIp: z.string(),
@@ -79,7 +80,7 @@ const desiredImages = (parsed: KomodoInputs): Record<string, string> => ({
 
 // FerretDB + Core + Periphery, co-located so Periphery trusts Core via the shared keys volume. `$...` secrets
 // interpolate from the .env beside it; image refs are inlined here (not the .env) so a bump recreates on `up -d`.
-const composeYaml = (images: Record<string, string>, id: string, hash: string): string =>
+const composeYaml = (images: Record<string, string>, stamp: ContainerStamp): string =>
     [
         "services:",
         "  postgres:",
@@ -101,7 +102,7 @@ const composeYaml = (images: Record<string, string>, id: string, hash: string): 
         "    env_file: ./.env",
         // config.toml carries the git-provider account, bound read-only; relative to --project-directory (STATE_DIR).
         "    volumes: [ keys:/config/keys, ./config.toml:/config/config.toml:ro ]",
-        `    labels: [ "intentic.id=${id}", "intentic.type=komodo", "intentic.hash=${hash}" ]`,
+        stampLabels("komodo", stamp),
         // Inbound mode: no core_address, so periphery's listener stays up; PERIPHERY_CORE_ADDRESS would disable it.
         "  periphery:",
         `    image: ${images["periphery"]}`,
@@ -137,9 +138,9 @@ const configToml = (parsed: KomodoInputs): string => {
 };
 
 // Writes compose.yaml + config.toml every apply, and the .env once, since its secrets must survive restarts.
-const ensureFiles = async (session: SshSession, parsed: KomodoInputs, images: Record<string, string>, id: string, hash: string): Promise<void> => {
+const ensureFiles = async (session: SshSession, parsed: KomodoInputs, images: Record<string, string>, stamp: ContainerStamp): Promise<void> => {
     await session.exec(`mkdir -p ${STATE_DIR}`);
-    await session.exec(`cat > ${STATE_DIR}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(images, id, hash)}COMPOSE_EOF`);
+    await session.exec(`cat > ${STATE_DIR}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(images, stamp)}COMPOSE_EOF`);
     await session.exec(`cat > ${STATE_DIR}/config.toml <<'CONFIG_EOF'\n${configToml(parsed)}CONFIG_EOF`);
     // Each line is its own printf argument, since printf %s does not interpret \n and a joined string would print
     // literally. Known-here values go through envLine + shellQuote; only the three host-generated secrets stay in the
@@ -202,6 +203,8 @@ export const createKomodoProvider = (executor: SshExecutor = sshExecutor): Provi
             if (!(await running(session, ctx.id)) || !(await healthy(session, parsed))) {
                 return undefined;
             }
+            // The owner stamp is not read back: an update here is a guarded snapshot-and-recreate of the whole control
+            // plane, too heavy to run just to add a label. Komodo picks up its owner on its next real recreate.
             const stampHash = await containerLabel(session, ctx.id, HASH_KEY);
             return { outputs: outputsFor(parsed), detail: { images: await runningImages(session) }, ...(stampHash === "" ? {} : { stampHash }) };
         } finally {
@@ -228,7 +231,7 @@ export const createKomodoProvider = (executor: SshExecutor = sshExecutor): Provi
             // --env-file/--project-directory
             // pin the .env we wrote, or compose looks in the SSH working dir and leaves the $secrets blank.
             const bringUp = async (images: Record<string, string>): Promise<void> => {
-                await ensureFiles(session, parsed, images, ctx.id, ctx.inputsHash ?? "");
+                await ensureFiles(session, parsed, images, stampOf(ctx));
                 const up = await session.exec(
                     `docker compose -p komodo --project-directory ${STATE_DIR} --env-file ${STATE_DIR}/.env -f ${STATE_DIR}/compose.yaml up -d`,
                 );
@@ -282,5 +285,5 @@ export const createKomodoProvider = (executor: SshExecutor = sshExecutor): Provi
             await session.dispose();
         }
     },
-    list: (sources, ctx) => listStampedContainers(executor, "komodo", sources, ctx.log),
+    list: (sources, ctx) => listStampedContainers(executor, "komodo", sources, ctx),
 });

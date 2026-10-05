@@ -3,7 +3,10 @@ import type { Logger } from "pino";
 import type { Config } from "../env.config.js";
 import { createLogger } from "../logger.js";
 import { logsRoot, terminalLogsDir } from "../logs/log-files.js";
+import { adoptDaemonGeneration, DAEMON_ONLY_ENV } from "../seams/workload-stamp.js";
 import { claimBootMarker } from "../system/boot/boot-marker.js";
+import { recordBoot } from "../system/boot/boot-history.js";
+import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
 
 // Runs before the first service exists, so nothing here may depend on one.
@@ -31,6 +34,9 @@ export const requireAuthWhenReachable = (config: Config): void => {
 };
 
 export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Logger => {
+    // Before any spawn: every child carries this run's generation, by which a later boot ends what this one left
+    // (system/boot/generation-sweep.ts). Fresh each boot, whatever this process inherited.
+    adoptDaemonGeneration();
     if (!traits.sharedTmux) {
         // Defaulted, not forced, so an operator can override.
         process.env["INTENTIC_AGENT_TMUX"] ??= "0";
@@ -46,6 +52,22 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
     if (config.historyRoot !== "") {
         const bootMarker = claimBootMarker(logsRoot(config.historyRoot), logger);
         process.on("exit", (code) => bootMarker.markExited(code));
+        // Counted before anything can fail, so a boot that dies before the gate still counts towards a restart storm,
+        // which the boot that finally gets through reads (boot-resumes.ts, work-signal.ts).
+        if (bootMarker.claimed) {
+            void recordBoot(config.historyRoot, logger, { restartAskedAt: async () => fileRestartResume(config.historyRoot).askedAt?.() });
+        }
     }
     return logger;
+};
+
+/**
+ * Takes the front's two socket paths off this process's environment once the front door has dialled them (2026-10-05):
+ * every child inherits what is left, and an agent's shell holding them could start a second Node that takes the
+ * front's socket over. The tmux server's own copy goes with terminal/tmux-server.ts prepareTmuxServer.
+ */
+export const forgetDaemonOnlyEnv = (env: NodeJS.ProcessEnv = process.env): void => {
+    for (const name of DAEMON_ONLY_ENV) {
+        delete env[name];
+    }
 };

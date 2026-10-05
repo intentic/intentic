@@ -1,8 +1,8 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 
-// Order is significant: drift outranks unreachable, which outranks refused.
-export type ContainerFault = "drift" | "unreachable" | "refused";
+// Order is significant: drift outranks duplicate, which outranks unreachable, which outranks refused.
+export type ContainerFault = "drift" | "duplicate" | "unreachable" | "refused";
 
 export interface ContainerNotice {
     readonly fault: ContainerFault;
@@ -15,7 +15,7 @@ export interface ContainerNotice {
     readonly keys?: readonly string[];
 }
 
-export type ContainerEvidence = Pick<SandboxSummary, "bootReport" | "announceRefusal">;
+export type ContainerEvidence = Pick<SandboxSummary, "bootReport" | "announceRefusal"> & Partial<Pick<SandboxSummary, "duplicateCopies">>;
 
 /** Returns only the deepest fault found, never a shallower one it explains; empty means healthy. */
 export const containerNotices = (sandbox: ContainerEvidence): readonly ContainerNotice[] => {
@@ -31,6 +31,21 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
     }));
     if (drift.length > 0) {
         return drift;
+    }
+
+    // Two containers holding this sandbox's one token, both checking in (the platform's `duplicateCopies`): they take
+    // turns holding its address, so it drops about once a minute and every turn on it is cut. It outranks unreachable,
+    // which it explains, and only a person can say which copy is the one to keep.
+    const copies = sandbox.duplicateCopies;
+    if (copies !== null && copies !== undefined && copies.hosts.length > 1) {
+        return [
+            {
+                fault: "duplicate",
+                title: t(`sandbox.containerHealth.twoCopiesRunning`),
+                detail: t(`sandbox.containerHealth.copiesTakeTurns`, { hosts: copies.hosts.join(`, `) }),
+                repair: t(`sandbox.containerHealth.removeTheOtherCopy`),
+            },
+        ];
     }
 
     // Only an explicit retrying === false is settled; absent means an older daemon, not a fault.

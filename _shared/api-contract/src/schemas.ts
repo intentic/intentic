@@ -562,6 +562,28 @@ export const BootReportSchema = z.object({
 });
 export type BootReport = z.infer<typeof BootReportSchema>;
 
+/* WHAT A DAEMON'S ANNOUNCE CARRIES (POST /sandbox/announce, the connect token in `x-intentic-connect`): the address it
+ * answers on, its version, and, from a daemon new enough (2026-10-05), which copy of the sandbox it is. `instance` is
+ * minted once per container start (the front's INTENTIC_INSTANCE, else once per daemon process), `host` is the
+ * machine's own name (HOST_LABEL) and `os` the side it runs on (HOST_ENV, else HOST_PLATFORM). Two instances that keep
+ * announcing side by side are two containers holding one token, which the owner's summary names (`duplicateCopies`).
+ * Every field past `daemonUrl` is optional: an older daemon sends none of them, and the platform reads that as nothing
+ * known, never as a refusal. The daemon sends the same body every hour once registered, as its heartbeat. */
+export const AnnounceBodySchema = z.object({
+    daemonUrl: z.string(),
+    version: z.string().max(64).optional(),
+    instance: z.string().min(1).max(80).optional(),
+    host: z.string().max(120).optional(),
+    os: z.string().max(40).optional(),
+});
+export type AnnounceBody = z.infer<typeof AnnounceBodySchema>;
+
+// Two copies of one sandbox seen announcing side by side, on the owner's summary: what each copy named itself as
+// (`rog (windows)`, `rog (linux)`), and since when. The tunnel keeps only one of them at a time, so the other is an
+// agent and a disk nobody can reach; the owner is the one who decides which copy goes.
+export const DuplicateCopiesSchema = z.object({ hosts: z.array(z.string()), since: z.string() });
+export type DuplicateCopies = z.infer<typeof DuplicateCopiesSchema>;
+
 /* WHAT THE MACHINE A SANDBOX RUNS ON FOUND, for the moments the browser cannot ask the sandbox itself. `ic sandbox fix`
  * writes it: run by the machine agent on its own when a sandbox of its machine stops answering (`agent`), by the command
  * the recovery panel hands out (`command`), or by the desktop app (`app`). The platform keeps only the latest one per
@@ -614,6 +636,22 @@ export const HostReportInputSchema = z.object({
     // `you` check, or a `consent` one nobody agreed to, is left. failed: a fix was tried and did not take.
     outcome: z.enum(["healthy", "fixed", "needs-you", "failed"]).optional(),
     checks: z.array(HostCheckSchema).max(24),
+    // (2026-10-05) Which environment on the machine ran it, when one machine has several (a WSL distro's name beside
+    // `windows`). With `machine` and `os` it names the reporter: the platform keeps the newest report of each, so a
+    // Windows agent and a WSL agent no longer overwrite each other. Absent from an older `ic`.
+    env: z.string().max(80).optional(),
+    // (2026-10-05) What the machine's own upkeep found, fixed and left last time it ran: leftovers of deleted sandboxes,
+    // retired agent generations and the like, counted by kind. Absent from an `ic` that has no upkeep pass.
+    upkeep: z
+        .object({
+            found: z.number().int().nonnegative(),
+            fixed: z.number().int().nonnegative(),
+            skipped: z.number().int().nonnegative(),
+            kinds: z.record(z.string().max(40), z.number().int().nonnegative()).optional(),
+            // The machine agent that ran the pass, so the platform can tell which release left machines unconverged.
+            agentVersion: z.string().max(40).optional(),
+        })
+        .optional(),
 });
 export type HostReportInput = z.infer<typeof HostReportInputSchema>;
 
@@ -821,6 +859,12 @@ export const SandboxSummarySchema = z.object({
     // own-machine sandbox only; null until one lands, absent from an older platform. Its `at` says how old it is: the
     // editor reads one older than the outage it is explaining as silence, never as the machine's word.
     hostReport: HostReportSchema.nullable().optional(),
+    // (2026-10-05) The newest report of each machine and environment that reported (at most three), newest first, on
+    // the same rows as `hostReport`, which is the first of them. Absent from an older platform.
+    hostReporters: z.array(HostReportSchema).optional(),
+    // (2026-10-05) Two copies of this sandbox announcing side by side (`DuplicateCopiesSchema`), on the owner's row;
+    // null while one copy announces alone, absent from an older platform.
+    duplicateCopies: DuplicateCopiesSchema.nullable().optional(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
@@ -923,6 +967,17 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 // Redeemed at /setup/claim for a connect token and reachability grant; the address is derived, not chosen.
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
+
+// What a machine redeeming a setup code may say about itself (POST /setup/claim, form fields beside `code`), from an
+// `ic` new enough (2026-10-05): its name (HOST_LABEL's value), the side it runs on, and its own run id. The first claim
+// that names a machine is kept, and a second one naming a DIFFERENT machine is refused while the code lives: one pasted
+// command must not start two copies of the same sandbox. A claim that names nothing is never refused for it.
+export const SetupClaimerSchema = z.object({
+    host: z.string().max(120).optional(),
+    os: z.string().max(40).optional(),
+    instance: z.string().max(80).optional(),
+});
+export type SetupClaimer = z.infer<typeof SetupClaimerSchema>;
 
 // A "view" is a projection of the desired-state graph plus reconciliation drift.
 // Read through the sandbox's own git routes (desired-state.json + status.json); it stays the source of truth.

@@ -4,6 +4,7 @@ import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
 import { bookedRerunWords } from "./child-lands.js";
 import { childVerification } from "./child-verification.js";
+import { familyEnded } from "./family-cancel.js";
 import { randomUUID } from "node:crypto";
 import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
 import { noteQueuedReport } from "./queued-reports.js";
@@ -39,7 +40,10 @@ const reportText = (settled: DomainEventMap["run.settled"], killed: string | und
     const ending = killed ?? (settled.failure === undefined ? undefined : `The turn failed: ${settled.failure}`);
     // A re-run the sandbox booked for itself leads, ahead of the failure, or the parent sends the task again or hands it
     // on before it reads that far.
-    const rerun = settled.rerun === undefined || killed !== undefined ? undefined : `Paused, not finished. ${bookedRerunWords(settled.rerun, settled.conversationId)}`;
+    const rerun =
+        settled.rerun === undefined || killed !== undefined
+            ? undefined
+            : `Paused, not finished. ${bookedRerunWords(settled.rerun, settled.conversationId)}`;
     return [...(rerun === undefined ? [] : [rerun]), answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
@@ -68,6 +72,15 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
         if (target === undefined) {
             return;
         }
+        // Stopped because a conversation above its parent left the board: said to the parent, it would only wake it into a
+        // turn of its own (family-cancel.ts).
+        if (familyEnded(deps.conversations, target.parent, Date.now())) {
+            deps.logger.info(
+                { child: settled.conversationId, parent: target.parent },
+                "child report: its family was just cancelled, it stays in the child's own chat",
+            );
+            return;
+        }
         // Taken before anything is awaited: the record this ending is about, whichever arrives first of it and this.
         const reported = subagentEndingReporter(deps.conversations, settled.conversationId);
         const prompt = childReportPrompt({
@@ -83,7 +96,13 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             return;
         }
         const messageId = `child-report-${randomUUID()}`;
-        const receipt = await deliverWake(deps.doors, { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile, messageId });
+        const receipt = await deliverWake(deps.doors, {
+            conversationId: target.parent,
+            prompt,
+            voice: "sandbox",
+            profile: target.profile,
+            messageId,
+        });
         if ("invalid" in receipt) {
             deps.logger.error(
                 { child: settled.conversationId, parent: target.parent, report: prompt, invalid: receipt.invalid },
@@ -92,7 +111,10 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             return;
         }
         if ("why" in receipt) {
-            deps.logger.info({ child: settled.conversationId, parent: target.parent, why: receipt.why }, "child report: its parent took nothing, it stays in the child's own chat");
+            deps.logger.info(
+                { child: settled.conversationId, parent: target.parent, why: receipt.why },
+                "child report: its parent took nothing, it stays in the child's own chat",
+            );
             return;
         }
         // Said into its turn, or a turn of its own: the parent has it, and `wait` must not hand it over again. One still

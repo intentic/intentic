@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -226,6 +227,7 @@ export const clearWindowsRunValue = (name: string): void => {
 };
 
 export const windowsTaskQueryArgs = (spec: AutostartSpec): string[] => ["/query", "/tn", spec.windowsRunValue];
+export const windowsTaskExportArgs = (spec: AutostartSpec): string[] => ["/query", "/tn", spec.windowsRunValue, "/xml"];
 export const windowsTaskRunArgs = (spec: AutostartSpec): string[] => ["/run", "/tn", spec.windowsRunValue];
 
 const quietly = (command: string, args: readonly string[]): boolean =>
@@ -233,6 +235,115 @@ const quietly = (command: string, args: readonly string[]): boolean =>
 
 const windowsTaskExists = (spec: AutostartSpec): boolean => quietly(schtasksExe(), windowsTaskQueryArgs(spec));
 const windowsRunValueExists = (spec: AutostartSpec): boolean => quietly(regExe(), ["query", WINDOWS_RUN_KEY, "/v", spec.windowsRunValue]);
+
+/* WHAT A LOGON TASK HOLDS, against what this build writes (2026-10-05). The repair used to ask only whether the task
+   EXISTS, and only at the agent's start: a task written by an older build (another restart policy, no `--wait`, so no
+   supervision at all) or pointing at a moved install stayed that way for good. Now the task's action and the settings
+   that make it a supervisor are compared, at start and in the agent's periodic upkeep, and a task that differs is
+   written again. Unlike a systemd unit or a LaunchAgent, a task that launches another command is rewritten too: it is
+   filed under this agent's own name, per user, so it can only be an older install of this agent's. */
+
+// XML text as Task Scheduler escapes it, back to the characters. Pure.
+const xmlUnescape = (value: string): string =>
+    value.replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+
+// The text of the first `<tag>` element (attributes allowed) in `xml`, or undefined. Pure.
+const elementText = (xml: string, tag: string): string | undefined => {
+    const found = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`).exec(xml)?.[1];
+    return found === undefined ? undefined : xmlUnescape(found.trim());
+};
+
+// Settings Windows leaves out of an export when they hold their default, so absent reads as that default.
+const SETTING_DEFAULTS: Readonly<Record<string, string>> = {
+    MultipleInstancesPolicy: "IgnoreNew",
+    DisallowStartIfOnBatteries: "true",
+    StopIfGoingOnBatteries: "true",
+    StartWhenAvailable: "false",
+    ExecutionTimeLimit: "PT72H",
+    Enabled: "true",
+};
+
+// The facts of a task that decide what it starts and whether it supervises it, each by name. Pure, so the comparison is
+// asserted on the XML this build writes and on what Windows exports.
+export const windowsTaskFacts = (xml: string): Readonly<Record<string, string>> => {
+    const settings = elementText(xml, "Settings") ?? "";
+    // Nested blocks hold elements of the same names (an idle `Enabled`?), so scalars are read with them taken out.
+    const scalars = settings.replaceAll(/<(IdleSettings|RestartOnFailure|NetworkSettings|MaintenanceSettings)\b[\s\S]*?<\/\1>/g, "");
+    const restart = elementText(settings, "RestartOnFailure");
+    const repeat = elementText(elementText(xml, "TimeTrigger") ?? "", "Repetition");
+    return {
+        command: elementText(xml, "Command") ?? "",
+        arguments: elementText(xml, "Arguments") ?? "",
+        logon: String(/<LogonTrigger[\s>]/.test(xml)),
+        repeat: repeat === undefined ? "" : (elementText(repeat, "Interval") ?? ""),
+        restart: restart === undefined ? "" : `${elementText(restart, "Interval") ?? ""}x${elementText(restart, "Count") ?? ""}`,
+        ...Object.fromEntries(
+            Object.entries(SETTING_DEFAULTS).map(([name, fallback]) => [name, (elementText(scalars, name) ?? fallback).toLowerCase()] as const),
+        ),
+    };
+};
+
+// The facts on which a task Windows holds differs from the one this build writes; empty when it is current. Pure.
+export const windowsTaskDrift = (held: string, wanted: string): string[] => {
+    const have = windowsTaskFacts(held);
+    const want = windowsTaskFacts(wanted);
+    return Object.keys(want).filter((name) => have[name] !== want[name]);
+};
+
+// Bytes a Windows tool printed, as text: UTF-16LE when it says so (a BOM) or looks it (every other byte NUL in an ASCII
+// prefix), else UTF-8. Pure.
+export const decodeToolOutput = (bytes: Buffer): string => {
+    const utf16 = (bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes.length >= 4 && bytes[1] === 0 && bytes[3] === 0);
+    return (utf16 ? bytes.toString("utf16le") : bytes.toString("utf8")).replace(/^\uFEFF/, "");
+};
+
+// The task as Windows holds it, or undefined when it cannot be read. PowerShell's export first, asked for UTF-8 so a
+// path with a non-ASCII user name reads back as written; schtasks' own export where PowerShell is not there.
+const readWindowsTaskXml = (spec: AutostartSpec): string | undefined => {
+    const powershell = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    const script = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Export-ScheduledTask -TaskName '${spec.windowsRunValue.replaceAll("'", "''")}' -TaskPath '\\'`;
+    const tries: readonly (readonly [string, readonly string[]])[] = [
+        [powershell, ["-NoProfile", "-NonInteractive", "-Command", script]],
+        [schtasksExe(), windowsTaskExportArgs(spec)],
+    ];
+    for (const [command, args] of tries) {
+        const result = spawnSync(command, args, { windowsHide: true, timeout: 30_000 });
+        const text = result.status === 0 && result.stdout.length > 0 ? decodeToolOutput(result.stdout) : "";
+        if (text.includes("<Task")) {
+            return text;
+        }
+    }
+    return undefined;
+};
+
+// What a login entry is now, against what this build would write there.
+// - current: exactly what this build writes (or, for a task, the same action and settings);
+// - missing: nothing there;
+// - stale: this agent's command with an older build's settings, or for a task any difference at all;
+// - foreign: a file-based entry launching another command, which a repair leaves to its install;
+// - unknown: there, but it could not be read, which a repair leaves as it is.
+export type EntryState = "current" | "missing" | "stale" | "foreign" | "unknown";
+
+export interface EntryInspection {
+    readonly kind: AutostartKind;
+    readonly state: EntryState;
+    // What differs, for a stale task: the facts named by windowsTaskFacts.
+    readonly drift?: readonly string[];
+}
+
+const inspectWindowsTask = (spec: AutostartSpec, launcher: CliLauncher, stub: string): EntryInspection => {
+    if (!windowsTaskExists(spec)) {
+        // A machine that could not register a task before starts the agent from the Run value; the start's own repair
+        // tries the task again.
+        return { kind: windowsRunValueExists(spec) ? "run-key" : "task", state: windowsRunValueExists(spec) ? "current" : "missing" };
+    }
+    const held = readWindowsTaskXml(spec);
+    if (held === undefined) {
+        return { kind: "task", state: "unknown" };
+    }
+    const drift = windowsTaskDrift(held, windowsTaskXml(spec, launcher, stub, windowsAccount()));
+    return drift.length === 0 ? { kind: "task", state: "current" } : { kind: "task", state: "stale", drift };
+};
 
 // States meaning a user manager exists (degraded/starting count too); some Linux setups have none.
 const SYSTEMD_LIVE_STATES = new Set(["running", "degraded", "starting", "maintenance", "stopping", "initializing"]);
@@ -256,7 +367,8 @@ export const supervisedPath = (home: string = homedir()): string => `${join(home
 export const ROTATE_LOG_SH = `[ -f "$1" ] && [ "$(wc -c < "$1")" -ge "$2" ] && mv -f "$1" "$1.1"`;
 
 // Restart=on-failure keeps a deliberate stop stopped, but needs the agent to exit non-zero on a signal;
-// RestartForceExitStatus forces a restart anyway for SIGHUP/INT/TERM/PIPE, which systemd otherwise treats as clean.
+// RestartForceExitStatus forces a restart anyway for SIGHUP/INT/TERM/PIPE, which systemd otherwise treats as clean. The
+// agent's hang watchdog ends it with SIGKILL, an unclean signal on-failure always restarts.
 // KillMode=process stops the agent's own process and nothing else: systemd's default ends the unit's whole cgroup, which
 // took down what the agent had started to outlive it (an `ic` mid-swap, whose container was left parked with nothing
 // started in its place, and Mutagen's daemon). What must not outlive it the agent ends itself as it stops.
@@ -295,7 +407,7 @@ X-GNOME-Autostart-enabled=true
 
 // RunAtLoad starts it at login; KeepAlive restarts it afterwards, but only when it exits non-zero — the same bargain
 // systemd's `Restart=on-failure` makes, and it lines up with this agent's own exits (0 for every deliberate stop,
-// 128+SIGNAL otherwise). Without it a crashed agent stayed dead until the next login, with nothing watching.
+// 128+SIGNAL otherwise). An exit by signal (the hang watchdog's SIGKILL) is not a successful one, so it is restarted too. Without it a crashed agent stayed dead until the next login, with nothing watching.
 export const macLaunchAgentXml = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher): string =>
     `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -319,25 +431,48 @@ ${[...launcher, ...spec.foregroundArgs].map((arg) => `        <string>${arg}</st
 export type AutostartKind = "task" | "run-key" | "systemd" | "launchd" | "xdg" | "none";
 
 export interface Autostart {
-    // Writes the login entry, or with `repair` only puts back one that is missing or, for the file-based mechanisms,
-    // rewrites one whose content is not what this build writes; never starts anything.
+    // Writes the login entry, or with `repair` only puts back one that is missing or rewrites one whose content is not
+    // what this build writes (inspect's `stale`); never starts anything.
     readonly register: (options?: { readonly repair?: boolean }) => Promise<AutostartKind>;
+    // The entry as it stands against what this build writes, changing nothing.
+    readonly inspect: () => Promise<EntryInspection>;
+    // Whether any mechanism holds an entry under this spec's names, whatever it launches: what retiring one asks.
+    readonly present: () => Promise<boolean>;
     // Starts the agent through its entry; false where the entry cannot start one and the caller has to spawn it.
     readonly start: () => Promise<boolean>;
     // Clears every mechanism's entry, since which one is in force depends on what the last register found.
     readonly unregister: () => Promise<void>;
 }
 
+// Whether a repair leaves the task as it is: when it is there and current, or could not be read (nothing is rewritten
+// on a guess). A stale one is said with what differs, and written again; a missing one (a Run value standing in for it
+// included) is registered again, as every start has always tried.
+const keepsTask = (inspection: EntryInspection, spec: AutostartSpec, log: Log): boolean => {
+    if (inspection.kind === "task" && inspection.state === "stale") {
+        log(`the "${spec.windowsRunValue}" logon task differs from what this agent writes (${(inspection.drift ?? []).join(", ")}): writing it again.`);
+        return false;
+    }
+    return inspection.kind === "task" && (inspection.state === "current" || inspection.state === "unknown");
+};
+
 // The stub is what makes a logon task silent, so without one the task is not offered: a console window at every
 // logon and every watchdog tick is worse than the Run key. A machine that cannot register a task still starts at login.
 const windowsAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => ({
+    inspect: async () => {
+        const stub = windowsLaunchStub(launcher);
+        if (stub === undefined) {
+            return await Promise.resolve({ kind: "run-key" as const, state: windowsRunValueExists(spec) ? ("current" as const) : ("missing" as const) });
+        }
+        return await Promise.resolve(inspectWindowsTask(spec, launcher, stub));
+    },
+    present: async () => await Promise.resolve(windowsTaskExists(spec) || windowsRunValueExists(spec)),
     register: async ({ repair = false } = {}) => {
         const stub = windowsLaunchStub(launcher);
         if (stub === undefined) {
             log(
                 `note: ${WINDOWS_LAUNCH_STUB} isn't installed beside this agent, so ${spec.id} will start at login through a console window that flashes on the desktop. Re-run the install command from the capability card to get it.`,
             );
-        } else if (repair && windowsTaskExists(spec)) {
+        } else if (repair && keepsTask(inspectWindowsTask(spec, launcher, stub), spec, log)) {
             return "task";
         } else {
             try {
@@ -372,8 +507,21 @@ const currentEntry = async (path: string): Promise<string | undefined> => await 
 // launches something else (another install's entry, which a repair is not the moment to take over). An entry launching
 // this same command with an older build's settings (a unit without KillMode=process, say) is rewritten, since its
 // supervisor keeps reading the old one. `launch` picks out the part of an entry that names what it starts.
-export const entryCurrent = (current: string | undefined, wanted: string, launch: (entry: string) => string | undefined): boolean =>
-    current !== undefined && (current === wanted || launch(current) !== launch(wanted));
+export const entryCurrent = (current: string | undefined, wanted: string, launch: (entry: string) => string | undefined): boolean => {
+    const state = fileEntryState(current, wanted, launch);
+    return state === "current" || state === "foreign";
+};
+
+// The same reading, said as an EntryState. Pure.
+export const fileEntryState = (current: string | undefined, wanted: string, launch: (entry: string) => string | undefined): EntryState => {
+    if (current === undefined) {
+        return "missing";
+    }
+    if (current === wanted) {
+        return "current";
+    }
+    return launch(current) === launch(wanted) ? "stale" : "foreign";
+};
 
 // What each kind of entry starts: the line under its key, or for a plist its argument array.
 const launchLine =
@@ -388,6 +536,13 @@ const plistArguments = (entry: string): string | undefined => {
 // Exactly one of a systemd user unit or an XDG entry is written, never both, or a desktop machine starts it twice.
 // Lingering keeps the user manager (and the unit) alive without a session, or a headless box never autostarts.
 const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => ({
+    inspect: async () => {
+        if (systemdUserAvailable()) {
+            return { kind: "systemd", state: fileEntryState(await currentEntry(systemdUnitPath(spec)), systemdUserUnit(spec, launcher), launchLine("ExecStart=")) };
+        }
+        return { kind: "xdg", state: fileEntryState(await currentEntry(linuxDesktopPath(spec)), linuxDesktopEntry(spec, launcher), launchLine("Exec=")) };
+    },
+    present: async () => existsSync(systemdUnitPath(spec)) || existsSync(linuxDesktopPath(spec)),
     register: async ({ repair = false } = {}) => {
         if (systemdUserAvailable()) {
             const unit = systemdUnitPath(spec);
@@ -434,6 +589,8 @@ const macAutostart = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: Cli
     const plist = macPlistPath(agent);
     const domain = `gui/${process.getuid?.() ?? 0}`;
     return {
+        inspect: async () => ({ kind: "launchd", state: fileEntryState(await currentEntry(plist), macLaunchAgentXml(spec, agent, launcher), plistArguments) }),
+        present: async () => await Promise.resolve(existsSync(plist)),
         register: async ({ repair = false } = {}) => {
             const wanted = macLaunchAgentXml(spec, agent, launcher);
             if (!(repair && entryCurrent(await currentEntry(plist), wanted, plistArguments))) {
@@ -456,6 +613,8 @@ const macAutostart = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: Cli
 // Where there is nothing to register with, or no LaunchAgent spec on macOS, it says so instead of writing a file
 // nothing reads.
 const noAutostart = (spec: AutostartSpec, log: Log): Autostart => ({
+    inspect: async () => await Promise.resolve({ kind: "none" as const, state: "current" as const }),
+    present: async () => await Promise.resolve(false),
     register: async () => {
         log(`note: ${spec.id} has no login autostart on ${process.platform}; it runs until this machine restarts.`);
         return await Promise.resolve("none");
@@ -489,6 +648,9 @@ export const autostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log):
                 return "none";
             }
         },
+        // allow(silent-catch): an entry that cannot be read is one a repair leaves alone (EntryState's `unknown`)
+        inspect: async () => await mechanism.inspect().catch(() => ({ kind: "none" as const, state: "unknown" as const })),
+        present: async () => await mechanism.present(),
         start: async () => await mechanism.start().catch(() => false),
         unregister: async () => {
             try {

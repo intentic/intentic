@@ -22,12 +22,13 @@ import { type Children, superviseChildren } from "./environments/children.js";
 import { type AutoUpgrade, startAutoUpgrade } from "./environments/auto-upgrade.js";
 import { heldDistros, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "./environments/machine.js";
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
-import { retireLegacyAutostart } from "./autostart/legacy-autostart.js";
 import { sweepBin } from "./release.js";
 import { assertSupervisor, machineLauncher, readResident, retireResident, startResident } from "./supervision.js";
 import { mirrorHeartbeatPath, readState } from "./sync/config.js";
 import { runMirrorWatch } from "./sync/mirror.js";
+import { startUpkeep } from "./upkeep/reconcile.js";
 import { MACHINE_VERSION } from "./version.js";
+import { startWatchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "./wsl.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
@@ -74,7 +75,14 @@ const nothingToServe = (served: Served): boolean => served.links.length === 0 &&
 export const keptSandboxes = async (): Promise<readonly string[]> => {
     // allow(silent-catch): an unreadable switch keeps the agent, the reversible answer (above)
     const on = await keeperOn().catch(() => true);
-    return on ? await hostedSlugs(async () => (await fleet({ current: false })).map((box) => box.slug), async () => await readChannelSlugs()) : [];
+    // Only this environment's own: a sandbox the other side of this PC keeps is that side's agent's reason to stay
+    // (`keptElsewhere`, keeper.ts), and counting it here kept a distro's agent resident for a sandbox it never serves.
+    return on
+        ? await hostedSlugs(
+              async () => (await fleet({ current: false })).map(({ slug, keptElsewhere }) => ({ slug, keptElsewhere })),
+              async () => await readChannelSlugs(),
+          )
+        : [];
 };
 
 const keptNote = (kept: readonly string[]): string =>
@@ -227,22 +235,31 @@ interface Runtime {
     readonly finish: (code: number) => Promise<never>;
 }
 
-// The machine-wide duties (the one Docker engine's next images, its daily backups and tidy, the sweep over every
-// sandbox, the PC's own upgrades) are the root's alone: a WSL distro shares the Windows side's engine. The probation
-// watch of the swaps this environment's own records name runs everywhere, since only this environment's ic holds them,
-// and so does the keeper, whose `ic sandbox fix` knows only this environment's sandboxes.
-const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, log: Log): Runtime => {
+// Every environment keeps its OWN sandboxes: the next images, the daily backups and tidy, the probation watch and its
+// sweep, and the keeper. ic decides which sandboxes are whose from the side stamped on each container (ic:
+// sandbox/side.rs) and leaves the others to the environment that made them, so a WSL distro sharing the Windows side's
+// engine is not touched twice and is not left untouched either. A supervised distro runs its rounds later than the root,
+// so the two sides never pull or back up on the one engine in the same minutes. Only the PC's own upgrades stay the
+// root's: it brings its distros along (environments/auto-upgrade.ts).
+// How much later a supervised distro's first prepare and backup come than the root's, so the two sides of one PC never
+// pull images or read the engine's disks at the same time.
+const SUPERVISED_ROUND_DELAY_MS = 30 * 60_000;
+
+const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: PidRecord, log: Log): Runtime => {
     const connections = new Map<string, Connection>();
     const children = WINDOWS_SIDE
         ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
         : undefined;
-    const watch = startProbationWatch(log, { sweeps: !supervised });
+    const watch = startProbationWatch(log, { sweeps: true });
     const keeper = startKeeper(log, {
         links: () => [...connections].map(([url, held]) => ({ url, reading: reading(held.peer) })),
         loopback: reachedOverLoopback,
         watching: watch.running,
     });
-    const rounds = [watch, keeper, ...(supervised ? [] : [startAutoPrepare(log), startAutoBackup(log)])];
+    const later = supervised ? SUPERVISED_ROUND_DELAY_MS : 0;
+    // The device's own upkeep runs everywhere too: each environment holds its own leftovers and stores (upkeep/).
+    const upkeep = startUpkeep(log, lease.supervisor);
+    const rounds = [watch, keeper, startAutoPrepare(log, { delayMs: later }), startAutoBackup(log, { delayMs: later }), upkeep];
     const autoUpgrade = supervised ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
     const finish = async (code: number): Promise<never> => {
@@ -323,7 +340,6 @@ const begin = async (
     await holdPidFile(runPidPath, baseDir, lease);
     await sweepBin();
     await takeOverCommandLedger(log);
-    await retireLegacyAutostart(log);
     return { served, lease, kept };
 };
 
@@ -336,6 +352,9 @@ const serving = (served: Served): string =>
 
 // The foreground agent a supervisor runs (systemd, launchd, the logon task, or the Windows side for a distro).
 export const runForeground = async (log: Log): Promise<void> => {
+    // First of all: an agent whose loop hangs anywhere from here on is killed and restarted by its supervisor, which only
+    // ever waits for an exit (watchdog.ts).
+    startWatchdog();
     // Read once and cleared, so no process this one starts (a shell, an upgrade) inherits a role that was never its own.
     const supervised = supervisedByWindows();
     delete process.env[SUPERVISOR_ENV];
@@ -352,7 +371,7 @@ export const runForeground = async (log: Log): Promise<void> => {
         await trial.clean();
         return;
     }
-    const runtime = runtimeOf(supervised, trial, started.kept, log);
+    const runtime = runtimeOf(supervised, trial, started.kept, started.lease, log);
     log(`serving ${serving(started.served)}`);
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition

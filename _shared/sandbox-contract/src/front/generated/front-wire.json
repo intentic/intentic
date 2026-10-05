@@ -2,6 +2,8 @@
   "askPatienceMs": 5000,
   "env": {
     "frontSocket": "INTENTIC_FRONT_SOCKET",
+    "generation": "INTENTIC_NODE_GENERATION",
+    "instance": "INTENTIC_INSTANCE",
     "nodeSocket": "INTENTIC_NODE_SOCKET"
   },
   "frame": {
@@ -432,10 +434,18 @@
     "description": "Everything Node sends the front.",
     "oneOf": [
       {
-        "description": "Node's HTTP socket is accepting; once per Node process.",
+        "description": "Node's HTTP socket is accepting; once per Node process. `generation` is the `GENERATION_ENV` it was started with,\nabsent from a Node that predates it.",
         "properties": {
           "build": {
             "type": "string"
+          },
+          "generation": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "kind": {
             "const": "hello",
@@ -726,6 +736,41 @@
             "type": "object"
           }
         ]
+      },
+      "TunnelRefusal": {
+        "description": "Why the front stopped dialling the ingress at its usual pace, past an ordinary drop it redials at once.",
+        "oneOf": [
+          {
+            "description": "Another copy of this sandbox (a container holding the same grant) holds its tunnel, running on `host` as the\nedge named it: the edge refused this front three times in a row, and the front now dials every 15 minutes.",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "refusal": {
+                "const": "elsewhere",
+                "type": "string"
+              }
+            },
+            "required": [
+              "refusal",
+              "host"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The platform deleted this sandbox: the edge closed its tunnel for that, and the front stopped dialling.",
+            "properties": {
+              "refusal": {
+                "const": "deleted",
+                "type": "string"
+              }
+            },
+            "required": [
+              "refusal"
+            ],
+            "type": "object"
+          }
+        ]
       }
     },
     "description": "Everything the front sends Node.",
@@ -797,6 +842,7 @@
         "type": "object"
       },
       {
+        "description": "Where the ingress tunnel's interactive socket stands, told on every change and again to each Node that says\nhello. `reason` says why it is not held, in the front's words (a drop, the edge's refusal), and `refused` when\nthe front stopped redialling at its usual pace (2026-10-05).",
         "properties": {
           "connected": {
             "type": "boolean"
@@ -804,6 +850,22 @@
           "kind": {
             "const": "tunnel",
             "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TunnelRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

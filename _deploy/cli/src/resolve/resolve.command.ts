@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { plural } from "@intentic/base/format";
+import type { DesiredStateGraph } from "@intentic/graph";
 import { resolveState } from "@intentic/state-resolver";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
@@ -14,7 +15,15 @@ import { syncControlPlaneSecrets } from "../pipelines/control-plane-sync.js";
 import { ensureGeneratedSecrets } from "../secrets/generated-secrets.js";
 import { createLocalSecretStore } from "../secrets/secret-store.js";
 import { collectSecrets, writeEnvExample } from "../secrets/secrets.js";
-import { discoverZone, loadIntent } from "./resolve.js";
+import { discoverZone, loadIntent, ownerFor } from "./resolve.js";
+
+// The artifact as written: the owner beside the version, where a person reading the file finds it first.
+const withOwner = (graph: DesiredStateGraph, owner: string | undefined): DesiredStateGraph => ({
+    version: graph.version,
+    ...(owner !== undefined ? { owner } : {}),
+    resources: graph.resources,
+    ...(graph.moved !== undefined ? { moved: graph.moved } : {}),
+});
 
 interface ResolveFlags {
     readonly config?: string;
@@ -48,7 +57,8 @@ export const resolveCommand = buildCommand<ResolveFlags>({
         // Capture the artifact being replaced BEFORE overwriting it, the control-plane sync diffs against it.
         const previousGraph = flags.syncControlPlane && existsSync(artifactOut) ? await readArtifact(artifactOut) : undefined;
         const zone = await discoverZone(intent, dir);
-        const graph = resolveState(intent, zone);
+        const owner = await ownerFor(artifactOut, { mint: !flags.syncControlPlane, log: out.log });
+        const graph = withOwner(resolveState(intent, zone), owner);
         await writeArtifact(artifactOut, graph);
         const count = Object.keys(graph.resources).length;
         out.text(`resolved desired state (${plural(count, "resource")}) → ${artifactOut}`);
@@ -90,6 +100,7 @@ export const resolveCommand = buildCommand<ResolveFlags>({
         }
         out.result({
             resources: count,
+            ...(owner !== undefined ? { owner } : {}),
             ...(zone !== undefined ? { zone } : {}),
             envSecrets: envKeys,
             generatedSecrets: generated,

@@ -3659,6 +3659,9 @@
             "weWontStartMachine": "We won't start this machine: the email we sent says why and where to write if we have it wrong. Your files are still on it, and nothing else about your account changes. The same sandbox runs on your own computer, free and without limits, from its setup screen."
         },
         "containerHealth": {
+            "copiesTakeTurns": "Copies on {hosts} both check in with its one token, so they take turns holding its address: it drops about once a minute, and turns running on it are cut.",
+            "removeTheOtherCopy": "On the machine whose copy you don't use, run `ic sandbox list`, then `ic sandbox remove` with that sandbox's name.",
+            "twoCopiesRunning": "Two copies of this sandbox are running",
             "announcedWhilePlatformOn": "It announced {announced}, while the platform has {expected} on record. Until the two agree, anything sent to the recorded address misses it.",
             "sandboxCheckingInUnder": "This sandbox is checking in under an address the platform does not hold for it",
             "sandboxDoesNotAnswer": "This sandbox does not answer at its public address",
@@ -3767,6 +3770,8 @@
             "deadLinksOnly": "Dead links only",
             "deletedOrMoved": "Deleted or moved sandboxes",
             "freshCommand": "Fresh command",
+            "leftovers": "Left for you",
+            "leftoversNote": "Its own tidy-up could not clear these",
             "mayBeOutdated": "Below may be outdated",
             "noContainersViaSync": "No containers via sync",
             "noSelfReport": "No self-report",

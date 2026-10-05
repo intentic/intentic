@@ -287,11 +287,45 @@ pub async fn dial_lane(
     bulk: &[&str],
     answering: Answering,
 ) -> Result<Sandbox, u16> {
+    dial_with(port, grant, lane, bulk, None, answering).await
+}
+
+/// Dials the interactive socket as a front of instance `instance` running on `host` (2026-10-05).
+pub async fn dial_as(
+    port: u16,
+    grant: &str,
+    instance: &str,
+    host: &str,
+    answering: Answering,
+) -> Result<Sandbox, u16> {
+    dial_with(
+        port,
+        grant,
+        Lane::Interactive,
+        &[],
+        Some((instance, host)),
+        answering,
+    )
+    .await
+}
+
+async fn dial_with(
+    port: u16,
+    grant: &str,
+    lane: Lane,
+    bulk: &[&str],
+    identity: Option<(&str, &str)>,
+    answering: Answering,
+) -> Result<Sandbox, u16> {
     let announced: Vec<String> = bulk.iter().map(|route| (*route).to_owned()).collect();
-    let headers = [
+    let mut headers = vec![
         (LANE_HEADER, lane.name().to_owned()),
         (BULK_HEADER, BulkRoutes::announce(&announced)),
     ];
+    if let Some((instance, host)) = identity {
+        headers.push((tunnel::INSTANCE_HEADER, instance.to_owned()));
+        headers.push((tunnel::HOST_HEADER, host.to_owned()));
+    }
     let socket = open(port, tunnel::TUNNEL_PATH, grant, &headers).await?;
     let (closing, closed) = watch::channel(None);
     let (session_side, mut pumping) = tunnel::pump(socket, Liveness::Pings, closed);

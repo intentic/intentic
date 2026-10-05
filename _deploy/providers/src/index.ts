@@ -5,6 +5,7 @@ export { createBackupProvider, isLocalRepo } from "./backup/backup.js";
 export { type RestoreArgs, type RestoreScope, restoreBackup } from "./backup/backup-restore.js";
 export { managedContainers, quiesceHost, snapshotNow, streamRepoVolume } from "./backup/migrate-host.js";
 export { parseInputs, sshSchema, sshTarget } from "./core/inputs.js";
+export { listHostStamps, type StampedRow } from "./core/list-stamped.js";
 export type { HostKeyStore, SshExecutor, SshResult, SshSession, SshTarget } from "./core/ssh.js";
 export { connectWithRetry, createSshExecutor, inMemoryHostKeyStore, sshExecutor, verifyHostKey } from "./core/ssh.js";
 export { overSsh } from "./core/over-ssh.js";

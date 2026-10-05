@@ -30,12 +30,19 @@ test("reconcile emits one iteration event marking convergence", async () => {
     expect(events.filter((event) => event.kind === "iteration")).toEqual([{ kind: "iteration", n: 1, converged: true }]);
 });
 
-test("collectOrphans emits an orphan event for a stamped resource absent from the graph", async () => {
+test("collectOrphans emits an orphan event for a stamped resource absent from the graph, with its ownership", async () => {
     const { events, onEvent } = collect();
-    const world: FakeWorld = new Map([["stray", { type: "host", inputs: {} }]]);
+    const world: FakeWorld = new Map([
+        ["stray", { type: "host", inputs: {} }],
+        ["mine", { type: "host", inputs: {}, owner: "aaa" }],
+        ["theirs", { type: "host", inputs: {}, owner: "bbb" }],
+    ]);
     const { providers } = createFakeProviders(world);
-    await collectOrphans(graph, config(providers, onEvent));
-    expect(events).toContainEqual({ kind: "orphan", id: "stray", type: "host" });
+    await collectOrphans(graph, { ...config(providers, onEvent), owner: "aaa" });
+    expect(events).toContainEqual({ kind: "orphan", id: "stray", type: "host", ownership: "unowned" });
+    expect(events).toContainEqual({ kind: "orphan", id: "mine", type: "host", ownership: "mine" });
+    // Another intent's resource is none of this scan's business: no event at all.
+    expect(events.some((event) => event.kind === "orphan" && event.id === "theirs")).toBe(false);
 });
 
 test("prune emits a skipped event when the removed resource's provider has no delete", async () => {

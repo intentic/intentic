@@ -6,10 +6,12 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::record::{self, ChannelRecord, Phase, Pin, Swap};
+use crate::sandbox::labels::{self, Kind as LabelKind};
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
+use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{
-    desired, identity, mirror, now_ms, preparing, probation, resolve_slug, staged, storage,
+    desired, identity, mirror, now_ms, preparing, probation, resolve_slug, resume, staged, storage,
     versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
@@ -129,11 +131,18 @@ fn recreate(
     };
     let slug = resolve_slug(slug, &format!("ic sandbox {verb}"))?;
     // A background run updates only the sandboxes this side created: the other side's machine agent prepares and
-    // swaps its own, against its own records (side.rs).
+    // swaps its own, against its own records (side.rs), unless that side has fallen silent and this run adopts it.
     if auto {
-        if let Some(side) = super::side::kept_elsewhere(&slug) {
-            println!("intentic: {slug}: {}", super::side::sentence(&side));
-            return Ok(());
+        match side::unattended(&slug) {
+            Unattended::Theirs(side) => {
+                println!("intentic: {slug}: {}", side::sentence(&side));
+                return Ok(());
+            }
+            Unattended::Adopted(adoption) => println!("intentic: {slug}: {}", adoption.sentence()),
+            // The keeper's own round is also its heartbeat (side.rs).
+            Unattended::Ours => {
+                side::beat(&slug);
+            }
         }
     }
     // One ic at a time on a sandbox; a background run comes back on its next tick rather than queueing behind a person.
@@ -266,6 +275,8 @@ fn recreate(
     // Whether this update is riding an image `prepare` already built. Decided in the Update arm below, read
     // again by the build block, which then has nothing left to build.
     let mut prepared = false;
+    // A rollback onto a pin whose image is gone runs the release it was instead; the pin leaves the list with it.
+    let mut gone_pin: Option<String> = None;
     match &mode {
         Mode::Rebuild { hash } => {
             // Copy the approved overlay out ONCE and hash/build that same copy — byte-exact, no window
@@ -349,13 +360,27 @@ fn recreate(
             }
         }
         Mode::Rollback { to } => {
-            let target = match to {
+            let pin = match to {
                 Some(to) => versions::resolve_to(&saved, to)?,
-                None => match saved.previous.clone() {
+                None => match saved.targets().into_iter().next() {
                     Some(previous) => previous,
                     None => bail!("nothing to roll back to — this sandbox has not been updated since the rollback record existed.\n       The record is written on every update from now on; {}", record::record_path(&slug).display()),
                 },
             };
+            /* A pin is a local tag no registry has: one pruned outside ic is reached again through its version (versions.rs). */
+            let Some(target) = versions::reachable(&pin, docker::image_exists(&pin.image)) else {
+                bail!(
+                    "the version to go back to ({}) was removed from this machine outside ic, and it names no release to download instead — there is nothing to roll back to. The sandbox is untouched.",
+                    pin.image
+                );
+            };
+            if target != pin.image {
+                println!(
+                    "intentic: {} is gone from this machine — going back to the release it was, {target}.",
+                    pin.image
+                );
+                gone_pin = Some(pin.image.clone());
+            }
             registry_image = target;
             // NO pull, and no "is there anything newer" check: the point of a rollback is to reach an image
             // already on this machine — one the registry moved the tag away from, pinned under the record's
@@ -440,7 +465,14 @@ fn recreate(
             let hash = env_hash.as_deref().expect("rebuild set the hash");
             target_image = format!("intentic-sandbox-env-{slug}:{}", &hash[..12]);
             println!("intentic: building {target_image} from the approved overlay…");
-            build_overlay(&target_image, &overlay_path, false, &base_image, &log)?;
+            build_overlay(
+                &target_image,
+                &slug,
+                &overlay_path,
+                false,
+                &base_image,
+                &log,
+            )?;
         }
         /* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same base pinning, same health gate — with one inversion. */
         Mode::Update { .. } | Mode::Rollback { .. } => {
@@ -469,7 +501,14 @@ fn recreate(
                 if let Some(announcing) = &announcing {
                     announcing.enter(preparing::Phase::Build);
                 }
-                build_overlay(&target_image, &overlay_path, fresh, &base_image, &log)?;
+                build_overlay(
+                    &target_image,
+                    &slug,
+                    &overlay_path,
+                    fresh,
+                    &base_image,
+                    &log,
+                )?;
             }
         }
         Mode::Dev => {
@@ -479,7 +518,7 @@ fn recreate(
                 let hash = env_hash.as_deref().expect("dev set the hash");
                 target_image = format!("intentic-sandbox-dev-env-{slug}:{}", &hash[..12]);
                 println!("intentic: building {target_image} — the overlay's tooling on top of {DEV_TAG}…");
-                build_overlay(&target_image, &overlay_path, false, DEV_TAG, &log)?;
+                build_overlay(&target_image, &slug, &overlay_path, false, DEV_TAG, &log)?;
             }
         }
         Mode::Reshape(_) => {
@@ -577,6 +616,28 @@ fn recreate(
             env_nul = merged;
         }
     }
+    /* A CONTAINER FROM BEFORE THE SIDE STAMPS IS ADOPTED BY THE SIDE RECREATING IT. A replay carries the old env as it
+    was, so a container made before HOST_PLATFORM stayed everyone's for good (audit 2026-10, item 2): two keepers, two
+    probation watches. Whatever the old container names is kept; what it does not name is this side's. */
+    let stamp = restamp(
+        match side::stamp_in(&env_nul) {
+            side::Stamp::Side(side) => Some(side),
+            _ => None,
+        }
+        .as_ref(),
+        &side::here(),
+    );
+    if let Some(platform) = &stamp.add_platform {
+        env_nul.extend_from_slice(format!("HOST_PLATFORM={platform}").as_bytes());
+        env_nul.push(0);
+        if reach == Reach::Applied {
+            println!(
+                "intentic: {slug} named no side of this computer; ic on {} keeps it from now on.",
+                stamp.side.name()
+            );
+        }
+    }
+    let stamped_run = stamp_args(&slug, &stamp);
 
     // The /agent-auth mount is a mount+env pair: replaying AGENT_AUTH_DIR without its volume would point
     // the daemon at an empty container-local dir, stranding the shared credentials.
@@ -647,8 +708,12 @@ fn recreate(
         checks::Outcome::Warn { .. } | checks::Outcome::Fail { .. } => 0,
         _ => record::MAX_KEPT,
     };
+    let listed = match &gone_pin {
+        Some(gone) => versions::without(&saved, gone),
+        None => saved.clone(),
+    };
     let (previous, kept, _pushed_off) =
-        versions::next_targets(&saved, left.clone(), &base_image, max_kept);
+        versions::next_targets(&listed, left.clone(), &base_image, max_kept);
     if reach == Reach::Applied {
         if let (Some(pin), Some(old)) = (left.as_ref(), old_base_id.as_deref()) {
             docker::quiet(&["tag", old, &pin.image]);
@@ -672,7 +737,10 @@ fn recreate(
         // keeps, and the daemon guards against replays anyway (workspaceArrivedEmpty).
         definition_b64: None,
     };
-    let argv = contract::run_command(&request, &env_nul, false, &unsupported, &seeds, &log)?;
+    let argv = labels::into_run(
+        &contract::run_command(&request, &env_nul, false, &unsupported, &seeds, &log)?,
+        &stamped_run,
+    );
     /* A check ends here: the image has answered for this shape, and nothing has been pinned, recorded or stopped. */
     if reach == Reach::Checked {
         return Ok(());
@@ -753,6 +821,10 @@ fn recreate(
     mirror::push(&slug);
     // Says "this cutover is alive" every few seconds until it is settled, so a watch from anywhere leaves it alone.
     let mut heartbeat = probation::Heartbeat::start(&slug, swap.at);
+    // The turns this cutover cuts are picked up by whichever version boots next, the new one or the old one put back.
+    if resume::ask(&container) {
+        println!("intentic: the agents' turns this restart cuts are picked up again once the sandbox is back.");
+    }
 
     /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that passes its probation earns the rm. */
     docker::quiet(&["rm", "-f", &parked]);
@@ -795,6 +867,7 @@ fn recreate(
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry_argv =
             match contract::run_command(&request, &env_nul, true, &all_optional, &seeds, &log)
+                .map(|retry_argv| labels::into_run(&retry_argv, &stamped_run))
                 .and_then(|retry_argv| storage::check(&parked, &retry_argv).map(|()| retry_argv))
             {
                 Ok(retry_argv) => retry_argv,
@@ -1159,8 +1232,9 @@ fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
 
 /// Stdin build (`docker build -t <tag> -`), progress live on the terminal and teed into the log, labelled with the
 /// id of the base it was built on (identity.rs) so a later update can tell which base this build is, whatever the
-/// base's tag names by then. A `pull` fetches the base first and builds from exactly what was fetched, so the label
-/// cannot name a different image than the one under it.
+/// base's tag names by then, and with ic's own labels naming the sandbox it is for (labels.rs). A `pull` fetches the
+/// base first and builds from exactly what was fetched, so the label cannot name a different image than the one under
+/// it.
 ///
 /// A failed build is an error. It used to be read off `image_exists` alone, and since the tag is keyed on the recipe,
 /// an unchanged recipe's tag still named the RUNNING build: a failed rebuild then swapped onto the old build and said
@@ -1168,6 +1242,7 @@ fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
 /// pub(crate): `ic runner up` builds a parent-shipped overlay through this same door (runner.rs).
 pub(crate) fn build_overlay(
     tag: &str,
+    slug: &str,
     overlay: &Path,
     pull: bool,
     base: &str,
@@ -1179,10 +1254,12 @@ pub(crate) fn build_overlay(
     log.section(&format!("docker build {tag}"));
     let content = std::fs::read(overlay).unwrap_or_default();
     let label = docker::image_id(base).map(|id| format!("{}={id}", identity::BASE_ID_LABEL));
-    let mut args = vec!["build"];
+    let ours = labels::here(slug, LabelKind::Environment);
+    let mut args: Vec<&str> = vec!["build"];
     if let Some(label) = label.as_deref() {
         args.extend_from_slice(&["--label", label]);
     }
+    args.extend(ours.iter().map(String::as_str));
     args.extend_from_slice(&["-t", tag, "-"]);
     let built = docker::stream(&args, Some(&content), docker::Shown::Raw, log)?;
     if !built.ok {
@@ -1257,6 +1334,56 @@ pub(crate) fn base_is_allowed(
         || base_image == DEV_TAG
         || current_base == Some(base_image)
         || rollback_target == Some(base_image)
+}
+
+/// What a recreate stamps on the container it starts: the platform to add when the old container named none, the
+/// environment to carry (the contract's replay drops HOST_ENV, so ic puts it back itself), and the side the result
+/// names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Restamp {
+    add_platform: Option<String>,
+    env: Option<String>,
+    side: Side,
+}
+
+/// The old container's side kept as it was, and what it lacks filled in from this side: all of it for a container
+/// that named no side, the environment alone for one that named this side's platform without it. A container stamped
+/// with another platform is never given this side's environment, which would describe a side that does not exist.
+/// Pure.
+fn restamp(old: Option<&Side>, here: &Side) -> Restamp {
+    match old {
+        None => Restamp {
+            add_platform: Some(here.platform.clone()),
+            env: here.env.clone(),
+            side: here.clone(),
+        },
+        Some(old) => {
+            let env = old.env.clone().or_else(|| {
+                old.platform
+                    .eq_ignore_ascii_case(&here.platform)
+                    .then(|| here.env.clone())
+                    .flatten()
+            });
+            Restamp {
+                add_platform: None,
+                env: env.clone(),
+                side: Side {
+                    platform: old.platform.clone(),
+                    env,
+                },
+            }
+        }
+    }
+}
+
+/// The options a recreate's run line gets beside the contract's: ic's labels for the side it names, and HOST_ENV.
+/// Pure.
+fn stamp_args(slug: &str, stamp: &Restamp) -> Vec<String> {
+    let mut extra = labels::args(slug, LabelKind::Sandbox, &stamp.side.wire());
+    if let Some(env) = &stamp.env {
+        extra.extend(["-e".to_string(), format!("HOST_ENV={env}")]);
+    }
+    extra
 }
 
 /// The build a swap leaves, as the rollback target it becomes: by IDENTITY, not by name. A stock stable-channel update is
@@ -1405,6 +1532,35 @@ mod tests {
             staged_version: Some("1.4.2".to_string()),
             ..saved(Some("ghcr.io/intentic/sandbox:stable"), None)
         }
+    }
+
+    #[test]
+    fn a_recreate_keeps_the_side_it_finds_and_stamps_the_one_it_is_missing() {
+        let here = Side::new("linux", Some("archlinux"));
+        // From before HOST_PLATFORM: the side doing the recreate adopts it.
+        let adopted = restamp(None, &here);
+        assert_eq!(adopted.add_platform.as_deref(), Some("linux"));
+        assert_eq!(adopted.env.as_deref(), Some("archlinux"));
+        assert_eq!(adopted.side, here);
+        // From before HOST_ENV, on this side's platform: the environment is filled in.
+        let platform_only = restamp(Some(&Side::new("linux", None)), &here);
+        assert_eq!(platform_only.add_platform, None);
+        assert_eq!(platform_only.side.wire(), "linux/archlinux");
+        // Another side's, stamped whole: kept exactly, and HOST_ENV put back since the contract drops it.
+        let theirs = restamp(Some(&Side::new("linux", Some("ubuntu"))), &here);
+        assert_eq!(theirs.env.as_deref(), Some("ubuntu"));
+        assert_eq!(theirs.side.wire(), "linux/ubuntu");
+        // Another platform without an environment: never given this side's.
+        let windows = restamp(Some(&Side::new("windows", None)), &here);
+        assert_eq!((windows.add_platform, windows.env), (None, None));
+        let args = stamp_args("x", &theirs);
+        assert!(args.contains(&"dev.intentic.side=linux/ubuntu".to_string()));
+        assert_eq!(&args[args.len() - 2..], ["-e", "HOST_ENV=ubuntu"]);
+        assert!(
+            !stamp_args("x", &restamp(Some(&Side::new("windows", None)), &here))
+                .iter()
+                .any(|arg| arg.starts_with("HOST_ENV="))
+        );
     }
 
     /* THE RESHAPE'S ARITHMETIC. */

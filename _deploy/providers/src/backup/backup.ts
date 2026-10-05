@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { OWNER_KEY } from "@intentic/graph";
 import { dockerEnvLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { execChecked, writeHostFiles } from "../core/host-files.js";
@@ -8,6 +9,7 @@ import { parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { stampLabelArgs, stampOf } from "../core/stamp.js";
 
 // Secrets arrive already resolved to strings. retention/schedule carry the resolver-or-default cron + keep
 // counts; signoz opts the observability volumes into the backup set.
@@ -112,15 +114,18 @@ const running = async (session: SshSession): Promise<boolean> => {
     return result.stdout.trim() === CONTAINER;
 };
 
-// The create-time image + the schedule/repo labels, the observable config the diff converges on.
-const observe = async (session: SshSession): Promise<{ image: string; schedule: string; repo: string; timezone: string }> => {
+// The create-time image + the schedule/repo labels, the observable config the diff converges on, and the owner stamp
+// (last, "" on a container from before owners).
+const observe = async (
+    session: SshSession,
+): Promise<{ config: { image: string; schedule: string; repo: string; timezone: string }; owner: string }> => {
     const result = await session.exec(
-        `docker inspect --format '{{.Config.Image}}${SEP}{{index .Config.Labels "intentic.schedule"}}${SEP}{{index .Config.Labels "intentic.repo"}}${SEP}{{index .Config.Labels "intentic.timezone"}}' ${CONTAINER} 2>/dev/null || true`,
+        `docker inspect --format '{{.Config.Image}}${SEP}{{index .Config.Labels "intentic.schedule"}}${SEP}{{index .Config.Labels "intentic.repo"}}${SEP}{{index .Config.Labels "intentic.timezone"}}${SEP}{{index .Config.Labels "${OWNER_KEY}"}}' ${CONTAINER} 2>/dev/null || true`,
     );
     // A container created before the zone was recorded reports an empty one, which reads as the UTC it was in fact
     // running on, so it converges on the first apply rather than looking like a change nobody made.
-    const [image = "", schedule = "", repo = "", timezone = ""] = result.stdout.trim().split(SEP);
-    return { image, schedule, repo, timezone: timezone === "" ? "UTC" : timezone };
+    const [image = "", schedule = "", repo = "", timezone = "", owner = ""] = result.stdout.trim().split(SEP);
+    return { config: { image, schedule, repo, timezone: timezone === "" ? "UTC" : timezone }, owner };
 };
 
 // Write restic.env once (the encryption password + backend creds must survive recreation); always rewrite the
@@ -183,7 +188,8 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             if (!up) {
                 return undefined;
             }
-            return { outputs: {}, detail: observed };
+            // Apply always removes and reruns the container, so an update adopts an unowned one.
+            return { outputs: {}, detail: observed.config, stampOwner: observed.owner };
         } finally {
             await session.dispose();
         }
@@ -219,9 +225,9 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             await ensureFiles(session, parsed);
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             const run = await session.exec(
-                `docker run -d --restart unless-stopped --name ${CONTAINER} --label ${shellQuote(`intentic.id=${ctx.id}`)} --label intentic.type=backup ` +
-                    `--label ${shellQuote(`intentic.schedule=${parsed.schedule}`)} --label ${shellQuote(`intentic.repo=${parsed.repo}`)} ` +
-                    `--label ${shellQuote(`intentic.timezone=${parsed.timezone}`)} -e ${shellQuote(`TZ=${parsed.timezone}`)} ` +
+                `docker run -d --restart unless-stopped --name ${CONTAINER} ` +
+                    `${stampLabelArgs("backup", stampOf(ctx), [`intentic.schedule=${parsed.schedule}`, `intentic.repo=${parsed.repo}`, `intentic.timezone=${parsed.timezone}`])} ` +
+                    `-e ${shellQuote(`TZ=${parsed.timezone}`)} ` +
                     `${mountArgs(parsed, dockerBin)} --entrypoint crond ${shellQuote(parsed.image)} -f -l 8`,
             );
             if (run.code !== 0) {
@@ -245,5 +251,5 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             await session.dispose();
         }
     },
-    list: (sources, ctx) => listStampedContainers(executor, "backup", sources, ctx.log),
+    list: (sources, ctx) => listStampedContainers(executor, "backup", sources, ctx),
 });

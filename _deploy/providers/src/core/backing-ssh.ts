@@ -23,12 +23,6 @@ const slug = (id: string): string => {
 export const stateDir = (kind: string, id: string): string => `${HOST_STATE_ROOT}/${kind}/${slug(id)}`;
 const projectName = (kind: string, id: string): string => `intentic-${kind}-${slug(id)}`;
 
-// The compose `labels:` line that makes a container findable: by owning node (intentic.id), by kind
-// (intentic.type), by inputs hash (intentic.hash), and by protection (intentic.protect, omitted rather than
-// written false).
-export const stampLabels = (kind: string, id: string, hash: string, protect = false): string =>
-    `    labels: [ "intentic.id=${id}", "intentic.type=${kind}", "intentic.hash=${hash}"${protect ? ', "intentic.protect=true"' : ""} ]`;
-
 // A readiness probe that runs inside the stamped container: resolve it by stamp, then exec. Exits non-zero (the
 // "not ready" callers want) when the container is not running.
 export const execProbe = (id: string, command: string): string =>

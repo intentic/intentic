@@ -27,6 +27,7 @@ import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scop
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import { sandboxBreakPolicy } from "../agent/run/turn/turn-resume.js";
 import { readSubagentTranscript } from "../agent/subagents/subagent-transcript.js";
+import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 import { readSubagentSession } from "../sessions/sessions.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
@@ -500,12 +501,17 @@ export const createAgentsRoutes = (services: Services) => {
         discard: i.discard.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
+            // Read while the conversation exists, since its dispose takes the records of the children it supervises.
+            const family = familyOf(services, [entry.id]);
             // Disarmed first, while the conversation exists: an outlived watch would target a removed id.
             await cancelWatchersFor(entry.id);
             // Resources before worktree: a running shell or dev server must not be mid-write in a tree being deleted.
             await services.reaper.reapConversation(entry.id, { force: true });
             await services.agentWorktrees.remove(entry.id, entry.placement.repos);
             await forgetConversations(services, [entry]);
+            // Its children stop once it is gone, so a stopped child's ending is said to nobody and its work lands as any
+            // conversation's does, never into the checkout just removed. Their conversations stay.
+            await cancelFamily(services, family, "discarded");
             return { ok: true } as const;
         }),
         // Archives exactly the ids named, the board's Clear included. Answers with what moved, not the roster, so

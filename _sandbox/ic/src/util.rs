@@ -95,6 +95,20 @@ pub fn timestamp() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_secs())
         .unwrap_or(0);
+    let (year, month, day, hour, minute, second) = civil(secs);
+    format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}")
+}
+
+/// An epoch-milliseconds moment as a person reads it in a sentence ("2026-10-05 22:45 UTC"): what ic says when it
+/// names when something last happened (a keeper falling silent, a run of restarts). UTC for the reason `timestamp`
+/// gives. Pure.
+pub fn utc_minute(ms: u64) -> String {
+    let (year, month, day, hour, minute, _) = civil(ms / 1000);
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02} UTC")
+}
+
+/// Epoch seconds as (year, month, day, hour, minute, second), UTC. Pure.
+fn civil(secs: u64) -> (i64, i64, i64, u64, u64, u64) {
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     let (hour, minute, second) = (rem / 3600, (rem % 3600) / 60, rem % 60);
@@ -108,7 +122,7 @@ pub fn timestamp() -> String {
     let day = doy - (153 * mp + 2) / 5 + 1;
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if month <= 2 { year + 1 } else { year };
-    format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}")
+    (year, month, day, hour, minute, second)
 }
 
 /// NAME=VALUE pairs, NUL-framed — the framing the run contract reads on stdin. NUL and not newline because
@@ -182,6 +196,14 @@ mod tests {
         assert_eq!(stamp.len(), 15);
         assert_eq!(stamp.as_bytes()[8], b'-');
         assert!(stamp[..8].chars().all(|c| c.is_ascii_digit()));
+    }
+
+    #[test]
+    fn a_moment_reads_as_a_utc_minute() {
+        assert_eq!(utc_minute(0), "1970-01-01 00:00 UTC");
+        // 2026-10-05T22:45:30Z
+        assert_eq!(utc_minute(1_791_240_330_000), "2026-10-05 22:45 UTC");
+        assert_eq!(utc_minute(951_782_400_000), "2000-02-29 00:00 UTC");
     }
 
     #[test]

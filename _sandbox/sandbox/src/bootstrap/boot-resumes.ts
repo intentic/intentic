@@ -1,4 +1,5 @@
 import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
+import { settleRestartPauses } from "../agent/subagents/paused-children.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
 import { restoreBackgroundJobs, settleLostRuns } from "../agent/tools/jobs/background-jobs.js";
@@ -6,6 +7,7 @@ import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
 import { restoreWatchers } from "../agent/verification/watchers.js";
 import { resumeInterruptedFires } from "../automations/fire-resume.js";
 import { resumeWorkflowExecution } from "../workflows/workflow-runner.js";
+import { bootFacts, RESTART_STORM, reportRestartStorm } from "../system/boot/boot-history.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Every restart is gated and attempt-bounded; a failure leaves the item on the record as interrupted.
@@ -19,15 +21,27 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
 
     // Detached: an interrupted turn is a whole turn, and an interrupted automation fire a whole fire. What waited in a
     // queue goes after them: behind a resumed turn when its conversation has one, at once when it has none. Whether
-    // the owner started this restart and asked for its cut turns back is read once, here, for both passes.
+    // the owner started this restart and asked for its cut turns back is read once, here, for both passes, and so is
+    // whether this boot is one of a restart storm, which resumes nothing (system/boot/boot-history.ts, 2026-10-05).
     const ownerAsked = fileRestartResume(services.config.historyRoot)
         .take(Date.now())
         .catch((error: unknown) => {
             logger.warn({ err: error }, "whether the owner asked this restart to resume could not be read, so only the settings decide");
             return false;
         });
-    void ownerAsked
-        .then((asked) => resumeInterruptedTurns(services, Date.now(), asked))
+    const held = bootFacts().then((facts) => {
+        if (facts?.storm !== true) {
+            return false;
+        }
+        logger.warn(
+            { boots: facts.bootsInWindow, windowMinutes: RESTART_STORM.windowMs / 60_000, previousBootAt: facts.previousBootAt },
+            "boot: a restart storm, so neither a resume ask nor autoResumeOnRestart is honoured this boot; the cut turns stay interrupted",
+        );
+        reportRestartStorm(services.config.historyRoot, facts);
+        return true;
+    });
+    void Promise.all([ownerAsked, held])
+        .then(([asked, storm]) => resumeInterruptedTurns(services, Date.now(), asked, storm))
         .catch((error: unknown) => logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"))
         .then(() => {
             for (const conversationId of services.agents.ids()) {
@@ -35,9 +49,12 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
                     void services.turns.drain(conversationId);
                 }
             }
-        });
-    void ownerAsked
-        .then((asked) => resumeInterruptedFires(services, Date.now(), asked))
+        })
+        // A child paused on a re-run the restart dropped stays stopped: its parent is told, once the turns the restart
+        // cut are running again, since only a parent with a live turn can be (agent/subagents/paused-children.ts).
+        .then(() => (role.roots ? settleRestartPauses(services) : undefined));
+    void Promise.all([ownerAsked, held])
+        .then(([asked, storm]) => resumeInterruptedFires(services, Date.now(), asked, storm))
         .catch((error: unknown) =>
             logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
         );

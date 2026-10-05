@@ -61,7 +61,11 @@ test("instance read returns undefined until the ping probe passes", async () => 
 });
 
 test("instance read returns the deterministic internalHost/port + observed image when ready", async () => {
-    expect(await createValkeyProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({ outputs, detail: { image: IMAGE } });
+    expect(await createValkeyProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({
+        outputs,
+        detail: { image: IMAGE },
+        stampOwner: "",
+    });
 });
 
 test("instance apply writes compose + a chmod-600 valkey.conf carrying requirepass, brings it up, and returns outputs", async () => {

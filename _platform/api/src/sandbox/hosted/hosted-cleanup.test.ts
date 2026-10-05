@@ -78,7 +78,9 @@ const fixture = () => {
                 pending.delete(where.appName);
             }),
             findMany: jest.fn(async () => [...pending].map((name) => ({ appName: name }))),
-            findUnique: jest.fn(async ({ where }: { where: { appName: string } }) => (pending.has(where.appName) ? { appName: where.appName } : null)),
+            findUnique: jest.fn(async ({ where }: { where: { appName: string } }) =>
+                pending.has(where.appName) ? { appName: where.appName } : null,
+            ),
         },
     };
     return { db, prisma: db as unknown as PrismaClient, state, pending };
@@ -87,7 +89,14 @@ const fixture = () => {
 const provider = (pending: Set<string>, pauseAt?: string) => {
     const entered = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
-    const state = { exists: false, failDelete: false, deleting: false };
+    // `ownApp` answers the read of whether this sandbox's own app is on the provider (hosted.ts heldAppOf); unset, it
+    // follows `exists`, which is the one app a cold provision makes. A warm claim's case sets it false, since there
+    // `exists` stands for the warm machine's app.
+    const state: { exists: boolean; failDelete: boolean; deleting: boolean; ownApp?: boolean } = {
+        exists: false,
+        failDelete: false,
+        deleting: false,
+    };
     const calls: string[] = [];
     stubGlobal(`fetch`, async (url: string, init: RequestInit) => {
         const path = new URL(url).pathname;
@@ -113,7 +122,8 @@ const provider = (pending: Set<string>, pauseAt?: string) => {
             }
             return new Response(null, { status: 202 });
         }
-        return state.exists ? Response.json({ id: `app`, state: `replacing` }) : Response.json({ error: `gone` }, { status: 404 });
+        const exists = path === `/v1/apps/${appName}` ? (state.ownApp ?? state.exists) : state.exists;
+        return exists ? Response.json({ id: `app`, state: `replacing` }) : Response.json({ error: `gone` }, { status: 404 });
     });
     return { state, calls, entered, resume };
 };
@@ -217,11 +227,14 @@ describe(`hosted cancellation`, () => {
 
     it(`does not destroy an existing app when its create request is refused`, async () => {
         const { prisma, pending } = fixture();
-        const fetch = jest.fn().mockResolvedValue(Response.json({ error: `app name already exists` }, { status: 422 }));
+        // A fresh answer per call: a body is read once, and the read before the create reads one too.
+        const fetch = jest.fn().mockImplementation(async () => Response.json({ error: `app name already exists` }, { status: 422 }));
         stubGlobal(`fetch`, fetch);
         await expect(provisionHosted(prisma, config, logger, args)).rejects.toThrow(`app name already exists`);
-        expect(fetch).toHaveBeenCalledTimes(1);
-        expect(fetch).toHaveBeenCalledWith(`https://api.machines.dev/v1/apps`, expect.objectContaining({ method: `POST` }));
+        // The read before it (whether this sandbox's own app is there, hosted.ts heldAppOf) got no answer it could use,
+        // so the provision went to createApp, whose refusal is the only write it made.
+        const writes = (fetch.mock.calls as [string, RequestInit][]).filter(([, init]) => init.method !== `GET` && init.method !== undefined);
+        expect(writes).toEqual([[`https://api.machines.dev/v1/apps`, expect.objectContaining({ method: `POST` })]]);
         expect([...pending]).toEqual([]);
     });
 
@@ -255,6 +268,7 @@ describe(`hosted cancellation`, () => {
         ]);
         const fly = provider(pending, `${method} /v1/apps/${warmApp}/machines/m1`);
         fly.state.exists = true;
+        fly.state.ownApp = false;
         const creating = provisionHosted(prisma, config, logger, args);
         await fly.entered.promise;
         await releaseHosted(prisma, config, args.sandboxId);
@@ -292,6 +306,10 @@ describe(`hosted cancellation`, () => {
                 fixCode: null,
                 fixCodeExpiresAt: null,
                 hostReport: Prisma.DbNull,
+                // The machine that claimed the old code, and the copies that announced on the old token.
+                setupClaimedBy: Prisma.DbNull,
+                seenInstances: Prisma.DbNull,
+                duplicateSince: null,
             },
         });
     });

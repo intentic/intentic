@@ -258,17 +258,22 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
         // can later act on it; the wallet's payment gate asks in chat instead.
         yield* vendorTurn(request, {
             open: () =>
-                spawnPi(config, request.spec.cwd, {
-                    onEvent: (event) => {
-                        state.queue.push(event);
-                        state.wait.wake();
+                spawnPi(
+                    config,
+                    request.spec.cwd,
+                    {
+                        onEvent: (event) => {
+                            state.queue.push(event);
+                            state.wait.wake();
+                        },
+                        onExit: (code) => {
+                            state.exited = true;
+                            state.exitCode = code;
+                            state.wait.wake();
+                        },
                     },
-                    onExit: (code) => {
-                        state.exited = true;
-                        state.exitCode = code;
-                        state.wait.wake();
-                    },
-                }),
+                    request.spec.conversationId,
+                ),
             unopened: "Pi failed to start",
             // A throwing setup (switch_session timeout, a dead transport), with Pi's own stderr folded in.
             failure: (error, proc) => withStderrTail(error instanceof Error ? error.message : "Pi agent failed", proc.stderrTail()),

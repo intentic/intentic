@@ -285,9 +285,10 @@ impl AppState {
         *self.hosts_sandboxes.lock().unwrap()
     }
 
-    /// Written the moment a sandbox is seen or made here, and never unwritten: a machine that hosted one and
-    /// currently shows none is a machine whose Docker is down, which is exactly the state this answer is for.
-    /// Only writes on the change, like [`AppState::remember_ui_mode`] — this is asked on every listing.
+    /// Written the moment a sandbox is seen or made here. A machine that hosted one and currently shows none is a
+    /// machine whose Docker is down, which is exactly the state this answer is for, so it is unwritten only on a listing
+    /// that proves there is none left ([`forgets_hosting`], 2026-10-05). Only writes on the change, like
+    /// [`AppState::remember_ui_mode`] — this is asked on every listing.
     pub fn remember_hosts_sandboxes(&self) {
         let mut held = self.hosts_sandboxes.lock().unwrap();
         if *held {
@@ -295,6 +296,16 @@ impl AppState {
         }
         *held = true;
         write_json(&self.config_dir.join("hosts-sandboxes.json"), &true);
+    }
+
+    /// The last sandbox here is gone: launches stop starting Docker Desktop for one. Only on the change.
+    pub fn forget_hosts_sandboxes(&self) {
+        let mut held = self.hosts_sandboxes.lock().unwrap();
+        if !*held {
+            return;
+        }
+        *held = false;
+        write_json(&self.config_dir.join("hosts-sandboxes.json"), &false);
     }
 
     pub fn workspace_seen(&self) -> bool {
@@ -457,6 +468,19 @@ impl AppState {
         write_json(&self.config_dir.join("projects.json"), &projects);
     }
 
+    /// The entries `gone` picks, taken out of `projects.json` and answered; nothing is written when it picks none.
+    pub fn forget_projects(&self, gone: impl Fn(&Project) -> bool) -> Vec<Project> {
+        let _held = self.lists.lock().unwrap();
+        let (dropped, kept): (Vec<Project>, Vec<Project>) = self
+            .projects()
+            .into_iter()
+            .partition(|project| gone(project));
+        if !dropped.is_empty() {
+            write_json(&self.config_dir.join("projects.json"), &kept);
+        }
+        dropped
+    }
+
     /* THE FOLDER THE MAIN WINDOW SHOWS. */
 
     /// The folder the main window opens on: the one it was last pointed at, or `~/intentic/local`.
@@ -557,6 +581,24 @@ impl AppState {
         names.remove(slug);
         write_json(&self.config_dir.join("sandboxes.json"), &*names);
     }
+}
+
+/// Whether a listing proves this machine hosts no sandbox any more, so `hosts-sandboxes.json` may be cleared and a
+/// launch stop starting Docker Desktop for one (2026-10-05: it never was, and every launch after the last sandbox was
+/// removed still started Docker). All three must say so: `ic sandbox list --json` answered (`rows`, which a failed
+/// listing never is) with no sandbox of this side's own (a row the other side of this computer keeps, `keptElsewhere`,
+/// is that side's to start Docker for); `ic`'s trash holds nothing a `restore` could bring back (`trash_empty`, `None`
+/// when it could not be read, which is a doubt and keeps the flag); and this computer's own sandbox is not one the app
+/// is making or keeps (`machine_holds`, machine_sandbox.rs). Pure.
+pub fn forgets_hosting(
+    rows: &[serde_json::Value],
+    trash_empty: Option<bool>,
+    machine_holds: bool,
+) -> bool {
+    let own = rows
+        .iter()
+        .any(|row| row["keptElsewhere"].as_str().is_none());
+    !own && trash_empty == Some(true) && !machine_holds
 }
 
 /// The file's value, or None when it is absent or unusable. A file that won't parse is set aside as
@@ -747,7 +789,63 @@ mod tests {
         // A second AppState over the same config dir is what the next launch of the app is — the one that
         // opens with Docker stopped and cannot ask docker anything.
         assert!(state_in(&dir).hosts_sandboxes());
+        // The last sandbox gone, as a listing proved: the next launch has no Docker to start for one.
+        state.forget_hosts_sandboxes();
+        assert!(!state_in(&dir).hosts_sandboxes());
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The flag is cleared only on proof: a listing that answered with nothing of this side's, an empty trash, and no
+    /// sandbox of this computer's own on its way. Anything less, a doubt included, keeps it.
+    #[test]
+    fn hosting_is_forgotten_only_when_a_listing_proves_nothing_is_left() {
+        let theirs = serde_json::json!({ "slug": "wsl-work", "keptElsewhere": "linux" });
+        let mine = serde_json::json!({ "slug": "work" });
+        assert!(forgets_hosting(&[], Some(true), false));
+        assert!(forgets_hosting(
+            std::slice::from_ref(&theirs),
+            Some(true),
+            false
+        ));
+        assert!(!forgets_hosting(
+            std::slice::from_ref(&mine),
+            Some(true),
+            false
+        ));
+        assert!(!forgets_hosting(&[theirs, mine], Some(true), false));
+        // A removed sandbox is still restorable for a week, and restoring it needs this machine's Docker.
+        assert!(!forgets_hosting(&[], Some(false), false));
+        // The trash could not be read: a doubt, which never clears anything.
+        assert!(!forgets_hosting(&[], None, false));
+        // This computer's own sandbox is being made, or kept, without a container listed yet.
+        assert!(!forgets_hosting(&[], Some(true), true));
+    }
+
+    #[test]
+    fn projects_whose_sandbox_is_gone_are_taken_out_and_the_rest_kept() {
+        let dir = std::env::temp_dir().join(format!("intentic-projects-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+        let state = state_in(&dir);
+        for (path, id) in [("/a", Some("gone")), ("/b", Some("live")), ("/c", None)] {
+            state.remember_project(Project {
+                path: path.to_string(),
+                dir: "x".to_string(),
+                sandbox_id: id.map(str::to_string),
+                slug: None,
+            });
+        }
+        assert!(state.forget_projects(|_| false).is_empty());
+        let dropped =
+            state.forget_projects(|project| project.sandbox_id.as_deref() == Some("gone"));
+        assert_eq!(dropped.len(), 1);
+        assert_eq!(dropped[0].path, "/a");
+        let left: Vec<String> = state_in(&dir)
+            .projects()
+            .into_iter()
+            .map(|project| project.path)
+            .collect();
+        assert_eq!(left, vec!["/b".to_string(), "/c".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

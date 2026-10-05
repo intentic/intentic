@@ -24,6 +24,17 @@ flowchart LR
   what must not outlive it itself. `register({ repair: true })` puts back a missing entry and rewrites one that starts
   this same command with other settings, so a unit an older build wrote picks up the change at the agent's next start;
   an entry starting something else (another install) is left to a full `register()`.
+- A Windows logon task is checked by content too (2026-10-05), not only for being there: its action (program and
+  arguments) and the settings that make it a supervisor (`IgnoreNew`, the restart-on-failure count and interval, the
+  five-minute repetition, no time limit, not stopped on battery, enabled) are read back with `Export-ScheduledTask`
+  (`schtasks /query /xml` where PowerShell is missing) and compared with what this build writes (`windowsTaskDrift`); a
+  task that differs in any of them is written again. A task launching another command is rewritten as well: it is filed
+  under the agent's own name for this user, so it can only be an older install of it. A task that cannot be read is
+  left alone. `inspect()` gives the same reading without changing anything, and `present()` says whether any
+  mechanism holds an entry under a spec's names, which is what retiring an old agent's entries asks.
+- Every supervisor restarts an agent that exits non-zero or is killed by a signal: the systemd unit's
+  `Restart=on-failure`, the LaunchAgent's `KeepAlive { SuccessfulExit = false }`, and the logon task's restart on
+  failure plus its five-minute repetition. That is what an agent's own hang watchdog relies on when it kills itself.
 - A pidfile stores a boot token beside the pid, so a pid reused after a reboot never reads as a running agent, and
   `claimPidFile` settles two starters racing for one file.
 - `cliLauncher` rebuilds the argv that re-invokes the current CLI, both as `node dist/cli.js` and as a bun-compiled binary.

@@ -293,9 +293,10 @@ fn scan(homes: &[Home], distros: &[(String, PathBuf)], projects: &[Project]) -> 
 }
 
 /// The distros running now, by name, each with its `/` as Windows reaches it. Never one that is stopped: reading its
-/// files would start it, which is a minute of somebody's memory spent on a guess.
+/// files would start it, which is a minute of somebody's memory spent on a guess. Also how the machine agents of this
+/// PC's distros are found (agents.rs).
 #[cfg(windows)]
-fn running_distros() -> Vec<(String, PathBuf)> {
+pub(crate) fn running_distros() -> Vec<(String, PathBuf)> {
     let mut command = std::process::Command::new("wsl.exe");
     command.args(["--list", "--running", "--quiet"]);
     // UTF-8 instead of the UTF-16 wsl.exe prints to anything that is not a console.
@@ -321,7 +322,7 @@ fn running_distros() -> Vec<(String, PathBuf)> {
 }
 
 #[cfg(not(windows))]
-fn running_distros() -> Vec<(String, PathBuf)> {
+pub(crate) fn running_distros() -> Vec<(String, PathBuf)> {
     Vec::new()
 }
 

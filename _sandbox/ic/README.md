@@ -19,13 +19,23 @@ flowchart LR
   The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
   (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own); the desktop app and the machine agent call the
   installed one. An agent reaches it through a connected device's sandbox tools.
-- `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. It pulls the published
-  image even when it is cached, so the moving `stable` tag runs the newest release, unless its caller would rather
-  start now on the image the machine already holds (`INTENTIC_REUSE_IMAGE=1`, the desktop app's setups; never with
-  `SELF_HOST`). On Windows its preflight takes the shim's word for the facts `ic docker prepare` passed on a moment
-  before (`INTENTIC_PREPARED=1`, connect.ps1) rather than probing the PC a second time. `update`, `prepare`,
+- `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. The claim names this
+  machine and its side (`host`, `os`: `windows`, `linux/archlinux`), and a code already redeemed on another machine, or
+  on the other side of this one, is refused with the platform's own sentence instead of starting a second copy
+  (2026-10-05). It pulls the published image even when it is cached, so the moving `stable` tag runs the newest
+  release, unless its caller would rather start now on the image the machine already holds (`INTENTIC_REUSE_IMAGE=1`,
+  the desktop app's setups; never with `SELF_HOST`). On Windows its preflight takes the shim's word for the facts
+  `ic docker prepare` passed on a moment before (`INTENTIC_PREPARED=1`, connect.ps1) rather than probing the PC a second
+  time. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
-  moves the data to a trash that `restore` brings back and `purge` empties early.
+  moves the data to a trash that `restore` brings back and `purge` empties early. Before any restart or recreate of a
+  running sandbox ic writes the daemon's resume ask (`/history/restart-resume.json`, `{"askedAt": <ms>}` on the
+  container's clock, `resume.rs`), so the agent turns it cuts run again after it; `--no-resume` on `update`, `rollback`,
+  `rebuild`, `dev`, `reshape`, `shape`, `start` and `restart` leaves them for a person (2026-10-05). `remove` takes the
+  sandbox's lock, sends the platform its removal notice a few times within 20 seconds, and retires its folder-sync
+  pairings through `intentic-machine sync forget <slug>` when the agent is installed; it no longer deletes
+  `~/.intentic/machine`, which holds restore points and the audit log (2026-10-05). A purge keeps the trash entry until
+  every volume of the sandbox is gone, and a failed first setup removes the volumes it made.
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
   is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
   tells the container `SANDBOX_PROJECT_DIR`, which the run contract replays across every later swap.
@@ -59,21 +69,49 @@ flowchart LR
   sandbox's `/history/update-outcome.json` (`outcome.rs`), which its daemon shows the owner. The dogfood `dev` loop
   keeps no probation. `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
 - **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again); up to two older builds
-  are kept behind it when the disk allows, and `ic sandbox versions` lists them for `rollback --to <version>`. A
-  release nothing kept is downloaded by its version tag. Every build a swap leaves is pinned under a tag no other flow
-  writes, chosen by image identity (`identity.rs`): an environment overlay is labelled with the base it was built on,
-  since its base tag moves whenever anything on the machine pulls it.
+  are kept behind it when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
+  keeps its data on is read directly, where the check used to skip), and `ic sandbox versions` lists them for
+  `rollback --to <version>`. A release nothing kept is downloaded by its version tag, and so is a pin whose image was
+  pruned outside ic; a pin with neither its image nor a version is no longer offered (`versions.rs`, 2026-10-05). Every
+  build a swap leaves is pinned under a tag no other flow writes, chosen by image identity (`identity.rs`): an
+  environment overlay is labelled with the base it was built on, since its base tag moves whenever anything on the
+  machine pulls it.
 - **One record, one run at a time.** The channel record is fsynced, and copied onto the sandbox's own `/history`
   volume so every `ic` that drives the same Docker engine (the Windows side and a WSL distro, `sudo`) reads the same one
   (`mirror.rs`). A per-sandbox lock (`lock.rs`) orders ic runs from a terminal, the desktop app and the machine agent;
-  a background run skips a busy sandbox instead of waiting.
+  a background run skips a busy sandbox instead of waiting. Swaps, power, backups, `remove`, `restore`, `purge`, the
+  trash sweep, a saved shape (read, changed and written under the lock, then mirrored) and tidy's deletions all take it
+  (2026-10-05: tidy, remove, restore, purge and the shape save took none). A record names the side that keeps its
+  sandbox (`side=`), so a run with Docker down only counts this side's own (`fix/mod.rs`).
+- **Each side keeps its own sandboxes** (`side.rs`). On a Windows PC, ic on Windows and ic in each WSL distro drive one
+  engine; a container carries the side that created it, as `HOST_PLATFORM` (`windows`/`linux`) and `HOST_ENV`
+  (`windows`, the distro's name, `linux`, `macos`), and only that side's unattended verbs act on it. (2026-10-05)
+  `HOST_ENV` is put on the run line by ic itself, since the published run contract replays only the names it lists; a
+  container stamped with the platform alone is compared on the platform alone, and one with no stamp is stamped by the
+  side that next recreates it. Ownership is a lease: the keeper's `ic sandbox fix --auto` (and its backup and prepare
+  rounds) writes `/history/.ic/keeper.json` (`{side, env, machineId, at}`, the container's clock), and when it is
+  missing or 30 minutes old, `fix --auto`, `prepare --auto`, `backup --auto`, the watch sweep, tidy and `list --json`
+  treat the sandbox as this side's for that run and say `adopted: …` (in `--json`: `adopted`, or `adoptedFrom` and
+  `keeperSilentSince` in the listing, which then leaves out `keptElsewhere`). Everything ic creates carries Docker labels
+  (`labels.rs`): `dev.intentic.sandbox`, `dev.intentic.kind`, `dev.intentic.side` (`linux/archlinux`) and
+  `dev.intentic.ic`; objects made before keep working by name.
 - **Backups outside Docker.** `ic sandbox backup` copies `/work` and `/history` into an encrypted, incremental restic
   repository in `~/.intentic/backups/<slug>/`, keyed by `~/.intentic/keys/backup-<slug>.key` (`backup.rs`), so a Docker
   reset or a lost WSL disk does not take the sandbox with it. The machine agent runs it daily (`--auto`); every swap
   takes a quick one of the state an update converts first. `backups` lists them, and `backup-restore` puts one into a
-  folder or back into a sandbox's volumes.
+  folder or back into a sandbox's volumes. Each backup says so on the sandbox's volume (`/history/.ic/backup.json`,
+  `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
+  (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).
 - `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
-  environment builds, the trash past its window) and names volumes that belong to no sandbox without touching them.
+  environment builds and the ones a rebuild left dangling, the trash past its window) and names volumes and networks
+  that belong to no sandbox (all four families, `intentic-{workspace,history,docker,dind-docker}-<slug>`, and the
+  network; never a runner's). Unattended (`--auto`, or no terminal: the machine agent's daily round) it moves a set
+  nothing claims (no container, no record here, no trash entry, not labelled by another side) into the trash, which
+  starts the same seven-day window a removal does: it never deletes a volume itself. Records of gone sandboxes, and
+  report-only records of another side's, move to `records-archive/`, kept 90 days. It removes this side's backups of a
+  sandbox gone 30 days (counted from the later of its record's archiving and the last backup), or of one another side
+  keeps whose `/history/.ic/backup.json` is newer than this side's copy; never the only copy of a live sandbox, and
+  every decision is in the tidy log. (2026-10-05: none of these had a retention rule; rog held a 40.9 GB duplicate.)
   `ic sandbox reset-owner <slug>` moves an unreadable owner file aside, the one way back in for an owner the daemon
   locks out because it cannot read who owns it.
 - A sandbox's **shape** is the owner's own ask for memory, CPUs, privileged and GPU, always whole
@@ -95,12 +133,23 @@ flowchart LR
   machine and a sandbox in order, each with a deadline: Windows prerequisites, Docker Desktop, the engine, WSL, disk,
   the container, its daemon, its registration, the network, the tunnel and the machine agent. It applies the fixes that
   are safe unasked (starting Docker Desktop, tidying, starting a sandbox nobody stopped, finishing a cut-off swap,
-  restarting one whose registration gave up), asks on the terminal before the rest, and re-checks after each. Exit 0
+  restarting one whose registration gave up), asks on the terminal before the rest, and re-checks after each. Every
+  automatic restart is busy-aware (agents mid-turn mean a yes first), and the repairs made through ic are counted on
+  the sandbox's volume (`/history/.ic/repairs.json`, `ledger.rs`, reported as `repairs` in `--json`): after three
+  automatic restarts in two hours the keeper stops and asks instead. A container a person stopped outside ic (Docker
+  Desktop's Stop button: Exited, `unless-stopped`, exit 0 or 143, the stop in the engine's event log) is recorded as
+  held and left for a yes, and a stopped tunnel container from an older setup is removed rather than started. An
+  unattended run on a side that keeps no sandbox names the machine's trouble and repairs none of it (2026-10-05: a
+  device-only PC had the Docker Desktop its owner quit started every sweep). Docker Desktop's start at sign-in counts
+  as on when its settings or the HKCU Run key say so, and a source that cannot be read leaves it unknown, never a
+  finding (2026-10-05: the verdict flapped every few minutes). Its reports name this side's environment (`env`). Exit 0
   is healthy or fixed, 1 something is left, 3 a fix needed a yes nobody could give, 4 Windows has to restart or sign
   out first. `--auto` is the machine agent's run (safe fixes only, nothing asked), `--yes` and `--accept <ids>` give
   consent in advance, and `--json` prints machine lines for the desktop app. Given the code the browser's recovery
   panel minted (`--code`, or `FIX_CODE` through the `/fix` shim), or holding a sandbox's report key, it posts its
-  progress to the platform's host report, which the page mirrors. The platform never sends it anything.
+  progress to the platform's host report, which the page mirrors. The platform never sends it anything. A finished
+  report also carries the machine agent's last upkeep pass (`~/.intentic/machine/upkeep.json`, summed, with the agent's
+  version), so the platform can tell whether a release brought machines to the current shape (2026-10-05).
   `ic sandbox doctor` is the same engine, read-only.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
@@ -113,6 +162,8 @@ flowchart LR
 - [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup one-liner's flow after Docker: claim, launch, reachability.
 - [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — every image swap (update, prepare, rollback, rebuild, reshape) as one flow.
 - [src/sandbox/probation.rs](src/sandbox/probation.rs) — the watch that finishes interrupted swaps and rolls a failing new version back.
+- [src/sandbox/side.rs](src/sandbox/side.rs) — which side of the computer keeps a sandbox, and the keeper's lease;
+  [src/sandbox/inside.rs](src/sandbox/inside.rs) reads and writes the files every side shares under `/history/.ic/`.
 - [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
 - [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
 

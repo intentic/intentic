@@ -1,6 +1,6 @@
 import { pollUntil } from "@intentic/base/async";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
-import { formatStamp, parseStamp, STAMP_KEY } from "@intentic/graph";
+import { formatStamp, OWNER_KEY, parseStamp, STAMP_KEY } from "@intentic/graph";
 import { z } from "zod";
 import { parseInputs } from "../core/inputs.js";
 import type { CloudflareApi } from "./cloudflare-api.js";
@@ -10,6 +10,16 @@ const cfRouteSchema = z.object({ hostname: z.string(), zoneId: z.string(), apiTo
 const parse = (inputs: ResolvedInputs): z.infer<typeof cfRouteSchema> => parseInputs(cfRouteSchema, inputs, "cf-route");
 // Parsed separately from cname, so delete also works from a ListedResource's inputs (no cname there).
 const deleteSchema = cfRouteSchema.omit({ cname: true });
+
+// Cloudflare caps a DNS record comment at 100 characters on the free plan.
+const COMMENT_LIMIT = 100;
+
+// The record's comment: the owned stamp when it fits the cap, the legacy one otherwise. A route whose id is too long to
+// carry its owner is never owner-checked (read leaves stampOwner unset), or adopting it would never converge.
+const stampComment = (id: string, owner: string | undefined): { readonly comment: string; readonly owned: boolean } => {
+    const owned = owner === undefined ? undefined : formatStamp(id, owner);
+    return owned !== undefined && owned.length <= COMMENT_LIMIT ? { comment: owned, owned: true } : { comment: formatStamp(id), owned: false };
+};
 
 // Waits until a fresh proxied record resolves before downstream providers hit it; a premature lookup would
 // cache NXDOMAIN for the zone's negative TTL. Probes over DoH so the check itself never pollutes that cache;
@@ -45,7 +55,7 @@ export const createCfRouteProvider = (
     api: CloudflareApi = cloudflareApi,
     awaitPropagation: DnsPropagationWait = waitForDnsPropagation,
 ): Provider => ({
-    read: async (inputs) => {
+    read: async (inputs, ctx) => {
         // cname and zoneId may still be PENDING $refs; parses only deleteSchema's fields, never cname.
         if (typeof inputs["zoneId"] !== "string") {
             return undefined;
@@ -55,7 +65,13 @@ export const createCfRouteProvider = (
         if (record === undefined) {
             return undefined;
         }
-        return { outputs: { url: `https://${hostname}` }, detail: { content: record.content } };
+        // Rewriting a record's comment is one API call, so an unowned route is adopted by the update that follows.
+        const owned = stampComment(ctx.id, ctx.owner).owned;
+        return {
+            outputs: { url: `https://${hostname}` },
+            detail: { content: record.content },
+            ...(owned ? { stampOwner: parseStamp(record.comment ?? "")?.owner ?? "" } : {}),
+        };
     },
     diff: (inputs, observed) => {
         // Tunnel is still a pending create, so the target cname isn't derivable yet; report drift instead.
@@ -71,7 +87,7 @@ export const createCfRouteProvider = (
     },
     apply: async (inputs, _observed, ctx) => {
         const { hostname, zoneId, apiToken, cname } = parse(inputs);
-        const comment = formatStamp(ctx.id);
+        const { comment } = stampComment(ctx.id, ctx.owner);
         const record = await api.findDnsRecord({ apiToken, zoneId, name: hostname });
         if (record === undefined) {
             await api.createDnsRecord({ apiToken, zoneId, name: hostname, content: cname, comment });
@@ -89,8 +105,8 @@ export const createCfRouteProvider = (
         }
         await api.deleteDnsRecord({ apiToken, zoneId, recordId: record.id });
     },
-    // Scans the zone for stamped records; zone id is re-resolved from the cloudflare source since a scan has no read
-    // pass to seed it.
+    // Scans the zone for stamped records, each with its owner; zone id is re-resolved from the cloudflare source since a
+    // scan has no read pass to seed it.
     list: async (sources, ctx) => {
         const account = sources.find((source) => source.type === "cloudflare");
         if (account === undefined) {
@@ -100,12 +116,25 @@ export const createCfRouteProvider = (
         const found = await api.getZone({ apiToken, zone });
         if (found === undefined) {
             ctx.log(`cf-route list: zone "${zone}" not found, skipping scan`);
+            ctx.skipped?.(account.id, `zone "${zone}" not found`);
             return [];
         }
-        const records = await api.listStampedDnsRecords({ apiToken, zoneId: found.id, commentPrefix: `${STAMP_KEY}=` });
+        // Two prefixes: legacy stamps (no owner) start with the id, owned ones with the owner.
+        const records = [
+            ...(await api.listStampedDnsRecords({ apiToken, zoneId: found.id, commentPrefix: `${STAMP_KEY}=` })),
+            ...(await api.listStampedDnsRecords({ apiToken, zoneId: found.id, commentPrefix: `${OWNER_KEY}=` })),
+        ];
         return records.flatMap((record) => {
-            const id = parseStamp(record.comment);
-            return id === undefined ? [] : [{ id, inputs: { hostname: record.name, zoneId: found.id, apiToken } }];
+            const stamp = parseStamp(record.comment);
+            return stamp === undefined
+                ? []
+                : [
+                      {
+                          id: stamp.id,
+                          inputs: { hostname: record.name, zoneId: found.id, apiToken },
+                          ...(stamp.owner !== undefined ? { owner: stamp.owner } : {}),
+                      },
+                  ];
         });
     },
 });

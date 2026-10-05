@@ -141,9 +141,45 @@ export const transportFor = async (
     const container = await locate(sandboxUrl);
     if (container === undefined) {
         if (asked === "docker") {
-            throw new Error(`--transport docker needs this sandbox's container running on this machine's Docker engine, and none here serves ${sandboxUrl}.`);
+            throw new Error(
+                `--transport docker needs this sandbox's container running on this machine's Docker engine, and none here serves ${sandboxUrl}.`,
+            );
         }
         return {};
     }
     return { transport: "docker", container };
+};
+
+// WHAT BECAME OF A DOCKER PAIRING'S CONTAINER, asked again on every prepare and every minute (gone.ts `dockerStep`), in
+// the four words that rule needs: it serves this sandbox; it exists but does not (stopped, or another sandbox under the
+// name); the engine answered and holds no container of that name; or the engine could not be asked. Only the third is
+// news: a stopped container is a sandbox not started yet, and an engine that is down says nothing about any container.
+export type ListContainers = (container: string) => Promise<readonly string[] | undefined>;
+
+// `docker ps -a` narrowed to exactly that name: the names it prints, or undefined when the engine did not answer.
+const listContainers: ListContainers = async (container) => {
+    const result = await runProcess("docker", ["ps", "-a", "--filter", `name=^/${container}$`, "--format", "{{.Names}}"], {
+        timeoutMs: INSPECT_TIMEOUT_MS,
+    });
+    return result.status === 0
+        ? result.stdout
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter((line) => line !== "")
+        : undefined;
+};
+
+export const containerState = async (
+    container: string,
+    sandboxUrl: string,
+    { inspect = inspectContainer, list = listContainers }: { readonly inspect?: InspectContainer; readonly list?: ListContainers } = {},
+): Promise<"serves" | "stopped" | "missing" | "unknown"> => {
+    if (servesSandbox(await inspect(container), sandboxUrl)) {
+        return "serves";
+    }
+    const names = await list(container);
+    if (names === undefined) {
+        return "unknown";
+    }
+    return names.includes(container) ? "stopped" : "missing";
 };

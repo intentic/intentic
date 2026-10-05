@@ -107,3 +107,66 @@ export const planSummary = (steps: readonly Step[], orphans: readonly Named[]): 
     const counts = stepCounts(steps);
     return [...(counts.length > 0 ? ["", ...counts] : []), ...orphanBlock(orphans)];
 };
+
+// Stamped resources with no owner stamp: made before owners existed (2026-10-05), or by an intent resolved without one.
+// Nothing proves they are this intent's, so nothing prunes them; a person decides.
+export const unownedBlock = (unowned: readonly Named[]): string[] => {
+    if (unowned.length === 0) {
+        return [];
+    }
+    const them = unowned.length === 1 ? "it" : "them";
+    return [
+        "",
+        `${plural(unowned.length, "stamped resource")} with no owner stamp, not in the desired graph (made before owner stamps, never pruned):`,
+        ...columns(unowned.map((resource) => [`  ${resource.id}`, resource.type])),
+        `Unowned: adopt ${them} by declaring ${them} (the next apply stamps ${them}), or remove ${them} by hand.`,
+    ];
+};
+
+// Nodes removed from the intent that the baseline still holds for deletion: they wait for `--yes`, or a delete failed
+// for want of a secret.
+export const pendingBlock = (pending: readonly Named[]): string[] => {
+    if (pending.length === 0) {
+        return [];
+    }
+    const them = pending.length === 1 ? "it" : "them";
+    return [
+        "",
+        `${plural(pending.length, "resource")} removed from the desired graph, pending deletion:`,
+        ...columns(pending.map((resource) => [`  ${resource.id}`, resource.type])),
+        `Delete ${them} with \`intentic deploy apply --yes\`.`,
+    ];
+};
+
+/** A machine a host migration moved away from, and what scanning it found. */
+export interface RetiredReport {
+    readonly id: string;
+    readonly address: string;
+    readonly leftovers: readonly Named[];
+    readonly unowned: readonly Named[];
+    // Why it could not be scanned this time.
+    readonly error?: string;
+}
+
+export const retiredBlock = (hosts: readonly RetiredReport[]): string[] =>
+    hosts.flatMap((host) => {
+        const name = `old host ${host.id} (${host.address}), retired by a migration`;
+        if (host.error !== undefined) {
+            return ["", `${name}: not scanned (${host.error}); it stays on the list until a scan finds it clean.`];
+        }
+        if (host.leftovers.length === 0 && host.unowned.length === 0) {
+            return ["", `${name}: clean, nothing of this intent left on it.`];
+        }
+        return [
+            "",
+            `${name}, still runs:`,
+            ...columns([
+                ...host.leftovers.map((resource) => [`  ${resource.id}`, resource.type, "this intent's: deleted by `apply --yes`"]),
+                ...host.unowned.map((resource) => [`  ${resource.id}`, resource.type, "unowned: remove by hand"]),
+            ]),
+        ];
+    });
+
+// Where the orphan scan could not look: the verdict above it is "nothing found", not "nothing there".
+export const scanGapBlock = (skipped: readonly { readonly source: string; readonly reason: string }[]): string[] =>
+    skipped.length === 0 ? [] : ["", "The orphan scan is incomplete:", ...skipped.map((skip) => `  ${skip.source}: ${skip.reason}`)];

@@ -76,4 +76,5 @@ const COMMANDS: &[&str] = &[
     "machine_sandbox_start",
     "machine_sandbox_end_session",
     "found_on_machine",
+    "machine_agents",
 ];

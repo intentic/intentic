@@ -1,4 +1,5 @@
 import {
+    containerState,
     dockerEndpointAnswers,
     type InspectContainer,
     liveIdentity,
@@ -30,7 +31,10 @@ const engine =
 describe("pairingEndpoint", () => {
     it("reaches every pairing over ssh unless it is a docker pairing naming its container", () => {
         expect(pairingEndpoint({ sandboxId: "box" })).toEqual({ kind: "ssh", alias: "intentic-sync-box" });
-        expect(pairingEndpoint({ sandboxId: "box", transport: "docker", container: CONTAINER_A })).toEqual({ kind: "docker", container: CONTAINER_A });
+        expect(pairingEndpoint({ sandboxId: "box", transport: "docker", container: CONTAINER_A })).toEqual({
+            kind: "docker",
+            container: CONTAINER_A,
+        });
         // A docker pairing that lost its container name cannot be reached through Docker, so it falls back to ssh.
         expect(pairingEndpoint({ sandboxId: "box", transport: "docker" })).toEqual({ kind: "ssh", alias: "intentic-sync-box" });
     });
@@ -99,7 +103,9 @@ describe("localSandboxContainer", () => {
     it("answers nothing for a sandbox this engine does not run, a stopped one, or a namesake serving another address", async () => {
         expect(await localSandboxContainer(URL_A, engine({}))).toBeUndefined();
         expect(await localSandboxContainer(URL_A, engine({ [CONTAINER_A]: { running: false, url: URL_A } }))).toBeUndefined();
-        expect(await localSandboxContainer(URL_A, engine({ [CONTAINER_A]: { running: true, url: "https://sandbox-0123456789ab.other.dev" } }))).toBeUndefined();
+        expect(
+            await localSandboxContainer(URL_A, engine({ [CONTAINER_A]: { running: true, url: "https://sandbox-0123456789ab.other.dev" } })),
+        ).toBeUndefined();
     });
 });
 
@@ -107,7 +113,28 @@ describe("dockerEndpointAnswers", () => {
     // Asked before every session is made through the container: the name can outlive the sandbox it was paired with.
     it("answers only while the named container is still this sandbox", async () => {
         expect(await dockerEndpointAnswers(CONTAINER_A, URL_A, engine({ [CONTAINER_A]: { running: true, url: URL_A } }))).toBe(true);
-        expect(await dockerEndpointAnswers(CONTAINER_A, URL_A, engine({ [CONTAINER_A]: { running: true, url: "https://sandbox-new.sbx.example.dev" } }))).toBe(false);
+        expect(
+            await dockerEndpointAnswers(CONTAINER_A, URL_A, engine({ [CONTAINER_A]: { running: true, url: "https://sandbox-new.sbx.example.dev" } })),
+        ).toBe(false);
         expect(await dockerEndpointAnswers(CONTAINER_A, URL_A, engine({}))).toBe(false);
+    });
+});
+
+// (2026-10-05) A docker pairing's container, asked after again on every prepare and every minute: only "the engine
+// answered and holds no such container" is news; a stopped one is a sandbox not started yet, and an engine that is down
+// says nothing about any container.
+describe("containerState", () => {
+    const running = { running: true, env: [`SANDBOX_PUBLIC_URL=${URL_A}`] };
+
+    it("serves when the container runs as this sandbox", async () => {
+        expect(await containerState(CONTAINER_A, URL_A, { inspect: async () => running, list: async () => [CONTAINER_A] })).toBe("serves");
+    });
+
+    it("is stopped when it exists but does not serve this sandbox, missing when the engine holds none, unknown when it did not answer", async () => {
+        expect(
+            await containerState(CONTAINER_A, URL_A, { inspect: async () => ({ ...running, running: false }), list: async () => [CONTAINER_A] }),
+        ).toBe("stopped");
+        expect(await containerState(CONTAINER_A, URL_A, { inspect: async () => undefined, list: async () => [] })).toBe("missing");
+        expect(await containerState(CONTAINER_A, URL_A, { inspect: async () => undefined, list: async () => undefined })).toBe("unknown");
     });
 });

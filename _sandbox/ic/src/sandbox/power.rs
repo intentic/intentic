@@ -4,7 +4,8 @@ use crate::docker;
 use crate::record;
 use crate::sandbox::recreate::{self, Preflight};
 use crate::sandbox::{
-    desired, lock, mirror, parked_of, probation, resolve_slug, CONTAINER_PREFIX, TUNNEL_PREFIX,
+    desired, ledger, lock, mirror, parked_of, probation, resolve_slug, resume, CONTAINER_PREFIX,
+    TUNNEL_PREFIX,
 };
 use crate::shape::Ask;
 use crate::util::{bail, Result};
@@ -47,7 +48,19 @@ fn order(power: Power, container: &str, sidecar: Option<&str>) -> Vec<String> {
     order
 }
 
+/// Who asked: a person (a terminal, the desktop app, the machine agent relaying a button), or the keeper's own repair.
+/// Only the keeper's restarts count toward the ledger's limit on automatic ones (ledger.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum By {
+    Person,
+    Keeper,
+}
+
 pub fn run(power: Power, slug: Option<String>) -> Result<()> {
+    run_by(power, slug, By::Person)
+}
+
+pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, &format!("ic sandbox {}", power.verb()))?;
     let _held = lock::hold_for_person(&slug)?;
@@ -91,10 +104,20 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
             if let Some(sidecar) = sidecar {
                 power_one("start", sidecar)?;
             }
+            let kind = if power == Power::Restart {
+                ledger::RESTART
+            } else {
+                ledger::START
+            };
+            ledger::note(&slug, kind, by == By::Keeper);
             return Ok(());
         }
     }
 
+    // The turns a restart cuts are picked up again by the daemon's next boot (resume.rs).
+    if power == Power::Restart && resume::ask(&container) {
+        println!("intentic: {slug}'s agents pick up the turns this restart cuts once it is back.");
+    }
     // Every container is tried, and what refused is said after: a tunnel that would not stop must not leave the
     // sandbox itself running.
     let refused: Vec<String> = order(power, &container, sidecar)
@@ -105,6 +128,11 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
         bail!("{}", refused.join("\n       "));
     }
     hold(&slug, power == Power::Stop);
+    match power {
+        Power::Restart => ledger::note(&slug, ledger::RESTART, by == By::Keeper),
+        Power::Start => ledger::note(&slug, ledger::START, by == By::Keeper),
+        Power::Stop => {}
+    }
     let done = match power {
         Power::Start => "started",
         Power::Stop => "stopped",
@@ -123,8 +151,10 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
 
 /* STOPPED ON PURPOSE. A stop through ic is the owner's decision, and `ic sandbox fix` (the machine agent's `--auto`
 among its callers) must never undo it unasked; a start or restart through ic is the decision reversed. Read through
-the mirror first, so a stale record on this side is never stamped as the newest. */
-fn hold(slug: &str, held: bool) {
+the mirror first, so a stale record on this side is never stamped as the newest. A stop a person made outside ic
+(Docker Desktop's Stop button) is recorded here too once the fix engine has seen it (fix/chain.rs), and a sandbox found
+running again is the decision reversed. */
+pub(crate) fn hold(slug: &str, held: bool) {
     let saved = mirror::reconcile(slug);
     if saved.held == held {
         return;

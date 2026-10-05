@@ -12,7 +12,7 @@ import { startBootResumes } from "./bootstrap/boot-resumes.js";
 import { startBootSchedulers } from "./bootstrap/boot-schedulers.js";
 import { startBootSweeps } from "./bootstrap/boot-sweeps.js";
 import { startChangeReactions } from "./bootstrap/change-reactions.js";
-import { prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
+import { forgetDaemonOnlyEnv, prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
 import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { startFrontDoor } from "./bootstrap/front-door.js";
@@ -25,6 +25,7 @@ import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
 import { loadConfig } from "./env.config.js";
 import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
+import { bootFacts } from "./system/boot/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
 import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
@@ -128,7 +129,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => void room.close());
         // How many turns run, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
-        const work = startWorkSignal({ conversations: services.conversations, events: services.events, logger });
+        const work = startWorkSignal({ conversations: services.conversations, events: services.events, logger, boot: bootFacts });
         shutdown.push(() => work.stop());
     }
     shutdown.push(() => services.perf.stop());
@@ -169,6 +170,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     declareBootSteps(services);
     attempt.stage = "Opening the front door";
     const reach = await startFrontDoor(phase, host);
+    // The front door has dialled its sockets: no child inherits them from here on (daemon-env.ts).
+    forgetDaemonOnlyEnv();
     startPlatformPresence(phase, reach);
 
     attempt.stage = "Running the boot chain";

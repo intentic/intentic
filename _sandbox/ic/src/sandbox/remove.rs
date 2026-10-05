@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use crate::docker;
+use crate::sandbox::lock;
 use crate::sandbox::trash;
 use crate::sandbox::trash::GRACE_DAYS;
 use crate::sandbox::{container_status, list_slugs, CONTAINER_PREFIX};
@@ -151,9 +154,15 @@ fn aftermath(now: bool) -> String {
     format!("Their data (/work + /history) is kept for {GRACE_DAYS} days — 'ic sandbox restore <slug>' brings one back. Add --now to delete it instead.")
 }
 
-/// Host-wide teardown, run once the machine holds nothing this flow could still be asked to bring back. Desktop
-/// sync and the agent-auth volume are not per-slug, and the volume stays docker-locked while any container
-/// references it — which a trashed sandbox's container still does.
+/// Host-wide teardown, run once the machine holds nothing this flow could still be asked to bring back. The agent-auth
+/// volume is not per-slug, and it stays docker-locked while any container references it — which a trashed sandbox's
+/// container still does.
+///
+/// (2026-10-05) The machine agent's own folder is no longer deleted here: `~/.intentic/machine` also holds the restore
+/// points of every synced folder and the audit log, which the agent's own uninstall deliberately keeps, and removing
+/// it under a running agent broke it rather than retiring it. Each removed sandbox's pairings are retired through the
+/// agent instead (`forget_pairings`), and the agent retires itself once it has nothing left to serve, as it already
+/// does.
 fn finish(args: &Args) {
     let Some(remaining) = crate::sandbox::live_slugs() else {
         eprintln!("intentic: docker could not list this machine's sandboxes, so the host-wide state they share was kept.");
@@ -161,7 +170,6 @@ fn finish(args: &Args) {
     };
     let recoverable = trash::list();
     if remaining.is_empty() && recoverable.is_empty() {
-        remove_sync_state();
         maybe_remove_agent_auth(args);
     } else if args.agent_auth {
         eprintln!(
@@ -186,10 +194,26 @@ fn finish(args: &Args) {
     }
 }
 
+/// How many times the removal notice is tried, and how long a removal waits on it in all: a flaky network must not
+/// cost the platform the one positive "gone" it gets for a sandbox (the audit's rule 3), and a dead one must not hold
+/// the removal for long.
+const FAREWELL_TRIES: u32 = 3;
+const FAREWELL_BUDGET: Duration = Duration::from_secs(20);
+
+/// Whether a refused notice is worth another try: no answer at all, a server error, or a rate limit. A 4xx is the
+/// platform's considered answer (an unknown token, a sandbox it already forgot) and another try changes nothing. Pure.
+pub fn farewell_again(refusal: &crate::platform::Refusal) -> bool {
+    match refusal {
+        crate::platform::Refusal::Unreached => true,
+        crate::platform::Refusal::Status(status) => *status >= 500 || *status == 429,
+    }
+}
+
 /// Tells the platform this sandbox is being deleted, BEFORE anything is deleted — the container's env is where
-/// its connect token lives, and a removed container answers no questions. Silent on every failure: a sandbox
-/// that was never connected to a platform, a machine that is offline, an old container missing either value.
-/// The browser's fallback is the wait it already does, so nothing here is worth a word in a removal's output.
+/// its connect token lives, and a removed container answers no questions. Tried a few times within a budget, then
+/// let go silently: a sandbox that was never connected to a platform, a machine that is offline, an old container
+/// missing either value. The browser's fallback is the wait it already does, so nothing here is worth a word in a
+/// removal's output.
 fn announce_removal(slug: &str) {
     let container = format!("{CONTAINER_PREFIX}{slug}");
     let (Some(token), Some(platform)) = (
@@ -198,22 +222,108 @@ fn announce_removal(slug: &str) {
     ) else {
         return;
     };
-    crate::platform::farewell(&platform, &token, &crate::sandbox::connect::machine_label());
+    let machine = crate::sandbox::connect::machine_label();
+    let started = std::time::Instant::now();
+    for attempt in 1..=FAREWELL_TRIES {
+        match crate::platform::farewell(&platform, &token, &machine) {
+            Ok(()) => return,
+            Err(refusal) if !farewell_again(&refusal) => return,
+            Err(_) => {}
+        }
+        let pause = Duration::from_secs(u64::from(attempt) * 2);
+        if attempt == FAREWELL_TRIES || started.elapsed() + pause >= FAREWELL_BUDGET {
+            return;
+        }
+        std::thread::sleep(pause);
+    }
 }
 
 /// One sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op). The
-/// dind pair is the Windows self-host deploy target connect.ps1 stands up beside the sandbox.
+/// dind pair is the Windows self-host deploy target connect.ps1 stands up beside the sandbox. Takes the sandbox's lock,
+/// waiting for a swap or a backup of it to finish rather than pulling its containers out from under it.
 pub fn remove_slug(slug: &str, now: bool) {
+    let _held = match lock::hold_for_person(slug) {
+        Ok(held) => held,
+        Err(fail) => {
+            eprintln!("intentic: {slug} was left as it is: {}", fail.0);
+            return;
+        }
+    };
     announce_removal(slug);
     if now {
         println!("intentic: deleting sandbox '{slug}' (containers + named volumes + network)…");
-        trash::purge(slug);
-        return;
+        if let Err(why) = trash::purge(slug) {
+            eprintln!("intentic: {why}.");
+        }
+    } else {
+        println!(
+            "intentic: removing sandbox '{slug}' — its data stays recoverable for {GRACE_DAYS} days…"
+        );
+        trash::stash(slug);
     }
-    println!(
-        "intentic: removing sandbox '{slug}' — its data stays recoverable for {GRACE_DAYS} days…"
-    );
-    trash::stash(slug);
+    forget_pairings(slug);
+}
+
+/// How long the machine agent gets to retire a sandbox's pairings.
+const FORGET_LIMIT: Duration = Duration::from_secs(60);
+
+/// Retire this sandbox's folder-sync pairings in every environment of this machine, through its machine agent
+/// (`intentic-machine sync forget <slug>`): a removed sandbox otherwise stays paired, and its sessions are retried
+/// against an address that no longer answers, forever (audit 2026-10, the gone signal). Best-effort and quiet: no
+/// agent, or one too old to know the verb, is a machine with nothing to forget. Run as the invoking user under sudo,
+/// whose agent it is.
+fn forget_pairings(slug: &str) {
+    let Some(agent) = machine_agent() else {
+        return;
+    };
+    let mut command = match invoking_user() {
+        Some(user) => {
+            let mut sudo = std::process::Command::new("sudo");
+            sudo.args(["-u", &user, "-H"]).arg(&agent);
+            sudo
+        }
+        None => std::process::Command::new(&agent),
+    };
+    command.args(["sync", "forget", slug]);
+    if let Ok(ran) = docker::bounded(command, FORGET_LIMIT) {
+        if ran.code == Some(0) {
+            println!("intentic: {slug}'s folder sync was retired on this machine.");
+        }
+    }
+}
+
+/// The machine agent's binary: on PATH, else where its installer puts it.
+fn machine_agent() -> Option<std::path::PathBuf> {
+    let name = if cfg!(windows) {
+        "intentic-machine.exe"
+    } else {
+        "intentic-machine"
+    };
+    let on_path = std::env::var_os("PATH").and_then(|path| {
+        std::env::split_paths(&path)
+            .map(|dir| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    });
+    on_path.or_else(|| {
+        let installed = crate::logfile::intentic_home()
+            .join("machine")
+            .join("bin")
+            .join(name);
+        installed.is_file().then_some(installed)
+    })
+}
+
+/// The user who ran `sudo ic …`, whose agent and home these are; None when this is not a sudo run.
+fn invoking_user() -> Option<String> {
+    #[cfg(unix)]
+    {
+        if docker::is_root() {
+            return std::env::var("SUDO_USER")
+                .ok()
+                .filter(|user| !user.is_empty());
+        }
+    }
+    None
 }
 
 /// Volumes and networks no per-slug pass would reach, because no container names them any more. Only ever
@@ -251,69 +361,6 @@ fn volume_names(prefix: &str) -> Vec<String> {
         .map(str::to_string)
         .filter(|line| !line.is_empty())
         .collect()
-}
-
-/// Host-side machine-agent state (per-user: ~/.intentic/machine, the ssh include, the Mutagen sessions + daemon
-/// registration) — removed as the INVOKING user, mirroring how connect installed it. The agent's own
-/// `uninstall` does the session/ssh-config work; best-effort, state may be absent.
-#[cfg(unix)]
-fn remove_sync_state() {
-    println!("intentic: removing machine-agent state…");
-    let (as_user, home) = match (docker::is_root(), std::env::var("SUDO_USER")) {
-        (true, Ok(user)) if !user.is_empty() => {
-            let home = std::process::Command::new("sh")
-                .args(["-c", &format!("eval echo ~{user}")])
-                .output()
-                .ok()
-                .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
-                .unwrap_or_default();
-            (Some(user), std::path::PathBuf::from(home))
-        }
-        _ => (
-            None,
-            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()),
-        ),
-    };
-    let agent = home.join(".intentic/machine/bin/intentic-machine");
-    if agent.exists() {
-        let mut cmd = match &as_user {
-            Some(user) => {
-                let mut sudo = std::process::Command::new("sudo");
-                sudo.args(["-u", user, "-H", &agent.to_string_lossy()]);
-                sudo
-            }
-            None => std::process::Command::new(&agent),
-        };
-        let _ = cmd
-            .arg("uninstall")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-    }
-    for path in [
-        home.join(".intentic/machine"),
-        home.join(".local/bin/intentic-machine"),
-        home.join(".ssh/intentic-machine.conf"),
-    ] {
-        let _ = std::fs::remove_dir_all(&path).or_else(|_| std::fs::remove_file(&path));
-    }
-}
-
-/// The Windows twin (cleanup.ps1) removes %USERPROFILE%\.intentic\machine and the agent's login entry via the
-/// agent's own uninstall; mirror that shape.
-#[cfg(windows)]
-fn remove_sync_state() {
-    println!("intentic: removing machine-agent state…");
-    let home = std::path::PathBuf::from(std::env::var("USERPROFILE").unwrap_or_default());
-    let agent = home.join(".intentic\\machine\\bin\\intentic-machine.exe");
-    if agent.exists() {
-        let _ = std::process::Command::new(&agent)
-            .arg("uninstall")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-    }
-    let _ = std::fs::remove_dir_all(home.join(".intentic\\machine"));
 }
 
 fn auth_volume() -> String {
@@ -355,5 +402,20 @@ fn remove_agent_auth(volume: &str) {
     println!("intentic: removing shared dev agent-auth volume '{volume}' (AI logins)…");
     if !docker::ok(&["volume", "rm", volume]) {
         eprintln!("intentic: could not remove '{volume}' — still referenced by a container.");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::Refusal;
+
+    #[test]
+    fn the_removal_notice_is_tried_again_only_when_another_try_could_land() {
+        assert!(farewell_again(&Refusal::Unreached));
+        assert!(farewell_again(&Refusal::Status(502)));
+        assert!(farewell_again(&Refusal::Status(429)));
+        assert!(!farewell_again(&Refusal::Status(401)));
+        assert!(!farewell_again(&Refusal::Status(404)));
     }
 }

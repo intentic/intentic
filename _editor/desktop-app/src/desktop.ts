@@ -59,6 +59,26 @@ export interface SandboxStatus {
     image: string;
     tunnelRunning?: boolean;
     resources?: DeviceSandboxResources;
+    // The other side of this computer that keeps it (`windows`, `linux`), absent for this side's own: on Windows, ic in
+    // WSL and ic on Windows each list every sandbox on the one Docker engine, and only the side that created one runs its
+    // background care. A person's start, stop and restart still reach it from here.
+    keptElsewhere?: string;
+    // The environment that keeps it by name (the WSL distro), where ic stamps one (HOST_ENV) and lists it.
+    hostEnv?: string;
+    // How a person reads the side that keeps it ("WSL (archlinux)", "Windows"), from an ic that says (2026-10-05).
+    keptElsewhereName?: string;
+}
+
+// One environment of this computer and what of Intentic's machine side it holds (src-tauri/src/agents.rs): this app's
+// own (`windows` or `linux`, `here`), and on Windows each WSL distro that is running.
+export interface MachineEnvironment {
+    kind: `windows` | `linux` | `wsl`;
+    distro?: string;
+    here: boolean;
+    // A machine agent is installed there, and its pidfile says it runs.
+    agent: boolean;
+    running: boolean;
+    ic: boolean;
 }
 
 // Docker engine's size (commands.rs DockerEngine): the ceiling the Resources form draws rails against. Null means
@@ -147,7 +167,9 @@ export type UpdateStage =
     | { kind: `current` }
     | { kind: `downloading`; version: string; percent: number }
     | { kind: `ready`; version: string }
-    | { kind: `manual`; version: string | null; reason: string; url: string };
+    | { kind: `manual`; version: string | null; reason: string; url: string }
+    // A deb or rpm upgrade already replaced this app on disk while it ran: the offer is a restart onto it.
+    | { kind: `installed` };
 
 export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
 // Whether a Docker daemon answers right now; false covers both not-installed and not-started, which the scripts
@@ -195,6 +217,8 @@ export const folderEntries = (path: string): Promise<number> => invoke(`folder_e
 // prepare` only reports what would change); the click to fix it comes back as true.
 export const setupRun = (args: SetupArgs, install = false): Promise<void> => invoke(`setup_run`, { args, install });
 export const sandboxList = (): Promise<SandboxStatus[]> => invoke(`sandbox_list`);
+/** This computer's environments and the machine agent each holds; a stand-in that knows none answers nothing. */
+export const machineAgents = async (): Promise<MachineEnvironment[]> => (await invoke<MachineEnvironment[] | null>(`machine_agents`)) ?? [];
 export const sandboxPower = (slug: string, action: PowerAction): Promise<void> => invoke(`sandbox_power`, { slug, action });
 // One command for all three recreate modes: no hash rebuilds :stable, a hash pins the overlay to that digest,
 // rollback reverts to the pre-update image.

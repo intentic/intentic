@@ -124,6 +124,12 @@ pub struct ChannelRecord {
     pub report_key: Option<String>,
     /// The platform origin that key reports to, as this machine spells it.
     pub report_platform: Option<String>,
+    /// The side of this computer that keeps the sandbox the record describes (side.rs's wire form, `windows`,
+    /// `linux/archlinux`): named by the first write, from the container's own stamp (else the side writing), and kept by
+    /// every write after, whichever side makes it and whichever home it is copied into (mirror.rs). What tells a record
+    /// of this side's own sandbox from a copy of another side's. Absent from a record an ic before it wrote.
+    /// (2026-10-05)
+    pub side: Option<String>,
 }
 
 impl ChannelRecord {
@@ -212,7 +218,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     // So are a kept target's image and version, and a swap's keys: a half-written group is no group.
     let mut kept: [(Option<String>, Option<String>); MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
-    let mut rest: [Option<String>; 7] = Default::default();
+    let mut rest: [Option<String>; 8] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -237,6 +243,7 @@ pub fn parse(content: &str) -> ChannelRecord {
             "held" => &mut rest[4],
             "report_key" => &mut rest[5],
             "report_platform" => &mut rest[6],
+            "side" => &mut rest[7],
             "kept_1" => &mut kept[0].0,
             "kept_1_version" => &mut kept[0].1,
             "kept_2" => &mut kept[1].0,
@@ -265,7 +272,7 @@ pub fn parse(content: &str) -> ChannelRecord {
         privileged.as_deref(),
         gpus.as_deref(),
     );
-    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform] =
+    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side] =
         rest;
     record.current_version = current_version;
     record.previous_version = previous_version;
@@ -274,6 +281,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     record.held = held.as_deref() == Some("1");
     record.report_key = report_key.filter(|key| !key.is_empty());
     record.report_platform = report_platform.filter(|url| !url.is_empty());
+    record.side = side.filter(|side| !side.is_empty());
     record.kept = kept
         .into_iter()
         .filter_map(|(image, version)| {
@@ -379,6 +387,7 @@ pub fn serialize(record: &ChannelRecord) -> String {
     put("held", record.held.then_some("1"));
     put("report_key", record.report_key.as_deref());
     put("report_platform", record.report_platform.as_deref());
+    put("side", record.side.as_deref());
     if let Some(desired) = &record.desired {
         let keys = [
             "desired_memory",
@@ -397,7 +406,27 @@ pub fn serialize(record: &ChannelRecord) -> String {
 /// previous file or the whole next one, never a seam. Stamped with the time it is written, which is how the copy on
 /// the sandbox's volume and this one are told apart (mirror.rs).
 pub fn write(slug: &str, record: &ChannelRecord) -> Result<()> {
-    write_file(&record_path(slug), &stamped(record))
+    let mut next = stamped(record);
+    if next.side.is_none() {
+        next.side = Some(owner(slug));
+    }
+    write_file(&record_path(slug), &next)
+}
+
+/// The side a new record names: the one the sandbox's container is stamped with, else this one.
+fn owner(slug: &str) -> String {
+    owner_of(
+        crate::sandbox::side::created_on(slug),
+        crate::sandbox::side::here(),
+    )
+}
+
+/// The same, pure over what was read. Pure.
+fn owner_of(
+    created: Option<crate::sandbox::side::Side>,
+    here: crate::sandbox::side::Side,
+) -> String {
+    created.unwrap_or(here).wire()
 }
 
 /* A DERIVED FACT, KEPT WITHOUT A STAMP. The report key is the same for as long as the container's token is, so
@@ -411,11 +440,18 @@ pub fn remember_report(slug: &str, key: &str, platform: Option<&str>) {
     if record.report_key.as_deref() == Some(key) && record.report_platform == platform {
         return;
     }
+    // A record this call creates names the side that keeps its sandbox (`side`); one that exists keeps what it says.
+    let side = if record_path(slug).exists() {
+        record.side.clone()
+    } else {
+        Some(owner(slug))
+    };
     let _ = write_file(
         &record_path(slug),
         &ChannelRecord {
             report_key: Some(key.to_string()),
             report_platform: platform,
+            side,
             ..record
         },
     );
@@ -741,6 +777,44 @@ mod tests {
         assert!(record
             .written
             .is_some_and(|written| written > 1_700_000_000_000));
+        assert_eq!(
+            record.side, None,
+            "the side is the write's to name, from the sandbox"
+        );
+        let kept = stamped(&ChannelRecord {
+            side: Some("linux/archlinux".to_string()),
+            ..swap("x", None)
+        });
+        assert_eq!(
+            kept.side.as_deref(),
+            Some("linux/archlinux"),
+            "and once named, kept"
+        );
+    }
+
+    #[test]
+    fn a_new_record_names_the_side_its_sandbox_is_stamped_with() {
+        use crate::sandbox::side::Side;
+        let here = Side::new("windows", Some("windows"));
+        assert_eq!(
+            owner_of(Some(Side::new("linux", Some("archlinux"))), here.clone()),
+            "linux/archlinux"
+        );
+        assert_eq!(owner_of(None, here), "windows");
+    }
+
+    #[test]
+    fn the_side_that_wrote_a_record_round_trips_and_an_older_record_names_none() {
+        let written = ChannelRecord {
+            side: Some("linux/archlinux".to_string()),
+            ..swap("x", None)
+        };
+        assert_eq!(
+            parse(&serialize(&written)).side.as_deref(),
+            Some("linux/archlinux")
+        );
+        assert_eq!(parse("current=x\nside=\n").side, None);
+        assert_eq!(parse("current=x\n").side, None);
     }
 
     #[test]

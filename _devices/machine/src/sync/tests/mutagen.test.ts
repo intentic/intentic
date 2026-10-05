@@ -7,9 +7,18 @@ import {
     convergePlan,
     forwardSessionName,
     isOwnMutagen,
+    labelArgs,
+    listedSessions,
     type LiveSession,
     liveMode,
     mutagenCreateArgs,
+    mutagenForwardArgs,
+    ownershipOf,
+    relabelBudget,
+    restartsDaemonFor,
+    sessionLabels,
+    terminateTargetsIn,
+    terminationTargets,
     parseForwardNames,
     parseForwardPorts,
     parseOrphanForwardNames,
@@ -383,5 +392,147 @@ describe("conflictsFrom", () => {
         const read = conflictsFrom({ conflicts });
         expect(read?.paths).toHaveLength(CONFLICT_PATHS_MAX);
         expect(read?.count).toBe(CONFLICT_PATHS_MAX + 12);
+    });
+});
+
+// (2026-10-05) WHO OWNS A SESSION, said by the session itself. One Mutagen daemon serves every Mutagen client of a user,
+// and "ours" was a name prefix and nothing more.
+describe("session ownership labels", () => {
+    const OWNER = "m-0123-windows";
+
+    it("labels every create with its owner, its sandbox and its kind, as Mutagen 0.18 takes them", () => {
+        const labels = sessionLabels("sandbox-abc.example.dev", "sync", OWNER);
+        expect(labels).toEqual({ owner: OWNER, sandbox: "sandbox-abc-example-dev", kind: "sync" });
+        expect(labelArgs(labels)).toEqual([
+            "--label",
+            `intentic-owner=${OWNER}`,
+            "--label",
+            "intentic-sandbox=sandbox-abc-example-dev",
+            "--label",
+            "intentic-kind=sync",
+        ]);
+        expect(labelArgs(undefined)).toEqual([]);
+    });
+
+    it("puts them on a sync session and on a forward, ahead of the endpoints", () => {
+        const pairing: Pairing & { readonly localDir: string } = {
+            sandboxUrl: "https://x.example.dev/",
+            sandboxId: "x",
+            mode: "sync",
+            localDir: "/home/u/x",
+        };
+        const args = mutagenCreateArgs(sessionSpec(pairing, "portable", OWNER), false);
+        expect(args.slice(0, 4)).toEqual(["sync", "create", "--name", "intentic-x"]);
+        expect(args).toContain(`intentic-owner=${OWNER}`);
+        expect(args.indexOf(`intentic-owner=${OWNER}`)).toBeLessThan(args.indexOf("/home/u/x"));
+        // The state backup says it is one.
+        expect(mutagenCreateArgs(sessionSpecs(pairing, "portable", OWNER)[1] ?? sessionSpec(pairing, "portable"), false)).toContain(
+            "intentic-kind=state",
+        );
+        // A spec built only to compare carries none.
+        expect(mutagenCreateArgs(sessionSpec(pairing, "portable"), false).join(" ")).not.toContain("--label");
+
+        const forward = mutagenForwardArgs({
+            name: "n",
+            port: 5173,
+            remote: { kind: "ssh", alias: "intentic-sync-x" },
+            host: "::1",
+            labels: sessionLabels("x", "forward", OWNER),
+        });
+        expect(forward.slice(0, 4)).toEqual(["forward", "create", "--name", "n"]);
+        expect(forward).toContain("intentic-kind=forward");
+        expect(forward.at(-1)).toBe("intentic-sync-x:tcp:[::1]:5173");
+    });
+
+    it("reads a session's owner as ours, another's, or one made before labels", () => {
+        expect(ownershipOf({ "intentic-owner": OWNER }, OWNER)).toBe("ours");
+        expect(ownershipOf({ "intentic-owner": "m-9999-Ubuntu" }, OWNER)).toBe("theirs");
+        expect(ownershipOf(undefined, OWNER)).toBe("unlabelled");
+        expect(ownershipOf({ "intentic-owner": "" }, OWNER)).toBe("unlabelled");
+    });
+
+    it("reads a listing's tokens as name, owner and identifier, and an older listing's as bare names", () => {
+        expect(listedSessions(`intentic-x@${OWNER}@sync_A intentic-y@@sync_B someone-else\n`)).toEqual([
+            { name: "intentic-x", owner: OWNER, identifier: "sync_A" },
+            { name: "intentic-y", owner: undefined, identifier: "sync_B" },
+            { name: "someone-else", owner: undefined, identifier: undefined },
+        ]);
+    });
+
+    // Never touch sessions labelled with another owner, whatever their names say.
+    it("sweeps this owner's orphans and unlabelled ones under the prefix, and never another owner's", () => {
+        const listed = [
+            `intentic-kept@${OWNER}@sync_1`,
+            `intentic-gone@${OWNER}@sync_2`,
+            "intentic-legacy@@sync_3",
+            "intentic-theirs@m-9999-Ubuntu@sync_4",
+            "my-own-project@@sync_5",
+        ].join(" ");
+        expect(parseOrphanSyncNames(listed, ["intentic-kept"], OWNER)).toEqual(["intentic-gone", "intentic-legacy"]);
+        // Terminated by identifier, so another owner's session under one of those names would never go with them.
+        expect(terminateTargetsIn(`${listed} intentic-gone@m-9999-Ubuntu@sync_6`, ["intentic-gone", "intentic-legacy"], "intentic-", OWNER)).toEqual([
+            "sync_2",
+            "sync_3",
+        ]);
+        const forwards = [`intentic-fwd-a-5173@${OWNER}@fwd_1`, "intentic-fwd-b-3000@m-9999-Ubuntu@fwd_2", "intentic-fwd-c-8080@@fwd_3"].join(" ");
+        expect(parseOrphanForwardNames(forwards, [], OWNER)).toEqual(["intentic-fwd-a-5173", "intentic-fwd-c-8080"]);
+    });
+
+    it("terminates a replaced session by its identifiers, by name only when the listing carried none", () => {
+        expect(terminationTargets([{ identifier: "sync_1" }, { identifier: "sync_2" }], "intentic-x")).toEqual(["sync_1", "sync_2"]);
+        expect(terminationTargets([{ identifier: "sync_1" }, {}], "intentic-x")).toEqual(["intentic-x"]);
+    });
+});
+
+// A session made before labels is everything the spec says but its owner: recreated for that only where safe, and paced.
+describe("convergePlan and labels", () => {
+    const OWNER = "m-0123-windows";
+    const pairing: Pairing & { readonly localDir: string } = {
+        sandboxUrl: "https://x.example.dev/",
+        sandboxId: "x",
+        mode: "sync",
+        localDir: "/home/u/code/app",
+        remoteDir: `${WORKSPACE_ROOT}/app`,
+        project: true,
+    };
+    const spec = sessionSpec(pairing, "portable", OWNER);
+    const live = (labels?: Record<string, string>): LiveSession => ({
+        name: spec.name,
+        mode: "one-way-safe",
+        alpha: { path: "/home/u/code/app" },
+        beta: { host: "intentic-sync-x", path: `${WORKSPACE_ROOT}/app`, watch: { mode: "force-poll", pollingInterval: 2 } },
+        ignore: { paths: [...PROJECT_IGNORES] },
+        ...(labels === undefined ? {} : { labels }),
+    });
+
+    it("keeps a labelled session, relabels an unlabelled one, and compares no labels for a spec that carries none", () => {
+        expect(convergePlan([live({ "intentic-owner": OWNER })], spec)).toBe("keep");
+        expect(convergePlan([live()], spec)).toBe("relabel");
+        expect(convergePlan([live()], sessionSpec(pairing, "portable"))).toBe("keep");
+        // A drifted one is a replacement whatever its labels, and the replacement carries them.
+        expect(convergePlan([{ ...live(), mode: "two-way-safe" }], spec)).toBe("replace");
+    });
+
+    it("lets a pass relabel as many sessions as its budget holds, and no more", () => {
+        const budget = relabelBudget(1);
+        expect([budget.take(), budget.take(), budget.take()]).toEqual([true, false, false]);
+        expect(relabelBudget(0).take()).toBe(false);
+    });
+});
+
+// A daemon of another version refuses every client: restarted with this agent's copy, and not every pass.
+describe("restartsDaemonFor", () => {
+    const mismatch = "Error: unable to connect to daemon: client/daemon version mismatch (daemon restart recommended)";
+
+    it("restarts the daemon for a version mismatch, at most once per half hour", () => {
+        expect(restartsDaemonFor(mismatch, 10 * 60 * 60_000, Number.NEGATIVE_INFINITY)).toBe(true);
+        expect(restartsDaemonFor(mismatch, 10 * 60 * 60_000, 10 * 60 * 60_000 - 60_000)).toBe(false);
+        expect(restartsDaemonFor(mismatch, 10 * 60 * 60_000, 10 * 60 * 60_000 - 30 * 60_000)).toBe(true);
+    });
+
+    it("leaves every other failure alone", () => {
+        expect(
+            restartsDaemonFor("Error: unable to connect to daemon: connection timed out (is the daemon running?)", 0, Number.NEGATIVE_INFINITY),
+        ).toBe(false);
     });
 });

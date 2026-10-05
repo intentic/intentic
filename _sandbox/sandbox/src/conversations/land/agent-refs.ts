@@ -71,6 +71,27 @@ export const parkAgentRefs = async (main: string, ids: ReadonlySet<string>, git:
     return parked;
 };
 
+// The shelf ref a conversation's branch is parked on, by its id.
+export const parkedRefOf = (id: string): string => parkedRef(`${AGENT}${id}`);
+
+// Every parked branch in this repo, by the conversation id it belongs to, with its tip; read by the retention that
+// lets old ones go (parked-ref-retention.ts). `ids` narrows the read to those conversations.
+export const parkedAgentRefs = async (main: string, git: GitRunner, ids?: readonly string[]): Promise<Map<string, string>> => {
+    const patterns = ids === undefined ? [parkedRef(AGENT)] : ids.map(parkedRefOf);
+    if (patterns.length === 0) {
+        return new Map();
+    }
+    const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", ...patterns]);
+    const parked = new Map<string, string>();
+    for (const line of stdout.split("\n")) {
+        const [sha, ref] = line.split(" ");
+        if (sha !== undefined && ref !== undefined && ref.startsWith(parkedRef(AGENT))) {
+            parked.set(ref.slice(parkedRef(AGENT).length), sha);
+        }
+    }
+    return parked;
+};
+
 // Moves a parked branch back onto `refs/heads/`, a no-op for one that never left; required before `git worktree add`,
 // which would otherwise check the commit out detached.
 export const unparkAgentRef = async (main: string, branch: string, git: GitRunner): Promise<void> => {

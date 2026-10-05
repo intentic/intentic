@@ -2,6 +2,7 @@ import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const paperlessSchema = serviceSchema.extend({
@@ -18,7 +19,7 @@ const PORT = 8000;
 
 // Paperless-ngx on SQLite (its default when PAPERLESS_DBHOST is unset, one fewer container) with the
 // valkey broker it needs for its task queue. PAPERLESS_URL makes CSRF trust the tunnel-routed https origin.
-const composeYaml = (parsed: PaperlessInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: PaperlessInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  broker:",
@@ -44,7 +45,7 @@ const composeYaml = (parsed: PaperlessInputs, id: string, hash: string): string 
         "      - media:/usr/src/paperless/media",
         "      - export:/usr/src/paperless/export",
         "      - consume:/usr/src/paperless/consume",
-        `    labels: [ "intentic.id=${id}", "intentic.type=paperless", "intentic.hash=${hash}" ]`,
+        stampLabels("paperless", stamp),
         "volumes: { brokerdata: {}, data: {}, media: {}, export: {}, consume: {} }",
         "",
     ].join("\n");
@@ -58,7 +59,7 @@ export const createPaperlessProvider = (executor: SshExecutor = sshExecutor): Pr
             schema: paperlessSchema,
             port: PORT,
             healthPath: "",
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp) }),
             env: (parsed) => [{ key: "PAPERLESS_SECRET_KEY" }, { key: "PAPERLESS_ADMIN_PASSWORD", value: parsed.adminPassword }],
             images: (parsed) => ({ broker: parsed.valkeyImage, paperless: parsed.paperlessImage }),
         },

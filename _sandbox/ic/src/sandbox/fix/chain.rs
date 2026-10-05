@@ -6,6 +6,8 @@ use super::clock;
 use super::model::{Check, Fix, Repair, CONTAINER, DAEMON, REGISTRATION, TUNNEL};
 use crate::docker::{self, Asked};
 use crate::record::{ChannelRecord, Phase};
+use crate::sandbox::ledger::{self, Ledger};
+use crate::sandbox::side::Side;
 use crate::sandbox::{container_of, parked_of, TUNNEL_PREFIX};
 
 /* ONE SANDBOX'S OWN LINKS — container, daemon, registration, and its public address from outside. Gathered through
@@ -24,6 +26,9 @@ pub struct Env {
     /// Which side of this computer created it: `windows` for ic on Windows, `linux` for ic in WSL or on Linux. One
     /// Docker Desktop engine serves both sides, so both see every container.
     pub host_platform: Option<String>,
+    /// The environment of that side: `windows`, a WSL distro's name, `linux`, `macos` (side.rs). Absent on a container
+    /// from before it was stamped.
+    pub host_env: Option<String>,
 }
 
 impl Env {
@@ -43,7 +48,15 @@ impl Env {
             ingress: value("INGRESS_URL"),
             host_label: value("HOST_LABEL"),
             host_platform: value("HOST_PLATFORM"),
+            host_env: value("HOST_ENV"),
         }
+    }
+
+    /// The side that created the container, when it says. Pure.
+    pub fn side(&self) -> Option<Side> {
+        self.host_platform
+            .as_deref()
+            .map(|platform| Side::new(platform, self.host_env.as_deref()))
     }
 }
 
@@ -60,10 +73,14 @@ pub struct Inspected {
     pub started_ms: Option<u64>,
     /// The memory cap docker enforces, in bytes; 0 for none.
     pub memory: u64,
+    /// Docker's own restart policy for it (`unless-stopped`, the run contract's); empty when an older reading had none.
+    pub restart_policy: String,
+    /// When it last stopped.
+    pub finished_ms: Option<u64>,
 }
 
 /// The inspect format [`Inspected::parse`] reads: one line, `|`-separated.
-pub const INSPECT: &str = "{{.State.Status}}|{{.State.Restarting}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.HostConfig.Memory}}";
+pub const INSPECT: &str = "{{.State.Status}}|{{.State.Restarting}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.HostConfig.Memory}}|{{.HostConfig.RestartPolicy.Name}}|{{.State.FinishedAt}}";
 
 impl Inspected {
     /// Pure.
@@ -80,6 +97,11 @@ impl Inspected {
             exit_code: fields[4].parse().unwrap_or(0),
             started_ms: clock::rfc3339_ms(fields[5]),
             memory: fields[6].parse().unwrap_or(0),
+            restart_policy: fields
+                .get(7)
+                .map(|policy| policy.to_string())
+                .unwrap_or_default(),
+            finished_ms: fields.get(8).and_then(|at| clock::rfc3339_ms(at)),
         })
     }
 
@@ -140,6 +162,10 @@ pub struct ChainFacts {
     /// ago to be believed.
     pub live_turns: Option<u32>,
     pub now_ms: u64,
+    /// The repairs made to it through ic, off its own volume (ledger.rs).
+    pub ledger: Ledger,
+    /// It stands stopped because a person stopped it outside ic (see `stopped_by_person`).
+    pub stopped_outside: bool,
 }
 
 /* GATHERING. */
@@ -167,6 +193,8 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
         public: Public::NotAsked,
         live_turns: None,
         now_ms: crate::sandbox::now_ms(),
+        ledger: Ledger::default(),
+        stopped_outside: false,
     };
     if !engine_up {
         return facts;
@@ -206,12 +234,15 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
         .said()
         {
             facts.env = Env::parse(&env);
-            super::report::remember(
+            // The other side's sandbox gets no record here: that side keeps one (record.rs, audit 2026-10 item 18).
+            super::report::remember_unless_elsewhere(
                 slug,
                 facts.env.token.as_deref(),
                 facts.env.platform.as_deref(),
+                facts.env.side().as_ref(),
             );
         }
+        facts.ledger = ledger::read(&holder);
     }
     let sidecar = format!("{TUNNEL_PREFIX}{slug}");
     facts.sidecar_running = docker::ask(
@@ -223,6 +254,9 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
     let Container::Present(state) = &facts.container else {
         return facts;
     };
+    if stop_worth_asking(state) {
+        facts.stopped_outside = stopped_by_person(state, stop_heard(&container, state));
+    }
     facts.oom_seen |= state.oom;
     if state.running() {
         facts.health = ask_health(&container);
@@ -243,7 +277,9 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
                 .said()
                 .and_then(|total| total.trim().parse().ok());
     }
-    if let Health::Answered(_) = &facts.health {
+    // Asked of every running daemon, answering or not (2026-10-05): one whose /health is wedged can still be running
+    // turns, and a restart cuts them all the same.
+    if state.running() {
         facts.live_turns = docker::ask(&["exec", &container, "cat", WORK_SIGNAL], EXEC_LIMIT)
             .said()
             .and_then(|body| live_turns(&body, facts.now_ms));
@@ -317,23 +353,43 @@ pub fn live_turns(body: &str, now_ms: u64) -> Option<u32> {
         .and_then(|n| u32::try_from(n).ok())
 }
 
-/// The restart a broken link gets: unasked while nothing runs inside, with a yes while agents are mid-turn. Pure.
+/// The restart a broken link gets: unasked while nothing runs inside, with a yes while agents are mid-turn, and with
+/// a yes once the keeper has restarted it by itself three times in two hours (ledger.rs). Every automatic restart in
+/// this file goes through here (2026-10-05: the silent-daemon one did not, and cut running turns unasked). Pure.
 fn restart_for(facts: &ChainFacts) -> Repair {
     if facts.live_turns.is_some_and(|n| n > 0) {
         Repair::RestartBusy
+    } else if facts.ledger.restarts_exhausted(facts.now_ms).is_some() {
+        Repair::RestartAgain
     } else {
         Repair::Restart
     }
 }
 
-/// Whether this run already restarted it, either way. Pure.
+/// Whether this run already restarted it, any way. Pure.
 fn restarted(tried: &dyn Fn(&Repair) -> bool) -> bool {
-    tried(&Repair::Restart) || tried(&Repair::RestartBusy)
+    tried(&Repair::Restart) || tried(&Repair::RestartBusy) || tried(&Repair::RestartAgain)
 }
 
-/// The remedy that goes with [`restart_for`]: says what a restart would cut when it would cut something. Pure.
+/// The remedy that goes with [`restart_for`]: says what a restart would cut when it would cut something, and how
+/// often the keeper has restarted it already when that is why it stopped. Pure.
 fn restart_remedy(facts: &ChainFacts, what: &str) -> String {
     let slug = &facts.slug;
+    if let (Some(exhausted), Repair::RestartAgain) = (
+        facts.ledger.restarts_exhausted(facts.now_ms),
+        restart_for(facts),
+    ) {
+        let back = if facts.record.previous.is_some() {
+            format!("roll back (ic sandbox rollback {slug}) or look at its log (ic sandbox logs {slug})")
+        } else {
+            format!("look at its log (ic sandbox logs {slug})")
+        };
+        return format!(
+            "restarted {} times since {} and it did not stay well; {back}. To restart it once more anyway: ic sandbox restart {slug}",
+            exhausted.count,
+            crate::util::utc_minute(exhausted.since)
+        );
+    }
     match facts.live_turns {
         Some(1) => format!(
             "1 agent turn is running here, and a restart cuts it: {what} once it has finished, or now: ic sandbox restart {slug}"
@@ -528,16 +584,15 @@ pub fn container(facts: &ChainFacts, engine_up: bool, tried: &dyn Fn(&Repair) ->
     }
     match state.status.as_str() {
         "running" => {
-            if facts.sidecar_running == Some(false) {
-                return Check::fail(
+            // The tunnel container an older setup ran beside the sandbox; nothing has created one since the daemon
+            // dials its own tunnel (connect.rs). Stopped, it is retired rather than started again (2026-10-05): it holds
+            // nothing, and starting it unasked revived a connector nothing uses.
+            if facts.sidecar_running == Some(false) && !tried(&Repair::RetireSidecar) {
+                return Check::warn_fix(
                     CONTAINER,
-                    "the sandbox runs, but its tunnel container is stopped.",
-                    format!("start it: ic sandbox start {slug}"),
-                    if tried(&Repair::Start) {
-                        Fix::You
-                    } else {
-                        Fix::Do(Repair::Start)
-                    },
+                    format!("a tunnel container from an older setup ({TUNNEL_PREFIX}{slug}) is stopped; the sandbox dials its own tunnel now and does not need it."),
+                    format!("remove it: docker rm {TUNNEL_PREFIX}{slug}"),
+                    Fix::Do(Repair::RetireSidecar),
                 );
             }
             if facts.oom_seen {
@@ -566,10 +621,15 @@ pub fn container(facts: &ChainFacts, engine_up: bool, tried: &dyn Fn(&Repair) ->
             };
             let problem = format!("the container is {status}, not running{oom}{exit}.");
             let start = format!("start it: ic sandbox start {slug}");
-            if facts.record.held {
+            if facts.record.held || facts.stopped_outside {
+                let how = if facts.stopped_outside {
+                    "It was stopped outside intentic (Docker Desktop's Stop button, or docker stop), so it is left for you to start."
+                } else {
+                    "It was stopped on purpose (ic sandbox stop)."
+                };
                 return Check::fail(
                     CONTAINER,
-                    format!("{problem} It was stopped on purpose (ic sandbox stop)."),
+                    format!("{problem} {how}"),
                     start,
                     if tried(&Repair::StartHeld) {
                         Fix::You
@@ -590,6 +650,66 @@ pub fn container(facts: &ChainFacts, engine_up: bool, tried: &dyn Fn(&Repair) ->
             )
         }
     }
+}
+
+/* STOPPED BY A PERSON, OUTSIDE ic. The run contract starts every sandbox `--restart unless-stopped`, so Docker itself
+restarts one that crashed or exited, and brings back at its own start every one that was running when it went down. A
+sandbox that stands Exited, not restarting, with a clean exit (0, or 143 for the SIGTERM `docker stop` sends), was
+stopped through Docker's API by somebody: Docker Desktop's Stop button, `docker stop`. The keeper used to start it again
+at its next sweep (audit 2026-10, class 5). The proof that the engine has been up past the stop, and so would have
+restarted the container were it not a person's stop, is the engine's own event log, which holds only what happened
+since the engine last started: a `stop` or `kill` of this container in it. A stop the log no longer holds reads as
+unknown and the sandbox is started as before; the fix engine records a stop it did see as held (power.rs), so a later
+restart of the engine does not forget it. */
+
+/// Worth asking the engine's event log about: Exited, not restarting, under a policy that would have restarted it,
+/// with the exit a stop leaves. Pure.
+pub fn stop_worth_asking(state: &Inspected) -> bool {
+    state.status == "exited"
+        && !state.restarting
+        && matches!(state.restart_policy.as_str(), "unless-stopped" | "always")
+        && matches!(state.exit_code, 0 | 143)
+}
+
+/// Whether a person stopped it: worth asking, and the engine's log since its last start holds the stop. Pure.
+pub fn stopped_by_person(state: &Inspected, stop_heard: bool) -> bool {
+    stop_worth_asking(state) && stop_heard
+}
+
+/// Whether `docker events` lines (one action each) hold a stop or a kill. Pure.
+pub fn stop_in_events(actions: &str) -> bool {
+    actions
+        .lines()
+        .map(str::trim)
+        .any(|action| action == "stop" || action == "kill" || action.starts_with("kill:"))
+}
+
+/// The engine's event log around the container's last stop, asked with an end so it answers at once.
+fn stop_heard(container: &str, state: &Inspected) -> bool {
+    let Some(finished) = state.finished_ms else {
+        return false;
+    };
+    let since = (finished / 1000).saturating_sub(10).to_string();
+    let until = (crate::sandbox::now_ms() / 1000 + 1).to_string();
+    let filter = format!("container={container}");
+    docker::ask(
+        &[
+            "events",
+            "--since",
+            &since,
+            "--until",
+            &until,
+            "--filter",
+            "type=container",
+            "--filter",
+            &filter,
+            "--format",
+            "{{.Action}}",
+        ],
+        docker::READ_LIMIT,
+    )
+    .said()
+    .is_some_and(|actions| stop_in_events(&actions))
 }
 
 fn running(facts: &ChainFacts) -> bool {
@@ -635,12 +755,12 @@ pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
                     Fix::Do(Repair::Watch),
                 );
             }
-            if !swap_on_record(&facts.record) && !tried(&Repair::Restart) {
+            if !swap_on_record(&facts.record) && !restarted(tried) {
                 return Check::fail(
                     DAEMON,
                     problem,
-                    format!("restart it: ic sandbox restart {slug}"),
-                    Fix::Do(Repair::Restart),
+                    restart_remedy(facts, "restart it"),
+                    Fix::Do(restart_for(facts)),
                 );
             }
             let (remedy, fix) = way_back(facts, tried);
@@ -869,6 +989,8 @@ mod tests {
             public: Public::NotAsked,
             live_turns: None,
             now_ms: NOW,
+            ledger: Ledger::default(),
+            stopped_outside: false,
         }
     }
 
@@ -1255,6 +1377,170 @@ mod tests {
     }
 
     #[test]
+    fn the_restart_policy_and_the_last_stop_are_read_and_an_older_reading_lacks_them() {
+        let parsed = Inspected::parse(
+            "exited|false|0|false|143|2026-10-05T20:00:00Z|0|unless-stopped|2026-10-05T22:45:30.5Z",
+        )
+        .expect("parses");
+        assert_eq!(parsed.restart_policy, "unless-stopped");
+        assert_eq!(parsed.finished_ms, Some(1_791_240_330_500));
+        let older =
+            Inspected::parse("exited|false|0|false|0|0001-01-01T00:00:00Z|0").expect("parses");
+        assert_eq!(older.restart_policy, "");
+        assert_eq!(older.finished_ms, None);
+    }
+
+    #[test]
+    fn a_container_a_person_stopped_outside_ic_waits_for_a_yes() {
+        let stopped_by_hand = Inspected {
+            status: "exited".to_string(),
+            exit_code: 143,
+            restart_policy: "unless-stopped".to_string(),
+            ..running_box()
+        };
+        assert!(stop_worth_asking(&stopped_by_hand));
+        assert!(stopped_by_person(&stopped_by_hand, true));
+        assert!(
+            !stopped_by_person(&stopped_by_hand, false),
+            "a stop the engine's log does not hold is not proven"
+        );
+        for not_a_stop in [
+            Inspected {
+                exit_code: 137,
+                ..stopped_by_hand.clone()
+            },
+            Inspected {
+                restart_policy: "no".to_string(),
+                ..stopped_by_hand.clone()
+            },
+            Inspected {
+                restarting: true,
+                ..stopped_by_hand.clone()
+            },
+            Inspected {
+                status: "running".to_string(),
+                ..stopped_by_hand.clone()
+            },
+        ] {
+            assert!(!stop_worth_asking(&not_a_stop), "{not_a_stop:?}");
+        }
+        assert!(stop_in_events("kill\ndie\nstop\n"));
+        assert!(stop_in_events("kill\n"));
+        assert!(!stop_in_events("die\nstart\n"));
+        assert!(!stop_in_events(""));
+
+        let check = container(
+            &ChainFacts {
+                stopped_outside: true,
+                ..facts(Container::Present(Inspected {
+                    exit_code: 0,
+                    ..stopped_by_hand
+                }))
+            },
+            true,
+            &never,
+        );
+        assert_eq!(check.repair(), Some(&Repair::StartHeld));
+        assert_eq!(check.who(), Some(Who::Consent));
+        assert!(check
+            .problem
+            .as_deref()
+            .is_some_and(|p| p.contains("stopped outside intentic")));
+    }
+
+    #[test]
+    fn a_stopped_tunnel_container_from_an_older_setup_is_retired_not_started() {
+        let with_sidecar = ChainFacts {
+            sidecar_running: Some(false),
+            ..facts(Container::Present(running_box()))
+        };
+        let check = container(&with_sidecar, true, &never);
+        assert_eq!(
+            check.state,
+            State::Warn,
+            "nothing about the sandbox is broken"
+        );
+        assert_eq!(check.repair(), Some(&Repair::RetireSidecar));
+        assert_eq!(check.who(), Some(Who::Auto));
+        let retired = |r: &Repair| *r == Repair::RetireSidecar;
+        assert_eq!(container(&with_sidecar, true, &retired).state, State::Ok);
+        let running_sidecar = ChainFacts {
+            sidecar_running: Some(true),
+            ..facts(Container::Present(running_box()))
+        };
+        assert_eq!(container(&running_sidecar, true, &never).state, State::Ok);
+    }
+
+    #[test]
+    fn a_silent_daemon_running_turns_is_not_restarted_unasked() {
+        let busy = ChainFacts {
+            health: Health::Silent,
+            live_turns: Some(2),
+            ..facts(Container::Present(running_box()))
+        };
+        let check = daemon(&busy, &never);
+        assert_eq!(check.repair(), Some(&Repair::RestartBusy));
+        assert_eq!(check.who(), Some(Who::Consent));
+        assert!(check
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.contains("2 agent turns are running here")));
+        let after = |r: &Repair| *r == Repair::RestartBusy;
+        assert_eq!(daemon(&busy, &after).who(), Some(Who::You));
+    }
+
+    #[test]
+    fn three_automatic_restarts_in_two_hours_hand_the_fourth_to_a_person() {
+        let mut ledger = Ledger::default();
+        for minutes_ago in [90, 40, 10] {
+            ledger = ledger.noted(
+                crate::sandbox::ledger::RESTART,
+                NOW - minutes_ago * 60_000,
+                true,
+            );
+        }
+        let looping = ChainFacts {
+            health: Health::Silent,
+            ledger,
+            ..facts(Container::Present(running_box()))
+        };
+        let check = daemon(&looping, &never);
+        assert_eq!(check.repair(), Some(&Repair::RestartAgain));
+        assert_eq!(check.who(), Some(Who::Consent));
+        let remedy = check.remedy.clone().unwrap_or_default();
+        assert!(remedy.contains("restarted 3 times since"), "{remedy}");
+        assert!(
+            remedy.contains("ic sandbox logs sandbox-0123456789ab"),
+            "{remedy}"
+        );
+        // With a version to go back to, the way back is named first.
+        let updated = ChainFacts {
+            record: ChannelRecord {
+                previous: Some("pin".to_string()),
+                ..ChannelRecord::default()
+            },
+            ..looping
+        };
+        assert!(daemon(&updated, &never)
+            .remedy
+            .unwrap_or_default()
+            .contains("roll back (ic sandbox rollback sandbox-0123456789ab)"));
+        // The same rule holds for the tunnel's restart and a registration that gave up.
+        let tunnel_down = ChainFacts {
+            public: Public::Answered {
+                status: 502,
+                edge: Some("no-tunnel".to_string()),
+            },
+            health: Health::Answered(serde_json::json!({ "ready": true })),
+            ..updated
+        };
+        assert_eq!(
+            tunnel(&tunnel_down, &never).repair(),
+            Some(&Repair::RestartAgain)
+        );
+    }
+
+    #[test]
     fn env_is_read_off_the_nul_framed_listing_with_empties_absent() {
         let env = Env::parse("CONNECT_TOKEN=abc\0PLATFORM_URL=https://api.intentic.dev\0SANDBOX_GRANT=\0HOST_LABEL=ada\0");
         assert_eq!(env.token.as_deref(), Some("abc"));
@@ -1262,8 +1548,10 @@ mod tests {
         assert_eq!(env.grant, None);
         assert_eq!(env.host_label.as_deref(), Some("ada"));
         assert_eq!(env.host_platform, None);
-        let wsl = Env::parse("HOST_PLATFORM=linux\0HOST_LABEL=rog\0");
+        let wsl = Env::parse("HOST_PLATFORM=linux\0HOST_LABEL=rog\0HOST_ENV=archlinux\0");
         assert_eq!(wsl.host_platform.as_deref(), Some("linux"));
+        assert_eq!(wsl.side(), Some(Side::new("linux", Some("archlinux"))));
+        assert_eq!(env.side(), None);
     }
 
     #[test]

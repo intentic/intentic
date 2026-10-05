@@ -2,9 +2,10 @@ import type { Provider } from "@intentic/engine";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
-import { execProbe, stampLabels } from "../core/backing-ssh.js";
+import { execProbe } from "../core/backing-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "valkey";
 
@@ -17,7 +18,7 @@ type ValkeyInputs = z.infer<typeof valkeySchema>;
 
 // A single Valkey service published on the host's internal ip. requirepass lives in the mounted valkey.conf
 // (write-once, chmod 600) so the secret is not interpolated through a shell command.
-const composeYaml = (parsed: ValkeyInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: ValkeyInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  valkey:",
@@ -28,7 +29,7 @@ const composeYaml = (parsed: ValkeyInputs, id: string, hash: string): string =>
         "      - data:/data",
         "      - ./valkey.conf:/etc/valkey/valkey.conf:ro",
         `    ports: [ "${parsed.publishPort}:6379" ]`,
-        stampLabels(KIND, id, hash, parsed.protect),
+        stampLabels(KIND, stamp, parsed.protect),
         "volumes: { data: {} }",
         "",
     ].join("\n");
@@ -45,8 +46,8 @@ export const createValkeyProvider = (executor: SshExecutor = sshExecutor): Provi
             schema: valkeySchema,
             readyTimeoutMs: 60_000,
             outputs: (parsed) => ({ internalHost: parsed.internalIp, port: String(parsed.publishPort) }),
-            files: (parsed, id, hash) => ({
-                "compose.yaml": composeYaml(parsed, id, hash),
+            files: (parsed, stamp) => ({
+                "compose.yaml": composeYaml(parsed, stamp),
                 "valkey.conf": { content: valkeyConf(parsed), secret: true },
             }),
             probe: (parsed, id) => execProbe(id, `valkey-cli -a ${shellQuote(parsed.adminPassword)} ping | grep -q PONG`),

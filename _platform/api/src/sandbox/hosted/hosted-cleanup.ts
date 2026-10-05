@@ -103,6 +103,7 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
                 setupCode: null,
                 setupCodeExpiresAt: null,
                 setupCodeClaimedAt: null,
+                setupClaimedBy: Prisma.DbNull,
                 setupPayload: Prisma.DbNull,
                 setupReport: Prisma.DbNull,
                 bootReport: Prisma.DbNull,
@@ -111,6 +112,9 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
                 fixCode: null,
                 fixCodeExpiresAt: null,
                 hostReport: Prisma.DbNull,
+                // The copies that announced on the old token are not this sandbox's any more (announce-copies.ts).
+                seenInstances: Prisma.DbNull,
+                duplicateSince: null,
             },
         });
     });

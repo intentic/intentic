@@ -31,10 +31,14 @@ const {
     retirePairingMirror,
     shouldAutoPauseFileSync,
     skippedPortsOf,
+    reportCarriers,
     strandedForwards,
     SyncAuthError,
     unpreparedSetups,
+    watcherStalled,
+    WATCHER_STALL_MS,
 } = await import("../mirror.js");
+const { SandboxGoneError } = await import("../gone.js");
 const { readState, upsertPairing } = await import("../config.js");
 const { readResidentPid, runForeground, signalExitCode } = await import("../../resident.js");
 const { stopResident } = await import("../../supervision.js");
@@ -225,6 +229,38 @@ describe("fetchWorkspacePorts", () => {
         const blip = await fetchWorkspacePorts("https://s.example.dev", "ist_old").catch((error: unknown) => error);
         expect(blip).toBeInstanceOf(Error);
         expect(blip).not.toBeInstanceOf(SyncAuthError);
+        expect(blip).not.toBeInstanceOf(SandboxGoneError);
+    });
+
+    // (2026-10-05) The edge's final word is read on every answer that is not OK: a deleted sandbox is not an outage.
+    it("types the edge's unknown-sandbox as SandboxGoneError, and its no-tunnel as the outage it is", async () => {
+        const edge = (said: string) => new Response("sandbox-2e8d89d75865 no longer exists.", { status: 502, headers: { "x-intentic-edge": said } });
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValue(edge("unknown-sandbox")));
+        await expect(fetchWorkspacePorts("https://s.example.dev", "ist_tok")).rejects.toBeInstanceOf(SandboxGoneError);
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValue(edge("no-tunnel")));
+        const restarting = await fetchWorkspacePorts("https://s.example.dev", "ist_tok").catch((error: unknown) => error);
+        expect(restarting).not.toBeInstanceOf(SandboxGoneError);
+    });
+});
+
+describe("reportCarriers", () => {
+    const pairing = (sandboxId: string, extra: Partial<Pairing> = {}): { readonly pairing: Pairing } => ({
+        pairing: { sandboxUrl: `https://${sandboxId}.dev`, sandboxId, mode: "sync", syncToken: "tok", ...extra },
+    });
+
+    // A dead sandbox took 5,760 report posts a day, none of them logged.
+    it("posts once per sandbox, and never to one said to be gone", () => {
+        const carried = reportCarriers([pairing("a"), pairing("a", { key: "a~blog" }), pairing("b", { goneSince: 1 }), pairing("c")], new Set());
+        expect(carried.map((entry) => entry.pairing.sandboxId)).toEqual(["a", "c"]);
+    });
+});
+
+describe("the watcher's stall check", () => {
+    // Longer than any one bounded step, so only a step that will never end trips it.
+    it("counts a loop stuck once it has made no progress for the whole limit", () => {
+        expect(WATCHER_STALL_MS).toBeGreaterThan(5 * 60_000);
+        expect(watcherStalled(0, WATCHER_STALL_MS - 1)).toBe(false);
+        expect(watcherStalled(0, WATCHER_STALL_MS)).toBe(true);
     });
 });
 
@@ -256,7 +292,15 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("recreates a forward whose sandbox loopback family moved (127.0.0.1 → ::1)", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, nothingIgnored, nothingHeld(), log);
+        const next = await reconcileForwards(
+            executor,
+            [{ port: 3000, host: "127.0.0.1" }],
+            [ws(3000, "::1")],
+            unclaimed,
+            nothingIgnored,
+            nothingHeld(),
+            log,
+        );
         expect(next).toEqual([{ port: 3000, host: "::1", command: "vite" }]);
         expect(terminated).toEqual([3000]);
         expect(created).toEqual([3000]);
@@ -295,7 +339,15 @@ describe("reconcileForwards (minimal-touch)", () => {
     // next one as still established.
     it("takes down a live forward the moment its port is set aside", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [{ port: 5440, host: "127.0.0.1" }], [ws(5440)], unclaimed, new Set([5440]), nothingHeld(), log);
+        const next = await reconcileForwards(
+            executor,
+            [{ port: 5440, host: "127.0.0.1" }],
+            [ws(5440)],
+            unclaimed,
+            new Set([5440]),
+            nothingHeld(),
+            log,
+        );
         expect(next).toEqual([]);
         expect(terminated).toEqual([5440]);
         expect(created).toEqual([]);
@@ -424,7 +476,9 @@ describe("reconcileForwards (what the bind probe cannot see)", () => {
         await watcher.run(T0 + BUSY_GRACE_MS + 2 * 60_000, nothingPublished);
         expect(await watcher.run(T0 + 2 * BUSY_GRACE_MS + 2 * 60_000 - 1, nothingPublished)).toEqual([]);
         expect(created).toEqual([]);
-        expect(await watcher.run(T0 + 2 * BUSY_GRACE_MS + 2 * 60_000, nothingPublished)).toEqual([{ port: 5440, host: "127.0.0.1", command: "postgres" }]);
+        expect(await watcher.run(T0 + 2 * BUSY_GRACE_MS + 2 * 60_000, nothingPublished)).toEqual([
+            { port: 5440, host: "127.0.0.1", command: "postgres" },
+        ]);
         expect(created).toEqual([5440]);
     });
 
@@ -442,7 +496,9 @@ describe("reconcileForwards (what the bind probe cannot see)", () => {
         const { lines, say } = heard();
         const desired = [postgres, ws(5173)];
         const holds = { docker: undefined, wasBusy: new Set([5440]), freeSince: new Map<number, number>(), now: T0 };
-        expect(await reconcileForwards(executor, [], desired, unclaimed, nothingIgnored, holds, say)).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
+        expect(await reconcileForwards(executor, [], desired, unclaimed, nothingIgnored, holds, say)).toEqual([
+            { port: 5173, host: "127.0.0.1", command: "vite" },
+        ]);
         expect(created).toEqual([5173]);
         // Without Docker's answer every port goes to the probe, and the one seen busy waits out its grace.
         expect(probed).toEqual([5440, 5173]);
@@ -702,18 +758,15 @@ describe("mutagen forward args", () => {
             "tcp:127.0.0.1:6480",
             "intentic-x:tcp:127.0.0.1:6480",
         ]);
-        expect(mutagenForwardArgs({ name: "n", port: 47145, remote: { kind: "ssh", alias: "intentic-x" }, host: "::1" }).at(-1)).toBe("intentic-x:tcp:[::1]:47145");
+        expect(mutagenForwardArgs({ name: "n", port: 47145, remote: { kind: "ssh", alias: "intentic-x" }, host: "::1" }).at(-1)).toBe(
+            "intentic-x:tcp:[::1]:47145",
+        );
     });
 
     // A project on this machine's own engine has its ports forwarded straight into its container (endpoint.ts).
     it("dials a docker pairing's container through Docker, binding the same local port", () => {
-        expect(mutagenForwardArgs({ name: "n", port: 5173, remote: { kind: "docker", container: "intentic-sandbox-sandbox-x" }, host: "::1" })).toEqual([
-            "forward",
-            "create",
-            "--name",
-            "n",
-            "tcp:127.0.0.1:5173",
-            "docker://intentic-sandbox-sandbox-x:tcp:[::1]:5173",
-        ]);
+        expect(
+            mutagenForwardArgs({ name: "n", port: 5173, remote: { kind: "docker", container: "intentic-sandbox-sandbox-x" }, host: "::1" }),
+        ).toEqual(["forward", "create", "--name", "n", "tcp:127.0.0.1:5173", "docker://intentic-sandbox-sandbox-x:tcp:[::1]:5173"]);
     });
 });

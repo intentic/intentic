@@ -95,6 +95,16 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // A rebuild's ask that the next boot resume the turns it cuts (restart-resume.ts): about this machine's next boot only,
     // read once by it, so a moved sandbox starts without one.
     { path: "restart-resume.json", portability: "derived" },
+    // Spawned children paused on a re-run the sandbox booked for them (agent/subagents/paused-children.ts): the booking
+    // is this process's memory, so the next boot tells each parent that its child stays stopped, then forgets the entry.
+    // About this machine's restarts, so a moved sandbox starts without it.
+    { path: "paused-children.json", portability: "derived" },
+    // When this machine's daemon booted (system/boot/boot-history.ts), for telling a restart storm from a restart: about
+    // this machine's restarts, so a moved sandbox starts without it.
+    { path: "boot-history.json", portability: "derived" },
+    // When each housekeeping chore last ran (system/chore-clock.ts), so a restart does not run a daily one again; a moved
+    // sandbox runs each once at its first boot.
+    { path: "chore-clock.json", portability: "derived" },
 
     /* ---- credentials ---- */
 

@@ -14,10 +14,21 @@ const DEFAULT_TTL_SECONDS = 30 * 60;
 export interface ApplyLock {
     // Throw if any held lock no longer carries our nonce (another run took it over). Call before mutating.
     readonly verify: () => Promise<void>;
-    // Push the takeover deadline out on every held lock, for an apply that runs longer than the TTL.
+    // Push the takeover deadline out on every held lock, for an apply that runs longer than the TTL. Throws LockLostError
+    // when a lock no longer carries our nonce, and the transport's own error when a host cannot be reached.
     readonly renew: () => Promise<void>;
     // Best-effort release of every lock held; only removes a lock that still carries our nonce.
     readonly release: () => Promise<void>;
+    // How long a held lock lasts without a renewal: the heartbeat's clock.
+    readonly ttlSeconds: number;
+}
+
+// Another run holds a lock this one had: the one answer a heartbeat never retries.
+export class LockLostError extends Error {
+    constructor(host: string) {
+        super(`apply lock on ${host} was taken over by another run`);
+        this.name = "LockLostError";
+    }
 }
 
 const lockKey = (target: SshTarget): string => `${target.address}:${target.port}`;
@@ -144,9 +155,68 @@ export const acquireApplyLock = async (
         },
         renew: async () => {
             for (const target of held) {
-                await run(executor, target, renewScript(holder, nonce, ttl));
+                const outcome = (await run(executor, target, renewScript(holder, nonce, ttl))).stdout.trim();
+                if (!outcome.startsWith("OK")) {
+                    throw new LockLostError(lockKey(target));
+                }
             }
         },
         release: releaseAll,
+        ttlSeconds: ttl,
+    };
+};
+
+export interface LockHeartbeat {
+    readonly stop: () => void;
+}
+
+// Renews the lease on a timer for as long as the run lasts, at a third of the TTL, so a long apply (an image pull, a
+// restic restore) never outlives its lock and lets a second writer in. A lost lock stops the run at once (`onLost`);
+// an unreachable host is retried once, and a second failure in a row stops it too, while the lease (two intervals
+// short of the TTL) is still ours.
+export const startLockHeartbeat = (
+    lock: ApplyLock,
+    options: {
+        readonly onLost: (error: Error) => void;
+        readonly intervalMs?: number;
+        readonly log?: (message: string) => void;
+    },
+): LockHeartbeat => {
+    const log = options.log ?? (() => {});
+    const intervalMs = options.intervalMs ?? (lock.ttlSeconds * 1000) / 3;
+    let failures = 0;
+    let busy = false;
+    let stopped = false;
+    const timer = setInterval(() => {
+        if (busy || stopped) {
+            return;
+        }
+        busy = true;
+        void lock
+            .renew()
+            .then(() => {
+                failures = 0;
+            })
+            .catch((error: unknown) => {
+                failures += 1;
+                const lost = error instanceof LockLostError;
+                if (lost || failures >= 2) {
+                    stopped = true;
+                    clearInterval(timer);
+                    options.onLost(lost ? error : new Error(`could not renew the apply lock twice in a row: ${String(error)}`, { cause: error }));
+                    return;
+                }
+                log(`apply-lock: renewal failed, retrying at the next beat: ${String(error)}`);
+            })
+            .finally(() => {
+                busy = false;
+            });
+    }, intervalMs);
+    timer.unref();
+    return {
+        stop: () => {
+            stopped = true;
+            clearInterval(timer);
+        },
     };
 };

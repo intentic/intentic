@@ -67,30 +67,87 @@ pub fn agent_within(platform_url: &str, limit: Duration) -> ureq::Agent {
         .new_agent()
 }
 
-/// POST `<platform>/setup/claim` with the code.
+/// The claim's form: the code, and which machine and side of it is claiming (`host`, the name a person knows this
+/// machine by; `os`, the side ic stamps on the sandbox it starts, `windows` or `linux/archlinux`), clipped to what the
+/// platform keeps (SetupClaimerSchema). (2026-10-05) The platform records the first machine that claims a code and
+/// refuses the same code on a different one while it lives, so one pasted command can no longer start two copies of a
+/// sandbox (PowerShell and WSL on one PC took turns holding its tunnel). Pure.
+pub fn claim_form(code: &str, host: &str, os: &str) -> Vec<(&'static str, String)> {
+    let clip = |text: &str, max: usize| text.trim().chars().take(max).collect::<String>();
+    let mut form = vec![("code", code.to_string())];
+    for (field, value) in [("host", clip(host, 120)), ("os", clip(os, 40))] {
+        if !value.is_empty() {
+            form.push((field, value));
+        }
+    }
+    form
+}
+
+/// The platform's own sentence out of a refusal's body: plain text after `error: `, or a JSON body's `message` or
+/// `error`. Pure.
+pub fn refusal_sentence(body: &str) -> Option<String> {
+    let body = body.trim();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
+        return ["message", "error"]
+            .iter()
+            .find_map(|key| value[*key].as_str())
+            .map(str::trim)
+            .filter(|said| !said.is_empty())
+            .map(str::to_string);
+    }
+    let said = body.strip_prefix("error:").unwrap_or(body).trim();
+    (!said.is_empty()).then(|| said.to_string())
+}
+
+/// POST `<platform>/setup/claim` with the code, naming this machine and its side.
 pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     step("claiming-code", "redeeming the setup code…");
-    let agent = agent_for(platform_url);
+    // Statuses are answers here: a 409's body is the platform's sentence about where the code was already used.
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .http_status_as_error(false)
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .disable_verification(is_local(platform_url))
+                .build(),
+        )
+        .build()
+        .new_agent();
     let url = format!("{platform_url}/setup/claim");
-    let body = match agent.post(&url).send_form([("code", code)]) {
-        Ok(mut response) => response.body_mut().read_to_string().map_err(|err| {
-            crate::util::Fail(format!(
-                "could not read the platform's claim response: {err}"
-            ))
-        })?,
-        // Name the real cause instead of always blaming the code: a 405 means PLATFORM_URL hit the static
-        // web app (app.*) instead of the API (api.*); a 4xx means the code really is bad or expired.
-        Err(ureq::Error::StatusCode(405)) => {
-            bail!("{url} returned HTTP 405 — PLATFORM_URL must be the platform's API origin (e.g. https://api.intentic.dev), not the web app.")
-        }
-        Err(ureq::Error::StatusCode(400 | 401 | 403 | 404 | 410)) => {
-            bail!("the setup code is invalid or expired — refresh the platform's setup page and copy a fresh command.")
-        }
-        Err(ureq::Error::StatusCode(status)) => {
-            bail!("the platform returned HTTP {status} redeeming the setup code — refresh the setup page and try again.")
-        }
+    let form = claim_form(
+        code,
+        &crate::sandbox::connect::machine_label(),
+        &crate::sandbox::side::here().wire(),
+    );
+    let mut response = match agent
+        .post(&url)
+        .send_form(form.iter().map(|(field, value)| (*field, value.as_str())))
+    {
+        Ok(response) => response,
         Err(_) => bail!("could not reach the platform at {platform_url} to redeem the setup code."),
     };
+    let status = response.status().as_u16();
+    let body = response.body_mut().read_to_string().map_err(|err| {
+        crate::util::Fail(format!(
+            "could not read the platform's claim response: {err}"
+        ))
+    })?;
+    match status {
+        200..=299 => {}
+        // The code is live, and was redeemed on another machine (or the other side of this one): the platform says
+        // where, and what to do, better than any sentence made up here.
+        409 => match refusal_sentence(&body) {
+            Some(said) => bail!("{said}"),
+            None => bail!("this setup code was already used on another machine, and running it here as well would start a second copy of the same sandbox."),
+        },
+        // Name the real cause instead of always blaming the code: a 405 means PLATFORM_URL hit the static
+        // web app (app.*) instead of the API (api.*); a 4xx means the code really is bad or expired.
+        405 => bail!("{url} returned HTTP 405 — PLATFORM_URL must be the platform's API origin (e.g. https://api.intentic.dev), not the web app."),
+        400 | 401 | 403 | 404 | 410 => {
+            bail!("the setup code is invalid or expired — refresh the platform's setup page and copy a fresh command.")
+        }
+        status => bail!("the platform returned HTTP {status} redeeming the setup code — refresh the setup page and try again."),
+    }
     let lookup = kv_lines(&body);
     Ok(Claim {
         connect_token: lookup("CONNECT_TOKEN"),
@@ -104,8 +161,21 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     })
 }
 
+/// Why a request to the platform did not land.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    /// No answer: the network, a timeout, a name that did not resolve.
+    Unreached,
+    /// An answer, with this status.
+    Status(u16),
+}
+
 /* When this container goes, it stops holding its tunnel — and so does a container that is merely stopped, and so does one whose machine went to sleep. */
-pub fn farewell(platform_url: &str, connect_token: &str, removed_by: &str) -> bool {
+pub fn farewell(
+    platform_url: &str,
+    connect_token: &str,
+    removed_by: &str,
+) -> std::result::Result<(), Refusal> {
     // The container's own PLATFORM_URL is spelled from INSIDE it; on a dev box that is host.docker.internal,
     // which resolves nowhere out here.
     let from_host = platform_url.replace("//host.docker.internal", "//localhost");
@@ -118,11 +188,15 @@ pub fn farewell(platform_url: &str, connect_token: &str, removed_by: &str) -> bo
         )
         .build()
         .new_agent();
-    agent
+    match agent
         .post(format!("{from_host}/sandbox/farewell"))
         .header("x-intentic-connect", connect_token)
         .send_json(serde_json::json!({ "removedBy": removed_by }))
-        .is_ok()
+    {
+        Ok(_) => Ok(()),
+        Err(ureq::Error::StatusCode(status)) => Err(Refusal::Status(status)),
+        Err(_) => Err(Refusal::Unreached),
+    }
 }
 
 /* SETUP TELEMETRY FOR THE WIZARD — the terminal is not where the user is looking. */
@@ -226,6 +300,43 @@ mod tests {
         let clipped = clip("é".repeat(30), 10);
         assert_eq!(clipped.chars().count(), 10);
         assert!(clipped.ends_with('…'));
+    }
+
+    #[test]
+    fn a_claim_names_the_machine_and_its_side_within_what_the_platform_keeps() {
+        let form = claim_form("abc", "ROG", "linux/archlinux");
+        assert_eq!(
+            form,
+            vec![
+                ("code", "abc".to_string()),
+                ("host", "ROG".to_string()),
+                ("os", "linux/archlinux".to_string()),
+            ]
+        );
+        let long = claim_form("abc", "", &format!("linux/{}", "d".repeat(60)));
+        assert_eq!(long.len(), 2, "an empty host is left out");
+        assert_eq!(long[1].1.chars().count(), 40);
+    }
+
+    #[test]
+    fn a_refused_claim_says_the_platforms_own_sentence() {
+        assert_eq!(
+            refusal_sentence(
+                "error: this setup code was already used on rog (windows) 3 minutes ago, and …"
+            )
+            .as_deref(),
+            Some("this setup code was already used on rog (windows) 3 minutes ago, and …")
+        );
+        assert_eq!(
+            refusal_sentence(r#"{"message":"already used on rog (windows)"}"#).as_deref(),
+            Some("already used on rog (windows)")
+        );
+        assert_eq!(
+            refusal_sentence(r#"{"error":"used elsewhere"}"#).as_deref(),
+            Some("used elsewhere")
+        );
+        assert_eq!(refusal_sentence("  "), None);
+        assert_eq!(refusal_sentence("error: "), None);
     }
 
     #[test]

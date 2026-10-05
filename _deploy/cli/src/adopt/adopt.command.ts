@@ -1,14 +1,16 @@
-import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { plural } from "@intentic/base/format";
 import { FORGEJO_HTTP_PORT, forgejoApi, overSsh, sshExecutor } from "@intentic/providers";
 import { secretDigest, writeSyncState } from "@intentic/scaffold";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
-import { ARTIFACT_FILE, ARTIFACT_PATH, CONFIG_FILE, INTENT_DIR, loadEnvFile, readArtifact, TARGET_DIR } from "../lib/artifact.js";
+import { ARTIFACT_FILE, ARTIFACT_PATH, CONFIG_FILE, INTENT_DIR, LAST_APPLIED_FILE, loadEnvFile, readArtifact, TARGET_DIR } from "../lib/artifact.js";
 import { createOutput, teeOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 import { version } from "../lib/version.js";
 import {
+    APPLIED_TAG,
     collectSecretValues,
     GIT_TOKEN_SECRET,
     GIT_USER_SECRET,
@@ -86,6 +88,8 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             intentSecrets["CLOUDFLARE_API_TOKEN"] = desiredStateSecrets["CLOUDFLARE_API_TOKEN"];
         }
 
+        // The local prune baseline seeds the pipeline's, so its first apply prunes against what this machine applied.
+        const baselineFile = resolve(targetDir, LAST_APPLIED_FILE);
         const run = async (baseUrl: string): Promise<{ readonly name: string; readonly cloneUrl: string }[]> => {
             const repos = await adoptRepos({
                 baseUrl,
@@ -94,7 +98,11 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
                 password,
                 repos: [
                     { dir: intentDir, name: INTENT_DIR },
-                    { dir: targetDir, name: TARGET_DIR },
+                    {
+                        dir: targetDir,
+                        name: TARGET_DIR,
+                        ...(existsSync(baselineFile) ? { seedTag: { name: APPLIED_TAG, messageFile: baselineFile } } : {}),
+                    },
                 ],
                 log: out.log,
             });

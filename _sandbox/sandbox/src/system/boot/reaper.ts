@@ -1,7 +1,13 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AGENT_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import {
+    AGENT_SESSION_PREFIX,
+    BROWSER_SESSION_PREFIX,
+    JOB_SESSION_PREFIX,
+    PANEL_SESSION_PREFIX,
+    WEB_SESSION_PREFIX,
+} from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
 import {
     closeBrowserSession,
@@ -10,8 +16,12 @@ import {
     runningBrowserOwners,
 } from "../../browser/sessions/browser-sessions.js";
 import { forkedExec } from "@intentic/scaffold";
-import { scanProcesses } from "../resources/process-scan.js";
-import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor } from "./leftovers.js";
+import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { SERVICE_SESSION_PREFIX } from "../../terminal/terminal-session.js";
+import { HOLDER_SESSION } from "../../terminal/tmux-server.js";
+import { type ScannedProcess, scanProcesses } from "../resources/process-scan.js";
+import { endProcess, overdueDetached, processAges } from "./generation-sweep.js";
+import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor, type SweptProcess } from "./leftovers.js";
 
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
 // turn registry reports it stopped, on one clock instead of one policy per resource kind. Archive and discard bypass
@@ -54,7 +64,7 @@ const TMP_SWEEPS: readonly { readonly prefix: string; readonly maxAgeMs: number 
 export const tmpSweepAgeOf = (entry: string): number | undefined => TMP_SWEEPS.find((candidate) => entry.startsWith(candidate.prefix))?.maxAgeMs;
 const SIGNALS_SWEEP = { dir: join(tmpdir(), "intentic", "agent-signals"), maxAgeMs: 24 * 3_600_000 };
 
-// One agent tmux session as the sweep sees it: owner, whether attached, last activity.
+// One tmux session as the sweep sees it: owner, whether attached, last activity.
 export interface AgentSessionState {
     readonly name: string;
     readonly owner: string | undefined;
@@ -67,11 +77,11 @@ const SESSION_FORMAT = `#{session_name}\t#{${TMUX_OWNER_OPTION}}\t#{session_atta
 
 // Parses one row per session, not per pane; pane liveness does not matter here. An unparseable activity stamp reads as
 // "just now", the safe direction since it gates a kill.
-export const parseAgentSessions = (stdout: string, now: number): AgentSessionState[] => {
+export const parseSessions = (stdout: string, now: number): AgentSessionState[] => {
     const sessions: AgentSessionState[] = [];
     for (const line of stdout.split("\n")) {
         const [name, owner, attached, activity] = line.split("\t");
-        if (name === undefined || !name.startsWith(AGENT_SESSION_PREFIX) || attached === undefined) {
+        if (name === undefined || name === "" || attached === undefined) {
             continue;
         }
         const activitySeconds = Number(activity);
@@ -83,6 +93,61 @@ export const parseAgentSessions = (stdout: string, now: number): AgentSessionSta
         });
     }
     return sessions;
+};
+
+export const parseAgentSessions = (stdout: string, now: number): AgentSessionState[] =>
+    parseSessions(stdout, now).filter((session) => session.name.startsWith(AGENT_SESSION_PREFIX));
+
+// The sandbox's own session names, each retired by its own sweep: agent and job terminals, panels, the owner's web
+// terminals, services, and the server's pin.
+const OWN_SESSION_PREFIXES = [
+    AGENT_SESSION_PREFIX,
+    JOB_SESSION_PREFIX,
+    PANEL_SESSION_PREFIX,
+    WEB_SESSION_PREFIX,
+    BROWSER_SESSION_PREFIX,
+    SERVICE_SESSION_PREFIX,
+];
+
+// What a session is to the sweep (2026-10-05): one of the sandbox's own (`own`), one a conversation's agent made by hand
+// with `tmux new-session` (`tagged`: bin/tmux-run's owner option, or the owner its creating shell's environment carried
+// in, which terminal/tmux-server.ts has tmux copy into the session), or one nobody can name (`untagged`: a person's own,
+// or a program's).
+export type SessionKind = "own" | "tagged" | "untagged";
+
+export const sessionKind = (session: Pick<AgentSessionState, "name" | "owner">): SessionKind => {
+    if (session.name === HOLDER_SESSION || OWN_SESSION_PREFIXES.some((prefix) => session.name.startsWith(prefix))) {
+        return "own";
+    }
+    return session.owner === undefined ? "untagged" : "tagged";
+};
+
+/**
+ * Which hand-made sessions of an agent go this pass: one whose conversation is gone (deleted, or archived) past the
+ * grace, never an attached one. `goneSince` answers undefined while the conversation stands or the registry cannot
+ * tell, and nothing goes on doubt.
+ */
+export const reapableTaggedSessionNames = (
+    sessions: readonly AgentSessionState[],
+    now: number,
+    { goneSince, graceMs }: { readonly goneSince: (owner: string) => number | undefined; readonly graceMs: number },
+): string[] =>
+    sessions
+        .filter((session) => {
+            if (session.attached || session.owner === undefined || sessionKind(session) !== "tagged") {
+                return false;
+            }
+            const since = goneSince(session.owner);
+            return since !== undefined && since <= now - graceMs;
+        })
+        .map((session) => session.name);
+
+// The owner a hand-made session's creating shell carried in, which tmux copied into its environment; undefined when it
+// carried none.
+export const parseSessionOwner = (stdout: string): string | undefined => {
+    const line = stdout.split("\n").find((candidate) => candidate.startsWith(`${WORKLOAD_ENV}=`));
+    const owner = line?.slice(WORKLOAD_ENV.length + 1).trim();
+    return owner === undefined || owner === "" ? undefined : owner;
 };
 
 export interface TerminalPolicy {
@@ -121,12 +186,20 @@ export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[]
 export interface ReaperDeps {
     // Whether this owner still has a run in flight, per the turn registry (plus the reserved owners).
     readonly ownerLive: (owner: string) => boolean;
+    // The same question for its processes alone: a turn in flight, not a watch the conversation waits on. A watch keeps
+    // the conversation for its wake, never a finished turn's processes (2026-10-05). Absent, `ownerLive`.
+    readonly processOwnerLive?: (owner: string) => boolean;
+    // Whether this conversation is gone for good (deleted, or archived): true or false once the registry can say,
+    // undefined while it cannot. Retires the sessions an agent made by hand. Absent, none are retired.
+    readonly ownerGone?: (owner: string) => boolean | undefined;
     // Whether this owner is a conversation this daemon's registry knows (leftovers.ts LeftoverPolicy.ownerKnown).
     readonly ownerKnown: (owner: string) => boolean;
     // tmux session names of turns in flight.
     readonly liveSessionNames: () => ReadonlySet<string>;
     // Every live tmux pane's root pid, shared with the ports scan.
     readonly panePids: () => Promise<Map<number, string>>;
+    // The /tmp capture dirs of jobs kept running for the person, which the tmp sweep leaves however quiet they are.
+    readonly keptJobDirs?: (root: string) => readonly string[];
     // Fires with the conversation id the moment a run finishes, seeding the stop clock.
     readonly onOwnerStopped: (listener: (owner: string) => void) => () => void;
     readonly logger: Logger;
@@ -152,15 +225,73 @@ const killSession = async (name: string): Promise<void> => {
     await forkedExec("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined);
 };
 
-const listAgentSessions = async (now: number): Promise<AgentSessionState[]> => {
+const listSessions = async (now: number): Promise<AgentSessionState[]> => {
     try {
         const { stdout } = await forkedExec("tmux", ["list-sessions", "-F", SESSION_FORMAT]);
-        return parseAgentSessions(stdout, now);
+        return parseSessions(stdout, now);
     } catch {
         // No tmux server: nothing of ours runs in a terminal.
         return [];
     }
 };
+
+const listAgentSessions = async (now: number): Promise<AgentSessionState[]> =>
+    (await listSessions(now)).filter((session) => session.name.startsWith(AGENT_SESSION_PREFIX));
+
+// A hand-made session's owner, from the environment its creating shell carried in, written onto the session as the
+// owner option so it outlives a later attach (which drops a variable the attaching client lacks).
+const tagFromEnvironment = async (session: AgentSessionState): Promise<AgentSessionState> => {
+    if (session.owner !== undefined || sessionKind(session) === "own") {
+        return session;
+    }
+    const shown = await forkedExec("tmux", ["show-environment", "-t", `=${session.name}`, WORKLOAD_ENV]).catch(() => undefined);
+    const owner = parseSessionOwner(shown?.stdout ?? "");
+    if (owner === undefined) {
+        return session;
+    }
+    await forkedExec("tmux", ["set-option", "-t", `=${session.name}:`, TMUX_OWNER_OPTION, owner]).catch(() => undefined);
+    return { ...session, owner };
+};
+
+// The pane pids that shield everything under them, and those of the untagged sessions, which shield only the young.
+export interface PaneShields {
+    readonly full: ReadonlySet<number>;
+    readonly untagged: ReadonlySet<number>;
+}
+
+export const paneShields = (panes: ReadonlyMap<number, string>, sessions: readonly AgentSessionState[]): PaneShields => {
+    const untaggedNames = new Set(sessions.filter((session) => sessionKind(session) === "untagged").map((session) => session.name));
+    const full = new Set<number>();
+    const untagged = new Set<number>();
+    for (const [pid, name] of panes) {
+        (untaggedNames.has(name) ? untagged : full).add(pid);
+    }
+    return { full, untagged };
+};
+
+// A watch check or an edit rule's command past its own deadline, whichever run started it, ended with its group; answers
+// which.
+const endOverdue = (scanned: readonly ScannedProcess[], now: number): number[] => {
+    const leaders = new Map(scanned.map((entry) => [entry.pid, entry.pgrp === entry.pid]));
+    return overdueDetached(scanned, now).filter((pid) => endProcess(pid, leaders.get(pid) === true, "SIGKILL"));
+};
+
+// The scan with each process's age, read only when an untagged pane makes age matter.
+const aged = async (scanned: readonly ScannedProcess[], needed: boolean): Promise<readonly SweptProcess[]> => {
+    if (!needed) {
+        return scanned;
+    }
+    const ages = await processAges(scanned).catch(() => new Map<number, number>());
+    return scanned.map((entry) => {
+        const ageMs = ages.get(entry.pid);
+        return ageMs === undefined ? entry : { ...entry, ageMs };
+    });
+};
+
+// After a forced reap's SIGTERM, how long its processes have before SIGKILL, and how long the owner is remembered for
+// it: the registry may forget the conversation the moment the reap returns (a discard), and the sweep would then no
+// longer license a survivor outside the daemon's group.
+const FORCED_KILL_AFTER_MS = 10_000;
 
 export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const { logger } = deps;
@@ -171,8 +302,13 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const intervalMs = deps.intervalMs ?? SWEEP_INTERVAL_MS;
     const group = ownProcessGroup();
 
+    const processOwnerLive = deps.processOwnerLive ?? deps.ownerLive;
     // Owner → when first known stopped; cleared when the owner runs again, resetting its grace window.
     const stoppedAt = new Map<string, number>();
+    // Owner → when first known gone for good, for the sessions its agent made by hand.
+    const goneAt = new Map<string, number>();
+    // Owner → until when a forced reap licenses its processes, whatever the registry says by then.
+    const forcedUntil = new Map<string, number>();
     // Since when a pid has been unowned, and which pids were already asked; both pruned to pids still visible.
     const unownedSince = new Map<number, number>();
     const asked = new Set<number>();
@@ -192,7 +328,19 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         return since;
     };
 
-    const sweepProcesses = async (now: number): Promise<void> => {
+    const goneSince = (owner: string, now: number): number | undefined => {
+        if (deps.ownerGone?.(owner) !== true) {
+            goneAt.delete(owner);
+            return undefined;
+        }
+        const since = goneAt.get(owner) ?? now;
+        goneAt.set(owner, since);
+        return since;
+    };
+
+    const forced = (owner: string, now: number): boolean => (forcedUntil.get(owner) ?? 0) > now;
+
+    const sweepProcesses = async (now: number, sessions: readonly AgentSessionState[]): Promise<void> => {
         if (group === undefined || process.platform !== "linux") {
             return;
         }
@@ -205,11 +353,18 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             return;
         }
         const scanned = await scanProcesses();
-        const leftovers = leftoverProcesses(scanned, {
+        const ended = endOverdue(scanned, now);
+        if (ended.length > 0) {
+            logger.warn({ pids: ended }, "reaper: ended detached commands past their own deadline");
+        }
+        const shields = paneShields(panes, sessions);
+        const leftovers = leftoverProcesses(await aged(scanned, shields.untagged.size > 0), {
             group,
-            ownerLive: deps.ownerLive,
-            ownerKnown: deps.ownerKnown,
-            panePids: new Set(panes.keys()),
+            ownerLive: (owner) => !forced(owner, now) && processOwnerLive(owner),
+            ownerKnown: (owner) => forced(owner, now) || deps.ownerKnown(owner),
+            panePids: shields.full,
+            untaggedPanePids: shields.untagged,
+            selfPid: process.pid,
         });
         const seen = new Set(leftovers.map((entry) => entry.pid));
         for (const pid of unownedSince.keys()) {
@@ -241,22 +396,32 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         }
     };
 
-    const sweepTerminals = async (now: number): Promise<void> => {
-        const sessions = await listAgentSessions(now);
+    const sweepTerminals = async (now: number, sessions: readonly AgentSessionState[]): Promise<void> => {
         if (sessions.length === 0) {
             return;
         }
-        const names = reapableAgentSessionNames(sessions, now, {
-            ownerStoppedSince: (owner) => ownerStoppedSince(owner, now),
-            liveNames: deps.liveSessionNames(),
-            graceMs: terminalGraceMs,
-            idleMs: terminalIdleMs,
-        });
-        if (names.length === 0) {
-            return;
+        const names = reapableAgentSessionNames(
+            sessions.filter((session) => session.name.startsWith(AGENT_SESSION_PREFIX)),
+            now,
+            {
+                ownerStoppedSince: (owner) => ownerStoppedSince(owner, now),
+                liveNames: deps.liveSessionNames(),
+                graceMs: terminalGraceMs,
+                idleMs: terminalIdleMs,
+            },
+        );
+        if (names.length > 0) {
+            await Promise.all(names.map(killSession));
+            logger.info({ count: names.length, sessions: names.slice(0, 10) }, "reaper: killed terminals of stopped conversations");
         }
-        await Promise.all(names.map(killSession));
-        logger.info({ count: names.length, sessions: names.slice(0, 10) }, "reaper: killed terminals of stopped conversations");
+        const handMade = reapableTaggedSessionNames(sessions, now, { goneSince: (owner) => goneSince(owner, now), graceMs: terminalGraceMs });
+        if (handMade.length > 0) {
+            await Promise.all(handMade.map(killSession));
+            logger.info(
+                { count: handMade.length, sessions: handMade.slice(0, 10) },
+                "reaper: killed sessions agents made whose conversation is gone",
+            );
+        }
     };
 
     // Closes browser records of owners that have stopped; Chromium itself is reaped by the process sweep. Puts every
@@ -309,11 +474,14 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         lastDiskSweep = now;
         const tmp = tmpdir();
         const entries = await readdir(tmp).catch(() => [] as string[]);
+        // A job kept for the person writes nothing while it runs quietly, and its file is what takes it back after a
+        // restart.
+        const kept = new Set(deps.keptJobDirs?.(tmp) ?? []);
         let removed = 0;
         await Promise.all(
             entries.map(async (entry) => {
                 const maxAgeMs = tmpSweepAgeOf(entry);
-                if (maxAgeMs === undefined) {
+                if (maxAgeMs === undefined || kept.has(join(tmp, entry))) {
                     return;
                 }
                 const path = join(tmp, entry);
@@ -353,8 +521,14 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                     stoppedAt.delete(owner);
                 }
             }
-            await sweepProcesses(now);
-            await sweepTerminals(now);
+            for (const [owner, until] of forcedUntil) {
+                if (until <= now) {
+                    forcedUntil.delete(owner);
+                }
+            }
+            const sessions = await Promise.all((await listSessions(now)).map(tagFromEnvironment));
+            await sweepProcesses(now, sessions);
+            await sweepTerminals(now, sessions);
             await sweepBrowsers(now);
             await sweepDisk(now);
         } catch (error) {
@@ -377,17 +551,31 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                 const [scanned, panes] = await Promise.all([scanProcesses(), deps.panePids()]);
                 const mineToo = leftoverProcesses(scanned, {
                     group,
-                    ownerLive: (candidate) => candidate !== owner && deps.ownerLive(candidate),
-                    ownerKnown: deps.ownerKnown,
+                    ownerLive: (candidate) => candidate !== owner && processOwnerLive(candidate),
+                    ownerKnown: (candidate) => candidate === owner || deps.ownerKnown(candidate),
                     panePids: new Set(panes.keys()),
+                    selfPid: process.pid,
                 }).filter((leftover) => leftover.owner === owner);
                 for (const leftover of mineToo) {
                     try {
                         process.kill(leftover.pid, "SIGTERM");
                         asked.add(leftover.pid);
+                        // Already past its grace: the next pass that still finds it sends the SIGKILL.
+                        unownedSince.set(leftover.pid, now - processGraceMs);
                     } catch {
                         // Already gone, which is the goal.
                     }
+                }
+                if (mineToo.length > 0) {
+                    // Remembered past the registry: a discard forgets the conversation the moment this returns, and the
+                    // pass below must still find its survivors to SIGKILL them.
+                    forcedUntil.set(owner, now + FORCED_KILL_AFTER_MS + processGraceMs);
+                    const edge = setTimeout(() => {
+                        scheduled.delete(edge);
+                        void sweep();
+                    }, FORCED_KILL_AFTER_MS);
+                    edge.unref();
+                    scheduled.add(edge);
                 }
             }
             if (mine.length > 0) {
@@ -437,6 +625,13 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         stop,
         sweep,
         reapConversation,
-        metrics: () => ({ stoppedOwners: stoppedAt.size, trackedPids: unownedSince.size, askedPids: asked.size, edgeTimers: scheduled.size }),
+        metrics: () => ({
+            stoppedOwners: stoppedAt.size,
+            goneOwners: goneAt.size,
+            forcedOwners: forcedUntil.size,
+            trackedPids: unownedSince.size,
+            askedPids: asked.size,
+            edgeTimers: scheduled.size,
+        }),
     };
 };

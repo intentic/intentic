@@ -44,9 +44,13 @@ test("the apply workflow injects every secret, diffs against the applied tag, an
     }
     expect(yaml).toContain(`FORGEJO_ADMIN_PASSWORD: \${{ secrets.INTENTIC_FORGEJO_ADMIN_PASSWORD }}`);
     expect(yaml).toContain("pnpm dlx @intentic/cli@1.2.3 deploy apply --yes --artifact desired-state.json $PREV");
-    // Prune baseline is the last successfully-applied commit, read from the intentic-applied tag.
+    // The prune baseline rides the intentic-applied tag: an annotated tag's message is the baseline record apply wrote; a
+    // plain tag from before that points at the applied artifact.
+    expect(yaml).toContain("git tag -l --format='%(contents)' intentic-applied > /tmp/previous.json");
     expect(yaml).toContain("git show intentic-applied:desired-state.json > /tmp/previous.json");
-    expect(yaml).toContain("git tag -f intentic-applied HEAD");
+    expect(yaml).toContain("tag -f -a --cleanup=verbatim -F .last-applied.json intentic-applied HEAD");
+    // A tag that exists but cannot be read fails the step instead of reading as "no baseline".
+    expect(yaml).toContain("set -e");
     // Tag push authenticates with the Forgejo admin password secret already in the apply env.
     expect(yaml).toContain("printf '%s:%s' 'intentic' \"$FORGEJO_ADMIN_PASSWORD\"");
 });
@@ -65,15 +69,33 @@ test("both rendered workflows are valid YAML with the expected job structure", (
     expect(intent.jobs.resolve.env["CLOUDFLARE_API_TOKEN"]).toBe(`\${{ secrets.CLOUDFLARE_API_TOKEN }}`);
 
     const apply = parse(applyWorkflowYaml(inputs)) as {
-        on: { push: { paths: string[] } };
-        jobs: { apply: { env: Record<string, string>; steps: unknown[] } };
+        on: { push: { paths: string[] }; schedule: { cron: string }[] };
+        jobs: Record<"apply" | "drift", { if: string; env: Record<string, string>; steps: { run?: string }[] }>;
     };
     expect(apply.on.push.paths).toEqual(["desired-state.json"]);
-    // Every injected secret survived the loop at the right indentation.
+    // Every injected secret survived the loop at the right indentation, in both jobs.
     for (const key of inputs.applySecretKeys) {
         expect(apply.jobs.apply.env[key]).toBe(`\${{ secrets.${forgejoSecretName(key)} }}`);
+        expect(apply.jobs.drift.env[key]).toBe(`\${{ secrets.${forgejoSecretName(key)} }}`);
     }
     expect(apply.jobs.apply.steps).toHaveLength(3);
+});
+
+// The scheduled reconcile: a push applies as before; once a day the drift job runs a plan that changes nothing and fails
+// the run on drift, so the owner sees it in CI.
+test("the apply workflow runs a daily drift check that never applies and fails on drift", () => {
+    const workflow = parse(applyWorkflowYaml(inputs)) as {
+        on: { schedule: { cron: string }[] };
+        jobs: Record<"apply" | "drift", { if: string; steps: { run?: string }[] }>;
+    };
+    expect(workflow.on.schedule).toEqual([{ cron: "17 5 * * *" }]);
+    expect(workflow.jobs.apply.if).toBe("github.event_name == 'push'");
+    expect(workflow.jobs.drift.if).toBe("github.event_name == 'schedule'");
+    const drift = workflow.jobs.drift.steps.map((step) => step.run ?? "").join("\n");
+    expect(drift).toContain("pnpm dlx @intentic/cli@1.2.3 deploy plan --check --artifact desired-state.json $PREV");
+    expect(drift).not.toContain("deploy apply");
+    expect(drift).not.toContain("--yes");
+    expect(drift).not.toContain("git tag -f");
 });
 
 test("setRepoSecrets PUTs each name/value onto the repo via the Forgejo API", async () => {

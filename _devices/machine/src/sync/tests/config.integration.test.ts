@@ -7,7 +7,18 @@ import { join } from "node:path";
 // (dynamic import, after the env is set), landing the state file in temp rather than the real ~/.intentic/machine.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-config-"));
 process.env["USERPROFILE"] = process.env["HOME"];
-const { pairingTransport, readState, removePairing, setMirrorOff, setPortIgnored, updateState, upsertPairing } = await import("../config.js");
+const {
+    moveSandboxToSsh,
+    pairingTransport,
+    readState,
+    removePairing,
+    setMirrorOff,
+    setPortIgnored,
+    setSandboxGone,
+    setUnreachableSince,
+    updateState,
+    upsertPairing,
+} = await import("../config.js");
 const { readFile, rm, writeFile } = await import("node:fs/promises");
 const { agentHome } = await import("@intentic/local-agent");
 const syncStatePath = join(agentHome("machine").dir, "sync.json");
@@ -262,10 +273,22 @@ describe("a pairing reached through Docker", () => {
     });
 
     it.each([
-        ["a workspace pairing", { ...local, transport: "docker", container: "intentic-sandbox-sandbox-0738cd6b5027" }, "reaches its sandbox through Docker, which only a project pairing or the projects host may"],
+        [
+            "a workspace pairing",
+            { ...local, transport: "docker", container: "intentic-sandbox-sandbox-0738cd6b5027" },
+            "reaches its sandbox through Docker, which only a project pairing or the projects host may",
+        ],
         ["no container", { ...project, transport: "docker" }, "reaches its sandbox through Docker but names no sandbox container (undefined)"],
-        ["a container that is not a sandbox's", { ...project, transport: "docker", container: "postgres" }, `names no sandbox container ("postgres")`],
-        ["a container name docker would not take", { ...project, transport: "docker", container: "intentic-sandbox-a;rm" }, "names no sandbox container"],
+        [
+            "a container that is not a sandbox's",
+            { ...project, transport: "docker", container: "postgres" },
+            `names no sandbox container ("postgres")`,
+        ],
+        [
+            "a container name docker would not take",
+            { ...project, transport: "docker", container: "intentic-sandbox-a;rm" },
+            "names no sandbox container",
+        ],
     ])("refuses a state file holding %s, whole, when it is read", async (_what, held, said) => {
         await writeFile(syncStatePath, JSON.stringify({ pairings: [web, held] }));
 
@@ -279,5 +302,54 @@ describe("a pairing reached through Docker", () => {
         const [held] = (await readState()).pairings;
         expect(held?.localDir).toBe(project.localDir);
         expect(pairingTransport(held ?? throughDocker)).toBe("ssh");
+    });
+});
+
+// (2026-10-05) What is the SANDBOX's, said on every pairing of it, and kept on disk so a restarted agent still knows.
+describe("a sandbox's fate on its pairings", () => {
+    const host = { ...local, projectsHost: true as const, localDir: undefined };
+    const folder = {
+        ...local,
+        key: `${local.sandboxId}~blog`,
+        localDir: "/home/dev/code/blog",
+        remoteDir: `${WORKSPACE_ROOT}/blog`,
+        project: true as const,
+        transport: "docker" as const,
+        container: "intentic-sandbox-sandbox-0738cd6b5027",
+    };
+
+    it("marks and clears a sandbox gone on every one of its pairings, and on no other sandbox's", async () => {
+        const { localDir: _none, ...hostOnly } = host;
+        await upsertPairing(hostOnly);
+        await upsertPairing(folder);
+        await upsertPairing(web);
+
+        await setSandboxGone(local.sandboxId, { since: 10, checkedAt: 20, by: "edge" });
+        expect((await readState()).pairings.map((held) => [held.sandboxId, held.goneSince, held.goneBy])).toEqual([
+            [local.sandboxId, 10, "edge"],
+            [local.sandboxId, 10, "edge"],
+            [web.sandboxId, undefined, undefined],
+        ]);
+
+        await setSandboxGone(local.sandboxId, undefined);
+        // Cleared without a trace, not written as nulls.
+        expect(await readFile(syncStatePath, "utf8")).not.toContain("gone");
+    });
+
+    it("keeps an outage's start on disk until it is cleared", async () => {
+        await upsertPairing(web);
+        await setUnreachableSince(web.sandboxId, 1_234);
+        expect((await readState()).pairings[0]?.unreachableSince).toBe(1_234);
+        await setUnreachableSince(web.sandboxId, undefined);
+        expect((await readState()).pairings[0]?.unreachableSince).toBeUndefined();
+    });
+
+    it("moves every docker pairing of a sandbox onto ssh, which the file still accepts", async () => {
+        await upsertPairing(folder);
+        await moveSandboxToSsh(local.sandboxId);
+        const moved = (await readState()).pairings[0];
+        expect(moved?.transport).toBeUndefined();
+        expect(moved?.container).toBeUndefined();
+        expect(moved === undefined ? undefined : pairingTransport(moved)).toBe("ssh");
     });
 });

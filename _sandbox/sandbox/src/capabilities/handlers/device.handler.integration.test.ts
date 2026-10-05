@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
+import { stubEnv } from "@intentic/testing/bun";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import { enrolledFleet, enrollSyncKey } from "../../hosts/desktop-sync.js";
 import { HOST_PEER } from "../../hosts/host-peer.js";
 import { createPeerHub, type PeerClient } from "../../peers/peer-hub.js";
 import { filePeerStore } from "../../peers/peer-store.js";
@@ -168,4 +170,57 @@ test("renaming a device carries every OS install to the new name, each keeping i
     for (const id of hub.connected()) {
         hub.disconnect(id, "test over");
     }
+});
+
+// (2026-10-05) A device card's computers also sync with this sandbox through a key of their own, which removing the card
+// used to leave authorized under no card at all. The card's enrollments say which computers and environments it held;
+// their sync keys go with it, and nobody else's.
+test("removing a card revokes the desktop-sync keys of the computers it held, and no other's", async () => {
+    stubEnv("HOME", mkdtempSync(join(tmpdir(), "card-sync-home-")));
+    const { ctx: base } = tempCtx();
+    const historyRoot = base.historyRoot;
+    const held = [
+        { id: "rog", card: "rog", machineId: "m-rog-0001", environment: "native" },
+        { id: "rog::wsl:Ubuntu", card: "rog", machineId: "m-rog-0001", environment: "wsl:Ubuntu" },
+        { id: "omen", card: "omen", machineId: "m-omen-0001", environment: "native" },
+    ];
+    const cut: string[] = [];
+    const ctx = {
+        ...base,
+        hosts: {
+            list: async () => held,
+            revokeCard: async (card: string) => held.filter((entry) => entry.card === card).map((entry) => entry.id),
+        },
+        hostHub: { disconnect: (id: string) => void cut.push(id) },
+        logger: { info: () => undefined, warn: () => undefined },
+    } as unknown as CapabilityCtx;
+    await enrollSyncKey({
+        historyRoot,
+        key: "ssh-ed25519 AAAArog ROG",
+        mode: "sync",
+        takeover: false,
+        machineId: "m-rog-0001",
+        environment: "native",
+    });
+    await enrollSyncKey({
+        historyRoot,
+        key: "ssh-ed25519 AAAArogwsl ROG",
+        mode: "mirror",
+        takeover: false,
+        machineId: "m-rog-0001",
+        environment: "wsl:Ubuntu",
+    });
+    await enrollSyncKey({
+        historyRoot,
+        key: "ssh-ed25519 AAAAomen omen",
+        mode: "mirror",
+        takeover: false,
+        machineId: "m-omen-0001",
+        environment: "native",
+    });
+
+    await deviceHandler.remove?.(ctx, "rog", {});
+
+    expect(cut).toEqual(["rog", "rog::wsl:Ubuntu"]);
+    expect((await enrolledFleet(historyRoot)).machines.map((row) => row.machine)).toEqual(["omen"]);
 });

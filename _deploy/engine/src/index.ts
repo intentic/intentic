@@ -10,7 +10,7 @@ export { plan } from "./reconcile/plan.js";
 export { prune, pruneOrphans } from "./reconcile/prune.js";
 export type { ConvergeResult } from "./reconcile/reconcile-loop.js";
 export { reconcile } from "./reconcile/reconcile-loop.js";
-export { resolveInputs } from "./resolve-inputs.js";
+export { MISSING_SECRET, resolveInputs } from "./resolve-inputs.js";
 export type { OutputStore } from "./store.js";
 export { createStore } from "./store.js";
 export type {
@@ -20,9 +20,13 @@ export type {
     EngineEvent,
     Orphan,
     OrphanEntry,
+    OrphanScan,
     PlanOutcome,
     PrunedResource,
     PruneOutcome,
     ResolvedInputs,
+    ScanSkip,
+    SkippedResource,
+    SkipReason,
     Step,
 } from "./types.js";

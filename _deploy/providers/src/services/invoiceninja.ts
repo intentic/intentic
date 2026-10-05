@@ -3,6 +3,7 @@ import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const invoiceninjaSchema = serviceSchema.extend({
@@ -21,7 +22,7 @@ const PORT = 8083;
 // One image serves app/worker/scheduler, selected by LARAVEL_ROLE; they share the &env anchor and storage volume.
 // TLS terminates at Cloudflare, so REQUIRE_HTTPS stays off while APP_URL is https; secrets ride env_file, not this
 // file.
-const composeYaml = (parsed: InvoiceninjaInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: InvoiceninjaInputs, stamp: ContainerStamp): string =>
     [
         "x-env: &env",
         `  APP_URL: https://${parsed.domain}`,
@@ -76,7 +77,7 @@ const composeYaml = (parsed: InvoiceninjaInputs, id: string, hash: string): stri
         "      <<: *env",
         "      LARAVEL_ROLE: app",
         "    volumes: [ appstorage:/app/storage ]",
-        `    labels: [ "intentic.id=${id}", "intentic.type=invoiceninja", "intentic.hash=${hash}" ]`,
+        stampLabels("invoiceninja", stamp),
         "  worker:",
         `    image: ${parsed.invoiceninjaImage}`,
         "    restart: unless-stopped",
@@ -114,7 +115,7 @@ export const createInvoiceninjaProvider = (executor: SshExecutor = sshExecutor):
             port: PORT,
             healthPath: "/health",
             readyTimeoutMs: 600_000,
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp) }),
             env: (parsed) => [
                 // APP_KEY needs a base64: prefixed 32-byte key; minted here since the standard generator only produces
                 // hex.

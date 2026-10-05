@@ -20,6 +20,22 @@ export const MachineIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,1
 export const derivedMachineId = (card: string): string => `card:${card}`;
 export const isDerivedMachineId = (machineId: string): boolean => machineId.startsWith("card:");
 
+// How many skipped lines an agent sends in its upkeep summary at most; the counts cover the rest.
+export const UPKEEP_SKIPPED_SHOWN = 10;
+
+// What the machine agent's own upkeep found in this environment at its last pass (its device reconciler, run at start
+// and every six hours): how many leftovers of each kind it found and how many it put right, and the first
+// UPKEEP_SKIPPED_SHOWN of those it left, each with why. Kinds are the agent's words (`retired-files`, `trash`,
+// `login-entry`…), read as strings, so a kind a newer agent adds is one more key rather than a facts row that fails to
+// parse; for the same reason the cap on `skipped` is the sender's, not checked here. `at` is epoch ms.
+export const DeviceUpkeepSchema = z.object({
+    at: z.number(),
+    found: z.record(z.string(), z.number()),
+    fixed: z.record(z.string(), z.number()),
+    skipped: z.array(z.object({ kind: z.string(), what: z.string(), why: z.string() })),
+});
+export type DeviceUpkeep = z.infer<typeof DeviceUpkeepSchema>;
+
 // What a machine reports once at connect (`host.describe`), cached until it reconnects: the skill pack says how to
 // drive Windows, this says which Windows it is.
 export const DeviceFactsSchema = z.object({
@@ -57,6 +73,9 @@ export const DeviceFactsSchema = z.object({
     // what explains `features` missing what this agent's release has (a stale ic has no logs verb and no `--set`).
     // Absent when ic is current, and from an agent older than the field.
     icOutOfDate: z.string().optional(),
+    // The agent's last upkeep pass in this environment (DeviceUpkeepSchema): whether a release brought this machine to
+    // the current shape, read rather than assumed. Absent before the first pass, and from an agent older than the field.
+    upkeep: DeviceUpkeepSchema.optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 

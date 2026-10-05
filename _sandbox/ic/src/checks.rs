@@ -266,12 +266,23 @@ pub fn parse_df_avail(df_output: &str) -> Option<u64> {
 #[cfg(unix)]
 pub fn check_disk() -> Outcome {
     // Native Linux stores images under DockerRootDir; Docker Desktop's root lives inside its VM, whose
-    // backing file grows on the host disk — so when the reported root is not a local path, measure `/`.
+    // backing file grows on the host disk — so when the reported root is not a local path, measure `/`. Inside WSL
+    // that host disk is the Windows drive, and `/` is the distro's own sparse virtual disk, which reports space the
+    // drive under it does not have (the fleet's 680 GB on a host with 2), so the drive is what is measured there.
     let root = docker::ask(&["info", "-f", "{{.DockerRootDir}}"], docker::READ_LIMIT)
         .said()
         .map(|dir| dir.trim().to_string())
         .filter(|dir| std::path::Path::new(dir).exists())
-        .unwrap_or_else(|| "/".to_string());
+        .unwrap_or_else(|| {
+            let wsl = crate::sandbox::fix::host::inside_wsl(
+                &std::fs::read_to_string("/proc/version").unwrap_or_default(),
+            );
+            if wsl && std::path::Path::new("/mnt/c").exists() {
+                "/mnt/c".to_string()
+            } else {
+                "/".to_string()
+            }
+        });
     disk_outcome(free_kib(&root), &root)
 }
 
@@ -284,14 +295,45 @@ pub fn free_kib(path: &str) -> Option<u64> {
         .and_then(|ran| parse_df_avail(&ran.stdout))
 }
 
-/// Windows measures its own free space inside [`check_windows`], which probes the machine once for a dozen
-/// facts at a time — asking a second time here would be a second `powershell.exe` launch for a number we
-/// already have.
+/// Windows asks the drive Docker Desktop keeps its data on (the one %LOCALAPPDATA% is on, C: by default) directly,
+/// through the Win32 call `ic sandbox fix` already used: no `powershell.exe` launch, so the guards that read this (a
+/// prepare's "not now", how many rollback builds a swap keeps, a backup's "the disk is short") engage on Windows as
+/// they do everywhere else. (2026-10-05: it answered "skip" here, and none of them ever did.) A drive that will not say
+/// is still a skip.
 #[cfg(not(unix))]
 pub fn check_disk() -> Outcome {
-    Outcome::Skip {
-        why: "measured with the rest of this PC's prerequisites".to_string(),
+    let (free, drive) = windows_free_bytes();
+    disk_outcome(free.map(|bytes| bytes / 1024), &drive)
+}
+
+/// Free bytes available to this user on the drive %LOCALAPPDATA% is on, and that drive's root (`C:\`).
+#[cfg(windows)]
+pub fn windows_free_bytes() -> (Option<u64>, String) {
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            directory: *const u16,
+            available: *mut u64,
+            total: *mut u64,
+            free: *mut u64,
+        ) -> i32;
     }
+    let root = std::env::var("LOCALAPPDATA")
+        .ok()
+        .and_then(|dir| {
+            std::path::Path::new(&dir)
+                .components()
+                .next()
+                .map(|c| c.as_os_str().to_string_lossy().to_string())
+        })
+        .map(|drive| format!("{drive}\\"))
+        .unwrap_or_else(|| "C:\\".to_string());
+    let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut available: u64 = 0;
+    let mut total: u64 = 0;
+    let mut free: u64 = 0;
+    // SAFETY: a NUL-terminated wide string and three out-pointers to locals, which is the whole contract.
+    let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut free) };
+    ((ok != 0).then_some(available), root)
 }
 
 //

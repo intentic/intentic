@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { FixCheck, KeeperSeams, LinkView } from "./device/sandbox-rounds/keeper.js";
+import type { FixCheck, KeeperSeams, LinkView, ListedSandbox } from "./device/sandbox-rounds/keeper.js";
 import type { IcRun } from "./device/tools/sandboxes.js";
 import { FETCH_PROGRAM, LISTING_PROGRAM, type ProjectRunner, realProjectRunner, type Spawned } from "./sync/project-remote.js";
 
@@ -181,8 +181,11 @@ export interface FakeKeeper {
     on: boolean | Error;
     links: LinkView[];
     records: string[];
-    // `ic sandbox list --json`'s slugs, or the error it fails with while Docker is down.
-    listing: string[] | Error;
+    // `ic sandbox list --json`'s rows (a bare slug is a row of this side's own), or the error it fails with while Docker
+    // is down. Undefined lists a container for every record, the usual machine.
+    listing: readonly (string | ListedSandbox)[] | Error | undefined;
+    // The slugs in ic's trash on this engine, or the error docker answers with.
+    trashed: string[] | Error;
     swapping: string[];
     watching: boolean;
     readonly busy: Set<string>;
@@ -209,7 +212,8 @@ export const fakeKeeper = (start: number): FakeKeeper => {
         on: true,
         links: [],
         records: [],
-        listing: [],
+        listing: undefined,
+        trashed: [],
         swapping: [],
         watching: false,
         busy,
@@ -227,8 +231,12 @@ export const fakeKeeper = (start: number): FakeKeeper => {
                 }
                 return run;
             },
-            listing: async () => (fake.listing instanceof Error ? await Promise.reject(fake.listing) : fake.listing),
+            listing: async () =>
+                fake.listing instanceof Error
+                    ? await Promise.reject(fake.listing)
+                    : (fake.listing ?? fake.records).map((row) => (typeof row === "string" ? { slug: row } : row)),
             records: async () => await Promise.resolve(fake.records),
+            trashed: async () => (fake.trashed instanceof Error ? await Promise.reject(fake.trashed) : fake.trashed),
             swapping: async () => await Promise.resolve(fake.swapping),
             links: () => fake.links,
             loopback,

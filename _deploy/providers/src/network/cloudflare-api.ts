@@ -51,12 +51,12 @@ export interface CloudflareApi {
         readonly tunnelId: string;
         readonly ingress: readonly IngressRule[];
     }) => Promise<void>;
-    // Find a CNAME record by exact name in a zone; undefined if none.
+    // Find a CNAME record by exact name in a zone, with its comment (the ownership stamp); undefined if none.
     readonly findDnsRecord: (args: {
         readonly apiToken: string;
         readonly zoneId: string;
         readonly name: string;
-    }) => Promise<{ readonly id: string; readonly content: string } | undefined>;
+    }) => Promise<{ readonly id: string; readonly content: string; readonly comment?: string } | undefined>;
     // Every DNS record whose comment starts with the given prefix; backs cf-route's `list` scan.
     readonly listStampedDnsRecords: (args: {
         readonly apiToken: string;
@@ -210,13 +210,13 @@ export const cloudflareApi: CloudflareApi = {
         const records = await call(
             apiToken,
             `/zones/${encodeURIComponent(zoneId)}/dns_records?type=CNAME&name=${encodeURIComponent(name)}`,
-            z.array(z.object({ id: z.string(), content: z.string() })),
+            z.array(z.object({ id: z.string(), content: z.string(), comment: z.string().nullish() })),
         );
         const found = records[0];
         if (found === undefined) {
             return undefined;
         }
-        return { id: found.id, content: found.content };
+        return { id: found.id, content: found.content, ...(typeof found.comment === "string" ? { comment: found.comment } : {}) };
     },
     listStampedDnsRecords: async ({ apiToken, zoneId, commentPrefix }) => {
         // One page of up to 1000 records; paginate if a zone ever exceeds that many stamped records.

@@ -7,7 +7,9 @@ use crate::checks;
 use crate::docker;
 use crate::logfile::{intentic_home, Log};
 use crate::record::{self, Phase};
+use crate::sandbox::inside::{self, Read};
 use crate::sandbox::lock::{self, Wait};
+use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{container_of, now_ms, parked_of, resolve_slug};
 use crate::util::{bail, sha256_hex, Fail, Result};
 
@@ -72,11 +74,11 @@ pub fn backups_dir(slug: &str) -> PathBuf {
     intentic_home().join("backups").join(slug)
 }
 
-fn repo_dir(slug: &str) -> PathBuf {
+pub fn repo_dir(slug: &str) -> PathBuf {
     backups_dir(slug).join("repo")
 }
 
-fn key_path(slug: &str) -> PathBuf {
+pub fn key_path(slug: &str) -> PathBuf {
     intentic_home()
         .join("keys")
         .join(format!("backup-{slug}.key"))
@@ -180,22 +182,47 @@ fn owner_ids() -> Option<String> {
     None
 }
 
+/// The worker container's name: per sandbox AND per side (2026-10-05). Both sides of a PC drive one engine, and one
+/// shared name meant each side's `rm -f` before its run killed the other side's backup in the middle of it; a name of
+/// this side's own is only ever a run of this side's that outlived its ic. Pure.
+pub fn worker_name(slug: &str, side: &Side) -> String {
+    let side: String = side
+        .wire()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    format!("intentic-backup-{slug}-{side}")
+}
+
 /// `docker run` of restic with the repository and key mounted, running `script` in the image's shell (restic's image
 /// is Alpine) so the repository can be handed back to this user afterwards.
 fn restic(slug: &str, mounts: &[String], script: &str, log: &Log) -> Result<docker::Bounded> {
     let repo = repo_dir(slug);
     std::fs::create_dir_all(&repo)?;
     let key = ensure_key(slug)?;
-    let name = format!("intentic-backup-{slug}");
+    let here = side::here();
+    let name = worker_name(slug, &here);
     docker::quiet(&["rm", "-f", &name]);
+    let labels = crate::sandbox::labels::args(
+        slug,
+        crate::sandbox::labels::Kind::BackupWorker,
+        &here.wire(),
+    );
     let chown = owner_ids()
         .map(|ids| format!(" ; status=$?; chown -R {ids} /repo; exit $status"))
         .unwrap_or_default();
     let repo_mount = format!("{}:/repo", repo.display());
     let key_mount = format!("{}:/key:ro", key.display());
     let full_script = format!("{script}{chown}");
-    let mut args: Vec<&str> = vec![
-        "run",
+    let mut args: Vec<&str> = vec!["run"];
+    args.extend(labels.iter().map(String::as_str));
+    args.extend_from_slice(&[
         "--rm",
         "--name",
         &name,
@@ -209,7 +236,7 @@ fn restic(slug: &str, mounts: &[String], script: &str, log: &Log) -> Result<dock
         &repo_mount,
         "-v",
         &key_mount,
-    ];
+    ]);
     for mount in mounts {
         args.extend_from_slice(&["-v", mount]);
     }
@@ -304,6 +331,15 @@ pub fn take(slug: &str, scope: Scope, reason: &str) -> Result<String> {
         );
     }
     let snapshot = snapshot_of(&ran.stdout).unwrap_or_else(|| "saved".to_string());
+    // Said on the sandbox's own volume, where every side reads it: tidy on another side removes its own stale copy of
+    // this sandbox once this, the keeping side's, is newer than it (tidy.rs).
+    if !container.is_empty() {
+        let _ = inside::write_stamped(
+            &container,
+            BACKUP_FILE,
+            &backup_body(&side::here(), &snapshot, scope),
+        );
+    }
     if scope == Scope::Full {
         let _ = std::fs::write(last_path(slug), now_ms().to_string());
         // Old snapshots go on the full, daily run only: a quick pre-update backup never waits on a prune.
@@ -315,6 +351,115 @@ pub fn take(slug: &str, scope: Scope, reason: &str) -> Result<String> {
         );
     }
     Ok(snapshot)
+}
+
+/// Where the last backup of a sandbox is said, on its own volume.
+pub const BACKUP_FILE: &str = "/history/.ic/backup.json";
+
+/// What `backup.json` says: which side took the backup, when (the container's clock), and which snapshot. Pure.
+pub fn backup_body(side: &Side, snapshot: &str, scope: Scope) -> Value {
+    json!({
+        "side": side.platform,
+        "env": side.env,
+        "at": inside::NOW,
+        "snapshot": snapshot,
+        "scope": if scope == Scope::Full { "full" } else { "state" },
+    })
+}
+
+/// Which side's backup a sandbox's `backup.json` names, and when it was taken. Pure.
+pub fn backup_of(value: &Value) -> Option<(Side, u64)> {
+    let platform = value["side"].as_str().filter(|side| !side.is_empty())?;
+    Some((
+        Side::new(platform, value["env"].as_str()),
+        value["at"].as_u64()?,
+    ))
+}
+
+/// The last backup any side said it took of this sandbox, off its volume.
+pub fn last_said(slug: &str) -> Option<(Side, u64)> {
+    let holder = inside::holder(slug)?;
+    match inside::read(&holder, BACKUP_FILE) {
+        Read::Found(value) => backup_of(&value),
+        _ => None,
+    }
+}
+
+/// When this side last backed this sandbox up: the stamp a full backup leaves, else the moment its repository last
+/// took a snapshot (an older ic left no stamp). None when there is no repository here at all.
+pub fn last_here(slug: &str) -> Option<u64> {
+    if let Some(stamp) = std::fs::read_to_string(last_path(slug))
+        .ok()
+        .and_then(|text| text.trim().parse().ok())
+    {
+        return Some(stamp);
+    }
+    let repo = repo_dir(slug);
+    [repo.join("snapshots"), repo]
+        .iter()
+        .find_map(|path| {
+            std::fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .ok()
+        })
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_millis() as u64)
+}
+
+/// The sandboxes this side holds backups of: a folder under `backups/`, or a key without one.
+pub fn held_here() -> Vec<String> {
+    let mut slugs: Vec<String> = Vec::new();
+    let mut add = |slug: String| {
+        if !slug.is_empty() && !slugs.contains(&slug) {
+            slugs.push(slug);
+        }
+    };
+    if let Ok(entries) = std::fs::read_dir(intentic_home().join("backups")) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                add(entry.file_name().to_string_lossy().to_string());
+            }
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(intentic_home().join("keys")) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(slug) = name
+                .strip_prefix("backup-")
+                .and_then(|rest| rest.strip_suffix(".key"))
+            {
+                add(slug.to_string());
+            }
+        }
+    }
+    slugs.sort();
+    slugs
+}
+
+/// This side's backups of a sandbox gone, repository and key. Ok(bytes the repository held) when nothing is left.
+pub fn discard(slug: &str) -> std::result::Result<u64, String> {
+    let dir = backups_dir(slug);
+    let size = dir_size(&dir);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|err| format!("{}: {err}", dir.display()))?;
+    }
+    let key = key_path(slug);
+    if key.exists() {
+        std::fs::remove_file(&key).map_err(|err| format!("{}: {err}", key.display()))?;
+    }
+    Ok(size)
+}
+
+fn dir_size(path: &std::path::Path) -> u64 {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return 0;
+    };
+    if !meta.is_dir() {
+        return meta.len();
+    }
+    std::fs::read_dir(path)
+        .map(|entries| entries.flatten().map(|entry| dir_size(&entry.path())).sum())
+        .unwrap_or(0)
 }
 
 /// Why a background backup should not run now, if it should not. Pure over what it is given.
@@ -340,9 +485,23 @@ pub fn auto_skip(
 pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, "ic sandbox backup")?;
+    // The daily backup of a sandbox is its own side's: the other side's machine agent backs it up into its own repo,
+    // for as long as it looks after it (side.rs).
+    let unattended = if auto {
+        side::unattended(&slug)
+    } else {
+        Unattended::Ours
+    };
+    let adopted = match &unattended {
+        Unattended::Adopted(adoption) => Some(adoption.clone()),
+        _ => None,
+    };
     let say = |result: &str, snapshot: Option<&str>, reason: Option<&str>| {
         if as_json {
             let mut line = json!({"slug": slug, "result": result});
+            if let Some(adoption) = &adopted {
+                line["adopted"] = adoption.json();
+            }
             if let Some(snapshot) = snapshot {
                 line["snapshot"] = json!(snapshot);
                 line["repo"] = json!(repo_dir(&slug).display().to_string());
@@ -352,6 +511,9 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
             }
             println!("{line}");
         } else if let Some(snapshot) = snapshot {
+            if let Some(adoption) = &adopted {
+                println!("intentic: {slug}: {}", adoption.sentence());
+            }
             println!(
                 "intentic: backed up {slug} (snapshot {snapshot}) to {}.",
                 repo_dir(&slug).display()
@@ -363,12 +525,13 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
             );
         }
     };
-    // The daily backup of a sandbox is its own side's: the other side's machine agent backs it up into its own repo.
-    if auto {
-        if let Some(side) = super::side::kept_elsewhere(&slug) {
-            say("elsewhere", None, Some(&super::side::sentence(&side)));
-            return Ok(());
-        }
+    if let Unattended::Theirs(side) = &unattended {
+        say("elsewhere", None, Some(&side::sentence(side)));
+        return Ok(());
+    }
+    // The keeper's own round is also its heartbeat (side.rs), beside the one its fix sweep writes.
+    if auto && unattended == Unattended::Ours {
+        side::beat(&slug);
     }
     let Some(_held) = lock::hold(&slug, if auto { Wait::Skip } else { Wait::Block })? else {
         say("skipped", None, Some("another ic run is working on it"));
@@ -619,6 +782,33 @@ mod tests {
         let out = "{\"message_type\":\"status\"}\n{\"message_type\":\"summary\",\"snapshot_id\":\"1234abcd5678\"}";
         assert_eq!(snapshot_of(out).as_deref(), Some("1234abcd"));
         assert_eq!(snapshot_of("not json"), None);
+    }
+
+    #[test]
+    fn each_side_has_a_backup_worker_of_its_own() {
+        let arch = worker_name("sandbox-abc", &Side::new("linux", Some("Arch Linux")));
+        assert_eq!(arch, "intentic-backup-sandbox-abc-linux-arch-linux");
+        let windows = worker_name("sandbox-abc", &Side::new("windows", Some("windows")));
+        assert_eq!(windows, "intentic-backup-sandbox-abc-windows");
+        assert_ne!(arch, windows);
+        assert_ne!(
+            arch,
+            worker_name("sandbox-abc", &Side::new("linux", Some("ubuntu")))
+        );
+    }
+
+    #[test]
+    fn the_last_backup_is_said_on_the_volume_with_its_side() {
+        let body = backup_body(&Side::new("linux", Some("arch")), "1234abcd", Scope::Full);
+        let written: Value =
+            serde_json::from_str(&inside::stamp(&body.to_string(), 9)).expect("JSON");
+        assert_eq!(written["snapshot"], "1234abcd");
+        assert_eq!(written["scope"], "full");
+        assert_eq!(
+            backup_of(&written),
+            Some((Side::new("linux", Some("arch")), 9))
+        );
+        assert_eq!(backup_of(&json!({ "at": 9 })), None);
     }
 
     #[test]

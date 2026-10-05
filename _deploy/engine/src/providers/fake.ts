@@ -6,6 +6,8 @@ import type { ResolvedInputs } from "../types.js";
 interface WorldEntry {
     readonly type: ResourceType;
     readonly inputs: ResolvedInputs;
+    // The owner it was stamped with; absent for an entry seeded as if created before owners existed.
+    readonly owner?: string;
 }
 
 // An in-memory stand-in for real infrastructure: id -> what was "created". Sharing one world across a
@@ -31,14 +33,17 @@ const fakeProvider = (type: ResourceType, world: FakeWorld): Provider => ({
         if (!world.has(ctx.id)) {
             return undefined;
         }
-        return { outputs: fakeOutputs(ctx.id, type) } satisfies Observed;
+        return { outputs: fakeOutputs(ctx.id, type), stampOwner: world.get(ctx.id)?.owner ?? "" } satisfies Observed;
     },
     diff: () => ({ action: "noop" }),
     apply: async (inputs, _observed, ctx) => {
-        world.set(ctx.id, { type, inputs });
+        world.set(ctx.id, { type, inputs, ...(ctx.owner !== undefined ? { owner: ctx.owner } : {}) });
         return fakeOutputs(ctx.id, type);
     },
-    list: async () => [...world].filter(([, entry]) => entry.type === type).map(([id, entry]) => ({ id, inputs: entry.inputs })),
+    list: async () =>
+        [...world]
+            .filter(([, entry]) => entry.type === type)
+            .map(([id, entry]) => ({ id, inputs: entry.inputs, ...(entry.owner !== undefined ? { owner: entry.owner } : {}) })),
     delete: async (_inputs, ctx) => {
         world.delete(ctx.id);
     },

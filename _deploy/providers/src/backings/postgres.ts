@@ -1,9 +1,10 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
-import { execProbe, stampLabels } from "../core/backing-ssh.js";
+import { execProbe } from "../core/backing-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "postgres";
 
@@ -16,7 +17,7 @@ type PostgresInputs = z.infer<typeof postgresSchema>;
 
 // A single Postgres service published on the host's internal ip; the named volume survives a pin bump. The
 // superuser password is interpolated from the write-once .env.
-const composeYaml = (parsed: PostgresInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: PostgresInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  postgres:",
@@ -25,7 +26,7 @@ const composeYaml = (parsed: PostgresInputs, id: string, hash: string): string =
         "    environment: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: $POSTGRES_PASSWORD, POSTGRES_DB: postgres }",
         "    volumes: [ data:/var/lib/postgresql ]",
         `    ports: [ "${parsed.publishPort}:5432" ]`,
-        stampLabels(KIND, id, hash, parsed.protect),
+        stampLabels(KIND, stamp, parsed.protect),
         "    healthcheck:",
         "      test: [ CMD-SHELL, pg_isready -U postgres ]",
         "      interval: 10s",
@@ -44,7 +45,7 @@ export const createPostgresProvider = (executor: SshExecutor = sshExecutor): Pro
             schema: postgresSchema,
             readyTimeoutMs: 120_000,
             outputs: (parsed) => ({ internalHost: parsed.internalIp, port: String(parsed.publishPort) }),
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp) }),
             // Write-once: the superuser password is baked into the data dir on first init and Postgres ignores it
             // thereafter; re-keying would lock us out of our own database.
             env: (parsed) => [{ key: "POSTGRES_PASSWORD", value: parsed.adminPassword }],

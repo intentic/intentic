@@ -3,6 +3,9 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { forgetHostedHealthAlert, sweepHostedHealth } from "./hosted-health.js";
 import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+import { fakeHostedAppLock } from "../../testing.js";
+
+jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 // Every other sweep here acts on the gap between the platform's rows and Fly, but never reported the gap itself. These
 // tests pin what this watch has to say out loud.
@@ -69,32 +72,73 @@ const flyMachine = (platform: string, ageMinutes = 120) => ({
 type Reach = { reachable: number; unreachable: number };
 
 // Counts mirror the same rows as the listings; pool count is asked twice (whole pool, then claimable).
-// `stranded` is what the rows a failed rollback stamped answer (gate/state-gate.ts); none by default.
-const prismaWith = (machines: unknown[], pooled: unknown[], reach: Reach = { reachable: 0, unreachable: 0 }, stranded: unknown[] = []) =>
-    ({
+// `stranded` is what the rows a failed rollback stamped answer (gate/state-gate.ts); none by default. `deleted` names the
+// apps whose sandbox has a deletion record, which is what makes an app with no row litter rather than forgotten.
+const prismaWith = (
+    machines: unknown[],
+    pooled: unknown[],
+    reach: Reach = { reachable: 0, unreachable: 0 },
+    stranded: unknown[] = [],
+    deleted: string[] = [],
+) => {
+    const db = {
         sandbox: {
-            count: jest.fn().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
-                Promise.resolve(args.where.bootReport.equals === `reachable` ? reach.reachable : reach.unreachable),
-            ),
+            count: jest
+                .fn()
+                .mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
+                    Promise.resolve(args.where.bootReport.equals === `reachable` ? reach.reachable : reach.unreachable),
+                ),
+            // Which orphan apps a sandbox row still names: none here.
+            findMany: jest.fn().mockResolvedValue([]),
+            // A repair clears the dropped machine's address.
+            update: jest.fn().mockResolvedValue({}),
         },
+        sandboxTombstone: { findMany: jest.fn().mockResolvedValue(deleted.map((app) => ({ tunnelId: app.slice(`intentic-sbx-`.length) }))) },
         hostedMachine: {
-            findMany: jest.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
-                Promise.resolve(args?.where?.[`strandedAt`] === undefined ? machines : stranded),
-            ),
+            findMany: jest
+                .fn()
+                .mockImplementation((args?: { where?: Record<string, unknown> }) =>
+                    Promise.resolve(args?.where?.[`strandedAt`] === undefined ? machines : stranded),
+                ),
             count: jest.fn().mockResolvedValue(machines.length),
+            // The repair's re-read under the app's lock, and the meter's read as the row is dropped: as listed, never awake.
+            findUnique: jest
+                .fn()
+                .mockImplementation((args: { where: { id: string } }) =>
+                    Promise.resolve((machines as { id?: string }[]).find((row) => row.id === args.where.id) ?? null),
+                ),
+            delete: jest.fn().mockResolvedValue({}),
         },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(db)),
         hostedPoolMachine: {
             findMany: jest.fn().mockResolvedValue(pooled),
-            count: jest.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
-                Promise.resolve(
-                    args?.where === undefined ? pooled.length : pooled.filter((row) => (row as { state?: string }).state === `ready`).length,
+            count: jest
+                .fn()
+                .mockImplementation((args?: { where?: Record<string, unknown> }) =>
+                    Promise.resolve(
+                        args?.where === undefined ? pooled.length : pooled.filter((row) => (row as { state?: string }).state === `ready`).length,
+                    ),
                 ),
-            ),
         },
         hostedBuild: { count: jest.fn().mockResolvedValue(0) },
-    }) as unknown as PrismaClient;
+    };
+    return db as unknown as PrismaClient & typeof db;
+};
 
-const taken = (appName: string) => ({ appName, region: `iad`, wokeAt: null, sandboxId: `s1`, sandbox: { owner: { email: `o@test` } } });
+// A person's machine row, as the fleet join and the repair both read it.
+const taken = (appName: string, over: Record<string, unknown> = {}) => ({
+    id: `h-${appName}`,
+    appName,
+    machineId: `m-${appName}`,
+    region: `iad`,
+    wokeAt: null,
+    sandboxId: `s1`,
+    migratingId: null,
+    buildingId: null,
+    sandbox: { ownerId: `u1`, owner: { email: `o@test` } },
+    ...over,
+});
 const warm = (appName: string, region = `iad`) => ({ appName, region, state: `ready` });
 
 afterEach(() => {
@@ -130,11 +174,22 @@ describe(`hosted health`, () => {
 
     it(`treats an app with no row of its own as litter, not as a stranger, and stays healthy`, async () => {
         stubFly([`intentic-sbx-pool-1`, `intentic-sbx-leftover`]);
-        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
+        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)], undefined, [], [`intentic-sbx-leftover`]);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
         expect(health?.litter).toEqual([`intentic-sbx-leftover`]);
         expect(health?.strangers).toEqual([]);
         // healthy gates whether the alert mail fires.
+        expect(health?.healthy).toBe(true);
+    });
+
+    // Neither a row nor a deletion record: the reaper never destroys it, so the watch names it for an operator. Not
+    // litter (it is not the reaper's work) and not a fault (a restore from an older backup leaves exactly these).
+    it(`names an app no record explains as forgotten, apart from litter, and stays healthy`, async () => {
+        stubFly([`intentic-sbx-pool-1`, `intentic-sbx-unexplained`]);
+        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.forgotten).toEqual([`intentic-sbx-unexplained`]);
+        expect(health?.litter).toEqual([]);
         expect(health?.healthy).toBe(true);
     });
 
@@ -148,7 +203,9 @@ describe(`hosted health`, () => {
                 sent.push(String(init?.body ?? ``));
                 return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
             }
-            return Promise.resolve(edgeAnswer(target, EDGE_OK) ?? new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }, { name: `intentic-sbx-b` }] })));
+            return Promise.resolve(
+                edgeAnswer(target, EDGE_OK) ?? new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }, { name: `intentic-sbx-b` }] })),
+            );
         });
         const strandedAt = new Date(Date.now() - 60_000);
         const detail = `moving ghcr.io/intentic/sandbox@sha256:aaa to ghcr.io/intentic/sandbox@sha256:bbb, putting the previous version back failed: boom`;
@@ -158,7 +215,11 @@ describe(`hosted health`, () => {
             { appName: `intentic-sbx-b`, strandedAt, strandedDetail: detail, sandbox: { lastSeenAt: new Date() } },
         ];
         // SAFETY: the sweep reads only these fields of the config; the fixture's own, with mail switched on.
-        const mailed: Config = { ...config({ poolSize: 0, regionEu: `` }), admin: { emails: `ops@test` }, email: { apiKey: `k`, from: `i@test` } } as never;
+        const mailed: Config = {
+            ...config({ poolSize: 0, regionEu: `` }),
+            admin: { emails: `ops@test` },
+            email: { apiKey: `k`, from: `i@test` },
+        } as never;
         const prisma = prismaWith([taken(`intentic-sbx-a`), taken(`intentic-sbx-b`)], [], undefined, stranded);
         const health = await sweepHostedHealth(prisma, mailed, logger);
         expect(health?.stranded).toEqual([{ appName: `intentic-sbx-a`, detail }]);
@@ -166,6 +227,91 @@ describe(`hosted health`, () => {
         expect(sent).toHaveLength(1);
         expect(sent[0]).toContain(`intentic-sbx-a (${detail})`);
         expect(sent[0]).not.toContain(`intentic-sbx-b`);
+    });
+
+    /* WHAT IT REPAIRS (2026-10-05). It used to mail about these every six hours and change nothing. */
+    describe(`repairs`, () => {
+        // Fly as these cases need it: the org's apps, and per path an answer; anything else answers the app list.
+        const stubProvider = (apps: string[], answers: Record<string, () => Response>, mails: string[] = []) => {
+            const calls: string[] = [];
+            stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+                const target = String(url);
+                calls.push(`${init?.method ?? `GET`} ${target}`);
+                if (target.startsWith(`https://api.resend.com`)) {
+                    mails.push(String(init?.body ?? ``));
+                    return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
+                }
+                const edge = edgeAnswer(target, EDGE_OK);
+                if (edge !== undefined) {
+                    return Promise.resolve(edge);
+                }
+                const answer = Object.entries(answers).find(([path]) => target.endsWith(path))?.[1];
+                return Promise.resolve(answer?.() ?? new Response(JSON.stringify({ apps: apps.map((name) => ({ name })) })));
+            });
+            return calls;
+        };
+        const gone = () => new Response(JSON.stringify({ error: `not found` }), { status: 404 });
+        const machineAt = (state: string) => () => new Response(JSON.stringify({ id: `m`, state }));
+        const quiet = config({ poolSize: 0, regionEu: `` });
+        const mailing: Config = { ...quiet, admin: { emails: `ops@test` }, email: { apiKey: `k`, from: `i@test` } } as never;
+
+        it(`drops a row whose app the provider answers 404 for, keeps the sandbox, and mails the lost disk once`, async () => {
+            const mails: string[] = [];
+            stubProvider([], { "/apps/intentic-sbx-a": gone }, mails);
+            const prisma = prismaWith([taken(`intentic-sbx-a`)], []);
+            const health = await sweepHostedHealth(prisma, mailing, logger);
+            expect(health?.repaired.appGone).toEqual([`intentic-sbx-a`]);
+            expect(health?.missing).toEqual([]);
+            expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h-intentic-sbx-a` } });
+            // The sandbox stays, with its dead address cleared so its owner is offered a new machine.
+            expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
+            expect(health?.healthy).toBe(false);
+            expect(mails).toHaveLength(1);
+            expect(mails[0]).toContain(`intentic-sbx-a`);
+        });
+
+        it(`keeps a row whose app the listing merely left out, while the app itself still answers`, async () => {
+            stubProvider([], { "/apps/intentic-sbx-a": () => new Response(JSON.stringify({ name: `intentic-sbx-a` })) });
+            const prisma = prismaWith([taken(`intentic-sbx-a`)], []);
+            const health = await sweepHostedHealth(prisma, quiet, logger);
+            expect(health?.repaired.appGone).toEqual([]);
+            expect(health?.missing).toEqual([`intentic-sbx-a`]);
+            expect(prisma.hostedMachine.delete).not.toHaveBeenCalled();
+        });
+
+        // Invisible to the fleet check, which reads apps: only the machine's own 404 says it.
+        it(`drops a row whose machine is gone inside an app that still stands, keeping the app for adoption`, async () => {
+            const calls = stubProvider([`intentic-sbx-a`], {
+                "/apps/intentic-sbx-a/machines/m-intentic-sbx-a": gone,
+                "/apps/intentic-sbx-a": () => new Response(JSON.stringify({ name: `intentic-sbx-a` })),
+            });
+            const prisma = prismaWith([taken(`intentic-sbx-a`)], []);
+            const health = await sweepHostedHealth(prisma, quiet, logger);
+            expect(health?.repaired).toEqual({ appGone: [], machineGone: [`intentic-sbx-a`] });
+            expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h-intentic-sbx-a` } });
+            expect(calls.some((call) => call.startsWith(`DELETE`))).toBe(false);
+            // The disk is still there for the sandbox's next start: nothing to mail.
+            expect(health?.healthy).toBe(true);
+        });
+
+        it(`leaves a row alone when the provider answers for its machine, or fails to answer at all`, async () => {
+            stubProvider([`intentic-sbx-a`, `intentic-sbx-b`], {
+                "/apps/intentic-sbx-a/machines/m-intentic-sbx-a": machineAt(`stopped`),
+                "/apps/intentic-sbx-b/machines/m-intentic-sbx-b": () => new Response(`{"error":"internal"}`, { status: 500 }),
+            });
+            const prisma = prismaWith([taken(`intentic-sbx-a`), taken(`intentic-sbx-b`)], []);
+            const health = await sweepHostedHealth(prisma, quiet, logger);
+            expect(health?.repaired).toEqual({ appGone: [], machineGone: [] });
+            expect(prisma.hostedMachine.delete).not.toHaveBeenCalled();
+        });
+
+        it(`does not read a machine mid-change: a build or a move holds it`, async () => {
+            const calls = stubProvider([`intentic-sbx-a`], { "/apps/intentic-sbx-a/machines/m-intentic-sbx-a": gone });
+            const prisma = prismaWith([taken(`intentic-sbx-a`, { buildingId: `b1` })], []);
+            const health = await sweepHostedHealth(prisma, quiet, logger);
+            expect(health?.repaired.machineGone).toEqual([]);
+            expect(calls.some((call) => call.includes(`/machines/`))).toBe(false);
+        });
     });
 
     it(`counts warm stock per region against the target, because a pool that never fills is a cold boot for everybody`, async () => {
@@ -276,7 +422,11 @@ describe(`hosted health`, () => {
             }
             return Promise.resolve(new Response(JSON.stringify({ apps: [] })));
         });
-        const mailed = { ...config({ poolSize: 0, regionEu: `` }), admin: { emails: `ops@test` }, email: { apiKey: `k`, from: `i@test` } } as unknown as Config;
+        const mailed = {
+            ...config({ poolSize: 0, regionEu: `` }),
+            admin: { emails: `ops@test` },
+            email: { apiKey: `k`, from: `i@test` },
+        } as unknown as Config;
         const prisma = prismaWith([], []);
 
         const blip = await sweepHostedHealth(prisma, mailed, logger);

@@ -46,7 +46,9 @@ test("apply creates every resource in dependency order, then is idempotent", asy
     expect(first.steps.every((step) => step.action === "create")).toBe(true);
     expect(first.steps.map((step) => step.id)).toEqual(linearize(graph));
     expect(Object.keys(first.outputs).toSorted()).toEqual(Object.keys(graph.resources).toSorted());
-    expect(await collectOrphans(graph, { providers, env: fullEnv, log: silent })).toEqual([]);
+    const scan = await collectOrphans(graph, { providers, env: fullEnv, log: silent });
+    expect(scan.orphans).toEqual([]);
+    expect(scan.unowned).toEqual([]);
 
     // Same providers (same world) => everything is found => all noop.
     const second = await apply(graph, { providers, env: fullEnv, probe: trueProbe, log: silent });
@@ -97,27 +99,27 @@ test("a node whose type has no provider throws", async () => {
     );
 });
 
-test("an orphan (stamped, not in the graph) is detected and left intact by collectOrphans", async () => {
+test("an orphan (stamped with this intent's owner, not in the graph) is detected and left intact by collectOrphans", async () => {
     const graph = buildGraph();
     const { providers, world } = createFakeProviders();
-    world.set("ghost-host", { type: "host", inputs: {} });
+    world.set("ghost-host", { type: "host", inputs: {}, owner: "aaa" });
 
-    const orphans = await collectOrphans(graph, { providers, env: fullEnv, log: silent });
-    expect(orphans).toContainEqual({ id: "ghost-host", type: "host", inputs: {} });
+    const scan = await collectOrphans(graph, { providers, env: fullEnv, log: silent, owner: "aaa" });
+    expect(scan.orphans).toContainEqual({ id: "ghost-host", type: "host", inputs: {} });
     expect(world.has("ghost-host")).toBe(true);
 });
 
 test("pruneOrphans tears down a stamped resource absent from the graph, leaving declared and protected ones alone", async () => {
     const graph = buildGraph();
     const { providers, world } = createFakeProviders();
-    await apply(graph, { providers, env: fullEnv, probe: trueProbe, log: silent });
-    world.set("ghost-host", { type: "host", inputs: {} });
+    await apply(graph, { providers, env: fullEnv, probe: trueProbe, log: silent, owner: "aaa" });
+    world.set("ghost-host", { type: "host", inputs: {}, owner: "aaa" });
 
-    const config = { providers, env: fullEnv, log: silent };
-    const orphans = await collectOrphans(graph, config);
-    const outcome = await pruneOrphans([...orphans, { id: "guarded-db", type: "postgres", inputs: {}, protected: true }], config);
+    const config = { providers, env: fullEnv, log: silent, owner: "aaa" };
+    const scan = await collectOrphans(graph, config);
+    const outcome = await pruneOrphans([...scan.orphans, { id: "guarded-db", type: "postgres", inputs: {}, protected: true }], config);
     expect(outcome.deleted).toEqual([{ id: "ghost-host", type: "host" }]);
-    expect(outcome.skipped).toEqual([{ id: "guarded-db", type: "postgres" }]);
+    expect(outcome.skipped).toEqual([{ id: "guarded-db", type: "postgres", reason: "protected" }]);
     expect(world.has("ghost-host")).toBe(false);
     expect(world.has("host")).toBe(true);
 });

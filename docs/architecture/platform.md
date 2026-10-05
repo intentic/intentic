@@ -26,18 +26,21 @@ flowchart LR
 [`schema.prisma`](../../_platform/prisma/schema.prisma), in four groups:
 
 - **Accounts**: `User`, Better Auth's `Session`, `Account` and `Verification`, and `ApiToken` for provisioning from a script or an agent.
-- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code, the last boot report, the recovery command's fix code and the last host report), `SandboxMember` for invitations, `SandboxTrash` for a deleted sandbox that can still be restored, `SandboxTombstone` for the deletion record of every tunnel id the registry let go of, and `PlatformIdentity`, which database this is. The daemon enforces membership; the platform only records it.
+- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code and the machine that claimed it, the last boot report, the recovery command's fix code, the newest host report of each machine that reports on it, and the last two copies of it that announced), `SandboxMember` for invitations, `SandboxTrash` for a deleted sandbox that can still be restored, `SandboxTombstone` for the deletion record of every tunnel id the registry let go of, and `PlatformIdentity`, which database this is. The daemon enforces membership; the platform only records it.
+- **Convergence across owners' machines** ([`upkeep-convergence.ts`](../../_platform/api/src/admin/upkeep-convergence.ts)): a host report carries the machine agent's last upkeep pass, its counts and the agent's version. The daily sweep sums them by version, one machine counted once. When machines on the newest agent still hold leftovers their own pass could not clear, it puts one line in the admin digest. (2026-10-05) This is how intentic sees whether a release brought machines nobody is watching to the current shape, rather than assuming it did; see [convergence.md](convergence.md).
 - **Hosted sandboxes**: `HostedMachine` and the warm pool `HostedPoolMachine`, image builds, migrations, cleanups, awake-minute metering, the Stripe subscription mirror (`HostedPlan`, `HostedPlanItem`) and the abuse ledgers.
 - **Everything else**: the free trial's meter, the x402 wallet's custody handle and payments, APNs push devices, the desktop sign-in handoff, and admin statistics.
 
 ## How a sandbox joins
 
 1. The owner names a sandbox in the editor. The platform writes a `Sandbox` row and mints a setup code ([`setup-code.ts`](../../_platform/api/src/sandbox/setup-code.ts)) valid for thirty minutes.
-2. The setup command on the owner's machine redeems it at `/setup/claim` for the connect token, the reachability grant and the ingress address, then starts the container.
-3. The daemon announces its URL and liveness with the connect token, and opens its tunnel to the ingress.
+2. The setup command on the owner's machine redeems it at `/setup/claim` for the connect token, the reachability grant and the ingress address, then starts the container. A claim may name the machine making it (`host`, `os`); the first that does is kept, and the same code claimed by a different machine is refused while it lives, so one command pasted into PowerShell and into WSL cannot start two copies. The same machine running it again is let through, and so is another machine once the first copy has reported its removal.
+3. The daemon announces its URL and liveness with the connect token, and opens its tunnel to the ingress. It announces again every hour while it runs, so `lastSeenAt` says when it last ran rather than when it registered, and each announce names which copy of the sandbox it is (an instance id minted once per container start, the machine's name, its side).
 4. The editor lists the owner's sandboxes and talks to each daemon directly. The platform is never on that path.
 
-When the editor cannot reach a sandbox on the owner's own machine, the machine says why. `ic sandbox fix` checks it (Docker, WSL, disk, container, daemon, tunnel), repairs what it can, and posts what it found to `/host-report` under the sandbox's report key: HMAC-SHA256 over a fixed label keyed with the connect token, which `ic` derives from the container's env. A run started from the editor's recovery panel carries a thirty-minute fix code instead, redeemed at `/host-report/claim` for that key. The platform keeps the latest report on the sandbox's row and shows it on the owner's sandbox list, so a browser on another device can say what the machine is doing. It never calls the machine; the machine only reports ([`host-report.ts`](../../_platform/api/src/sandbox/host-report.ts)).
+(2026-10-05) A setup code used to be claimable by any number of machines for its thirty minutes, and the daemon went silent once registered. Two containers on one token were then indistinguishable from one, the last announce winning, and a sandbox stopped a month ago read as one up for a month. The platform keeps the last two distinct copies that announced (`seenInstances`), and when their running stretches overlap by ten minutes or more it records since when (`duplicateSince`); the owner's summary names both copies (`duplicateCopies`) until one of them has been silent an hour ([`announce-copies.ts`](../../_platform/api/src/sandbox/announce-copies.ts)). It is the registry's half of one copy per sandbox; the front standing down after repeated displacement is the tunnel's.
+
+When the editor cannot reach a sandbox on the owner's own machine, the machine says why. `ic sandbox fix` checks it (Docker, WSL, disk, container, daemon, tunnel), repairs what it can, and posts what it found to `/host-report` under the sandbox's report key: HMAC-SHA256 over a fixed label keyed with the connect token, which `ic` derives from the container's env. A run started from the editor's recovery panel carries a thirty-minute fix code instead, redeemed at `/host-report/claim` for that key. The platform keeps the newest report of each reporter on the sandbox's row (the machine, its OS and the environment on it, three at most) and shows the newest of them on the owner's sandbox list, with the others beside it (`hostReporters`), so a browser on another device can say what the machine is doing. It never calls the machine; the machine only reports ([`host-report.ts`](../../_platform/api/src/sandbox/host-report.ts)). (2026-10-05) It kept one report, so a PC whose Windows agent and WSL agent both report had each overwrite the other's.
 
 ## When the platform forgets
 
@@ -55,7 +58,8 @@ between forgotten and deleted, so the platform keeps the difference explicit ([`
   when the identity under it changes. `pnpm db:up` checks that `DATABASE_URL` reaches the compose service's own
   Postgres before it migrates.
 - **The sandbox keeps asking.** A daemon whose registration is refused or unanswered retries for as long as it runs,
-  every few seconds at first and every five minutes after; only a 410 ends it.
+  every few seconds at first and every five minutes after; only a 410 ends it. Registered, it announces again every
+  hour, and a heartbeat answered 404 puts it back to asking.
 - **The editor remembers.** Each device keeps, per account, where every listed sandbox answers (names and addresses,
   never a token). With the platform down it opens them directly, since a daemon checks the reader's Google sign-in
   itself; with the platform answering an empty list it offers them back instead of onboarding
@@ -64,12 +68,31 @@ between forgotten and deleted, so the platform keeps the difference explicit ([`
   ticket naming the sandbox and the account, hands it to the daemon (`POST /platform/relink`, owner-only), and the
   daemon presents it at `POST /sandbox/adopt` with its connect token and the grant this platform signed for it. The
   platform makes the row again only for an id it has no record of, at the address the token derives, for the owner the
-  daemon bound. A hosted sandbox comes back as a row without its machine record, which is the operator's to restore.
+  daemon bound. A hosted sandbox comes back as a row without its machine record; giving it a machine again adopts the
+  app and the disk the provider still holds (below).
+- **Destroyed only on a record.** The daily reapers act on a deletion record and on nothing less
+  ([`hosted.ts`](../../_platform/api/src/sandbox/hosted/hosted.ts) `reapHostedOrphans`,
+  [`cloudflare.ts`](../../_platform/api/src/sandbox/cloudflare.ts) `reapOrphanDnsRecords`). A Fly app no row names is
+  destroyed only when its sandbox's tunnel id is tombstoned, or when every machine in it is warm stock this platform built
+  and nobody claimed; an app a `HostedCleanup` row names is the cleanup sweep's. Any other unknown app is `forgotten`:
+  left standing, and named in the hosted health log and the daily admin digest for an operator to decide. A DNS record
+  keyed to a sandbox goes the same way. Each pass destroys the oldest of what it may, up to a cap, and leaves the rest
+  for the next; a pass whose share of the fleet looks like a wrong database destroys nothing.
+- **A lost machine is not a lost disk.** When Fly loses a machine, the row goes (`forgetHostedMachine`) and the app and
+  its volume stay. The sandbox's next provision or restart computes the same app name and adopts it: it re-configures a
+  machine this platform stamped there, or makes one on the newest volume, and never touches an app holding a machine
+  another deployment stamped. The health sweep drops a row whose app or machine Fly answers 404 for, on that 404 alone
+  ([`hosted-health.ts`](../../_platform/api/src/sandbox/hosted/hosted-health.ts)).
 
 (2026-10-02) Absence used to mean deletion everywhere: the edge revoked on a missing row, the editor onboarded on an
 empty list, and the daemon stopped registering after ten minutes. On the night that made this, a developer's platform
 read a sandbox's empty database through a mirrored port, and every one of those turned an intact registry into what
 looked like a wiped one.
+
+(2026-10-05) The reapers were the exception left over: an app with no machine row was destroyed for its emptiness, a
+DNS record for its missing row, and a pass with more to do than its cap refused to do any of it. So a platform restored
+from an older backup would have destroyed the disks of every hosted sandbox made since, a machine Fly lost took its
+volume with it at the next daily pass, and a backlog after an outage never cleared.
 
 ## Hosted sandboxes
 
@@ -79,7 +102,9 @@ A hosted sandbox can be made for one folder of the owner's computer, as a sandbo
 
 Every change of image a hosted machine takes (a restart onto a new release, an environment rebuild, the wake that heals a stale tunnel, the owner's rollback) goes through one gate ([`state-gate.ts`](../../_platform/api/src/sandbox/hosted/gate/state-gate.ts)): the new image's state planner runs against the machine's volume first, and once the new version starts, the platform waits on its daemon's `/health` and its check-in ([`daemon-health.ts`](../../_platform/api/src/sandbox/hosted/gate/daemon-health.ts)) and puts the machine back on the image it ran if that version crashes, never becomes ready or cannot convert the stored files. The image before the last change is kept on the machine's row, so its owner can go back to it (`hostedRollback`) while the daemon is down; a version applied to a stopped machine is on trial until its next start is judged the same way. COMPATIBILITY.md has the promise.
 
-A hosted machine is reached the way every sandbox is: its daemon dials the edge's tunnel with a grant the platform puts in the machine's config, and nothing on Fly routes to the machine (it declares no Fly service, and the edge terminates TLS itself, so there is no Fly proxy to replay through). A hosted sandbox that dials nothing answers the edge's `no-tunnel` verdict, and the editor's wake starts it, re-applying the config first when its grant or edge address is missing or stale. The api's health sweep ([`hosted-health.ts`](../../_platform/api/src/sandbox/hosted/hosted-health.ts)) reads the edge's `/health` for a build stamp and alarms when every hosted sandbox that checked in says its own address does not reach it.
+A hosted machine is reached the way every sandbox is: its daemon dials the edge's tunnel with a grant the platform puts in the machine's config, and nothing on Fly routes to the machine (it declares no Fly service, and the edge terminates TLS itself, so there is no Fly proxy to replay through). A hosted sandbox that dials nothing answers the edge's `no-tunnel` verdict, and the editor's wake starts it, re-applying the config first when its grant or edge address is missing or stale. The api's health sweep ([`hosted-health.ts`](../../_platform/api/src/sandbox/hosted/hosted-health.ts)) reads the edge's `/health` for a build stamp and alarms when every hosted sandbox that checked in says its own address does not reach it. It also repairs the one fleet shape it can prove: a row whose app Fly answers 404 for is dropped and mailed once, and a row whose machine is gone inside an app that still stands (read for a rotating slice of the fleet each pass) is dropped and logged, the app kept for the sandbox's next start to adopt. Each drop holds the app's lock and skips a machine mid-build or mid-move.
+
+Once a day the retention sweep holds every person's app to its one machine and one disk ([`hosted-app-shape.ts`](../../_platform/api/src/sandbox/hosted/hosted-app-shape.ts)): a machine of this platform's that the row does not name is destroyed (its volume stays), ten per pass at most; a machine another deployment or nobody stamped, and a volume the row does not name, are reported and left. (2026-10-05) Until then only a build checked an app's shape, and only while it ran.
 
 Background jobs started in [`main.ts`](../../_platform/api/src/main.ts) reap orphaned machines, refill the pool, finish builds, meter usage, watch for abuse and check health.
 

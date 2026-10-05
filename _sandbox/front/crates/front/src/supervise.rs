@@ -90,9 +90,13 @@ pub async fn supervise(
     restarts: &Restarts,
 ) -> i32 {
     let mut backoff = BACKOFF;
+    // Which start of Node this is, told to each in `GENERATION_ENV` and said back in its hello: the control socket lets a
+    // newer start take the link from an older one, and never a copy of the same start (link.rs).
+    let mut generation = 0_u64;
     loop {
         let started = Instant::now();
-        let mut child = match spawn(&command) {
+        generation += 1;
+        let mut child = match spawn(&command, generation) {
             Ok(child) => child,
             Err(error) => {
                 tracing::error!(%error, "could not start the daemon");
@@ -131,11 +135,12 @@ pub async fn supervise(
 
 // Its own process group, so the daemon's "my group" still means its own descendants and never the front; and it dies
 // with the front, so a front killed outright never leaves a daemon serving a socket nobody dials.
-fn spawn(command: &NodeCommand) -> std::io::Result<Child> {
+fn spawn(command: &NodeCommand, generation: u64) -> std::io::Result<Child> {
     let mut spawning = Command::new(&command.program);
     spawning
         .args(&command.args)
         .envs(command.env.iter().cloned())
+        .env(front_wire::GENERATION_ENV, generation.to_string())
         .process_group(0)
         .kill_on_drop(false);
     // SAFETY: prctl is async-signal-safe, and nothing else runs between fork and exec here.
@@ -395,10 +400,13 @@ mod tests {
             std::env::temp_dir().join(format!("front-supervise-group-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let written = dir.join("leftover");
-        let mut daemon = spawn(&sh(&format!(
-            "(trap '' TERM; exec sleep 1000) & echo $! > {}; exit 3",
-            written.display()
-        )))
+        let mut daemon = spawn(
+            &sh(&format!(
+                "(trap '' TERM; exec sleep 1000) & echo $! > {}; exit 3",
+                written.display()
+            )),
+            1,
+        )
         .unwrap();
         let group = daemon.id().unwrap();
         assert_eq!(daemon.wait().await.unwrap().code(), Some(3));
@@ -457,5 +465,12 @@ mod tests {
         );
         assert_eq!(restarts.within_window(Instant::now()), 1);
         let _ = std::fs::remove_file(&marker);
+    }
+
+    // Each start is told which one it is, which it says back in its hello (link.rs).
+    #[tokio::test]
+    async fn every_start_is_told_its_generation() {
+        let mut child = spawn(&sh(&format!("exit ${}", front_wire::GENERATION_ENV)), 7).unwrap();
+        assert_eq!(child.wait().await.unwrap().code(), Some(7));
     }
 }

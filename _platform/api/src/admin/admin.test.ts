@@ -880,6 +880,22 @@ describe(`sendAdminDigest`, () => {
         // The unconfigured mailer declined twice, once per admin, instead of throwing.
         expect(logged.warn.filter((entry) => entry.message === `email unconfigured, logging link instead of sending`)).toHaveLength(2);
     });
+
+    // (2026-10-05) What the day's sweeps left for a human rides along, and is reason enough to mail on a quiet feed: the
+    // hosted reaper's forgotten apps exist only in the pass that found them.
+    it(`mails the sweeps' own lines, even when the attention feed is empty`, async () => {
+        logged.info.length = 0;
+        const lines = [{ severity: `warning` as const, title: `2 hosted app(s) belong to sandboxes this database has no record of` }];
+        await sendAdminDigest(
+            attentionPrisma(true, 0),
+            configWith({ admin: { emails: `ops@example.com`, mutations: false } }),
+            logger,
+            `2026-08-24`,
+            () => NOW,
+            lines,
+        );
+        expect(logged.info.some((entry) => entry.fields?.[`items`] === 1 && entry.message === `admin digest sent`)).toBe(true);
+    });
 });
 
 describe(`admin actions`, () => {

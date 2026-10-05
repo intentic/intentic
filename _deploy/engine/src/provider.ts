@@ -8,6 +8,10 @@ export interface Observed {
     readonly detail?: Readonly<Record<string, unknown>>;
     // Drift stamp read back from the resource; mismatch against the node's inputs hash flags update without `diff`.
     readonly stampHash?: string;
+    // The owner stamp read back (intentic.owner), "" when the resource carries none. Set only by a provider whose update
+    // re-stamps it: the engine then adopts an unowned resource of the graph (an update) and refuses one stamped by
+    // another intent. Left undefined, ownership is not checked on read.
+    readonly stampOwner?: string;
 }
 
 // A pure diff decision: noop, or update with a human-readable reason surfaced in plan output.
@@ -28,6 +32,9 @@ export interface ListedResource {
     readonly inputs: ResolvedInputs;
     // True when the live resource carries the intentic.protect stamp; pruneOrphans leaves it in place.
     readonly protected?: boolean;
+    // The intentic.owner stamp, absent on a resource stamped before owners existed. The engine classifies by it: only
+    // this intent's own orphans are ever pruned.
+    readonly owner?: string;
 }
 
 export interface ProviderContext {
@@ -39,6 +46,11 @@ export interface ProviderContext {
     readonly output: (id: string, name: string) => unknown;
     // The hash of the node's serialized inputs, stamped as intentic.hash; set only while a node is being applied.
     readonly inputsHash?: string;
+    // The intent id to stamp as intentic.owner; absent when the graph carries none (resolved before owners existed).
+    readonly owner?: string;
+    // Set only during a scan: `list` reports a source it could not read (a host it could not reach, a zone it could not
+    // find), so the scan counts as incomplete instead of reading as "nothing there".
+    readonly skipped?: (source: string, reason: string) => void;
 }
 
 // The contract every provider implements; `apply` is distinct from the engine's top-level apply().
@@ -51,7 +63,8 @@ export interface Provider {
     // Mutating: create when observed is undefined, otherwise update; returns the resource's produced outputs.
     readonly apply: (inputs: ResolvedInputs, observed: Observed | undefined, ctx: ProviderContext) => Promise<Record<string, unknown>>;
     // Optional: enumerate this kind's stamped resources in live infra via the graph's inventory sources (hosts,
-    // cloudflare); best-effort per source, logged and skipped rather than thrown. ctx.id is "".
+    // cloudflare), each with its owner stamp; best-effort per source, a source it cannot read is reported through
+    // ctx.skipped and skipped rather than thrown. ctx.id is "".
     readonly list?: (sources: readonly ScanSource[], ctx: ProviderContext) => Promise<readonly ListedResource[]>;
     // Optional: tear a resource down; called by prune (a removed node's previous inputs) and pruneOrphans (a found
     // resource). Idempotent; without `delete` the provider is left in place and logged.

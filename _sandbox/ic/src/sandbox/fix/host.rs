@@ -204,7 +204,7 @@ fn desktop(os: Os, windows: Option<&plan::Facts>) -> (Desktop, Option<bool>) {
             }
             let autostart = std::env::var("APPDATA")
                 .ok()
-                .and_then(|dir| autostart_in(&Path::new(&dir).join("Docker")));
+                .and_then(|dir| autostart_in(&Path::new(&dir).join("Docker"), run_key_said()));
             (running_on_windows("tasklist.exe"), autostart)
         }
         Os::Wsl => {
@@ -238,7 +238,8 @@ fn desktop(os: Os, windows: Option<&plan::Facts>) -> (Desktop, Option<bool>) {
                 } else {
                     Desktop::Stopped
                 },
-                autostart_in(&settings),
+                // A Mac has no Run key: what Docker Desktop's own settings say is the whole answer.
+                autostart_in(&settings, Said::Silent),
             )
         }
         Os::Linux => {
@@ -299,22 +300,126 @@ fn systemd_active(unit: &str, user: bool) -> Option<bool> {
     Some(ran.stdout.trim() == "active")
 }
 
-/// Docker Desktop's start-at-sign-in switch, off its settings file in `dir` (`settings-store.json`, or the older
-/// `settings.json`). None when neither says.
-pub fn autostart_in(dir: &Path) -> Option<bool> {
-    ["settings-store.json", "settings.json"]
-        .iter()
-        .find_map(|name| std::fs::read_to_string(dir.join(name)).ok())
-        .and_then(|text| autostart_of(&text))
+/* DOCKER DESKTOP'S START AT SIGN-IN, read from every place that decides it. (2026-10-05) It was read from whichever of
+`settings-store.json` and the older `settings.json` came first to hand, and never from the Run key Docker Desktop
+registers itself under, so on rog the verdict flipped between "starts at sign-in" and "does not" every few minutes while
+the Run key started it each time. On if any of them says so; off only when the file Docker Desktop reads says off and
+the Run key was read and holds nothing; and a source that could not be read makes it unknown, which is never a finding
+(a read error is not a reason to ask anybody anything). */
+
+/// What one source says about the switch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Said {
+    On,
+    Off,
+    /// The file, the key or the value is not there.
+    Silent,
+    /// It is there and could not be read.
+    Unreadable,
+}
+
+/// One settings file's word: a missing file is silent, one that is there and will not read is unreadable.
+fn said_in_file(path: &Path) -> Said {
+    match std::fs::read_to_string(path) {
+        Ok(text) => said_in(&text),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Said::Silent,
+        Err(_) => Said::Unreadable,
+    }
 }
 
 /// The switch out of the settings text: `AutoStart` in the current file, `autoStart` in the older one. Pure.
-pub fn autostart_of(settings: &str) -> Option<bool> {
-    let value: serde_json::Value = serde_json::from_str(settings).ok()?;
-    value
+pub fn said_in(settings: &str) -> Said {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(settings) else {
+        return Said::Unreadable;
+    };
+    match value
         .get("AutoStart")
         .or_else(|| value.get("autoStart"))
         .and_then(serde_json::Value::as_bool)
+    {
+        Some(true) => Said::On,
+        Some(false) => Said::Off,
+        None => Said::Silent,
+    }
+}
+
+/// The verdict over the three sources: `settings-store.json` (the file Docker Desktop reads), `settings.json` (asked
+/// only when the newer file says nothing), and the Run key. Pure.
+pub fn autostart_verdict(store: Said, legacy: Said, run_key: Said) -> Option<bool> {
+    let file = if store == Said::Silent { legacy } else { store };
+    match (file, run_key) {
+        (Said::On, _) | (_, Said::On) => Some(true),
+        (Said::Off, Said::Off | Said::Silent) => Some(false),
+        _ => None,
+    }
+}
+
+/// Docker Desktop's start-at-sign-in switch, off its settings files in `dir` and what the Run key said. None when it
+/// cannot be told.
+pub fn autostart_in(dir: &Path, run_key: Said) -> Option<bool> {
+    autostart_verdict(
+        said_in_file(&dir.join("settings-store.json")),
+        said_in_file(&dir.join("settings.json")),
+        run_key,
+    )
+}
+
+/// `HKCU\…\CurrentVersion\Run` asked for the value Docker Desktop registers ("Docker Desktop"), and Task Manager's
+/// Startup tab asked whether it switched that entry off. Windows only; a `reg` that does not answer is unreadable.
+#[cfg(windows)]
+fn run_key_said() -> Said {
+    const RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    const APPROVED: &str =
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    let ask = |key: &str| {
+        docker::run_bounded(
+            "reg",
+            &["query", key, "/v", "Docker Desktop"],
+            Duration::from_secs(10),
+        )
+    };
+    let run = match ask(RUN) {
+        Ok(ran) if !ran.timed_out => ran,
+        _ => return Said::Unreadable,
+    };
+    if run.code != Some(0) {
+        // `reg` exits 1 for a value that is not there.
+        return if run.code == Some(1) {
+            Said::Silent
+        } else {
+            Said::Unreadable
+        };
+    }
+    let approved = ask(APPROVED)
+        .ok()
+        .filter(|ran| !ran.timed_out && ran.code == Some(0))
+        .map(|ran| ran.stdout);
+    run_entry_said(approved.as_deref())
+}
+
+#[cfg(not(windows))]
+fn run_key_said() -> Said {
+    Said::Silent
+}
+
+/// A Run entry that exists, against the Startup tab's word on it: a REG_BINARY whose first byte is odd (03) is an
+/// entry switched off there; anything else, or no word at all, leaves it on. Pure.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn run_entry_said(approved: Option<&str>) -> Said {
+    let disabled = approved
+        .and_then(|listing| {
+            listing
+                .lines()
+                .find(|line| line.contains("REG_BINARY"))
+                .and_then(|line| line.split_whitespace().last())
+                .and_then(|bytes| u8::from_str_radix(bytes.get(..2)?, 16).ok())
+        })
+        .is_some_and(|first| first % 2 == 1);
+    if disabled {
+        Said::Off
+    } else {
+        Said::On
+    }
 }
 
 /* WSL. */
@@ -405,35 +510,11 @@ fn free_space(os: Os, engine_up: bool) -> (Option<u64>, String) {
     }
 }
 
-/// The drive %LOCALAPPDATA% is on (Docker Desktop's data lives under it), asked of Windows directly.
+/// The drive %LOCALAPPDATA% is on (Docker Desktop's data lives under it), asked of Windows directly (checks.rs).
 #[cfg(windows)]
 fn windows_free() -> (Option<u64>, String) {
-    extern "system" {
-        fn GetDiskFreeSpaceExW(
-            directory: *const u16,
-            available: *mut u64,
-            total: *mut u64,
-            free: *mut u64,
-        ) -> i32;
-    }
-    let root = std::env::var("LOCALAPPDATA")
-        .ok()
-        .and_then(|dir| {
-            Path::new(&dir)
-                .components()
-                .next()
-                .map(|c| c.as_os_str().to_string_lossy().to_string())
-        })
-        .map(|drive| format!("{drive}\\"))
-        .unwrap_or_else(|| "C:\\".to_string());
-    let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
-    let mut available: u64 = 0;
-    let mut total: u64 = 0;
-    let mut free: u64 = 0;
-    // SAFETY: a NUL-terminated wide string and three out-pointers to locals, which is the whole contract.
-    let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut free) };
-    let gib = (ok != 0).then_some(available / (1024 * 1024 * 1024));
-    (gib, root)
+    let (bytes, root) = crate::checks::windows_free_bytes();
+    (bytes.map(|bytes| bytes / (1024 * 1024 * 1024)), root)
 }
 
 #[cfg(not(windows))]
@@ -1191,12 +1272,37 @@ mod tests {
         let check = docker_app(&facts, &never).expect("applies");
         assert_eq!(check.state, State::Warn);
         assert_eq!(repair_of(&check), Some(Repair::AutoStart));
+        assert_eq!(said_in(r#"{"AutoStart": false, "Other": 1}"#), Said::Off);
+        assert_eq!(said_in(r#"{"autoStart": true}"#), Said::On);
+        assert_eq!(said_in(r#"{"Other": 1}"#), Said::Silent);
+        assert_eq!(said_in("not json"), Said::Unreadable);
+    }
+
+    #[test]
+    fn autostart_is_on_when_any_source_says_so_and_unknown_when_one_cannot_be_read() {
+        use Said::*;
+        // rog: the settings say off, and the Run key starts Docker Desktop at every sign-in.
+        assert_eq!(autostart_verdict(Off, Silent, On), Some(true));
+        assert_eq!(autostart_verdict(On, Silent, Silent), Some(true));
+        // The older file is asked only when the newer one says nothing.
+        assert_eq!(autostart_verdict(Silent, On, Silent), Some(true));
+        assert_eq!(autostart_verdict(Off, On, Silent), Some(false));
+        assert_eq!(autostart_verdict(Silent, Off, Silent), Some(false));
+        // A source that could not be read is unknown, never a finding.
+        assert_eq!(autostart_verdict(Unreadable, Silent, Silent), None);
+        assert_eq!(autostart_verdict(Off, Silent, Unreadable), None);
+        assert_eq!(autostart_verdict(Silent, Unreadable, Silent), None);
+        assert_eq!(autostart_verdict(Silent, Silent, Silent), None);
+        // The Startup tab switching the Run entry off.
+        let off = "\r\nHKEY_CURRENT_USER\\...\\StartupApproved\\Run\r\n    Docker Desktop    REG_BINARY    030000000000000000000000\r\n";
+        assert_eq!(run_entry_said(Some(off)), Off);
         assert_eq!(
-            autostart_of(r#"{"AutoStart": false, "Other": 1}"#),
-            Some(false)
+            run_entry_said(Some(
+                "    Docker Desktop    REG_BINARY    020000000000000000000000"
+            )),
+            On
         );
-        assert_eq!(autostart_of(r#"{"autoStart": true}"#), Some(true));
-        assert_eq!(autostart_of("not json"), None);
+        assert_eq!(run_entry_said(None), On);
     }
 
     #[test]

@@ -286,9 +286,7 @@ export const listVolumeSnapshots = async (token: string, app: string, volumeId: 
     const parsed = z
         .array(snapshotSchema)
         .parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}/snapshots`));
-    return parsed
-        .map(toSnapshot)
-        .toSorted((left, right) => (right.createdAt?.getTime() ?? 0) - (left.createdAt?.getTime() ?? 0));
+    return parsed.map(toSnapshot).toSorted((left, right) => (right.createdAt?.getTime() ?? 0) - (left.createdAt?.getTime() ?? 0));
 };
 
 // `instance_id`: this create's machine version; the build row records it to distinguish builder runs.
@@ -430,7 +428,13 @@ export interface FlyExecAnswer {
 }
 // Runs `command` in a started machine and waits for it, up to `timeoutSeconds`; the request's own deadline sits past
 // that, so a command that runs long is Fly's timeout to report rather than a dropped socket.
-export const execMachine = async (token: string, app: string, machineId: string, command: readonly string[], timeoutSeconds: number): Promise<FlyExecAnswer> => {
+export const execMachine = async (
+    token: string,
+    app: string,
+    machineId: string,
+    command: readonly string[],
+    timeoutSeconds: number,
+): Promise<FlyExecAnswer> => {
     const parsed = execSchema.parse(
         await call(
             token,
@@ -480,12 +484,23 @@ export const listMachines = async (token: string, app: string): Promise<FlyMachi
 };
 
 // An app's volumes, read for the same age question when it holds no machine yet: a lone volume is either mid
-// cold-provision or what a failed one left behind, and only its age tells them apart.
-const volumeListSchema = z.array(z.object({ id: z.string(), created_at: z.string().optional() }));
+// cold-provision or what a failed one left behind, and only its age tells them apart. Region and size ride along for
+// a provision that adopts the volume (hosted.ts): a machine has to be made where its volume is, and the row states the
+// disk it really has.
+const volumeListSchema = z.array(
+    z.object({ id: z.string(), created_at: z.string().optional(), region: z.string().optional(), size_gb: z.number().optional() }),
+);
 
-export const listVolumes = async (token: string, app: string): Promise<{ id: string; createdAt: Date | undefined }[]> => {
+export interface FlyVolumeSummary {
+    readonly id: string;
+    readonly createdAt: Date | undefined;
+    readonly region?: string | undefined;
+    readonly sizeGb?: number | undefined;
+}
+
+export const listVolumes = async (token: string, app: string): Promise<FlyVolumeSummary[]> => {
     const parsed = volumeListSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/volumes`));
-    return parsed.map((volume) => ({ id: volume.id, createdAt: parsedDate(volume.created_at) }));
+    return parsed.map((volume) => ({ id: volume.id, createdAt: parsedDate(volume.created_at), region: volume.region, sizeGb: volume.size_gb }));
 };
 
 // Start answers 200; an already-running machine answers an error naming its state, which hosted.ts treats as success

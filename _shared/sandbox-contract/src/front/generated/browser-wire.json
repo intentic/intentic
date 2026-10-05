@@ -203,6 +203,67 @@
             "io"
           ],
           "type": "object"
+        },
+        "TunnelState": {
+          "description": "Where the front's tunnel stands.",
+          "oneOf": [
+            {
+              "const": "off",
+              "description": "No tunnel is configured: the sandbox is reachable on loopback only.",
+              "type": "string"
+            },
+            {
+              "const": "dialling",
+              "description": "Configured and not held right now: dialling, or waiting to redial.",
+              "type": "string"
+            },
+            {
+              "const": "held",
+              "description": "The edge holds the interactive socket.",
+              "type": "string"
+            },
+            {
+              "const": "elsewhere",
+              "description": "Another copy of this sandbox holds the tunnel, and the edge refused this one three times in a row; the front\ndials every 15 minutes meanwhile.",
+              "type": "string"
+            },
+            {
+              "const": "deleted",
+              "description": "The platform deleted this sandbox, and the front stopped dialling.",
+              "type": "string"
+            }
+          ]
+        },
+        "TunnelVitals": {
+          "description": "The ingress tunnel as the front holds it: the interactive socket, which every request can ride, and QUIC beside it.",
+          "properties": {
+            "dropsLastHour": {
+              "description": "How many times a registered interactive socket dropped in the last hour.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "holder": {
+              "description": "Where the copy holding this sandbox's tunnel runs, as the edge named it, while `state` is `elsewhere`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "quic": {
+              "description": "Whether a QUIC connection is held beside the socket.",
+              "type": "boolean"
+            },
+            "state": {
+              "$ref": "#/$defs/TunnelState"
+            }
+          },
+          "required": [
+            "state",
+            "dropsLastHour",
+            "quic"
+          ],
+          "type": "object"
         }
       },
       "description": "The sandbox's proof of life, measured by the front and answered by it at [`VITALS_PATH`] whatever state Node is in:\nthe daemon's own heartbeat rides Node's event loop, so a sandbox busy enough to starve it would otherwise look dead.\nIt carries nothing of the workspace.",
@@ -235,6 +296,17 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "tunnel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TunnelVitals"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the ingress tunnel stands and how often it dropped (2026-10-05: a tunnel that dropped once a minute for\nfour hours was counted nowhere). Absent from an older front."
         },
         "uptimeS": {
           "description": "Seconds since the front, and so the container, started.",

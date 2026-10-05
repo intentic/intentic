@@ -99,11 +99,43 @@ if [ -z "$IC" ]; then
         dest="$HOME/.intentic/ic/bin/ic"
         mkdir -p "$(dirname "$dest")"
     fi
-    # A run pinned to the release already installed (IC_VERSION beside IC_URL, which the desktop app sets to its
-    # own) has nothing to fetch: asking the binary costs milliseconds. An unpinned run still downloads.
-    if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && [ "$("$dest" --version 2>/dev/null)" = "ic ${IC_VERSION}" ]; then
+    # A run pinned to a release (IC_VERSION beside IC_URL, which the desktop app sets to its own) that finds that
+    # release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds. Never "exactly that
+    # release": the machine agent moves ic up by itself, so a desktop app left in the tray for days put an older ic
+    # back on every Start, Stop or Restart it ran (2026-10-05). An unpinned run still downloads.
+    #
+    # Compared as versions: major.minor.patch first, then a pre-release below its own release. An installed ic whose
+    # answer is not a version this can read counts as older, and is replaced.
+    ic_not_older() {
+        ic_seen="$("$1" --version 2>/dev/null || true)"
+        ic_have="${ic_seen#ic }"
+        ic_have="${ic_have#v}"
+        ic_want="${2#v}"
+        ic_have_pre=""
+        ic_want_pre=""
+        case "$ic_have" in *-*)
+            ic_have_pre="${ic_have#*-}"
+            ic_have="${ic_have%%-*}"
+            ;;
+        esac
+        case "$ic_want" in *-*)
+            ic_want_pre="${ic_want#*-}"
+            ic_want="${ic_want%%-*}"
+            ;;
+        esac
+        for ic_part in 1 2 3; do
+            ic_h="$(printf '%s' "$ic_have" | cut -d. -f"$ic_part")"
+            ic_w="$(printf '%s' "$ic_want" | cut -d. -f"$ic_part")"
+            case "$ic_h" in "" | *[!0-9]*) return 1 ;; esac
+            case "$ic_w" in "" | *[!0-9]*) return 1 ;; esac
+            [ "$ic_h" -gt "$ic_w" ] && return 0
+            [ "$ic_h" -lt "$ic_w" ] && return 1
+        done
+        [ -z "$ic_have_pre" ] || [ "$ic_have_pre" = "$ic_want_pre" ]
+    }
+    if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && ic_not_older "$dest" "$IC_VERSION"; then
         IC="$dest"
-        echo "note: ic ${IC_VERSION} is already installed — not downloading it again."
+        echo "note: $ic_seen is installed (this run asks for ic ${IC_VERSION} or newer) — not downloading it."
     else
         echo "intentic: fetching the ic CLI…"
         if curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then

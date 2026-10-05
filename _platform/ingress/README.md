@@ -17,11 +17,23 @@ flowchart LR
   crates as the sandbox's front, so both ends of a tunnel are one implementation of the wire and of how HTTP crosses
   it.
 - No database and nothing durable: the tunnel registry is an in-memory map, so a restart drops every tunnel and each
-  front redials. The newest tunnel for an id displaces the older one.
+  front redials. One copy of a sandbox holds it (2026-10-05): a front names its instance on every tunnel
+  (`x-intentic-instance`, `x-intentic-host`, and in the QUIC hello), and a tunnel from another instance than one
+  holding the sandbox whose carrier was heard within the dead window, here or on a peer, is refused: 409 naming the
+  holder in `x-intentic-holder`, `Hello::HeldElsewhere` over QUIC, or close code 4009 when the two registered at once.
+  The same instance's newer tunnel displaces its older one (4001), and so does a new instance from the very place the
+  holder names (`x-intentic-host`, machine and environment): one engine cannot run two copies of a sandbox, so that is
+  the same container started again after a crash or a recreate, and refusing it would leave the sandbox unreachable
+  for the refusal's backoff. A front naming no instance (older than this) keeps newest-wins either way, for the roll.
+  Before this, two containers holding one grant took the tunnel from each other every minute.
 - Holds only the platform's Ed25519 public key, so it verifies grants and can never mint one. Revocation is a
-  cached, fail-open `GET /api/reachability/<id>` to the api, at registration and on a miss. A 404 there is a deletion
-  record and nothing else: the api answers 200 (`known: false`) for an id it has no record of either way, so an api
-  reading a database that forgot a sandbox does not take it off the edge (2026-10-02).
+  cached, fail-open `GET /api/reachability/<id>` to the api, at registration, on a miss, and for every held sandbox
+  as its minute-long cached answer expires (eight at a time). A 404 there is a deletion record and nothing else: the
+  api answers 200 (`known: false`) for an id it has no record of either way, so an api reading a database that forgot
+  a sandbox does not take it off the edge (2026-10-02). A held sandbox found deleted has every tunnel closed with code
+  4010, and its front stops dialling; a redial is refused 403 with the `unknown-sandbox` verdict (2026-10-05: a deleted
+  sandbox stayed reachable until its front redialled). The cache holds at most 10,000 answers, past which a new one is
+  not kept.
 - Routes on each request's Host, since HTTP/2 coalesces many hostnames onto one connection. A sandbox with no tunnel
   answers 502 with an `x-intentic-edge` header naming why (`edge-verdict.ts` in the contract), which the editor reads.
 - What the edge serves beyond HTTPS over TCP is declared, never probed for: binding the QUIC door
@@ -39,16 +51,28 @@ flowchart LR
   CONNECT whose h1 head rides under `x-ingress-*`. [legacy.rs](src/legacy.rs) alone speaks it, reading those fronts'
   transfer routes from the list frozen with the door, and goes once no front dials it.
 - A `/tunnel/v2` front pings its WebSockets every 15 s and the edge only listens; either end drops a peer silent for
-  45 s. On `/tunnel/v1` the edge pings too, because some older fronts never ping and only answer: an edge that
-  stopped pinging them dropped each one for silence every minute (`Door::liveness` in src/edge.rs). A QUIC
-  connection's own keep-alive and idle timeout, on the same cadence, are its only liveness.
+  45 s, checked in a task of its own so a stalled write cannot postpone it (2026-10-05). On `/tunnel/v1` the edge pings
+  too, because some older fronts never ping and only answer: an edge that stopped pinging them dropped each one for
+  silence every minute (`Door::liveness` in src/edge.rs). A QUIC connection's own keep-alive and idle timeout run on
+  the same cadence, and since they prove only that packets cross, the edge proves the connection serves streams
+  (2026-10-05: a half-dead QUIC path kept every request, since QUIC outranks the socket): a probe stream at
+  registration, which must be answered before QUIC takes a request, then every 15 s with 10 s to answer, any answer
+  counting (an older front answers HTTP 400). An unanswered probe closes the connection with code 4008 and the socket
+  carries on while the front redials. A request whose QUIC stream does not open within 5 s, or whose answer has not
+  started in 10 s while a probe beside it goes unanswered, demotes QUIC the same way and is sent once more over the
+  socket when nothing of it was spent (no upgrade, no body). A QUIC front that named itself is registered only once it
+  acknowledged the edge's `Held`, so a connection its front gave up on is never held.
 - With the certificate held here (below), browsers get HTTP/3 on the same port, and the editor's terminals ride
   WebTransport where the platform relays the edge's declaration on the sandbox's row: a session opened at
   `/system/transport` on a sandbox's address, each stream served as one HTTP/1.1 connection to that address whatever
   Host it writes. The editor speaks a plain WebSocket on the stream, so any front or daemon serving `/system/terminal`
   serves it.
 - Machines behind the one address find each other through Fly's internal DNS and forward a miss once to whichever
-  holds the tunnel, over private port 8081.
+  holds the tunnel, over private port 8081. Every slot is news to the peers (a sandbox held only over QUIC on another
+  machine is that machine's to answer, not `no-tunnel`), each with when it registered and which front instance dialled
+  it: an `add` older than this machine's own registration in that slot is stale and ignored rather than displacing the
+  newer one, and between two copies of one sandbox the first to register holds it on every machine (2026-10-05). An
+  older peer's message carries socket ids alone and still reads newest-wins.
 - A hosted sandbox is no exception: its machine dials the same tunnel with a grant the platform put in its config,
   and nothing else reaches it. One holding no tunnel (stopped, booting) answers the `no-tunnel` verdict, and the
   editor wakes it through the api. The edge replays nothing: no Fly HTTP proxy sits in front of 443 to act on one.

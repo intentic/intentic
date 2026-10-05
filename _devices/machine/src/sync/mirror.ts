@@ -12,15 +12,21 @@ import {
     type MirroredPort,
     type Pairing,
     pairingKey,
+    pairingTransport,
     readState,
     removeSandboxPairings,
     setFileSyncAutoPaused,
     setFileSyncSwapPaused,
+    setSandboxGone,
+    setUnreachableSince,
     type SkippedPort,
     updateState,
 } from "./config.js";
 import { pairingEndpoint } from "./endpoint.js";
-import { createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
+import { candidateBases, createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
+import { answeredGone, goneStep, SandboxGoneError } from "./gone.js";
+import { checkContainers, checkKeptHere, type FateSeams, sandboxAnswered, sandboxSaidGone } from "./gone-watch.js";
+import { retireSandbox } from "./retire.js";
 import { readSwapRecords } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
@@ -36,10 +42,14 @@ import {
     ourForwardSessions,
     pauseRunningSync,
     pauseUnreachableSync,
+    type RelabelBudget,
+    relabelBudget,
     retireOrphanSessions,
     resumeAutoPausedSync,
     resumeSwapPausedSync,
     runMutagenAsync,
+    sayDaemonEventsTo,
+    sessionLabels,
     syncMode,
     syncSessionNames,
 } from "./mutagen.js";
@@ -112,6 +122,11 @@ export const fetchWorkspacePorts = async (base: string, syncToken: string): Prom
             "the sandbox rejected the sync token: click 'Enable desktop sync' in your browser and re-run setup to mint a fresh one.",
         );
     }
+    // The edge's own verdict, read on every answer that is not OK (gone.ts): a sandbox the platform no longer has is
+    // not an outage to wait out.
+    if (answeredGone(response)) {
+        throw new SandboxGoneError(`the platform says this sandbox no longer exists (${response.status}): ${await response.text()}`);
+    }
     if (!response.ok) {
         throw new Error(`reading the sandbox's ports failed (${response.status}): ${await response.text()}`);
     }
@@ -153,6 +168,7 @@ const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardEx
                 port: summary.port,
                 remote: pairingEndpoint(pairing),
                 host: summary.host,
+                labels: sessionLabels(pairing.sandboxId, "forward"),
             }),
             log,
         ),
@@ -259,7 +275,9 @@ export const reconcileForwards = async (
         const publishers = holds.docker?.get(summary.port);
         if (publishers !== undefined) {
             holds.freeSince.delete(summary.port);
-            log(`  localhost:${summary.port} is published by a Docker container on this machine (${publishers}): skipped (${summary.command ?? "unknown process"})`);
+            log(
+                `  localhost:${summary.port} is published by a Docker container on this machine (${publishers}): skipped (${summary.command ?? "unknown process"})`,
+            );
             continue;
         }
         const existing = currentByPort.get(summary.port);
@@ -308,7 +326,9 @@ export const strandedForwards = (held: readonly number[], mirrored: readonly Mir
 // The sweep itself. Only ever called with a `mirrored` list a successful reconcile just produced: against a stale
 // record this would tear down live forwards.
 const sweepStrandedForwards = (mutagen: string, sandboxId: string, mirrored: readonly MirroredPort[], log: Log): void => {
-    for (const port of strandedForwards(forwardedPorts(mutagen, sandboxId), mirrored)) {
+    // A listing that did not answer is not "nothing held": nothing is swept on it.
+    const held = forwardedPorts(mutagen, sandboxId);
+    for (const port of held === undefined ? [] : strandedForwards(held, mirrored)) {
         spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], {
             stdio: "ignore",
             windowsHide: true,
@@ -360,7 +380,13 @@ export const skippedPortsOf = (
             // Ignored outranks the rest because reconcile never tried: no contest was entered and no bind measured,
             // so the other two reasons are not facts about this pass at all.
             const reason: PortSkipReason = ignored.has(summary.port) ? "ignored" : heldBy === undefined ? "busy" : "held-by-sandbox";
-            return { port: summary.port, host: summary.host, reason, heldBy: reason === "held-by-sandbox" ? heldBy : undefined, command: summary.command };
+            return {
+                port: summary.port,
+                host: summary.host,
+                reason,
+                heldBy: reason === "held-by-sandbox" ? heldBy : undefined,
+                command: summary.command,
+            };
         });
 };
 
@@ -461,10 +487,14 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
 // One report per sandbox, carried by the first of its pairings that holds a token (they share one): several pairings
 // of one sandbox (its projects host and the folders attached to it) are one machine to its daemon, which keeps one
 // report per machine, so posting each would only send the same slice again.
-export const reportCarriers = <T extends { readonly pairing: Pick<Pairing, "sandboxId" | "syncToken"> }>(dialed: readonly T[], unsupported: ReadonlySet<string>): T[] => {
+// (2026-10-05) Never to a sandbox said to be gone: a dead sandbox took 5,760 report posts a day, none of them logged.
+export const reportCarriers = <T extends { readonly pairing: Pick<Pairing, "sandboxId" | "syncToken" | "goneSince"> }>(
+    dialed: readonly T[],
+    unsupported: ReadonlySet<string>,
+): T[] => {
     const seen = new Set<string>();
     return dialed.filter(({ pairing }) => {
-        if (pairing.syncToken === undefined || unsupported.has(pairing.sandboxId) || seen.has(pairing.sandboxId)) {
+        if (pairing.syncToken === undefined || pairing.goneSince !== undefined || unsupported.has(pairing.sandboxId) || seen.has(pairing.sandboxId)) {
             return false;
         }
         seen.add(pairing.sandboxId);
@@ -482,8 +512,15 @@ const sendReport = async (base: string, pairing: Pick<Pairing, "sandboxId" | "sy
     });
 
 // Reports each sandbox's folders/ports/liveness to that sandbox, scoped per sandbox so none leaks to another.
-// Best-effort telemetry: failures are logged and dropped; a definitive 404 retires reporting for that sandbox.
-const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
+// Best-effort telemetry: failures are logged (quietly, repeats.ts) and dropped; a definitive 404 retires reporting for
+// that sandbox, and the edge's "no such sandbox" marks it gone (`gone`).
+const postReports = async (
+    dialed: readonly Dialed<Pairing>[],
+    mutagen: string,
+    unsupported: Set<string>,
+    gone: (pairing: Pairing) => Promise<void>,
+    log: Log,
+): Promise<void> => {
     const reportable = reportCarriers(dialed, unsupported);
     if (reportable.length === 0) {
         return;
@@ -497,6 +534,11 @@ const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, 
             if (response.status === 404) {
                 unsupported.add(pairing.sandboxId);
                 log(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Devices view will stay empty.`);
+            } else if (answeredGone(response)) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                await gone(pairing);
+            } else if (!response.ok) {
+                log(`  ${pairing.sandboxId}: report not taken (${response.status})`);
             }
         } catch (error) {
             log(`  ${pairing.sandboxId}: report skipped: ${errorMessage(error)}`);
@@ -567,9 +609,14 @@ const absorbRejectedPoll = async (
 const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreachable: Map<string, Unreachable>, log: Log): Promise<boolean> => {
     const now = Date.now();
     // The first failure of a run sets the clock; every later one only records that a poll was spent, so the hour
-    // below is wall-clock and survives the backoff stretching the gaps between them.
-    const since = unreachable.get(pairing.sandboxId)?.since ?? now;
+    // below is wall-clock and survives the backoff stretching the gaps between them. (2026-10-05) The clock is kept on
+    // disk too (`unreachableSince`), written once per outage: kept in memory alone, an agent restarted more often than
+    // hourly started the hour over each time and never paused a dead sandbox's sessions.
+    const since = unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince ?? now;
     unreachable.set(pairing.sandboxId, { since, lastTried: now });
+    if (pairing.unreachableSince === undefined) {
+        await setUnreachableSince(pairing.sandboxId, since);
+    }
     const mirrored = (pairing.mirroredPorts ?? []).length;
     if (shouldReleaseForwards(now - since, mirrored)) {
         await retirePairingMirror(mutagen, pairing.sandboxId);
@@ -609,8 +656,14 @@ const absorbPairingFailure = async (
     mutagen: string,
     pairing: Pairing,
     tracking: PairingTracking,
+    fate: FateSeams,
     log: Log,
 ): Promise<{ readonly drop: boolean; readonly paused: boolean }> => {
+    // The edge's final word: the sandbox is marked gone (and held still) rather than counted as one more failed poll.
+    if (error instanceof SandboxGoneError) {
+        await sandboxSaidGone(fate, pairing.sandboxId, "edge");
+        return { drop: true, paused: true };
+    }
     if (error instanceof SyncAuthError) {
         const drop = await absorbRejectedPoll(mutagen, pairing, tracking.rejectedPolls, tracking.repos, tracking.sessionsPending, log);
         return { drop, paused: false };
@@ -630,7 +683,10 @@ const healPairing = async (mutagen: string, pairing: Pairing, tick: number, log:
 // Which setup of a pairing this is. Every `setup` mints a fresh sync token, so a pairing set up again (another folder,
 // a takeover, a re-pair after an unpair) reads as new here and is prepared again; one that is merely re-read does not.
 // So does a project whose direction was switched (`sync direction`): the mode is what its session is recreated for.
-const setupOf = (pairing: Pairing): string => [pairingKey(pairing), pairing.localDir ?? "", pairing.syncToken ?? "", syncMode(pairing)].join("\n");
+// So does a docker pairing moved onto ssh (gone-watch.ts `checkContainers`), whose session is made again over the other
+// transport.
+const setupOf = (pairing: Pairing): string =>
+    [pairingKey(pairing), pairing.localDir ?? "", pairing.syncToken ?? "", syncMode(pairing), pairingTransport(pairing)].join("\n");
 
 // The pairings this pass has to prepare: every setup the watcher has not seen. Pure, so "each setup exactly once" is a
 // rule with a test rather than a branch in the loop.
@@ -641,10 +697,10 @@ export const markPrepared = (prepared: Set<string>, pairing: Pairing): void => v
 
 // One pairing's sessions brought to this build's rules. Whatever did not get there (a create that failed, or a
 // replacement put off until the sandbox answers or its conflicts settle) is pending, and retried on the cadence below.
-const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<string>, say: Log): Promise<boolean> => {
+const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<string>, relabels: RelabelBudget, say: Log): Promise<boolean> => {
     let converged = false;
     await guard(say, `${pairingKey(pairing)}: preparing its file sync`, async () => {
-        converged = await ensureSyncSession(mutagen, pairing, say);
+        converged = await ensureSyncSession(mutagen, pairing, say, relabels);
     });
     if (converged) {
         pending.delete(pairingKey(pairing));
@@ -659,8 +715,13 @@ const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<st
 // has been gone for an hour each dial can run to the tunnel's ten-second timeout. A dogfooding PC had 6 of its 8
 // pairings in this state: twelve such dials at every agent start, before mirroring or reporting began. Only while its
 // sessions exist, since a pairing that has none is not syncing anything and nothing else would create them.
+// (2026-10-05) So is a pairing whose sandbox is gone, or whose sessions the watcher holds for a reason of its own
+// (config.ts `fileSyncPausedFor`): nothing is made or replaced for a sandbox that is not there. A listing that did not
+// answer counts as sessions held, the side that makes nothing.
 const dormant = (mutagen: string, pairing: Pairing): boolean =>
-    pairing.fileSyncAutoPaused === true && existingSyncSessions(mutagen, syncSessionNames(pairing)).length > 0;
+    pairing.goneSince !== undefined ||
+    pairing.fileSyncPausedFor !== undefined ||
+    (pairing.fileSyncAutoPaused === true && (existingSyncSessions(mutagen, syncSessionNames(pairing)) ?? [undefined]).length > 0);
 
 // BEFORE A FOLDER'S FIRST COPY, ITS SANDBOX IS TOLD OF IT. The daemon makes an attached folder's `/work/<name>` a
 // repository of its own once a report names it. A session that began filling `/work/<name>` first would leave those
@@ -693,8 +754,19 @@ export const readyToPrepare = async (
 // sandbox. A daemon with no report route (404) cannot be waiting for one, so the folder goes ahead; a sandbox whose
 // polls are backing off is not asked more often than they are.
 const announcer =
-    (mutagen: string, bases: DaemonBases, unsupported: Set<string>, unreachable: ReadonlyMap<string, Unreachable>, say: Log) =>
+    (
+        mutagen: string,
+        bases: DaemonBases,
+        unsupported: Set<string>,
+        unreachable: ReadonlyMap<string, Unreachable>,
+        gone: (pairing: Pairing) => Promise<void>,
+        say: Log,
+    ) =>
     async (pairing: Pairing): Promise<boolean> => {
+        // Nothing is announced to a sandbox said to be gone; its folder waits with it.
+        if (pairing.goneSince !== undefined) {
+            return false;
+        }
         if (pairing.syncToken === undefined || unsupported.has(pairing.sandboxId)) {
             return true;
         }
@@ -708,12 +780,20 @@ const announcer =
                 say(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Devices view will stay empty.`);
                 return true;
             }
+            if (answeredGone(response)) {
+                await gone(pairing);
+                return false;
+            }
             if (!response.ok) {
-                say(`  ${pairingKey(pairing)}: ${pairing.sandboxId} did not take the report naming this folder (${response.status}); its first copy waits for it.`);
+                say(
+                    `  ${pairingKey(pairing)}: ${pairing.sandboxId} did not take the report naming this folder (${response.status}); its first copy waits for it.`,
+                );
             }
             return response.ok;
         } catch (error) {
-            say(`  ${pairingKey(pairing)}: ${pairing.sandboxId} could not be told of this folder (${errorMessage(error)}); its first copy waits until it can.`);
+            say(
+                `  ${pairingKey(pairing)}: ${pairing.sandboxId} could not be told of this folder (${errorMessage(error)}); its first copy waits until it can.`,
+            );
             return false;
         }
     };
@@ -726,24 +806,43 @@ const announcer =
 // THE WATCHER IS THE ONLY THING THAT CREATES SESSIONS. `setup` used to create them too, at the same moment the agent it
 // had just started was preparing the same pairing, so each create found no session and both went ahead: one name came
 // to hold two identical sessions over the same folder, each flagging the other's writes as conflicts.
+// (2026-10-05) A docker pairing's container is asked after first (gone-watch.ts `checkContainers`): the transport was
+// decided at setup and never asked again, so a session was made, or kept, through a container that was gone.
 const prepareSessions = async (
     mutagen: string,
     pairings: readonly Pairing[],
     prepared: Set<string>,
     pending: Set<string>,
     announce: (pairing: Pairing) => Promise<boolean>,
+    passes: Pick<PassContext, "fate" | "relabels" | "tracking">,
     say: Log,
 ): Promise<void> => {
-    const firstCopyAhead = (pairing: Pairing): boolean => existingSyncSessions(mutagen, syncSessionNames(pairing)).length === 0;
-    for (const pairing of await readyToPrepare(unpreparedSetups(pairings, prepared), firstCopyAhead, announce)) {
+    // A listing that did not answer reads as a first copy ahead: announcing again costs one report.
+    const firstCopyAhead = (pairing: Pairing): boolean => (existingSyncSessions(mutagen, syncSessionNames(pairing)) ?? []).length === 0;
+    const unprepared = unpreparedSetups(pairings, prepared);
+    const docker = unprepared.filter((pairing) => pairingTransport(pairing) === "docker");
+    if (docker.length > 0) {
+        await guard(
+            say,
+            "asking after the containers docker pairings reach",
+            async () => await checkContainers(passes.fate, docker, answeringOf(passes.tracking)),
+        );
+    }
+    for (const pairing of await readyToPrepare(unprepared, firstCopyAhead, announce)) {
         markPrepared(prepared, pairing);
         if (dormant(mutagen, pairing)) {
             pending.add(pairingKey(pairing));
             continue;
         }
-        await prepareSession(mutagen, pairing, pending, say);
+        await prepareSession(mutagen, pairing, pending, passes.relabels, say);
     }
 };
+
+// Whether a sandbox's own poll is answering, as this watcher has seen it.
+const answeringOf =
+    (tracking: Pick<PairingTracking, "unreachable">) =>
+    (sandboxId: string): boolean =>
+        !tracking.unreachable.has(sandboxId);
 
 // The same work on a cadence, for the pairings whose file sync has not reached this build's rules: asleep,
 // mid-rebuild, behind a transport that was not yet open, or holding conflicts a replacement has to wait out. A dormant
@@ -753,13 +852,14 @@ const retryPendingSessions = async (
     pairings: readonly Pairing[],
     sessionsPending: Set<string>,
     tick: number,
+    relabels: RelabelBudget,
     say: Log,
 ): Promise<void> => {
     if (sessionsPending.size === 0 || tick % SESSION_RETRY_EVERY_TICKS !== 0) {
         return;
     }
     for (const pairing of pairings.filter((held) => sessionsPending.has(pairingKey(held)) && !dormant(mutagen, held))) {
-        if (await prepareSession(mutagen, pairing, sessionsPending, say)) {
+        if (await prepareSession(mutagen, pairing, sessionsPending, relabels, say)) {
             say(`  ${pairingKey(pairing)}: file sync is running on this build's rules`);
         }
     }
@@ -813,6 +913,13 @@ interface PassContext {
     readonly swapHeld: ReadonlySet<string>;
     // What this machine's Docker publishes, and when each port a pass found busy was first seen free again.
     readonly holders: HolderMemory;
+    // How a sandbox's fate is acted on (gone-watch.ts), and how many legacy sessions this pass may relabel.
+    readonly fate: FateSeams;
+    readonly relabels: RelabelBudget;
+    // Says this watcher is still moving, for its own stall check (`watchGeneration`).
+    readonly progress: (step: string) => void;
+    // Every pairing as this tick read them: a sandbox's answer clears a gone mark any of its pairings carries.
+    readonly pairings: readonly Pairing[];
     readonly say: Log;
 }
 
@@ -820,7 +927,7 @@ interface PassContext {
 // so the agent stays a list of what a tick does, rather than one function in which every branch is one pairing's
 // business.
 const runPairingPass = async (context: PassContext, pairing: Pairing, base: string): Promise<void> => {
-    const { mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, say } = context;
+    const { mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, fate, say } = context;
     const { rejectedPolls, unreachable, repos } = tracking;
     const swapping = swapHeld.has(pairing.sandboxId);
     let pausedThisPass = false;
@@ -828,6 +935,14 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         const mirrored = await servePairing(context, pairing, base);
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
+        // It answered: whatever said it was gone is withdrawn, from every pairing of it (a folder attached to it keeps
+        // the mark when its projects host was set up again), and the outage clock on disk stops.
+        if (context.pairings.some((held) => held.sandboxId === pairing.sandboxId && held.goneSince !== undefined)) {
+            await sandboxAnswered(fate, pairing.sandboxId);
+        }
+        if (context.pairings.some((held) => held.sandboxId === pairing.sandboxId && held.unreachableSince !== undefined)) {
+            await setUnreachableSince(pairing.sandboxId, undefined);
+        }
         // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
         // its sandbox is mid-swap, which holds that sync still whoever paused it.
         if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
@@ -850,7 +965,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         // Reports that this pass's resolved base failed, which daemon-base.ts can't detect itself; matters only for a
         // loopback base, so the next tick falls back to the public URL instead of the pairing just failing.
         bases.failed(pairing.sandboxId);
-        const outcome = await absorbPairingFailure(error, mutagen, pairing, tracking, say);
+        const outcome = await absorbPairingFailure(error, mutagen, pairing, tracking, fate, say);
         if (outcome.drop) {
             return;
         }
@@ -858,8 +973,9 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         // A transient tunnel blip must not kill the agent, log and try again next tick.
         say(`  ${pairingKey(pairing)}: reconcile skipped: ${errorMessage(error)}`);
     }
-    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap.
-    if (pairing.fileSyncAutoPaused === true || pausedThisPass || swapping) {
+    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap, and
+    // those the watcher holds still for a reason of its own (a gone sandbox among them, until it answered just now).
+    if (pairing.fileSyncAutoPaused === true || pairing.fileSyncPausedFor !== undefined || pausedThisPass || swapping) {
         return;
     }
     // Before the bridge, and guarded like it: a conflict standing here blocks the very deletions the bridge's
@@ -898,17 +1014,22 @@ export const pollingPairings = (pairings: readonly Pick<Pairing, "sandboxId" | "
 
 // The whole pass of a folder attached to a sandbox that another pairing polls: its file sync paused after an hour of
 // that sandbox not answering and resumed once it answers, as the poller's own is, then the heal (which a copy-first
-// folder never needs). No ports, no git bridge: the folder is the owner's project, and the projects host mirrors.
+// folder never needs). No ports, no git bridge: the folder is the owner's project, and the projects host mirrors. A
+// folder of a sandbox said to be gone was paused with the rest of it (gone-watch.ts), and does nothing more here.
 const followSandbox = async (context: PassContext, pairing: Pairing): Promise<void> => {
     const { mutagen, tick, tracking, swapHeld, say } = context;
-    const down = tracking.unreachable.get(pairing.sandboxId);
+    if (pairing.goneSince !== undefined || pairing.fileSyncPausedFor !== undefined) {
+        return;
+    }
+    // The outage as the poller's pass recorded it, or as it stands on disk from before this agent started.
+    const down = tracking.unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince;
     const swapping = swapHeld.has(pairing.sandboxId);
     if (down === undefined) {
         if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
             await setFileSyncAutoPaused(pairingKey(pairing), false);
             say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
-    } else if (await pauseIfLongUnreachable(mutagen, pairing, Date.now() - down.since, say)) {
+    } else if (await pauseIfLongUnreachable(mutagen, pairing, Date.now() - down, say)) {
         return;
     }
     if (pairing.fileSyncAutoPaused === true || swapping) {
@@ -917,42 +1038,237 @@ const followSandbox = async (context: PassContext, pairing: Pairing): Promise<vo
     await healPairing(mutagen, pairing, tick, say);
 };
 
+// What a pass does about a polling pairing whose sandbox was said to be gone (gone.ts `goneStep`): nothing until its
+// hour is up, a poll when it is (the pass itself, which clears the mark if the sandbox answers), and past the trash
+// window the retirement. Answers whether this pass polls as usual ("pass"), polls whatever the backoff says ("ask"), or
+// does nothing more ("skip").
+const passGone = async (context: PassContext, pairing: Pairing): Promise<"pass" | "ask" | "skip"> => {
+    const now = Date.now();
+    const step = goneStep(pairing, now);
+    if (step === undefined) {
+        return "pass";
+    }
+    // The hour is counted from the asking, whatever the answer: a recheck that met an outage instead of a verdict is
+    // not asked again every tick.
+    if (step === "recheck") {
+        await setSandboxGone(pairing.sandboxId, { since: pairing.goneSince ?? now, checkedAt: now, by: pairing.goneBy ?? "edge" });
+        return "ask";
+    }
+    if (step === "retire") {
+        const { mutagen, tracking, say } = context;
+        await guard(say, `${pairing.sandboxId}: retiring its pairing`, async () => {
+            await retireSandbox(pairing.sandboxId, say, `gone since ${new Date(pairing.goneSince ?? Date.now()).toISOString().slice(0, 10)}`, {
+                mutagen,
+            });
+        });
+        tracking.unreachable.delete(pairing.sandboxId);
+        tracking.rejectedPolls.delete(pairing.sandboxId);
+        tracking.repos.delete(pairing.sandboxId);
+        for (const key of [...tracking.sessionsPending].filter((held) => keyOfSandbox(held, pairing.sandboxId))) {
+            tracking.sessionsPending.delete(key);
+        }
+    }
+    return "skip";
+};
+
 // Every pairing's pass for one tick. The pairings that poll go first, so a folder following its sandbox reads this
 // tick's answer.
-const runPasses = async (context: PassContext, dialed: readonly Dialed<Pairing>[], pairings: readonly Pairing[]): Promise<void> => {
+const runPasses = async (
+    context: PassContext,
+    dialed: readonly Dialed<Pairing>[],
+    pairings: readonly Pairing[],
+    live: () => boolean,
+): Promise<void> => {
     const polling = pollingPairings(pairings);
     for (const { pairing, base } of dialed.filter((held) => polling.has(pairingKey(held.pairing)))) {
+        if (!live()) {
+            return;
+        }
+        // A sandbox said to be gone is asked again only hourly, and retired past the trash window.
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, as every pass here
+        const gone = await passGone(context, pairing);
+        if (gone === "skip") {
+            continue;
+        }
         // A pairing that has been failing for a while is not polled every tick (pollBackoffMs). The record is kept
         // rather than cleared, so the hour that auto-pauses file sync still runs on wall-clock while it waits.
-        if (!pollDue(context.tracking.unreachable.get(pairing.sandboxId), Date.now())) {
+        if (gone === "pass" && !pollDue(context.tracking.unreachable.get(pairing.sandboxId), Date.now())) {
             continue;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
         await runPairingPass(context, pairing, base);
+        context.progress(`${pairingKey(pairing)}'s pass`);
     }
     for (const { pairing } of dialed.filter((held) => !polling.has(pairingKey(held.pairing)))) {
+        if (!live()) {
+            return;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- one folder at a time, as every pass here
         await guard(context.say, `${pairingKey(pairing)}: following its sandbox`, async () => await followSandbox(context, pairing));
     }
 };
 
+// (2026-10-05) How often the standing sweeps run, in ticks of POLL_MS: Mutagen sessions no pairing claims (once a
+// minute, where it ran only at the watcher's start, a setup and a revocation), and the containers docker pairings reach.
+const ORPHAN_SWEEP_EVERY_TICKS = 12;
+const CONTAINER_CHECK_EVERY_TICKS = 12;
+// And this machine's ic, asked whether the sandboxes kept here still exist: an ic listing costs a `docker ps` and an
+// inspect of every container, so every ten minutes, and only on a machine that keeps one of its pairings' sandboxes.
+const KEPT_HERE_CHECK_EVERY_TICKS = 120;
+
+// The sandboxes whose daemon this pass reached on this machine's loopback: kept here, whatever ic has said so far.
+const reachedLocally = (dialed: readonly Dialed<Pairing>[]): ReadonlySet<string> =>
+    new Set(
+        dialed.flatMap(({ pairing, base }) => {
+            const candidates = candidateBases(pairing.sandboxUrl);
+            return candidates.length > 1 && candidates[0] === base ? [pairing.sandboxId] : [];
+        }),
+    );
+
+// The standing sweeps of one pass, each on its own cadence and each against the state as it stands after the pass:
+// Mutagen sessions no pairing claims, the containers docker pairings reach, and this machine's ic.
+const standingSweeps = async (
+    context: Pick<PassContext, "mutagen" | "tick" | "tracking" | "fate" | "say">,
+    dialed: readonly Dialed<Pairing>[],
+): Promise<void> => {
+    const { mutagen, tick, tracking, fate, say } = context;
+    if (tick > 0 && tick % ORPHAN_SWEEP_EVERY_TICKS === 0) {
+        await guard(say, "retiring orphaned sessions", async () => retireOrphanSessions(mutagen, (await readState()).pairings, say));
+    }
+    if (tick % CONTAINER_CHECK_EVERY_TICKS === 0) {
+        await guard(
+            say,
+            "asking after the containers docker pairings reach",
+            async () => await checkContainers(fate, (await readState()).pairings, answeringOf(tracking)),
+        );
+    }
+    if (tick % KEPT_HERE_CHECK_EVERY_TICKS === 0) {
+        await guard(
+            say,
+            "asking this machine's ic which sandboxes it keeps",
+            async () => await checkKeptHere(fate, (await readState()).pairings, reachedLocally(dialed)),
+        );
+    }
+};
+
+/* A WATCHER THAT STOPPED MOVING IS RESTARTED, NOT ONLY REPORTED (2026-10-05). The heartbeat this loop stamps at the end
+   of each pass was only ever reported: an await that never settled (a child with no bound, a socket nothing closed) left
+   the process up, the pidfile claimed, mirroring, the git bridge and file sync stopped, and `status` saying "stalled"
+   to nobody. Every child call is bounded now, and on top of that the loop marks its progress at every step; a loop with
+   no progress for WATCHER_STALL_MS is abandoned (it stops at its next step, whenever its stuck await returns), its
+   tunnels are released, it says so in one line, and a fresh loop takes over with fresh memory. The agent's own hang
+   watchdog (watchdog.ts) is for the other kind of stuck: an event loop that cannot run at all. */
+export const WATCHER_STALL_MS = 20 * 60_000;
+const STALL_CHECK_MS = 30_000;
+
+// Whether a loop last seen moving at `progress` counts as stuck. Longer than any one bounded step (a create is five
+// minutes, a git fetch two), so only a step that will never end trips it.
+export const watcherStalled = (progress: number, now: number): boolean => now - progress >= WATCHER_STALL_MS;
+
+/** One run of the loop, and how its stall check reads it. */
+interface Generation {
+    abandoned: boolean;
+    progress: number;
+    step: string;
+    stopTransports: (() => Promise<void>) | undefined;
+}
+
 export const runMirrorWatch = async (log: Log): Promise<void> => {
+    for (;;) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one loop at a time; a stalled one is replaced, never joined
+        if ((await watchGeneration(log)) === "done") {
+            return;
+        }
+    }
+};
+
+// One loop under its stall check: "done" when the loop ended by itself (nothing left paired), "stalled" when it was
+// abandoned. A loop that throws throws through, as it always did, for the resident agent's retry ladder.
+const watchGeneration = async (log: Log): Promise<"done" | "stalled"> => {
+    const generation: Generation = { abandoned: false, progress: Date.now(), step: "starting", stopTransports: undefined };
+    const loop = watchLoop(log, generation);
+    let timer: NodeJS.Timeout | undefined;
+    const stall = new Promise<"stalled">((resolve) => {
+        timer = setInterval(() => {
+            if (watcherStalled(generation.progress, Date.now())) {
+                resolve("stalled");
+            }
+        }, STALL_CHECK_MS);
+    });
+    try {
+        const outcome = await Promise.race([loop.then(() => "done" as const), stall]);
+        if (outcome === "stalled") {
+            generation.abandoned = true;
+            // Whatever the abandoned loop does when its stuck step returns is its own; it stops at its next check.
+            loop.catch(() => undefined);
+            log(
+                `sync watcher: no progress for ${WATCHER_STALL_MS / 60_000} minutes (it was at: ${generation.step}); restarting it. Its heartbeat had gone stale, which \`intentic-machine status\` reports.`,
+            );
+            await generation.stopTransports?.().catch(() => undefined);
+        }
+        return outcome;
+    } finally {
+        clearInterval(timer);
+    }
+};
+
+/** What one run of the loop holds for its lifetime, built once by `startWatch` and read by every `watchTick`. */
+interface Watch {
+    readonly log: Log;
+    readonly say: Log;
+    readonly mutagen: string;
+    readonly live: () => boolean;
+    readonly progress: (step: string) => void;
+    readonly tunnels: ReturnType<typeof createTunnelPool>;
+    readonly bases: DaemonBases;
+    readonly tracking: PairingTracking;
+    readonly sessionsPrepared: Set<string>;
+    readonly reportUnsupported: Set<string>;
+    readonly fate: FateSeams;
+    readonly gone: (pairing: Pairing) => Promise<void>;
+    readonly announce: (pairing: Pairing) => Promise<boolean>;
+    readonly holders: HolderMemory;
+    // The ssh config fragment as last written, so a tick writes it again only when its pairings' transports changed.
+    sshConfig: string;
+}
+
+const watchLoop = async (log: Log, generation: Generation): Promise<void> => {
+    const watch = await startWatch(log, generation);
+    if (watch === undefined) {
+        return;
+    }
+    for (let tick = 0; watch.live(); tick += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition
+        if ((await watchTick(watch, tick)) === "stop") {
+            return;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        await sleep(POLL_MS);
+    }
+};
+
+// Everything a run holds for its lifetime, and its first preparation; undefined when nothing is paired at all.
+const startWatch = async (log: Log, generation: Generation): Promise<Watch | undefined> => {
     const mutagen = await ensureMutagen();
     // Everything below runs every POLL_MS for the life of the machine, so everything below says what it has to say
     // through the quiet rule (repeats.ts) rather than once per tick per pairing.
     const say = quieted(log);
+    sayDaemonEventsTo(say);
     // Nothing paired is terminal, logged once, not spammed every tick for the life of the session.
     const initial = await readState();
     if (initial.pairings.length === 0) {
         log("no sandboxes are paired: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
-        return;
+        return undefined;
     }
     // This process puts the sandbox's sshd on loopback (tunnel.ts) before any session needs it; reconciled again
     // every tick so a pairing added or dropped mid-run gains or loses its transport without a restart.
     // Regenerated here, not only by setup/uninstall, so an upgraded binary's dialing rules reach an old pairing
-    // without a fresh browser token. Idempotent and cheap when already correct.
-    await guard(say, "refreshing the ssh configuration", async () => await writeManagedSshConfig(pairingSshConfig(initial.pairings)));
+    // without a fresh browser token. Idempotent and cheap when already correct. Written again whenever the pairings it
+    // is made of change their transport (a docker pairing moved onto ssh, a pairing retired).
+    const sshConfig = pairingSshConfig(initial.pairings);
+    await guard(say, "refreshing the ssh configuration", async () => await writeManagedSshConfig(sshConfig));
     const tunnels = createTunnelPool(say);
+    generation.stopTransports = tunnels.stopAll;
     // Where each pairing's daemon is dialled, held for the watcher's lifetime (daemon-base.ts owns the policy) and
     // cached per sandbox, so most ticks cost only a map lookup.
     const bases = createDaemonBases(say);
@@ -962,80 +1278,146 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))),
     );
     // Per-sandbox state keyed by sandbox id, and the sessions still owed by pairing key; entries come and go with them.
-    const rejectedPolls = new Map<string, number>();
-    const unreachable = new Map<string, Unreachable>();
-    const repos = new Map<string, readonly string[]>();
-    const sessionsPending = new Set<string>();
-    const sessionsPrepared = new Set<string>();
-    const tracking = { rejectedPolls, unreachable, repos, sessionsPending };
+    const tracking: PairingTracking = { rejectedPolls: new Map(), unreachable: new Map(), repos: new Map(), sessionsPending: new Set() };
     // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
     const reportUnsupported = new Set<string>();
-    const announce = announcer(mutagen, bases, reportUnsupported, unreachable, say);
-    await prepareSessions(mutagen, initial.pairings, sessionsPrepared, sessionsPending, announce, say);
+    const fate: FateSeams = { mutagen, releaseForwards: async (sandboxId) => await retirePairingMirror(mutagen, sandboxId), say };
+    const gone = async (pairing: Pairing): Promise<void> => await sandboxSaidGone(fate, pairing.sandboxId, "edge");
+    const watch: Watch = {
+        log,
+        say,
+        mutagen,
+        live: () => !generation.abandoned,
+        progress: (step) => {
+            generation.progress = Date.now();
+            generation.step = step;
+        },
+        tunnels,
+        bases,
+        tracking,
+        sessionsPrepared: new Set(),
+        reportUnsupported,
+        fate,
+        gone,
+        announce: announcer(mutagen, bases, reportUnsupported, tracking.unreachable, gone, say),
+        // What the bind probe cannot see, kept for the watcher's lifetime: Docker's answer, cached, and the grace each
+        // port a pass found busy is serving. Only the busy rows reach the disk, so a restart starts every grace over.
+        holders: { dockerPorts: publishedPortsReader(say), freeSince: new Map() },
+        sshConfig,
+    };
+    await prepareSessions(
+        mutagen,
+        initial.pairings,
+        watch.sessionsPrepared,
+        tracking.sessionsPending,
+        watch.announce,
+        { fate, relabels: relabelBudget(1), tracking },
+        say,
+    );
     await guard(say, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, say));
     log(`sync started; polling ${plural(initial.pairings.length, "paired sandbox")} every ${POLL_MS / 1000}s`);
+    return watch;
+};
 
-    // What the bind probe cannot see, kept for the watcher's lifetime: Docker's answer, cached, and the grace each port a
-    // pass found busy is serving. Only the busy rows reach the disk, so a restart starts every grace over.
-    const holders: HolderMemory = { dockerPorts: publishedPortsReader(say), freeSince: new Map() };
-    for (let tick = 0; ; tick += 1) {
-        // Re-read every tick so a concurrent setup/uninstall takes effect without restarting the watcher.
-        const state = await readState().catch((error: unknown) => {
-            say(`  tick skipped: the sync state didn't read (${errorMessage(error)})`);
-            return undefined;
-        });
-        // Unparseable state (setup caught mid-write): wait and retry rather than spin; heartbeat stays where it was.
-        if (state === undefined) {
-            await sleep(POLL_MS);
-            continue;
-        }
-        if (state.pairings.length === 0) {
-            // Nothing left to sync: stops this half for good rather than polling empty forever. A pairing revoked
-            // mid-loop
-            // lands here next tick.
-            await tunnels.stopAll();
-            log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
-            return;
-        }
-        // Where this pass dials each pairing, decided once and shared by the transport reconcile, ports poll, and
-        // report
-        // below. Cached, so a tick pays for a probe only when the answer could have moved.
-        const dialed = await dialedPairings(state.pairings, bases);
-        // Runs before the port reconcile and git bridge, both of which ride this transport; a newly added pairing needs
-        // its listener up first, and a moved base gets rebound here too.
-        await guard(say, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(dialed)));
-        // After the transport reconcile above, which is what a new pairing's sessions ride, and what a session that
-        // failed to create was usually waiting on.
-        await prepareSessions(mutagen, state.pairings, sessionsPrepared, sessionsPending, announce, say);
-        await retryPendingSessions(mutagen, state.pairings, sessionsPending, tick, say);
-        let swapHeld: ReadonlySet<string> = new Set();
-        await guard(say, "holding file sync still during swaps", async () => {
-            swapHeld = await holdSyncDuringSwaps(mutagen, state.pairings, unreachable, say);
-        });
-        // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
-        const claimedBy = new Map<number, string>();
-        // And whose forward each port is meanwhile, so a pairing listed before its holder does not file it as busy.
-        const holding = recordedForwards(state.pairings);
-        await runPasses({ mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, holders, say }, dialed, state.pairings);
-        // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state,
-        // so
-        // reporting last reports this tick, not the previous one.
-        if (tick % REPORT_EVERY_TICKS === 0) {
-            await guard(say, "posting this machine's reports", async () => await postReports(dialed, mutagen, reportUnsupported, say));
-        }
-        // Stamped at the bottom of the pass that did the work: its whole meaning is that everything above it ran. A
-        // tick
-        // skipped for unparseable state leaves it where it was.
-        await beat();
-        await sleep(POLL_MS);
+// One tick: "stop" when nothing is paired any more (or this run was abandoned), "next" otherwise.
+const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> => {
+    const { mutagen, say, tracking, fate, progress } = watch;
+    progress("the start of a pass");
+    // Re-read every tick so a concurrent setup/uninstall takes effect without restarting the watcher.
+    const state = await readState().catch((error: unknown) => {
+        say(`  tick skipped: the sync state didn't read (${errorMessage(error)})`);
+        return undefined;
+    });
+    // Unparseable state (setup caught mid-write): wait and retry rather than spin; heartbeat stays where it was.
+    if (state === undefined) {
+        return "next";
     }
+    if (state.pairings.length === 0) {
+        // Nothing left to sync: stops this half for good rather than polling empty forever. A pairing revoked mid-loop
+        // lands here next tick.
+        await watch.tunnels.stopAll();
+        watch.log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
+        return "stop";
+    }
+    const wantedConfig = pairingSshConfig(state.pairings);
+    if (wantedConfig !== watch.sshConfig) {
+        await guard(say, "refreshing the ssh configuration", async () => await writeManagedSshConfig(wantedConfig));
+        watch.sshConfig = wantedConfig;
+    }
+    // Where this pass dials each pairing, decided once and shared by the transport reconcile, ports poll, and report
+    // below. Cached, so a tick pays for a probe only when the answer could have moved.
+    const dialed = await dialedPairings(state.pairings, watch.bases);
+    // Runs before the port reconcile and git bridge, both of which ride this transport; a newly added pairing needs
+    // its listener up first, and a moved base gets rebound here too.
+    await guard(say, "reconciling the sync transports", async () => await watch.tunnels.reconcile(tunnelTargets(dialed)));
+    progress("the sync transports");
+    // One legacy session relabelled per pass at most (mutagen.ts RelabelBudget).
+    const relabels = relabelBudget(1);
+    // After the transport reconcile above, which is what a new pairing's sessions ride, and what a session that
+    // failed to create was usually waiting on.
+    await prepareSessions(
+        mutagen,
+        state.pairings,
+        watch.sessionsPrepared,
+        tracking.sessionsPending,
+        watch.announce,
+        { fate, relabels, tracking },
+        say,
+    );
+    await retryPendingSessions(mutagen, state.pairings, tracking.sessionsPending, tick, relabels, say);
+    progress("preparing file sync");
+    if (!watch.live()) {
+        return "stop";
+    }
+    let swapHeld: ReadonlySet<string> = new Set();
+    await guard(say, "holding file sync still during swaps", async () => {
+        swapHeld = await holdSyncDuringSwaps(mutagen, state.pairings, tracking.unreachable, say);
+    });
+    // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted. And whose
+    // forward each port is meanwhile, so a pairing listed before its holder does not file it as busy.
+    const context: PassContext = {
+        mutagen,
+        tick,
+        claimedBy: new Map(),
+        holding: recordedForwards(state.pairings),
+        tracking,
+        bases: watch.bases,
+        swapHeld,
+        holders: watch.holders,
+        fate,
+        relabels,
+        progress,
+        pairings: state.pairings,
+        say,
+    };
+    await runPasses(context, dialed, state.pairings, watch.live);
+    if (!watch.live()) {
+        return "stop";
+    }
+    // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state, so
+    // reporting last reports this tick, not the previous one.
+    if (tick % REPORT_EVERY_TICKS === 0) {
+        await guard(say, "posting this machine's reports", async () => await postReports(dialed, mutagen, watch.reportUnsupported, watch.gone, say));
+    }
+    await standingSweeps(context, dialed);
+    progress("the end of a pass");
+    // Stamped at the bottom of the pass that did the work: its whole meaning is that everything above it ran. A tick
+    // skipped for unparseable state leaves it where it was.
+    await beat();
+    return "next";
 };
 
 // Terminates one sandbox's forward sessions (or every one this agent owns with no id given), read from the
 // daemon, not a config baseline: Mutagen keeps a forward's listener bound even after its sandbox is gone. The record
 // that moves with them is the sandbox's own pairing's: a folder attached to it holds none.
+// A listing that did not answer falls back to what the record says is mirrored, by name: the forwards this agent knows
+// it made, rather than none.
 const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<number> => {
-    const names = ourForwardSessions(mutagen, sandboxId);
+    const recorded = async (): Promise<string[]> =>
+        (await readState()).pairings
+            .filter((held) => sandboxId === undefined || held.sandboxId === sandboxId)
+            .flatMap((held) => (held.mirroredPorts ?? []).map((port) => forwardSessionName(held.sandboxId, port.port)));
+    const names = ourForwardSessions(mutagen, sandboxId) ?? (await recorded());
     if (names.length > 0) {
         spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
     }
@@ -1044,7 +1426,9 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
     // reading: mirroring switched off and back on must not silently take back a number somebody released.
     await updateState((state) => ({
         pairings: state.pairings.map((held) =>
-            (sandboxId === undefined || held.sandboxId === sandboxId) && !isAttachedPairing(held) ? { ...held, mirroredPorts: [], skippedPorts: [] } : held,
+            (sandboxId === undefined || held.sandboxId === sandboxId) && !isAttachedPairing(held)
+                ? { ...held, mirroredPorts: [], skippedPorts: [] }
+                : held,
         ),
     }));
     return names.length;

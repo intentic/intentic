@@ -7,7 +7,7 @@ mod support;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
-use front_wire::{Endpoint, FromNode, ListenConfig, TunnelConfig};
+use front_wire::{Endpoint, FromNode, ListenConfig, ToNode, TunnelConfig};
 use futures_util::StreamExt;
 use http_body_util::{BodyExt, Empty};
 use hyper::Request;
@@ -35,6 +35,8 @@ struct Dial {
     grant: String,
     lane: String,
     bulk: String,
+    instance: String,
+    host: String,
     opener: mux::Opener,
 }
 
@@ -68,6 +70,8 @@ async fn edge() -> (u16, tokio::sync::mpsc::UnboundedReceiver<Dial>) {
                             header("x-intentic-grant"),
                             header("x-intentic-lane"),
                             header("x-intentic-bulk"),
+                            header("x-intentic-instance"),
+                            header("x-intentic-host"),
                         ];
                         Ok(response)
                     },
@@ -78,12 +82,15 @@ async fn edge() -> (u16, tokio::sync::mpsc::UnboundedReceiver<Dial>) {
                 let (session, mut pumping) = tunnel::pump(socket, Liveness::Listens, closed);
                 let (opener, _driving) = mux::client(session);
                 let heard = heard.lock().unwrap().clone();
-                let [path, grant, lane, bulk] = <[String; 4]>::try_from(heard).unwrap();
+                let [path, grant, lane, bulk, instance, host] =
+                    <[String; 6]>::try_from(heard).unwrap();
                 let _ = accepted.send(Dial {
                     path,
                     grant,
                     lane,
                     bulk,
+                    instance,
+                    host,
                     opener,
                 });
                 let _held = closing;
@@ -165,6 +172,10 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
             ("/tunnel/v2", GRANT, "interactive", announced)
         ]
     );
+    // Both sockets present this front's one instance, so the edge can tell it from another copy of the sandbox.
+    assert_eq!(dials[0].instance, dials[1].instance);
+    assert_eq!(dials[0].instance.len(), 16, "{}", dials[0].instance);
+    assert_eq!(dials[0].host, dials[1].host);
     let dial = dials.pop().unwrap();
     let mut tunnel = harness.tunnel.clone();
     tunnel
@@ -234,4 +245,179 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
     let response = sender.send_request(request).await.unwrap();
     assert_eq!(response.status(), 426);
     assert!(response.headers().get("x-intentic-edge").is_none());
+}
+
+// A stand-in edge that answers every upgrade as `answer` says, counting the dials it heard.
+#[allow(clippy::result_large_err)]
+async fn refusing_edge(
+    answer: fn(&Upgrade) -> Result<(), ErrorResponse>,
+    then_close: Option<(u16, &'static str)>,
+) -> (u16, Arc<Mutex<Vec<(String, String, String)>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let dials = Arc::new(Mutex::new(Vec::new()));
+    let heard = dials.clone();
+    tokio::spawn(async move {
+        while let Ok((stream, _)) = listener.accept().await {
+            let heard = heard.clone();
+            tokio::spawn(async move {
+                let accepted = tokio_tungstenite::accept_hdr_async(
+                    stream,
+                    move |request: &Upgrade,
+                          response: Upgraded|
+                          -> Result<Upgraded, ErrorResponse> {
+                        let header = |name: &str| {
+                            request
+                                .headers()
+                                .get(name)
+                                .map(|value| value.to_str().unwrap().to_owned())
+                                .unwrap_or_default()
+                        };
+                        heard.lock().unwrap().push((
+                            header("x-intentic-lane"),
+                            header("x-intentic-instance"),
+                            header("x-intentic-host"),
+                        ));
+                        answer(request).map(|()| response)
+                    },
+                )
+                .await;
+                let Ok(mut socket) = accepted else {
+                    return;
+                };
+                if let Some((code, reason)) = then_close {
+                    use futures_util::SinkExt;
+                    let frame = tokio_tungstenite::tungstenite::protocol::CloseFrame {
+                        code: code.into(),
+                        reason: reason.into(),
+                    };
+                    let _ = socket.send(Message::Close(Some(frame))).await;
+                }
+                while socket.next().await.is_some() {}
+            });
+        }
+    });
+    (port, dials)
+}
+
+async fn dialling(harness: &Harness, port: u16) {
+    harness
+        .send(&FromNode::Tunnel {
+            tunnel: Some(TunnelConfig {
+                url: format!("ws://127.0.0.1:{port}/tunnel/v2"),
+                grant: GRANT.into(),
+                bulk: vec![],
+            }),
+        })
+        .await;
+    harness.hello().await;
+}
+
+// The edge refuses a second copy of a sandbox with 409, naming where the copy holding it runs: the front says so to Node
+// and stands back a minute or more instead of redialling at once, so two copies stop trading the tunnel.
+// tungstenite's handshake callback answers its own error type, whatever its size.
+#[allow(clippy::result_large_err)]
+#[tokio::test]
+async fn a_front_another_copy_holds_out_stands_back_and_tells_node_where_it_runs() {
+    let harness = Harness::launch(
+        "tunnel-elsewhere",
+        Arc::new(|_: &str, _| support::nothing_here()),
+        Arc::new(|_: &str| {
+            (
+                front_wire::TerminalPlan::Refused {
+                    code: 1008,
+                    reason: "no terminals here".into(),
+                },
+                None,
+            )
+        }),
+        None,
+        &[
+            ("HOST_LABEL", "rog"),
+            ("HOST_PLATFORM", "linux"),
+            ("HOST_ENV", "Ubuntu"),
+        ],
+    )
+    .await;
+    let (port, dials) = refusing_edge(
+        |_| {
+            let mut refused = ErrorResponse::new(Some("held by another copy".into()));
+            *refused.status_mut() = http::StatusCode::CONFLICT;
+            refused
+                .headers_mut()
+                .insert("x-intentic-holder", "omen (windows)".parse().unwrap());
+            Err(refused)
+        },
+        None,
+    )
+    .await;
+    dialling(&harness, port).await;
+    let mut reports = harness.reports.clone();
+    let told = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        reports.wait_for(|told| {
+            told.iter().any(|report| {
+                matches!(report, ToNode::Tunnel { connected: false, reason: Some(reason), .. }
+                    if reason.contains("omen (windows)"))
+            })
+        }),
+    )
+    .await
+    .expect("Node hears why")
+    .unwrap()
+    .clone();
+    // One refusal is not yet a copy that stays: Node is told why, not that it should say so to its owner.
+    assert!(told.iter().all(|report| !matches!(
+        report,
+        ToNode::Tunnel {
+            refused: Some(_),
+            ..
+        }
+    )));
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    let dials = dials.lock().unwrap().clone();
+    assert_eq!(
+        dials.len(),
+        2,
+        "one dial per socket, then standing back: {dials:?}"
+    );
+    for (_, instance, host) in &dials {
+        assert_eq!(instance.len(), 16);
+        assert_eq!(host, "rog (linux, Ubuntu)");
+    }
+}
+
+// The edge closes a held tunnel with the deleted code once the platform recorded the sandbox's deletion: the front stops
+// dialling, and tells Node.
+#[allow(clippy::result_large_err)]
+#[tokio::test]
+async fn a_tunnel_closed_for_a_deleted_sandbox_is_not_redialled() {
+    let harness = Harness::start(
+        "tunnel-deleted",
+        Arc::new(|_: &str, _| support::nothing_here()),
+    )
+    .await;
+    let (port, dials) = refusing_edge(|_| Ok(()), Some((tunnel::DELETED_CODE, "deleted"))).await;
+    dialling(&harness, port).await;
+    let mut reports = harness.reports.clone();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        reports.wait_for(|told| {
+            told.iter().any(|report| {
+                matches!(
+                    report,
+                    ToNode::Tunnel {
+                        connected: false,
+                        refused: Some(front_wire::TunnelRefusal::Deleted),
+                        ..
+                    }
+                )
+            })
+        }),
+    )
+    .await
+    .expect("Node hears the sandbox is deleted")
+    .unwrap();
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    assert_eq!(dials.lock().unwrap().len(), 2, "never redialled");
 }

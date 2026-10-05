@@ -1,10 +1,10 @@
 import type { Provider, ProviderContext, ResolvedInputs } from "@intentic/engine";
-import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
-import { composeDown, composeUp, containerImage, containerLabel, restampBacking, stateDir, waitReady } from "./backing-ssh.js";
+import { composeDown, composeUp, containerImage, restampBacking, stateDir, waitReady } from "./backing-ssh.js";
 import { type EnvEntry, type HostFile, writeEnvOnce, writeHostFiles } from "./host-files.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "./inputs.js";
 import { listStampedContainers } from "./list-stamped.js";
+import { type ContainerStamp, containerStampOf, observedStamp, stampOf } from "./stamp.js";
 import { type SshExecutor, type SshSession, sshExecutor } from "./ssh.js";
 
 // A backing is a single-container compose project per instance (Postgres, Valkey, Garage, Authentik). The six
@@ -34,8 +34,8 @@ export interface BackingSpec<S extends z.ZodType> {
     // touching the host.
     readonly outputs: (parsed: z.infer<S>) => Record<string, unknown>;
     // The state dir's config files, rewritten on every apply (how an image-pin bump reaches the host). Must include
-    // compose.yaml, whose stamped service carries `stampLabels`.
-    readonly files: (parsed: z.infer<S>, id: string, hash: string) => Record<string, string | HostFile>;
+    // compose.yaml, whose stamped service carries `stampLabels` of this stamp.
+    readonly files: (parsed: z.infer<S>, stamp: ContainerStamp) => Record<string, string | HostFile>;
     // The write-once .env. Omitted when the backing keeps its secrets elsewhere; the file is still created, since
     // compose is given `--env-file` regardless.
     readonly env?: (parsed: z.infer<S>) => readonly EnvEntry[];
@@ -75,11 +75,12 @@ export const createBackingProvider = <S extends typeof backingSchema>(spec: Back
                 if ((await session.exec(spec.probe(parsed, ctx.id))).code !== 0) {
                     return undefined;
                 }
-                const stampHash = await containerLabel(session, ctx.id, HASH_KEY);
+                // The owner is read back too: compose recreates the container when its labels change, so an update
+                // adopts an unowned instance.
                 return {
                     outputs: spec.outputs(parsed),
                     detail: { image: await containerImage(session, ctx.id) },
-                    ...(stampHash === "" ? {} : { stampHash }),
+                    ...observedStamp(await containerStampOf(session, ctx.id)),
                 };
             } finally {
                 await session.dispose();
@@ -97,7 +98,7 @@ export const createBackingProvider = <S extends typeof backingSchema>(spec: Back
             const session = await executor.connect(sshTarget(parsed));
             try {
                 const dir = stateDir(spec.kind, ctx.id);
-                await writeHostFiles(session, spec.kind, dir, spec.files(parsed, ctx.id, ctx.inputsHash ?? ""));
+                await writeHostFiles(session, spec.kind, dir, spec.files(parsed, stampOf(ctx)));
                 await writeEnvOnce(session, spec.kind, dir, spec.env?.(parsed) ?? []);
                 await spec.prepare?.(session, parsed, dir);
                 await composeUp(session, spec.kind, ctx.id);
@@ -117,7 +118,7 @@ export const createBackingProvider = <S extends typeof backingSchema>(spec: Back
                 await session.dispose();
             }
         },
-        list: (sources, ctx) => listStampedContainers(executor, spec.kind, sources, ctx.log),
+        list: (sources, ctx) => listStampedContainers(executor, spec.kind, sources, ctx),
         ...(spec.restamp === true
             ? {
                   // Inputs are resolved leniently (the new node's ref is absent); parse only the SSH block to connect.

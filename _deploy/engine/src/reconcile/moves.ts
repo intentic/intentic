@@ -3,7 +3,7 @@ import type { ResourceType } from "@intentic/resources";
 import { resolveInputs } from "../resolve-inputs.js";
 import { createStore } from "../store.js";
 import type { EngineConfig } from "../types.js";
-import { makeContext, requireProvider } from "./reconcile.js";
+import { checkSignal, makeContext, requireProvider, runScope } from "./reconcile.js";
 
 // Consume the graph's `moved` renames before reconcile: re-stamp each live resource from its old id to the new
 // one so reconcile sees it as already-owned-and-current instead of orphaning it and recreating from scratch.
@@ -14,8 +14,8 @@ export const applyMoves = async (graph: DesiredStateGraph, config: EngineConfig)
     if (moves.length === 0) {
         return [];
     }
-    const env = config.env ?? process.env;
-    const log = config.log ?? console.log;
+    const scope = runScope(config);
+    const { env, log } = scope;
     const store = createStore();
     const applied: Move[] = [];
     for (const move of moves) {
@@ -37,8 +37,9 @@ export const applyMoves = async (graph: DesiredStateGraph, config: EngineConfig)
             log(`moved: ${type} cannot rename in place, "${move.from}" → "${move.to}" will be recreated (its data is NOT preserved)`);
             continue;
         }
-        const ctx = makeContext(move.to, store, env, log);
+        const ctx = makeContext(move.to, store, scope);
         const inputs = resolveInputs(node.inputs, store, env, { lenient: true });
+        checkSignal(config);
         await provider.restamp(move.from, inputs, ctx);
         log(`moved: re-stamped ${type} "${move.from}" → "${move.to}" in place`);
         applied.push(move);
@@ -59,5 +60,5 @@ export const rewriteGraphForMoves = (previous: DesiredStateGraph, moves: readonl
         const newId = rename.get(id) ?? id;
         resources[newId] = { ...node, id: newId, dependsOn: node.dependsOn.map((dep) => rename.get(dep) ?? dep) };
     }
-    return { version: 1, resources };
+    return { version: 1, ...(previous.owner !== undefined ? { owner: previous.owner } : {}), resources };
 };

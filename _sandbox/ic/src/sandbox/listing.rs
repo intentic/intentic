@@ -6,6 +6,7 @@ use serde_json::{json, Map, Value};
 use crate::docker;
 use crate::record::Phase;
 use crate::record::{self, ChannelRecord};
+use crate::sandbox::side::{self, Adoption, Side};
 use crate::sandbox::{desired, versions, CONTAINER_PREFIX, PARKED_SUFFIX, TUNNEL_PREFIX};
 use crate::shape::Shape;
 use crate::util::{bail, Result};
@@ -167,14 +168,29 @@ fn staged_of(record: &ChannelRecord) -> Option<Value> {
     Some(Value::Object(staged))
 }
 
+/// What the listing knows of the sandboxes other sides keep: whether each keeper still looks after its own, read once
+/// per listing from its heartbeat (side.rs). A slug missing here is read as looked after.
+type Leases = HashMap<String, Option<Adoption>>;
+
+/// The other side that keeps a container, off its inspect object. Pure.
+fn kept_by(inspected: Option<&Value>, here: &Side) -> Option<Side> {
+    inspected
+        .and_then(side::created_on_inspected)
+        .and_then(|created| side::elsewhere(Some(&created), here))
+}
+
 /// The listing, pure over what docker and the records said: one `DeviceSandboxSchema` object per sandbox, in the
 /// order docker listed them (newest first). `inspected` is keyed by container name; a container missing from it
 /// (it vanished between the two calls, or inspect failed) is listed without `resources` rather than left out.
+/// `on_machine` answers whether an image is here, for the rollback targets a rollback can still reach (versions.rs).
 fn listing(
     rows: &[Row],
     inspected: &HashMap<String, Value>,
     records: &HashMap<String, ChannelRecord>,
+    leases: &Leases,
+    on_machine: &dyn Fn(&str) -> bool,
 ) -> Value {
+    let here = side::here();
     let sandboxes: Vec<Value> = rows
         .iter()
         .filter(|row| !is_sidecar(&row.name, rows))
@@ -201,8 +217,12 @@ fn listing(
                 {
                     sandbox.insert("probationUntil".into(), json!(until));
                 }
-                if !record.targets().is_empty() {
-                    sandbox.insert("rollbackTargets".into(), versions::targets_json(record));
+                let targets = versions::targets_json(record, on_machine);
+                if targets
+                    .as_array()
+                    .is_some_and(|targets| !targets.is_empty())
+                {
+                    sandbox.insert("rollbackTargets".into(), targets);
                 }
             }
             // Absent when there is no sidecar at all, which is not the same fact as a sidecar that is down.
@@ -212,13 +232,20 @@ fn listing(
             {
                 sandbox.insert("tunnelRunning".into(), json!(tunnel.state == "running"));
             }
-            // The other side of this computer keeps it (side.rs): its background rounds are that side's to run.
-            if let Some(side) = inspected
-                .get(&row.name)
-                .and_then(super::side::created_on_inspected)
-                .and_then(|created| super::side::elsewhere(Some(&created), super::side::here()))
-            {
-                sandbox.insert("keptElsewhere".into(), json!(side));
+            // Another side of this computer keeps it (side.rs): its background rounds are that side's to run, while that
+            // side looks after it. One that has fallen silent is listed as this side's to run, saying whose it is, so
+            // the machine agent's rounds here take it up (the verbs they run adopt it in turn).
+            if let Some(side) = kept_by(inspected.get(&row.name), &here) {
+                match leases.get(slug) {
+                    Some(Some(adoption)) => {
+                        sandbox.insert("adoptedFrom".into(), json!(side.wire()));
+                        sandbox.insert("keeperSilentSince".into(), json!(adoption.since));
+                    }
+                    _ => {
+                        sandbox.insert("keptElsewhere".into(), json!(side.wire()));
+                        sandbox.insert("keptElsewhereName".into(), json!(side.name()));
+                    }
+                }
             }
             if let Some(inspected) = inspected.get(&row.name) {
                 sandbox.insert(
@@ -275,11 +302,17 @@ pub fn list_json() -> Result<()> {
             .map(|ran| inspected_from(&ran.stdout))
             .unwrap_or_default()
     };
+    let here = side::here();
     let mut records = HashMap::new();
+    let mut leases: Leases = HashMap::new();
     for row in rows.iter().filter(|row| !is_sidecar(&row.name, &rows)) {
         let Some((slug, _parked)) = row_slug(row, &rows) else {
             continue;
         };
+        let theirs = kept_by(inspected.get(&row.name), &here);
+        if let Some(keeper) = &theirs {
+            leases.insert(slug.to_string(), side::lease(slug, keeper));
+        }
         // A share an older ic saved becomes the record's desired shape here as anywhere; a record that cannot be
         // read lists the sandbox without what is waiting for it rather than failing the whole listing.
         if let Err(err) = desired::adopt_legacy(slug, &row.name) {
@@ -295,17 +328,24 @@ pub fn list_json() -> Result<()> {
                     .filter_map(Value::as_str)
                     .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
             };
-            crate::sandbox::fix::report::remember(
+            // Never a record made here for another side's sandbox: that side's home keeps it (record.rs).
+            crate::sandbox::fix::report::remember_unless_elsewhere(
                 slug,
                 value("CONNECT_TOKEN"),
                 value("PLATFORM_URL"),
+                theirs.as_ref(),
             );
         }
         if let Ok(record) = record::read(slug) {
             records.insert(slug.to_string(), record);
         }
     }
-    println!("{}", listing(&rows, &inspected, &records));
+    println!(
+        "{}",
+        listing(&rows, &inspected, &records, &leases, &|image| {
+            docker::image_exists(image)
+        })
+    );
     Ok(())
 }
 
@@ -326,13 +366,25 @@ mod tests {
         let probation = rows_from(
             "intentic-sandbox-work\trunning\timg:new\nintentic-sandbox-work.previous\texited\timg:old\n",
         );
-        let listed = listing(&probation, &HashMap::new(), &HashMap::new());
+        let listed = listing(
+            &probation,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &|_| true,
+        );
         assert_eq!(listed.as_array().map(Vec::len), Some(1));
         assert_eq!(listed[0]["slug"], "work");
         assert!(listed[0].get("parked").is_none());
 
         let interrupted = rows_from("intentic-sandbox-work.previous\texited\timg:old\n");
-        let listed = listing(&interrupted, &HashMap::new(), &HashMap::new());
+        let listed = listing(
+            &interrupted,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &|_| true,
+        );
         assert_eq!(listed[0]["slug"], "work");
         assert_eq!(listed[0]["parked"], true);
         assert_eq!(listed[0]["running"], false);
@@ -378,7 +430,7 @@ mod tests {
             },
         )]);
         assert_eq!(
-            listing(&rows, &inspected, &records),
+            listing(&rows, &inspected, &records, &HashMap::new(), &|_| true),
             json!([
                 {
                     "slug": "work",
@@ -411,34 +463,48 @@ mod tests {
 
     #[test]
     fn a_sandbox_the_other_side_of_this_computer_created_is_marked_as_kept_there() {
-        let rows = rows_from("intentic-sandbox-mine\trunning\timg:1\nintentic-sandbox-theirs\trunning\timg:1\nintentic-sandbox-old\trunning\timg:1\n");
-        let other = if super::super::side::here() == "windows" {
+        let rows = rows_from("intentic-sandbox-mine\trunning\timg:1\nintentic-sandbox-theirs\trunning\timg:1\nintentic-sandbox-old\trunning\timg:1\nintentic-sandbox-silent\trunning\timg:1\n");
+        let here = side::here();
+        let other = if here.platform == "windows" {
             "linux"
         } else {
             "windows"
         };
         let inspected: HashMap<String, Value> = [
-            ("intentic-sandbox-mine", json!({ "Config": { "Env": [format!("HOST_PLATFORM={}", super::super::side::here())] } })),
+            ("intentic-sandbox-mine", json!({ "Config": { "Env": [format!("HOST_PLATFORM={}", here.platform)] } })),
             ("intentic-sandbox-theirs", json!({ "Config": { "Env": [format!("HOST_PLATFORM={other}")] } })),
             ("intentic-sandbox-old", json!({ "Config": { "Env": ["PATH=/bin"] } })),
+            ("intentic-sandbox-silent", json!({ "Config": { "Env": [format!("HOST_PLATFORM={other}"), "HOST_ENV=gone".to_string()] } })),
         ]
         .into_iter()
         .map(|(name, value)| (name.to_string(), value))
         .collect();
-        let listed = listing(&rows, &inspected, &HashMap::new());
-        let kept = |slug: &str| {
+        let leases: Leases = HashMap::from([(
+            "silent".to_string(),
+            Some(Adoption {
+                from: Side::new(other, Some("gone")),
+                since: Some(5),
+            }),
+        )]);
+        let listed = listing(&rows, &inspected, &HashMap::new(), &leases, &|_| true);
+        let row = |slug: &str| {
             listed
                 .as_array()
                 .and_then(|all| all.iter().find(|row| row["slug"] == slug))
-                .and_then(|row| row.get("keptElsewhere").cloned())
+                .cloned()
+                .unwrap_or_default()
         };
-        assert_eq!(kept("mine"), None);
-        assert_eq!(kept("theirs"), Some(json!(other)));
+        assert_eq!(row("mine").get("keptElsewhere"), None);
+        assert_eq!(row("theirs")["keptElsewhere"], json!(other));
         assert_eq!(
-            kept("old"),
+            row("old").get("keptElsewhere"),
             None,
             "a container from before HOST_PLATFORM is everyone's"
         );
+        // A keeper gone silent: listed as this side's to run, naming whose it is.
+        assert_eq!(row("silent").get("keptElsewhere"), None);
+        assert_eq!(row("silent")["adoptedFrom"], json!(format!("{other}/gone")));
+        assert_eq!(row("silent")["keeperSilentSince"], json!(5));
     }
 
     #[test]

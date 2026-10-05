@@ -50,6 +50,13 @@ export type JournalledFire = z.infer<typeof JournalledFireSchema>;
 
 export type JournalEntry = JournalledTurn | JournalledFire;
 
+// How many boots may fail to put a parked turn's cards back before it is given up: a restore spends nothing, but one
+// refused at every boot (its conversation archived, a card the build can no longer read) was tried forever.
+export const MAX_PARKED_RESTORES = 3;
+
+/** Whether a parked turn has failed to come back as often as it may; the attempts count its failed restores. */
+export const parkedRestoreSpent = (entry: Pick<JournalEntry, "attempts">): boolean => entry.attempts >= MAX_PARKED_RESTORES;
+
 // Why a boot leaves an entry interrupted rather than re-running it: its attempt is spent, or it is too old to be wanted.
 export const resumeBars = (entry: JournalEntry, now: number): { readonly spent: boolean; readonly stale: boolean } => ({
     spent: entry.attempts >= MAX_RESUME_ATTEMPTS,

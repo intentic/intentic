@@ -75,6 +75,24 @@ pub fn remember(slug: &str, connect_token: Option<&str>, platform_url: Option<&s
     crate::record::remember_report(slug, &report_key(token), platform.as_deref());
 }
 
+/// The same for a reader that may be looking at another side's sandbox (`created_by`, off its env): a record that
+/// already exists here is kept current, but none is made for a sandbox another side keeps, whose own home holds its
+/// record. `ic sandbox list --json` and an attended `fix` made one for every container on the engine before
+/// (2026-10-05), so every side ended up holding records of every other side's sandboxes.
+pub fn remember_unless_elsewhere(
+    slug: &str,
+    connect_token: Option<&str>,
+    platform_url: Option<&str>,
+    created_by: Option<&crate::sandbox::side::Side>,
+) {
+    let theirs =
+        crate::sandbox::side::elsewhere(created_by, &crate::sandbox::side::here()).is_some();
+    if theirs && !crate::record::record_path(slug).exists() {
+        return;
+    }
+    remember(slug, connect_token, platform_url);
+}
+
 /// The same, off the NUL-framed env `docker::container_env_nul` reads.
 pub fn remember_from_env(slug: &str, env: &[u8]) {
     let text = String::from_utf8_lossy(env);

@@ -3,7 +3,7 @@ import { archiveVanishedWorktrees } from "../conversations/registry/vanished-wor
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
-import { runGitMaintenance } from "../git/ops/maintenance.js";
+import { stopCursorRuntimes } from "../runtimes/cursor/cursor-host.js";
 import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
 import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
@@ -11,6 +11,7 @@ import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-sess
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
 import { sweepAgedState, sweepStateAtBoot } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
+import { startHousekeeping } from "./boot-chores.js";
 
 // Recurring passes over the daemon's own state: none gates anything, every one may fail, each is scoped by role.
 
@@ -91,9 +92,6 @@ const startRootSweeps = (phase: BootPhase): void => {
     // Must run before any turn: panes inherit this daemon's mounts, and a pre-existing server can't be pinned later.
     void pinTmuxServer(logger).then(() => reportTmuxServerNamespace(logger));
     setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000).unref();
-    // Never awaited: it exists to run while nothing waits.
-    void runGitMaintenance(services.workspace, logger);
-    setInterval(() => void runGitMaintenance(services.workspace, logger), HOURLY_MS).unref();
     // Root-scoped: a guest sharing the history root prunes nothing.
     const pruneLogs = (): Promise<void> =>
         pruneLogFiles(logsRoot(config.historyRoot)).catch((error: unknown) => logger.warn({ err: error }, "logs: the retention sweep failed"));
@@ -155,9 +153,15 @@ export const startBootSweeps = (phase: BootPhase): void => {
 
     startRootSweeps(phase);
     startContainerSweeps(phase);
+    // Git maintenance among them, once an hour across restarts rather than at every boot.
+    startHousekeeping(phase);
     // Registered whether or not this role started it, so every role unwinds cleanly.
     shutdown.push(() => services.reaper.stop());
     // Turns' mounts: their browsers are this daemon's children, and a restart must not leave them driving pages nobody
     // can reach; no bearer minted by this boot answers once it is winding down.
     shutdown.push(() => services.turnMounts.closeAll());
+    // The shared `opencode serve` and the Cursor runtime processes are this daemon's children too, and outlived a clean
+    // stop before 2026-10-05 (the next boot's generation sweep is the backstop for an unclean one).
+    shutdown.push(() => void services.openCode.stop().catch(() => undefined));
+    shutdown.push(stopCursorRuntimes);
 };

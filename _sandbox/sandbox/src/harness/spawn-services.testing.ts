@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
@@ -13,6 +16,13 @@ import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
 // The daemon as a child spawn sees it (agent/subagents/children.ts): the settings it budgets by, the transcript a child
 // turn appends to, the fleet it may be placed onto, and the actors its records, cards and runs are held by. Anything
 // else names itself if a spawn reaches for it; the turn body is the suite's, bound with drivenBy (testing.ts).
+
+// One scratch history volume per suite process, made the first time a spawn needs one.
+let scratch: string | undefined;
+const scratchHistory = (): string => {
+    scratch ??= mkdtempSync(join(tmpdir(), "spawn-history-"));
+    return scratch;
+};
 
 // The fleet a spawn can be placed onto; empty by default, so a spawn places nothing and runs here.
 export interface FakeRunner {
@@ -44,6 +54,8 @@ export const spawnServices = (
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         config: unstubbed<Services["config"]>("config", {
+            // Where a paused child is written down for the next boot (paused-children.ts): a scratch volume of the suite's.
+            historyRoot: scratchHistory(),
             // Only the fields the scheduler's parity read touches; the rest throw by name instead of being invented.
             sandbox: unstubbed<Services["config"]["sandbox"]>("config.sandbox", {
                 image: "ghcr.io/intentic/sandbox:2",

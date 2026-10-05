@@ -75,7 +75,8 @@ interface WatchState {
     sweepFailures: number;
 }
 
-// One minute's watch. `sweeps` is whether this environment runs the sweep at all (the root does; see resident.ts).
+// One minute's watch. `sweeps` is whether this environment runs the sweep at all (every environment does, over its own
+// sandboxes; see resident.ts).
 export const runWatchRound = async (
     state: WatchState,
     records: readonly SwapRecord[],

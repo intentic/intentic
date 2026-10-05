@@ -39,7 +39,12 @@ uptimeS: number,
 /**
  * The container's pressure stall; null where the cgroup's pressure files cannot be read.
  */
-pressure: Pressure | null, };
+pressure: Pressure | null, 
+/**
+ * Where the ingress tunnel stands and how often it dropped (2026-10-05: a tunnel that dropped once a minute for
+ * four hours was counted nowhere). Absent from an older front.
+ */
+tunnel?: TunnelVitals, };
 
 /**
  * What the browser sends on a terminal socket, each a JSON text message.
@@ -50,3 +55,25 @@ export type TerminalClientMessage = { "type": "input", data: string, } | { "type
  * What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.
  */
 export type TerminalServerMessage = { "type": "grid", cols: number, rows: number, } | { "type": "exit", code: number, reason?: string, } | { "type": "pong" };
+
+/**
+ * Where the front's tunnel stands.
+ */
+export type TunnelState = "off" | "dialling" | "held" | "elsewhere" | "deleted";
+
+/**
+ * The ingress tunnel as the front holds it: the interactive socket, which every request can ride, and QUIC beside it.
+ */
+export type TunnelVitals = { state: TunnelState, 
+/**
+ * How many times a registered interactive socket dropped in the last hour.
+ */
+dropsLastHour: number, 
+/**
+ * Where the copy holding this sandbox's tunnel runs, as the edge named it, while `state` is `elsewhere`.
+ */
+holder?: string, 
+/**
+ * Whether a QUIC connection is held beside the socket.
+ */
+quic: boolean, };

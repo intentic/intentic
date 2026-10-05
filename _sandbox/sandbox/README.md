@@ -21,7 +21,10 @@ flowchart LR
   database, snapshots, logs) and sits outside `/work`.
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
   `/events` pushes file, git and fleet changes to the browser.
-- It registers with the platform at boot (`system/boot/announce.ts`) and goes quiet once accepted. A refusal or an
+- It registers with the platform at boot (`system/boot/announce.ts`), then announces again about once an hour
+  (jittered by a tenth) as its heartbeat, naming which copy it is: `instance` (the front's `INTENTIC_INSTANCE`, else an
+  id minted once per process), `host` (`HOST_LABEL`) and `os` (`HOST_ENV`, else `HOST_PLATFORM`). (2026-10-05) It
+  went quiet once accepted, so the platform's last-seen time was its registration. A refusal or an
   unreachable platform is retried for as long as the daemon runs, every few seconds for ten minutes and every five
   minutes after; only a deletion record (410) ends it. `/health`'s `announce` says which no it got (`reason`: `unknown`
   or `deleted`) and which database took it (`identity`). The owner's Reconnect (`POST /platform/relink`,
@@ -184,6 +187,34 @@ flowchart LR
   `/history/trash/conversations/` rather than deleting it, and removes it 14 days later; the blob sweep counts the
   records there as names still standing. It moves nothing on a boot whose database was made again, or while the
   database holds no conversation but directories remain: a lost database is not a fleet of orphans.
+- What a daemon run leaves behind is somebody's to end (2026-10-05). Every process the daemon starts carries its run's
+  generation (`INTENTIC_DAEMON_GEN`), and its detached children say what they are (`INTENTIC_DETACHED`: an isolation
+  anchor, a watch check, an edit rule's command, the sign-in Chromium; `seams/workload-stamp.ts`). The boot ends a
+  stamped process of an older run outside tmux unless it is meant to survive (X displays, openbox, VPN and exit
+  clients, dockerd, model servers; `system/boot/generation-sweep.ts`), and the reaper's minute sweep ends a watch check
+  or edit rule past its deadline. Pi turns are stamped with their conversation, a `one-shot` helper is live while its
+  parent is, a forced reap's SIGKILL follows even after a discard forgot the conversation, an armed watch no longer
+  shields a finished turn's processes, and a tmux session an agent made by hand goes with its conversation
+  (`system/boot/reaper.ts`). `opencode serve` stops after 30 idle minutes, and with the Cursor runtimes on shutdown.
+- A job an agent kept running for the person survives a restart and never expires (`agent/tools/jobs/background-jobs.ts`
+  `keptJobSessions`, adopted by the boot's session sweep), and archiving, purging or discarding a conversation cancels
+  the subagents it spawned (`agent/subagents/family-cancel.ts`); a paused child's end is kept in
+  `/history/paused-children.json` so a restart still tells its parent (2026-10-05).
+- A restart storm resumes nothing (2026-10-05): each boot is recorded in `/history/boot-history.json`
+  (`system/boot/boot-history.ts`), and the third within 30 minutes honours neither a resume ask (which `ic` now writes
+  before every restart) nor autoResumeOnRestart, says so in the log and on the settings-problems card, and leaves the
+  cut turns interrupted. A parked turn whose cards cannot come back is given up after three boots.
+  `/run/intentic/work.json` adds `bootedAt`, `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt`
+  beside `liveTurns` and `at`, so the host's keeper sees the storm too.
+- Housekeeping runs on one clock that remembers across restarts (`system/chore-clock.ts`, `/history/chore-clock.json`,
+  wired in `bootstrap/boot-chores.ts`; 2026-10-05): git maintenance hourly (a stale `maintenance.lock` is now named
+  and cleared instead of skipping silently), stale git locks and temp packs at boot and hourly with no git running,
+  `gc --prune=2.weeks.ago` daily while idle, parked `refs/agent/*` of conversations archived over 90 days ago daily
+  (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
+  conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
+  containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
+- The front's two sockets (`INTENTIC_FRONT_SOCKET`, `INTENTIC_NODE_SOCKET`) leave the daemon's environment once its
+  front door has dialled them, and the tmux server's, so no agent-spawned child inherits them (2026-10-05).
 
 - `agent/` runs one turn: its prompt, tools, provider seam and the pipeline in `agent/run/stream-agent.ts`.
   `conversations/` is what turns belong to: the actors, the registry, each conversation's worktree and its land.

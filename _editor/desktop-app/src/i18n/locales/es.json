@@ -40,7 +40,9 @@
         "stoppedInstallNothingElse": "Has detenido esta instalación. No hay nada más en marcha en este dispositivo.",
         "stopping": "Deteniendo…",
         "updateRestart": "Actualizar y reiniciar",
-        "yourSandbox": "tu sandbox"
+        "yourSandbox": "tu sandbox",
+        "newerIntenticInstalled": "Hay una versión más reciente de Intentic instalada. Reinicia Intentic para usarla.",
+        "restartIntentic": "Reiniciar Intentic"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Hacer siempre esto: no volver a preguntar",

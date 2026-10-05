@@ -32,7 +32,7 @@ import { fileSandboxSettingsStore } from "../../../../settings/settings-store.js
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../../../providers/provider-health.js";
 import { providerReadiness } from "../../../providers/provider-registry.js";
 import { PROVIDER_MODULES } from "../../../../runtimes/runtime-table.js";
-import { type JournalledTurn, sqliteTurnJournal, type TurnJournal } from "../turn-journal.js";
+import { type JournalledTurn, MAX_PARKED_RESTORES, sqliteTurnJournal, type TurnJournal } from "../turn-journal.js";
 import { turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
@@ -912,6 +912,19 @@ test("a restart the owner asked to pick up after resumes the cut turns with auto
     expect(prompts[0]).toContain("finish the report");
 });
 
+// 2026-10-05: a boot in a restart storm (system/boot/boot-history.ts) resumes nothing, the owner's ask included: each
+// resume could be what brings the next restart, so the cut turns stand interrupted on the record.
+test("a restart storm's boot resumes nothing, ask or setting, and leaves each cut turn interrupted on the record", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root, true);
+    await services.turnJournal.recordTurn(journalled("rs-storm", { sessionId: "s-partial" }));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, true, true);
+    expect(prompts).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+    expect((await fileTranscriptRecord(root).read("rs-storm")).at(-1)).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
+});
+
 // The transcript record is appended per settled turn, so an interrupted turn recorded nothing; boot reads the session's
 // streamed tail before consuming its journal entry, the last moment it can.
 test("an interrupted turn is recorded from the work it did, not from its prompt alone", async () => {
@@ -1267,6 +1280,29 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
     expect(prompts[0]).toMatch(/allowed Bash/i);
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-mq" });
     await settle(services, "pk-multi");
+});
+
+// 2026-10-05: a parked turn whose cards cannot come back (its conversation archived) was tried at every boot, for ever.
+test("a parked turn refused at every boot is given up once its tries are spent, and stands interrupted on the record", async () => {
+    const root = mkdtempSync(join(tmpdir(), "parked-"));
+    const { services, observed } = await parkedServices(root);
+    await services.turnJournal.recordTurn(parkedEntry("pk-spent", [questionRequest("r-spent")], { attempts: MAX_PARKED_RESTORES }));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+    expect(observed).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+    expect((await fileTranscriptRecord(root).read("pk-spent")).at(-1)).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
+});
+
+test("a parked turn its conversation refuses spends a try, and comes back at the next boot until the tries run out", async () => {
+    const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    await beginTurn(services.conversations, { conversationId: "pk-filed", isolated: true, prompt: "finish the report", profile: {} }, 1_000);
+    await services.conversations.send("pk-filed", { kind: "settle" }, 2_000).settled;
+    await services.agents.setArchived(["pk-filed"], 3_000);
+    await services.turnJournal.recordTurn(parkedEntry("pk-filed", [questionRequest("r-filed")]));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+    expect(observed).toEqual([]);
+    const [entry] = await services.turnJournal.list();
+    expect(entry).toMatchObject({ kind: "turn", attempts: 1 });
 });
 
 test("rehydration answers to none of the resume gates: spent, stale and toggle-off all still restore the card", async () => {

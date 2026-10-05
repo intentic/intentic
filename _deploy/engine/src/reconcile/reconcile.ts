@@ -1,9 +1,9 @@
 import type { ResourceNode } from "@intentic/graph";
-import { hashInputs, refKey } from "@intentic/graph";
+import { hashInputs, ownershipOf, refKey } from "@intentic/graph";
 import type { ResourceType } from "@intentic/resources";
 import type { DiffResult, Observed, Provider, ProviderContext, Providers } from "../provider.js";
 import type { OutputStore } from "../store.js";
-import type { ResolvedInputs } from "../types.js";
+import type { EngineConfig, ResolvedInputs } from "../types.js";
 
 export const requireProvider = (providers: Providers, type: ResourceType, id: string): Provider => {
     const provider = providers[type];
@@ -13,19 +13,32 @@ export const requireProvider = (providers: Providers, type: ResourceType, id: st
     return provider;
 };
 
-export const makeContext = (
-    id: string,
-    store: OutputStore,
-    env: Readonly<Record<string, string | undefined>>,
-    log: (message: string) => void,
-    inputsHash?: string,
-): ProviderContext => ({
-    env,
-    log,
+// What every provider call of one run shares: the env secrets resolve from, the log, and the owner to stamp.
+export interface RunScope {
+    readonly env: Readonly<Record<string, string | undefined>>;
+    readonly log: (message: string) => void;
+    readonly owner?: string;
+}
+
+export const runScope = (config: EngineConfig): RunScope => ({
+    env: config.env ?? process.env,
+    log: config.log ?? console.log,
+    ...(config.owner !== undefined ? { owner: config.owner } : {}),
+});
+
+export const makeContext = (id: string, store: OutputStore, scope: RunScope, inputsHash?: string): ProviderContext => ({
+    env: scope.env,
+    log: scope.log,
     id,
     output: (depId, name) => store.get(refKey(depId, name), { lenient: false }),
     ...(inputsHash !== undefined ? { inputsHash } : {}),
+    ...(scope.owner !== undefined ? { owner: scope.owner } : {}),
 });
+
+// Stops a run before its next mutation once its signal is aborted (the CLI aborts it when the apply lock is lost).
+export const checkSignal = (config: EngineConfig): void => {
+    config.signal?.throwIfAborted();
+};
 
 // How often a still-running provider read narrates itself.
 const READ_NARRATE_INTERVAL_MS = 15_000;
@@ -51,11 +64,31 @@ export const narratedRead = async (
     }
 };
 
-// The engine-level drift check, shared by plan and apply: a resource whose stamped inputs hash no longer
-// matches the node's serialized inputs is an update regardless of what the provider's diff would say,
-// authored config changed since the last stamped apply. Falls through to the provider's own diff (live
+// The ownership check on a live resource of the graph, for a provider that reads its owner stamp back: one this intent
+// stamped is fine; an unowned one (stamped before owners existed) is adopted by an update that re-stamps it; one
+// stamped by another intent is a conflict a person must settle, since applying would take it over.
+export const ownerDrift = (id: string, observed: Observed, owner: string | undefined): DiffResult | undefined => {
+    if (owner === undefined || observed.stampOwner === undefined) {
+        return undefined;
+    }
+    const ownership = ownershipOf(observed.stampOwner, owner);
+    if (ownership === "mine") {
+        return undefined;
+    }
+    if (ownership === "unowned") {
+        return { action: "update", reason: `adopting: stamp it as owned by intent ${owner}` };
+    }
+    throw new Error(
+        `"${id}" is live but stamped as owned by intent "${observed.stampOwner}", not this one ("${owner}"): two intents declare the same resource on a shared host or zone. Rename it in one of them, or remove it there first.`,
+    );
+};
+
+// The engine-level drift check, shared by plan and apply. Ownership first (above). Then a resource whose stamped
+// inputs hash no longer matches the node's serialized inputs is an update regardless of what the provider's diff
+// would say, authored config changed since the last stamped apply. Falls through to the provider's own diff (live
 // drift: image pins etc.) when no hash is stamped or it matches.
-export const decideDiff = (provider: Provider, node: ResourceNode, inputs: ResolvedInputs, observed: Observed): DiffResult =>
-    observed.stampHash !== undefined && observed.stampHash !== hashInputs(node.inputs)
+export const decideDiff = (provider: Provider, node: ResourceNode, inputs: ResolvedInputs, observed: Observed, owner?: string): DiffResult =>
+    ownerDrift(node.id, observed, owner) ??
+    (observed.stampHash !== undefined && observed.stampHash !== hashInputs(node.inputs)
         ? { action: "update", reason: "authored inputs changed since last stamped apply" }
-        : provider.diff(inputs, observed);
+        : provider.diff(inputs, observed));

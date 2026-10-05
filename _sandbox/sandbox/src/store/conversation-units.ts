@@ -61,8 +61,18 @@ export interface ConversationUnits {
     readonly remove: (ids: readonly string[]) => Promise<void>;
     // Moves the directories no registered conversation owns aside, and removes what was moved aside long enough ago.
     readonly sweep: (now: number) => Promise<UnitSweep>;
+    // Only the second half of `sweep`, under the same holds: what the hourly trash sweep runs
+    // (system/resources/storage/trash-sweep.ts), since moving directories aside is the boot's call alone. `quarantined`
+    // is always empty.
+    readonly prune: (now: number) => Promise<UnitSweep>;
+    // What the database answers about which conversations exist, for another sweep judging a directory by its owner
+    // (conversations/worktrees/orphan-checkouts.ts) with the same distrust of a database made again this boot.
+    readonly owners: UnitOwners;
     // The first `limit` files under one conversation's directory, relative to it, and how many there are in all.
-    readonly files: (id: string, limit: number) => Promise<{ readonly files: { readonly path: string; readonly bytes: number }[]; readonly total: number }>;
+    readonly files: (
+        id: string,
+        limit: number,
+    ) => Promise<{ readonly files: { readonly path: string; readonly bytes: number }[]; readonly total: number }>;
 }
 
 // Younger than this, a directory without a conversation is one being opened: a fork copies its transcript before the
@@ -106,18 +116,24 @@ const pruneQuarantine = async (historyRoot: string, now: number): Promise<string
     return pruned;
 };
 
+// Why nothing may be set aside or removed right now, given the directories standing; undefined when nothing holds.
+const holdOf = (owners: UnitOwners, ids: readonly string[]): UnitSweep["held"] => {
+    if (owners.recreated) {
+        return "database-recreated";
+    }
+    return ids.length > 0 && !owners.any() ? "database-empty" : undefined;
+};
+
 export const conversationUnits = (historyRoot: string, owners: UnitOwners): ConversationUnits => ({
     dir: (id) => conversationUnit(historyRoot, id),
     remove: async (ids) => {
         await Promise.all(ids.map((id) => rm(conversationUnit(historyRoot, id), { recursive: true, force: true })));
     },
     sweep: async (now) => {
-        if (owners.recreated) {
-            return { held: "database-recreated", quarantined: [], pruned: [] };
-        }
         const ids = await unitIds(historyRoot);
-        if (ids.length > 0 && !owners.any()) {
-            return { held: "database-empty", quarantined: [], pruned: [] };
+        const held = holdOf(owners, ids);
+        if (held !== undefined) {
+            return { held, quarantined: [], pruned: [] };
         }
         const quarantined: string[] = [];
         for (const id of ids) {
@@ -133,6 +149,11 @@ export const conversationUnits = (historyRoot: string, owners: UnitOwners): Conv
         }
         return { quarantined, pruned: await pruneQuarantine(historyRoot, now) };
     },
+    prune: async (now) => {
+        const held = holdOf(owners, await unitIds(historyRoot));
+        return held !== undefined ? { held, quarantined: [], pruned: [] } : { quarantined: [], pruned: await pruneQuarantine(historyRoot, now) };
+    },
+    owners,
     files: async (id, limit) => {
         const dir = conversationUnit(historyRoot, id);
         const found = (await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => []))

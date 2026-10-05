@@ -35,6 +35,22 @@ pub fn next_targets(
     (previous, kept, dropped)
 }
 
+/// The record with the target `image` taken off its rollback list: a pin whose image is gone, once a rollback has
+/// gone back to the release it was instead. Pure.
+pub fn without(record: &ChannelRecord, image: &str) -> ChannelRecord {
+    let mut rest = record
+        .targets()
+        .into_iter()
+        .filter(|pin| pin.image != image);
+    let previous = rest.next();
+    ChannelRecord {
+        previous: previous.as_ref().map(|pin| pin.image.clone()),
+        previous_version: previous.and_then(|pin| pin.version),
+        kept: rest.collect(),
+        ..record.clone()
+    }
+}
+
 /// Which kept build `to` names: a version, a whole image reference, or the short id a pin tag ends with. Pure.
 pub fn find_target<'a>(targets: &'a [Pin], to: &str) -> Option<&'a Pin> {
     targets.iter().find(|pin| {
@@ -55,14 +71,28 @@ pub fn is_version(value: &str) -> bool {
             .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
 }
 
-/// The image `ic sandbox rollback --to <to>` moves onto: a kept build when one matches, else the published image of
-/// that release (every release is also tagged by its version), which is pulled like any update.
-pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<String> {
+/// The target `ic sandbox rollback --to <to>` moves onto: a kept build when one matches, else the published image of
+/// that release (every release is also tagged by its version, and a published reference is taken as it is), which is
+/// pulled like any update.
+pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
     if let Some(pin) = find_target(&record.targets(), to) {
-        return Ok(pin.image.clone());
+        return Ok(pin.clone());
     }
     if is_version(to) {
-        return Ok(format!("{DEFAULT_REGISTRY}:{}", to.trim_start_matches('v')));
+        let version = to.trim_start_matches('v');
+        return Ok(Pin {
+            image: format!("{DEFAULT_REGISTRY}:{version}"),
+            version: Some(version.to_string()),
+        });
+    }
+    if to
+        .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
+        .is_some_and(|tag| !tag.is_empty())
+    {
+        return Ok(Pin {
+            image: to.to_string(),
+            version: None,
+        });
     }
     let kept: Vec<String> = record
         .targets()
@@ -75,14 +105,49 @@ pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<String> {
     );
 }
 
-/// The listing's `rollbackTargets` (DeviceSandboxSchema): newest first, as JSON.
-pub fn targets_json(record: &ChannelRecord) -> Value {
+/* A PIN DELETED OUTSIDE ic. The rollback tags are local-only (`intentic-sandbox-rollback-<slug>:<id>`), so a person's
+`docker image prune -a` takes the image and leaves the record naming it, and a rollback then "pulled" a tag no registry
+ever had (audit 2026-10, item 19). A pin whose image is gone is reached again through its version, since every release
+is also published under its version tag; a pin that names neither a local image nor a version is no way back at all,
+and is no longer offered as one. */
+
+/// What a rollback to `pin` would run: the pinned image while this machine holds it, a published reference as it is,
+/// else the release its version names; None when nothing can be had. Pure.
+pub fn reachable(pin: &Pin, on_machine: bool) -> Option<String> {
+    if on_machine || !crate::sandbox::connect::is_registryless(&pin.image) {
+        return Some(pin.image.clone());
+    }
+    pin.version
+        .as_deref()
+        .filter(|version| is_version(version))
+        .map(|version| format!("{DEFAULT_REGISTRY}:{}", version.trim_start_matches('v')))
+}
+
+/// The rollback targets that can still be had, newest first, each as what a rollback would run. Pure over `on_machine`.
+pub fn reachable_targets(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Vec<Pin> {
+    record
+        .targets()
+        .into_iter()
+        .filter_map(|pin| {
+            reachable(&pin, on_machine(&pin.image)).map(|image| Pin {
+                image,
+                version: pin.version,
+            })
+        })
+        .collect()
+}
+
+/// The listing's `rollbackTargets` (DeviceSandboxSchema): newest first, as JSON, only the ones a rollback can reach.
+/// `download` marks one whose pinned image is gone, which a rollback downloads by its version. Pure over `on_machine`.
+pub fn targets_json(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Value {
     Value::Array(
-        record
-            .targets()
+        reachable_targets(record, on_machine)
             .into_iter()
             .map(|pin| {
                 let mut entry = Map::new();
+                if !on_machine(&pin.image) {
+                    entry.insert("download".into(), json!(true));
+                }
                 entry.insert("image".into(), json!(pin.image));
                 if let Some(version) = pin.version {
                     entry.insert("version".into(), json!(version));
@@ -111,7 +176,10 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
             current.insert("version".into(), json!(version));
         }
         out.insert("current".into(), Value::Object(current));
-        out.insert("targets".into(), targets_json(&record));
+        out.insert(
+            "targets".into(),
+            targets_json(&record, &|image| docker::image_exists(image)),
+        );
         if let Some(until) = record.swap.as_ref().and_then(|swap| swap.until) {
             out.insert("probationUntil".into(), json!(until));
         }
@@ -129,27 +197,36 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
             .map(|version| format!(" ({version})"))
             .unwrap_or_default()
     );
-    let targets = record.targets();
+    let targets: Vec<(Pin, bool)> = record
+        .targets()
+        .into_iter()
+        .map(|pin| {
+            let here = docker::image_exists(&pin.image);
+            (pin, here)
+        })
+        .collect();
     if targets.is_empty() {
         println!(
             "          Nothing is kept to go back to yet: the next update keeps what runs now."
         );
     }
-    for (index, pin) in targets.iter().enumerate() {
+    for (index, (pin, here)) in targets.iter().enumerate() {
         let label = if index == 0 {
             "rollback goes back to"
         } else {
             "also kept"
         };
-        println!(
-            "          {label}: {}{}",
-            pin.version.as_deref().unwrap_or("an unnamed build"),
-            if docker::image_exists(&pin.image) {
-                String::new()
-            } else {
-                " — its image is gone from this machine, so it would be downloaded again"
-                    .to_string()
+        // A pin is a local tag no registry has: once its image is gone, only its version brings it back.
+        let note = match (here, reachable(pin, *here)) {
+            (true, _) => String::new(),
+            (false, Some(source)) => {
+                format!(" — its pinned image is gone from this machine, so {source} is downloaded instead")
             }
+            (false, None) => " — its image is gone from this machine and it names no version to download, so it can no longer be gone back to".to_string(),
+        };
+        println!(
+            "          {label}: {}{note}",
+            pin.version.as_deref().unwrap_or("an unnamed build"),
         );
     }
     if let Some(swap) = record
@@ -263,17 +340,75 @@ mod tests {
     #[test]
     fn a_version_nobody_kept_is_downloaded_by_its_release_tag_and_anything_else_is_refused() {
         let record = with_targets(Some(pin("pin:b", "1.2.0")), Vec::new());
-        assert_eq!(resolve_to(&record, "1.2.0").unwrap(), "pin:b");
+        assert_eq!(resolve_to(&record, "1.2.0").unwrap().image, "pin:b");
         assert_eq!(
             resolve_to(&record, "1.1.0").unwrap(),
+            pin("ghcr.io/intentic/sandbox:1.1.0", "1.1.0")
+        );
+        assert_eq!(
+            resolve_to(&record, "v1.1.0").unwrap().image,
             "ghcr.io/intentic/sandbox:1.1.0"
         );
         assert_eq!(
-            resolve_to(&record, "v1.1.0").unwrap(),
-            "ghcr.io/intentic/sandbox:1.1.0"
+            resolve_to(&record, "ghcr.io/intentic/sandbox:1.1.0")
+                .unwrap()
+                .image,
+            "ghcr.io/intentic/sandbox:1.1.0",
+            "what the listing offers for a pin whose image is gone"
         );
         let refused = resolve_to(&record, "yesterday").unwrap_err();
         assert!(refused.0.contains("Kept: 1.2.0"), "{}", refused.0);
+    }
+
+    #[test]
+    fn a_pin_gone_back_past_leaves_the_list_and_the_rest_move_up() {
+        let saved = with_targets(
+            Some(pin("pin:b", "1.2.0")),
+            vec![pin("pin:a", "1.1.0"), pin("pin:z", "1.0.0")],
+        );
+        let rest = without(&saved, "pin:b");
+        assert_eq!(rest.previous.as_deref(), Some("pin:a"));
+        assert_eq!(rest.previous_version.as_deref(), Some("1.1.0"));
+        assert_eq!(rest.kept, vec![pin("pin:z", "1.0.0")]);
+        assert_eq!(without(&saved, "pin:q"), saved);
+    }
+
+    #[test]
+    fn a_pin_whose_image_was_pruned_is_reached_through_its_version_or_not_offered() {
+        let local = pin("intentic-sandbox-rollback-x:0123456789ab", "1.2.0");
+        assert_eq!(
+            reachable(&local, true).as_deref(),
+            Some("intentic-sandbox-rollback-x:0123456789ab")
+        );
+        assert_eq!(
+            reachable(&local, false).as_deref(),
+            Some("ghcr.io/intentic/sandbox:1.2.0")
+        );
+        let nameless = Pin {
+            image: "intentic-sandbox-rollback-x:fedcba987654".to_string(),
+            version: None,
+        };
+        assert_eq!(reachable(&nameless, false), None);
+        // An older record named the registry's own tag: pulled as it is.
+        let published = Pin {
+            image: "ghcr.io/intentic/sandbox:1.1.0".to_string(),
+            version: None,
+        };
+        assert_eq!(
+            reachable(&published, false).as_deref(),
+            Some("ghcr.io/intentic/sandbox:1.1.0")
+        );
+        let record = with_targets(Some(local), vec![nameless]);
+        let gone = |_: &str| false;
+        assert_eq!(
+            targets_json(&record, &gone),
+            json!([{ "image": "ghcr.io/intentic/sandbox:1.2.0", "version": "1.2.0", "download": true }])
+        );
+        let all_here = |_: &str| true;
+        assert_eq!(
+            targets_json(&record, &all_here).as_array().map(Vec::len),
+            Some(2)
+        );
     }
 
     #[test]

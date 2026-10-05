@@ -1,6 +1,15 @@
 import { createHmac } from "node:crypto";
 import { type HostReport, type HostReportInput, HostReportSchema } from "@intentic/api-contract";
-import { HOST_REPORT_INTERVAL_MS, hostReportKey, hostReportOf, skipsWrite } from "./host-report.js";
+import {
+    HOST_REPORT_INTERVAL_MS,
+    HOST_REPORTERS,
+    hostReportKey,
+    hostReportOf,
+    hostReportsOf,
+    reporterOf,
+    skipsWrite,
+    withHostReport,
+} from "./host-report.js";
 
 const NOW = Date.parse(`2026-09-30T12:00:00.000Z`);
 
@@ -53,5 +62,61 @@ describe(`hostReportOf`, () => {
         expect(hostReportOf(undefined)).toBeNull();
         expect(hostReportOf({ stage: `checking`, at: `2026-09-30T12:00:00.000Z` })).toBeNull();
         expect(hostReportOf(`not a report`)).toBeNull();
+    });
+});
+
+/* ONE SLOT PER REPORTER (2026-10-05): the Windows agent and the WSL agent on one PC used to overwrite each other. */
+describe(`reports per reporter`, () => {
+    const windows: HostReport = {
+        source: `agent`,
+        machine: `ROG`,
+        os: `windows`,
+        stage: `done`,
+        outcome: `healthy`,
+        checks: [],
+        at: `2026-10-05T12:00:00.000Z`,
+    };
+    const wsl: HostReport = {
+        source: `agent`,
+        machine: `rog`,
+        os: `wsl`,
+        env: `Ubuntu`,
+        stage: `done`,
+        outcome: `fixed`,
+        checks: [],
+        at: `2026-10-05T12:01:00.000Z`,
+    };
+
+    it(`keeps the newest report of each machine and environment, and answers the newest of them first`, () => {
+        const both = withHostReport(withHostReport(null, windows), wsl);
+        expect(hostReportsOf(both)).toEqual([wsl, windows]);
+        expect(hostReportOf(both)).toEqual(wsl);
+        // The same reporter again replaces its own slot and nobody else's.
+        const later = { ...windows, outcome: `needs-you` as const, at: `2026-10-05T12:02:00.000Z` };
+        expect(hostReportsOf(withHostReport(both, later))).toEqual([later, wsl]);
+    });
+
+    it(`tells the reporters apart by OS and environment, not by how the machine's name is cased`, () => {
+        expect(reporterOf(windows)).not.toBe(reporterOf(wsl));
+        expect(reporterOf({ ...windows, machine: `rog` })).toBe(reporterOf(windows));
+        expect(reporterOf({ ...wsl, env: `Debian` })).not.toBe(reporterOf(wsl));
+    });
+
+    it(`keeps no more than ${HOST_REPORTERS} reporters, dropping the one silent longest`, () => {
+        let stored: unknown = null;
+        for (const [index, machine] of [`a`, `b`, `c`, `d`].entries()) {
+            stored = withHostReport(stored, { ...windows, machine, at: `2026-10-05T12:0${index}:00.000Z` });
+        }
+        expect(hostReportsOf(stored).map((report) => report.machine)).toEqual([`d`, `c`, `b`]);
+    });
+
+    it(`reads a row written before reporters had slots as its one reporter, and keeps it beside the next`, () => {
+        expect(hostReportsOf(windows)).toEqual([windows]);
+        expect(hostReportsOf(withHostReport(windows, wsl))).toEqual([wsl, windows]);
+    });
+
+    it(`carries the upkeep counts an ic with an upkeep pass sends`, () => {
+        const upkeep = { found: 4, fixed: 3, skipped: 1, kinds: { pairing: 2, volume: 2 } };
+        expect(hostReportsOf(withHostReport(null, { ...windows, upkeep }))[0]?.upkeep).toEqual(upkeep);
     });
 });

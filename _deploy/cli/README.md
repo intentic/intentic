@@ -14,15 +14,18 @@ flowchart LR
 
 - Four route groups in `src/app.ts`: `deploy` (the tool itself), `sandbox` (prints the canonical `docker run` for a sandbox), `tunnel host` (a host's own Cloudflare SSH tunnel) and `scaffold` (a pnpm + turbo monorepo and its apps).
 - A workspace has separate git repos: `intent/` holds `deploy.config.ts`, `desired-state/` holds the resolved `desired-state.json`, `.env` and generated secrets. `deploy init` scaffolds them; every other command reads these default paths from cwd.
-- `deploy resolve` reaches the network only to discover the Cloudflare zone from the API token. `plan` and `apply` never re-resolve; they work from the baked artifact.
-- `deploy apply` takes a lock on every host, generates missing secrets, applies authored renames, runs the reconcile loop, then prunes what the previous artifact declared and this one does not. Deletions wait for `--yes`.
-- `deploy adopt` pushes both repos to the provisioned Forgejo and installs pipelines, so later pushes resolve and apply in CI with this CLI's own version.
+- `deploy resolve` reaches the network only to discover the Cloudflare zone from the API token. `plan` and `apply` never re-resolve; they work from the baked artifact. Resolve keeps the artifact's `owner` id, the intent's mark on everything it deploys, and mints one only when neither the artifact nor the baseline has it; the CI pipeline never mints (2026-10-05).
+- `deploy apply` takes a lock on every host, generates missing secrets, applies authored renames, runs the reconcile loop, then prunes what the baseline holds and this artifact does not, this intent's own orphans, and its leftovers on hosts a migration retired. Deletions wait for `--yes`. A heartbeat renews the lock while the run lasts and stops it if the lock is lost (2026-10-05).
+- The prune baseline, `.last-applied.json` beside the artifact (in CI, the `intentic-applied` tag's message), is a record, not a copy (2026-10-05). It advances with every apply, even while deletions wait for `--yes`, and keeps removed nodes in `pendingDeletion` until a delete succeeds, and retired hosts until one scans clean. A baseline that cannot be read stops the run before it changes anything. A missing one is a first apply only when nothing live carries this intent's owner stamp; otherwise it was lost, and `--first-apply` is the person's way through.
+- `deploy plan --check` is the drift check: it changes nothing and fails on anything apply would change or delete, and on unowned resources or a scan that could not look everywhere.
+- `deploy adopt` pushes both repos to the provisioned Forgejo, seeds the `intentic-applied` tag with the local baseline, and installs pipelines, so later pushes resolve and apply in CI with this CLI's own version. The apply pipeline also runs the drift check daily.
 
 ## Key files
 
 - [src/app.ts](src/app.ts) — the command tree and the one-line error format.
 - [src/resolve/resolve.ts](src/resolve/resolve.ts) — imports the config in place and discovers the Cloudflare zone.
 - [src/apply/apply.command.ts](src/apply/apply.command.ts) — lock, secrets, moves, reconcile loop, prune.
+- [src/apply/baseline.ts](src/apply/baseline.ts) — the prune baseline record, and telling a first apply from a lost baseline.
 - [src/lib/artifact.ts](src/lib/artifact.ts) — default paths, artifact read/write and `.env` loading.
 - [src/pipelines/adopt-pipelines.ts](src/pipelines/adopt-pipelines.ts) — the CI workflows and repo secrets `adopt` installs.
 

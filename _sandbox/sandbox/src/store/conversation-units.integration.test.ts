@@ -109,6 +109,25 @@ test("a database made again this boot moves nothing, and removes nothing set asi
     expect(await readdir(quarantineRoot(root))).toEqual(["orphan"]);
 });
 
+test("prune removes what was set aside past its keeping and moves nothing aside, under the sweep's own holds", async () => {
+    const root = await historyRoot();
+    const now = Date.now();
+    await unitAged(root, "owned", now, 2 * HOUR_MS);
+    await unitAged(root, "orphan", now, 2 * HOUR_MS);
+    await conversationUnits(root, owning(["owned"])).sweep(now);
+    await unitAged(root, "stranger", now, 2 * HOUR_MS);
+    const later = now + QUARANTINE_MS + 1;
+
+    expect(await conversationUnits(root, owning(["owned"], true)).prune(later)).toEqual({ held: "database-recreated", quarantined: [], pruned: [] });
+    expect(await conversationUnits(root, owning([])).prune(later)).toEqual({ held: "database-empty", quarantined: [], pruned: [] });
+    expect(await readdir(quarantineRoot(root))).toEqual(["orphan"]);
+    expect(await conversationUnits(root, owning(["owned"])).prune(now + QUARANTINE_MS)).toEqual({ quarantined: [], pruned: [] });
+    expect(await conversationUnits(root, owning(["owned"])).prune(later)).toEqual({ quarantined: [], pruned: ["orphan"] });
+    expect(await readdir(quarantineRoot(root))).toEqual([]);
+    // The unowned directory standing is the boot's to move, not prune's.
+    expect((await readdir(conversationsRoot(root))).toSorted()).toEqual(["owned", "stranger"]);
+});
+
 test("a volume with no units yet sweeps nothing rather than failing boot", async () => {
     expect(await conversationUnits(await historyRoot(), owning([])).sweep(Date.now())).toEqual({ quarantined: [], pruned: [] });
 });

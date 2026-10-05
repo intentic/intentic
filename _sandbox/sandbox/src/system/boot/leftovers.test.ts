@@ -110,3 +110,30 @@ test("an ancestry cycle procfs should not be able to show us still terminates", 
     ];
     expect(leftoverProcesses(cyclic, policy()).map((entry) => entry.pid)).toEqual([500]);
 });
+
+// 2026-10-05: a helper call is stamped `one-shot`, which nothing reports live, so one that ran past the grace was
+// SIGTERMed mid-answer. It is live while its parent is: the daemon, or the helper above it.
+test("a one-shot helper is live while its parent is, and a leftover once orphaned", () => {
+    const helper: SweptProcess[] = [
+        { pid: 800, ppid: 50, pgrp: 7, owner: "one-shot" },
+        { pid: 801, ppid: 800, pgrp: 7, owner: "one-shot" },
+    ];
+    expect(leftoverProcesses(helper, policy({ selfPid: 50 }))).toEqual([]);
+    const orphaned: SweptProcess[] = [{ pid: 801, ppid: 1, pgrp: 7, owner: "one-shot" }];
+    expect(leftoverProcesses(orphaned, policy({ selfPid: 50 })).map((entry) => entry.pid)).toEqual([801]);
+    // Without the daemon's pid the rule has nothing to go by, and the helper is judged as before.
+    expect(leftoverProcesses(helper, policy()).map((entry) => entry.pid)).toEqual([800, 801]);
+});
+
+// A session somebody made by hand is never closed by anything, so its pane held a finished turn's process forever.
+test("an untagged session's pane shields a stamped process for a day, not for ever", () => {
+    const old: SweptProcess[] = [{ pid: 600, ppid: 1, pgrp: 7, owner: "conv-1", session: 601, ageMs: 25 * 3_600_000 }];
+    const young: SweptProcess[] = [{ pid: 600, ppid: 1, pgrp: 7, owner: "conv-1", session: 601, ageMs: 3_600_000 }];
+    const unknownAge: SweptProcess[] = [{ pid: 600, ppid: 1, pgrp: 7, owner: "conv-1", session: 601 }];
+    const untagged = policy({ untaggedPanePids: new Set([601]) });
+    expect(leftoverProcesses(old, untagged).map((entry) => entry.pid)).toEqual([600]);
+    expect(leftoverProcesses(young, untagged)).toEqual([]);
+    expect(leftoverProcesses(unknownAge, untagged)).toEqual([]);
+    // The sandbox's own and tagged sessions shield whatever its age.
+    expect(leftoverProcesses(old, policy({ panePids: new Set([601]) }))).toEqual([]);
+});

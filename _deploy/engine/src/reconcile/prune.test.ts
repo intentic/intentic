@@ -59,7 +59,7 @@ test("a removed node whose provider has no delete is reported as skipped, never 
     const outcome = await prune(previous, current, config({ host: keptHost, "cf-route": noDelete }));
 
     expect(outcome.deleted).toEqual([]);
-    expect(outcome.skipped).toEqual([{ id: "route", type: "cf-route" }]);
+    expect(outcome.skipped).toEqual([{ id: "route", type: "cf-route", reason: "no-delete" }]);
 });
 
 test("a removed node with a protect:true input is skipped, even though its provider can delete", async () => {
@@ -72,7 +72,7 @@ test("a removed node with a protect:true input is skipped, even though its provi
     const outcome = await prune(previous, current, config({ host: keptHost, postgres: deletable(deleted) }));
 
     expect(deleted).toEqual([]);
-    expect(outcome.skipped).toEqual([{ id: "db", type: "postgres" }]);
+    expect(outcome.skipped).toEqual([{ id: "db", type: "postgres", reason: "protected" }]);
 });
 
 test("is a no-op when nothing was removed", async () => {
@@ -115,4 +115,92 @@ test("pruning to an empty graph (destroy) resolves a removed node's refs from ot
         { id: "repo", type: "repo" },
         { id: "git", type: "forgejo" },
     ]);
+});
+
+// The audit's "pruned node with a generated secret" failure: a removed node's own generated secret is no longer in the
+// env (only the current graph's secrets are loaded), and resolving it used to throw "missing secret env var", failing
+// every later apply. Deleting needs what identifies the resource, not the password its creation set.
+test("a removed node whose creation-only secret is gone from the env is still deleted", async () => {
+    const deleted: Array<{ id: string; username: unknown }> = [];
+    const users: Provider = {
+        read: async () => undefined,
+        diff: () => ({ action: "noop" }),
+        apply: async () => ({}),
+        delete: async (inputs, ctx) => {
+            deleted.push({ id: ctx.id, username: inputs["username"] });
+        },
+    };
+    const previous = compile(
+        toNodeMap([
+            host,
+            {
+                id: "user-ann",
+                type: "komodo-user",
+                inputs: { username: "ann", password: { kind: "secret", source: "generated", key: "ANN_PASSWORD" } },
+                explicitDependsOn: ["host"],
+            },
+        ]),
+    );
+    const current = compile(toNodeMap([host]));
+
+    const outcome = await prune(previous, current, config({ host: keptHost, "komodo-user": users }));
+
+    expect(deleted).toEqual([{ id: "user-ann", username: "ann" }]);
+    expect(outcome.deleted).toEqual([{ id: "user-ann", type: "komodo-user" }]);
+});
+
+test("a removed node whose delete fails for want of a secret is skipped as missing-secret, naming it, and the rest still prune", async () => {
+    const deleted: string[] = [];
+    const needsToken: Provider = {
+        read: async () => undefined,
+        diff: () => ({ action: "noop" }),
+        apply: async () => ({}),
+        delete: async (inputs) => {
+            if (inputs["apiToken"] !== "real") {
+                throw new Error("HTTP 401");
+            }
+        },
+    };
+    const previous = compile(
+        toNodeMap([
+            host,
+            {
+                id: "route",
+                type: "cf-route",
+                inputs: { hostname: "a", apiToken: { kind: "secret", source: "env", key: "OLD_TOKEN" } },
+                explicitDependsOn: ["host"],
+            },
+            { id: "deploy", type: "deployment", inputs: {}, explicitDependsOn: ["host"] },
+        ]),
+    );
+    const current = compile(toNodeMap([host]));
+
+    const outcome = await prune(previous, current, config({ host: keptHost, "cf-route": needsToken, deployment: deletable(deleted) }));
+
+    expect(deleted).toEqual(["deploy"]);
+    expect(outcome.skipped).toEqual([{ id: "route", type: "cf-route", reason: "missing-secret", missing: ["OLD_TOKEN"] }]);
+});
+
+test("a delete failure with every secret set still fails the prune", async () => {
+    const failing: Provider = {
+        read: async () => undefined,
+        diff: () => ({ action: "noop" }),
+        apply: async () => ({}),
+        delete: async () => {
+            throw new Error("HTTP 500");
+        },
+    };
+    const previous = compile(toNodeMap([host, { id: "route", type: "cf-route", inputs: { hostname: "a" }, explicitDependsOn: ["host"] }]));
+    await expect(prune(previous, compile(toNodeMap([host])), config({ host: keptHost, "cf-route": failing }))).rejects.toThrow("HTTP 500");
+});
+
+test("an aborted signal stops prune before its next delete", async () => {
+    const deleted: string[] = [];
+    const controller = new AbortController();
+    controller.abort(new Error("apply lock lost"));
+    const previous = compile(toNodeMap([host, { id: "route", type: "cf-route", inputs: { hostname: "a" }, explicitDependsOn: ["host"] }]));
+    await expect(
+        prune(previous, compile(toNodeMap([host])), { ...config({ host: keptHost, "cf-route": deletable(deleted) }), signal: controller.signal }),
+    ).rejects.toThrow("apply lock lost");
+    expect(deleted).toEqual([]);
 });

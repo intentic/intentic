@@ -1,4 +1,4 @@
-import type { EngineEvent } from "@intentic/engine";
+import type { EngineEvent, SkipReason } from "@intentic/engine";
 
 // How a command renders: prose (default), one JSON document, or a live NDJSON event stream. Selected by INTENTIC_OUTPUT
 // so a driving backend can set it once.
@@ -83,7 +83,12 @@ export const columns = (rows: readonly (readonly string[])[]): string[] => {
             widths[at] = Math.max(widths[at] ?? 0, [...cell].length);
         }
     }
-    return rows.map((row) => row.map((cell, at) => (at === row.length - 1 ? cell : cell.padEnd(widths[at] ?? 0))).join("  ").trimEnd());
+    return rows.map((row) =>
+        row
+            .map((cell, at) => (at === row.length - 1 ? cell : cell.padEnd(widths[at] ?? 0)))
+            .join("  ")
+            .trimEnd(),
+    );
 };
 
 // The seam every command renders through: `onEvent`/`log` feed engine events and free-form logs, `text` is a human
@@ -101,6 +106,13 @@ export interface Output {
 // better unquoted.
 const named = (id: string, type: string): string => (id === type ? id : `${id} (${type})`);
 
+// Why prune left a resource in place, as the rest of the sentence.
+const SKIP_WHY: Readonly<Record<SkipReason, string>> = {
+    "no-delete": "removed from desired state, but its provider has no delete",
+    protected: "it is protected; remove it by hand if it is no longer wanted",
+    "missing-secret": "its delete needs a secret that is no longer set; it stays pending until the secret is back",
+};
+
 // Renders lifecycle events as text. Apply-phase node/readiness events print live progress (else the terminal sits blank
 // for minutes); plan-phase stays silent, plan.command prints its own table.
 const eventText = (event: EngineEvent): string | undefined => {
@@ -115,12 +127,15 @@ const eventText = (event: EngineEvent): string | undefined => {
         return event.state === "waiting" ? `waiting for ${event.id} at ${event.url}` : `${event.id} ready`;
     }
     if (event.kind === "prune") {
-        return event.state === "deleted"
-            ? `deleted ${named(event.id, event.type)}`
-            : `left ${named(event.id, event.type)} in place: removed from desired state, but its provider has no delete`;
+        if (event.state === "deleted") {
+            return `deleted ${named(event.id, event.type)}`;
+        }
+        return `left ${named(event.id, event.type)} in place: ${SKIP_WHY[event.reason ?? "no-delete"]}`;
     }
     if (event.kind === "orphan") {
-        return `orphan ${named(event.id, event.type)}: exists on the host but is not in the desired graph`;
+        return event.ownership === "unowned"
+            ? `unowned ${named(event.id, event.type)}: stamped without an owner and not in the desired graph; adopt it by declaring it, or remove it by hand`
+            : `orphan ${named(event.id, event.type)}: exists on the host but is not in the desired graph`;
     }
     return undefined;
 };

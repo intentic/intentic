@@ -18,16 +18,22 @@ flowchart LR
   either. `build-win-launcher.sh` reads the PE header of every build and fails unless the subsystem is WINDOWS.
 - Usage: `intentic-launch --log <file> [--wait] -- <program> [args...]`. It prints the child's pid and exits. With
   `--wait` it lives as long as the child and exits with the child's code, which is what lets a Task Scheduler task
-  supervise the agent.
+  supervise the agent. Only the child's own 0 is a success: a code that does not fit a byte (a crash's NTSTATUS) and a
+  wait that failed exit non-zero, so a dead agent never reads as a finished one.
+- With `--wait` the child also dies with the launcher (2026-10-05): it goes into a job object that is killed when the
+  launcher's handle to it closes, which is when the launcher ends, however it ends. Before, a launcher ended from Task
+  Scheduler left the agent running unsupervised, and the next watchdog start found its pidfile held and left again. The
+  job allows silent breakaway, so what the agent starts to outlive itself (`ic` mid-swap, Mutagen's daemon, an upgrade)
+  is never part of it. A job that cannot be made is noted in the log and the agent runs as before.
 - It opens the log for appending and hands it to the child as stdout and stderr, rolling it to `<file>.1` at the
   same size as `LOG_ROTATE_BYTES` in [local-agent](../local-agent). A failed start is written into that log.
 - Ships as the release asset `intentic-launch-windows-<arch>.exe`; [`intentic-machine`](../machine) keeps a copy
   beside its own binary, which is where `local-agent` looks for it. On any other OS it prints a note and exits
-  non-zero. It uses only std, which keeps the download small.
+  non-zero. It uses only std (and three kernel32 calls declared by hand for the job), which keeps the download small.
 
 ## Key files
 
-- [src/main.rs](src/main.rs) — argument parsing, the windowless spawn, log rotation and the tests.
+- [src/main.rs](src/main.rs) — argument parsing, the windowless spawn, log rotation, the `--wait` job and the tests.
 - [Cargo.toml](Cargo.toml) — no dependencies, and a release profile tuned for size.
 - [../../_tools/scripts/build/build-win-launcher.sh](../../_tools/scripts/build/build-win-launcher.sh) — cross-compiles, checks the PE subsystem and signs.
 

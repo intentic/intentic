@@ -1,4 +1,4 @@
-import { resolveInputs } from "./resolve-inputs.js";
+import { MISSING_SECRET, resolveInputs } from "./resolve-inputs.js";
 import { createStore, PENDING } from "./store.js";
 
 const env = { TOKEN: "secret-value" };
@@ -43,4 +43,13 @@ test("a missing output ref: strict throws, lenient yields PENDING", () => {
 test("a literal {kind:'ref'} object is NOT treated as a ref (serialized form only)", () => {
     const out = resolveInputs({ x: { kind: "ref", resourceId: "host" } }, createStore(), env, { lenient: false });
     expect(out["x"]).toEqual({ kind: "ref", resourceId: "host" });
+});
+
+test("an unset secret throws, unless the caller collects missing secrets: then it reads as MISSING_SECRET and is named", () => {
+    const inputs = { password: { $secret: { source: "generated", key: "GONE" } }, name: "ann" } as const;
+    expect(() => resolveInputs(inputs, createStore(), env, { lenient: true })).toThrow('missing secret env var "GONE"');
+    const missing = new Set<string>();
+    const out = resolveInputs(inputs, createStore(), env, { lenient: true, missingSecrets: missing });
+    expect(out).toEqual({ password: MISSING_SECRET, name: "ann" });
+    expect([...missing]).toEqual(["GONE"]);
 });

@@ -4,8 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pairings } from "../../peers/enrollment.js";
 import {
+    deviceReports,
+    ENROLLMENT_RETENTION_MS,
     enrolledFleet,
     enrollSyncKey,
+    keyMaterialOf,
+    revokeSyncEnrollmentsOf,
+    withoutStale,
     isFileSyncEnrolled,
     isKeyEnrolled,
     recordDeviceReport,
@@ -347,5 +352,177 @@ describe("enrollment store", () => {
         order.push("answered");
         stop();
         expect(order).toEqual(["attached", "answered"]);
+    });
+});
+
+// (2026-10-05) THE TWO SIDES OF ONE PC, AND THE KEYS NOBODY USES ANY MORE. A Windows PC's Windows side and its WSL
+// distro each enroll a key of their own, and WSL hands the distro the PC's hostname, so both arrived under one name: their
+// reports overwrote each other and revoking one by name revoked both. And `seenAt` was never read, so every key a machine
+// ever enrolled stayed authorized for good.
+describe("enrollments of one PC's environments, and their retention", () => {
+    let history: string;
+    beforeEach(() => {
+        history = mkdtempSync(join(tmpdir(), "sync-history-"));
+        process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-enroll-"));
+    });
+
+    // Two keys of one computer, both named by its hostname, as every agent before `<hostname>-<environment>` named them.
+    const windowsKey = "ssh-ed25519 AAAAwindowsside ROG";
+    const wslKey = "ssh-ed25519 AAAAwslside ROG";
+    const enrolled = async (result: Awaited<ReturnType<typeof enrollSyncKey>>): Promise<string> => {
+        if ("locked" in result) {
+            throw new Error(`expected a token, got locked by ${result.locked}`);
+        }
+        return result.syncToken;
+    };
+    const report = (machineId: string | undefined, distro: string | undefined, folder: string) => ({
+        ...(machineId === undefined ? {} : { machineId }),
+        hostname: "ROG",
+        os: "linux",
+        ...(distro === undefined ? {} : { wsl: { distro } }),
+        pairings: [{ sandboxId: "sandbox-abc", mode: "sync" as const, localDir: folder }],
+        ports: [],
+        agent: { running: true },
+        capturedAt: 1,
+    });
+
+    it("tells two environments of one PC apart by name once each says which it is, and keeps a report for each", async () => {
+        const windows = await enrolled(
+            await enrollSyncKey({
+                historyRoot: history,
+                key: windowsKey,
+                mode: "sync",
+                takeover: false,
+                machineId: "m-rog-0001",
+                environment: "native",
+            }),
+        );
+        const wsl = await enrolled(
+            await enrollSyncKey({
+                historyRoot: history,
+                key: wslKey,
+                mode: "mirror",
+                takeover: false,
+                machineId: "m-rog-0001",
+                environment: "wsl:Ubuntu",
+            }),
+        );
+        // The native side keeps the hostname (setup's own card is placed by it); the distro takes its name after it.
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine)).toEqual(["ROG", "ROG-Ubuntu"]);
+
+        await recordDeviceReport(history, windows, report("m-rog-0001", undefined, "C:\\code"));
+        await recordDeviceReport(history, wsl, report("m-rog-0001", "Ubuntu", "/home/ada/code"));
+        const filed = await deviceReports(history);
+        expect(filed.map((entry) => [entry.machine, entry.report.pairings[0]?.localDir]).toSorted()).toEqual([
+            ["ROG", "C:\\code"],
+            ["ROG-Ubuntu", "/home/ada/code"],
+        ]);
+
+        // Revoking one by the name its row shows leaves the other enrolled and syncing.
+        expect(await revokeEnrollmentByMachine(history, "ROG-Ubuntu")).toBe(true);
+        expect(await verifySyncToken(history, windows, true)).toEqual({ kind: "enrolled", id: "ROG", card: "ROG" });
+        expect(await verifySyncToken(history, wsl, true)).toEqual({ kind: "unknown" });
+    });
+
+    it("sorts out two enrollments made before either could say, once their reports say which environment each is", async () => {
+        const windows = await enrolled(await enrollSyncKey({ historyRoot: history, key: windowsKey, mode: "sync", takeover: false }));
+        const wsl = await enrolled(await enrollSyncKey({ historyRoot: history, key: wslKey, mode: "mirror", takeover: false }));
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine)).toEqual(["ROG", "ROG"]);
+        // Each one's report is its own even while they share a name: filed under the key, not the name.
+        await recordDeviceReport(history, windows, report(undefined, undefined, "C:\\code"));
+        await recordDeviceReport(history, wsl, report(undefined, undefined, "/home/ada/code"));
+        expect((await deviceReports(history)).map((entry) => entry.report.pairings[0]?.localDir).toSorted()).toEqual(["/home/ada/code", "C:\\code"]);
+
+        await recordDeviceReport(history, wsl, report("m-rog-0001", "Ubuntu", "/home/ada/code"));
+        await recordDeviceReport(history, windows, report("m-rog-0001", undefined, "C:\\code"));
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine)).toEqual(["ROG", "ROG-Ubuntu"]);
+    });
+
+    it("reads a key enrolled again under another comment, or the same install under a new key, as the same enrollment", async () => {
+        await enrollSyncKey({ historyRoot: history, key: windowsKey, mode: "sync", takeover: false });
+        // The same key named `<hostname>-<environment>`, as a new agent names it: not a second machine holding sync.
+        await enrolled(await enrollSyncKey({ historyRoot: history, key: `${keyMaterialOf(windowsKey)} ROG-windows`, mode: "sync", takeover: false }));
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine)).toEqual(["ROG-windows"]);
+
+        // A side that made itself a new key replaces its own record rather than being locked out by it.
+        await enrollSyncKey({
+            historyRoot: history,
+            key: "ssh-ed25519 AAAAone laptop",
+            mode: "mirror",
+            takeover: false,
+            machineId: "m-laptop-0001",
+            environment: "native",
+        });
+        await enrolled(
+            await enrollSyncKey({
+                historyRoot: history,
+                key: "ssh-ed25519 AAAAtwo laptop",
+                mode: "mirror",
+                takeover: false,
+                machineId: "m-laptop-0001",
+                environment: "native",
+            }),
+        );
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine)).toEqual(["ROG-windows", "laptop"]);
+        const authorized = await readFile(join(process.env["HOME"] ?? "", ".ssh", "authorized_keys"), "utf8");
+        expect(authorized).not.toContain("AAAAone");
+        expect(authorized).toContain("AAAAtwo");
+    });
+
+    it("revokes the sync keys of exactly the installs a removed card held, and no enrollment that never said which it is", async () => {
+        await enrollSyncKey({ historyRoot: history, key: windowsKey, mode: "sync", takeover: false, machineId: "m-rog-0001", environment: "native" });
+        await enrollSyncKey({
+            historyRoot: history,
+            key: wslKey,
+            mode: "mirror",
+            takeover: false,
+            machineId: "m-rog-0001",
+            environment: "wsl:Ubuntu",
+        });
+        await enrollSyncKey({
+            historyRoot: history,
+            key: "ssh-ed25519 AAAAomen omen",
+            mode: "mirror",
+            takeover: false,
+            machineId: "m-omen-0001",
+            environment: "native",
+        });
+        await enrollSyncKey({ historyRoot: history, key: "ssh-ed25519 AAAAold ROG", mode: "mirror", takeover: false });
+
+        expect(
+            await revokeSyncEnrollmentsOf(history, [
+                { machineId: "m-rog-0001", environment: "native" },
+                { machineId: "m-rog-0001", environment: "wsl:Ubuntu" },
+            ]),
+        ).toBe(2);
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine).toSorted()).toEqual(["ROG", "omen"]);
+        expect(await revokeSyncEnrollmentsOf(history, [])).toBe(0);
+    });
+
+    it("keeps an enrollment for ninety days since it was last seen, and rebuilds authorized_keys without the ones past it", async () => {
+        const now = Date.now();
+        const seen = await enrolled(await enrollSyncKey({ historyRoot: history, key: windowsKey, mode: "sync", takeover: false }));
+        await enrollSyncKey({ historyRoot: history, key: "ssh-ed25519 AAAAgone gone", mode: "mirror", takeover: false });
+        expect(await verifySyncToken(history, seen, true)).toEqual({ kind: "enrolled", id: "ROG", card: "ROG" });
+
+        // A boot a day short of the window keeps both; the never-seen one counts from when it was made.
+        await restoreAuthorizedKeys(history, now + ENROLLMENT_RETENTION_MS - 24 * 60 * 60_000);
+        expect((await enrolledFleet(history)).machines.map((row) => row.machine)).toEqual(["ROG", "gone"]);
+
+        // Past it, both go, and sshd's file with them.
+        await restoreAuthorizedKeys(history, now + ENROLLMENT_RETENTION_MS + 60_000);
+        expect((await enrolledFleet(history)).machines).toEqual([]);
+        expect(await readFile(join(process.env["HOME"] ?? "", ".ssh", "authorized_keys"), "utf8")).toBe("");
+    });
+
+    it("counts retention from the last time an enrollment was seen, else from when it was made", () => {
+        const base = { tokenDigest: "x", mode: "mirror" as const, machine: "m" };
+        const enrollments = [
+            { ...base, key: "a", enrolledAt: 0, seenAt: 50 * 24 * 60 * 60_000 },
+            { ...base, key: "b", enrolledAt: 0 },
+            { ...base, key: "c", enrolledAt: 10 * 24 * 60 * 60_000 },
+        ];
+        expect(withoutStale(enrollments, ENROLLMENT_RETENTION_MS + 1).map((entry) => entry.key)).toEqual(["a", "c"]);
+        expect(withoutStale(enrollments, 140 * 24 * 60 * 60_000 + 1).map((entry) => entry.key)).toEqual([]);
     });
 });

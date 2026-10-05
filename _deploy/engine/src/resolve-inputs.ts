@@ -6,11 +6,20 @@ import type { OutputStore } from "./store.js";
 const isSecretNode = (value: object): value is { readonly $secret: { readonly source: SecretSource; readonly key: string } } => "$secret" in value;
 const isRefNode = (value: object): value is { readonly $ref: string } => "$ref" in value;
 
+// What an unset secret resolves to when the caller collects missing secrets instead of throwing: prune deleting a
+// removed node whose creation-only secret (a user's own password) is gone. One shell-safe word, so a delete that does
+// interpolate it fails its own auth rather than injecting anything; prune then keeps the node pending.
+export const MISSING_SECRET = "intentic-missing-secret";
+
 export const resolveInputs = (
     inputs: Readonly<Record<string, SerializedValue>>,
     store: OutputStore,
     env: Readonly<Record<string, string | undefined>>,
-    options: { readonly lenient: boolean },
+    options: {
+        readonly lenient: boolean;
+        // When given, an unset secret is recorded here and resolves to MISSING_SECRET instead of throwing.
+        readonly missingSecrets?: Set<string>;
+    },
 ): Record<string, unknown> => {
     const walk = (value: SerializedValue): unknown => {
         if (Array.isArray(value)) {
@@ -20,6 +29,10 @@ export const resolveInputs = (
             if (isSecretNode(value)) {
                 const secret = env[value.$secret.key];
                 if (secret === undefined) {
+                    if (options.missingSecrets !== undefined) {
+                        options.missingSecrets.add(value.$secret.key);
+                        return MISSING_SECRET;
+                    }
                     throw new Error(`missing secret env var "${value.$secret.key}"`);
                 }
                 return secret;

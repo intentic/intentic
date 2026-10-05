@@ -6,14 +6,17 @@ import {
     dockerEngine,
     dockerListening,
     homeFacts,
+    machineAgents,
     sandboxList,
     type DesktopInfo,
     type DeviceStatus,
     type DockerEngine,
     type HomeFacts,
+    type MachineEnvironment,
     type SandboxStatus,
 } from "../desktop";
 import { desktopAgentPanel } from "../deviceAgent";
+import { keptBy, otherAgents } from "./keeper";
 
 // THIS COMPUTER, AS THE APP READS IT: what the app is, what it remembers, whether the Docker engine answers, the
 // sandboxes `ic` lists here and the machine agent's own report. Read again on every `refresh` (the page's arrival, its
@@ -41,6 +44,9 @@ export const status = ref<DeviceStatus | undefined>(undefined);
 export const reportError = ref<string | undefined>(undefined);
 /** Whether the machine has been read at all: until then the page says it is looking, not that nothing is there. */
 export const read = ref(false);
+/** This computer's environments and the machine agent each holds (agents.rs): a WSL distro's agent keeps the sandboxes
+ *  set up from that distro, and the page says so beside them. */
+export const environments = ref<MachineEnvironment[]>([]);
 
 export const loadFacts = async (): Promise<void> => {
     try {
@@ -108,12 +114,29 @@ const refreshAgent = async (generation: number): Promise<void> => {
     }
 };
 
-/** Read the machine again: the engine and its sandboxes, the agent, and what the app remembers. */
+// Beside the rest and never in its way: an environment that cannot be read is one with nothing to say.
+const refreshEnvironments = async (generation: number): Promise<void> => {
+    const found = await machineAgents().catch((): MachineEnvironment[] => []);
+    if (newest(generation)) {
+        environments.value = found;
+    }
+};
+
+/** Read the machine again: the engine and its sandboxes, the agent, its other environments, and what the app remembers. */
 export const refresh = async (): Promise<void> => {
     refreshes += 1;
-    await Promise.all([refreshDocker(refreshes), refreshAgent(refreshes), loadFacts()]);
+    await Promise.all([refreshDocker(refreshes), refreshAgent(refreshes), refreshEnvironments(refreshes), loadFacts()]);
     read.value = true;
 };
+
+/** Where the other side of this computer keeps the sandbox `slug`, by name (`WSL (archlinux)`); undefined for this side's own. */
+export const keptByOf = (slug: string | undefined): string | undefined => {
+    const sandbox = sandboxes.value.find((held) => held.slug === slug);
+    return sandbox === undefined ? undefined : keptBy(sandbox, environments.value);
+};
+
+/** The other environments of this computer whose own machine agent runs, by name. */
+export const agentsElsewhere = computed(() => otherAgents(environments.value));
 
 /* THE SANDBOXES, as the kit's rows (the same rows the workspace's Devices tab draws). */
 

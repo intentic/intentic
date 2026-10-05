@@ -86,7 +86,7 @@ test("read returns undefined when the UI is not yet healthy", async () => {
 
 test("read returns the deterministic url/internalUrl/otlpEndpoint plus the observed service images when running and healthy", async () => {
     const provider = createSignozProvider(fakeSsh({ running: true, healthy: true }).executor);
-    expect(await provider.read(inputs, ctx())).toEqual({ outputs, detail: { images: DEFAULT_IMAGES } });
+    expect(await provider.read(inputs, ctx())).toEqual({ outputs, detail: { images: DEFAULT_IMAGES }, stampOwner: "" });
 });
 
 test("diff is noop when every long-running service runs on its desired image", () => {

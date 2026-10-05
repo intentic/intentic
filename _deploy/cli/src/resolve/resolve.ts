@@ -1,9 +1,14 @@
-import { resolve } from "node:path";
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { errorMessage } from "@intentic/base/errors";
+import { isOwnerId } from "@intentic/graph";
 import type { IntentSet } from "@intentic/need-resolver";
 import { cloudflareApi } from "@intentic/providers";
 import { collectDomains, selectZone } from "@intentic/state-resolver";
-import { loadEnvFile } from "../lib/artifact.js";
+import { readBaseline } from "../apply/baseline.js";
+import { LAST_APPLIED_FILE, loadEnvFile, readArtifact } from "../lib/artifact.js";
 
 // Load the intent a deploy.config.ts exports by importing it IN PLACE, so its `@intentic/sdk` and
 // `@intentic/graph` imports resolve from the project the config lives in (Node strips the TS types).
@@ -44,4 +49,34 @@ export const discoverZone = async (intent: IntentSet, dir: string): Promise<stri
         zones.map((zone) => zone.name),
         collectDomains(intent),
     );
+};
+
+// The intent's owner id, stamped on every resource it deploys. Kept from the artifact being replaced, else from the
+// prune baseline beside it; minted only when neither has one. The pipeline never mints (`mint` off): racing the
+// sandbox's own resolve, a second minter would split one intent into two owners, each refusing the other's resources.
+export const ownerFor = async (
+    artifactOut: string,
+    options: { readonly mint: boolean; readonly log: (message: string) => void },
+): Promise<string | undefined> => {
+    const sources = [
+        { what: "the artifact", read: async () => (existsSync(artifactOut) ? (await readArtifact(artifactOut)).owner : undefined) },
+        { what: "the prune baseline", read: async () => (await readBaseline(join(dirname(artifactOut), LAST_APPLIED_FILE)))?.owner },
+    ];
+    for (const source of sources) {
+        try {
+            const owner = await source.read();
+            if (owner !== undefined && isOwnerId(owner)) {
+                return owner;
+            }
+        } catch (error) {
+            options.log(`resolve: could not read the owner id from ${source.what}: ${errorMessage(error)}`);
+        }
+    }
+    if (!options.mint) {
+        options.log("resolve: no owner id yet and this run does not mint one; the next resolve in the workspace does");
+        return undefined;
+    }
+    const minted = randomBytes(6).toString("hex");
+    options.log(`resolve: minted owner id ${minted} for this intent; it is stamped on everything it deploys`);
+    return minted;
 };

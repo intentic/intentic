@@ -71,6 +71,14 @@ pub fn reconcile(slug: &str) -> ChannelRecord {
     volume
 }
 
+/// The copy on the sandbox's volume, read and NOT adopted here: what a verb that only needs to know what another
+/// side's record names (tidy, about a sandbox it adopts while its keeper is silent) reads without making that record
+/// this home's.
+pub fn volume_record(slug: &str) -> Option<ChannelRecord> {
+    let container = holder(slug)?;
+    fetch(&container, "channel").map(|text| record::parse(&text))
+}
+
 /// Whether the volume's copy should win: it was written later, or the home has none at all. Pure.
 pub fn newer(volume: &ChannelRecord, home: &ChannelRecord) -> bool {
     match (volume.written, home.written) {

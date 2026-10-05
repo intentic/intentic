@@ -41,6 +41,16 @@ import {
     type SubagentWaitOptions,
 } from "./subagents.js";
 import { bookedRerunWords, childLandingWords, sayToParent } from "./child-lands.js";
+import {
+    type ChildStanding,
+    descendantsOf,
+    type FamilyCancel,
+    type FamilyEnd,
+    type FamilyLink,
+    familyCancels,
+    markFamilyEnded,
+} from "./family-cancel.js";
+import { filePausedChildren } from "./paused-children.js";
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
 import { deliverWake } from "../run/turn/wake-delivery.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
@@ -134,15 +144,26 @@ interface ChildRecord {
     report: string | undefined;
     // Its parent cancelled it: the turn that stops, or the start that is kept from happening, ends as killed.
     cancelled: boolean;
-    // Its turn ended on a wall the sandbox re-runs it past by itself: what stopped it, the run that ended so, and the
-    // look that ends the pause as failed if the re-run never comes.
-    paused: { readonly failure: string; readonly run: string | undefined; readonly look: ReturnType<typeof setInterval> } | undefined;
+    // Its turn ended on a wall the sandbox re-runs it past by itself: what stopped it, the run that ended so, the look
+    // that ends the pause as failed if the re-run never comes, and what strikes the pause off the record a restart reads
+    // (paused-children.ts).
+    paused:
+        | {
+              readonly failure: string;
+              readonly run: string | undefined;
+              readonly look: ReturnType<typeof setInterval>;
+              readonly unrecord: () => void;
+          }
+        | undefined;
 }
 
 // A spawned child's record, held by its parent and filed about the child, so either one's dispose takes it.
 const CHILDREN: Holding<ChildRecord> = { name: "children" };
 // A parent's child turns, live and lifetime, held by the parent under its own id.
 const SEATS: Holding<{ readonly live: number; readonly total: number }> = { name: "child seats" };
+// The run a person started in a spawned child's own chat, held by the child under its own id. A parent leaving stops the
+// sandbox's turns on its children and never a person's (cancelFamily), and nothing on a run says who started it.
+const PERSON_RUNS: Holding<string> = { name: "person runs in child chats" };
 // The supervisor a turn armed for the `/children` routes, which have no tool mount to gate; held under its own id.
 const SUPERVISORS: Holding<ChildSupervisor> = { name: "child supervisors" };
 // The owner's "for the rest of this turn" on a child-agent card: the parent's run it was given in, so it lapses with that
@@ -189,6 +210,7 @@ export const resetChildrenForTest = (actors: Actors): void => {
     actors.holdings(SEATS).clear();
     actors.holdings(SUPERVISORS).clear();
     actors.holdings(TURN_GRANTS).clear();
+    actors.holdings(PERSON_RUNS).clear();
 };
 
 // Display label for the roster row; a provider absent from PROVIDERS shows as its raw id.
@@ -370,7 +392,13 @@ const questionWords = (childId: string, spec: ChildSpawnSpec, questions: readonl
 // through the door a child's report takes (child-report.ts): into the parent's live turn, else a turn of its own.
 // `reported` files the move as handed over once the parent has it, so a later wait does not return it again. Never
 // throws: it runs off a frame of the child's turn, which must not fail with it.
-const askParent = async (services: Services, childId: string, kid: ChildRecord, questions: readonly AskQuestion[], reported: () => void): Promise<void> => {
+const askParent = async (
+    services: Services,
+    childId: string,
+    kid: ChildRecord,
+    questions: readonly AskQuestion[],
+    reported: () => void,
+): Promise<void> => {
     const entry = services.agents.entry(kid.parent);
     if (entry === undefined || entry.archivedAt !== undefined) {
         return;
@@ -378,10 +406,19 @@ const askParent = async (services: Services, childId: string, kid: ChildRecord, 
     try {
         const receipt = await deliverWake(
             { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
-            { conversationId: kid.parent, prompt: questionWords(childId, kid.spec, questions), voice: "sandbox", source: "subagents", profile: conversationProfile(entry) },
+            {
+                conversationId: kid.parent,
+                prompt: questionWords(childId, kid.spec, questions),
+                voice: "sandbox",
+                source: "subagents",
+                profile: conversationProfile(entry),
+            },
         );
         if ("invalid" in receipt || "why" in receipt) {
-            services.logger.info({ child: childId, parent: kid.parent, receipt }, "child question: its parent took nothing, it waits on a wait or the owner");
+            services.logger.info(
+                { child: childId, parent: kid.parent, receipt },
+                "child question: its parent took nothing, it waits on a wait or the owner",
+            );
             return;
         }
         reported();
@@ -468,21 +505,31 @@ const noRerun = (ranElsewhere: boolean): string =>
         ? "Its turn was run again from its own chat rather than for you: read its chat for how that went, or send it again."
         : "The sandbox did not run it again after all (the re-run was given up or dropped), so it is not coming back by itself: send it again, or give the task to another agent.";
 
-/** Ends a child's pause, whatever ends it: its re-run starting, a message from its parent, a cancel, or the re-run lapsing. */
+/**
+ * Ends a child's pause, whatever ends it: its re-run starting, a message from its parent, a cancel (its parent's, or its
+ * family's as a parent leaves), or the re-run lapsing. Struck off the record a restart reads too, so the next boot does
+ * not tell its parent about a pause that already ended.
+ */
 const endPause = (kid: ChildRecord): void => {
     if (kid.paused !== undefined) {
         clearInterval(kid.paused.look);
+        kid.paused.unrecord();
         kid.paused = undefined;
     }
 };
 
 // A turn that ended on a wall the sandbox re-runs it past by itself is paused, not finished: its row stays live so its
 // parent's wait keeps covering it, says when the re-run comes and how to stop it, and ends as failed if it never does.
+// Written down while it stands, since a restart clears the booking and this look with it (paused-children.ts).
 const pauseChild = (services: Services, childId: string, parent: string, kid: ChildRecord, failure: string, error: string): void => {
     endPause(kid);
     noteSpawnedChild(services.conversations, childId, { status: "paused", summary: `Paused, not finished. ${error}`, error });
+    const ledger = filePausedChildren(services.config.historyRoot, services.logger);
+    void ledger.note(childId, { parent, failure }, Date.now());
     let misses = 0;
     const look = setInterval(() => {
+        // Its record went with a dispose (its own conversation's, or its parent's): nobody is left to tell. The pause
+        // itself stands, for the family's cancel that follows a parent's discard to find and end (cancelFamily).
         if (kid.paused?.look !== look || services.conversations.holdings(CHILDREN).get(childId) !== kid) {
             clearInterval(look);
             return;
@@ -500,18 +547,27 @@ const pauseChild = (services: Services, childId: string, parent: string, kid: Ch
         void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${lapsed}`);
     }, PAUSE_LOOK_MS);
     look.unref();
-    kid.paused = { failure, run: turnRunOf(services.conversations, childId)?.id, look };
+    kid.paused = { failure, run: turnRunOf(services.conversations, childId)?.id, look, unrecord: () => void ledger.forget([childId]) };
 };
 
 // Settles a child's turn from its tally: its closing text as the report, a kill named from outside, a re-run the sandbox
 // booked making it paused rather than failed, and its seat freed.
-const settleChildTurn = async (services: Services, childId: string, parent: string, kid: ChildRecord | undefined, tally: ChildTurnTally): Promise<void> => {
+const settleChildTurn = async (
+    services: Services,
+    childId: string,
+    parent: string,
+    kid: ChildRecord | undefined,
+    tally: ChildTurnTally,
+): Promise<void> => {
     const whole = (tally.bubble.trim() !== "" ? tally.bubble : tally.report).trim();
     const closing = whole.slice(0, REPORT_KEPT);
     // Read while the record still says running, so a `send` cannot start a follow-up this settle then overwrites.
     const killed = tally.failure === undefined ? undefined : await childKillNote(services, childId, tally.failure);
     const cancelled = kid?.cancelled === true;
-    const rerun = tally.failure === undefined || tally.rerun === undefined || cancelled || killed !== undefined ? undefined : bookedRerunWords(tally.rerun, childId);
+    const rerun =
+        tally.failure === undefined || tally.rerun === undefined || cancelled || killed !== undefined
+            ? undefined
+            : bookedRerunWords(tally.rerun, childId);
     const error = cancelled ? CANCELLED : (killed ?? (rerun === undefined ? tally.failure : `${tally.failure} ${rerun}`));
     if (kid !== undefined) {
         kid.running = false;
@@ -569,7 +625,8 @@ const admitRoom = async (services: Services, childId: string, kid: ChildRecord |
         where,
         forTurn: true,
         wait: {
-            onShort: (diagnosis) => noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` }),
+            onShort: (diagnosis) =>
+                noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` }),
         },
     });
     if (kid !== undefined) {
@@ -670,7 +727,9 @@ const startedWhy = (started: DomainEventMap["run.started"]): string => {
     if (speaker?.kind === "agent") {
         return `another conversation, \`${speaker.conversationId}\`, sent it a message`;
     }
-    return speaker?.kind === "sandbox" && speaker.source !== undefined ? `the sandbox started a turn on it (${speaker.source})` : "the sandbox started a turn on it";
+    return speaker?.kind === "sandbox" && speaker.source !== undefined
+        ? `the sandbox started a turn on it (${speaker.source})`
+        : "the sandbox started a turn on it";
 };
 
 /**
@@ -684,6 +743,9 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
     const childId = started.conversationId;
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     const run = liveRunOf(services.conversations, childId);
+    if (started.speaker?.kind === "person" && run !== undefined && parentOfActor(services.agents.entry(childId)?.identity.startedBy) !== undefined) {
+        services.conversations.holdings(PERSON_RUNS).hold(childId, childId, run.id);
+    }
     if (kid === undefined || kid.running || run === undefined || started.speaker?.kind === "person") {
         return;
     }
@@ -707,7 +769,8 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
 type Admission = { readonly ok: true; readonly run?: ChildRun } | { readonly ok: false; readonly message: string };
 
 // What the owner's rules and the taint floor say of a move before anybody is asked.
-type MoveVerdict = { readonly effect: "allow" } | { readonly effect: "deny"; readonly message: string } | { readonly effect: "hold"; readonly reason: string };
+type MoveVerdict =
+    { readonly effect: "allow" } | { readonly effect: "deny"; readonly message: string } | { readonly effect: "hold"; readonly reason: string };
 
 // Whether the owner already allowed held moves on this provider for the rest of the parent's live turn.
 const turnAllows = (actors: Actors, parent: string, provider: string): boolean => {
@@ -730,7 +793,9 @@ const judgeMove = async (services: Services, parent: string, provider: string): 
     if (verdict.effect === "deny") {
         return { effect: "deny", message: `Refused: ${verdict.reason}.` };
     }
-    return verdict.effect === "hold" && !turnAllows(services.conversations, parent, provider) ? { effect: "hold", reason: verdict.reason } : { effect: "allow" };
+    return verdict.effect === "hold" && !turnAllows(services.conversations, parent, provider)
+        ? { effect: "hold", reason: verdict.reason }
+        : { effect: "allow" };
 };
 
 // A provider the owner's rules refuse stays refused when it was picked on the card: the card overrides the agent's
@@ -1086,7 +1151,9 @@ const startChild = async (
 
 // A start waiting on the owner, filed as a child already, so `wait` parks on it and `send` refuses it with the reason.
 const holdChildStart = (services: Services, parent: ChildParent, start: ChildStart): void => {
-    services.conversations.holdings(CHILDREN).hold(parent.conversationId, start.id, childRecordOf(parent, start.asked, start.depth, "start"), start.id);
+    services.conversations
+        .holdings(CHILDREN)
+        .hold(parent.conversationId, start.id, childRecordOf(parent, start.asked, start.depth, "start"), start.id);
     openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(start.id, start.asked, start.depth));
     noteSpawnedChild(services.conversations, start.id, { status: "pending", summary: START_SUMMARY });
 };
@@ -1136,7 +1203,10 @@ export const spawnChild = async (services: Services, parent: ChildParent, asked:
     const settings = await services.sandboxSettings.get();
     const depth = spawnDepthOf(services.conversations, parent.conversationId) + 1;
     if (depth > settings.subagentDepth) {
-        return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned subagent and may not go deeper.` };
+        return {
+            ok: false,
+            message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned subagent and may not go deeper.`,
+        };
     }
     const verdict = await judgeMove(services, parent.conversationId, asked.provider);
     if (verdict.effect === "deny") {
@@ -1221,7 +1291,13 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
 };
 
 // A message the gate let through: steered into the child's live turn, else a follow-up turn of its own.
-const deliverToChild = async (services: Services, parent: ChildParent, kid: ChildRecord, childId: string, message: string): Promise<ChildActionResult> => {
+const deliverToChild = async (
+    services: Services,
+    parent: ChildParent,
+    kid: ChildRecord,
+    childId: string,
+    message: string,
+): Promise<ChildActionResult> => {
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, childRouting(kid.spec).harness);
     // Asked again: an owner answering later may find the child waiting on something new.
     const waiting = notYet(kid);
@@ -1238,7 +1314,14 @@ const deliverToChild = async (services: Services, parent: ChildParent, kid: Chil
 };
 
 // A held message once the owner answers: sent, or not, and the parent told when it did not go.
-const sendAllowed = async (services: Services, parent: ChildParent, kid: ChildRecord, childId: string, message: string, admission: Admission): Promise<void> => {
+const sendAllowed = async (
+    services: Services,
+    parent: ChildParent,
+    kid: ChildRecord,
+    childId: string,
+    message: string,
+    admission: Admission,
+): Promise<void> => {
     kid.held = undefined;
     let sent: ChildActionResult;
     try {
@@ -1254,7 +1337,7 @@ const sendAllowed = async (services: Services, parent: ChildParent, kid: ChildRe
 // Why an id reaches no child of this parent. Both kinds are listed alike (`list`), so an id naming a subagent its own
 // runtime ran in-process is told apart from one naming nothing: it is this conversation's, and a service call cannot
 // reach it.
-const noSuchChild = (services: Services, parent: ChildParent, childId: string): ChildActionResult =>
+const noSuchChild = (services: { readonly conversations: Actors }, parent: ChildParent, childId: string): ChildActionResult =>
     ranInProcess(services.conversations, parent.conversationId, childId)
         ? {
               ok: false,
@@ -1370,14 +1453,21 @@ export const childReportOf = (actors: Actors, childId: string): string | undefin
 
 // What a cancel found to stop, as its parent reads it.
 const CANCEL_NOTES = {
-    running: "Cancelled: its turn is being stopped, and it ends as killed. Whatever it already wrote stays in its worktree; send it a message to carry on.",
+    running:
+        "Cancelled: its turn is being stopped, and it ends as killed. Whatever it already wrote stays in its worktree; send it a message to carry on.",
     waiting: "Cancelled: it will not start. Send it a message if you want it after all.",
     paused: "Cancelled: the sandbox will not run it again by itself, and it ends as killed. Send it a message to carry on from where it stopped.",
 } as const satisfies Record<string, string>;
 
 // A path list as a parent reads it: the first few named, the rest counted.
 const namedPaths = (paths: readonly string[]): string =>
-    [paths.slice(0, 5).map((path) => `\`${path}\``).join(", "), ...(paths.length > 5 ? [`and ${paths.length - 5} more`] : [])].join(" ");
+    [
+        paths
+            .slice(0, 5)
+            .map((path) => `\`${path}\``)
+            .join(", "),
+        ...(paths.length > 5 ? [`and ${paths.length - 5} more`] : []),
+    ].join(" ");
 
 /**
  * Brings a child's work into its parent's own checkout, leaving conflict markers where it clashes with the parent's
@@ -1395,7 +1485,11 @@ export const mergeChild = async (services: Services, parent: ChildParent, childI
     }
     const target = await landTargetOf(services, entry);
     if (target.kind === "main" && target.ruled) {
-        return { ok: false, message: "Your checkout cannot take its work (you run on another machine, or it carries a repo you do not), so it lands the way any agent's does." };
+        return {
+            ok: false,
+            message:
+                "Your checkout cannot take its work (you run on another machine, or it carries a repo you do not), so it lands the way any agent's does.",
+        };
     }
     const result = await landByHandLeased(services, entry, "merge", "outstanding");
     const where = target.kind === "parent" ? "your checkout" : "the main tree";
@@ -1403,7 +1497,10 @@ export const mergeChild = async (services: Services, parent: ChildParent, childI
         const open = (result.resolving ?? []).flatMap(({ repo, paths }) => paths.map((path) => (repo === "root" ? path : `${repo}/${path}`)));
         return {
             ok: true,
-            note: open.length === 0 ? `Its changes are in ${where} now.` : `Its changes are in ${where} now, with conflict markers to resolve in ${namedPaths(open)}.`,
+            note:
+                open.length === 0
+                    ? `Its changes are in ${where} now.`
+                    : `Its changes are in ${where} now, with conflict markers to resolve in ${namedPaths(open)}.`,
         };
     }
     if (!result.changed) {
@@ -1416,16 +1513,27 @@ export const mergeChild = async (services: Services, parent: ChildParent, childI
     };
 };
 
+// What a cancel reaches a child through: its conversation's actor, and the turn port's stop.
+export interface ChildCancelDeps {
+    readonly conversations: Pick<ConversationActors, "holdings" | "state" | "send">;
+    readonly turns: Pick<Services["turns"], "stop">;
+}
+
 /**
  * Stops what a child of this parent is doing or is booked to do: its running turn, the start it waits on memory or
  * another turn for, or the re-run the sandbox booked for it after a spent allowance or a turn that stopped short. A start
  * or message still waiting on the owner's card is theirs to decline, not the parent's to withdraw.
  */
-export const cancelChild = async (services: Services, parent: ChildParent, childId: string): Promise<ChildActionResult> => {
+export const cancelChild = async (services: ChildCancelDeps, parent: ChildParent, childId: string): Promise<ChildActionResult> => {
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return noSuchChild(services, parent, childId);
     }
+    return cancelRecord(services, childId, kid);
+};
+
+// The cancel of one child this daemon supervises, whoever asked for it: its parent, or the end of its family.
+const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: ChildRecord): Promise<ChildActionResult> => {
     if (kid.held !== undefined) {
         return { ok: false, message: "It waits on the owner's card, which is theirs to answer: it does not go unless they allow it." };
     }
@@ -1450,6 +1558,124 @@ export const cancelChild = async (services: Services, parent: ChildParent, child
     }
     await services.turns.stop({ conversationId: childId, run: run.id });
     return { ok: true, note: CANCEL_NOTES.running };
+};
+
+/** What a family's end reads and stops: the registry's spawn links, each child's conversation, and the turn port's stop. */
+export interface FamilyDeps extends ChildCancelDeps {
+    readonly agents: Pick<Services["agents"], "ids" | "entry">;
+    readonly logger: Pick<Services["logger"], "info" | "warn">;
+}
+
+// A family as it stood while its heads were still on the board: every conversation below them, and the records of those
+// this daemon supervises, which a head's dispose takes with it, since a child's record is held by its parent.
+export interface Family {
+    readonly heads: readonly string[];
+    readonly members: readonly FamilyLink[];
+    readonly records: ReadonlyMap<string, ChildRecord>;
+}
+
+/**
+ * The family below these conversations: the children they spawned, theirs, and so on, by the registry's record of who
+ * started whom, which outlives a restart, and by this daemon's own records, which hold a child whose first turn has not
+ * opened its conversation yet. Read before the heads are forgotten.
+ */
+export const familyOf = (deps: Pick<FamilyDeps, "agents" | "conversations">, heads: readonly string[]): Family => {
+    if (heads.length === 0) {
+        return { heads, members: [], records: new Map() };
+    }
+    const kids = deps.conversations.holdings(CHILDREN);
+    const links: FamilyLink[] = kids.entries().map(([child, kid]) => ({ child, parent: kid.parent }));
+    for (const id of deps.agents.ids()) {
+        const parent = parentOfActor(deps.agents.entry(id)?.identity.startedBy);
+        if (parent !== undefined) {
+            links.push({ child: id, parent });
+        }
+    }
+    const members = descendantsOf(heads, links);
+    const records = new Map<string, ChildRecord>();
+    for (const { child } of members) {
+        const kid = kids.get(child);
+        if (kid !== undefined) {
+            records.set(child, kid);
+        }
+    }
+    return { heads, members, records };
+};
+
+// How a member stands as the cancel runs: off its record where this daemon supervises it, else off its conversation.
+const standingOf = (deps: ChildCancelDeps, family: Family, child: string): ChildStanding => {
+    const kid = family.records.get(child) ?? deps.conversations.holdings(CHILDREN).get(child);
+    if (kid !== undefined) {
+        return { tracked: true, heldForOwner: kid.held !== undefined, paused: kid.paused !== undefined, running: kid.running };
+    }
+    const run = liveRunOf(deps.conversations, child);
+    const held = deps.conversations.state(child)?.resume.held;
+    return {
+        tracked: false,
+        sandboxRun: run !== undefined && deps.conversations.holdings(PERSON_RUNS).get(child) !== run.id,
+        bookedRerun: held !== undefined && !held.fired && held.input.speaker?.kind !== "person",
+    };
+};
+
+// Stops one member as its move says: the cancel tool's own path, or its live turn and its booking directly.
+const stopMember = async (deps: ChildCancelDeps, family: Family, { child, move }: FamilyCancel): Promise<void> => {
+    if (move.kind === "cancel") {
+        const kid = family.records.get(child) ?? deps.conversations.holdings(CHILDREN).get(child);
+        if (kid !== undefined) {
+            await cancelRecord(deps, child, kid);
+        }
+        return;
+    }
+    if (move.drop) {
+        deps.conversations.send(child, { kind: "resume-dropped" });
+    }
+    const run = move.stop ? liveRunOf(deps.conversations, child) : undefined;
+    if (run !== undefined) {
+        await deps.turns.stop({ conversationId: child, run: run.id });
+    }
+};
+
+/**
+ * Cancels the family below conversations leaving the board (family-cancel.ts): every running turn, waiting start and
+ * booked re-run of the children they spawned, and of theirs, as each one's parent would cancel it. Their conversations and
+ * what they wrote stay. Run once the heads are filed away or forgotten, so a stopped child's ending is said to nobody and
+ * its work lands as any conversation's does, never into a checkout on its way out; a child with children of its own is
+ * marked first, so the endings stopped under it do not wake it into a turn. The children stop side by side, since a stop
+ * waits for its turn to unwind. Never throws; answers what it cancelled.
+ */
+export const cancelFamily = async (deps: FamilyDeps, family: Family, why: FamilyEnd): Promise<readonly FamilyCancel[]> => {
+    if (family.members.length === 0) {
+        return [];
+    }
+    const cancels = familyCancels(family.members, (child) => standingOf(deps, family, child));
+    const heads = new Set(family.heads);
+    for (const { parent } of cancels) {
+        if (!heads.has(parent)) {
+            markFamilyEnded(deps.conversations, parent, Date.now());
+        }
+    }
+    const stopped = await Promise.all(
+        cancels.map(async (cancel) => {
+            try {
+                await stopMember(deps, family, cancel);
+                return [cancel];
+            } catch (error) {
+                deps.logger.warn(
+                    { err: error, child: cancel.child, parent: cancel.parent, why },
+                    "subagents: a child of a conversation that left could not be cancelled",
+                );
+                return [];
+            }
+        }),
+    );
+    const done = stopped.flat();
+    if (done.length > 0) {
+        deps.logger.info(
+            { why, heads: family.heads, cancelled: done.map(({ child, parent, move }) => ({ child, parent, ...move })) },
+            "subagents: cancelled the children of conversations that left the board",
+        );
+    }
+    return done;
 };
 
 // Everything a parent may do about its children, as one object shared by every door (tool mounts, CLI arm).
@@ -1482,8 +1708,13 @@ export const childSupervisor = (services: Services, parent: ChildParent): ChildS
             ? pendingQuestionOf(services.conversations, childId)
             : undefined,
     report: (childId) =>
-        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId ? childReportOf(services.conversations, childId) : undefined,
-    landing: (childId) => (services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId ? childLandingWords(services.agents, childId) : undefined),
+        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId
+            ? childReportOf(services.conversations, childId)
+            : undefined,
+    landing: (childId) =>
+        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId
+            ? childLandingWords(services.agents, childId)
+            : undefined,
     merge: (childId) => mergeChild(services, parent, childId),
     cancel: (childId) => cancelChild(services, parent, childId),
     wait: (options) => waitForWork(services.conversations, parent.conversationId, options),

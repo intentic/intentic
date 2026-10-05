@@ -19,6 +19,7 @@ import {
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { SingleFlight } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
 import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
@@ -28,7 +29,7 @@ import { formatAnswers } from "../../tools/question-answers.js";
 import { personaRunModel, runRoleModel, unpinnedRunProvider } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
 import { type Routing, routingFor } from "../../providers/accounts/routing.js";
-import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
+import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "./turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
 import { sessionFor } from "./turn-admission.js";
@@ -616,7 +617,8 @@ const sessionAccount = (services: Services, conversationId: string): { account?:
 
 // Restores parked requests verbatim under their original request ids, via a placeholder turn on the ordinary start path.
 // The answer's turn starts on the journalled session only after the placeholder fully unwinds and releases the mutex.
-const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): Promise<void> => {
+// Answers the refusal when no placeholder could start (an archived conversation, a live turn already holding it).
+const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): Promise<string | undefined> => {
     const conversationId = entry.turn.conversationId;
     const requests = entry.parked ?? [];
     const sessionId = entry.sessionId ?? entry.turn.sessionId;
@@ -742,7 +744,7 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
     const run = await startConversationTurn(services, placeholder, withRuntimeDefaults(entry.turn), { attempts: entry.attempts });
     if (typeof run === "string") {
         // A live turn already owns the conversation, superseding the park as a hand retry would; or nobody reopened it.
-        return;
+        return run;
     }
     services.logger.info({ conversationId, requests: requests.length }, "parked turn rehydrated, its requests are back where they were");
     // Detached: the handoff waits out the whole run, and a request may sit unanswered for days without blocking boot.
@@ -757,14 +759,55 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
             services.logger.info({ conversationId }, "parked turn resumed: the user's answer continues its session");
         }
     })().catch((error: unknown) => services.logger.error({ err: error, conversationId }, "parked turn's answer failed to resume it"));
+    return undefined;
+};
+
+// A parked turn whose cards could not be put back: the refusal or the error is spent as an attempt, so one that can
+// never come back (its conversation archived, say) stops being tried at every boot once the cap is reached, and then
+// stands on the record as interrupted, with the reason in the log (2026-10-05).
+const parkedNotRestored = async (services: Services, entry: JournalledTurn, reason: string): Promise<void> => {
+    const { conversationId } = entry.turn;
+    if (!parkedRestoreSpent({ ...entry, attempts: entry.attempts + 1 })) {
+        await spendAttempt(services, entry);
+        services.logger.warn({ conversationId, reason, attempts: entry.attempts + 1 }, "parked turn not restored this boot, tried again at the next");
+        return;
+    }
+    await settleParked(services, entry, reason);
+};
+
+// Puts a parked turn's cards back, or, once it has failed to come back as often as it may, gives it up.
+const restoreParked = async (services: Services, entry: JournalledTurn): Promise<void> => {
+    if (parkedRestoreSpent(entry)) {
+        await settleParked(services, entry, "spent");
+        return;
+    }
+    const refused = await rehydrateParkedTurn(services, entry).catch((error: unknown) => {
+        services.logger.error({ err: error, conversationId: entry.turn.conversationId }, "parked turn failed to rehydrate");
+        return errorMessage(error);
+    });
+    if (refused !== undefined) {
+        await parkedNotRestored(services, entry, refused);
+    }
+};
+
+// Gives a parked turn up for good: its cards are not coming back, and its conversation's record says it was cut.
+const settleParked = async (services: Services, entry: JournalledTurn, reason: string): Promise<void> => {
+    const { conversationId } = entry.turn;
+    const recorded = await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt).catch(() => false);
+    await consumeEntry(services, entry);
+    services.logger.warn(
+        { conversationId, reason, attempts: entry.attempts, recorded },
+        "parked turn given up: its cards could not be put back after every try, so it stands on the record as interrupted",
+    );
 };
 
 // Runs once at boot, before anything else starts a turn on these conversations. Surviving means never settled; each
 // entry is consumed (spent or deleted) before it restarts, so a turn that kills the daemon can't loop the boot. An
 // automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts). `ownerAsked`: the restart
 // this boot follows was one the owner started and asked to pick up after (restart-resume.ts), which resumes the turns
-// it cut as autoResumeOnRestart would, this once.
-export const resumeInterruptedTurns = async (services: Services, now: number = Date.now(), ownerAsked = false): Promise<void> => {
+// it cut as autoResumeOnRestart would, this once. `held`: this boot is one of a restart storm (system/boot/boot-history.ts),
+// which resumes nothing, ask or setting, and leaves every cut turn interrupted on the record (2026-10-05).
+export const resumeInterruptedTurns = async (services: Services, now: number = Date.now(), ownerAsked = false, held = false): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
         services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted turn is resumed");
         return [];
@@ -773,15 +816,13 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
     if (interrupted.length === 0) {
         return;
     }
-    const autoResumeOnRestart = ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart;
+    const autoResumeOnRestart = !held && (ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart);
     for (const entry of interrupted) {
         // Skips every gate below: rehydration spends nothing and isn't an attempt, so autoResumeOnRestart, staleness
         // and the attempt cap don't apply. Not cleared here either; the placeholder re-journals it, so a second restart
         // rehydrates again.
         if (entry.parked !== undefined && entry.parked.length > 0) {
-            await rehydrateParkedTurn(services, entry).catch((error: unknown) =>
-                services.logger.error({ err: error, conversationId: entry.turn.conversationId }, "parked turn failed to rehydrate"),
-            );
+            await restoreParked(services, entry);
             continue;
         }
         const { spent, stale } = resumeBars(entry, now);
@@ -799,7 +840,7 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
             }
             await consumeEntry(services, entry);
             services.logger.info(
-                { entry: entry.kind, spent, stale, autoResumeOnRestart },
+                { entry: entry.kind, spent, stale, autoResumeOnRestart, restartStorm: held },
                 "interrupted turn not resumed: the interruption stands on the record",
             );
             continue;

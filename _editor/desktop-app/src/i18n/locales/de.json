@@ -40,7 +40,9 @@
         "stoppedInstallNothingElse": "Sie haben diese Installation gestoppt. Auf diesem Gerät läuft sonst nichts.",
         "stopping": "Wird gestoppt…",
         "updateRestart": "Aktualisieren und neu starten",
-        "yourSandbox": "Ihrer Sandbox"
+        "yourSandbox": "Ihrer Sandbox",
+        "newerIntenticInstalled": "Eine neuere Version von Intentic ist installiert. Starten Sie Intentic neu, um sie zu verwenden.",
+        "restartIntentic": "Intentic neu starten"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Immer so machen: nicht mehr fragen",

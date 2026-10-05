@@ -38,6 +38,19 @@ const DRAIN_POLL_MS = 50;
 const MAX_STREAMS = 32;
 let active = 0;
 
+// A STREAM WHOSE FAR END IS GONE IS CLOSED HERE (2026-10-05). A machine that sleeps, loses its network or is killed
+// mid-session leaves its WebSocket open on this side, with nothing ever arriving and no close frame coming: half open.
+// Each such stream held one of the 32 slots above and an sshd connection for good, until the cap refused every new one
+// (1013) and file sync to this sandbox stopped for every machine. Every stream is pinged; one that has answered neither
+// that ping nor anything else by the next is dropped, so a dead stream lasts two intervals at most. A live client
+// answers pings by itself (every WebSocket implementation pongs, the machine agent's included), so an idle Mutagen
+// session that is merely quiet is never dropped. Kept on this route rather than in sshd's `ClientAliveInterval`, which
+// would also need the image changed and would see the stream only through the socket this route holds open.
+export const STREAM_PING_MS = 30_000;
+
+// Whether a stream is dead at its next ping: it has been pinged, and nothing (a frame or a pong) came after that ping.
+export const streamSilent = (heardAt: number, lastPingAt: number | undefined): boolean => lastPingAt !== undefined && heardAt < lastPingAt;
+
 // Reads a frame as exactly its own bytes: a view's whole backing buffer would feed sshd neighbouring memory. Text
 // frames are dropped; this protocol is binary only.
 export const bytesOf = (data: unknown): Buffer | undefined => {
@@ -67,10 +80,16 @@ export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
     upgradeWebSocket(() => {
         let socket: Socket | undefined;
         let drain: NodeJS.Timeout | undefined;
+        let pinger: NodeJS.Timeout | undefined;
         let counted = false;
+        // When the far end last said anything (a frame or a pong), and when it was last pinged.
+        let heardAt = Date.now();
+        let pingedAt: number | undefined;
 
         // Idempotent: onClose and onError can both fire, and destroying the socket re-enters this handler.
         const cleanup = (): void => {
+            clearInterval(pinger);
+            pinger = undefined;
             clearInterval(drain);
             drain = undefined;
             if (counted) {
@@ -92,6 +111,21 @@ export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
 
                 // `.raw` is the real `ws` socket; WebSocketLike only types a subset, needed here for bufferedAmount.
                 const raw = ws.raw as unknown as WebSocket;
+                raw.on("pong", () => {
+                    heardAt = Date.now();
+                });
+                pinger = setInterval(() => {
+                    if (streamSilent(heardAt, pingedAt)) {
+                        services.logger.info("sync ssh stream: its far end answered nothing since the last ping; closing it");
+                        // Not a close handshake: an end that is gone would never answer one.
+                        raw.terminate();
+                        cleanup();
+                        return;
+                    }
+                    pingedAt = Date.now();
+                    raw.ping();
+                }, STREAM_PING_MS);
+                pinger.unref?.();
                 const tcp = connect(SSHD_PORT, SSHD_HOST);
                 socket = tcp;
                 tcp.on("data", (chunk: Buffer) => {
@@ -116,6 +150,7 @@ export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
                 });
             },
             onMessage: (event) => {
+                heardAt = Date.now();
                 const bytes = bytesOf(event.data);
                 if (bytes !== undefined) {
                     socket?.write(bytes);

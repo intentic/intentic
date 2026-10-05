@@ -26,6 +26,10 @@ import { parseDefinitionToml } from "../portability/definition.js";
 import { sweepStaleExports } from "../portability/exports.js";
 import { killStaleManagedSessions } from "../processes/managed-processes.js";
 import { killOrphanServiceProcesses } from "../processes/service-processes.js";
+import { keptJobSessions } from "../agent/tools/jobs/background-jobs.js";
+import { sweepEarlierGenerations } from "../system/boot/generation-sweep.js";
+import { panePids } from "../terminal/terminal-session.js";
+import { prepareTmuxServer } from "../terminal/tmux-server.js";
 import type { RunnerModeEnv } from "../runners/runner-mode.js";
 import { seedStarterSite } from "../scaffold/starter-site.js";
 import { linkClaudeState } from "../sessions/session-store.js";
@@ -51,9 +55,13 @@ interface BootChainStep {
     readonly failure?: string;
 }
 
-// Kills a previous daemon's panel, agent and job tmux sessions, re-adopting a live infra apply, dockerd or model server;
-// the tmux server is container-wide, so they are the container owner's to sweep.
+// Kills a previous daemon's panel, agent and job tmux sessions, re-adopting a live infra apply, dockerd or model server,
+// and the terminal of every job an agent kept running for the person (2026-10-05: they were killed at every restart,
+// though keeping them is the point of `keep`); the tmux server is container-wide, so they are the container owner's to
+// sweep. Then what an earlier daemon run left running outside tmux (system/boot/generation-sweep.ts).
 const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promise<void> => {
+    // A server that outlived the last daemon (or that the front started) still hands every new pane the front's sockets.
+    await prepareTmuxServer(logger);
     // An events log that cannot be read spares whatever apply session exists: killing a live infra apply mid-run is the
     // costlier mistake.
     // A session that could not be adopted is swept as stale below, so the refusal is said, not dropped.
@@ -80,13 +88,22 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
             modelsAlive.push(panelSession(key));
         }
     }
+    // Taken back as jobs once the conversations load (boot-resumes.ts restoreBackgroundJobs), which spares them from
+    // then on.
+    const kept = keptJobSessions();
+    if (kept.length > 0) {
+        logger.info({ sessions: kept }, "boot: terminals running servers an agent kept for the person are adopted, not swept");
+    }
     await killStaleManagedSessions([
         ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
         ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
         ...modelsAlive,
+        ...kept,
     ]).catch(() => undefined);
     // Extension-gateway children of a daemon that died without unwinding hold connections a restore would duplicate.
     await killOrphanServiceProcesses(logger).catch(() => undefined);
+    // After the sessions above, so what tmux still holds is exactly what this boot adopted.
+    await sweepEarlierGenerations({ logger, panePids: async () => new Set((await panePids()).keys()) });
 };
 
 // Guarded by an empty (or only prewarmed) workspace, so a replayed env can never run over real work.

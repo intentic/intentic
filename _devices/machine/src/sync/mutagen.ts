@@ -20,12 +20,13 @@ import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
 import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
+import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
 import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";
 
-// The pinned Mutagen version this agent downloads when the machine has no install of its own.
+// The pinned Mutagen version this agent downloads and runs.
 const MUTAGEN_VERSION = "0.18.1";
 
 // How long one blocking Mutagen call may run before it is abandoned. Generous, since a loaded laptop's daemon can take
@@ -34,8 +35,53 @@ const MUTAGEN_VERSION = "0.18.1";
 // comes back with a null status (`error.code` ETIMEDOUT), which every caller already reads as the call having failed.
 export const MUTAGEN_CALL_TIMEOUT_MS = 60_000;
 
+// (2026-10-05) What a create may take, which no call had a bound for: a first `sync create` installs Mutagen's agent in
+// the sandbox over the transport (`setup` waits 90 s for one), and a create against a transport that accepts and never
+// speaks waited for good, holding the watcher's whole pass behind it. Five minutes is three times setup's own wait.
+export const MUTAGEN_CREATE_TIMEOUT_MS = 5 * 60_000;
+
 // Prefix every session this agent creates carries, sync and forward alike, so they're all findable again.
 const SESSION_PREFIX = "intentic-";
+
+// WHO OWNS A SESSION, said by the session itself (2026-10-05). One Mutagen daemon serves every Mutagen client of a user:
+// this agent's sessions sit beside the owner's own, and "ours" meant a name starting with `intentic-` and nothing more.
+// Every session and forward this agent creates from now on carries three labels: its owner (this computer and this
+// environment of it, environment.ts `sessionOwner`), the sandbox it is for, and what kind of session it is. An unattended
+// sweep acts only on a session labelled with this owner, or on an unlabelled one with the prefix, which is every session
+// made before labels; one labelled with ANOTHER owner is never touched, whatever its name says.
+export const OWNER_LABEL = "intentic-owner";
+const SANDBOX_LABEL = "intentic-sandbox";
+const KIND_LABEL = "intentic-kind";
+
+// The workspace (or project) sync, the state backup beside it, a port forward.
+export type SessionKind = "sync" | "state" | "forward";
+
+export interface SessionLabels {
+    readonly owner: string;
+    readonly sandbox: string;
+    readonly kind: SessionKind;
+}
+
+export const sessionLabels = (sandboxId: string, kind: SessionKind, owner: string = sessionOwner()): SessionLabels => ({
+    owner,
+    sandbox: labelValue(sanitizeId(sandboxId)),
+    kind,
+});
+
+// `--label key=value`, as Mutagen 0.18's `sync create` and `forward create` take it (a repeatable string-slice flag, so
+// a value may hold no comma; none of these can).
+export const labelArgs = (labels: SessionLabels | undefined): string[] =>
+    labels === undefined
+        ? []
+        : ["--label", `${OWNER_LABEL}=${labels.owner}`, "--label", `${SANDBOX_LABEL}=${labels.sandbox}`, "--label", `${KIND_LABEL}=${labels.kind}`];
+
+// Whose a session is, read off its owner label: this agent's own, another owner's, or one made before labels (by this
+// agent's older builds, if its name says so). A session of another owner is never this agent's to change.
+export type Ownership = "ours" | "theirs" | "unlabelled";
+export const ownershipOf = (labels: Readonly<Record<string, string>> | undefined, owner: string): Ownership => {
+    const said = labels?.[OWNER_LABEL];
+    return said === undefined || said === "" ? "unlabelled" : said === owner ? "ours" : "theirs";
+};
 
 // The Mutagen session name (letters/digits/dashes) that `sync list/pause/resume/terminate` target, from a pairing's key
 // (config.ts `pairingKey`). A key that is a sandbox id names its session as it always has. An attached folder's
@@ -74,17 +120,59 @@ export const syncSessionNames = (pairing: Pick<Pairing, "sandboxId" | "project" 
 const FORWARD_PREFIX = "intentic-fwd-";
 export const forwardSessionName = (sandboxId: string, port: number): string => `${FORWARD_PREFIX}${sanitizeId(sandboxId)}-${port}`;
 
-// Session names from a `list` listing, narrowed to this agent's prefix; anything else is the user's own Mutagen,
-// never ours to terminate.
-const oursIn = (listed: string, prefix: string): string[] => listed.split(/\s+/).filter((name) => name.startsWith(prefix));
+// One session as a listing names it: its name, its owner label when it carries one, and its identifier. The listing
+// prints each as `<name>@<owner>@<identifier>` (LIST_TEMPLATE); a token with no `@` is read as an unlabelled name with
+// no identifier, which is also what an older listing (or a test's stand-in for Mutagen) prints. Neither a session name,
+// a label value nor an identifier holds `@`, so the split is exact.
+export interface ListedSession {
+    readonly name: string;
+    readonly owner: string | undefined;
+    readonly identifier: string | undefined;
+}
+
+const present = (text: string | undefined): string | undefined => (text === undefined || text === "" ? undefined : text);
+
+export const listedSessions = (listed: string): ListedSession[] =>
+    listed
+        .split(/\s+/)
+        .filter((token) => token !== "")
+        .map((token) => {
+            const [name = "", owner, identifier] = token.split("@");
+            return { name, owner: present(owner), identifier: present(identifier) };
+        });
+
+// Whether a listed session is this agent's own: labelled with `owner`, or unlabelled under this agent's prefix (every
+// session made before labels). With no owner given, the prefix alone decides: the reading for a listing searched by name.
+const isOurs = (session: ListedSession, prefix: string, owner: string | undefined): boolean =>
+    session.name.startsWith(prefix) && (session.owner === undefined || owner === undefined || session.owner === owner);
+
+// Session names from a `list` listing, narrowed to this agent's own: labelled with `owner`, or unlabelled under this
+// agent's prefix (every session made before labels). Anything else is the user's own Mutagen, or another owner's,
+// never ours to terminate. With no owner given, only the unlabelled rule applies to unlabelled names, and a labelled
+// session counts as ours when its name has the prefix: the reading for a listing that is only being searched by name.
+const oursIn = (listed: string, prefix: string, owner?: string): string[] =>
+    listedSessions(listed)
+        .filter((session) => isOurs(session, prefix, owner))
+        .map((session) => session.name);
+
+// What to hand `terminate` for these names out of one listing: each of this agent's sessions under them by its
+// identifier, so a session another owner made under the same name is never taken along; by name where the listing
+// carried no identifier.
+export const terminateTargetsIn = (listed: string, names: readonly string[], prefix: string, owner: string): string[] => {
+    const wanted = new Set(names);
+    return listedSessions(listed)
+        .filter((session) => wanted.has(session.name) && isOurs(session, prefix, owner))
+        .map((session) => session.identifier ?? session.name)
+        .filter((target, index, all) => all.indexOf(target) === index);
+};
 
 // Parses the sandbox id off a forward name by its trailing digit port, immune to dashes in the id.
 const FORWARD_NAME = new RegExp(`^${FORWARD_PREFIX}(.+)-(\\d+)$`);
 
 // This agent's forward sessions, optionally narrowed to one sandbox. Parses the name rather than testing a
 // prefix, since `intentic-fwd-sandbox-a-` is itself a prefix of `intentic-fwd-sandbox-a-b-5173`.
-export const parseForwardNames = (listed: string, sandboxId?: string): string[] => {
-    const names = oursIn(listed, FORWARD_PREFIX);
+export const parseForwardNames = (listed: string, sandboxId?: string, owner?: string): string[] => {
+    const names = oursIn(listed, FORWARD_PREFIX, owner);
     if (sandboxId === undefined) {
         return names;
     }
@@ -94,49 +182,103 @@ export const parseForwardNames = (listed: string, sandboxId?: string): string[] 
 
 // Forward sessions belonging to no pairing still held: Mutagen keeps a forward's listener bound after its sandbox
 // is gone, so its port reads as busy until something terminates it.
-export const parseOrphanForwardNames = (listed: string, keptSandboxIds: readonly string[]): string[] => {
+export const parseOrphanForwardNames = (listed: string, keptSandboxIds: readonly string[], owner?: string): string[] => {
     const kept = new Set(keptSandboxIds.map(sanitizeId));
-    return parseForwardNames(listed).filter((name) => {
-        const owner = FORWARD_NAME.exec(name)?.[1];
-        return owner === undefined || !kept.has(owner);
+    return parseForwardNames(listed, undefined, owner).filter((name) => {
+        const held = FORWARD_NAME.exec(name)?.[1];
+        return held === undefined || !kept.has(held);
     });
 };
 
 // This agent's file-sync sessions minus the ones still held; retired only when nothing claims them, never merely
 // because another pairing arrived. Forward sessions share the prefix but never appear in `sync list`, so they aren't
 // caught here.
-export const parseOrphanSyncNames = (listed: string, keep: readonly string[]): string[] => {
+export const parseOrphanSyncNames = (listed: string, keep: readonly string[], owner?: string): string[] => {
     const kept = new Set(keep);
-    return oursIn(listed, SESSION_PREFIX).filter((name) => !kept.has(name));
+    return oursIn(listed, SESSION_PREFIX, owner).filter((name) => !kept.has(name));
 };
 
-// Raw name listing for one session kind; a dead daemon or failed list reports nothing to tear down.
-const listSessionNames = (mutagen: string, kind: "forward" | "sync"): string => {
-    const result = spawnSync(mutagen, [kind, "list", "--template", "{{range .}}{{.Name}} {{end}}"], {
-        encoding: "utf8",
-        windowsHide: true,
-        timeout: MUTAGEN_CALL_TIMEOUT_MS,
-    });
-    return result.status === 0 ? result.stdout : "";
+// Each session's name, owner label and identifier, one token per session. `index` on a session without labels yields
+// the empty string, so an unlabelled session prints as `<name>@@<identifier>`.
+const LIST_TEMPLATE = `{{range .}}{{.Name}}@{{index .Labels "${OWNER_LABEL}"}}@{{.Identifier}} {{end}}`;
+
+// THE DAEMON THAT ANSWERS IS NOT ALWAYS THIS AGENT'S VERSION. A Mutagen daemon refuses every client of another version
+// ("client/daemon version mismatch (daemon restart recommended)"), and an owner's own Mutagen, or this agent's previous
+// copy, may be the one that started it. Every listing failed that way, and every failed listing read as "no sessions":
+// the report said nothing synced, a session about to be converged read as missing and was created again, and the sweep
+// found nothing to retire. Now a failed listing is a failure (undefined, which every caller reads as "skip this"), and a
+// version mismatch restarts the daemon with this agent's copy, at most once per DAEMON_RESTART_MS so an owner's own
+// Mutagen restarting it back is not a fight every pass. Sessions are kept on disk by the daemon and come back with it.
+const VERSION_MISMATCH = /version mismatch/i;
+const DAEMON_RESTART_MS = 30 * 60_000;
+let daemonRestartedAt = Number.NEGATIVE_INFINITY;
+
+// Where the restart is said, set by the watcher (mirror.ts); a one-shot command says nothing of it.
+let daemonLog: Log | undefined;
+export const sayDaemonEventsTo = (log: Log | undefined): void => {
+    daemonLog = log;
 };
 
-// Every forward session in the daemon that is ours, all of them, or just one sandbox's.
-export const ourForwardSessions = (mutagen: string, sandboxId?: string): string[] =>
-    parseForwardNames(listSessionNames(mutagen, "forward"), sandboxId);
+// Whether a failed call's stderr is a version mismatch, and the restart that answers it was made now. Exported for the
+// rule's own test.
+export const restartsDaemonFor = (stderr: string, now: number, lastRestart: number): boolean =>
+    VERSION_MISMATCH.test(stderr) && now - lastRestart >= DAEMON_RESTART_MS;
+
+const recoverDaemon = (mutagen: string, stderr: string): boolean => {
+    const now = Date.now();
+    if (!restartsDaemonFor(stderr, now, daemonRestartedAt)) {
+        return false;
+    }
+    daemonRestartedAt = now;
+    // `daemon stop` connects without the version check, so it reaches a daemon of any version.
+    spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    const started = spawnSync(mutagen, ["daemon", "start"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    daemonLog?.(
+        `the Mutagen daemon running here is another version than this agent's (${mutagen}); ${started.status === 0 ? "restarted it with this agent's copy" : "could not restart it"}. Its sessions are kept on disk and come back with it.`,
+    );
+    return started.status === 0;
+};
+
+// One blocking Mutagen listing: stdout when it answered, undefined when it did not. A version mismatch restarts the
+// daemon (above) and asks once more.
+const listCall = (mutagen: string, args: readonly string[]): string | undefined => {
+    const run = (): SpawnSyncReturns<string> =>
+        spawnSync(mutagen, [...args], { encoding: "utf8", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    const first = run();
+    if (first.status === 0) {
+        return first.stdout;
+    }
+    if (!recoverDaemon(mutagen, first.stderr ?? "")) {
+        return undefined;
+    }
+    const again = run();
+    return again.status === 0 ? again.stdout : undefined;
+};
+
+// Raw name listing for one session kind, undefined when the daemon did not answer: never read as "nothing there".
+const listSessionNames = (mutagen: string, kind: "forward" | "sync"): string | undefined =>
+    listCall(mutagen, [kind, "list", "--template", LIST_TEMPLATE]);
+
+// Every forward session in the daemon that is ours, all of them, or just one sandbox's; undefined when Mutagen did not
+// answer.
+export const ourForwardSessions = (mutagen: string, sandboxId?: string): string[] | undefined => {
+    const listed = listSessionNames(mutagen, "forward");
+    return listed === undefined ? undefined : parseForwardNames(listed, sandboxId, sessionOwner());
+};
 
 // The ports one sandbox's live forwards are bound to, read off their names. The per-tick reconcile works from the
 // persisted baseline, which cannot see a session that baseline lost; this is the only thing that can.
-export const parseForwardPorts = (listed: string, sandboxId: string): number[] =>
-    parseForwardNames(listed, sandboxId).flatMap((name) => {
+export const parseForwardPorts = (listed: string, sandboxId: string, owner?: string): number[] =>
+    parseForwardNames(listed, sandboxId, owner).flatMap((name) => {
         const port = Number(FORWARD_NAME.exec(name)?.[2]);
         return Number.isInteger(port) ? [port] : [];
     });
 
-export const forwardedPorts = (mutagen: string, sandboxId: string): number[] => parseForwardPorts(listSessionNames(mutagen, "forward"), sandboxId);
-
-// Forward sessions no pairing in `keptSandboxIds` claims.
-const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[]): string[] =>
-    parseOrphanForwardNames(listSessionNames(mutagen, "forward"), keptSandboxIds);
+// Undefined when Mutagen did not answer, which the stranded sweep reads as "nothing known", never as "nothing held".
+export const forwardedPorts = (mutagen: string, sandboxId: string): number[] | undefined => {
+    const listed = listSessionNames(mutagen, "forward");
+    return listed === undefined ? undefined : parseForwardPorts(listed, sandboxId, sessionOwner());
+};
 
 // Binds the same local port and pipes it to the sandbox's recorded loopback address; `host` matters because a
 // `localhost` bind inside the sandbox can land on ::1 only (Vite), where 127.0.0.1 is refused. The sandbox's side is
@@ -146,11 +288,14 @@ export const mutagenForwardArgs = (args: {
     readonly port: number;
     readonly remote: SandboxEndpoint;
     readonly host: string;
+    // Who made it (OWNER_LABEL); absent only where a caller builds the arguments to look at them.
+    readonly labels?: SessionLabels | undefined;
 }): string[] => [
     "forward",
     "create",
     "--name",
     args.name,
+    ...labelArgs(args.labels),
     `tcp:127.0.0.1:${args.port}`,
     mutagenForwardUrl(args.remote, `tcp:${args.host.includes(":") ? `[${args.host}]` : args.host}:${args.port}`),
 ];
@@ -178,6 +323,9 @@ export interface SyncSessionSpec {
     // polled (SANDBOX_WATCH_MODE), so this is both how late a change made there arrives and how often one can cost this
     // device a cycle.
     readonly pollSeconds: number;
+    // Who made it, for which sandbox, as what (OWNER_LABEL). Absent from a spec built only to compare a session against,
+    // and then not compared either; present on every spec the watcher converges.
+    readonly labels?: SessionLabels | undefined;
 }
 
 // Mutagen's names for the modes, as `sync create --sync-mode` takes them and `sync list` prints them back.
@@ -193,7 +341,7 @@ export const syncMode = (pairing: Pick<Pairing, "project" | "direction">): "two-
 
 // The workspace session for a pairing: name and alias namespace on the sandbox id; the remote side is /work, or the
 // project folder a project pairing syncs (config.ts), and each kind gets its own ignore list (ssh.ts).
-export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
+export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode, owner?: string): SyncSessionSpec => ({
     name: sessionName(pairingKey(pairing)),
     localDir: pairing.localDir,
     remote: pairingEndpoint(pairing),
@@ -203,12 +351,13 @@ export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, sy
     from: "local",
     symlinks,
     pollSeconds: SANDBOX_POLL_SECONDS,
+    ...(owner === undefined ? {} : { labels: sessionLabels(pairing.sandboxId, "sync", owner) }),
 });
 
 // Mirrors the sandbox's state dir into `<localDir>/.intentic`, one-way, sandbox first — the daemon is the only
 // writer. Halts rather than emptying beta when alpha's root disappears, so a mid-rebuild sandbox isn't read as a
 // deleted backup. Never for a project pairing (syncSessionNames says why).
-const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
+const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode, owner?: string): SyncSessionSpec => ({
     name: backupSessionName(pairingKey(pairing)),
     localDir: join(pairing.localDir, STATE_DIR),
     remote: pairingEndpoint(pairing),
@@ -218,6 +367,7 @@ const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: 
     from: "sandbox",
     symlinks,
     pollSeconds: BACKUP_POLL_SECONDS,
+    ...(owner === undefined ? {} : { labels: sessionLabels(pairing.sandboxId, "state", owner) }),
 });
 
 // Seconds between the sandbox endpoint's own scans. Mutagen's default is 10, and that number is the whole latency of a
@@ -261,6 +411,7 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
         spec.name,
         "--sync-mode",
         spec.mode,
+        ...labelArgs(spec.labels),
         // Pinned for the same reason, and even where it is Mutagen's default: a user's global config must not decide
         // whether this session tries to create links on a device that cannot.
         "--symlink-mode",
@@ -350,6 +501,8 @@ export interface LiveSession {
     readonly conflicts?: readonly LiveConflict[];
     // Conflicts left out of the list above; the list is capped for display, never the true count.
     readonly excludedConflicts?: number;
+    // What it was created with by `--label` (OWNER_LABEL); absent on a session made before this agent labelled them.
+    readonly labels?: Readonly<Record<string, string>>;
 }
 
 // The session of this name, or undefined if none: a non-zero exit is Mutagen's "no match" or an unreachable
@@ -358,23 +511,33 @@ export interface LiveSession {
 // on one pair of roots flag each other's writes as conflicts and neither ever converges: measured on a dogfooding
 // machine as 2 identical sessions, 108 conflicts, and nothing propagating in either direction while a status of
 // "Watching for changes" claimed all was well. Reading `[0]` hid the second one from every check below.
-const readSessions = (mutagen: string, name: string): LiveSession[] => listSessions(mutagen, [name]);
+const readSessions = (mutagen: string, name: string): LiveSession[] | undefined => listSessions(mutagen, [name]);
 
 // Every session the daemon holds, in ONE `sync list`: what a report reads, rather than a process per session. Spawning
 // is what that read costs on Windows, and the report runs every 15 seconds over every pairing, the paused and the long
 // gone included: a dogfooding PC with 10 pairings spawned 80 Mutagen processes a minute for it. A daemon that does not
-// answer reads as no sessions, as one name not found did.
-export const readAllSessions = (mutagen: string): LiveSession[] => listSessions(mutagen, []);
+// answer is undefined, which the report reads as Mutagen not consulted, never as a daemon holding nothing.
+export const readAllSessions = (mutagen: string): LiveSession[] | undefined => listSessions(mutagen, []);
 
-const listSessions = (mutagen: string, names: readonly string[]): LiveSession[] => {
-    const result = spawnSync(mutagen, ["sync", "list", "--template", "{{json .}}", ...names], {
-        encoding: "utf8",
-        windowsHide: true,
-        timeout: MUTAGEN_CALL_TIMEOUT_MS,
-    });
+// `sync list <name>` exits non-zero both for a name it holds no session under and for a daemon that did not answer.
+// Asking by name would make those one answer, so a name is looked up in the whole listing instead: a name it lacks is
+// an empty list, a failed listing is undefined.
+const listSessions = (mutagen: string, names: readonly string[]): LiveSession[] | undefined => {
+    const listed = listCall(mutagen, ["sync", "list", "--template", "{{json .}}"]);
+    if (listed === undefined) {
+        return undefined;
+    }
     // SAFETY: Mutagen's own JSON rendering of its session list (null when it holds none), and every field read off it
-    // is optional in LiveSession, so a field this build does not know or one Mutagen left out reads as absent.
-    return result.status === 0 ? ((JSON.parse(result.stdout) as LiveSession[] | null) ?? []) : [];
+    // is optional in LiveSession, so a field this build does not know or one Mutagen left out reads as absent. An answer
+    // that is not that JSON is no answer.
+    let sessions: LiveSession[];
+    try {
+        sessions = (JSON.parse(listed) as LiveSession[] | null) ?? [];
+    } catch {
+        // allow(silent-catch): read as Mutagen not answering, which every caller already handles
+        return undefined;
+    }
+    return names.length === 0 ? sessions : sessions.filter((session) => session.name !== undefined && names.includes(session.name));
 };
 
 // That listing by name, the first session under each name kept: the one `readSessionState` would have read, since
@@ -461,8 +624,14 @@ export interface SessionConflicts {
     readonly conflicts: readonly DeviceConflict[];
 }
 
-export const readSessionConflicts = (mutagen: string, name: string): SessionConflicts | undefined => {
-    const session = readSessions(mutagen, name)[0];
+// Undefined for no session of that name, "unanswered" when Mutagen did not say: a heal skips both, a replacement waiting
+// to settle must not read the second as "nothing standing".
+export const readSessionConflicts = (mutagen: string, name: string): SessionConflicts | "unanswered" | undefined => {
+    const sessions = readSessions(mutagen, name);
+    if (sessions === undefined) {
+        return "unanswered";
+    }
+    const session = sessions[0];
     return session === undefined ? undefined : { ignores: session.ignore.paths ?? [], conflicts: (session.conflicts ?? []).map(conflictedPath) };
 };
 
@@ -470,7 +639,7 @@ export const readSessionConflicts = (mutagen: string, name: string): SessionConf
 // agent, a full cycle over a large workspace outlives any tick, and Mutagen's own filesystem watch picks the change up
 // regardless — the flush only stops it waiting for a coalescing window it has no reason to keep.
 export const flushSession = async (mutagen: string, name: string): Promise<void> => {
-    await runProcess(mutagen, ["sync", "flush", "--skip-wait", name]);
+    await runProcess(mutagen, ["sync", "flush", "--skip-wait", name], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
 };
 
 export const conflictsFrom = (
@@ -496,7 +665,7 @@ export interface SessionState {
 export const readSessionState = (mutagen: string, name: string): SessionState =>
     // The first of them is enough for a report: what a reader needs is that this pairing is syncing and how it is
     // doing, and duplicates are converged away by `convergeSession` rather than described here.
-    sessionStateOf(readSessions(mutagen, name)[0]);
+    sessionStateOf(readSessions(mutagen, name)?.[0]);
 
 // The same, of a session already read (or of none).
 export const sessionStateOf = (session: LiveSession | undefined): SessionState => {
@@ -516,9 +685,15 @@ export const sessionStateOf = (session: LiveSession | undefined): SessionState =
 
 // Which of these session names the daemon actually has. `sync list a b` is all-or-nothing, one unresolved name
 // fails the whole call, so callers ask this first and name the rest themselves.
-export const existingSyncSessions = (mutagen: string, names: readonly string[]): string[] => {
-    const listed = new Set(oursIn(listSessionNames(mutagen, "sync"), SESSION_PREFIX));
-    return names.filter((name) => listed.has(name));
+// Undefined when Mutagen did not answer: a caller that read that as "none" would create a second session over a folder,
+// or resume nothing it paused.
+export const existingSyncSessions = (mutagen: string, names: readonly string[]): string[] | undefined => {
+    const listed = listSessionNames(mutagen, "sync");
+    if (listed === undefined) {
+        return undefined;
+    }
+    const held = new Set(oursIn(listed, SESSION_PREFIX, sessionOwner()));
+    return names.filter((name) => held.has(name));
 };
 
 // Pauses a pairing's file sync, without touching a deliberate manual pause: answers whether it paused anything, and a
@@ -530,8 +705,9 @@ export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => 
         return false;
     }
     const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    // `every` over an empty list is true, so "no sessions" and "all paused" share the branch on purpose.
-    if (names.every((name) => readSessionState(mutagen, name).paused === true)) {
+    // `every` over an empty list is true, so "no sessions" and "all paused" share the branch on purpose. A listing that
+    // did not answer pauses nothing: the next pass asks again.
+    if (names === undefined || names.every((name) => readSessionState(mutagen, name).paused === true)) {
         return false;
     }
     const result = spawnSync(mutagen, ["sync", "pause", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
@@ -543,7 +719,7 @@ export const pauseUnreachableSync = pauseRunningSync;
 // Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
 export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {
     const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    if (names.length === 0) {
+    if (names === undefined || names.length === 0) {
         return false;
     }
     return spawnSync(mutagen, ["sync", "resume", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS }).status === 0;
@@ -554,12 +730,16 @@ export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean
         return false;
     }
     const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    if (names.length === 0) {
+    if (names === undefined || names.length === 0) {
         return false;
     }
     const result = spawnSync(mutagen, ["sync", "resume", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
     return result.status === 0;
 };
+
+// Lifts a pause the watcher made for a reason of its own (config.ts `fileSyncPausedFor`), once that reason ended. The
+// same as the swap's: that pause paused every session the pairing has.
+export const resumeWatcherPausedSync = (mutagen: string, pairing: Pairing): boolean => resumeSwapPausedSync(mutagen, pairing);
 
 // Whether a live session joins the same two folders the spec does, in the same direction. Which endpoint should hold
 // what follows the spec's direction; a backup with reversed ends must never read as "close enough" — it would upload
@@ -567,7 +747,11 @@ export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean
 // different pair of ends as much as a local one is, and so is the same folder reached another way: a session made over
 // ssh is replaced once its pairing reaches the sandbox through Docker, and the other way round.
 export const sameEnds = (session: Pick<LiveSession, "alpha" | "beta">, spec: SyncSessionSpec): boolean => {
-    const local: Required<Pick<LiveEndpoint, "protocol" | "path">> & { readonly host: undefined } = { protocol: "local", host: undefined, path: spec.localDir };
+    const local: Required<Pick<LiveEndpoint, "protocol" | "path">> & { readonly host: undefined } = {
+        protocol: "local",
+        host: undefined,
+        path: spec.localDir,
+    };
     const remote = { ...liveIdentity(spec.remote), path: spec.remoteDir };
     const [alpha, beta] = spec.from === "local" ? [local, remote] : [remote, local];
     const matches = (live: LiveEndpoint, wanted: { readonly protocol: string; readonly host: string | undefined; readonly path: string }): boolean =>
@@ -610,11 +794,38 @@ export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec):
     );
 };
 
+// HOW MANY SESSIONS ONE PASS MAY RECREATE ONLY TO LABEL THEM (2026-10-05). Mutagen has no verb that adds a label to a
+// session that exists, so a session made before labels gets its owner only by being made again. That is never needed
+// for correctness (an unlabelled session under this agent's prefix is still read as its own), and each one costs a
+// rescan of both sides, so it is paced: one per pass of the watcher, and only where a replacement is safe anyway (the
+// sandbox answers; a two-way session has settled, readyForReplacement). A recreate of a two-way session over two copies
+// that already agree rescans and transfers nothing; paced, a machine with twenty sessions takes a couple of hours to
+// carry labels on all of them instead of rescanning everything in its first minute.
+export interface RelabelBudget {
+    readonly take: () => boolean;
+}
+
+export const relabelBudget = (count: number): RelabelBudget => {
+    let left = count;
+    return {
+        take: () => {
+            if (left <= 0) {
+                return false;
+            }
+            left -= 1;
+            return true;
+        },
+    };
+};
+
+const NO_RELABELS: RelabelBudget = { take: () => false };
+
 // Converges the session to this build's spec: creates if missing, recreates if drifted, since recreating is the
 // only way to change ignores. Cheap when content already matches (a rescan, not a re-download); a paused session stays
 // paused. Answers whether both sessions now ARE the spec: false means something was put off (a create that failed is
-// thrown instead), and the watcher tries again on its cadence rather than at its next start.
-export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: Log): Promise<boolean> => {
+// thrown instead, a session waiting for its labels until a pass has room for it), and the watcher tries again on its
+// cadence rather than at its next start.
+export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: Log, relabels: RelabelBudget = NO_RELABELS): Promise<boolean> => {
     if (pairing.mode !== "sync" || pairing.localDir === undefined) {
         return true; // a mirror-only enrollment has no file sync at all: just port forwards
     }
@@ -629,16 +840,18 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     // since that's what the user is waiting on. An unreachable sandbox leaves both alone, never half-converged.
     let converged = true;
     const answers = transportAnswers(pairing);
-    for (const spec of sessionSpecs(held, symlinks.mode)) {
-        converged = (await convergeSession(mutagen, spec, log, answers)) && converged;
+    for (const spec of sessionSpecs(held, symlinks.mode, sessionOwner())) {
+        converged = (await convergeSession(mutagen, spec, log, answers, relabels)) && converged;
     }
     retireStrayBackup(mutagen, pairing, log);
     return converged;
 };
 
-// What one pairing's sessions should be, in the order they are converged.
-export const sessionSpecs = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): readonly SyncSessionSpec[] =>
-    isProjectPairing(pairing) ? [sessionSpec(pairing, symlinks)] : [sessionSpec(pairing, symlinks), backupSpec(pairing, symlinks)];
+// What one pairing's sessions should be, in the order they are converged; labelled when an owner is given.
+export const sessionSpecs = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode, owner?: string): readonly SyncSessionSpec[] =>
+    isProjectPairing(pairing)
+        ? [sessionSpec(pairing, symlinks, owner)]
+        : [sessionSpec(pairing, symlinks, owner), backupSpec(pairing, symlinks, owner)];
 
 // A state backup a project pairing should never have had, found and terminated: an older agent's, or one left from when
 // this sandbox was paired as a workspace. Surplus rather than a choice, since it writes the sandbox's state dir into the
@@ -647,12 +860,15 @@ export const strayBackupSessions = (pairing: Pick<Pairing, "sandboxId" | "projec
     isProjectPairing(pairing) ? live.filter((name) => name === backupSessionName(pairingKey(pairing))) : [];
 
 const retireStrayBackup = (mutagen: string, pairing: Pairing, log: Log): void => {
-    const stray = strayBackupSessions(pairing, existingSyncSessions(mutagen, [backupSessionName(pairingKey(pairing))]));
+    const live = existingSyncSessions(mutagen, [backupSessionName(pairingKey(pairing))]);
+    const stray = live === undefined ? [] : strayBackupSessions(pairing, live);
     if (stray.length === 0) {
         return;
     }
     spawnSync(mutagen, ["sync", "terminate", ...stray], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
-    log(`${pairingKey(pairing)}: its folder is a project of yours, which carries no copy of the sandbox's state; terminated the state backup that was writing one into it.`);
+    log(
+        `${pairingKey(pairing)}: its folder is a project of yours, which carries no copy of the sandbox's state; terminated the state backup that was writing one into it.`,
+    );
 };
 
 // Every session under one name except the oldest, by identifier. Mutagen lists sessions by creation time. Terminating
@@ -664,27 +880,34 @@ export const surplusSessions = (sessions: readonly LiveSession[]): string[] =>
 
 // One synchronizer per name before anything else is decided. The list is read again rather than assumed: if a
 // terminate did not take, the duplicates are still there, and convergePlan replaces them all from a settled state as
-// it did before.
-const retireSurplus = (mutagen: string, name: string, log: Log): LiveSession[] => {
+// it did before. Undefined when Mutagen did not answer.
+const retireSurplus = (mutagen: string, name: string, log: Log): LiveSession[] | undefined => {
     const sessions = readSessions(mutagen, name);
-    const surplus = surplusSessions(sessions);
-    if (surplus.length === 0) {
+    const surplus = sessions === undefined ? [] : surplusSessions(sessions);
+    if (sessions === undefined || surplus.length === 0) {
         return sessions;
     }
     spawnSync(mutagen, ["sync", "terminate", ...surplus], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
-    log(`${name}: ${sessions.length} sync sessions shared this name and flagged each other's writes as conflicts; kept the oldest and terminated the rest.`);
+    log(
+        `${name}: ${sessions.length} sync sessions shared this name and flagged each other's writes as conflicts; kept the oldest and terminated the rest.`,
+    );
     return readSessions(mutagen, name);
 };
 
 // What to do with what `sync list <name>` answered. Kept pure and beside `sessionMatchesSpec` so the one case that
 // cost a dogfooding machine its file sync — SEVERAL sessions under one name, each flagging the other's writes as
-// conflicts — is a rule with a test rather than a branch inside a process spawner.
-export const convergePlan = (sessions: readonly LiveSession[], spec: SyncSessionSpec): "keep" | "create" | "replace" => {
+// conflicts — is a rule with a test rather than a branch inside a process spawner. "relabel" is a session that is
+// everything the spec says but made before labels (RelabelBudget says when that is acted on); a spec with no labels
+// never asks for them, and a session labelled with another owner is never this function's to see (convergeSession).
+export const convergePlan = (sessions: readonly LiveSession[], spec: SyncSessionSpec): "keep" | "create" | "replace" | "relabel" => {
     if (sessions.length === 0) {
         return "create";
     }
     const only = sessions.length === 1 ? sessions[0] : undefined;
-    return only !== undefined && sessionMatchesSpec(only, spec) ? "keep" : "replace";
+    if (only === undefined || !sessionMatchesSpec(only, spec)) {
+        return "replace";
+    }
+    return spec.labels !== undefined && ownershipOf(only.labels, spec.labels.owner) === "unlabelled" ? "relabel" : "keep";
 };
 
 // Whether a replacement waits for a settled pair of roots and sweeps residue first (readyForReplacement): only a
@@ -715,6 +938,10 @@ const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, live:
     }
     await flushSession(mutagen, spec.name);
     const held = readSessionConflicts(mutagen, spec.name);
+    // A listing that did not answer says nothing about what stands: the replacement waits for one that does.
+    if (held === "unanswered") {
+        return false;
+    }
     const cleared =
         held === undefined || held.conflicts.length === 0
             ? { standing: 0 }
@@ -762,11 +989,45 @@ export const transportAnswers = (pairing: Pick<Pairing, "sandboxId" | "sandboxUr
         : async () => await sshTransportAnswers(mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]), endpoint.alias);
 };
 
-const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log, answers: () => Promise<boolean>): Promise<boolean> => {
+// The sessions to terminate for a replacement: each by its identifier, so a session of another owner that happens to
+// share the name is never taken with them; by name only for a listing that carries no identifiers.
+export const terminationTargets = (sessions: readonly Pick<LiveSession, "identifier">[], name: string): string[] =>
+    sessions.length > 0 && sessions.every((session) => session.identifier !== undefined)
+        ? sessions.flatMap((session) => session.identifier ?? [])
+        : [name];
+
+const convergeSession = async (
+    mutagen: string,
+    spec: SyncSessionSpec,
+    log: Log,
+    answers: () => Promise<boolean>,
+    relabels: RelabelBudget,
+): Promise<boolean> => {
+    const listed = readSessions(mutagen, spec.name);
+    if (listed === undefined) {
+        log(`${spec.name}: Mutagen did not answer a listing, so this session is left as it is this pass. Retrying later.`);
+        return false;
+    }
+    // A session under this name that ANOTHER owner made is never touched, and none is made beside it: two synchronizers
+    // over one folder overwrite each other.
+    const owner = spec.labels?.owner;
+    if (owner !== undefined && listed.some((session) => ownershipOf(session.labels, owner) === "theirs")) {
+        log(
+            `${spec.name}: a session of this name belongs to another owner (${OWNER_LABEL} says so), so this one is neither replaced nor made beside it.`,
+        );
+        return false;
+    }
     const sessions = retireSurplus(mutagen, spec.name, log);
+    if (sessions === undefined) {
+        return false;
+    }
     const plan = convergePlan(sessions, spec);
     if (plan === "keep") {
         return true;
+    }
+    // Put off rather than kept: the pairing stays pending, and a later pass with room for one takes it.
+    if (plan === "relabel" && !relabels.take()) {
+        return false;
     }
     const live = sessions.length === 1 ? sessions[0] : undefined;
     if (sessions.length > 1) {
@@ -778,7 +1039,7 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log,
         );
         return false;
     }
-    if (plan === "replace") {
+    if (plan === "replace" || plan === "relabel") {
         // Never tears down a session it can't replace: `sync create` needs the sandbox to answer, so the transport is
         // probed first, and an unreachable sandbox keeps its drifted session (retried on the watcher's cadence) rather
         // than losing sync entirely.
@@ -792,9 +1053,15 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log,
             return false;
         }
         log(
-            `${spec.name}: the running sync session does not match this build's rules (its ignores, its folder, which way it syncs, or what it does with symbolic links): recreating it so they apply, as ${spec.mode}. This starts the comparison from scratch.`,
+            plan === "relabel"
+                ? `${spec.name}: made before this agent labelled its sessions, and Mutagen cannot label a session that exists: recreating it with this machine's ownership labels, as ${spec.mode}. Both sides are rescanned; nothing that already matches is copied.`
+                : `${spec.name}: the running sync session does not match this build's rules (its ignores, its folder, which way it syncs, or what it does with symbolic links): recreating it so they apply, as ${spec.mode}. This starts the comparison from scratch.`,
         );
-        spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        spawnSync(mutagen, ["sync", "terminate", ...terminationTargets(sessions, spec.name)], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        });
     }
     await runMutagenAsync(mutagen, mutagenCreateArgs(spec, live?.paused === true), log);
     return true;
@@ -821,7 +1088,7 @@ export const healDerivedConflicts = async (mutagen: string, pairing: Pairing, lo
         return idle;
     }
     const held = readSessionConflicts(mutagen, sessionName(pairingKey(pairing)));
-    if (held === undefined || held.conflicts.length === 0) {
+    if (held === undefined || held === "unanswered" || held.conflicts.length === 0) {
         return idle;
     }
     const outcome = await clearConflictResidue({ root: pairing.localDir, conflicts: held.conflicts, ignores: held.ignores, log });
@@ -832,20 +1099,44 @@ export const healDerivedConflicts = async (mutagen: string, pairing: Pairing, lo
 };
 
 // Sweeps file-sync and forward sessions no pairing claims any more, so an unpaired sandbox stops being dialled
-// and releases its ports. Must never fire merely because another sandbox was added.
-export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing[], log: Log): void => {
-    const ids = pairings.map((pairing) => pairing.sandboxId);
-    const sessions = parseOrphanSyncNames(
-        listSessionNames(mutagen, "sync"),
-        pairings.flatMap((pairing) => syncSessionNames(pairing)),
-    );
-    if (sessions.length > 0) {
-        spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+// and releases its ports. Must never fire merely because another sandbox was added. Acts only on this agent's own
+// sessions (OWNER_LABEL, or unlabelled under its prefix), never on one labelled with another owner, and on nothing at
+// all when Mutagen did not answer the listing: an unanswered listing is not an empty one. (2026-10-05) Run every few
+// passes rather than only at the watcher's start, setup and a revocation, so a leftover from any other path (a pairing
+// edited away, a crash between two writes) is gone within a minute instead of at the next restart.
+export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing[], log: Log, owner: string = sessionOwner()): void => {
+    const listedSync = listSessionNames(mutagen, "sync");
+    const sessions =
+        listedSync === undefined
+            ? []
+            : parseOrphanSyncNames(
+                  listedSync,
+                  pairings.flatMap((pairing) => syncSessionNames(pairing)),
+                  owner,
+              );
+    if (listedSync !== undefined && sessions.length > 0) {
+        spawnSync(mutagen, ["sync", "terminate", ...terminateTargetsIn(listedSync, sessions, SESSION_PREFIX, owner)], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        });
         log(`retired ${plural(sessions.length, "file-sync session")} belonging to sandboxes this machine no longer pairs.`);
     }
-    const forwards = orphanForwardSessions(mutagen, ids);
-    if (forwards.length > 0) {
-        spawnSync(mutagen, ["forward", "terminate", ...forwards], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    const listedForwards = listSessionNames(mutagen, "forward");
+    const forwards =
+        listedForwards === undefined
+            ? []
+            : parseOrphanForwardNames(
+                  listedForwards,
+                  pairings.map((pairing) => pairing.sandboxId),
+                  owner,
+              );
+    if (listedForwards !== undefined && forwards.length > 0) {
+        spawnSync(mutagen, ["forward", "terminate", ...terminateTargetsIn(listedForwards, forwards, FORWARD_PREFIX, owner)], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        });
         log(`released ${plural(forwards.length, "port forward")} left holding localhost for sandboxes this machine no longer pairs.`);
     }
 };
@@ -862,11 +1153,15 @@ const installedVersion = (binary: string, versionArgs: string[]): string | undef
 
 // Extract a gzipped tarball into this agent's own bin using the system `tar` (bsdtar on macOS/Windows 10+).
 const extractTarball = (tarball: string): void => {
-    const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true });
+    // Bounded under the agent's own hang watchdog (watchdog.ts), since a blocking call here holds its event loop.
+    const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true, timeout: 2 * 60_000 });
     if (extract.status !== 0) {
         throw new Error(`failed to extract ${tarball}: tar's own reason is above (no \`tar\` on PATH, or a file it must replace is in use)`);
     }
 };
+
+// A PATH lookup is a local read; past this, the shell or `where.exe` is stuck, and the answer is "not found".
+const PATH_LOOKUP_TIMEOUT_MS = 10_000;
 
 // Where PATH's copy of a command is at this moment. A bare name is resolved again every time it is run, against a
 // PATH this agent does not control, which is how an autostart entry keeps starting a binary from a retired install.
@@ -874,14 +1169,14 @@ const resolveOnPath = (command: string): string | undefined => {
     const whereExe = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "where.exe");
     const found =
         process.platform === "win32"
-            ? spawnSync(whereExe, [command], { encoding: "utf8", windowsHide: true })
-            : spawnSync("sh", ["-c", `command -v ${command}`], { encoding: "utf8" });
+            ? spawnSync(whereExe, [command], { encoding: "utf8", windowsHide: true, timeout: PATH_LOOKUP_TIMEOUT_MS })
+            : spawnSync("sh", ["-c", `command -v ${command}`], { encoding: "utf8", timeout: PATH_LOOKUP_TIMEOUT_MS });
     // `where` lists every match, best first; `command -v` prints the single one it would run.
     const first = found.status === 0 ? found.stdout.split("\n")[0]?.trim() : undefined;
     return first === undefined || first === "" || !existsSync(first) ? undefined : first;
 };
 
-// The copy this agent downloads and runs when the machine has no Mutagen of its own.
+// The copy this agent downloads and runs.
 export const ownMutagenPath = (): string => join(binDir, `mutagen${exe}`);
 
 // Whether a resolved Mutagen is that copy, rather than the user's own install found on PATH: only this agent's copy's
@@ -892,17 +1187,38 @@ export const isOwnMutagen = (mutagen: string, own: string = ownMutagenPath(), pl
     return fold(mutagen) === fold(own);
 };
 
-// Resolves mutagen to an absolute path and never a bare name (see resolveOnPath): the user's own install if
-// present, else the pinned copy, downloaded and extracted only when our bin isn't already at that version.
+// A Mutagen the user installed for themselves, on PATH, or undefined. Its daemon is the same daemon this agent talks to
+// (one per user), so its presence is what makes stopping that daemon somebody else's business too (`sync uninstall`).
+export const userMutagenOnPath = (): string | undefined => {
+    const found = resolveOnPath("mutagen");
+    return found === undefined || isOwnMutagen(found) ? undefined : found;
+};
+
+// WHICH MUTAGEN THIS AGENT RUNS: its own pinned copy, downloaded when absent or another version, and an absolute path
+// either way (see resolveOnPath). (2026-10-05) A Mutagen on PATH used to win, so the version that drove every session
+// was whatever the owner had installed, and a daemon started by one version refused every client of another: each
+// failed listing read as "no sessions" (the version mismatch above). The pinned copy is what this agent was tested
+// with, and the one whose daemon `recoverDaemon` restarts. PATH's copy is used only when the pinned one cannot be had
+// (offline at first start), so a machine with Mutagen installed still syncs while the download keeps failing.
 export const ensureMutagen = async (): Promise<string> => {
-    const own = resolveOnPath("mutagen");
-    if (own !== undefined && installedVersion(own, ["version"]) !== undefined) {
-        return own;
-    }
     const dest = ownMutagenPath();
     if (installedVersion(dest, ["version"]) === MUTAGEN_VERSION) {
         return dest;
     }
+    try {
+        await installPinnedMutagen(dest);
+        return dest;
+    } catch (error) {
+        const onPath = resolveOnPath("mutagen");
+        if (onPath !== undefined && installedVersion(onPath, ["version"]) !== undefined) {
+            daemonLog?.(`this agent's own Mutagen ${MUTAGEN_VERSION} could not be fetched (${errorMessage(error)}); using ${onPath} until it can.`);
+            return onPath;
+        }
+        throw error;
+    }
+};
+
+const installPinnedMutagen = async (dest: string): Promise<void> => {
     // Stops any daemon from our copy first; on Windows that's what holds the file open. Best-effort.
     spawnSync(dest, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
     const tarball = join(binDir, "mutagen.tar.gz");
@@ -917,14 +1233,13 @@ export const ensureMutagen = async (): Promise<string> => {
     await chmod(dest, 0o755);
     await rm(displaced, { force: true }).catch(() => undefined);
     await rm(tarball, { force: true }).catch(() => undefined);
-    return dest;
 };
 
 // Runs without blocking, for anything that dials a sandbox (sync/forward create): the watcher serves the SSH
 // transport those commands ride, so a blocking spawn would deadlock it (exec.ts). Throws on failure like its blocking
 // twin.
 export const runMutagenAsync = async (mutagen: string, args: readonly string[], log: Log): Promise<void> => {
-    const result = await runProcess(mutagen, args);
+    const result = await runProcess(mutagen, args, { timeoutMs: MUTAGEN_CREATE_TIMEOUT_MS });
     const said = `${result.stdout}${result.stderr}`.trim();
     if (result.status === 0) {
         return;
@@ -938,7 +1253,7 @@ export const runMutagenAsync = async (mutagen: string, args: readonly string[], 
 // Runs a mutagen subcommand, inheriting stdio, throwing on failure. One-shot CLI commands only, never the
 // resident watcher.
 export const runMutagen = (mutagen: string, args: string[]): SpawnSyncReturns<Buffer> => {
-    const result = spawnSync(mutagen, args, { stdio: "inherit", windowsHide: true });
+    const result = spawnSync(mutagen, args, { stdio: "inherit", windowsHide: true, timeout: MUTAGEN_CREATE_TIMEOUT_MS });
     if (result.error !== undefined) {
         throw result.error;
     }

@@ -94,8 +94,8 @@ import { createPerfTracker } from "./system/resources/perf.js";
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { internalTools } from "./agent/tools/agent-tools.js";
-import { backgroundJobSessions } from "./agent/tools/jobs/background-jobs.js";
-import { conversationBusy } from "./agent/run/turn/turn-liveness.js";
+import { backgroundJobSessions, keptJobDirs } from "./agent/tools/jobs/background-jobs.js";
+import { conversationBusy, turnInFlight } from "./agent/run/turn/turn-liveness.js";
 import { createTurnMounts, TURN_MOUNT_BASE, type TurnMounts } from "./agent/tools/turn-mounts.js";
 import { enabledExtensions, type ExtensionHost } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
@@ -335,7 +335,17 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
 const createReaper = ({ conversations, agents, events, logger }: Pick<Services, "conversations" | "agents" | "events" | "logger">): ResourceReaper =>
     createResourceReaper({
         ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(conversations, owner),
+        // A watch keeps the conversation for its wake; its finished turn's processes go regardless (2026-10-05).
+        processOwnerLive: (owner) => owner === DAEMON_OWNER || turnInFlight(conversations, owner),
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
+        // Gone only on the registry's word: one that lists no conversation at all says nothing about any.
+        ownerGone: (owner) => {
+            if (agents.ids().length === 0) {
+                return undefined;
+            }
+            const entry = agents.entry(owner);
+            return entry === undefined || entry.archivedAt !== undefined;
+        },
         liveSessionNames: () =>
             new Set([
                 ...conversations.liveSessionIds().flatMap((sessionId) => {
@@ -348,6 +358,7 @@ const createReaper = ({ conversations, agents, events, logger }: Pick<Services, 
                 ...backgroundJobSessions(conversations),
             ]),
         panePids,
+        keptJobDirs,
         onOwnerStopped: (listener) => events.subscribe("run.settled", (settled) => listener(settled.conversationId)),
         logger,
     });

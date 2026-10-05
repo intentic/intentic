@@ -1858,6 +1858,8 @@ dependencies = [
  "futures-util",
  "quinn",
  "relay",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-tungstenite",
  "tokio-util",

@@ -3,7 +3,7 @@ import type { HostReportInput } from "@intentic/api-contract";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
-import { HOST_REPORT_INTERVAL_MS } from "./sandbox/host-report.js";
+import { HOST_REPORT_INTERVAL_MS, reporterOf } from "./sandbox/host-report.js";
 import { INGRESS_TEST_PRIVATE_KEY, testIngressConfig } from "./testing.js";
 import { mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { mintAdoptionTicket } from "./sandbox/recovery.js";
@@ -94,6 +94,77 @@ describe(`POST /setup/claim`, () => {
         const res = await claim(prisma);
         expect(res.status).toBe(404);
     });
+
+    /* ONE PASTED COMMAND, ONE COPY (2026-10-05). The same command run in PowerShell and in WSL used to start two
+     * containers on one token. An `ic` that names its machine in the claim is held to the first machine that did. */
+    describe(`the machine that claims`, () => {
+        const claimAs = (prisma: PrismaClient, fields: string) =>
+            createApp(config, prisma, logger).app.request(`/setup/claim`, {
+                method: `POST`,
+                headers: { "content-type": `application/x-www-form-urlencoded` },
+                body: `code=abc${fields}`,
+            });
+        const claimedBy = (held: Record<string, unknown>, over: Record<string, unknown> = {}) => ({
+            ...intenticRow(),
+            setupCodeClaimedAt: new Date(Date.now() - 5 * 60_000),
+            setupClaimedBy: { ...held, at: new Date(Date.now() - 5 * 60_000).toISOString() },
+            removedAt: null,
+            ...over,
+        });
+
+        it(`records the first machine that names itself`, async () => {
+            const update = jest.fn();
+            const prisma = fakePrisma({
+                sandbox: { findUnique: jest.fn().mockResolvedValue({ ...intenticRow(), setupCodeClaimedAt: null, setupClaimedBy: null }), update },
+            });
+            expect((await claimAs(prisma, `&host=ROG&os=windows&instance=run-1`)).status).toBe(200);
+            expect(update).toHaveBeenCalledWith({
+                where: { id: `s1` },
+                data: {
+                    setupCodeClaimedAt: expect.any(Date),
+                    setupReport: Prisma.DbNull,
+                    setupClaimedBy: { host: `ROG`, os: `windows`, instance: `run-1`, at: expect.any(String) },
+                },
+            });
+        });
+
+        it(`refuses the code on a different machine, in words, and writes nothing`, async () => {
+            const update = jest.fn();
+            const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(claimedBy({ host: `ROG`, os: `windows` })), update } });
+            const res = await claimAs(prisma, `&host=rog&os=linux`);
+            expect(res.status).toBe(409);
+            const sentence = await res.text();
+            expect(sentence).toContain(`already used on ROG (windows) 5 minutes ago`);
+            expect(sentence).toContain(`rog (linux)`);
+            expect(sentence).not.toContain(`CONNECT_TOKEN`);
+            expect(update).not.toHaveBeenCalled();
+        });
+
+        it(`lets the same machine run it again, whatever case Windows spells its name in`, async () => {
+            const update = jest.fn();
+            const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(claimedBy({ host: `ROG`, os: `windows` })), update } });
+            expect((await claimAs(prisma, `&host=rog&os=windows`)).status).toBe(200);
+            // The first claimer stays the one on record.
+            expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { setupCodeClaimedAt: expect.any(Date), setupReport: Prisma.DbNull } });
+        });
+
+        it(`lets the code go to another machine once the first copy reported its removal`, async () => {
+            const prisma = fakePrisma({
+                sandbox: {
+                    findUnique: jest.fn().mockResolvedValue(claimedBy({ host: `ROG`, os: `windows` }, { removedAt: new Date() })),
+                    update: jest.fn(),
+                },
+            });
+            expect((await claimAs(prisma, `&host=omen&os=windows`)).status).toBe(200);
+        });
+
+        it(`never refuses a claim that names no machine: nothing about it can be compared`, async () => {
+            const prisma = fakePrisma({
+                sandbox: { findUnique: jest.fn().mockResolvedValue(claimedBy({ host: `ROG`, os: `windows` })), update: jest.fn() },
+            });
+            expect((await claimAs(prisma, ``)).status).toBe(200);
+        });
+    });
 });
 
 const report = (prisma: PrismaClient, body: unknown) =>
@@ -169,7 +240,14 @@ const fixing: HostReportInput = {
 const reportRow = (hostReport: unknown = null) => ({ id: `s1`, token: `tok`, tokenDigest: TOKEN_DIGEST, hostReport, hosted: null });
 
 // A row holding a live fix code, as the claim selects it.
-const fixRow = () => ({ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, fixCodeExpiresAt: new Date(Date.now() + 60_000), removedAt: null, hosted: null });
+const fixRow = () => ({
+    id: `s1`,
+    tunnelId: TUNNEL_ID,
+    token: `tok`,
+    fixCodeExpiresAt: new Date(Date.now() + 60_000),
+    removedAt: null,
+    hosted: null,
+});
 
 const claimFix = (prisma: PrismaClient, body: unknown) =>
     createApp(config, prisma, logger).app.request(`/host-report/claim`, {
@@ -245,9 +323,31 @@ describe(`POST /host-report`, () => {
         expect(updateMany).toHaveBeenCalledWith({
             // Pinned to the token the key was checked against, like announce.
             where: { id: `s1`, tokenDigest: TOKEN_DIGEST },
-            // The platform's own clock: a machine with a wrong one must not narrate from the past.
-            data: { hostReport: { ...fixing, at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } },
+            // The platform's own clock: a machine with a wrong one must not narrate from the past. Kept in its reporter's
+            // own slot (2026-10-05), so another environment on the machine does not overwrite it.
+            data: {
+                hostReport: {
+                    reporters: { [reporterOf(fixing)]: { ...fixing, at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } },
+                },
+            },
         });
+    });
+
+    // The Windows agent and the WSL agent on one PC report on the same sandbox; one's report is not the other's repeat.
+    it(`keeps another reporter's report beside this one, and does not throttle one with the other's`, async () => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const windows = { ...fixing, os: `windows` as const, at: new Date().toISOString() };
+        const res = await postHostReport(
+            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(windows)), updateMany } }),
+            REPORT_KEY,
+            {
+                sandbox: TUNNEL_ID,
+                report: { ...fixing, os: `wsl`, env: `Ubuntu` },
+            },
+        );
+        expect(res.status).toBe(204);
+        const [[written]] = updateMany.mock.calls as [[{ data: { hostReport: { reporters: Record<string, { os: string }> } } }]];
+        expect(Object.values(written.data.hostReport.reporters).map((report) => report.os)).toEqual([`wsl`, `windows`]);
     });
 
     it.each([
@@ -310,10 +410,14 @@ describe(`POST /host-report`, () => {
     it(`skips a report of the same stage and outcome inside the interval, answering 204 so ic never retries`, async () => {
         const updateMany = jest.fn();
         const stored = { ...fixing, doing: `Waiting for Docker Desktop`, at: new Date().toISOString() };
-        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(stored)), updateMany } }), REPORT_KEY, {
-            sandbox: TUNNEL_ID,
-            report: fixing,
-        });
+        const res = await postHostReport(
+            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(stored)), updateMany } }),
+            REPORT_KEY,
+            {
+                sandbox: TUNNEL_ID,
+                report: fixing,
+            },
+        );
         expect(res.status).toBe(204);
         expect(updateMany).not.toHaveBeenCalled();
     });
@@ -325,13 +429,20 @@ describe(`POST /host-report`, () => {
         [`the stored one no longer parses`, { stage: `fixing`, at: new Date().toISOString() }],
     ])(`writes inside the interval when %s`, async (_case, stored) => {
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(stored)), updateMany } }), REPORT_KEY, {
-            sandbox: TUNNEL_ID,
-            report: fixing,
-        });
+        const res = await postHostReport(
+            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(stored)), updateMany } }),
+            REPORT_KEY,
+            {
+                sandbox: TUNNEL_ID,
+                report: fixing,
+            },
+        );
         expect(res.status).toBe(204);
         expect(updateMany).toHaveBeenCalledTimes(1);
-        expect(updateMany).toHaveBeenCalledWith({ where: { id: `s1`, tokenDigest: TOKEN_DIGEST }, data: { hostReport: { ...fixing, at: expect.any(String) } } });
+        expect(updateMany).toHaveBeenCalledWith({
+            where: { id: `s1`, tokenDigest: TOKEN_DIGEST },
+            data: { hostReport: { reporters: { [reporterOf(fixing)]: { ...fixing, at: expect.any(String) } } } },
+        });
     });
 
     it(`401s a report whose sandbox's token rotated between the read and the write`, async () => {
@@ -467,19 +578,57 @@ describe(`POST /sandbox/announce`, () => {
     it(`stores the version the daemon names`, async () => {
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
         const findUnique = jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
-        const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`, `1.62.0-rc.1+build.7`);
+        const res = await announce(
+            fakePrisma({ sandbox: { findUnique, updateMany } }),
+            `tok`,
+            `https://sandbox-abc.intentic.dev`,
+            `1.62.0-rc.1+build.7`,
+        );
         expect(res.status).toBe(200);
         expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: `1.62.0-rc.1+build.7` }) }));
     });
 
-    // A version is short and semver-shaped; anything else is not trusted, and costs the announce nothing.
-    it.each([[`latest`], [`1.2`], [`1.2.3 ; drop table`], [`1.2.${`9`.repeat(80)}`], [42]])(`announces but stores no version for %j`, async (version) => {
+    // Which copy announced, kept beside the last other one (announce-copies.ts). Two copies whose running stretches
+    // overlap are two containers on one token, and the row says since when.
+    it(`keeps which copy announced, and marks two copies running side by side`, async () => {
+        const minutesAgo = (minutes: number): string => new Date(Date.now() - minutes * 60_000).toISOString();
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-        const findUnique = jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
-        const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`, version);
+        const findUnique = jest.fn().mockResolvedValue({
+            id: `s1`,
+            token: `tok`,
+            setupPayload: null,
+            daemonUrl: null,
+            hosted: null,
+            seenInstances: [
+                { instance: `pwsh`, host: `ROG`, os: `windows`, firstAt: minutesAgo(70), at: minutesAgo(5) },
+                { instance: `wsl`, host: `rog`, os: `linux`, firstAt: minutesAgo(65), at: minutesAgo(62) },
+            ],
+            duplicateSince: null,
+        });
+        const res = await createApp(config, fakePrisma({ sandbox: { findUnique, updateMany } }), logger).app.request(`/sandbox/announce`, {
+            method: `POST`,
+            headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+            body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev`, instance: `wsl`, host: `rog`, os: `linux` }),
+        });
         expect(res.status).toBe(200);
-        expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: null }) }));
+        const [[written]] = updateMany.mock.calls as [
+            [{ data: { seenInstances: { instance: string }[]; duplicateSince: Date | null; lastSeenAt: Date } }],
+        ];
+        expect(written.data.seenInstances.map((copy) => copy.instance)).toEqual([`wsl`, `pwsh`]);
+        expect(written.data.duplicateSince).toEqual(written.data.lastSeenAt);
     });
+
+    // A version is short and semver-shaped; anything else is not trusted, and costs the announce nothing.
+    it.each([[`latest`], [`1.2`], [`1.2.3 ; drop table`], [`1.2.${`9`.repeat(80)}`], [42]])(
+        `announces but stores no version for %j`,
+        async (version) => {
+            const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+            const findUnique = jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
+            const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`, version);
+            expect(res.status).toBe(200);
+            expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: null }) }));
+        },
+    );
 
     // A registry that forgot the sandbox says 404 and the daemon keeps asking; one that deleted it says 410, and that is
     // final. Only the token's holder can tell the two apart, so neither is an oracle.
@@ -498,7 +647,9 @@ describe(`POST /sandbox/announce`, () => {
                 findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
                 updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
-            platformIdentity: { findUnique: jest.fn().mockResolvedValue({ id: 1, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, createdAt: new Date(0) }) },
+            platformIdentity: {
+                findUnique: jest.fn().mockResolvedValue({ id: 1, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, createdAt: new Date(0) }),
+            },
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(await res.json()).toEqual({ ok: true, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a` });
@@ -518,7 +669,10 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`404s an unknown token with no oracle`, async () => {
-        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(null) } });
+        const prisma = fakePrisma({
+            sandbox: { findUnique: jest.fn().mockResolvedValue(null) },
+            sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(null) },
+        });
         expect((await announce(prisma, `nope`, `https://sandbox-abc.intentic.dev`)).status).toBe(404);
     });
 
@@ -631,6 +785,22 @@ describe(`POST /sandbox/boot-report`, () => {
         });
     });
 
+    // (2026-10-05) Both used to be dropped on the way in: the editor's "unreachable for good" card waits for
+    // `retrying: false`, and a setup's missing environment is only ever told to it here.
+    it(`keeps whether the probe has given up, and what the setup left missing`, async () => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1` }), updateMany } });
+        const drift = [
+            { key: `ingress`, missing: [`SANDBOX_GRANT`], enables: `reaching it from anywhere`, lost: `its address`, repair: `run setup again` },
+        ];
+        const res = await bootReport(prisma, `tok`, { reach: `unreachable`, detail: `no tunnel`, retrying: false, drift });
+        expect(res.status).toBe(200);
+        expect(updateMany).toHaveBeenCalledWith({
+            where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
+            data: { bootReport: { reach: `unreachable`, detail: `no tunnel`, retrying: false, drift, at: expect.any(String) } },
+        });
+    });
+
     it(`accepts a bare verdict: the healthy path carries no detail`, async () => {
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
         const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1` }), updateMany } });
@@ -707,7 +877,10 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     // The one refusal: a deletion record. 404 is what the edge refuses a tunnel on, so it means exactly this.
     it(`404s a sandbox whose id has a deletion record`, async () => {
         const tombstone = jest.fn().mockResolvedValue({ tunnelId: id });
-        const res = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: tombstone } }), id);
+        const res = await ask(
+            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: tombstone } }),
+            id,
+        );
         expect(res.status).toBe(404);
         expect(await res.json()).toEqual({ error: `deleted sandbox` });
         expect(tombstone).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { tunnelId: true } });
@@ -717,7 +890,10 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     // grant, and refusing it would take that sandbox off the internet within a minute of the edge asking.
     it(`serves an id it has neither a row nor a deletion record for, as unknown`, async () => {
         const res = await ask(
-            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(null) } }),
+            fakePrisma({
+                sandbox: { findUnique: jest.fn().mockResolvedValue(null) },
+                sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(null) },
+            }),
             id,
         );
         expect(res.status).toBe(200);
@@ -747,7 +923,9 @@ describe(`GET /api/identity`, () => {
     const ask = (prisma: PrismaClient) => createApp(config, prisma, logger).app.request(`/api/identity`);
 
     it(`answers the database's identity and when it was given it, with no credential presented`, async () => {
-        const findUnique = jest.fn().mockResolvedValue({ id: 1, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, createdAt: new Date(`2026-10-01T22:42:40.466Z`) });
+        const findUnique = jest
+            .fn()
+            .mockResolvedValue({ id: 1, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, createdAt: new Date(`2026-10-01T22:42:40.466Z`) });
         const res = await ask(fakePrisma({ platformIdentity: { findUnique } }));
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, since: `2026-10-01T22:42:40.466Z` });
@@ -821,12 +999,15 @@ describe(`the idle timeout on machine changes`, () => {
     // Bun's server, as Bun.serve hands it to fetch; only the per-request timeout is read.
     const served = () => ({ timeout: jest.fn() });
 
-    it.each([[`/rpc/sandbox/hosted-restart`], [`/rpc/sandbox/hosted-rollback`], [`/rpc/sandbox/wake`], [`/rpc/hosted-plan/tier`]])(`lifts it for %s`, async (path) => {
-        const server = served();
-        await createApp(config, fakePrisma({}), logger).app.request(path, { method: `POST`, body: `{}` }, server);
-        expect(server.timeout).toHaveBeenCalledTimes(1);
-        expect(server.timeout).toHaveBeenCalledWith(expect.any(Request), 0);
-    });
+    it.each([[`/rpc/sandbox/hosted-restart`], [`/rpc/sandbox/hosted-rollback`], [`/rpc/sandbox/wake`], [`/rpc/hosted-plan/tier`]])(
+        `lifts it for %s`,
+        async (path) => {
+            const server = served();
+            await createApp(config, fakePrisma({}), logger).app.request(path, { method: `POST`, body: `{}` }, server);
+            expect(server.timeout).toHaveBeenCalledTimes(1);
+            expect(server.timeout).toHaveBeenCalledWith(expect.any(Request), 0);
+        },
+    );
 
     it(`leaves it for every other route`, async () => {
         const server = served();

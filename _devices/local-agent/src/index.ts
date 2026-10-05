@@ -17,6 +17,8 @@ export {
     type Autostart,
     type AutostartKind,
     type AutostartSpec,
+    type EntryInspection,
+    type EntryState,
     type LaunchAgentSpec,
 } from "./autostart.js";
 export {
@@ -26,6 +28,7 @@ export {
     livePid,
     livePidRecord,
     LOG_ROTATE_BYTES,
+    rotateIfLarge,
     type PidClaim,
     type PidRecord,
     pidFileBody,

@@ -40,7 +40,9 @@
         "stoppedInstallNothingElse": "Vous avez arrêté cette installation. Rien d'autre ne tourne sur cet appareil.",
         "stopping": "Arrêt en cours…",
         "updateRestart": "Mettre à jour et redémarrer",
-        "yourSandbox": "votre sandbox"
+        "yourSandbox": "votre sandbox",
+        "newerIntenticInstalled": "Une version plus récente d'Intentic est installée. Redémarrez Intentic pour l'utiliser.",
+        "restartIntentic": "Redémarrer Intentic"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Toujours faire ainsi : ne plus demander",

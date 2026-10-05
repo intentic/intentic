@@ -153,6 +153,8 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
         build: config.build.clone(),
         transports: config.transports(),
     });
+    // Every held sandbox's existence asked again as its cached answer expires: a deleted one's tunnels close.
+    edge.recheck_held(intentic_ingress::revocation::KEEP_FOR);
     let alt_svc = match config.alt_svc.as_str() {
         "" => None,
         value => Some(

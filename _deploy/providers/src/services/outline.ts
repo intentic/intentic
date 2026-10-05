@@ -3,6 +3,7 @@ import { hashSync } from "bcryptjs";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const outlineSchema = serviceSchema.extend({
@@ -23,7 +24,7 @@ const DEX_PORT = 5556;
 
 // Outline plus its postgres/valkey backing and the Dex OIDC provider. TLS terminates at Cloudflare, so FORCE_HTTPS
 // stays off while URL is the public https origin; secrets come from the write-once .env via ${…}, not this file.
-const composeYaml = (parsed: OutlineInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: OutlineInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  postgres:",
@@ -83,7 +84,7 @@ const composeYaml = (parsed: OutlineInputs, id: string, hash: string): string =>
         "      - OIDC_USERNAME_CLAIM=email",
         "      - OIDC_DISPLAY_NAME=intentic",
         "    volumes: [ outlinedata:/var/lib/outline/data ]",
-        `    labels: [ "intentic.id=${id}", "intentic.type=outline", "intentic.hash=${hash}" ]`,
+        stampLabels("outline", stamp),
         "volumes: { pgdata: {}, dexdata: {}, outlinedata: {} }",
         "",
     ].join("\n");
@@ -125,7 +126,7 @@ export const createOutlineProvider = (executor: SshExecutor = sshExecutor): Prov
             schema: outlineSchema,
             port: PORT,
             healthPath: "/_health",
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash), "dex-config.yaml": dexConfigYaml(parsed) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp), "dex-config.yaml": dexConfigYaml(parsed) }),
             env: () => [{ key: "SECRET_KEY" }, { key: "UTILS_SECRET" }, { key: "POSTGRES_PASSWORD" }, { key: "OIDC_CLIENT_SECRET" }],
             images: (parsed) => ({
                 postgres: parsed.postgresImage,

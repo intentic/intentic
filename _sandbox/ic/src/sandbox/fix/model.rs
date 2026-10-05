@@ -135,6 +135,11 @@ pub enum Repair {
     /// The same, on a sandbox whose agents are mid-turn: the restart cuts them, so it waits for a yes, and the
     /// machine agent's `--auto` leaves it for its next pass, when they may have finished.
     RestartBusy,
+    /// The same, on a sandbox the keeper has already restarted by itself three times in two hours (ledger.rs): a loop
+    /// a fourth restart will not end, so it waits for a person.
+    RestartAgain,
+    /// Stop and remove the tunnel container an older setup left beside the sandbox, which nothing uses any more.
+    RetireSidecar,
     /// `ic sandbox rollback`: the version before the last update.
     Rollback,
     /// `ic sandbox reshape --memory <n>g`, after the kernel killed it for memory.
@@ -148,7 +153,8 @@ impl Repair {
             | Repair::Tidy
             | Repair::Start
             | Repair::Watch
-            | Repair::Restart => Who::Auto,
+            | Repair::Restart
+            | Repair::RetireSidecar => Who::Auto,
             _ => Who::Consent,
         }
     }
@@ -162,6 +168,8 @@ impl Repair {
                 | Repair::Watch
                 | Repair::Restart
                 | Repair::RestartBusy
+                | Repair::RestartAgain
+                | Repair::RetireSidecar
                 | Repair::Rollback
                 | Repair::RaiseMemory(_)
         )
@@ -184,7 +192,12 @@ impl Repair {
             Repair::PruneBuilder => "Clearing Docker's build cache".to_string(),
             Repair::Start | Repair::StartHeld => "Starting the sandbox".to_string(),
             Repair::Watch => "Finishing an interrupted update".to_string(),
-            Repair::Restart | Repair::RestartBusy => "Restarting the sandbox".to_string(),
+            Repair::Restart | Repair::RestartBusy | Repair::RestartAgain => {
+                "Restarting the sandbox".to_string()
+            }
+            Repair::RetireSidecar => {
+                "Removing the tunnel container an older setup left".to_string()
+            }
             Repair::Rollback => "Going back to the version before the last update".to_string(),
             Repair::RaiseMemory(gib) => format!("Giving the sandbox {gib} GiB of memory"),
         }
@@ -225,6 +238,9 @@ impl Repair {
             ),
             Repair::RestartBusy => format!(
                 "Agents in sandbox{of} are mid-turn, and a restart cuts them. Restart it now?"
+            ),
+            Repair::RestartAgain => format!(
+                "Sandbox{of} was restarted three times in the last two hours and did not stay well. Restart it once more?"
             ),
             other => format!("{}?", other.doing()),
         }
@@ -516,6 +532,9 @@ pub struct Report<'a> {
     pub source: Source,
     pub machine: &'a str,
     pub os: &'a str,
+    /// Which environment of the machine ran it (side.rs: `windows`, a WSL distro's name): with `machine` and `os` it
+    /// names the reporter, so a Windows agent's report and a WSL agent's do not overwrite each other.
+    pub env: Option<&'a str>,
     pub stage: Stage,
     pub doing: Option<&'a str>,
     pub outcome: Option<Outcome>,
@@ -528,6 +547,7 @@ const LABEL_MAX: usize = 120;
 const TEXT_MAX: usize = 2000;
 const DOING_MAX: usize = 300;
 const MACHINE_MAX: usize = 120;
+const ENV_MAX: usize = 80;
 const CHECKS_MAX: usize = 24;
 
 /// The report as the contract's `HostReportInputSchema` reads it, field for field. Problem, remedy and fix ride on a
@@ -567,10 +587,72 @@ pub fn wire(report: &Report<'_>) -> Value {
     if let Some(doing) = report.doing.filter(|doing| !doing.is_empty()) {
         body["doing"] = json!(clip(doing, DOING_MAX));
     }
+    if let Some(env) = report.env.filter(|env| !env.is_empty()) {
+        body["env"] = json!(clip(env, ENV_MAX));
+    }
     if report.stage == Stage::Done {
         if let Some(outcome) = report.outcome {
             body["outcome"] = json!(outcome.wire());
         }
+    }
+    body
+}
+
+/// How old the machine agent's last upkeep pass may be and still ride a report: a pass runs every six hours, so two days
+/// means the agent has stopped running it, and an old count would read as a machine that never converged.
+const UPKEEP_FRESH_MS: u64 = 2 * 24 * 60 * 60 * 1000;
+/// The contract's caps on the upkeep summary (`HostReportInputSchema.upkeep`).
+const UPKEEP_KINDS_MAX: usize = 20;
+const UPKEEP_KIND_MAX: usize = 40;
+const UPKEEP_VERSION_MAX: usize = 40;
+
+/// The machine agent's last upkeep pass (`~/.intentic/machine/upkeep.json`: its standing clean-up of what older
+/// releases left on this computer) as a report's `upkeep`: the counts summed, the kinds it found, and the agent's
+/// version, so the platform can tell whether a release brought machines to the current shape. None for a pass that is
+/// missing, unreadable or stale. Pure.
+pub fn upkeep_summary(raw: &Value, now_ms: u64) -> Option<Value> {
+    let at = raw["at"].as_u64()?;
+    if now_ms.saturating_sub(at) > UPKEEP_FRESH_MS {
+        return None;
+    }
+    let sum = |key: &str| -> u64 {
+        raw[key]
+            .as_object()
+            .map(|counts| counts.values().filter_map(Value::as_u64).sum())
+            .unwrap_or(0)
+    };
+    let mut out = json!({
+        "found": sum("found"),
+        "fixed": sum("fixed"),
+        "skipped": raw["skipped"].as_array().map_or(0, Vec::len),
+    });
+    if let Some(found) = raw["found"].as_object() {
+        let kinds: serde_json::Map<String, Value> = found
+            .iter()
+            .filter_map(|(kind, count)| {
+                count
+                    .as_u64()
+                    .map(|count| (clip(kind, UPKEEP_KIND_MAX), json!(count)))
+            })
+            .take(UPKEEP_KINDS_MAX)
+            .collect();
+        if !kinds.is_empty() {
+            out["kinds"] = Value::Object(kinds);
+        }
+    }
+    if let Some(version) = raw["version"]
+        .as_str()
+        .filter(|version| !version.is_empty())
+    {
+        out["agentVersion"] = json!(clip(version, UPKEEP_VERSION_MAX));
+    }
+    Some(out)
+}
+
+/// A finished report with the upkeep summary on it, when there is one.
+pub fn with_upkeep(mut body: Value, upkeep: Option<&Value>) -> Value {
+    if let Some(upkeep) = upkeep {
+        body["upkeep"] = upkeep.clone();
     }
     body
 }
@@ -678,6 +760,7 @@ mod tests {
             source: Source::Agent,
             machine: "ada-laptop",
             os: "windows",
+            env: None,
             stage: Stage::Done,
             doing: None,
             outcome: Some(Outcome::NeedsYou),
@@ -708,23 +791,63 @@ mod tests {
     }
 
     #[test]
+    fn the_agents_upkeep_pass_rides_a_report_summed_and_only_while_fresh() {
+        let now = 1_800_000_000_000_u64;
+        let raw = json!({
+            "at": now - 60_000,
+            "version": "1.330.0",
+            "found": { "retired-generation": 2, "stale-pairing": 3 },
+            "fixed": { "retired-generation": 2 },
+            "skipped": [{ "kind": "second-ic", "what": "/usr/local/bin/ic", "why": "needs sudo" }],
+        });
+        assert_eq!(
+            upkeep_summary(&raw, now),
+            Some(json!({
+                "found": 5,
+                "fixed": 2,
+                "skipped": 1,
+                "kinds": { "retired-generation": 2, "stale-pairing": 3 },
+                "agentVersion": "1.330.0",
+            }))
+        );
+        assert_eq!(
+            upkeep_summary(&raw, now + 3 * 24 * 60 * 60 * 1000),
+            None,
+            "a pass two days old says nothing"
+        );
+        assert_eq!(upkeep_summary(&json!({}), now), None, "no pass, no summary");
+        let body = with_upkeep(
+            json!({ "stage": "done" }),
+            upkeep_summary(&raw, now).as_ref(),
+        );
+        assert_eq!(body["upkeep"]["found"], json!(5));
+        assert_eq!(
+            with_upkeep(json!({ "stage": "done" }), None).get("upkeep"),
+            None
+        );
+    }
+
+    #[test]
     fn doing_rides_while_fixing_and_outcome_only_when_done() {
         let body = wire(&Report {
             source: Source::Command,
             machine: "m",
             os: "linux",
+            env: Some("archlinux"),
             stage: Stage::Fixing,
             doing: Some("Starting Docker Desktop"),
             outcome: Some(Outcome::Fixed),
             checks: &[],
         });
         assert_eq!(body["doing"], json!("Starting Docker Desktop"));
+        assert_eq!(body["env"], json!("archlinux"));
         assert_eq!(body.get("outcome"), None);
         let long = "x".repeat(400);
         let clipped = wire(&Report {
             source: Source::App,
             machine: &long,
             os: "macos",
+            env: None,
             stage: Stage::Asking,
             doing: Some(&long),
             outcome: None,
@@ -748,6 +871,7 @@ mod tests {
             Repair::Start,
             Repair::Watch,
             Repair::Restart,
+            Repair::RetireSidecar,
         ] {
             assert_eq!(auto.who(), Who::Auto, "{auto:?}");
         }
@@ -762,6 +886,7 @@ mod tests {
             Repair::PruneBuilder,
             Repair::StartHeld,
             Repair::RestartBusy,
+            Repair::RestartAgain,
             Repair::Rollback,
             Repair::RaiseMemory(12),
         ] {
@@ -770,6 +895,8 @@ mod tests {
         assert!(Repair::Tidy.host());
         assert!(!Repair::StartHeld.host());
         assert!(!Repair::RestartBusy.host());
+        assert!(!Repair::RestartAgain.host());
+        assert!(!Repair::RetireSidecar.host());
         assert!(Repair::RestartBusy
             .question(Some("sandbox-0123456789ab"))
             .contains("mid-turn, and a restart cuts them"));

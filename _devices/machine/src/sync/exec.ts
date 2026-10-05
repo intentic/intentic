@@ -11,6 +11,11 @@ export interface ExecResult {
     readonly stderr: string;
 }
 
+// THE BOUND EVERY CHILD HAS, whatever its caller forgot: a child that never exits holds the watcher's whole pass with
+// it (every pairing after it, the reports, the heartbeat), and the old default here was no bound at all. Generous,
+// since the callers that know their work set their own, shorter ones; this only turns "forever" into "a long while".
+export const CHILD_TIMEOUT_MS = 10 * 60_000;
+
 export const runProcess = async (
     command: string,
     args: readonly string[],
@@ -30,12 +35,9 @@ export const runProcess = async (
         child.stdout.on("data", (chunk: string) => (stdout += chunk));
         child.stderr.on("data", (chunk: string) => (stderr += chunk));
 
-        const timer =
-            options.timeoutMs === undefined
-                ? undefined
-                : setTimeout(() => {
-                      child.kill("SIGKILL");
-                  }, options.timeoutMs);
+        const timer = setTimeout(() => {
+            child.kill("SIGKILL");
+        }, options.timeoutMs ?? CHILD_TIMEOUT_MS);
 
         const settle = (status: number | null, failure?: Error): void => {
             clearTimeout(timer);

@@ -165,7 +165,7 @@ for (const svc of cases) {
 
     test(`${svc.kind}: read returns the deterministic url/internalUrl + observed images when running and healthy`, async () => {
         const provider = svc.make(fakeSsh({ running: true, healthy: true, images: svc.images }).executor);
-        expect(await provider.read(svc.inputs, ctx())).toEqual({ outputs: svc.outputs, detail: { images: svc.images } });
+        expect(await provider.read(svc.inputs, ctx())).toEqual({ outputs: svc.outputs, detail: { images: svc.images }, stampOwner: "" });
     });
 
     test(`${svc.kind}: diff is noop on matching images, update on a pin bump`, () => {

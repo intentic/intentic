@@ -109,7 +109,7 @@ function Add-IntenticPath {
 # ---- fetch the ic CLI (the same block recreate.ps1 and connect-host.ps1 carry, apart from its one narration
 #      line - these are standalone irm|iex files and cannot share code, so a test holds them to it instead) ----
 # Downloaded on every run that pins no release, so re-running the one-liner upgrades an existing install; a
-# run pinned to the release already installed (IC_VERSION) skips it, and only a failed download falls back to
+# run pinned to a release (IC_VERSION) that finds it or a newer one installed skips it, and only a failed download falls back to
 # what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
 # executable fails, and a half-downloaded binary must never be what runs.
 $Ic = $env:IC_BIN
@@ -120,11 +120,147 @@ if (-not $Ic) {
     $IcDest = "$IcDir\ic.exe"
     $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
     # A caller that pins its release (IC_VERSION beside IC_URL, which the desktop app sets to its own) and finds
-    # exactly that release installed has nothing to fetch: asking the binary costs milliseconds, the download
-    # seconds. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
+    # that release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds, the download
+    # seconds. Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the
+    # tray for days put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions,
+    # major.minor.patch first, a pre-release below its own release; an installed ic whose answer is not a version
+    # is replaced. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
     $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
-    if ($IcHave -and $IcHave -eq "ic $env:IC_VERSION") {
-        Write-Host "note: $IcHave is already installed - not downloading it again."
+    $IcCurrent = $false
+    if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-Step 'fetching-ic' 'fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
+            } else {
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
+            }
+        }
+    }
+}
+
+# ---- Docker, and everything Windows needs before Docker can exist ----
+#
+# This used to be forty lines of this script: is `docker` on PATH, does `docker info` answer, and if not,
+# winget. It saw two of the dozen states a Windows PC can be in, and every other one arrived as the same
+# sentence - most often "docker is not installed and winget is unavailable", which is a dead end on a machine
+# where the only thing missing was a different download.
+#
+# It is now `ic docker prepare`: one read-only examination of this PC (Windows version, virtualization,
+# WSL2, the features behind it, a pending restart, Docker itself, its group, its engine, its container mode,
+# free space), one question covering everything that has to change, and then the changes. It is in ic rather
+# than here because the SAME reading feeds the desktop app's install screen and the platform's setup page -
+# and because a decision written in Rust is one the Linux runner that cross-builds this can actually test.
+#
+# Consent still comes from the same place it always did: INSTALL_DOCKER=1 pre-approves (the desktop app sets
+# it), and otherwise ic asks on the terminal. Nothing below this line is reached until Docker answers.
+& $Ic docker prepare
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Said to the connect below, whose preflight would otherwise examine this PC a second time for the facts prepare
+# passed on a moment ago (ic's checks.rs `PREPARED`).
+$env:INTENTIC_PREPARED = '1'
+
+# Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
+# carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.
+#
+# The code goes LAST, behind `--`: it is a positional, and an argument parser reads anything starting with a
+# hyphen as a flag unless the end-of-flags marker has already gone by.
+$IcArgs = @('sandbox', 'connect')
+if ($Yes) { $IcArgs += '-y' }
+if ($SetupCode) { $IcArgs += '--'; $IcArgs += $SetupCode }
+& $Ic @IcArgs
+exit $LASTEXITCODE
+) {
+        $IcHaveCore = [version]$Matches[1]
+        $IcHavePre = $Matches[2]
+        if ($env:IC_VERSION -match '^v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-Step 'fetching-ic' 'fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
+            } else {
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
+            }
+        }
+    }
+}
+
+# ---- Docker, and everything Windows needs before Docker can exist ----
+#
+# This used to be forty lines of this script: is `docker` on PATH, does `docker info` answer, and if not,
+# winget. It saw two of the dozen states a Windows PC can be in, and every other one arrived as the same
+# sentence - most often "docker is not installed and winget is unavailable", which is a dead end on a machine
+# where the only thing missing was a different download.
+#
+# It is now `ic docker prepare`: one read-only examination of this PC (Windows version, virtualization,
+# WSL2, the features behind it, a pending restart, Docker itself, its group, its engine, its container mode,
+# free space), one question covering everything that has to change, and then the changes. It is in ic rather
+# than here because the SAME reading feeds the desktop app's install screen and the platform's setup page -
+# and because a decision written in Rust is one the Linux runner that cross-builds this can actually test.
+#
+# Consent still comes from the same place it always did: INSTALL_DOCKER=1 pre-approves (the desktop app sets
+# it), and otherwise ic asks on the terminal. Nothing below this line is reached until Docker answers.
+& $Ic docker prepare
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Said to the connect below, whose preflight would otherwise examine this PC a second time for the facts prepare
+# passed on a moment ago (ic's checks.rs `PREPARED`).
+$env:INTENTIC_PREPARED = '1'
+
+# Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
+# carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.
+#
+# The code goes LAST, behind `--`: it is a positional, and an argument parser reads anything starting with a
+# hyphen as a flag unless the end-of-flags marker has already gone by.
+$IcArgs = @('sandbox', 'connect')
+if ($Yes) { $IcArgs += '-y' }
+if ($SetupCode) { $IcArgs += '--'; $IcArgs += $SetupCode }
+& $Ic @IcArgs
+exit $LASTEXITCODE
+) {
+            $IcPinCore = [version]$Matches[1]
+            $IcCurrent = ($IcHaveCore -gt $IcPinCore) -or ($IcHaveCore -eq $IcPinCore -and (-not $IcHavePre -or $IcHavePre -eq $Matches[2]))
+        }
+    }
+    if ($IcCurrent) {
+        Write-Host "note: $IcHave is installed (this run asks for ic $env:IC_VERSION or newer) - not downloading it."
         $Ic = $IcDest
         Add-IntenticPath -Folder $IcDir -Command 'ic'
     } else {

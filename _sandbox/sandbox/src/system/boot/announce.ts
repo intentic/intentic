@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
 import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
@@ -6,9 +7,14 @@ import type { Config } from "../../env.config.js";
 import { version } from "../../version.js";
 import { exchangeWithPlatform } from "../platform-client.js";
 
-// Registration with the platform: tells it this sandbox's public URL at boot, then goes silent once acked (liveness after
-// that is the browser's own SSE probe). Authenticated by the connect token, the same secret the daemon's first-bind
-// gate uses. Doesn't claim reachability: that's reach-report.ts's fact, next door.
+// Registration with the platform: tells it this sandbox's public URL at boot, then again every hour while it runs, as its
+// heartbeat (the browser's own SSE probe is still what says it is reachable). Authenticated by the connect token, the
+// same secret the daemon's first-bind gate uses. Doesn't claim reachability: that's reach-report.ts's fact, next door.
+//
+// (2026-10-05) It went silent once acked, so the platform's `lastSeenAt` was the registration and a sandbox stopped a
+// month ago read the same as one up for a month. Each announce also names which copy of the sandbox this is
+// (`instance`, minted once per container start, with the machine's name and side), so the platform can tell two
+// containers on one token from one that restarted (api announce-copies.ts).
 //
 // It never gives up (2026-10-02). A platform that is down, or that answers from a database that forgot this sandbox (a
 // restore, a wrong DATABASE_URL), comes back on its own time, so the daemon keeps asking: every few seconds while
@@ -24,6 +30,28 @@ const FAST_WINDOW_MS = 10 * 60_000;
 const PLATFORM_IDLE_MS = 60_000;
 // After the fast window, a still-failing registration is logged this often rather than on every attempt.
 const QUIET_LOG_MS = 30 * 60_000;
+// Registered, the same announce goes again about this often: cheap (one small POST, one row update), and frequent
+// enough that a sandbox gone quiet for a day reads as stopped. Jittered by a tenth either way, so a fleet that started
+// together (a release, a power cut) does not announce in one burst forever after.
+export const HEARTBEAT_MS = 60 * 60_000;
+const heartbeatDelay = (): number => Math.round(HEARTBEAT_MS * (0.9 + Math.random() * 0.2));
+
+/* WHICH COPY OF THIS SANDBOX IS SPEAKING. The front sets INTENTIC_INSTANCE once per container start when it can, so a
+ * daemon restarted inside one container stays the same copy; without it, this process's own id, minted once at boot and
+ * kept for its life. Either way a second container holding the same token is a different instance. */
+const PROCESS_INSTANCE = randomUUID();
+const instanceId = (): string => {
+    const set = process.env["INTENTIC_INSTANCE"]?.trim() ?? "";
+    return set === "" ? PROCESS_INSTANCE : set.slice(0, 80);
+};
+
+// What the announce says about where this copy runs: the machine's own name (HOST_LABEL, which `ic` sets from the host)
+// and its side (HOST_ENV, a WSL distro's name where the front sets it, else HOST_PLATFORM). Each left out when unset.
+const whereThisRuns = (config: Config): { host?: string; os?: string } => {
+    const host = (config.hostLabel ?? "").trim();
+    const os = (process.env["HOST_ENV"] ?? "").trim() || (config.hostPlatform ?? "").trim();
+    return { ...(host === "" ? {} : { host: host.slice(0, 120) }), ...(os === "" ? {} : { os: os.slice(0, 40) }) };
+};
 
 // What the owner's Reconnect carries when the platform may need to adopt this sandbox (POST /platform/relink).
 export interface Adoption {
@@ -91,12 +119,15 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     let status: AnnounceState = { state: "off" };
     let inFlight: Promise<AnnounceState> | undefined;
     const headers = { "x-intentic-connect": config.connectToken };
+    // The same body on every announce, the heartbeat's included: fixed for this process's life.
+    const announceBody = JSON.stringify({ daemonUrl: config.sandbox.publicUrl, version, instance: instanceId(), ...whereThisRuns(config) });
 
-    const post = (path: string, payload: string) => exchangeWithPlatform(config, { method: "POST", path, headers, payload, idleMs: PLATFORM_IDLE_MS });
+    const post = (path: string, payload: string) =>
+        exchangeWithPlatform(config, { method: "POST", path, headers, payload, idleMs: PLATFORM_IDLE_MS });
 
     // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
     const register = (): Promise<AnnounceState> => {
-        inFlight ??= post("/sandbox/announce", JSON.stringify({ daemonUrl: config.sandbox.publicUrl, version }))
+        inFlight ??= post("/sandbox/announce", announceBody)
             .then(
                 (answer) => verdictOf(answer, Date.now()),
                 (error: Error): AnnounceState => ({
@@ -112,10 +143,13 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
         return inFlight;
     };
 
-    // Every attempt while fast, then once per quiet window, so a sandbox the platform forgot doesn't fill its log.
-    const report = (next: AnnounceState): void => {
+    // Every attempt while fast, then once per quiet window, so a sandbox the platform forgot doesn't fill its log. A
+    // heartbeat that lands is logged only when it is news: the first registration, or one after a failure.
+    const report = (next: AnnounceState, before: AnnounceState): void => {
         if (next.state === "registered") {
-            logger.info({ identity: next.identity }, "registered with the platform");
+            if (before.state !== "registered" || before.identity !== next.identity) {
+                logger.info({ identity: next.identity }, "registered with the platform");
+            }
             return;
         }
         const now = Date.now();
@@ -132,10 +166,18 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
         backoff = Math.min(backoff * 2, Date.now() < fastUntil ? FAST_CAP_MS : SLOW_CAP_MS);
     };
 
+    // The next announce after this one: an hour on (the heartbeat) once registered, the backoff while it is not, and
+    // none at all after a deletion record. A heartbeat the platform does not answer, or answers 404 (it forgot this
+    // sandbox), goes back to retrying from the shortest wait; a 410 is final here as anywhere.
     const settle = (next: AnnounceState): AnnounceState => {
+        const before = status;
         status = next;
-        report(next);
-        if (next.state !== "registered" && next.retrying !== false) {
+        report(next, before);
+        if (next.state === "registered") {
+            clearTimeout(timer);
+            backoff = 2_000;
+            timer = setTimeout(() => void cycle(), heartbeatDelay());
+        } else if (next.retrying !== false) {
             schedule();
         }
         return next;

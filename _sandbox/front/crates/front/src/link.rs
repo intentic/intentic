@@ -1,9 +1,19 @@
 //! The front's half of the control socket: accepts Node's connection, reads what it sends, asks it questions and answers
-//! its. One Node at a time; a new connection (a restarted Node) replaces the old once its first frame decodes, and every
-//! question in flight on the old fails. A connection whose first frame does not decode is not Node's (an agent that took
-//! the socket for the HTTP one, `curl --unix-socket`): it is refused and the live link stands, since Node reads its
-//! link closing as the box going down. A reply the front cannot read refuses its own question and leaves the link up:
-//! that is how an older Node answers a question it does not know.
+//! its. One Node at a time. A connection whose first frame does not decode is not Node's (an agent that took the socket
+//! for the HTTP one, `curl --unix-socket`): it is refused and the live link stands, since Node reads its link closing as
+//! the box going down. A reply the front cannot read refuses its own question and leaves the link up: that is how an
+//! older Node answers a question it does not know.
+//!
+//! Which connection is the link: a new one takes it at its first frame while no Node that said hello holds it (a
+//! restarted Node, whose predecessor's connection is gone or never said hello), and every question in flight on the old
+//! one fails. While a Node that said hello holds it, a new connection is held back until its own hello, and takes the
+//! link only if that names a newer start of the daemon (`GENERATION_ENV`, counted by the front as it spawns each one);
+//! one naming the same start or none is a copy, refused, and the live link stands. A connection that lost the link is
+//! closed and nothing it sent afterwards is applied (2026-10-05: the newest connection took the writer, and the older
+//! one's frames were still applied).
+//!
+//! The listener itself is kept: an accept that fails is retried, and after a few in a row the socket is bound again,
+//! rather than leaving a front that no restarted Node can reach.
 
 use std::collections::HashMap;
 use std::io;
@@ -12,13 +22,13 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use front_wire::{
     ASK_PATIENCE, Answer, FromNode, FrontAnswer, FrontQuestion, LENGTH_BYTES, MAX_FRAME_BYTES,
     Question, ToNode, frame,
 };
+use relay::Backoff;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::unix::OwnedReadHalf;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -54,10 +64,49 @@ enum Reply {
 
 type Pending = HashMap<u32, oneshot::Sender<Reply>>;
 
+// Frames a held-back connection may send before its hello: a starting Node sends its listen config, certificate and
+// tunnel, and may ask a sync or two. Past this it is no Node starting.
+const HELD_BACK_FRAMES: usize = 64;
+
+// Accepts that fail in a row before the socket is bound again: one failure is usually the process's file limit, which a
+// pause outlasts; several in a row may be a listener that will not accept again.
+const ACCEPT_FAILURES_BEFORE_REBIND: u32 = 3;
+
+// Between failed accepts, and between failed binds.
+const ACCEPT_RETRY: Backoff = Backoff::new(
+    Duration::from_millis(100),
+    Duration::from_secs(5),
+    Duration::from_secs(60),
+);
+const BIND_RETRY: Backoff = Backoff::new(
+    Duration::from_secs(1),
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+);
+
+// Where the connection holding the link stands: whether its Node said hello, and the start it named then (none from a
+// Node older than generations).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Said {
+    Nothing,
+    Hello(Option<u64>),
+}
+
+// The connection holding the link.
+struct Current {
+    connection: u64,
+    said: Said,
+    writer: mpsc::UnboundedSender<Vec<u8>>,
+    // Raised when another connection takes the link: this one's reader stops, and nothing more it sent is applied.
+    stop: watch::Sender<bool>,
+}
+
 pub struct Link {
     state: watch::Sender<NodeState>,
     said_hello: AtomicBool,
-    writer: Mutex<Option<(u64, mpsc::UnboundedSender<Vec<u8>>)>>,
+    current: Mutex<Option<Current>>,
+    // Which connection holds the link and what it said, for a held-back connection to wait on.
+    holding: watch::Sender<Option<(u64, Said)>>,
     pending: Mutex<Pending>,
     next_id: AtomicU32,
     pushed: mpsc::UnboundedSender<Pushed>,
@@ -68,7 +117,8 @@ impl Link {
         Self {
             state: watch::Sender::new(None),
             said_hello: AtomicBool::new(false),
-            writer: Mutex::new(None),
+            current: Mutex::new(None),
+            holding: watch::Sender::new(None),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU32::new(1),
             pushed,
@@ -146,28 +196,54 @@ impl Link {
     /// Sends a message to the current Node; false when there is none to send it to.
     pub fn tell(&self, message: &ToNode) -> bool {
         let bytes = frame(message).expect("a ToNode always serializes");
-        self.writer
+        self.current
             .lock()
-            .expect("writer poisoned")
+            .expect("the link is never poisoned")
             .as_ref()
-            .is_some_and(|(_, writer)| writer.send(bytes).is_ok())
+            .is_some_and(|current| current.writer.send(bytes).is_ok())
     }
 
-    pub async fn serve(&'static self, path: &Path) -> anyhow::Result<()> {
-        let _ = std::fs::remove_file(path);
-        let listener = UnixListener::bind(path)
-            .with_context(|| format!("binding the control socket {}", path.display()))?;
-        let mut generation = 0_u64;
+    /// Serves the control socket at `path` for as long as the front runs: a failed accept is retried, and the socket is
+    /// bound again after `ACCEPT_FAILURES_BEFORE_REBIND` in a row or when binding failed.
+    pub async fn serve(&'static self, path: &Path) {
+        let mut connection = 0_u64;
+        let mut binding = BIND_RETRY;
         loop {
-            let (stream, _) = listener.accept().await?;
-            generation += 1;
-            tokio::spawn(self.connection(generation, stream));
+            let _ = std::fs::remove_file(path);
+            let listener = match UnixListener::bind(path) {
+                Ok(listener) => listener,
+                Err(error) => {
+                    let wait = binding.after(Duration::ZERO);
+                    tracing::error!(%error, path = %path.display(), ?wait, "could not bind the control socket; trying again");
+                    tokio::time::sleep(wait).await;
+                    continue;
+                }
+            };
+            binding = BIND_RETRY;
+            let mut failures = Failures::default();
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => {
+                        failures = Failures::default();
+                        connection += 1;
+                        tokio::spawn(self.connection(connection, stream));
+                    }
+                    Err(error) => {
+                        let (wait, rebind) = failures.after();
+                        tracing::warn!(%error, ?wait, rebind, "the control socket failed to accept a connection");
+                        tokio::time::sleep(wait).await;
+                        if rebind {
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
     // A connection takes the link only once its first frame decodes: replacing the writer at accept would hang up on
     // the live Node for whatever dialed the socket, and Node stops the box when its link closes unasked.
-    async fn connection(&'static self, generation: u64, stream: UnixStream) {
+    async fn connection(&'static self, connection: u64, stream: UnixStream) {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
         let first = match first_message(&mut reader).await {
@@ -182,39 +258,180 @@ impl Link {
                 return;
             }
         };
-        let (sender, mut frames) = mpsc::unbounded_channel::<Vec<u8>>();
-        self.replace_writer(generation, sender);
+        // Read in a task of its own, so waiting on this connection's frames beside anything else never cuts one short.
+        let (arriving, mut frames) = mpsc::unbounded_channel::<io::Result<Vec<u8>>>();
+        let reading = tokio::spawn(async move {
+            loop {
+                match read_frame(&mut reader).await {
+                    Ok(Some(bytes)) => {
+                        if arriving.send(Ok(bytes)).is_err() {
+                            return;
+                        }
+                    }
+                    Ok(None) => return,
+                    Err(error) => {
+                        let _ = arriving.send(Err(error));
+                        return;
+                    }
+                }
+            }
+        });
+        let (sender, mut outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
         tokio::spawn(async move {
-            while let Some(bytes) = frames.recv().await {
+            while let Some(bytes) = outgoing.recv().await {
                 if writer.write_all(&bytes).await.is_err() {
                     break;
                 }
             }
         });
-        self.receive(generation, first);
-        if let Err(error) = self.read(generation, reader).await {
-            tracing::warn!(%error, "the control socket closed on an unreadable frame");
+        let (stop, mut stopped) = watch::channel(false);
+        let Some(held_back) = self
+            .take_link(connection, first, &sender, &stop, &mut frames)
+            .await
+        else {
+            reading.abort();
+            return;
+        };
+        drop(sender);
+        for message in held_back {
+            self.receive(connection, message);
         }
-        self.lost(generation);
+        loop {
+            let bytes = tokio::select! {
+                frame = frames.recv() => match frame {
+                    Some(Ok(bytes)) => bytes,
+                    Some(Err(error)) => {
+                        tracing::warn!(%error, "the control socket closed on an unreadable frame");
+                        break;
+                    }
+                    None => break,
+                },
+                _ = stopped.wait_for(|stopped| *stopped) => break,
+            };
+            // Another connection may have taken the link while this frame waited: it is not this one's to apply.
+            if !self.holds(connection) {
+                break;
+            }
+            match serde_json::from_slice::<FromNode>(&bytes) {
+                Ok(message) => self.receive(connection, message),
+                Err(error) => {
+                    let Some(id) = unreadable_reply(&bytes) else {
+                        tracing::warn!(%error, "the control socket closed on a frame from the daemon that does not decode");
+                        break;
+                    };
+                    tracing::debug!(%error, id, "the daemon's reply is unreadable; its question counts as refused");
+                    self.settle(id, Reply::Refused(format!("an unreadable reply: {error}")));
+                }
+            }
+        }
+        reading.abort();
+        self.lost(connection);
     }
 
+    // Takes the link for `connection`, answering what it sent before taking it, in order; none when it is refused. Free
+    // or held by a Node that has not said hello, the link is taken at once. Held by one that has, this connection is
+    // held back until its own hello, which takes the link only if it names a newer start; and if the holder goes first,
+    // it takes the link then.
+    async fn take_link(
+        &self,
+        connection: u64,
+        first: FromNode,
+        writer: &mpsc::UnboundedSender<Vec<u8>>,
+        stop: &watch::Sender<bool>,
+        frames: &mut mpsc::UnboundedReceiver<io::Result<Vec<u8>>>,
+    ) -> Option<Vec<FromNode>> {
+        let mut held_back = vec![first];
+        let mut holding = self.holding.subscribe();
+        loop {
+            let named = held_back.iter().find_map(|message| match message {
+                FromNode::Hello { generation, .. } => Some(*generation),
+                _ => None,
+            });
+            let live = *holding.borrow_and_update();
+            match decide(live, named) {
+                Decision::Take => {
+                    self.take(connection, writer.clone(), stop.clone());
+                    return Some(held_back);
+                }
+                Decision::Refuse(live) => {
+                    tracing::warn!(
+                        connection,
+                        live = ?live,
+                        named = ?named.flatten(),
+                        "refused a second daemon on the control socket: the daemon holding it said hello, and this one names no newer start; the live link stands"
+                    );
+                    return None;
+                }
+                Decision::Wait => {}
+            }
+            if held_back.len() == 1 {
+                tracing::info!(
+                    connection,
+                    "a new connection to the control socket waits for its hello: a daemon that said hello holds the link"
+                );
+            }
+            tokio::select! {
+                frame = frames.recv() => {
+                    let message = match frame {
+                        Some(Ok(bytes)) => serde_json::from_slice::<FromNode>(&bytes).ok()?,
+                        _ => return None,
+                    };
+                    if held_back.len() >= HELD_BACK_FRAMES {
+                        tracing::warn!(connection, "a held-back connection to the control socket sent too much before its hello; refused");
+                        return None;
+                    }
+                    held_back.push(message);
+                }
+                changed = holding.changed() => changed.ok()?,
+            }
+        }
+    }
+
+    // This connection takes the link: the one holding it is stopped and hung up, and every question asked on it fails.
     // A new connection is not up until it says hello, whatever the one it replaces had said.
-    fn replace_writer(&self, generation: u64, sender: mpsc::UnboundedSender<Vec<u8>>) {
-        *self.writer.lock().expect("writer poisoned") = Some((generation, sender));
+    fn take(
+        &self,
+        connection: u64,
+        writer: mpsc::UnboundedSender<Vec<u8>>,
+        stop: watch::Sender<bool>,
+    ) {
+        let previous = self
+            .current
+            .lock()
+            .expect("the link is never poisoned")
+            .replace(Current {
+                connection,
+                said: Said::Nothing,
+                writer,
+                stop,
+            });
+        if let Some(previous) = previous {
+            previous.stop.send_replace(true);
+        }
         self.state.send_replace(None);
+        self.holding.send_replace(Some((connection, Said::Nothing)));
         self.fail_pending("the daemon reconnected before answering");
     }
 
-    // Only the current connection's end means Node is gone; an older one closing after its replacement means nothing.
-    fn lost(&self, generation: u64) {
-        let mut writer = self.writer.lock().expect("writer poisoned");
-        if writer
+    fn holds(&self, connection: u64) -> bool {
+        self.current
+            .lock()
+            .expect("the link is never poisoned")
             .as_ref()
-            .is_some_and(|(current, _)| *current == generation)
+            .is_some_and(|current| current.connection == connection)
+    }
+
+    // Only the current connection's end means Node is gone; an older one closing after its replacement means nothing.
+    fn lost(&self, connection: u64) {
+        let mut current = self.current.lock().expect("the link is never poisoned");
+        if current
+            .as_ref()
+            .is_some_and(|current| current.connection == connection)
         {
-            *writer = None;
-            drop(writer);
+            *current = None;
+            drop(current);
             self.state.send_replace(None);
+            self.holding.send_replace(None);
             self.fail_pending("the daemon went away before answering");
         }
     }
@@ -225,32 +442,27 @@ impl Link {
         }
     }
 
-    async fn read(
-        &self,
-        generation: u64,
-        mut reader: BufReader<OwnedReadHalf>,
-    ) -> anyhow::Result<()> {
-        while let Some(bytes) = read_frame(&mut reader).await? {
-            match serde_json::from_slice::<FromNode>(&bytes) {
-                Ok(message) => self.receive(generation, message),
-                Err(error) => {
-                    let Some(id) = unreadable_reply(&bytes) else {
-                        return Err(error).context("decoding a frame from the daemon");
-                    };
-                    tracing::debug!(%error, id, "the daemon's reply is unreadable; its question counts as refused");
-                    self.settle(id, Reply::Refused(format!("an unreadable reply: {error}")));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn receive(&self, generation: u64, message: FromNode) {
+    fn receive(&self, connection: u64, message: FromNode) {
         match message {
-            FromNode::Hello { build, pid } => {
-                tracing::info!(%build, pid, "the daemon is up");
+            FromNode::Hello {
+                build,
+                pid,
+                generation,
+            } => {
+                tracing::info!(%build, pid, generation, "the daemon is up");
+                if let Some(current) = self
+                    .current
+                    .lock()
+                    .expect("the link is never poisoned")
+                    .as_mut()
+                    .filter(|current| current.connection == connection)
+                {
+                    current.said = Said::Hello(generation);
+                }
                 self.said_hello.store(true, Ordering::Relaxed);
-                self.state.send_replace(Some(generation));
+                self.state.send_replace(Some(connection));
+                self.holding
+                    .send_replace(Some((connection, Said::Hello(generation))));
                 let _ = self.pushed.send(Pushed::Hello);
             }
             FromNode::Listen { config } => {
@@ -283,6 +495,67 @@ impl Link {
         if let Some(answered) = self.pending.lock().expect("pending poisoned").remove(&id) {
             let _ = answered.send(reply);
         }
+    }
+}
+
+// What becomes of a new connection, given who holds the link (`live`) and the start its own hello named, once it said
+// one (`named`).
+#[derive(Debug, PartialEq, Eq)]
+enum Decision {
+    Take,
+    Wait,
+    Refuse(Option<u64>),
+}
+
+fn decide(live: Option<(u64, Said)>, named: Option<Option<u64>>) -> Decision {
+    match (live, named) {
+        // Free, or held by a Node still starting: a restarted Node takes it at its first frame, as it always did.
+        (None | Some((_, Said::Nothing)), _) => Decision::Take,
+        (Some((_, Said::Hello(_))), None) => Decision::Wait,
+        (Some((_, Said::Hello(live))), Some(named)) => {
+            if newer(named, live) {
+                Decision::Take
+            } else {
+                Decision::Refuse(live)
+            }
+        }
+    }
+}
+
+// Whether a hello naming start `named` comes from a newer daemon than the one that said `live`: only a named start can
+// be newer, and any named start is newer than a Node that predates generations.
+fn newer(named: Option<u64>, live: Option<u64>) -> bool {
+    match (named, live) {
+        (Some(named), Some(live)) => named > live,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+
+// Failed accepts in a row, and the pause after each.
+struct Failures {
+    count: u32,
+    retry: Backoff,
+}
+
+impl Default for Failures {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            retry: ACCEPT_RETRY,
+        }
+    }
+}
+
+impl Failures {
+    // The pause after one more failure, and whether the socket is to be bound again after it.
+    fn after(&mut self) -> (Duration, bool) {
+        self.count += 1;
+        let rebind = self.count >= ACCEPT_FAILURES_BEFORE_REBIND;
+        if rebind {
+            self.count = 0;
+        }
+        (self.retry.after(Duration::ZERO), rebind)
     }
 }
 
@@ -394,6 +667,7 @@ mod tests {
     use super::*;
     use front_wire::PreviewRoute;
     use tokio::net::UnixStream;
+    use tokio::net::unix::OwnedReadHalf;
 
     async fn node_side(
         path: &Path,
@@ -418,6 +692,7 @@ mod tests {
                 &frame(&FromNode::Hello {
                     build: "test".into(),
                     pid: 7,
+                    generation: None,
                 })
                 .unwrap(),
             )
@@ -482,9 +757,15 @@ mod tests {
     }
 
     async fn hello(writer: &mut tokio::net::unix::OwnedWriteHalf) {
+        hello_as(writer, None).await;
+    }
+
+    // Node's hello naming the start the front spawned it as.
+    async fn hello_as(writer: &mut tokio::net::unix::OwnedWriteHalf, generation: Option<u64>) {
         let hello = FromNode::Hello {
             build: "test".into(),
             pid: 7,
+            generation,
         };
         writer.write_all(&frame(&hello).unwrap()).await.unwrap();
     }
@@ -574,12 +855,59 @@ mod tests {
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
-    // Node says hello last, once it serves HTTP, so a restarted Node takes the link at its first frame, whatever it is.
+    // Node says hello last, once it serves HTTP, so a restarted Node takes the link at its first frame, whatever it is,
+    // when the Node before it never said hello (it is gone, or died starting).
     #[tokio::test]
-    async fn a_restarted_node_takes_the_link_at_its_first_frame_and_the_old_one_is_hung_up() {
+    async fn a_restarted_node_takes_a_link_no_hello_holds_at_its_first_frame() {
         let (link, path, mut received) = served("restart").await;
         let (mut old_reader, mut old_writer) = node_side(&path).await;
-        hello(&mut old_writer).await;
+        let listen = FromNode::Unwatch { dir: "/old".into() };
+        old_writer
+            .write_all(&frame(&listen).unwrap())
+            .await
+            .unwrap();
+        assert!(matches!(received.recv().await, Some(Pushed::Unwatch(dir)) if dir == "/old"));
+
+        let (mut reader, mut writer) = node_side(&path).await;
+        let unwatch = FromNode::Unwatch {
+            dir: "/workspace".into(),
+        };
+        writer.write_all(&frame(&unwatch).unwrap()).await.unwrap();
+        assert!(matches!(received.recv().await, Some(Pushed::Unwatch(dir)) if dir == "/workspace"));
+        let old_end = tokio::time::timeout(Duration::from_secs(2), read_frame(&mut old_reader))
+            .await
+            .expect("the old connection is hung up")
+            .unwrap();
+        assert!(old_end.is_none());
+        // Whatever the old one sends now is never applied.
+        let _ = old_writer
+            .write_all(
+                &frame(&FromNode::Unwatch {
+                    dir: "/stale".into(),
+                })
+                .unwrap(),
+            )
+            .await;
+
+        hello_as(&mut writer, Some(2)).await;
+        assert!(link.ready(Duration::from_secs(2)).await);
+        assert!(matches!(received.recv().await, Some(Pushed::Hello)));
+        assert_eq!(*link.state().borrow(), Some(2));
+        ping_round_trip(link, &mut reader, &mut writer).await;
+        assert!(
+            received.try_recv().is_err(),
+            "nothing of the old connection's was applied"
+        );
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    // The front spawned a newer daemon while the older one's connection still stood: the newer start's hello takes the
+    // link, what it sent before is applied then and in order, and the older is hung up.
+    #[tokio::test]
+    async fn a_newer_start_takes_the_link_at_its_hello_and_the_older_is_hung_up() {
+        let (link, path, mut received) = served("newer").await;
+        let (mut old_reader, mut old_writer) = node_side(&path).await;
+        hello_as(&mut old_writer, Some(1)).await;
         assert!(link.ready(Duration::from_secs(2)).await);
         assert!(matches!(received.recv().await, Some(Pushed::Hello)));
 
@@ -588,19 +916,111 @@ mod tests {
             dir: "/workspace".into(),
         };
         writer.write_all(&frame(&unwatch).unwrap()).await.unwrap();
+        // Held back: the live daemon keeps the link, and nothing of the newcomer's is applied yet.
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), received.recv())
+                .await
+                .is_err()
+        );
+        assert_eq!(*link.state().borrow(), Some(1));
+
+        hello_as(&mut writer, Some(2)).await;
         assert!(matches!(received.recv().await, Some(Pushed::Unwatch(dir)) if dir == "/workspace"));
-        assert_eq!(*link.state().borrow(), None);
+        assert!(matches!(received.recv().await, Some(Pushed::Hello)));
+        assert_eq!(*link.state().borrow(), Some(2));
         let old_end = tokio::time::timeout(Duration::from_secs(2), read_frame(&mut old_reader))
             .await
             .expect("the old connection is hung up")
             .unwrap();
         assert!(old_end.is_none());
+        ping_round_trip(link, &mut reader, &mut writer).await;
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
 
-        hello(&mut writer).await;
+    // A second daemon with the live one's environment (a guest, an agent's copy): its hello names the same start, so it
+    // is refused, and nothing it sent before its hello was applied.
+    #[tokio::test]
+    async fn a_copy_naming_the_same_start_or_none_is_refused_and_the_live_link_stands() {
+        let (link, path, mut received) = served("copy").await;
+        let (mut reader, mut writer) = node_side(&path).await;
+        hello_as(&mut writer, Some(3)).await;
         assert!(link.ready(Duration::from_secs(2)).await);
+        assert!(matches!(received.recv().await, Some(Pushed::Hello)));
+
+        for named in [Some(3), Some(2), None] {
+            let (mut copy_reader, mut copy_writer) = node_side(&path).await;
+            let listen = FromNode::Unwatch {
+                dir: "/taken".into(),
+            };
+            copy_writer
+                .write_all(&frame(&listen).unwrap())
+                .await
+                .unwrap();
+            hello_as(&mut copy_writer, named).await;
+            let refused =
+                tokio::time::timeout(Duration::from_secs(2), read_frame(&mut copy_reader))
+                    .await
+                    .expect("the copy is hung up")
+                    .unwrap();
+            assert!(refused.is_none(), "{named:?}");
+        }
+        assert!(
+            received.try_recv().is_err(),
+            "nothing of a copy's was applied"
+        );
+        assert_eq!(*link.state().borrow(), Some(1));
+        ping_round_trip(link, &mut reader, &mut writer).await;
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    // The restart race: the newer daemon dialled before the front read the older one's connection end.
+    #[tokio::test]
+    async fn a_held_back_connection_takes_the_link_when_the_live_one_goes() {
+        let (link, path, mut received) = served("handover").await;
+        let (old_reader, mut old_writer) = node_side(&path).await;
+        hello_as(&mut old_writer, Some(1)).await;
+        assert!(link.ready(Duration::from_secs(2)).await);
+        assert!(matches!(received.recv().await, Some(Pushed::Hello)));
+
+        let (mut reader, mut writer) = node_side(&path).await;
+        let unwatch = FromNode::Unwatch {
+            dir: "/workspace".into(),
+        };
+        writer.write_all(&frame(&unwatch).unwrap()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        drop(old_writer);
+        drop(old_reader);
+        assert!(matches!(received.recv().await, Some(Pushed::Unwatch(dir)) if dir == "/workspace"));
+        hello(&mut writer).await;
+        assert!(matches!(received.recv().await, Some(Pushed::Hello)));
         assert_eq!(*link.state().borrow(), Some(2));
         ping_round_trip(link, &mut reader, &mut writer).await;
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn only_a_named_newer_start_displaces_a_daemon_that_said_hello() {
+        let up = |generation| Some((1, Said::Hello(generation)));
+        assert_eq!(decide(None, None), Decision::Take);
+        assert_eq!(decide(Some((1, Said::Nothing)), None), Decision::Take);
+        assert_eq!(decide(up(Some(1)), None), Decision::Wait);
+        assert_eq!(decide(up(Some(1)), Some(Some(2))), Decision::Take);
+        assert_eq!(
+            decide(up(Some(2)), Some(Some(2))),
+            Decision::Refuse(Some(2))
+        );
+        assert_eq!(decide(up(Some(2)), Some(None)), Decision::Refuse(Some(2)));
+        assert_eq!(decide(up(None), Some(Some(1))), Decision::Take);
+        assert_eq!(decide(up(None), Some(None)), Decision::Refuse(None));
+    }
+
+    #[test]
+    fn failed_accepts_pause_and_every_third_in_a_row_binds_again() {
+        let mut failures = Failures::default();
+        let rebinds: Vec<bool> = (0..7).map(|_| failures.after().1).collect();
+        assert_eq!(rebinds, [false, false, true, false, false, true, false]);
+        let (wait, _) = Failures::default().after();
+        assert!(wait <= Duration::from_millis(200), "{wait:?}");
     }
 
     #[test]
@@ -642,6 +1062,7 @@ mod tests {
         let hello = FromNode::Hello {
             build: "older".into(),
             pid: 7,
+            generation: None,
         };
         writer.write_all(&frame(&hello).unwrap()).await.unwrap();
         assert!(link.ready(Duration::from_secs(2)).await);

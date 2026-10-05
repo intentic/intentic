@@ -7,11 +7,13 @@ import { runForeground } from "./resident.js";
 import { readResident, restartResident, stopResident } from "./supervision.js";
 import { status } from "./status.js";
 import { syncCommands, syncUninstall } from "./sync/commands.js";
+import { doctor } from "./upkeep/doctor.js";
 import { MACHINE_VERSION } from "./version.js";
 
 // intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
 // folders/ports; both share one resident agent (`run`), `status`, `upgrade`, `updates` and `uninstall`. `sandbox`
-// passes ic's own verbs through, for repairing a sandbox on this machine without a browser.
+// passes ic's own verbs through, for repairing a sandbox on this machine without a browser; `doctor` is the agent's own
+// upkeep pass on demand (upkeep/).
 
 interface RunFlags {
     readonly foreground: boolean;
@@ -113,6 +115,7 @@ export const commands = buildRouteMap({
         environment: environmentRoutes,
         run,
         status,
+        doctor,
         version,
         upgrade,
         updates,

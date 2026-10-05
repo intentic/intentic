@@ -61,7 +61,11 @@ const inputs = {
 const outputs = { url: "https://auth.example.com", issuerUrl: "https://auth.example.com/application/o/", internalUrl: "http://10.0.0.5:49000" };
 
 test("instance read returns the deterministic urls + observed image once the server is healthy", async () => {
-    expect(await createAuthentikProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({ outputs, detail: { image: IMAGE } });
+    expect(await createAuthentikProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({
+        outputs,
+        detail: { image: IMAGE },
+        stampOwner: "",
+    });
     expect(await createAuthentikProvider(fakeSsh({ ready: false }).executor).read(inputs, ctx())).toBeUndefined();
 });
 

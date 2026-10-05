@@ -3,6 +3,7 @@ import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const infisicalSchema = serviceSchema.extend({
@@ -20,7 +21,7 @@ const PORT = 8084;
 
 // Standalone image (frontend+backend, migrations run on boot) with its postgres/valkey backing. TLS terminates
 // at Cloudflare, so SITE_URL is https while the container serves http; secrets interpolate from the write-once .env.
-const composeYaml = (parsed: InfisicalInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: InfisicalInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  postgres:",
@@ -56,7 +57,7 @@ const composeYaml = (parsed: InfisicalInputs, id: string, hash: string): string 
         "      - REDIS_URL=redis://redis:6379",
         `      - SITE_URL=https://${parsed.domain}`,
         "      - TELEMETRY_ENABLED=false",
-        `    labels: [ "intentic.id=${id}", "intentic.type=infisical", "intentic.hash=${hash}" ]`,
+        stampLabels("infisical", stamp),
         "volumes: { pgdata: {} }",
         "",
     ].join("\n");
@@ -69,7 +70,7 @@ export const createInfisicalProvider = (executor: SshExecutor = sshExecutor): Pr
             schema: infisicalSchema,
             port: PORT,
             healthPath: "/api/status",
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp) }),
             env: () => [
                 // Infisical wants 16-byte hex + 32-byte base64, not the host generator's hex-32, so both mint here.
                 { key: "ENCRYPTION_KEY", value: randomBytes(16).toString("hex") },

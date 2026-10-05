@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { promisify } from "node:util";
 import type { ForkRequest, ForkResponse } from "./forker.js";
+import { clearStaleLock } from "./git-locks.js";
 
 // Import this rather than re-wrapping execFile elsewhere.
 export const exec = promisify(execFile);
@@ -36,6 +37,13 @@ const isLockContention = (error: unknown): boolean => {
     return typeof stderr === "string" && LOCK_CONTENTION.test(stderr);
 };
 
+// Whether the lock git refused on was stale and is gone now.
+const clearedStaleLock = async (dir: string, error: unknown): Promise<boolean> => {
+    const stderr = String((error as { stderr?: unknown }).stderr);
+    // allow(silent-catch): a lock that cannot be read or removed stays, and git's own error surfaces as it always did.
+    return (await clearStaleLock(dir, stderr).catch(() => undefined)) !== undefined;
+};
+
 // Runs a git subcommand in `dir`; injectable so callers are testable without a real repo, shared with the CLI's adopt.
 // `env` merges over the process env, for flags with no CLI spelling (GIT_INDEX_FILE), and is optional.
 export type GitRunner = (
@@ -66,7 +74,7 @@ let nextRequestId = 0;
 const settle = (id: number): void => {
     inFlight.delete(id);
     if (inFlight.size === 0) {
-        forker?.channel?.unref();
+        forker?.channel?.unref?.();
     }
 };
 
@@ -126,7 +134,7 @@ const residentForker = (): ChildProcess | undefined => {
         forkerUnavailable = true;
     });
     started.unref();
-    started.channel?.unref();
+    started.channel?.unref?.();
     forker = started;
     return forker;
 };
@@ -204,8 +212,10 @@ interface ForkedOptions {
 }
 
 const runForked = async (command: string, args: readonly string[], options: ForkedOptions): Promise<GitRun> => {
-    // Merged, not replaced: execFile's `env` replaces the whole environment, and git needs PATH/HOME too.
-    const resolved = options.env === undefined ? undefined : { ...process.env, ...options.env };
+    // Merged, not replaced: execFile's `env` replaces the whole environment, and git needs PATH/HOME too. Always sent,
+    // since the forker's own environment is this process's as it was at fork time, and a variable the process has
+    // dropped since (the daemon's front sockets, once its front door has them) must not reach what it runs.
+    const resolved = { ...process.env, ...options.env };
     const limits = {
         maxBuffer: options.maxBuffer,
         ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
@@ -216,7 +226,7 @@ const runForked = async (command: string, args: readonly string[], options: Fork
         // No forker: this process execs directly, so there is one clock, not the two the forked path needs.
         const from = process.hrtime.bigint();
         try {
-            const output = await exec(command, [...args], { ...limits, ...(resolved !== undefined ? { env: resolved } : {}) });
+            const output = await exec(command, [...args], { ...limits, env: resolved });
             return { ...output, execMs: Number(process.hrtime.bigint() - from) / 1e6 };
         } catch (error) {
             // Guards a non-object throw, which is rethrown untouched instead of being boxed.
@@ -228,10 +238,10 @@ const runForked = async (command: string, args: readonly string[], options: Fork
     }
     const id = nextRequestId;
     nextRequestId += 1;
-    const request: ForkRequest = { id, command, args, ...limits, ...(resolved !== undefined ? { env: resolved } : {}) };
+    const request: ForkRequest = { id, command, args, ...limits, env: resolved };
     return await new Promise<GitRun>((resolve, reject) => {
         inFlight.set(id, { resolve, reject });
-        channel.channel?.ref();
+        channel.channel?.ref?.();
         channel.send(request, (error) => {
             // The exit handler may already have rejected this id; settle/reject are then no-ops.
             if (error !== null) {
@@ -362,6 +372,10 @@ const runGit = async (
             return { stdout: output.stdout, stderr: output.stderr };
         } catch (error) {
             execMs += failedExecMs(error);
+            // Every retry spent on a lock no running git holds and older than any write (git-locks.ts): it goes, once.
+            if (attempt === RETRY_ATTEMPTS && isLockContention(error) && (await clearedStaleLock(dir, error))) {
+                continue;
+            }
             if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
                 observe(attempt, true);
                 throw error;
@@ -375,7 +389,11 @@ const runGit = async (
 export const defaultGit: GitRunner = gitRunnerVia(["git"], { bulk: false, globals: GIT_GLOBAL_ARGS, gated: true });
 
 // CPU/IO demoted (nice +10, ionice best-effort) for bulk agent work; its ENOENT fallback is bulk-classed too.
-const nicedGit: GitRunner = gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"], { bulk: true, globals: GIT_GLOBAL_ARGS, gated: true });
+const nicedGit: GitRunner = gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"], {
+    bulk: true,
+    globals: GIT_GLOBAL_ARGS,
+    gated: true,
+});
 const plainBulkGit: GitRunner = gitRunnerVia(["git"], { bulk: true, globals: GIT_GLOBAL_ARGS, gated: true });
 
 // A status that may write back the index it refreshed, as a plain `git status` does, holding index.lock for the write.

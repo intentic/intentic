@@ -11,6 +11,7 @@ import {
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
+import { z } from "zod";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { bearerOf } from "../tokens/api-tokens.js";
@@ -53,15 +54,53 @@ const keysMatch = (presented: string, expected: string): boolean => {
     return given.length === wanted.length && timingSafeEqual(given, wanted);
 };
 
-// The row's column as the contract states it, or null for a row with none or one that no longer parses.
-export const hostReportOf = (stored: Prisma.JsonValue | undefined): HostReport | null => {
-    const parsed = HostReportSchema.safeParse(stored);
-    return parsed.success ? parsed.data : null;
+/* ONE SLOT PER REPORTER (2026-10-05). A Windows PC with WSL runs a machine agent on each side, and both report on the
+ * sandboxes they can see, so one slot meant each report overwrote the other's, and the throttle below, comparing a
+ * report with whichever one was stored, skipped one side's word as a repeat of the other's. The column now holds the
+ * newest report of each reporter (`reporterOf`: the machine, its OS and the environment on it), at most HOST_REPORTERS
+ * of them, as `{ reporters: { <reporter>: report } }`; a row written before holds one bare report, read as a single
+ * reporter. The summary still says the newest (`hostReport`) and adds them all (`hostReporters`). A read-modify-write
+ * without a lock, like the rest of this route's writes: two reporters posting in the same instant can lose one report,
+ * which that reporter's next post puts back. */
+export const HOST_REPORTERS = 3;
+
+const ReportersSchema = z.object({ reporters: z.record(z.string(), z.unknown()) });
+
+// Who sent a report: the machine (case aside, since Windows spells its name in capitals and WSL does not), its OS, and
+// the environment on it (a WSL distro's name).
+export const reporterOf = (report: Pick<HostReportInput, `machine` | `os` | `env`>): string =>
+    `${report.machine.toLowerCase()}|${report.os}|${report.env ?? ``}`;
+
+// Every report the column holds, newest first; none for a row with none or one that no longer parses.
+export const hostReportsOf = (stored: unknown): HostReport[] => {
+    const single = HostReportSchema.safeParse(stored);
+    if (single.success) {
+        return [single.data];
+    }
+    const held = ReportersSchema.safeParse(stored);
+    if (!held.success) {
+        return [];
+    }
+    return Object.values(held.data.reporters)
+        .flatMap((value) => {
+            const parsed = HostReportSchema.safeParse(value);
+            return parsed.success ? [parsed.data] : [];
+        })
+        .toSorted((left, right) => Date.parse(right.at) - Date.parse(left.at));
 };
 
-/* Whether `next` is skipped rather than stored: the stored one is under HOST_REPORT_INTERVAL_MS old and says the same
- * stage and outcome. A change of either always lands, so `done` is never lost to the throttle. A stored `at` from the
- * future (another replica's clock) does not hold writes back. */
+// The newest report, as the contract states it, or null: what the owner's summary has always carried.
+export const hostReportOf = (stored: unknown): HostReport | null => hostReportsOf(stored)[0] ?? null;
+
+// The column once `report` lands: its reporter's slot replaced, and the newest HOST_REPORTERS reporters kept.
+export const withHostReport = (stored: unknown, report: HostReport): Prisma.InputJsonValue => {
+    const others = hostReportsOf(stored).filter((held) => reporterOf(held) !== reporterOf(report));
+    return { reporters: Object.fromEntries([report, ...others].slice(0, HOST_REPORTERS).map((kept) => [reporterOf(kept), kept])) };
+};
+
+/* Whether `next` is skipped rather than stored: the same reporter's stored one is under HOST_REPORT_INTERVAL_MS old and
+ * says the same stage and outcome. A change of either always lands, so `done` is never lost to the throttle. A stored
+ * `at` from the future (another replica's clock) does not hold writes back. */
 export const skipsWrite = (held: HostReport | null, next: HostReportInput, nowMs: number): boolean => {
     if (held === null || held.stage !== next.stage || held.outcome !== next.outcome) {
         return false;
@@ -137,13 +176,14 @@ export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
             return c.text(`error: a sandbox intentic hosts has no host report`, 404);
         }
         const { report } = body.data;
-        if (skipsWrite(hostReportOf(sandbox.hostReport), report, Date.now())) {
+        const held = hostReportsOf(sandbox.hostReport).find((stored) => reporterOf(stored) === reporterOf(report)) ?? null;
+        if (skipsWrite(held, report, Date.now())) {
             return c.body(null, 204);
         }
         // Pinned to the token the key was checked against, as announce is: a token rotated since the read writes nothing.
         const written = await prisma.sandbox.updateMany({
             where: { id: sandbox.id, tokenDigest: sandbox.tokenDigest },
-            data: { hostReport: { ...report, at: new Date().toISOString() } },
+            data: { hostReport: withHostReport(sandbox.hostReport, { ...report, at: new Date().toISOString() }) },
         });
         return written.count === 0 ? c.text(`error: that report key is not this sandbox's`, 401) : c.body(null, 204);
     });

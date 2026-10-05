@@ -6,6 +6,7 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { stampLabelArgs, stampOf } from "../core/stamp.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // image is the act_runner image; jobImage is what each `runs-on: docker` job runs in (docker CLI + buildx are
@@ -78,6 +79,8 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             if (!(await running(session)) || !(await registeredTo(session, parsed.instanceUrl))) {
                 return undefined;
             }
+            // The owner stamp is not read back: recreating the runner kills the CI job it may be running this very
+            // apply from. It picks up its owner on its next real recreate.
             const stampHash = (
                 await session.exec(`docker inspect --format ${shellQuote(`{{index .Config.Labels "${HASH_KEY}"}}`)} ${CONTAINER}`)
             ).stdout.trim();
@@ -127,7 +130,7 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             const run = await session.exec(
                 // --user root avoids a docker-socket permission crash-loop; --config wires both to the host docker.
-                `docker run -d --restart unless-stopped --network host --user root --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=forgejo-runner --label intentic.hash=${ctx.inputsHash ?? ""} ` +
+                `docker run -d --restart unless-stopped --network host --user root --name ${CONTAINER} ${stampLabelArgs("forgejo-runner", stampOf(ctx))} ` +
                     `-v ${CONTAINER}-data:/data -v /var/run/docker.sock:/var/run/docker.sock -v ${CONFIG_DIR}/config.yaml:/config.yaml:ro ${parsed.image} ` +
                     `sh -c "forgejo-runner register --no-interactive --config /config.yaml --instance ${parsed.instanceUrl} --token ${parsed.token} && forgejo-runner daemon --config /config.yaml"`,
             );
@@ -150,5 +153,5 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             await session.dispose();
         }
     },
-    list: (sources, ctx) => listStampedContainers(executor, "forgejo-runner", sources, ctx.log),
+    list: (sources, ctx) => listStampedContainers(executor, "forgejo-runner", sources, ctx),
 });

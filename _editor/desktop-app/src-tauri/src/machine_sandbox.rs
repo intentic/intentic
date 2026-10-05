@@ -207,6 +207,10 @@ pub struct Record {
     /// The last standing a notification was put up for, so a round that finds the same thing says nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noticed: Option<String>,
+    /// A setup for this row got as far as starting its container ([`may_have_announced`]), whose daemon announces itself
+    /// to the platform: from then on the row may be live somewhere, and a failure never takes it off the account.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub announced: bool,
 }
 
 /* READING THE SETUP'S OWN LINES. */
@@ -450,6 +454,9 @@ pub struct Facts {
     /// The first round of this run of the app.
     pub launch: bool,
     pub asked: Option<Ask>,
+    /// Another environment of this computer whose machine agent keeps its sandboxes, when this one has none of its own
+    /// (agents.rs `elsewhere`, `WSL (archlinux)`). Looked for only while the record holds no row.
+    pub elsewhere: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -532,6 +539,18 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
         };
     }
     if record.sandbox_id.is_none() {
+        // CHECKED FIRST (2026-10-05): another environment of this computer already runs a machine agent that keeps its
+        // sandboxes (a WSL distro's), and this one has none. Setting one up here unasked would put a second agent and a
+        // second sandbox on the same Docker, each running its own keeper. It stops for the reader instead, saying where
+        // the sandboxes are kept; their "Try again" sets it up here all the same (the retry above).
+        if let Some(place) = &facts.elsewhere {
+            return become_(
+                record,
+                Standing::Failed {
+                    reason: kept_elsewhere(place),
+                },
+            );
+        }
         return Decision::Create { consent: false };
     }
     if !record.made {
@@ -549,6 +568,41 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
             _ => become_(record, Standing::Ready),
         },
     }
+}
+
+/// What the card says when another environment's agent keeps this computer's sandboxes (`decide`).
+pub fn kept_elsewhere(place: &str) -> String {
+    format!(
+        "Intentic's machine agent already runs in {place} on this computer and keeps its sandboxes there, so a second \
+         one wasn't set up here. Try again to set one up here anyway."
+    )
+}
+
+/// The phases of a setup from which its container may be up and its daemon may have announced itself to the platform:
+/// from `starting-sandbox` on (setupPlan.ts). Before it, nothing of the row ever ran anywhere.
+const ANNOUNCING: [&str; 5] = [
+    "starting-sandbox",
+    "waiting-health",
+    "verifying",
+    "desktop-sync",
+    "connecting-machine",
+];
+
+/// Whether a setup that reached `phase` may have had its sandbox announce itself. Pure.
+pub fn may_have_announced(phase: Option<&str>) -> bool {
+    phase.is_some_and(|phase| ANNOUNCING.contains(&phase))
+}
+
+/// Whether a setup that stopped leaves a row to take off the account (2026-10-05): one this computer's record holds,
+/// that no setup finished and none got as far as starting a container for (so it never announced itself), and whose
+/// container this machine does not have (`container`, read just now: a container that is here, or a listing that
+/// failed, is never a licence). A row like that waited in the account's switcher as an unfinished sandbox for good,
+/// since only a failed code minting ever discarded one. Pure.
+pub fn discards_row(record: &Record, container: Container) -> bool {
+    record.sandbox_id.is_some()
+        && !record.made
+        && !record.announced
+        && (record.slug.is_none() || container == Container::Missing)
 }
 
 /// Whether a round needs Docker's answer and the container's: not for a stop that waits on the reader.
@@ -1027,12 +1081,17 @@ fn gather(app: &AppHandle, record: &Record, launch: bool, asked: Option<Ask>) ->
         (Some(slug), true) => container_of(app, slug),
         _ => Container::Unknown,
     };
+    // Only where a setup could start from scratch: a row already held is this computer's, wherever else agents run.
+    let elsewhere = (looked && record.sandbox_id.is_none())
+        .then(|| crate::agents::elsewhere(&crate::agents::find()))
+        .flatten();
     Facts {
         account,
         docker,
         container,
         launch,
         asked,
+        elsewhere,
     }
 }
 
@@ -1104,6 +1163,11 @@ fn create(app: &AppHandle, consent: bool) {
             said = true;
         }
         std::thread::sleep(Duration::from_secs(5));
+    }
+    // A setup a crashed launch left running: followed to its end rather than raced, then the round decides again.
+    if follow_live_run(app) {
+        kick();
+        return;
     }
     let roster = app.state::<AppState>().roster();
     let Some(account) = roster.account.as_ref().map(|account| account.email.clone()) else {
@@ -1195,7 +1259,10 @@ fn create(app: &AppHandle, consent: bool) {
             (code, slug)
         }
         Ok(Minted::SignedOut) => return signed_out(app),
-        Ok(Minted::Refused(why)) | Err(why) => return failed(app, why),
+        Ok(Minted::Refused(why)) | Err(why) => {
+            discard_unannounced(app, &window);
+            return failed(app, why);
+        }
     };
 
     let image_ready = crate::commands::sandbox_image_ready();
@@ -1217,32 +1284,17 @@ fn create(app: &AppHandle, consent: bool) {
         .push(("SYNC_PROJECTS_HOST".to_string(), "1".to_string()));
 
     let progress = Arc::new(Mutex::new(Progress::new(cfg!(windows), image_ready)));
-    let heard: Heard = {
-        let app = app.clone();
-        let progress = Arc::clone(&progress);
-        Arc::new(move |stream: Stream, line: &str| {
-            let shown = {
-                let Ok(mut progress) = progress.lock() else {
-                    return;
-                };
-                if !progress.hear(stream, line) {
-                    return;
-                }
-                progress.clone()
-            };
-            update(&app, |record| {
-                if matches!(record.standing, Standing::Creating { .. }) {
-                    record.standing = Standing::Creating {
-                        phase: shown.phase.clone(),
-                        step: shown.step.clone(),
-                        percent: shown.percent,
-                    };
-                }
-                record.requirements.clone_from(&shown.requirements);
-            });
-        })
+    let heard = hearing(app, &progress);
+    // The run lock is taken the moment the script starts, and given back however it ends.
+    let lock = lock_path(app);
+    let spawned: crate::scripts::OnSpawn = {
+        let lock = lock.clone();
+        Box::new(move |child: &crate::scripts::Spawned| take_lock(&lock, child))
     };
-    let ended = crate::scripts::run_heard(app, RUN, script, Some(heard));
+    let ended = crate::scripts::run_heard(app, RUN, script, Some(heard), Some(spawned));
+    if let Some(lock) = &lock {
+        let _ = std::fs::remove_file(lock);
+    }
     if EXITING.load(Ordering::SeqCst) {
         // Stopped by the app's own quit: the next launch finds it creating, and runs it again.
         return;
@@ -1257,6 +1309,9 @@ fn create(app: &AppHandle, consent: bool) {
             if standing == Standing::Ready {
                 finished(app, &sandbox_id, slug.as_deref(), &name);
             }
+            if matches!(standing, Standing::Failed { .. }) {
+                discard_unannounced(app, &window);
+            }
             update(app, |record| {
                 record.log_path = ended.log.clone();
                 record.requirements.clone_from(&progress.requirements);
@@ -1268,8 +1323,299 @@ fn create(app: &AppHandle, consent: bool) {
                 record.standing = standing;
             });
         }
-        Err(why) => failed(app, why),
+        Err(why) => {
+            discard_unannounced(app, &window);
+            failed(app, why);
+        }
     }
+}
+
+/// A setup that stopped before its sandbox could have announced itself ([`discards_row`]): its row is taken off the
+/// account (`/rpc/sandbox/delete`, which the platform holds in its own trash for the recovery window), the record
+/// forgets it, so the next try makes a fresh one, and the local windows stop listing it. Best effort: a row the platform
+/// would not delete stays, as before, and the next try sets it up.
+fn discard_unannounced(app: &AppHandle, window: &WebviewWindow) {
+    let record = status(app);
+    let container = match &record.slug {
+        Some(slug) => container_of(app, slug),
+        None => Container::Missing,
+    };
+    if !discards_row(&record, container) {
+        return;
+    }
+    let Some(id) = record.sandbox_id else {
+        return;
+    };
+    let body = serde_json::json!({ "sandboxId": id });
+    let answered = tauri::async_runtime::block_on(crate::account::platform_post(
+        app,
+        window,
+        "/rpc/sandbox/delete",
+        &body,
+    ));
+    match answered {
+        // Gone already is as good as deleted.
+        Ok(crate::account::Answered::Json { status, .. })
+            if (200..300).contains(&status) || status == 404 => {}
+        Ok(other) => {
+            eprintln!(
+                "intentic: the unfinished sandbox {id} was not taken off the account: {other:?}"
+            );
+            return;
+        }
+        Err(error) => {
+            eprintln!(
+                "intentic: the unfinished sandbox {id} was not taken off the account: {error}"
+            );
+            return;
+        }
+    }
+    update(app, |record| {
+        if record.sandbox_id.as_deref() == Some(id.as_str()) {
+            record.sandbox_id = None;
+            record.slug = None;
+            record.hostname = None;
+        }
+    });
+    let state = app.state::<AppState>();
+    state.remember_roster(without_row(state.roster(), &id));
+}
+
+/// The account's sandboxes without the one with `id`. Pure.
+pub(crate) fn without_row(
+    mut roster: crate::setup_link::Roster,
+    id: &str,
+) -> crate::setup_link::Roster {
+    roster.sandboxes.retain(|entry| entry.id != id);
+    roster
+}
+
+/// What hears a setup's lines (its own run, or one a crashed launch left running): each folded into `progress`, and
+/// the record moved on when what the card shows changed.
+fn hearing(app: &AppHandle, progress: &Arc<Mutex<Progress>>) -> Heard {
+    let app = app.clone();
+    let progress = Arc::clone(progress);
+    Arc::new(move |stream: Stream, line: &str| {
+        let shown = {
+            let Ok(mut progress) = progress.lock() else {
+                return;
+            };
+            if !progress.hear(stream, line) {
+                return;
+            }
+            progress.clone()
+        };
+        update(&app, |record| {
+            if matches!(record.standing, Standing::Creating { .. }) {
+                record.standing = Standing::Creating {
+                    phase: shown.phase.clone(),
+                    step: shown.step.clone(),
+                    percent: shown.percent,
+                };
+            }
+            if may_have_announced(shown.phase.as_deref()) {
+                record.announced = true;
+            }
+            record.requirements.clone_from(&shown.requirements);
+        });
+    })
+}
+
+/* ONE SETUP RUN AT A TIME, ACROSS LAUNCHES TOO (2026-10-05).
+ *
+ * A quit stops the setup it is running (`before_exit`), but a hard crash stops nothing: its script goes on, writing to its
+ * own files (scripts.rs `Spool`), and the next launch found the record `creating` and started a second setup beside the
+ * first, both claiming one row and driving one docker. So a run holds a lock while it lives, a pidfile in the app's data
+ * folder with the script's pid and the start time its system gives that process, so a pid the system handed to another
+ * process since is not taken for the run. A launch that finds the lock's process alive follows that run from its files
+ * until it ends ([`follow_live_run`]), then decides again, which runs the setup once more on the same row exactly as
+ * after an interrupted one, never two at once. A lock whose process is gone is taken over. */
+
+/// The lock, in the app's data folder.
+const LOCK_FILE: &str = "machine-setup.pid.json";
+
+/// How long a lock whose process start could not be read is believed while its pid is alive: longer than any setup.
+const LOCK_TRUST: Duration = Duration::from_secs(60 * 60);
+
+/// How often a run a crashed launch left behind is asked whether it still lives.
+const LIVE_RUN_POLL: Duration = Duration::from_secs(5);
+
+/// What the card says while it follows a setup a crashed launch left running.
+const FOLLOWING_RUN: &str = "Picking up the setup that was already running.";
+
+/// The setup run holding the lock.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunLock {
+    /// The setup script's process.
+    pub pid: u32,
+    /// When its system says that process started, in the system's own unit; none when it could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started: Option<String>,
+    /// Unix seconds when the lock was taken.
+    pub at: u64,
+    /// The files the run writes its two streams to, which a later launch follows it by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub err: Option<String>,
+}
+
+/// Who holds the lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Holder {
+    /// No lock: the setup may start.
+    Free,
+    /// The run that took it is still going: followed, never raced.
+    Live,
+    /// Its process is gone, or the pid is another process's now: the lock is taken over.
+    Stale,
+}
+
+/// Who holds `lock`, given the start time the system gives its pid now (`None`: no such process) and the time now.
+/// A lock that recorded no start time is believed for [`LOCK_TRUST`] while its pid lives. Pure.
+pub fn holder(lock: Option<&RunLock>, started_now: Option<&str>, now: u64) -> Holder {
+    let Some(lock) = lock else {
+        return Holder::Free;
+    };
+    let Some(started_now) = started_now else {
+        return Holder::Stale;
+    };
+    match &lock.started {
+        Some(started) if started == started_now => Holder::Live,
+        Some(_) => Holder::Stale,
+        None if now.saturating_sub(lock.at) < LOCK_TRUST.as_secs() => Holder::Live,
+        None => Holder::Stale,
+    }
+}
+
+/// The start time field of a `/proc/<pid>/stat` line (the 22nd, in clock ticks since boot), or none for a zombie,
+/// which is a process that has ended. The command name is skipped by its closing parenthesis, since it may hold spaces.
+/// Pure.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn start_time_in_stat(stat: &str) -> Option<String> {
+    let (_, fields) = stat.rsplit_once(')')?;
+    let mut fields = fields.split_whitespace();
+    if fields.next()? == "Z" {
+        return None;
+    }
+    fields.nth(18).map(str::to_string)
+}
+
+/// When the system says process `pid` started, or none when there is no such process.
+#[cfg(target_os = "linux")]
+fn process_started(pid: u32) -> Option<String> {
+    start_time_in_stat(&std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?)
+}
+
+/// When Windows says process `pid` started (UTC ticks), or none when there is no such process. Asked of PowerShell,
+/// which every Windows this app runs on has, rather than through a Win32 binding added to the build for this alone.
+#[cfg(windows)]
+fn process_started(pid: u32) -> Option<String> {
+    let mut command = std::process::Command::new("powershell.exe");
+    command.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        &format!("(Get-Process -Id {pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks"),
+    ]);
+    intentic_bounded::no_window(&mut command);
+    let answer = crate::scripts::capture("Get-Process", command, Duration::from_secs(20)).ok()?;
+    let ticks = answer.stdout.trim();
+    (answer.success && !ticks.is_empty() && ticks.bytes().all(|byte| byte.is_ascii_digit()))
+        .then(|| ticks.to_string())
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn process_started(_pid: u32) -> Option<String> {
+    None
+}
+
+/// Where the lock lives: the app's data folder.
+fn lock_path(app: &AppHandle) -> Option<PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join(LOCK_FILE))
+}
+
+/// The lock, taken by the run that just started.
+fn take_lock(lock: &Option<PathBuf>, child: &crate::scripts::Spawned) {
+    let Some(lock) = lock else {
+        return;
+    };
+    crate::state::write_json(
+        lock,
+        &RunLock {
+            pid: child.pid,
+            started: process_started(child.pid),
+            at: now(),
+            out: Some(child.out.display().to_string()),
+            err: Some(child.err.display().to_string()),
+        },
+    );
+}
+
+/// A setup a crashed launch left running, followed from its files until it ends: true when there was one. A lock whose
+/// run is gone is taken over (removed here, taken again by the run about to start). A quit while following leaves the
+/// lock to the run, which the next launch follows again.
+fn follow_live_run(app: &AppHandle) -> bool {
+    let Some(path) = lock_path(app) else {
+        return false;
+    };
+    let Some(lock) = crate::state::read_json::<RunLock>(&path) else {
+        return false;
+    };
+    let live = || holder(Some(&lock), process_started(lock.pid).as_deref(), now()) == Holder::Live;
+    if !live() {
+        let _ = std::fs::remove_file(&path);
+        return false;
+    }
+    update(app, |record| {
+        record.standing = Standing::Creating {
+            phase: None,
+            step: Some(FOLLOWING_RUN.to_string()),
+            percent: 0,
+        };
+    });
+    let progress = Arc::new(Mutex::new(Progress::new(cfg!(windows), false)));
+    let heard = hearing(app, &progress);
+    let ended = Arc::new(AtomicBool::new(false));
+    let readers: Vec<_> = [(&lock.out, Stream::Stdout), (&lock.err, Stream::Stderr)]
+        .into_iter()
+        .filter_map(|(file, stream)| {
+            let file = PathBuf::from(file.as_ref()?);
+            let (heard, ended) = (Arc::clone(&heard), Arc::clone(&ended));
+            Some(std::thread::spawn(move || {
+                crate::scripts::tail(&file, &ended, |line| heard(stream, line));
+            }))
+        })
+        .collect();
+    let mut gone = false;
+    while !EXITING.load(Ordering::SeqCst) {
+        if !live() {
+            gone = true;
+            break;
+        }
+        std::thread::sleep(LIVE_RUN_POLL);
+    }
+    ended.store(true, Ordering::Release);
+    for reader in readers {
+        let _ = reader.join();
+    }
+    if gone {
+        let _ = std::fs::remove_file(&path);
+    }
+    true
+}
+
+/// The platform id of this computer's own sandbox while the app is making it or keeps it (not one the account no longer
+/// has): what the folders of `projects.json` are never pruned against (project.rs), and what counts as a sandbox this
+/// machine hosts (commands.rs `sandbox_list`).
+pub fn kept_sandbox_id(app: &AppHandle) -> Option<String> {
+    let record = status(app);
+    record
+        .sandbox_id
+        .filter(|_| record.standing != Standing::Gone)
 }
 
 /// A setup that finished: a sandbox runs here (this machine's stopped Docker is the app's to start from now on), named
@@ -1548,6 +1894,7 @@ mod tests {
             container: Container::Running,
             launch: false,
             asked: None,
+            elsewhere: None,
         }
     }
 
@@ -1801,6 +2148,143 @@ mod tests {
             decide(&record(Standing::SignedOut), &facts()),
             Decision::Create { consent: false }
         );
+    }
+
+    /// Another environment of this computer already keeps its sandboxes with its own agent (a WSL distro's): the first
+    /// setup is not run unasked, which would put a second agent on the same Docker. The reader's "Try again" runs it all
+    /// the same, and a row already held is this computer's whatever else runs.
+    #[test]
+    fn a_setup_where_another_environments_agent_keeps_the_sandboxes_waits_for_the_reader() {
+        let wsl = Facts {
+            elsewhere: Some("WSL (archlinux)".into()),
+            ..facts()
+        };
+        let Decision::Become(Standing::Failed { reason }) =
+            decide(&record(Standing::SignedOut), &wsl)
+        else {
+            panic!("a first setup beside another environment's agent ran unasked");
+        };
+        assert!(reason.contains("WSL (archlinux)"), "{reason}");
+        let stopped = record(Standing::Failed { reason });
+        assert_eq!(decide(&stopped, &wsl), Decision::Keep);
+        assert_eq!(
+            decide(
+                &stopped,
+                &Facts {
+                    asked: Some(Ask::Retry { consent: false }),
+                    ..wsl.clone()
+                }
+            ),
+            Decision::Create { consent: false }
+        );
+        assert_eq!(
+            decide(&made(Standing::Ready), &wsl),
+            Decision::Keep,
+            "a sandbox already made here stays this computer's"
+        );
+    }
+
+    /* A ROW THAT NEVER RAN goes with the setup that made it; one that may have announced itself never does. */
+
+    #[test]
+    fn a_row_is_announced_from_the_moment_its_container_is_started() {
+        assert!(!may_have_announced(None));
+        for phase in [
+            "fetching-ic",
+            "checking-docker",
+            "preflight",
+            "claiming-code",
+            "pulling-image",
+        ] {
+            assert!(!may_have_announced(Some(phase)), "{phase}");
+        }
+        for phase in ANNOUNCING {
+            assert!(may_have_announced(Some(phase)), "{phase}");
+        }
+    }
+
+    #[test]
+    fn only_a_row_nothing_of_which_ever_ran_is_taken_off_the_account() {
+        let unminted = Record {
+            sandbox_id: Some("cm-new".into()),
+            ..record(Standing::Failed { reason: "x".into() })
+        };
+        // Its code was never minted: no container can exist.
+        assert!(discards_row(&unminted, Container::Unknown));
+        let minted = Record {
+            slug: Some("sandbox-abc".into()),
+            ..unminted.clone()
+        };
+        assert!(discards_row(&minted, Container::Missing));
+        // A container here, or a listing that failed, is never a licence.
+        assert!(!discards_row(&minted, Container::Running));
+        assert!(!discards_row(&minted, Container::Stopped));
+        assert!(!discards_row(&minted, Container::Unknown));
+        // A setup that got as far as starting it, or finished once.
+        assert!(!discards_row(
+            &Record {
+                announced: true,
+                ..minted.clone()
+            },
+            Container::Missing
+        ));
+        assert!(!discards_row(&made(Standing::Ready), Container::Missing));
+        assert!(!discards_row(
+            &record(Standing::SignedOut),
+            Container::Missing
+        ));
+        // The flag rides the record only when it is set.
+        let wire = serde_json::to_value(&minted).unwrap();
+        assert!(wire.get("announced").is_none(), "{wire}");
+    }
+
+    /* ONE RUN AT A TIME: a live run's lock is followed, a dead one's taken over. */
+
+    fn lock(started: Option<&str>, at: u64) -> RunLock {
+        RunLock {
+            pid: 4242,
+            started: started.map(str::to_string),
+            at,
+            out: Some("/logs/desktop-machine-setup-1.out".into()),
+            err: Some("/logs/desktop-machine-setup-1.err".into()),
+        }
+    }
+
+    #[test]
+    fn a_lock_is_held_only_by_the_very_process_that_took_it() {
+        let now = 10_000;
+        assert_eq!(holder(None, Some("77"), now), Holder::Free);
+        let taken = lock(Some("77"), now - 60);
+        assert_eq!(holder(Some(&taken), Some("77"), now), Holder::Live);
+        // The process is gone: its lock is taken over.
+        assert_eq!(holder(Some(&taken), None, now), Holder::Stale);
+        // The pid is alive, started at another time: a process the system gave that pid since.
+        assert_eq!(holder(Some(&taken), Some("78"), now), Holder::Stale);
+        // A start that could not be read is believed for a while, never for good.
+        let unread = lock(None, now - 60);
+        assert_eq!(holder(Some(&unread), Some("anything"), now), Holder::Live);
+        let old = lock(None, now - LOCK_TRUST.as_secs() - 1);
+        assert_eq!(holder(Some(&old), Some("anything"), now), Holder::Stale);
+        assert_eq!(holder(Some(&old), None, now), Holder::Stale);
+        // On disk as it is read back.
+        let back: RunLock = serde_json::from_value(serde_json::to_value(&taken).unwrap()).unwrap();
+        assert_eq!(back, taken);
+    }
+
+    #[test]
+    fn a_processs_start_is_read_past_a_command_name_that_holds_spaces() {
+        let stat = "4242 (power shell (x)) S 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 1000 10";
+        assert_eq!(start_time_in_stat(stat).as_deref(), Some("987654"));
+        let zombie = "4242 (sh) Z 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 0 0";
+        assert_eq!(start_time_in_stat(zombie), None);
+        assert_eq!(start_time_in_stat("garbage"), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn this_process_has_a_start_and_a_pid_nobody_holds_has_none() {
+        assert!(process_started(std::process::id()).is_some());
+        assert_eq!(process_started(u32::MAX - 1), None);
     }
 
     #[test]

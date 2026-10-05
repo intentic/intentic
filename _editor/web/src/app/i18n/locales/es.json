@@ -2375,6 +2375,9 @@
             "weWontStartMachine": "No vamos a arrancar esta máquina: el correo que enviamos dice por qué y a dónde escribir si nos equivocamos. Tus archivos siguen en ella, y nada más de tu cuenta cambia. El mismo sandbox se ejecuta en tu propio ordenador, gratis y sin límites, desde su pantalla de configuración."
         },
         "containerHealth": {
+            "copiesTakeTurns": "Las copias en {hosts} se registran con el mismo token, así que se turnan su dirección: se corta más o menos cada minuto y los turnos en curso se interrumpen.",
+            "removeTheOtherCopy": "En la máquina cuya copia no usas, ejecuta `ic sandbox list` y luego `ic sandbox remove` con el nombre de ese sandbox.",
+            "twoCopiesRunning": "Hay dos copias de este sandbox en marcha",
             "announcedWhilePlatformOn": "Anunció {announced}, mientras que la plataforma tiene {expected} registrado. Hasta que ambos coincidan, todo lo que se envíe a la dirección registrada no le llega.",
             "sandboxCheckingInUnder": "Este sandbox se está reportando bajo una dirección que la plataforma no tiene registrada para él",
             "sandboxDoesNotAnswer": "Este sandbox no responde en su dirección pública",
@@ -2489,6 +2492,8 @@
             "deadLinksOnly": "Solo enlaces muertos",
             "deletedOrMoved": "Sandboxes borrados o movidos",
             "freshCommand": "Comando nuevo",
+            "leftovers": "Pendiente para ti",
+            "leftoversNote": "Su propia limpieza no pudo quitar esto",
             "mayBeOutdated": "Lo de abajo puede ser viejo",
             "noContainersViaSync": "Sin contenedores por sync",
             "noSelfReport": "Sin autoinforme",

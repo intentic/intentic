@@ -40,7 +40,9 @@
         "stoppedInstallNothingElse": "Zatrzymałeś tę instalację. Nic więcej nie działa na tym urządzeniu.",
         "stopping": "Zatrzymywanie…",
         "updateRestart": "Zaktualizuj i uruchom ponownie",
-        "yourSandbox": "Twój sandbox"
+        "yourSandbox": "Twój sandbox",
+        "newerIntenticInstalled": "Zainstalowano nowszą wersję Intentic. Uruchom Intentic ponownie, aby jej używać.",
+        "restartIntentic": "Uruchom Intentic ponownie"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Zawsze tak rób: nie pytaj ponownie",
@@ -148,7 +150,10 @@
         "needsYouBadge": "czeka na Ciebie",
         "startingDockerBadge": "uruchamianie Dockera",
         "updateReadyBadge": "aktualizacja jest gotowa",
-        "machineBadge": "konfiguracja sandboxa tego komputera"
+        "machineBadge": "konfiguracja sandboxa tego komputera",
+        "keptBy": "Obsługiwany przez {place}",
+        "keptByNote": "Jego aktualizacje, kopie zapasowe i restarty działają tam. Uruchamianie, zatrzymywanie i restart nadal działają stąd.",
+        "agentsElsewhere": "Agent maszyny Intentic działa na tym komputerze także w {places} i dba o skonfigurowane tam sandboxy."
     },
     "machineSandbox": {
         "title": "Sandbox tego komputera",

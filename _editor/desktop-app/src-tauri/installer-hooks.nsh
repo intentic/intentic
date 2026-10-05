@@ -15,6 +15,11 @@
 ; include, so referencing them here would name nothing.
 !define MUI_BRANDINGTEXT "Intentic"
 
+; Whether the machine agent is still on this PC once the uninstall hook has asked about it (1) or not (0): the last
+; page says what stays, and the agent is part of that only when it stayed. Declared here, at the top level, because
+; Tauri includes this file there and a Var cannot be declared inside a section.
+Var IntenticAgentKept
+
 ; WHY AN UNINSTALL HOOK AT ALL — this app is meant to be running when you uninstall it.
 ;
 ; The tray is where Intentic lives once its window is closed (windows.rs, `apply_close`), so the ordinary
@@ -29,11 +34,70 @@
 ;
 ; `CurrentUser` matches the check's own choice under `installMode: currentUser` — the process to end is this
 ; user's, not every user's on the machine.
+;
+; The file server goes too (intentic-files.exe, src/sidecar.rs). It ends by itself once the app's pipe closes, but only
+; after it has let go of its office editor, and until then it holds its own file open: the uninstaller's Delete of it
+; failed on a slow exit and left the binary behind (2026-10-05). It is killed by name for the same reason as the app.
+;
+; WHAT AN UNINSTALL LEFT BEHIND, and what it still leaves (2026-10-05). The app is one part of what a setup put on this
+; PC, and the uninstaller used to remove that part alone:
+;   - the machine agent (~/.intentic/machine), whose keeper starts Docker Desktop at every sign-in to keep sandboxes up.
+;     It is ASKED about, not removed unasked: somebody may use it without the app (a terminal setup, a device paired
+;     from the workspace). Yes runs `intentic-machine uninstall`, which removes this PC's links, sync pairings and
+;     login entry and never a container: it has no flag about sandboxes because it touches none, which is the rule
+;     (a container is never deleted silently). Never asked on an update or a passive uninstall, and a silent one
+;     answers no.
+;   - the platform session, in the webview's cookie store (`$LOCALAPPDATA\<identifier>\EBWebView`), which stayed signed
+;     in unless "Delete app data" was ticked. The app's own sign-out (account.rs `signed_off`) deletes the session
+;     cookie and empties roster.json; the uninstaller cannot reach the platform with a cookie Chromium keeps
+;     encrypted, so it does the local half: the cookie files and the account's name go. Tried a few times, since the
+;     webview's own processes outlive the app by a moment and hold the files until they exit.
+;   - the sandboxes, their data, `ic` and its PATH entry, and the run logs stay, and the last page says so (below):
+;     the sandboxes are the reader's work, and `ic` is how they are removed.
 !macro NSIS_HOOK_PREUNINSTALL
   nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
   Pop $0
+  nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
+  Pop $0
   ; The same settle the built-in check gives itself between killing and looking again.
   Sleep 500
+  StrCpy $IntenticAgentKept 0
+  ${If} $UpdateMode <> 1
+    ${If} ${FileExists} "$PROFILE\.intentic\machine\bin\intentic-machine.exe"
+      StrCpy $IntenticAgentKept 1
+      ${If} $PassiveMode <> 1
+        ${If} ${Cmd} `MessageBox MB_YESNO|MB_ICONQUESTION "Also remove the Intentic machine agent from this PC?$\r$\n$\r$\nIt keeps your sandboxes connected and starts Docker Desktop when you sign in. Your sandboxes and their files are not deleted either way." /SD IDNO IDYES`
+          DetailPrint "Removing the Intentic machine agent..."
+          nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" uninstall'
+          Pop $0
+          ${If} $0 == 0
+            StrCpy $IntenticAgentKept 0
+          ${Else}
+            DetailPrint "The machine agent did not uninstall ($0). Run: intentic-machine uninstall"
+          ${EndIf}
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+    ; Signed out on this PC: the session cookie, wherever this WebView2 keeps it, and the account's name.
+    StrCpy $1 0
+    ${Do}
+      Delete "$LOCALAPPDATA\${BUNDLEID}\EBWebView\Default\Network\Cookies"
+      Delete "$LOCALAPPDATA\${BUNDLEID}\EBWebView\Default\Network\Cookies-journal"
+      Delete "$LOCALAPPDATA\${BUNDLEID}\EBWebView\Default\Cookies"
+      Delete "$LOCALAPPDATA\${BUNDLEID}\EBWebView\Default\Cookies-journal"
+      ${IfNot} ${FileExists} "$LOCALAPPDATA\${BUNDLEID}\EBWebView\Default\Network\Cookies"
+      ${AndIfNot} ${FileExists} "$LOCALAPPDATA\${BUNDLEID}\EBWebView\Default\Cookies"
+        ${ExitDo}
+      ${EndIf}
+      IntOp $1 $1 + 1
+      ${If} $1 >= 10
+        DetailPrint "The webview still holds its cookies; you may still be signed in."
+        ${ExitDo}
+      ${EndIf}
+      Sleep 500
+    ${Loop}
+    Delete "$APPDATA\${BUNDLEID}\roster.json"
+  ${EndIf}
 !macroend
 
 ; ...AND THE SAME PROBLEM ON THE WAY IN, which arrived with the app updating itself in the background.
@@ -49,8 +113,13 @@
 ; the update path (the process is already on its way out) and correct on the manual one (somebody running the
 ; downloaded installer over a copy they left open); if it fails, the built-in check still runs and still asks,
 ; which is the right fallback rather than a silent overwrite.
+;
+; The file server is ended as well, for the reason the uninstall hook gives: a sidecar slow to exit holds
+; intentic-files.exe, and the installer's overwrite of it fails.
 !macro NSIS_HOOK_PREINSTALL
   nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
+  Pop $0
+  nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
   Pop $0
   Sleep 500
 !macroend
@@ -69,7 +138,19 @@
   WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%V"'
 !macroend
 
+; WHAT STAYS, said on the way out (2026-10-05): an uninstall that ends in silence lets the reader believe their
+; sandboxes went with the app, when every container is still in Docker and keeps its data. Only where `ic` is installed,
+; which is every PC a sandbox was set up on; never on an update, a passive or a silent uninstall.
 !macro NSIS_HOOK_POSTUNINSTALL
   DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
   DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
+  ${If} $UpdateMode <> 1
+  ${AndIf} $PassiveMode <> 1
+  ${AndIf} ${FileExists} "$PROFILE\.intentic\ic\bin\ic.exe"
+    ${If} $IntenticAgentKept = 1
+      MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC, in Docker. In a terminal, ic sandbox list shows them and ic sandbox remove <name> removes one (it stays recoverable for a week).$\r$\n$\r$\nThe machine agent stays too. intentic-machine uninstall removes it." /SD IDOK
+    ${Else}
+      MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC, in Docker. In a terminal, ic sandbox list shows them and ic sandbox remove <name> removes one (it stays recoverable for a week)." /SD IDOK
+    ${EndIf}
+  ${EndIf}
 !macroend

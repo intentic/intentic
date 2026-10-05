@@ -73,6 +73,10 @@ export interface Move {
 
 export interface DesiredStateGraph {
     readonly version: 1;
+    // The intent id every resource is stamped with as its owner (intentic.owner), so a scan of a host or zone two
+    // intents share tells this intent's resources from the other's. Minted once by resolve and carried forward; absent
+    // in an artifact resolved before owners existed (2026-10-05).
+    readonly owner?: string;
     readonly resources: Readonly<Record<string, ResourceNode>>;
     // Renames to reconcile before this apply.
     readonly moved?: readonly Move[];

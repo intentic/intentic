@@ -206,7 +206,7 @@ function Add-IntenticPath {
 #      line - a test in desktop-app/src-tauri/src/scripts.rs holds the three to that, because three
 #      hand-kept copies of a download are three chances to drift) ----
 # Downloaded on every run that pins no release, so re-running the one-liner upgrades an existing install; a
-# run pinned to the release already installed (IC_VERSION) skips it, and only a failed download falls back to
+# run pinned to a release (IC_VERSION) that finds it or a newer one installed skips it, and only a failed download falls back to
 # what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
 # executable fails, and a half-downloaded binary must never be what runs.
 $Ic = $env:IC_BIN
@@ -217,11 +217,309 @@ if (-not $Ic) {
     $IcDest = "$IcDir\ic.exe"
     $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
     # A caller that pins its release (IC_VERSION beside IC_URL, which the desktop app sets to its own) and finds
-    # exactly that release installed has nothing to fetch: asking the binary costs milliseconds, the download
-    # seconds. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
+    # that release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds, the download
+    # seconds. Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the
+    # tray for days put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions,
+    # major.minor.patch first, a pre-release below its own release; an installed ic whose answer is not a version
+    # is replaced. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
     $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
-    if ($IcHave -and $IcHave -eq "ic $env:IC_VERSION") {
-        Write-Host "note: $IcHave is already installed - not downloading it again."
+    $IcCurrent = $false
+    if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-Host 'intentic: [fetching-ic] fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
+            } else {
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
+            }
+        }
+    }
+}
+
+# ---- Docker, and everything Windows needs before Docker can exist ----
+# This was a copy of connect.ps1's Docker block, kept in step by hand and marked "lifted from connect.ps1".
+# Both are now one call into ic, which examines this PC properly (virtualization, WSL2, the features behind
+# it, a pending restart, Docker, its group, its engine, its container mode, free space), asks once, and fixes
+# what it can. See connect.ps1 for why that reading lives there rather than in a shell script.
+& $Ic docker prepare
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# ---- validate the Cloudflare token (own-Cloudflare path only; lifted from connect.ps1) ----
+if (-not $ProvidedTunnel) {
+    Write-Host 'intentic: validating Cloudflare API token...'
+    try {
+        $cfVerify = Invoke-RestMethod -Uri 'https://api.cloudflare.com/client/v4/user/tokens/verify' -Headers @{ Authorization = "Bearer $CfToken" }
+    } catch {
+        $cfVerify = $null
+    }
+    if (-not $cfVerify -or -not $cfVerify.success -or $cfVerify.result.status -ne 'active') {
+        Write-Error 'the Cloudflare API token is invalid or inactive (token verify failed). Re-check the token and its scopes (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit) at https://dash.cloudflare.com/profile/api-tokens.'
+        exit 1
+    }
+}
+
+# Per-(sandbox, host) identity, so one PC can host several targets and re-running the same command reuses this
+# one (same DinD volume => deployed containers/state survive). Digest matches the tunnel-id scheme (token:name).
+$slugInput = '{0}:{1}' -f $ConnectToken, $HostName
+$sha = [System.Security.Cryptography.SHA256]::Create()
+$Slug = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($slugInput))) -replace '-', '').Substring(0, 12).ToLower()
+$DindContainer = "intentic-dind-host-$Slug"
+$DindVolume = "intentic-dind-docker-$Slug"
+$TunnelContainer = "intentic-host-ssh-tunnel-$Slug"
+
+Invoke-ImagePull $DindImage
+if (-not $ProvidedTunnel) { Invoke-ImagePull $SandboxImage }
+
+# ---- stand up the Docker-in-Docker deploy target + its SSH key (lifted from connect.ps1) ----
+Write-Host 'intentic: starting the Docker-in-Docker deploy target...'
+docker rm -f $DindContainer *> $null
+docker run -d --privileged --restart unless-stopped --name $DindContainer `
+    -e DOCKER_TLS_CERTDIR= `
+    -v "${DindVolume}:/var/lib/docker" `
+    --dns 1.1.1.1 --dns 1.0.0.1 `
+    $DindImage | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error 'failed to start the Docker-in-Docker deploy target (see the docker output above).'
+    exit 1
+}
+# Wait until `docker exec` works, then generate a fresh ed25519 key inside the target and authorize it as the
+# target's only key (root-owned, 600 - sshd rejects loose modes). The private half is read out for the sandbox.
+for ($i = 0; $i -lt 60; $i++) { docker exec $DindContainer true *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep -Seconds 1 }
+docker exec $DindContainer sh -c 'ssh-keygen -t ed25519 -N "" -C intentic-host -f /root/.ssh/intentic_ed25519 >/dev/null && cat /root/.ssh/intentic_ed25519.pub > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error 'failed to provision the deploy target''s SSH key (see the docker output above).'
+    exit 1
+}
+$HostSshKey = (docker exec $DindContainer cat /root/.ssh/intentic_ed25519) -join "`n"
+
+# ---- expose the target's sshd over Cloudflare ----
+if ($ProvidedTunnel) {
+    Write-Host "intentic: using the pre-provisioned host SSH tunnel ($HostSshHostname)."
+    $HostAddress = $HostSshHostname
+} else {
+    Write-Host "intentic: creating this host's SSH tunnel..."
+    $tunnelArgs = @('run', '--rm', '--entrypoint', 'intentic', '-e', "CLOUDFLARE_API_TOKEN=$CfToken", '-e', "CONNECT_TOKEN=$ConnectToken", '-e', "HOST_NAME=$HostName")
+    if ($Zone) { $tunnelArgs += @('-e', "ZONE=$Zone") }
+    $tunnelArgs += @($SandboxImage, 'tunnel', 'host')
+    $hostSshOut = & docker $tunnelArgs
+    $HostSshTunnelToken = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_TUNNEL_TOKEN=*' } | Select-Object -First 1) -replace '^HOST_SSH_TUNNEL_TOKEN=', ''
+    $HostAddress = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_HOSTNAME=*' } | Select-Object -First 1) -replace '^HOST_SSH_HOSTNAME=', ''
+    if (-not $HostSshTunnelToken -or -not $HostAddress) {
+        Write-Error 'failed to create this host''s SSH tunnel (see the output above).'
+        exit 1
+    }
+}
+
+# The connector SHARES the DinD's network namespace (--network container:), so the tunnel's `ssh://localhost:22`
+# origin is the DinD's own sshd - no origin rewrite needed. Coupling: recreating the DinD orphans this connector
+# (both are recreated together on a re-run).
+Write-Host 'intentic: starting the host SSH tunnel connector...'
+docker rm -f $TunnelContainer *> $null
+docker run -d --restart unless-stopped --name $TunnelContainer --network "container:$DindContainer" `
+    $CloudflaredImage tunnel --no-autoupdate run --token $HostSshTunnelToken | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error 'failed to start the host SSH tunnel connector (see the docker output above).'
+    exit 1
+}
+
+# ---- enroll with the sandbox (mirrors connect-host.sh's POST /enroll) ----
+Write-Host 'intentic: enrolling with the sandbox...'
+$body = @{
+    name    = $HostName
+    user    = $HostUser
+    address = $HostAddress
+    port    = 22
+    via     = 'cloudflared'
+    sshKey  = $HostSshKey
+}
+# cfToken rides along only on the own-Cloudflare path - the pre-provisioned one has no token to hand over.
+if ($CfToken) { $body.cfToken = $CfToken }
+try {
+    Invoke-RestMethod -Method Post -Uri "$SandboxUrl/enroll" `
+        -Headers @{ 'x-intentic-connect' = $ConnectToken } `
+        -ContentType 'application/json' `
+        -Body ($body | ConvertTo-Json -Compress) | Out-Null
+} catch {
+    Write-Error "enroll failed ($($_.Exception.Message)). Is the sandbox reachable at $SandboxUrl and is the DevOps capability active?"
+    exit 1
+}
+
+Write-Host "intentic: this machine is enrolled as deploy target ""$HostName"" (SSH reachable at $HostAddress)."
+Write-Host 'Provision from the Infra screen to deploy onto it. Re-run this command anytime to refresh the key/tunnel.'
+Write-Host "Logs: docker logs -f $DindContainer"
+Write-Host "Stop (keeps deployed state): docker stop $DindContainer $TunnelContainer"
+) {
+        $IcHaveCore = [version]$Matches[1]
+        $IcHavePre = $Matches[2]
+        if ($env:IC_VERSION -match '^v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-Host 'intentic: [fetching-ic] fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
+            } else {
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
+            }
+        }
+    }
+}
+
+# ---- Docker, and everything Windows needs before Docker can exist ----
+# This was a copy of connect.ps1's Docker block, kept in step by hand and marked "lifted from connect.ps1".
+# Both are now one call into ic, which examines this PC properly (virtualization, WSL2, the features behind
+# it, a pending restart, Docker, its group, its engine, its container mode, free space), asks once, and fixes
+# what it can. See connect.ps1 for why that reading lives there rather than in a shell script.
+& $Ic docker prepare
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# ---- validate the Cloudflare token (own-Cloudflare path only; lifted from connect.ps1) ----
+if (-not $ProvidedTunnel) {
+    Write-Host 'intentic: validating Cloudflare API token...'
+    try {
+        $cfVerify = Invoke-RestMethod -Uri 'https://api.cloudflare.com/client/v4/user/tokens/verify' -Headers @{ Authorization = "Bearer $CfToken" }
+    } catch {
+        $cfVerify = $null
+    }
+    if (-not $cfVerify -or -not $cfVerify.success -or $cfVerify.result.status -ne 'active') {
+        Write-Error 'the Cloudflare API token is invalid or inactive (token verify failed). Re-check the token and its scopes (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit) at https://dash.cloudflare.com/profile/api-tokens.'
+        exit 1
+    }
+}
+
+# Per-(sandbox, host) identity, so one PC can host several targets and re-running the same command reuses this
+# one (same DinD volume => deployed containers/state survive). Digest matches the tunnel-id scheme (token:name).
+$slugInput = '{0}:{1}' -f $ConnectToken, $HostName
+$sha = [System.Security.Cryptography.SHA256]::Create()
+$Slug = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($slugInput))) -replace '-', '').Substring(0, 12).ToLower()
+$DindContainer = "intentic-dind-host-$Slug"
+$DindVolume = "intentic-dind-docker-$Slug"
+$TunnelContainer = "intentic-host-ssh-tunnel-$Slug"
+
+Invoke-ImagePull $DindImage
+if (-not $ProvidedTunnel) { Invoke-ImagePull $SandboxImage }
+
+# ---- stand up the Docker-in-Docker deploy target + its SSH key (lifted from connect.ps1) ----
+Write-Host 'intentic: starting the Docker-in-Docker deploy target...'
+docker rm -f $DindContainer *> $null
+docker run -d --privileged --restart unless-stopped --name $DindContainer `
+    -e DOCKER_TLS_CERTDIR= `
+    -v "${DindVolume}:/var/lib/docker" `
+    --dns 1.1.1.1 --dns 1.0.0.1 `
+    $DindImage | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error 'failed to start the Docker-in-Docker deploy target (see the docker output above).'
+    exit 1
+}
+# Wait until `docker exec` works, then generate a fresh ed25519 key inside the target and authorize it as the
+# target's only key (root-owned, 600 - sshd rejects loose modes). The private half is read out for the sandbox.
+for ($i = 0; $i -lt 60; $i++) { docker exec $DindContainer true *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep -Seconds 1 }
+docker exec $DindContainer sh -c 'ssh-keygen -t ed25519 -N "" -C intentic-host -f /root/.ssh/intentic_ed25519 >/dev/null && cat /root/.ssh/intentic_ed25519.pub > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error 'failed to provision the deploy target''s SSH key (see the docker output above).'
+    exit 1
+}
+$HostSshKey = (docker exec $DindContainer cat /root/.ssh/intentic_ed25519) -join "`n"
+
+# ---- expose the target's sshd over Cloudflare ----
+if ($ProvidedTunnel) {
+    Write-Host "intentic: using the pre-provisioned host SSH tunnel ($HostSshHostname)."
+    $HostAddress = $HostSshHostname
+} else {
+    Write-Host "intentic: creating this host's SSH tunnel..."
+    $tunnelArgs = @('run', '--rm', '--entrypoint', 'intentic', '-e', "CLOUDFLARE_API_TOKEN=$CfToken", '-e', "CONNECT_TOKEN=$ConnectToken", '-e', "HOST_NAME=$HostName")
+    if ($Zone) { $tunnelArgs += @('-e', "ZONE=$Zone") }
+    $tunnelArgs += @($SandboxImage, 'tunnel', 'host')
+    $hostSshOut = & docker $tunnelArgs
+    $HostSshTunnelToken = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_TUNNEL_TOKEN=*' } | Select-Object -First 1) -replace '^HOST_SSH_TUNNEL_TOKEN=', ''
+    $HostAddress = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_HOSTNAME=*' } | Select-Object -First 1) -replace '^HOST_SSH_HOSTNAME=', ''
+    if (-not $HostSshTunnelToken -or -not $HostAddress) {
+        Write-Error 'failed to create this host''s SSH tunnel (see the output above).'
+        exit 1
+    }
+}
+
+# The connector SHARES the DinD's network namespace (--network container:), so the tunnel's `ssh://localhost:22`
+# origin is the DinD's own sshd - no origin rewrite needed. Coupling: recreating the DinD orphans this connector
+# (both are recreated together on a re-run).
+Write-Host 'intentic: starting the host SSH tunnel connector...'
+docker rm -f $TunnelContainer *> $null
+docker run -d --restart unless-stopped --name $TunnelContainer --network "container:$DindContainer" `
+    $CloudflaredImage tunnel --no-autoupdate run --token $HostSshTunnelToken | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error 'failed to start the host SSH tunnel connector (see the docker output above).'
+    exit 1
+}
+
+# ---- enroll with the sandbox (mirrors connect-host.sh's POST /enroll) ----
+Write-Host 'intentic: enrolling with the sandbox...'
+$body = @{
+    name    = $HostName
+    user    = $HostUser
+    address = $HostAddress
+    port    = 22
+    via     = 'cloudflared'
+    sshKey  = $HostSshKey
+}
+# cfToken rides along only on the own-Cloudflare path - the pre-provisioned one has no token to hand over.
+if ($CfToken) { $body.cfToken = $CfToken }
+try {
+    Invoke-RestMethod -Method Post -Uri "$SandboxUrl/enroll" `
+        -Headers @{ 'x-intentic-connect' = $ConnectToken } `
+        -ContentType 'application/json' `
+        -Body ($body | ConvertTo-Json -Compress) | Out-Null
+} catch {
+    Write-Error "enroll failed ($($_.Exception.Message)). Is the sandbox reachable at $SandboxUrl and is the DevOps capability active?"
+    exit 1
+}
+
+Write-Host "intentic: this machine is enrolled as deploy target ""$HostName"" (SSH reachable at $HostAddress)."
+Write-Host 'Provision from the Infra screen to deploy onto it. Re-run this command anytime to refresh the key/tunnel.'
+Write-Host "Logs: docker logs -f $DindContainer"
+Write-Host "Stop (keeps deployed state): docker stop $DindContainer $TunnelContainer"
+) {
+            $IcPinCore = [version]$Matches[1]
+            $IcCurrent = ($IcHaveCore -gt $IcPinCore) -or ($IcHaveCore -eq $IcPinCore -and (-not $IcHavePre -or $IcHavePre -eq $Matches[2]))
+        }
+    }
+    if ($IcCurrent) {
+        Write-Host "note: $IcHave is installed (this run asks for ic $env:IC_VERSION or newer) - not downloading it."
         $Ic = $IcDest
         Add-IntenticPath -Folder $IcDir -Command 'ic'
     } else {

@@ -11,9 +11,11 @@ use std::time::Duration;
 
 use desktop::Applied;
 use host::{DeviceFacts, Os};
-use model::{Check, Outcome, Repair, Source, Stage, State, Who};
+use model::{Check, Fix, Outcome, Repair, Source, Stage, State, Who};
 use report::{Poster, Target};
 
+use crate::record::ChannelRecord;
+use crate::sandbox::side::{self, Side, Unattended};
 use crate::ui::{self, RowOutcome};
 use crate::util::{Fail, Result};
 
@@ -131,9 +133,17 @@ struct Engine {
     /// PLATFORM_URL was set: it wins over what a container says.
     platform_forced: bool,
     machine: String,
-    /// Per sandbox, whether an unattended run leaves it to the other side of this computer, and which side that is:
-    /// read once per run, off the container's env.
-    sides: HashMap<String, Option<String>>,
+    /// Per sandbox, whether an unattended run leaves it to another side of this computer, which side that is, and
+    /// whether that side has fallen silent so this run adopts it (side.rs): read once per run.
+    sides: HashMap<String, Unattended>,
+    /// This side's environment (side.rs), which every report names.
+    env: Option<String>,
+    /// The machine agent's last upkeep pass, summed for the finished reports (model::upkeep_summary): read once per run.
+    upkeep: Option<serde_json::Value>,
+    /// Whether this side keeps any sandbox at all (a container, a record or a trash entry of its own): an unattended
+    /// run on a side that keeps none applies no repair to the machine (2026-10-05: the keeper of a device-only machine
+    /// started the Docker Desktop its owner had quit, every sweep). Settled by the first look.
+    keeps_any: bool,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -196,8 +206,24 @@ pub fn run(args: Args) -> Result<()> {
         platform_forced: forced.is_some(),
         machine: crate::sandbox::connect::machine_label(),
         sides: HashMap::new(),
+        env: side::here().env,
+        upkeep: read_upkeep(),
+        keeps_any: true,
     };
     engine.go()
+}
+
+/// The machine agent's upkeep file, summed for a report; None when there is no agent here, or no recent pass.
+fn read_upkeep() -> Option<serde_json::Value> {
+    let path = crate::logfile::intentic_home()
+        .join("machine")
+        .join("upkeep.json");
+    let raw: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    model::upkeep_summary(&raw, u64::try_from(now).ok()?)
 }
 
 /// A sandbox's 12-hex id names the `sandbox-<id>` it runs as, the way the platform's pages name it.
@@ -225,8 +251,8 @@ fn docker_knows(container: &str) -> bool {
     )
 }
 
-/// Every sandbox on this machine: its containers when the engine answers, else the channel records ic keeps for
-/// them, which is what lets a machine whose Docker is down still say which sandboxes it is down for.
+/// Every sandbox on this machine: its containers when the engine answers, else the channel records this side keeps for
+/// its own, which is what lets a machine whose Docker is down still say which sandboxes it is down for.
 fn discover(engine_up: bool) -> Vec<String> {
     if engine_up {
         let filter = format!("name=^{}", crate::sandbox::CONTAINER_PREFIX);
@@ -244,6 +270,13 @@ fn discover(engine_up: bool) -> Vec<String> {
             return crate::sandbox::slugs_of(&names);
         }
     }
+    own_records()
+}
+
+/// The sandboxes this side holds a channel record of its own for (archived ones are in another folder). Records the
+/// other side wrote, which an older ic copied here, are not this side's to start Docker for (audit 2026-10 item 12).
+fn own_records() -> Vec<String> {
+    let here = side::here();
     let mut slugs: Vec<String> = std::fs::read_dir(crate::logfile::intentic_home())
         .map(|entries| {
             entries
@@ -254,6 +287,9 @@ fn discover(engine_up: bool) -> Vec<String> {
                         .and_then(|rest| rest.strip_suffix(".channel"))
                         .map(str::to_string)
                 })
+                .filter(|slug| {
+                    crate::record::read(slug).is_ok_and(|record| record_is_ours(&record, &here))
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -261,15 +297,78 @@ fn discover(engine_up: bool) -> Vec<String> {
     slugs
 }
 
+/// Whether a channel record is this side's own: one written by this side, or one from an ic before records named
+/// their side, which cannot be told apart and stays what it always was. Pure.
+pub fn record_is_ours(record: &ChannelRecord, here: &Side) -> bool {
+    record
+        .side
+        .as_deref()
+        .and_then(Side::parse)
+        .is_none_or(|side| side.same(here))
+}
+
+/// Whether the trash holds a sandbox this side removed (or one nobody's stamp names). Asked only of an engine that
+/// answers.
+fn own_trash(here: &Side) -> bool {
+    crate::sandbox::trash::list().iter().any(|entry| {
+        let trashed = format!("{}{}", crate::sandbox::trash::TRASH_PREFIX, entry.slug);
+        crate::docker::container_env_nul(&trashed)
+            .map(|env| side::stamp_in(&env))
+            .map_or(true, |stamp| match stamp {
+                side::Stamp::Side(side) => side.same(here),
+                _ => true,
+            })
+    })
+}
+
+/// A machine check as an unattended run leaves it on a side that keeps no sandbox: said, with nothing done about it,
+/// and never what the run fails on. Pure.
+pub fn left_alone(check: Check) -> Check {
+    if check.repair().is_none() || !matches!(check.state, State::Fail | State::Warn) {
+        return check;
+    }
+    let problem = check.problem.clone().unwrap_or_default();
+    Check {
+        state: State::Warn,
+        fix: Fix::None,
+        problem: Some(
+            format!(
+                "{problem} No sandbox on this side of the computer needs it, so it was left as it is."
+            )
+            .trim()
+            .to_string(),
+        ),
+        ..check
+    }
+}
+
 /// The `--json` answer for a sandbox an unattended run left to the side that created it (side.rs): settled as far as
 /// this side goes, with nothing checked. Never posted: the side that keeps it reports for it. Pure.
-fn elsewhere_report(side: &str) -> serde_json::Value {
+fn elsewhere_report(side: &Side) -> serde_json::Value {
     serde_json::json!({
         "stage": Stage::Done.wire(),
         "outcome": "elsewhere",
-        "doing": crate::sandbox::side::sentence(side),
+        "doing": side::sentence(side),
         "checks": [],
     })
+}
+
+/// One sandbox's final `--json` line: its report, and beside it (never inside, which is the platform's shape) what this
+/// side adopted and the repairs ic has made to it (ledger.rs). Pure.
+fn answer_line(
+    slug: &str,
+    report: &serde_json::Value,
+    adopted: Option<&side::Adoption>,
+    ledger: &crate::sandbox::ledger::Ledger,
+) -> String {
+    let mut line = serde_json::json!({ "slug": slug, "report": report });
+    if let Some(adoption) = adopted {
+        line["adopted"] = adoption.json();
+    }
+    if !ledger.entries.is_empty() {
+        line["repairs"] = ledger.json();
+    }
+    line.to_string()
 }
 
 /// What a repair is doing, and the finding that made it: an unasked restart that cuts every running turn has to say
@@ -341,6 +440,14 @@ impl Engine {
             }
         ));
         let mut snapshot = self.examine(true);
+        // The keeper's heartbeat, for every sandbox it keeps (side.rs): only the machine agent's own run is the keeper.
+        if self.auto && snapshot.host.engine.up() {
+            for sandbox in &snapshot.sandboxes {
+                if self.sides.get(&sandbox.slug) == Some(&Unattended::Ours) {
+                    side::beat(&sandbox.slug);
+                }
+            }
+        }
         self.post(&snapshot, Stage::Checking, None, None);
         let mut repairs = 0;
         while !self.doctor && !self.session && repairs < MAX_REPAIRS {
@@ -426,15 +533,26 @@ impl Engine {
         }
     }
 
-    /// The other side of this computer that keeps this sandbox, when an unattended run should leave it there
-    /// (side.rs): otherwise two keepers restart one sandbox, each with its own record of what it already tried.
-    fn side_of(&mut self, slug: &str) -> Option<String> {
+    /// Whether an unattended run acts on this sandbox (side.rs): another side that keeps it and looks after it is left
+    /// to, or two keepers restart one sandbox, each with its own record of what it already tried; one that has fallen
+    /// silent is adopted for this run.
+    fn side_of(&mut self, slug: &str) -> Unattended {
         if let Some(side) = self.sides.get(slug) {
             return side.clone();
         }
-        let side = crate::sandbox::side::kept_elsewhere(slug);
+        let side = side::unattended(slug);
+        if let Unattended::Adopted(adoption) = &side {
+            ui::note(&format!("{slug}: {}", adoption.sentence()));
+        }
         self.sides.insert(slug.to_string(), side.clone());
         side
+    }
+
+    fn adoption_of(&self, slug: &str) -> Option<&side::Adoption> {
+        match self.sides.get(slug) {
+            Some(Unattended::Adopted(adoption)) => Some(adoption),
+            _ => None,
+        }
     }
 
     fn examine(&mut self, first: bool) -> Snapshot {
@@ -453,9 +571,15 @@ impl Engine {
                 .slugs
                 .clone()
                 .into_iter()
-                .filter(|slug| self.side_of(slug).is_none())
+                .filter(|slug| !matches!(self.side_of(slug), Unattended::Theirs(_)))
                 .collect();
             self.slugs = mine;
+        }
+        if first {
+            let here = side::here();
+            self.keeps_any = !self.slugs.is_empty()
+                || !own_records().is_empty()
+                || (engine_up && own_trash(&here));
         }
         let host_checks = {
             let tried = |repair: &Repair| self.tried.contains(&(None, repair.clone()));
@@ -469,13 +593,33 @@ impl Engine {
             ]
             .into_iter()
             .flatten()
+            .map(|check| {
+                if self.auto && !self.keeps_any {
+                    left_alone(check)
+                } else {
+                    check
+                }
+            })
             .collect::<Vec<Check>>()
         };
         let mut sandboxes = Vec::new();
         for slug in self.slugs.clone() {
-            let facts = chain::gather(&slug, engine_up, self.oom_seen.contains(&slug));
+            let mut facts = chain::gather(&slug, engine_up, self.oom_seen.contains(&slug));
             if facts.oom_seen {
                 self.oom_seen.insert(slug.clone());
+            }
+            // A stop a person made outside ic is remembered as held, so a later restart of the engine (which forgets
+            // the stop) does not have the keeper start it after all; one found running again is the stop reversed.
+            if !self.doctor {
+                let running =
+                    matches!(&facts.container, chain::Container::Present(state) if state.running());
+                if facts.stopped_outside && !facts.record.held {
+                    crate::sandbox::power::hold(&slug, true);
+                    facts.record.held = true;
+                } else if facts.record.held && running {
+                    crate::sandbox::power::hold(&slug, false);
+                    facts.record.held = false;
+                }
             }
             let own = {
                 let scope = Some(slug.clone());
@@ -629,6 +773,7 @@ impl Engine {
                 source: self.source,
                 machine: &machine,
                 os: self.os.wire(),
+                env: self.env.as_deref(),
                 stage,
                 doing,
                 outcome: None,
@@ -674,17 +819,26 @@ impl Engine {
             let checks = snapshot.checks_of(sandbox);
             let fixed = self.fixed_for(&sandbox.slug);
             let outcome = model::outcome(&checks, fixed, self.attempted);
-            let body = model::wire(&model::Report {
-                source: self.source,
-                machine: &self.machine_of(sandbox),
-                os: self.os.wire(),
-                stage: Stage::Done,
-                doing: None,
-                outcome: Some(outcome),
-                checks: &checks,
-            });
+            let body = model::with_upkeep(
+                model::wire(&model::Report {
+                    source: self.source,
+                    machine: &self.machine_of(sandbox),
+                    os: self.os.wire(),
+                    env: self.env.as_deref(),
+                    stage: Stage::Done,
+                    doing: None,
+                    outcome: Some(outcome),
+                    checks: &checks,
+                }),
+                self.upkeep.as_ref(),
+            );
             if self.json {
-                report::emit(&report::result_line(&sandbox.slug, &body));
+                report::emit(&answer_line(
+                    &sandbox.slug,
+                    &body,
+                    self.adoption_of(&sandbox.slug),
+                    &sandbox.facts.ledger,
+                ));
             }
             if let (false, Some(target)) = (self.doctor, self.targets.get(&sandbox.slug)) {
                 self.poster.send(target, Stage::Done, body);
@@ -696,10 +850,13 @@ impl Engine {
                 .collect();
             outcomes.push((Some(sandbox.slug.clone()), outcome, theirs));
         }
-        let mut left_elsewhere: Vec<(&String, &String)> = self
+        let mut left_elsewhere: Vec<(&String, &Side)> = self
             .sides
             .iter()
-            .filter_map(|(slug, side)| side.as_ref().map(|side| (slug, side)))
+            .filter_map(|(slug, unattended)| match unattended {
+                Unattended::Theirs(side) => Some((slug, side)),
+                _ => None,
+            })
             .collect();
         left_elsewhere.sort();
         for (slug, side) in &left_elsewhere {
@@ -710,15 +867,19 @@ impl Engine {
         if snapshot.sandboxes.is_empty() {
             let outcome = model::outcome(&snapshot.host_checks, self.fixed_for(""), self.attempted);
             if self.json {
-                let body = model::wire(&model::Report {
-                    source: self.source,
-                    machine: &self.machine,
-                    os: self.os.wire(),
-                    stage: Stage::Done,
-                    doing: None,
-                    outcome: Some(outcome),
-                    checks: &snapshot.host_checks,
-                });
+                let body = model::with_upkeep(
+                    model::wire(&model::Report {
+                        source: self.source,
+                        machine: &self.machine,
+                        os: self.os.wire(),
+                        env: self.env.as_deref(),
+                        stage: Stage::Done,
+                        doing: None,
+                        outcome: Some(outcome),
+                        checks: &snapshot.host_checks,
+                    }),
+                    self.upkeep.as_ref(),
+                );
                 report::emit(&serde_json::json!({ "slug": null, "report": body }).to_string());
             }
             outcomes.push((
@@ -757,10 +918,10 @@ impl Engine {
         snapshot: &Snapshot,
         outcomes: &[(Option<String>, Outcome, Vec<&Check>)],
         left: &[(Option<&str>, &Check)],
-        left_elsewhere: &[(&String, &String)],
+        left_elsewhere: &[(&String, &Side)],
     ) {
         for (slug, side) in left_elsewhere {
-            ui::note(&format!("{slug}: {}", crate::sandbox::side::sentence(side)));
+            ui::note(&format!("{slug}: {}", side::sentence(side)));
         }
         if snapshot.sandboxes.is_empty() && !left_elsewhere.is_empty() && left.is_empty() {
             return;
@@ -888,6 +1049,8 @@ mod tests {
             public: chain::Public::NotAsked,
             live_turns: None,
             now_ms: 0,
+            ledger: crate::sandbox::ledger::Ledger::default(),
+            stopped_outside: false,
         };
         Snapshot {
             host: host_facts(),
@@ -938,13 +1101,79 @@ mod tests {
 
     #[test]
     fn a_sandbox_left_to_the_other_side_is_answered_as_settled_and_never_checked() {
-        let report = elsewhere_report("linux");
+        let report = elsewhere_report(&Side::new("linux", None));
         assert_eq!(report["outcome"], "elsewhere");
         assert_eq!(report["stage"], "done");
         assert_eq!(report["checks"], serde_json::json!([]));
         assert!(report["doing"]
             .as_str()
             .is_some_and(|said| said.contains("ic on WSL or Linux created it")));
+    }
+
+    #[test]
+    fn a_side_that_keeps_no_sandbox_names_the_machines_trouble_and_leaves_it() {
+        let quit = Check::fail(
+            model::DOCKER_APP,
+            "Docker Desktop is not running, so neither is your sandbox.",
+            "start Docker Desktop",
+            Fix::Do(Repair::StartDesktop),
+        );
+        let left = left_alone(quit);
+        assert_eq!(left.state, State::Warn);
+        assert_eq!(left.repair(), None);
+        assert!(left
+            .problem
+            .as_deref()
+            .is_some_and(|p| p.ends_with("so it was left as it is.")));
+        // Nothing to do about it either way: untouched.
+        let yours = Check::fail(model::DISK, "full", "free some", Fix::You);
+        assert_eq!(left_alone(yours.clone()), yours);
+        assert_eq!(
+            left_alone(Check::ok(model::DOCKER)),
+            Check::ok(model::DOCKER)
+        );
+    }
+
+    #[test]
+    fn a_record_is_this_sides_when_it_says_so_or_says_nothing() {
+        let here = Side::new("linux", Some("archlinux"));
+        let by = |side: Option<&str>| ChannelRecord {
+            side: side.map(str::to_string),
+            current: Some("img".to_string()),
+            ..ChannelRecord::default()
+        };
+        assert!(record_is_ours(&by(Some("linux/archlinux")), &here));
+        assert!(
+            record_is_ours(&by(None), &here),
+            "an older record cannot be told apart"
+        );
+        assert!(!record_is_ours(&by(Some("windows")), &here));
+        assert!(!record_is_ours(&by(Some("linux/ubuntu")), &here));
+        assert!(record_is_ours(&by(Some("linux")), &here));
+    }
+
+    #[test]
+    fn the_answer_line_carries_an_adoption_and_the_ledger_beside_the_report() {
+        let report = serde_json::json!({ "stage": "done", "checks": [] });
+        let plain: serde_json::Value = serde_json::from_str(&answer_line(
+            "s",
+            &report,
+            None,
+            &crate::sandbox::ledger::Ledger::default(),
+        ))
+        .expect("JSON");
+        assert_eq!(plain, serde_json::json!({ "slug": "s", "report": report }));
+        let adoption = side::Adoption {
+            from: Side::new("windows", Some("windows")),
+            since: Some(7),
+        };
+        let ledger = crate::sandbox::ledger::Ledger::default().noted("restart", 9, true);
+        let full: serde_json::Value =
+            serde_json::from_str(&answer_line("s", &report, Some(&adoption), &ledger))
+                .expect("JSON");
+        assert_eq!(full["adopted"]["from"], "windows");
+        assert_eq!(full["repairs"]["restart"]["count"], 1);
+        assert_eq!(full["report"], report, "the platform's report is untouched");
     }
 
     #[test]

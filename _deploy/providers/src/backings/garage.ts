@@ -1,9 +1,10 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
-import { containerId, execProbe, stampLabels } from "../core/backing-ssh.js";
+import { containerId, execProbe } from "../core/backing-ssh.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "garage";
 // The garage binary path inside the dxflrs/garage image (its entrypoint).
@@ -21,7 +22,7 @@ const internalEndpoint = (parsed: GarageInputs): string => `http://${parsed.inte
 
 // Single-node Garage: SQLite metadata, replication_factor 1, S3 API on 3900 (published), RPC on 3901
 // (in-container). The RPC secret is read from a host-written file so compose.yaml stays rewritable for bumps.
-const composeYaml = (parsed: GarageInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: GarageInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  garage:",
@@ -33,7 +34,7 @@ const composeYaml = (parsed: GarageInputs, id: string, hash: string): string =>
         "      - ./garage.toml:/etc/garage.toml:ro",
         "      - ./rpc_secret:/etc/garage/rpc_secret:ro",
         `    ports: [ "${parsed.publishPort}:3900" ]`,
-        stampLabels(KIND, id, hash, parsed.protect),
+        stampLabels(KIND, stamp, parsed.protect),
         "volumes: { meta: {}, data: {} }",
         "",
     ].join("\n");
@@ -88,7 +89,7 @@ export const createGarageProvider = (executor: SshExecutor = sshExecutor): Provi
                 internalEndpoint: internalEndpoint(parsed),
                 endpoint: parsed.domain !== undefined ? `https://${parsed.domain}` : internalEndpoint(parsed),
             }),
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash), "garage.toml": garageToml(parsed) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp), "garage.toml": garageToml(parsed) }),
             // The RPC secret is 32 bytes of host-generated hex, written once: it is baked into the cluster's identity,
             // so a
             // rewrite would leave the node unable to talk to itself.

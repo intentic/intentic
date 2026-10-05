@@ -40,6 +40,7 @@ flowchart LR
 - A turn nobody is watching when it starts (an automation, a loop, a spawned child) carries `policy.unattended`: the safety judge and the prompt are told, and nothing else changes. Every card it raises, a question, a plan, a held command, a credential's release, an install, waits for the owner like any other (conventions.md, A person's answers).
 - A scheduled automation whose moment passed while the daemon was down (a hosted sandbox stops itself when idle, and nothing wakes it for a cron) fires once as the scheduler starts, however many moments it missed, late and saying so, through the same sessions bar, guard and hold as any fire ([`scheduler.ts`](../../_sandbox/sandbox/src/automations/scheduler.ts) `catchUp`). What it owed is measured from the later of its last run and how far the scheduler has accounted for its clock (`.intentic/records/automation-schedule.json`), so one created or switched back on while nothing ran owes nothing from before.
 - A turn runs detached from any client ([`turn-runs.ts`](../../_sandbox/sandbox/src/agent/run/turn/turn-runs.ts)). It is journaled in `/history/conversations.db` and resumed after a restart when the owner's **Resume turns after a restart** is on, or when the owner asked that one restart to pick up what it cut (the rebuild dialog, or a rebuild the sandbox held until its agents were idle; [`restart-resume.ts`](../../_sandbox/sandbox/src/agent/run/turn/restart-resume.ts)); otherwise it is recorded as interrupted. Transcripts live in `/history/conversations/<id>/`.
+- (2026-10-05) `ic` writes the same ask before every restart it makes, so the turns a keeper's restart cuts come back too. A boot that is the third within 30 minutes (`/history/boot-history.json`, [`boot-history.ts`](../../_sandbox/sandbox/src/system/boot/boot-history.ts), written before anything can fail, a boot that dies before the gate included) honours neither the ask nor the setting: every cut turn stays interrupted, the log says why, and the owner's settings-problems card names the boot record until the next boot. A turn parked on a card is put back at every boot, but one whose cards cannot come back (its conversation archived) spends a try each time and is given up as interrupted after three.
 - A turn the provider's safety classifier stops (Claude Code's "safeguards flagged this message/session", `stop_reason: "refusal"`) is coded `safeguard-flagged` and held for a person, never re-run by a clock ([`refusal-fork.ts`](../../_sandbox/sandbox/src/agent/run/refusal-fork.ts), [`classify-failure.ts`](../../_sandbox/sandbox/src/agent/run/frames/classify-failure.ts)). The turn interrupts the CLI as the flag lands: left alone, a CLI whose stopped response held a tool call answers it and asks again into the same refusal, over and over. The hold keeps the last session entry before the stopped responses, and the chat's card offers **Retry on** the same model or **Continue on…** another one, which the conversation then stays on. Either press resumes the same session with `resumeSessionAt` at that entry, so the model never reads what was stopped. The CLI's own automatic switch to another model is off (`CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK`); its single same-model retry within the turn stays.
 - 2026-09-30: a flagged turn used to read as an uncoded death, so the stop ladder and Continue resent it into the session still carrying the stopped response (one conversation was flagged twelve times running). Automatic switching to a fallback model and re-seeding a fresh session were considered and rejected: the owner asked to choose each time, and changing the model by hand already covers both.
 
@@ -216,6 +217,46 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   times the price of reading it. Simulated on 543 sessions from the week to 2026-10-04, that raised prompt cost by 20% at
   ten kept results and 196% at fifty. It only came out ahead at three, a window too small to work in. The chunked
   boundary read 11 to 18% less prompt cost, and a mean prompt of about 190k to 205k tokens instead of 255k.
+
+## Leftovers and housekeeping
+
+(2026-10-05, from the self-healing audit.) What a run of the daemon starts is either retired by a sweep with an owner,
+or is meant to outlive it and is adopted; nothing is left to whoever happens to notice.
+
+- **Every process carries the run that started it.** The daemon puts a fresh `INTENTIC_DAEMON_GEN` on its own
+  environment at boot, so everything it starts inherits it, and the children it detaches into process groups of their
+  own (out of the front's reach when it dies) also say what they are, `INTENTIC_DETACHED`: an isolation anchor, a watch
+  check, an edit rule's command, the sign-in window's Chromium, the last three with their deadline (`INTENTIC_DEADLINE`)
+  where they have one ([`workload-stamp.ts`](../../_sandbox/sandbox/src/seams/workload-stamp.ts)).
+- **The boot sweep ends what an earlier run left** ([`generation-sweep.ts`](../../_sandbox/sandbox/src/system/boot/generation-sweep.ts)):
+  a stamped process of an older generation goes, except what tmux holds (its sessions have their own sweep) and the
+  programs meant to survive (the X displays and openbox, VPN and exit clients, dockerd and containerd, model servers).
+  An isolation anchor of an older run always goes; one from before the stamp is known by its shape. Unstamped
+  processes are never judged.
+- **The kept stay kept.** A job an agent kept running for the person keeps its terminal across a restart (the boot's
+  session sweep adopts it, as it adopts dockerd and the model panels) and never expires; before, the restart killed it
+  and six hours forgot it. A conversation's subagents are cancelled with it when it is archived, purged or discarded.
+- **The reaper's gaps** ([`reaper.ts`](../../_sandbox/sandbox/src/system/boot/reaper.ts), [`leftovers.ts`](../../_sandbox/sandbox/src/system/boot/leftovers.ts)):
+  Pi turns carry their conversation, not `daemon`, so they are reaped like Claude's; a `one-shot` helper is live while
+  its parent is; a forced reap (archive, discard) remembers the owner past the registry, so its SIGKILL still follows;
+  an armed watch keeps its conversation for the wake but no longer shields its finished turn's processes; a watch
+  check or an edit rule past its deadline is ended by the minute sweep; a tmux session an agent made by hand carries
+  its conversation (tmux copies `INTENTIC_TURN_OWNER` from the creating shell) and goes once that conversation is gone,
+  and a session nobody can name is left alone but shields a stamped process for a day, not for ever. `opencode serve`
+  stops after 30 idle minutes, and it and the Cursor runtimes stop with the daemon.
+- **Housekeeping runs on one clock that remembers across restarts** ([`chore-clock.ts`](../../_sandbox/sandbox/src/system/chore-clock.ts),
+  `/history/chore-clock.json`, wired in [`boot-chores.ts`](../../_sandbox/sandbox/src/bootstrap/boot-chores.ts)): git
+  maintenance hourly, which now says when a stale `maintenance.lock` stands in its way; stale `*.lock`, `tmp_pack_*`
+  and `tmp_idx_*` files in the history git dirs at boot and hourly, only with no git running; `gc` with two weeks'
+  grace daily while idle; parked `refs/agent/*` of conversations archived more than 90 days ago, daily; `/history/trash`
+  past 14 days, hourly; checkouts and overlays no conversation owns, daily, only on the registry's word; and stopped
+  containers and dangling images of the agents' dockerd, daily, only when it already runs.
+- **The host sees a restart storm too.** `/run/intentic/work.json` keeps `liveTurns` and `at`, and adds `bootedAt`,
+  `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt` (when the restart this boot follows was asked
+  for) ([`work-signal.ts`](../../_sandbox/sandbox/src/workload/work-signal.ts)).
+- **Children do not inherit the front's sockets.** Once the front door has dialled them, `INTENTIC_FRONT_SOCKET` and
+  `INTENTIC_NODE_SOCKET` leave the daemon's environment and the tmux server's, so no agent shell can start a second
+  Node that takes them over.
 
 ## State
 

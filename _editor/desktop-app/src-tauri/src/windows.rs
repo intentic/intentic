@@ -1081,6 +1081,13 @@ static QUITTING: AtomicBool = AtomicBool::new(false);
 /// A Quit question is on screen. A second Quit while it is up is held without asking twice.
 static ASKING_QUIT: AtomicBool = AtomicBool::new(false);
 
+/// Set by the runs question's "Quit now", or by its wait ending: the exit that follows leaves what still runs to finish
+/// on its own, and is not asked about again.
+static RUNS_ANSWERED: AtomicBool = AtomicBool::new(false);
+
+/// The runs question's "Quit when it's done" is being waited out.
+static WAITING_TO_QUIT: AtomicBool = AtomicBool::new(false);
+
 /// Only local windows keep the question: the workspace's × hides it and a floating panel's docks, so neither loses
 /// anything by closing. The main window's × hides it too, but Quit still ends it, so it keeps the question as well.
 fn is_local_window(label: &str) -> bool {
@@ -1167,14 +1174,18 @@ pub fn unsaved_windows() -> usize {
 
 /// The app is about to end with `code` (the tray's Quit, the ×'s "Quit", a restart): with local windows holding
 /// unsaved changes, ask first, in a native dialog. `true` means the exit was held for the question, and the caller
-/// prevents it; "Quit anyway" ends the app with the same code, and nothing is asked a second time.
+/// prevents it; "Quit anyway" ends the app with the same code, and nothing is asked a second time. Then, with work
+/// still under way on this computer, that is asked about too ([`hold_quit_for_runs`], 2026-10-05).
 ///
 /// A restart cannot be held (Tauri ignores a prevented restart), which is why an update refuses to start while
-/// anything is unsaved (update.rs `refusal`) rather than relying on this.
+/// anything is unsaved or running (update.rs `refusal`) rather than relying on this.
 pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
-    let count = unsaved_windows();
-    if count == 0 || code == tauri::RESTART_EXIT_CODE {
+    if code == tauri::RESTART_EXIT_CODE {
         return false;
+    }
+    let count = unsaved_windows();
+    if count == 0 {
+        return hold_quit_for_runs(app, code);
     }
     if ASKING_QUIT.swap(true, Ordering::SeqCst) {
         return true;
@@ -1196,6 +1207,113 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
             }
         });
     true
+}
+
+/* A QUIT WHILE THE APP IS STILL WORKING ON THIS COMPUTER (2026-10-05). Quit asked only about unsaved windows, and ended the
+ * app under a recreate, a removal or a bring-back as readily as under nothing: the scripts and the `ic` under them were
+ * abandoned mid-flow, a bring-back's machine agent with them. Now a Quit with work under way asks first: wait for it and
+ * quit then, quit now, or cancel. A run's child no longer writes to a pipe of this process (scripts.rs `Spool`), so a
+ * "Quit now" leaves it to finish on its own with its own words in its files, which its transcript names. This
+ * computer's own sandbox's setup is not asked about: a quit stops it and the next launch runs it again by design
+ * (machine_sandbox.rs `before_exit`). */
+
+/// What still runs that a Quit should ask about: every script and `ic` run but this computer's own sandbox's setup, and
+/// a folder's bring-back, restore or direction change (`project_busy`). Pure.
+pub fn quit_waits_for(runs: &[String], project_busy: bool) -> Vec<String> {
+    let mut waits: Vec<String> = runs
+        .iter()
+        .filter(|run| run.as_str() != crate::machine_sandbox::RUN)
+        .cloned()
+        .collect();
+    if project_busy {
+        waits.push("project".to_string());
+    }
+    waits
+}
+
+/// What a run is doing, in the question's words. Pure.
+pub fn run_said(run: &str) -> String {
+    let (kind, slug) = run.split_once(':').unwrap_or((run, ""));
+    match kind {
+        "setup" => "setting up a sandbox".to_string(),
+        "power" => format!("starting or stopping {slug}"),
+        "recreate" => format!("updating {slug}"),
+        "remove" => format!("removing {slug}"),
+        "fix" => "fixing a sandbox".to_string(),
+        "sync-setup" | "project-sync" => "setting up folder sync".to_string(),
+        "project" => "bringing changes back to a folder".to_string(),
+        _ => "a task on this computer".to_string(),
+    }
+}
+
+/// The question about work still under way, as one sentence. Pure.
+pub fn runs_question(waits: &[String]) -> String {
+    let mut doing: Vec<String> = waits.iter().map(|run| run_said(run)).collect();
+    doing.dedup();
+    format!(
+        "Intentic is still {} on this computer. If you quit now, it carries on without Intentic, and Intentic won't \
+         show you how it ends.",
+        doing.join(", ")
+    )
+}
+
+/// The second half of [`hold_quit`]: work still under way is asked about, and the exit held for the answer. "Quit when
+/// it's done" waits for it in the background and then quits with the same code; "Quit now" quits; "Cancel" stays.
+fn hold_quit_for_runs(app: &AppHandle, code: i32) -> bool {
+    if RUNS_ANSWERED.load(Ordering::SeqCst) {
+        return false;
+    }
+    let waits = quit_waits_for(&crate::scripts::running_ids(), crate::project::busy());
+    if waits.is_empty() {
+        return false;
+    }
+    if ASKING_QUIT.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    const WAIT: &str = "Quit when it's done";
+    const NOW: &str = "Quit now";
+    let handle = app.clone();
+    app.dialog()
+        .message(runs_question(&waits))
+        .title("Quit Intentic?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            WAIT.into(),
+            NOW.into(),
+            "Cancel".into(),
+        ))
+        .show_with_result(move |answer| {
+            ASKING_QUIT.store(false, Ordering::SeqCst);
+            use tauri_plugin_dialog::MessageDialogResult;
+            match answer {
+                MessageDialogResult::Yes => wait_then_quit(handle, code),
+                MessageDialogResult::Custom(said) if said == WAIT => wait_then_quit(handle, code),
+                MessageDialogResult::No => quit_now(&handle, code),
+                MessageDialogResult::Custom(said) if said == NOW => quit_now(&handle, code),
+                _ => {}
+            }
+        });
+    true
+}
+
+fn quit_now(app: &AppHandle, code: i32) {
+    RUNS_ANSWERED.store(true, Ordering::SeqCst);
+    crate::scripts::note_quit(&[crate::machine_sandbox::RUN]);
+    app.exit(code);
+}
+
+/// Wait out the work under way, then quit with `code`. Once: a second "Quit when it's done" joins the first.
+fn wait_then_quit(app: AppHandle, code: i32) {
+    if WAITING_TO_QUIT.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(move || {
+        while !quit_waits_for(&crate::scripts::running_ids(), crate::project::busy()).is_empty() {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        RUNS_ANSWERED.store(true, Ordering::SeqCst);
+        app.exit(code);
+    });
 }
 
 /// The question, counted the way it is read.
@@ -1661,6 +1779,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The workspace's account and sandboxes, for the local windows to show (state.rs `remember_roster`). Nothing
         // is shown now: the page sends it whenever either changes, not because the reader asked for anything.
         Some(Link::Roster(roster)) => {
+            // A sandbox the account lists no more: its folders' records and this machine's sync of it go (project.rs).
+            let before = app.state::<AppState>().roster();
+            crate::project::roster_changed(app, before, roster.clone());
             app.state::<AppState>().remember_roster(roster);
             // Who is signed in is what this computer's sandbox is made for (machine_sandbox.rs).
             crate::machine_sandbox::account_changed();
@@ -1814,6 +1935,31 @@ mod unsaved_tests {
             quit_question(3),
             "3 windows have unsaved changes. If you quit now, those changes are lost."
         );
+    }
+
+    /// A Quit asks about every run under way but this computer's own sandbox's setup, which a quit stops and the next
+    /// launch runs again by design, and about a folder's bring-back; and says what each is doing.
+    #[test]
+    fn a_quit_asks_about_the_work_still_under_way_and_names_it() {
+        let runs = vec![
+            crate::machine_sandbox::RUN.to_string(),
+            "recreate:work".to_string(),
+            "remove:old".to_string(),
+        ];
+        assert_eq!(
+            quit_waits_for(&runs, false),
+            vec!["recreate:work".to_string(), "remove:old".to_string()]
+        );
+        assert!(quit_waits_for(&[crate::machine_sandbox::RUN.to_string()], false).is_empty());
+        assert_eq!(quit_waits_for(&[], true), vec!["project".to_string()]);
+        assert_eq!(
+            runs_question(&quit_waits_for(&runs, true)),
+            "Intentic is still updating work, removing old, bringing changes back to a folder on this computer. If \
+             you quit now, it carries on without Intentic, and Intentic won't show you how it ends."
+        );
+        assert_eq!(run_said("power:work"), "starting or stopping work");
+        assert_eq!(run_said("setup"), "setting up a sandbox");
+        assert_eq!(run_said("anything-new"), "a task on this computer");
     }
 
     /// A close is held only while the page says it has changes and has not itself asked about them, and it is the

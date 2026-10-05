@@ -1,18 +1,20 @@
-//! Reachability as outbound dials: two WebSockets at `/tunnel/v2`, `interactive` and `bulk`, each presenting the grant
-//! and the daemon's transfer routes, then serving every stream the edge opens on its yamux session as one HTTP/1.1
-//! connection (`Front::serve_stream`), routed like any listener's request. Two, since streams on one TCP connection
-//! still share its congestion window and its losses: the edge sends an announced transfer down the bulk socket, and a
-//! keystroke never queues behind it. Neither ever gives up, since the tunnel is this sandbox's reachability. The edge's
-//! answer declares what else it serves, and only a declared QUIC door is dialled (`quic.rs`), beside the sockets.
+//! Reachability as outbound dials: two WebSockets at `/tunnel/v2`, `interactive` and `bulk`, each presenting the grant,
+//! this front's identity and the daemon's transfer routes, then serving every stream the edge opens on its yamux session
+//! as one HTTP/1.1 connection (`Front::serve_stream`), routed like any listener's request. Two, since streams on one TCP
+//! connection still share its congestion window and its losses: the edge sends an announced transfer down the bulk
+//! socket, and a keystroke never queues behind it. Neither ever gives up for long, since the tunnel is this sandbox's
+//! reachability. The edge's answer declares what else it serves, and only a declared QUIC door is dialled (`quic.rs`),
+//! beside the sockets.
+//!
+//! Each carrier redials at the pace its last dial set (`standing.rs`): a drop on the ladder, a displacement or another
+//! copy's refusal standing back a drawn minute or two, three refusals in a row every 15 minutes, a deletion an hour.
 
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use front_wire::{ToNode, TunnelConfig};
+use front_wire::TunnelConfig;
 use http::{HeaderValue, StatusCode};
-use relay::Backoff;
 use rustls::pki_types::CertificateDer;
 use rustls::pki_types::pem::PemObject;
 use tokio::net::TcpStream;
@@ -22,24 +24,24 @@ use tokio_tungstenite::tungstenite::Error as SocketError;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{Connector, MaybeTlsStream, connect_async_tls_with_config};
 use tunnel::{
-    BULK_HEADER, BulkRoutes, Close, DISPLACED_CODE, Ended, GRANT_HEADER, LANE_HEADER, Lane,
+    BULK_HEADER, BulkRoutes, Close, DELETED_CODE, DISPLACED_CODE, Ended, GRANT_HEADER,
+    HELD_ELSEWHERE_CODE, HOLDER_HEADER, HOST_HEADER, INSTANCE_HEADER, Identity, LANE_HEADER, Lane,
     Liveness, TRANSPORTS_HEADER, TUNNEL_PATH, Transport, mux,
 };
 
 use crate::link::Link;
 use crate::proxy::Front;
-
-// Redialling at once into a live holder would flap the two tunnels forever.
-pub const DISPLACED_WAIT: Duration = Duration::from_secs(60);
+use crate::standing::{Outcome, Pace, Standing};
 
 const TUNNEL_CA_ENV: &str = "INTENTIC_TUNNEL_CA";
 
-/// Every carrier redials on this ladder: from a second to thirty, a minute held counting as working.
-pub const REDIAL: Backoff = Backoff::new(
-    Duration::from_secs(1),
-    Duration::from_secs(30),
-    Duration::from_secs(60),
-);
+// A dial the edge has not answered by now (TCP, TLS and the upgrade together) is a path that carries nothing; without a
+// bound, one stalled dial held its carrier unreachable for good. Past the edge's slowest answer, which waits up to 5 s
+// on the platform's existence check.
+const DIAL_PATIENCE: Duration = Duration::from_secs(30);
+
+// How long a session that ended waits for the socket's close frame, whose code says why it ended.
+const CLOSE_HEARD_WITHIN: Duration = Duration::from_secs(1);
 
 // Unsent bytes the kernel holds for the interactive socket: past this its session stops writing, so a keystroke is never
 // queued behind a deep send buffer the way a transfer's bytes may be.
@@ -61,17 +63,24 @@ type Running = (
 pub struct Tunnel {
     front: Arc<Front>,
     link: &'static Link,
-    // The interactive socket's state: the one Node is told about, since every request can ride it.
-    connected: Arc<AtomicBool>,
+    identity: Identity,
+    // The interactive socket's standing: what Node is told, since every request can ride it, and what the vitals show.
+    standing: Arc<Standing>,
     running: Option<Running>,
 }
 
 impl Tunnel {
-    pub fn new(front: Arc<Front>, link: &'static Link) -> Self {
+    pub fn new(
+        front: Arc<Front>,
+        link: &'static Link,
+        identity: Identity,
+        standing: Arc<Standing>,
+    ) -> Self {
         Self {
             front,
             link,
-            connected: Arc::new(AtomicBool::new(false)),
+            identity,
+            standing,
             running: None,
         }
     }
@@ -86,9 +95,9 @@ impl Tunnel {
             for carrier in dialling {
                 carrier.abort();
             }
-            self.connected.store(false, Ordering::Relaxed);
-            let _ = self.link.tell(&ToNode::Tunnel { connected: false });
         }
+        self.standing.configure(wanted.is_some());
+        let _ = self.link.tell(&self.standing.report());
         let Some(config) = wanted else {
             return;
         };
@@ -100,12 +109,13 @@ impl Tunnel {
             .into_iter()
             .map(|lane| {
                 tokio::spawn(run(
-                    self.front.clone(),
-                    self.link,
-                    config.clone(),
-                    lane,
-                    Shared {
-                        connected: self.connected.clone(),
+                    Carrier {
+                        front: self.front.clone(),
+                        link: self.link,
+                        config: config.clone(),
+                        identity: self.identity.clone(),
+                        lane,
+                        standing: self.standing.clone(),
                         declaring: declaring.clone(),
                     },
                     closed.clone(),
@@ -117,6 +127,8 @@ impl Tunnel {
             dialling.push(tokio::spawn(crate::quic::run(
                 self.front.clone(),
                 config.clone(),
+                self.identity.clone(),
+                self.standing.clone(),
                 declared,
                 closed,
             )));
@@ -126,9 +138,7 @@ impl Tunnel {
 
     /// Tells a Node that just said hello where the tunnel stands.
     pub fn report_again(&self) {
-        let _ = self.link.tell(&ToNode::Tunnel {
-            connected: self.connected.load(Ordering::Relaxed),
-        });
+        let _ = self.link.tell(&self.standing.report());
     }
 
     /// Closes both sockets and the QUIC connection with 1001 so the edge forgets them at once, and waits briefly for
@@ -143,93 +153,121 @@ impl Tunnel {
     }
 }
 
-// What both sockets share: the state Node is told about, and where the edge's declaration goes.
-struct Shared {
-    connected: Arc<AtomicBool>,
-    declaring: Arc<watch::Sender<bool>>,
-}
-
-async fn run(
+// One socket's dialling: what it presents, and where its standing goes.
+struct Carrier {
     front: Arc<Front>,
     link: &'static Link,
     config: TunnelConfig,
+    identity: Identity,
     lane: Lane,
-    shared: Shared,
-    closed: watch::Receiver<Option<Close>>,
-) {
-    let reports = lane == Lane::Interactive;
-    let mut backoff = REDIAL;
+    standing: Arc<Standing>,
+    // Where the edge's declaration goes, for the QUIC carrier.
+    declaring: Arc<watch::Sender<bool>>,
+}
+
+// How one dial ended, and whether the edge registered it first.
+struct Dialled {
+    outcome: Outcome,
+    registered: bool,
+}
+
+async fn run(carrier: Carrier, closed: watch::Receiver<Option<Close>>) {
+    let reports = carrier.lane == Lane::Interactive;
+    let mut pace = Pace::default();
     loop {
         let started = Instant::now();
-        let ended = dial_once(&front, link, &config, lane, &shared, closed.clone()).await;
-        if reports {
-            shared.connected.store(false, Ordering::Relaxed);
-            let _ = link.tell(&ToNode::Tunnel { connected: false });
-        }
+        let Dialled {
+            outcome,
+            registered,
+        } = dial_once(&carrier, closed.clone()).await;
         if closed.borrow().is_some() {
             return;
         }
-        let wait = match ended {
-            Ended::Closed(Some(DISPLACED_CODE)) => {
-                tracing::warn!(
-                    lane = lane.name(),
-                    "another tunnel took this sandbox's socket; standing back"
-                );
-                DISPLACED_WAIT
+        let next = pace.next(&outcome, started.elapsed());
+        let reason = outcome.reason();
+        let lane = carrier.lane.name();
+        match &outcome {
+            Outcome::Elsewhere(_) if next.refused.is_some() => tracing::warn!(
+                lane, %reason, wait = ?next.wait,
+                "another copy of this sandbox keeps the tunnel; dialling every 15 minutes until it stops"
+            ),
+            Outcome::Elsewhere(_) | Outcome::Displaced => {
+                tracing::warn!(lane, %reason, wait = ?next.wait, "standing back from the tunnel")
             }
-            Ended::Closed(_) | Ended::Dropped(_) => {
-                let why = match ended {
-                    Ended::Dropped(why) => why,
-                    Ended::Closed(_) => "the edge closed the tunnel".into(),
-                };
-                tracing::warn!(lane = lane.name(), %why, "the ingress tunnel dropped");
-                backoff.after(started.elapsed())
+            Outcome::Deleted => tracing::warn!(
+                lane, wait = ?next.wait,
+                "the platform deleted this sandbox; no longer dialling the ingress"
+            ),
+            Outcome::Dropped { .. } | Outcome::Demoted => {
+                tracing::warn!(lane, %reason, wait = ?next.wait, "the ingress tunnel dropped")
             }
-        };
-        tokio::time::sleep(wait).await;
+        }
+        if reports {
+            carrier
+                .standing
+                .not_held(registered, reason, next.refused, Instant::now());
+            let _ = carrier.link.tell(&carrier.standing.report());
+        }
+        tokio::time::sleep(next.wait).await;
     }
 }
 
-async fn dial_once(
-    front: &Arc<Front>,
-    link: &'static Link,
-    config: &TunnelConfig,
-    lane: Lane,
-    shared: &Shared,
-    closed: watch::Receiver<Option<Close>>,
-) -> Ended {
+fn not_registered(outcome: Outcome) -> Dialled {
+    Dialled {
+        outcome,
+        registered: false,
+    }
+}
+
+fn dropped(why: String) -> Dialled {
+    not_registered(Outcome::Dropped { why, proven: false })
+}
+
+async fn dial_once(carrier: &Carrier, closed: watch::Receiver<Option<Close>>) -> Dialled {
+    let Carrier {
+        front,
+        link,
+        config,
+        identity,
+        lane,
+        standing,
+        declaring,
+    } = carrier;
+    let lane = *lane;
     let url = door(&config.url);
     let mut request = match url.as_str().into_client_request() {
         Ok(request) => request,
-        Err(error) => return Ended::Dropped(format!("the tunnel URL is unusable: {error}")),
+        Err(error) => return dropped(format!("the tunnel URL is unusable: {error}")),
     };
     let announced = BulkRoutes::announce(&config.bulk);
     let headers = [
         (GRANT_HEADER, config.grant.as_str()),
         (LANE_HEADER, lane.name()),
         (BULK_HEADER, announced.as_str()),
+        (INSTANCE_HEADER, identity.instance.as_str()),
+        (HOST_HEADER, identity.host.as_str()),
     ];
     for (name, value) in headers {
         match HeaderValue::from_str(value) {
             Ok(value) => request.headers_mut().insert(name, value),
-            Err(error) => return Ended::Dropped(format!("{name} is not a header value: {error}")),
+            Err(error) => return dropped(format!("{name} is not a header value: {error}")),
         };
     }
-    let (socket, answer) = match connect_async_tls_with_config(
+    let dialling = connect_async_tls_with_config(
         request,
         Some(tunnel::socket_config()),
         true,
         Some(Connector::Rustls(client_tls())),
-    )
-    .await
-    {
-        Ok(opened) => opened,
-        Err(SocketError::Http(refused)) if refused.status() == StatusCode::NOT_FOUND => {
-            return Ended::Dropped(format!(
-                "the edge does not serve {TUNNEL_PATH}: it predates this front, and serves it once redeployed"
+    );
+    let (socket, answer) = match tokio::time::timeout(DIAL_PATIENCE, dialling).await {
+        Ok(Ok(opened)) => opened,
+        Ok(Err(SocketError::Http(refused))) => return not_registered(refusal(&refused)),
+        Ok(Err(error)) => return dropped(format!("could not dial the edge: {error}")),
+        Err(_) => {
+            return dropped(format!(
+                "the edge did not answer the dial within {DIAL_PATIENCE:?}"
             ));
         }
-        Err(error) => return Ended::Dropped(format!("could not dial the edge: {error}")),
     };
     let declared = Transport::declared(
         answer
@@ -237,15 +275,14 @@ async fn dial_once(
             .get(TRANSPORTS_HEADER)
             .and_then(|value| value.to_str().ok()),
     );
-    shared
-        .declaring
-        .send_replace(declared.contains(&Transport::Quic));
+    declaring.send_replace(declared.contains(&Transport::Quic));
     if lane == Lane::Interactive
         && let Some(tcp) = tcp_of(socket.get_ref())
     {
         notsent_lowat(tcp, INTERACTIVE_NOTSENT_LOWAT);
     }
     let (session_side, mut pumping) = tunnel::pump(socket, Liveness::Pings, closed);
+    let heard = pumping.heard();
     let (mut streams, mut driving) = mux::server(session_side);
     let serving = front.clone();
     let accepting = tokio::spawn(async move {
@@ -255,8 +292,8 @@ async fn dial_once(
         }
     });
     if lane == Lane::Interactive {
-        shared.connected.store(true, Ordering::Relaxed);
-        let _ = link.tell(&ToNode::Tunnel { connected: true });
+        standing.held();
+        let _ = link.tell(&standing.report());
     }
     tracing::info!(
         lane = lane.name(),
@@ -265,15 +302,73 @@ async fn dial_once(
 
     let ended = tokio::select! {
         ended = pumping.ended() => ended,
-        driven = &mut driving => Ended::Dropped(match driven {
-            Ok(Ok(())) => "the session ended".into(),
-            Ok(Err(error)) => format!("the session failed: {error}"),
-            Err(error) => error.to_string(),
-        }),
+        driven = &mut driving => {
+            // The far end's close ends the session too, and may be read here first: its code says what to do next.
+            match tokio::time::timeout(CLOSE_HEARD_WITHIN, pumping.ended()).await {
+                Ok(closed @ Ended::Closed(_)) => closed,
+                _ => Ended::Dropped(match driven {
+                    Ok(Ok(())) => "the session ended".into(),
+                    Ok(Err(error)) => format!("the session failed: {error}"),
+                    Err(error) => error.to_string(),
+                }),
+            }
+        }
     };
     driving.abort();
     accepting.abort();
-    ended
+    let outcome = match ended {
+        Ended::Closed(Some(DISPLACED_CODE)) => Outcome::Displaced,
+        Ended::Closed(Some(HELD_ELSEWHERE_CODE)) => {
+            Outcome::Elsewhere(pumping.close_reason().unwrap_or_default())
+        }
+        Ended::Closed(Some(DELETED_CODE)) => Outcome::Deleted,
+        Ended::Closed(code) => Outcome::Dropped {
+            why: match code {
+                Some(code) => format!("the edge closed the tunnel ({code})"),
+                None => "the edge closed the tunnel".into(),
+            },
+            proven: heard.answered(),
+        },
+        Ended::Dropped(why) => Outcome::Dropped {
+            why,
+            proven: heard.answered(),
+        },
+    };
+    Dialled {
+        outcome,
+        registered: true,
+    }
+}
+
+// What an upgrade the edge answered with something other than 101 says: another copy holds the sandbox (409, naming
+// where), the sandbox is deleted (403 with the edge's `unknown-sandbox` verdict), the edge predates this door (404),
+// or anything else, which is a drop like any other.
+fn refusal(answer: &http::Response<Option<Vec<u8>>>) -> Outcome {
+    let header = |name: &str| {
+        answer
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+    };
+    match answer.status() {
+        StatusCode::CONFLICT => Outcome::Elsewhere(header(HOLDER_HEADER).unwrap_or("").to_owned()),
+        StatusCode::FORBIDDEN
+            if header(browser_wire::VERDICT_HEADER)
+                == Some(browser_wire::EdgeVerdict::UnknownSandbox.name()) =>
+        {
+            Outcome::Deleted
+        }
+        StatusCode::NOT_FOUND => Outcome::Dropped {
+            why: format!(
+                "the edge does not serve {TUNNEL_PATH}: it predates this front, and serves it once redeployed"
+            ),
+            proven: false,
+        },
+        status => Outcome::Dropped {
+            why: format!("the edge refused the tunnel: {status}"),
+            proven: false,
+        },
+    }
 }
 
 // Node names the edge's door; whatever path it names, this front dials the one it speaks.
@@ -341,6 +436,38 @@ pub fn trusted() -> rustls::RootCertStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn answered(status: u16, headers: &[(&str, &str)]) -> http::Response<Option<Vec<u8>>> {
+        let mut answer = http::Response::builder().status(status);
+        for (name, value) in headers {
+            answer = answer.header(*name, *value);
+        }
+        answer.body(None).unwrap()
+    }
+
+    #[test]
+    fn an_answer_other_than_101_says_who_holds_the_sandbox_or_that_it_is_gone() {
+        assert_eq!(
+            refusal(&answered(409, &[(HOLDER_HEADER, "rog (linux)")])),
+            Outcome::Elsewhere("rog (linux)".into())
+        );
+        assert_eq!(
+            refusal(&answered(
+                403,
+                &[(browser_wire::VERDICT_HEADER, "unknown-sandbox")]
+            )),
+            Outcome::Deleted
+        );
+        // An edge from before the verdict on this answer: a refusal like any other, redialled on the ladder.
+        assert!(matches!(
+            refusal(&answered(403, &[])),
+            Outcome::Dropped { .. }
+        ));
+        assert!(matches!(
+            refusal(&answered(502, &[])),
+            Outcome::Dropped { .. }
+        ));
+    }
 
     #[test]
     fn the_door_dialled_is_this_fronts_whatever_path_node_named() {

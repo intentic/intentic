@@ -131,6 +131,10 @@ enum SandboxCommand {
         /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
         #[arg(long = "skip-preflight")]
         skip_preflight: bool,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume")]
+        no_resume: bool,
     },
     /// Download and build the next update WITHOUT applying it, so the update itself is a short restart
     Prepare {
@@ -156,6 +160,10 @@ enum SandboxCommand {
         /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
         #[arg(long = "skip-preflight")]
         skip_preflight: bool,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume")]
+        no_resume: bool,
     },
     /// Back to the image this sandbox ran before its last update (or, with --to, an older one kept here)
     Rollback {
@@ -169,6 +177,10 @@ enum SandboxCommand {
         /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
         #[arg(long = "skip-preflight")]
         skip_preflight: bool,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume")]
+        no_resume: bool,
     },
     /// Finish or undo a swap that was interrupted, and judge the probation after an update: go back to the parked
     /// previous version by itself if the new one keeps crashing, never becomes ready, or loses its tunnel
@@ -222,14 +234,18 @@ enum SandboxCommand {
         #[arg(short = 'y', long = "yes")]
         yes: bool,
     },
-    /// Remove what updates left behind: images and records of sandboxes that are gone, superseded builds, and the
-    /// trash past its window. Never deletes a volume
+    /// Remove what updates left behind: images and records of sandboxes that are gone, superseded and dangling
+    /// builds, stale backups, and the trash past its window. Never deletes a volume
     Tidy {
         /// Say what would be removed and remove nothing
         #[arg(long = "dry-run")]
         dry_run: bool,
         #[arg(long)]
         json: bool,
+        /// Unattended (the machine agent's daily round; also assumed with no terminal): volumes nothing claims are
+        /// moved into the trash, which deletes them after its recovery window, instead of only being named
+        #[arg(long)]
+        auto: bool,
     },
     /// The way back in when the sandbox's owner file cannot be read: move it aside so the owner's next sign-in binds
     /// the sandbox again
@@ -249,6 +265,10 @@ enum SandboxCommand {
         /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
         #[arg(long = "skip-preflight")]
         skip_preflight: bool,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume")]
+        no_resume: bool,
     },
     /// Change a sandbox's share of this machine, or its privileges — a restart of about a minute onto the
     /// same image. The values live on the container and survive every later update, rollback and rebuild.
@@ -283,6 +303,10 @@ enum SandboxCommand {
         /// restart: --later and --forget restart nothing
         #[arg(long = "skip-preflight", conflicts_with_all = ["later", "forget"])]
         skip_preflight: bool,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume", conflicts_with_all = ["later", "forget"])]
+        no_resume: bool,
     },
     /// Set a sandbox's shape — its share of this machine and its privileges — now, or for its next restart.
     /// Fields left out keep what is saved for the next restart, else what runs. A shape saved for later is
@@ -323,11 +347,19 @@ enum SandboxCommand {
         /// Restart without the state-conversion pre-flight. Only with `--when now`
         #[arg(long = "skip-preflight", conflicts_with = "forget")]
         skip_preflight: bool,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume", conflicts_with = "forget")]
+        no_resume: bool,
     },
     /// Start a stopped sandbox and its tunnel, applying the shape saved for its next restart if there is one
     Start {
         /// The sandbox to start (omit when this machine runs exactly one)
         slug: Option<String>,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume")]
+        no_resume: bool,
     },
     /// Stop a sandbox and its tunnel; its data and anything saved for its next restart are kept
     Stop {
@@ -338,6 +370,10 @@ enum SandboxCommand {
     Restart {
         /// The sandbox to restart (omit when this machine runs exactly one)
         slug: Option<String>,
+        /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
+        /// it is back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume")]
+        no_resume: bool,
     },
     /// Print the tail of a sandbox's own log, both streams (read-only)
     Logs {
@@ -573,11 +609,14 @@ fn main() {
                 channel,
                 force,
                 skip_preflight,
-            } => sandbox::recreate::run(
-                sandbox::recreate::Mode::Update { channel, force },
-                slug,
-                preflight(skip_preflight),
-            ),
+                no_resume,
+            } => resumed(no_resume, || {
+                sandbox::recreate::run(
+                    sandbox::recreate::Mode::Update { channel, force },
+                    slug,
+                    preflight(skip_preflight),
+                )
+            }),
             SandboxCommand::Prepare {
                 slug,
                 channel,
@@ -587,20 +626,26 @@ fn main() {
                 slug,
                 hash,
                 skip_preflight,
-            } => sandbox::recreate::run(
-                sandbox::recreate::Mode::Rebuild { hash },
-                Some(slug),
-                preflight(skip_preflight),
-            ),
+                no_resume,
+            } => resumed(no_resume, || {
+                sandbox::recreate::run(
+                    sandbox::recreate::Mode::Rebuild { hash },
+                    Some(slug),
+                    preflight(skip_preflight),
+                )
+            }),
             SandboxCommand::Rollback {
                 slug,
                 to,
                 skip_preflight,
-            } => sandbox::recreate::run(
-                sandbox::recreate::Mode::Rollback { to },
-                slug,
-                preflight(skip_preflight),
-            ),
+                no_resume,
+            } => resumed(no_resume, || {
+                sandbox::recreate::run(
+                    sandbox::recreate::Mode::Rollback { to },
+                    slug,
+                    preflight(skip_preflight),
+                )
+            }),
             SandboxCommand::Watch { slug, json } => sandbox::probation::run(slug, json),
             SandboxCommand::Versions { slug, json } => sandbox::versions::run(slug, json),
             SandboxCommand::Backup { slug, auto, json } => sandbox::backup::run(slug, auto, json),
@@ -612,16 +657,23 @@ fn main() {
                 into,
                 yes,
             } => sandbox::backup::restore(slug, snapshot, to, into, yes),
-            SandboxCommand::Tidy { dry_run, json } => sandbox::tidy::run(dry_run, json),
+            SandboxCommand::Tidy {
+                dry_run,
+                json,
+                auto,
+            } => sandbox::tidy::run(dry_run, json, auto),
             SandboxCommand::ResetOwner { slug, yes } => sandbox::owner::run(slug, yes),
             SandboxCommand::Dev {
                 slug,
                 skip_preflight,
-            } => sandbox::recreate::run(
-                sandbox::recreate::Mode::Dev,
-                slug,
-                preflight(skip_preflight),
-            ),
+                no_resume,
+            } => resumed(no_resume, || {
+                sandbox::recreate::run(
+                    sandbox::recreate::Mode::Dev,
+                    slug,
+                    preflight(skip_preflight),
+                )
+            }),
             SandboxCommand::Reshape {
                 slug,
                 memory,
@@ -631,7 +683,11 @@ fn main() {
                 later,
                 forget,
                 skip_preflight,
+                no_resume,
             } => {
+                if no_resume {
+                    sandbox::resume::decline();
+                }
                 let ask = ask_of(memory, cpus, privileged, gpus);
                 if forget {
                     sandbox::desired::forget(slug)
@@ -651,9 +707,13 @@ fn main() {
                 when,
                 forget,
                 skip_preflight,
+                no_resume,
             } => match (forget, when) {
                 (true, _) | (false, None) => sandbox::desired::forget(slug),
                 (false, Some(when)) => {
+                    if no_resume {
+                        sandbox::resume::decline();
+                    }
                     let ask = if set.is_empty() {
                         Ok(ask_of(memory, cpus, privileged, gpus))
                     } else {
@@ -672,13 +732,13 @@ fn main() {
                     })
                 }
             },
-            SandboxCommand::Start { slug } => {
+            SandboxCommand::Start { slug, no_resume } => resumed(no_resume, || {
                 sandbox::power::run(sandbox::power::Power::Start, slug)
-            }
+            }),
             SandboxCommand::Stop { slug } => sandbox::power::run(sandbox::power::Power::Stop, slug),
-            SandboxCommand::Restart { slug } => {
+            SandboxCommand::Restart { slug, no_resume } => resumed(no_resume, || {
                 sandbox::power::run(sandbox::power::Power::Restart, slug)
-            }
+            }),
             SandboxCommand::Logs { slug, tail } => sandbox::logs::run(slug, tail),
             SandboxCommand::Doctor { slug, json } => sandbox::fix::run(sandbox::fix::Args {
                 slug,
@@ -757,6 +817,15 @@ fn main() {
     }
 }
 
+/// Run a verb that restarts or recreates a sandbox, with `--no-resume` declining the daemon's resume ask first
+/// (sandbox/resume.rs).
+fn resumed(no_resume: bool, verb: impl FnOnce() -> util::Result<()>) -> util::Result<()> {
+    if no_resume {
+        sandbox::resume::decline();
+    }
+    verb()
+}
+
 #[cfg(unix)]
 fn run_machine(command: DeviceCommand) -> util::Result<()> {
     match command {
@@ -804,6 +873,7 @@ mod tests {
                     slug,
                     hash,
                     skip_preflight: false,
+                    no_resume: false,
                 }),
         }) = parse(&["sandbox", "rebuild", "abc123", "deadbeef"])
         else {
@@ -890,6 +960,7 @@ mod tests {
                     channel,
                     force,
                     skip_preflight,
+                    ..
                 }),
         }) = parse(&["sandbox", "update", "abc123", "--channel", "core-stable"])
         else {
@@ -1175,6 +1246,7 @@ mod tests {
                     later: false,
                     forget: false,
                     skip_preflight: false,
+                    no_resume: false,
                 }),
         }) = parse(&[
             "sandbox",
@@ -1260,6 +1332,7 @@ mod tests {
                     when,
                     forget: false,
                     skip_preflight: false,
+                    no_resume: false,
                 }),
         }) = parse(&[
             "sandbox",
@@ -1496,7 +1569,8 @@ mod tests {
             Ok(Cli {
                 command: Command::Sandbox(SandboxCommand::Tidy {
                     dry_run: true,
-                    json: false
+                    json: false,
+                    auto: false,
                 })
             })
         ));

@@ -2365,6 +2365,9 @@
             "weWontStartMachine": "Nous ne démarrerons pas cette machine : l'e-mail que nous avons envoyé dit pourquoi et où écrire si nous nous trompons. Vos fichiers y sont toujours, et rien d'autre ne change dans votre compte. Le même sandbox tourne sur votre propre ordinateur, gratuitement et sans limites, depuis son écran d'installation."
         },
         "containerHealth": {
+            "copiesTakeTurns": "Les copies sur {hosts} se présentent avec le même jeton et se relaient donc sur son adresse : elle coupe environ une fois par minute, et les tours en cours sont interrompus.",
+            "removeTheOtherCopy": "Sur la machine dont vous n’utilisez pas la copie, lancez `ic sandbox list`, puis `ic sandbox remove` avec le nom de ce sandbox.",
+            "twoCopiesRunning": "Deux copies de ce sandbox tournent",
             "announcedWhilePlatformOn": "Il a annoncé {announced}, alors que la plateforme a {expected} en fiche. Tant que les deux ne concordent pas, tout ce qui est envoyé à l'adresse enregistrée le rate.",
             "sandboxCheckingInUnder": "Ce sandbox se signale sous une adresse que la plateforme ne détient pas pour lui",
             "sandboxDoesNotAnswer": "Ce sandbox ne répond pas à son adresse publique",
@@ -2479,6 +2482,8 @@
             "deadLinksOnly": "Liens morts seulement",
             "deletedOrMoved": "Sandboxes supprimés ou déplacés",
             "freshCommand": "Nouvelle commande",
+            "leftovers": "Laissé pour vous",
+            "leftoversNote": "Son propre nettoyage n’a pas pu retirer ceci",
             "mayBeOutdated": "La suite peut dater",
             "noContainersViaSync": "Pas de conteneurs via sync",
             "noSelfReport": "Pas d'auto-rapport",

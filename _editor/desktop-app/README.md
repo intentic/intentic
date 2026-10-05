@@ -80,6 +80,23 @@ flowchart LR
   one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
   for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
   verbs. The machine is read when the page opens and every 30 seconds while it is on screen.
+
+  On Windows the one Docker engine serves Windows and every WSL distro, and `ic` on either side lists every sandbox on
+  it. A sandbox the other side keeps (`keptElsewhere` in `ic sandbox list --json`, named by its distro where `ic`
+  stamps one, `hostEnv`) keeps its verbs here, since a person's start, stop and restart reach it from either side, and
+  says under its row where it is kept: "Kept by WSL (archlinux)". The machine agents of this computer's environments are
+  read off their files (`src-tauri/src/agents.rs`: this app's own home, and through `\\wsl.localhost` each distro that
+  is running, never one that is stopped): their binary, their pidfile and `ic`. This device names the other environments
+  whose agent runs under its own agent's group, and so does the tray's agent row ("Machine agent: … · also in WSL
+  (archlinux)", or "Machine agent: in WSL (archlinux)" where Windows has none). _(2026-10-05) The app read the Windows
+  home alone: blind to a WSL agent, it drew WSL's sandboxes as its own, and its setup put a second agent beside it._
+
+  A listing proves when this machine hosts no sandbox any more: `ic` answered with no row of this side's own, `ic`'s
+  trash holds nothing a restore could bring back (its `intentic-trashed-*` volumes), and this computer's own sandbox is
+  not one the app is making or keeps. Then `hosts-sandboxes.json` is cleared, and a launch stops starting Docker Desktop
+  for one (`state.rs` `forgets_hosting`). A listing that failed, or a trash that could not be read, clears nothing.
+  _(2026-10-05) It was written once and never cleared, so every launch after the last sandbox was removed still started
+  Docker Desktop._
 - **The account in a local window.** Who is signed in, the plan, API tokens and the data export, as the account menu
   and Settings ask for them. The page cannot hold the platform's session (an HttpOnly cookie on the API's host, which
   the platform answers only from the workspace's origin), but every window of the app shares one browser profile, so
@@ -103,7 +120,21 @@ flowchart LR
 - **Native work is the public scripts.** Setup, sync and everything done to a sandbox run the same `connect`,
   `sync` and `recreate` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
-  local installer.
+  local installer. Each run is told this build's own release (`IC_URL`, `IC_VERSION`), and a shim fetches `ic` only
+  when the installed one is older than that: the pin is a floor, compared as a version (major.minor.patch, a pre-release
+  below its release), never a ceiling.
+
+  A run's child writes its two streams to two files beside its transcript (`~/.intentic/logs/desktop-<run>-<stamp>.out`
+  and `.err`, `scripts.rs` `Spool`), which the app reads back as they grow for the window and the transcript
+  (`desktop-<run>-<stamp>.log`, both streams, stderr lines marked `! `). A run followed to its end leaves only its
+  transcript. The logs folder keeps the newest 30 runs' files, counted at launch and after every run; `ic`'s own logs
+  there are not counted.
+
+  _(2026-10-05) The shims used to fetch `ic` whenever the installed one was not exactly the app's pin, and the machine
+  agent moves `ic` up by itself, so an app left in the tray for days put an older `ic` back on every Start, Stop or
+  Restart. A run's child used to write to a pipe the app held: a Quit mid-run broke it, and `ic`, which prints with
+  `println!`, panicked on the broken pipe half way through a recreate or a removal; now it finishes, and its files are the
+  record of the rest, which its transcript names. The transcripts used to be kept for good._
 - **What runs is `ic`'s to say.** This device's list is `ic sandbox list --json` from the installed `ic` (the shim's
   `--list` when that one is missing or older than this app, whose fetch brings it level). Start, stop and restart are
   `recreate --start|--stop|--restart`, and the Resources form's Apply and Save are `recreate --shape`, all `ic` verbs
@@ -112,7 +143,10 @@ flowchart LR
   `/work` and `/history` stay recoverable for a week (`ic sandbox restore`), as they do from every other door. The
   confirmation says so, in place of the kit's "cannot be undone". The app reads nothing off `docker inspect`; the
   short children it waits on (Docker probes, the listing, the agent's status) share `ic`'s time-limited capture
-  crate, `_sandbox/ic/bounded`.
+  crate, `_sandbox/ic/bounded`. A removal also has this machine's sync let go of the sandbox: `intentic-machine sync
+  forget <slug>`, or, from an agent older than that verb, `sync uninstall --sandbox <id>` with the platform id this app
+  remembers for the slug. _(2026-10-05) A removal used to forget only the sandbox's display name, and the agent went on
+  syncing its folder until a new sandbox was made for that same folder._
 - **Fixing a sandbox the workspace cannot reach.** The workspace's recovery panel sends `intentic://fix?slug=…`; the
   app brings This device forward in the main window, and it runs `ic sandbox fix <slug> [--code <code>] --source app
   --json` with the installed `ic`, looked for where This device's listing looks, with no console window, one run at a
@@ -132,7 +166,11 @@ flowchart LR
   "Open a folder…" and "Open a file…" (each in a window of its own), the machine agent's row (This device), the update
   row and Quit. Updates download in the background and install on quit or from the editor's banner or This device;
   deb and rpm installs cannot replace themselves and link to the download page instead. A local window never draws the
-  editor's update banner: This device says it instead.
+  editor's update banner: This device says it instead. A deb or rpm upgraded under the running app (the file at the path
+  it started from is no longer the one it runs, `update.rs` `replaced_on_disk`) is offered as a restart onto it ("Restart
+  to use the new Intentic"), at every check and whenever the workspace comes back on screen. _(2026-10-05) A deb and an
+  rpm have no maintainer script that restarts the app, so the old app and its file server ran on until Quit, and the next
+  check offered the release the package manager had just installed, as a download._
 - **What needs the reader, with the window out of sight.** The workspace's page decides, the app only puts it up:
   the tab's mark (the web's `shell/browser-tab/`: a count of what needs you, a check for a turn that finished while
   you were away, a dot while agents work, grey while the sandbox is not answering) on the tray icon, with its meaning
@@ -236,6 +274,13 @@ flowchart LR
   they are saved or closed, asked again just before the installer runs and before the restart onto it (a restart
   held that way is what the update's offer means from then on), since the Windows installer ends the process where
   nothing can ask.
+
+  A Quit while the app is still working on this computer (a setup handed over, a start, a recreate, a removal, a fix,
+  a sync's setup, a folder's bring-back) asks too, after the unsaved windows: "Quit when it's done" waits in the tray and
+  quits once nothing runs, "Quit now" quits and leaves the work to finish on its own (each run's transcript says where the
+  rest of its words went), "Cancel" stays. This computer's own sandbox's setup is not asked about: a quit stops it and the
+  next launch runs it again. _(2026-10-05) Quit used to ask about unsaved windows alone, and abandoned every run under
+  way with a dead pipe (`windows.rs` `hold_quit`)._
 - **A folder in this computer's sandbox, copy-first.** "Work on this with an agent" in a folder's window asks in the
   window's own dialog (the web's `local/LocalProject.vue`), drawn from `project_preview` (`src-tauri/src/project.rs`):
   the folder's name and path, what its first copy carries, anything to beware of (another sync service, a network
@@ -264,6 +309,22 @@ flowchart LR
   runs it again on the same row with its code minted afresh (the platform hands back the live one). The system's
   notification says once that it is ready and once each time it newly needs the reader, and nothing while a window of
   this computer has the focus, where the card says it already.
+
+  _(2026-10-05)_ Three changes. **One run, across launches too:** a setup run holds a lock in the app's data folder
+  (`machine-setup.pid.json`: the script's pid, the start time its system gives that process, and the two files it writes
+  to). A launch after a hard crash that finds the lock's process alive, with the same start time, follows that run from
+  its files until it ends and then decides again, which runs the setup once more on the same row as after an interrupted
+  one; it never starts a second beside it, which it used to. A lock whose process is gone, or whose pid another process
+  has since, is taken over. **A row that never ran goes:** a setup that fails (a code the platform would not mint, a
+  script that stopped) before it got as far as starting its container (`starting-sandbox`, from which the daemon may have
+  announced itself; the record keeps `announced`) takes its row off the account (`/rpc/sandbox/delete`, into the
+  platform's own trash), so a Try again makes a fresh one. A row a setup ever finished, one that may have announced, or
+  one whose container is here or could not be looked for, is never discarded. Before, only a failed minting in the
+  per-folder flow discarded its row, and every other failure left an unfinished sandbox in the account's switcher.
+  **Checked first:** where another environment of this computer already runs a machine agent that keeps its sandboxes
+  (a WSL distro's, `agents.rs`) and this one has none, the first setup is not run unasked, which would put a second agent
+  and a second sandbox on the same Docker. The card says where the sandboxes are kept, and its Try again sets one up here
+  all the same.
 
   Once it is ready, each folder in line is attached by the machine agent (`intentic-machine sync attach --sandbox-url
   https://<hostname> --dir <folder> --name <name> --json`, which only records the pairing), remembered in
@@ -299,6 +360,14 @@ flowchart LR
   removed after the run), never on the command line, which Windows caps at 32,767 characters. One bring-back, restore
   or direction change runs per folder at a time, and an update waits for it.
 
+  _(2026-10-05)_ A paths file older than a day is swept at launch: only a run that ended removed its own, so a crash mid
+  bring-back left one naming the reader's files for good. When the workspace's roster no longer lists a sandbox (a
+  roster that names who is signed in, compared with the same account's last one), the folders remembered with it leave
+  `projects.json`, and this machine's sync lets go of it (`intentic-machine sync forget <slug>`, falling back to `sync
+  uninstall --sandbox <id>` on an agent older than the verb), but only for a sandbox the agent syncs. This computer's own
+  sandbox is left to its supervisor, which says for itself when that one is gone. Before, `projects.json` was never
+  pruned, and the agent let go of a folder's dead sandbox only when a new one was made for that folder.
+
   (2026-10-05) Each folder used to get a sandbox of its own. The question was first the system's own message box, two
   paragraphs in its look, whose press took the reader to the workspace's full-screen `/setup` and then to This device;
   then the window's own dialog, whose press made a sandbox for that folder and ran its setup in that window's store,
@@ -315,6 +384,17 @@ flowchart LR
   read-only, for the workspace's origin alone and for fifteen minutes (a handoff grant, never a window), and opens
   the workspace at `/?handoff=<base64url of { url, token, name }>`, where `url` is the sidecar's
   `/workspace/raw?path=<name>`.
+- **Uninstalling on Windows** (`src-tauri/installer-hooks.nsh`, 2026-10-05). The uninstaller ends the app and its
+  file server (`intentic-files.exe`, which an install over the app ends too: a slow exit held its file), then asks "Also
+  remove the Intentic machine agent from this PC?" where one is installed. Yes runs `intentic-machine uninstall`, which
+  removes this PC's links, sync pairings and login entry, the keeper that starts Docker Desktop at every sign-in with
+  them, and never a container. Never asked on an update or a passive uninstall; a silent one answers no. It signs out on
+  this PC: the webview's cookie files (`%LOCALAPPDATA%\dev.intentic.desktop\EBWebView`) and `roster.json` go, whether or
+  not "Delete app data" is ticked; the platform's own record of the session is left to expire, since the uninstaller has
+  no way to send it. Its last page says what stays: the sandboxes and their files, in Docker, which `ic sandbox list`
+  shows and `ic sandbox remove <name>` removes (recoverable for a week), and the agent where it was kept. `ic` and its
+  PATH entry stay, since they are how the sandboxes are removed. Before, the uninstaller removed the app alone, and said
+  nothing.
 - **Deletes go to the Recycle Bin.** A delete in a local window reaches the sidecar, which asks the app (`ask`,
   `verb: trash`); the app moves the entry to the OS's Recycle Bin or Trash (the `trash` crate) when it lies strictly
   inside the folder of an open folder window, and answers.
@@ -381,7 +461,9 @@ A local window also hears the app's Tauri events, which This device listens on: 
 ## The sidecar's control lines
 
 The app writes JSON lines on `intentic-files`' stdin and reads its stdout (`_devices/local-files/src/control.ts`).
-Each spawn is a generation: a start that does not hear `ready` within 20 seconds kills its child, only the current
+When its stdin closes it lets go of the office editor for at most 3 seconds, closing the editor's idle connections first,
+and exits: _(2026-10-05)_ that close used to wait for every open connection, and kept the process, and its file, past the
+app's own exit. Each spawn is a generation: a start that does not hear `ready` within 20 seconds kills its child, only the current
 generation's exit restarts it, with every grant handed back on the same port, and an event the app does not know is
 passed over. When that port is taken the restart takes a fresh one, and first gives every window and handoff a new
 token, since whatever holds the old port hears the old tokens from pages still calling it; the windows are then
@@ -405,6 +487,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
+- [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder put in line for this computer's sandbox, and the project verbs its window runs.
 - [src-tauri/src/machine_sandbox.rs](src-tauri/src/machine_sandbox.rs) — this computer's own sandbox: the record every window hears, the thread that makes and watches it, and the folders it attaches.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.

@@ -46,10 +46,72 @@ type SyncEnrollment = z.infer<typeof SyncEnrollmentSchema>;
 
 const enrollmentsPath = (historyRoot: string): string => join(historyRoot, syncEnrollmentsDocument.path);
 
-export const syncEnrollmentsDocument = defineDocument({ root: "history", path: "sync-enrollments.json", schema: SyncEnrollmentSchema, granularity: "entries" });
+export const syncEnrollmentsDocument = defineDocument({
+    root: "history",
+    path: "sync-enrollments.json",
+    schema: SyncEnrollmentSchema,
+    granularity: "entries",
+});
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
 const authorizedKeysPath = (): string => join(process.env["HOME"] ?? homedir(), ".ssh", "authorized_keys");
 const machineOf = (key: string): string => key.trim().split(" ")[2] ?? "unknown";
+
+// WHICH ENROLLMENT IS WHICH (2026-10-05). An enrollment was keyed by its whole key line and named by the line's comment,
+// which every machine agent spelled as the bare hostname. A Windows PC runs an agent on its Windows side and one in each
+// WSL distro, each with a key of its own, and WSL hands every distro the PC's hostname: so both sides enrolled under one
+// name, their reports overwrote each other in the one slot a name had, and revoking one by name revoked both. Now:
+// - the same enrollment is the same KEY (its type and body, whatever its comment), or the same computer and environment
+//   on it when both records say so (`sameEnrollment`), so a side that made itself a new key replaces its own record;
+// - a report is filed under the enrollment's key, not its name (`reports`);
+// - two enrollments that share a name but are different environments of one PC are told apart by name too: the one
+//   that is not the native environment takes its distro's name after its own (`distinctLabels`). The native one keeps
+//   the hostname, which is what setup's own card is placed by (device-reports.ts).
+// A new agent also names its key `<hostname>-<environment>` (the machine's sync/environment.ts), so a new enrollment
+// arrives distinct; the rule above is what sorts out every enrollment made before that.
+
+// A key line's type and body, its comment dropped: the part sshd authenticates, and so the part that says which key.
+export const keyMaterialOf = (key: string): string => key.trim().split(/\s+/).slice(0, 2).join(" ");
+
+// The computer and environment an enrollment says it is, when it says both.
+const identityOf = (entry: Pick<SyncEnrollment, "machineId" | "environment">): string | undefined =>
+    entry.machineId === undefined || entry.environment === undefined ? undefined : `${entry.machineId}\n${entry.environment}`;
+
+export const sameEnrollment = (
+    left: Pick<SyncEnrollment, "key" | "machineId" | "environment">,
+    right: Pick<SyncEnrollment, "key" | "machineId" | "environment">,
+): boolean => keyMaterialOf(left.key) === keyMaterialOf(right.key) || (identityOf(left) !== undefined && identityOf(left) === identityOf(right));
+
+// A distro's name as a label's tail: what follows `wsl:`, in characters an authorized_keys comment and a URL both keep.
+const environmentTail = (environment: string): string => environment.replace(/^wsl:/, "").replaceAll(/[^A-Za-z0-9._-]+/g, "-");
+
+// Enrollments that share a name, told apart: each one that is not the native environment and says which environment it
+// is takes `<name>-<distro>`, made unique against every other name held. Idempotent: a renamed one no longer shares its
+// name, and one whose environment is unknown, or native, keeps its name.
+export const distinctLabels = (enrollments: readonly SyncEnrollment[]): SyncEnrollment[] => {
+    const taken = new Set(enrollments.map((entry) => entry.machine));
+    return enrollments.map((entry) => {
+        const sharing = enrollments.filter((other) => other.machine === entry.machine);
+        if (sharing.length < 2 || entry.environment === undefined || entry.environment === "native" || !entry.environment.startsWith("wsl:")) {
+            return entry;
+        }
+        const base = `${entry.machine}-${environmentTail(entry.environment)}`;
+        const machine =
+            [base, ...[2, 3, 4, 5, 6, 7, 8, 9].map((count) => `${base}-${count}`)].find((candidate) => !taken.has(candidate)) ??
+            `${base}-${Date.now()}`;
+        taken.add(machine);
+        // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
+        return { ...entry, machine };
+    });
+};
+
+// HOW LONG AN ENROLLMENT NOBODY USES IS KEPT (2026-10-05): ninety days since it was last seen (its agent's own polls
+// stamp `seenAt`, at most once a minute), or since it was made when it never was. `seenAt` was written and never read,
+// so every key a machine ever enrolled stayed in authorized_keys for good, a laptop given away included. Applied on
+// every write of the store and at boot, which rebuilds authorized_keys from what is kept (`restoreAuthorizedKeys`).
+export const ENROLLMENT_RETENTION_MS = 90 * 24 * 60 * 60_000;
+
+export const withoutStale = (enrollments: readonly SyncEnrollment[], now: number): SyncEnrollment[] =>
+    enrollments.filter((entry) => now - (entry.seenAt ?? entry.enrolledAt) < ENROLLMENT_RETENTION_MS);
 
 // Atomic writes and a per-path update queue (store/json-file.ts), so a redeem racing a heartbeat stamp can't lose an
 // update; 0o600, since the file holds token digests.
@@ -67,22 +129,33 @@ const writeAuthorizedKeys = async (enrollments: readonly SyncEnrollment[]): Prom
 
 // Store and authorized_keys always move together, inside the file's own update queue; returning the same array means
 // no-op. Publishes its own change, since /history is outside the watched tree.
-const persist = async (historyRoot: string, change: (current: SyncEnrollment[]) => SyncEnrollment[]): Promise<void> => {
+// Every write also drops what is past retention (`withoutStale`), and the reports of what it dropped go with them.
+const persist = async (historyRoot: string, change: (current: SyncEnrollment[]) => SyncEnrollment[], now: number = Date.now()): Promise<boolean> => {
     let changed = false;
+    let dropped: readonly SyncEnrollment[] = [];
     const enrollments = await enrollmentsFile(historyRoot).update((current) => {
         const next = change(current);
-        changed = next !== current;
-        return next;
+        const kept = withoutStale(next, now);
+        dropped = next.filter((entry) => !kept.includes(entry));
+        changed = next !== current || dropped.length > 0;
+        return changed ? kept : current;
     });
+    for (const entry of dropped) {
+        reports.delete(keyMaterialOf(entry.key));
+    }
     if (changed) {
         await writeAuthorizedKeys(enrollments);
         publishRuntimeChange("hosts");
     }
+    return changed;
 };
 
-// Re-derives authorized_keys from the store at boot, since a recreate leaves enrollments intact but the file gone.
-export const restoreAuthorizedKeys = async (historyRoot: string): Promise<void> => {
-    await writeAuthorizedKeys(await readEnrollments(historyRoot));
+// Re-derives authorized_keys from the store at boot, since a recreate leaves enrollments intact but the file gone, and
+// drops what is past retention first, so a key nobody has used in ninety days does not come back with the container.
+export const restoreAuthorizedKeys = async (historyRoot: string, now: number = Date.now()): Promise<void> => {
+    if (!(await persist(historyRoot, (current) => current, now))) {
+        await writeAuthorizedKeys(await readEnrollments(historyRoot));
+    }
 };
 
 // One key line: known type, base64 blob, optional comment, no embedded newline (blocks smuggled entries).
@@ -102,29 +175,27 @@ export const enrollSyncKey = async (args: {
     environment?: string | undefined;
 }): Promise<{ syncToken: string } | { locked: string }> => {
     const key = args.key.trim();
+    const incoming = {
+        key,
+        ...(args.machineId === undefined ? {} : { machineId: args.machineId }),
+        ...(args.environment === undefined ? {} : { environment: args.environment }),
+    };
     let outcome: { syncToken: string } | { locked: string } = { locked: "" };
     await persist(args.historyRoot, (enrollments) => {
         if (args.mode === "sync") {
-            const holder = enrollments.find((entry) => entry.mode === "sync" && entry.key !== key);
+            const holder = enrollments.find((entry) => entry.mode === "sync" && !sameEnrollment(entry, incoming));
             if (holder !== undefined && !args.takeover) {
                 outcome = { locked: holder.machine };
                 return enrollments;
             }
         }
-        // Drops this machine's prior record, and on takeover the existing sync holder; mirror always survives.
-        const kept = enrollments.filter((entry) => entry.key !== key && !(args.mode === "sync" && entry.mode === "sync"));
+        // Drops this machine's prior record (the same key, or the same computer and environment under a new key), and on
+        // takeover the existing sync holder; mirror always survives.
+        const kept = enrollments.filter((entry) => !sameEnrollment(entry, incoming) && !(args.mode === "sync" && entry.mode === "sync"));
         const token = `ist_${randomBytes(32).toString("base64url")}`;
-        kept.push({
-            key,
-            tokenDigest: sha256Hex(token),
-            mode: args.mode,
-            machine: machineOf(key),
-            enrolledAt: Date.now(),
-            ...(args.machineId === undefined ? {} : { machineId: args.machineId }),
-            ...(args.environment === undefined ? {} : { environment: args.environment }),
-        });
+        kept.push({ ...incoming, tokenDigest: sha256Hex(token), mode: args.mode, machine: machineOf(key), enrolledAt: Date.now() });
         outcome = { syncToken: token };
-        return kept;
+        return distinctLabels(kept);
     });
     return outcome;
 };
@@ -186,10 +257,8 @@ const rowsOf = (enrollments: readonly SyncEnrollment[]): SyncEnrollmentRow[] =>
         ...(entry.environment === undefined ? {} : { environment: entry.environment }),
     }));
 
-// Machine names only, for a filter that only needs to check "is this still enrolled".
-const labelsOf = (enrollments: readonly SyncEnrollment[]): string[] => enrollments.map((entry) => entry.machine);
-
-// In memory only: a stale report would serve a laptop's old folder list long after it's gone.
+// In memory only: a stale report would serve a laptop's old folder list long after it's gone. Keyed by the enrollment's
+// key (`keyMaterialOf`), never its name: two environments of one PC that share a name each keep their own.
 const reports = new Map<string, { readonly report: DeviceReport; readonly receivedAt: number }>();
 
 // Who is told of each report taken in, so this store never imports what one sets in motion: on a projects host, the
@@ -228,15 +297,20 @@ export const recordDeviceReport = async (historyRoot: string, presented: string,
     if (matched === undefined) {
         return false;
     }
-    reports.set(matched.machine, { report, receivedAt: Date.now() });
+    reports.set(keyMaterialOf(matched.key), { report, receivedAt: Date.now() });
     // Only a report its own enrollment's token vouched for reaches a listener.
     await heardBy(report);
     const environment = environmentOf(undefined, report);
     if (report.machineId !== undefined && (matched.machineId !== report.machineId || matched.environment !== environment)) {
+        // Once both sides of a PC have said which they are, two that shared a name stop sharing it (`distinctLabels`).
         await persist(historyRoot, (current) =>
-            current.map((entry) =>
-                // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
-                entry.key === matched.key ? { ...entry, machineId: report.machineId, ...(environment === undefined ? {} : { environment }) } : entry,
+            distinctLabels(
+                current.map((entry) =>
+                    // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
+                    entry.key === matched.key
+                        ? { ...entry, machineId: report.machineId, ...(environment === undefined ? {} : { environment }) }
+                        : entry,
+                ),
             ),
         );
     }
@@ -245,13 +319,14 @@ export const recordDeviceReport = async (historyRoot: string, presented: string,
 
 // Pairs each report with the enrollment label it was filed under (the sandbox's only name for the machine, not its own
 // hostname). Filtered against live enrollments, so revoking access also stops its reports being shown.
-const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; report: DeviceReport }[] => {
-    const enrolled = new Set(labelsOf(enrollments));
-    return [...reports.entries()]
-        .filter(([machine]) => enrolled.has(machine))
-        .toSorted(([, a], [, b]) => b.receivedAt - a.receivedAt)
-        .map(([machine, entry]) => ({ machine, report: entry.report }));
-};
+const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; report: DeviceReport }[] =>
+    enrollments
+        .flatMap((enrollment) => {
+            const held = reports.get(keyMaterialOf(enrollment.key));
+            return held === undefined ? [] : [{ machine: enrollment.machine, ...held }];
+        })
+        .toSorted((a, b) => b.receivedAt - a.receivedAt)
+        .map(({ machine, report }) => ({ machine, report }));
 
 export const deviceReports = async (historyRoot: string): Promise<{ machine: string; report: DeviceReport }[]> =>
     reportsFor(await readEnrollments(historyRoot));
@@ -273,27 +348,37 @@ export const enrolledFleet = async (historyRoot: string): Promise<SyncFleet> => 
 // access dies with it.
 export const revokeEnrollmentByToken = async (historyRoot: string, token: string): Promise<boolean> => {
     const digest = sha256Hex(token);
-    let revoked = false;
-    await persist(historyRoot, (enrollments) => {
-        const kept = enrollments.filter((entry) => entry.tokenDigest !== digest);
-        revoked = kept.length !== enrollments.length;
-        return revoked ? kept : enrollments;
-    });
-    return revoked;
+    return (await revokeWhere(historyRoot, (entry) => entry.tokenDigest === digest)) > 0;
 };
 
-// Revokes one machine by name, the identity `reports` and the row already use. Nothing happens on that machine
-// directly; its agent notices within a poll and stops on its own.
-export const revokeEnrollmentByMachine = async (historyRoot: string, machine: string): Promise<boolean> => {
-    let revoked = false;
+// Drops every enrollment `revoked` picks in one write, and their in-memory reports with them, or a report would outlive
+// its enrollment until the process restarts. Answers how many went.
+const revokeWhere = async (historyRoot: string, revoked: (entry: SyncEnrollment) => boolean): Promise<number> => {
+    let gone: SyncEnrollment[] = [];
     await persist(historyRoot, (enrollments) => {
-        const kept = enrollments.filter((entry) => entry.machine !== machine);
-        revoked = kept.length !== enrollments.length;
-        return revoked ? kept : enrollments;
+        gone = enrollments.filter(revoked);
+        return gone.length > 0 ? enrollments.filter((entry) => !revoked(entry)) : enrollments;
     });
-    // Drops the machine's in-memory report too, or it would outlive the enrollment until the process restarts.
-    if (revoked) {
-        reports.delete(machine);
+    for (const entry of gone) {
+        reports.delete(keyMaterialOf(entry.key));
     }
-    return revoked;
+    return gone.length;
+};
+
+// Revokes one machine by name, the identity the row shows. Nothing happens on that machine directly; its agent notices
+// within a poll and stops on its own.
+export const revokeEnrollmentByMachine = async (historyRoot: string, machine: string): Promise<boolean> =>
+    (await revokeWhere(historyRoot, (entry) => entry.machine === machine)) > 0;
+
+// REMOVING A DEVICE'S CARD TAKES ITS SYNC ENROLLMENTS TOO (2026-10-05). The card's own enrollments (the device door) were
+// revoked, and the ssh key the same computer syncs with stayed in authorized_keys under no card at all, which no screen
+// listed. Each OS install the card held is named by its computer and environment, and every sync enrollment that says it
+// is one of those goes. One that never said which it is (an agent too old to) is left: it is named by a hostname, which
+// is no proof it is that computer. Answers how many went.
+export const revokeSyncEnrollmentsOf = async (
+    historyRoot: string,
+    installs: readonly { readonly machineId: string; readonly environment: string }[],
+): Promise<number> => {
+    const wanted = new Set(installs.map((install) => identityOf(install)));
+    return installs.length === 0 ? 0 : await revokeWhere(historyRoot, (entry) => wanted.has(identityOf(entry)));
 };

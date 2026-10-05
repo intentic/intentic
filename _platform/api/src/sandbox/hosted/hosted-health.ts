@@ -5,18 +5,24 @@ import { JOB_HOSTED_HEALTH, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { hostedCapacity, type HostedRefusal } from "./hosted-capacity.js";
 import { hostedFleet } from "./hosted-fleet.js";
-import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
+import { appRecordsOf, forgetHostedMachine, hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
+import { appExists, getMachine, isFlyGone } from "./fly/fly.js";
+import { withHostedAppLock } from "./hosted-app-lock.js";
 import { HOUR_MS } from "../../durations.js";
 
-// Watches the rows-vs-Fly gap other sweeps act on but never report; read-only, fixes nothing. Seven shapes:
+// Watches the rows-vs-Fly gap other sweeps act on but never report. Eight shapes:
 // - edge: whether the edge in front of the lane is a build that can actually serve it
 // - lane: whether the sandboxes that booted could be reached at their own addresses
 // - missing: a row whose Fly app is gone (several at once is another deployment's reaper eating this fleet)
 // - strangers: apps under our prefix running another deployment's machine; the only orphan shape that mails anybody
 // - litter: our-prefix apps with no row, the reaper's ordinary work; reported, never mailed
+// - forgotten: our-prefix apps of sandboxes this database has neither a row nor a deletion record for, which the reaper
+//   never destroys (hosted.ts `OrphanSkip`); reported for an operator, never mailed (the admin digest carries them)
 // - stock: warm machines against the pool target, per region
 // - stranded: machines an image change could not put back on their previous version (gate/state-gate.ts)
 // Litter must never be counted as a stranger: that conflation is what made this watch stop being read.
+// (2026-10-05) It also repairs the one shape it can prove: a row whose app or machine Fly answers 404 for is dropped
+// (`repairHostedRows` below). Until then it mailed about those rows every six hours and changed nothing.
 
 // One alert per window per problem shape; the log line still writes every tick.
 const ALERT_EVERY_MS = 6 * HOUR_MS;
@@ -146,15 +152,30 @@ export interface HostedHealth {
     readonly strangers: string[];
     // Our-prefix apps with no row: the reaper's ordinary work. Never mailed, never counted against healthy.
     readonly litter: string[];
+    // Our-prefix apps of sandboxes this database has no record of at all; an operator's call. Never mailed here.
+    readonly forgotten: string[];
     // Warm stock per region against the configured target.
     readonly stock: { region: string; warm: number; target: number }[];
     // Machines a failed rollback left on neither version; each needs a person.
     readonly stranded: StrandedMachine[];
+    // What the sweep repaired on this pass (`repairHostedRows`); empty from the read alone.
+    readonly repaired: HostedRepairs;
     readonly healthy: boolean;
 }
 
+// The rows a pass dropped, by app: those whose whole app Fly no longer has, and those whose machine is gone from an app
+// that still stands (kept for the sandbox's next provision to adopt).
+export interface HostedRepairs {
+    readonly appGone: readonly string[];
+    readonly machineGone: readonly string[];
+}
+
+const NOTHING_REPAIRED: HostedRepairs = { appGone: [], machineGone: [] };
+
 // The regions this platform places machines in; one knob names both, and a single-region setup dedupes to one.
-const configuredRegions = (config: Config): string[] => [...new Set([config.hosted.region, config.hosted.regionEu].filter((region) => region !== ``))];
+const configuredRegions = (config: Config): string[] => [
+    ...new Set([config.hosted.region, config.hosted.regionEu].filter((region) => region !== ``)),
+];
 
 export const hostedHealth = async (prisma: PrismaClient, config: Config, now: () => number = Date.now): Promise<HostedHealth> => {
     const [fleet, capacity, edge, lane, stranded] = await Promise.all([
@@ -168,34 +189,156 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config, now: ()
     // `orphan` says an app has no row, not whose; the reaper's classifier answers that, skipped when nothing to ask.
     const orphans = fleet.filter((entry) => entry.role === `orphan`).map((entry) => entry.appName);
     const sorted: { doomed: string[]; skipped: { app: string; why: OrphanSkip }[] } =
-        orphans.length === 0 ? { doomed: [], skipped: [] } : await sortUnknownApps(config, orphans);
-    const strangers = sorted.skipped.filter((entry) => entry.why === `theirs`).map((entry) => entry.app);
-    const litter = [...sorted.doomed, ...sorted.skipped.filter((entry) => entry.why !== `theirs`).map((entry) => entry.app)];
+        orphans.length === 0 ? { doomed: [], skipped: [] } : await sortUnknownApps(config, orphans, await appRecordsOf(prisma, config, orphans));
+    const skippedFor = (pick: (why: OrphanSkip) => boolean): string[] => sorted.skipped.filter((entry) => pick(entry.why)).map((entry) => entry.app);
+    const strangers = skippedFor((why) => why === `theirs`);
+    const forgotten = skippedFor((why) => why === `forgotten`);
+    const litter = [...sorted.doomed, ...skippedFor((why) => why !== `theirs` && why !== `forgotten`)];
     const stock = configuredRegions(config).map((region) => ({
         region,
         warm: fleet.filter((entry) => entry.role === `warm` && !entry.missing && entry.region === region).length,
         target: config.hosted.poolSize,
     }));
-    return {
+    const reading = {
         edge,
         lane,
         capacity: { used: capacity.used, cap: capacity.cap, full: capacity.full, reason: capacity.reason, refusals: capacity.refusals },
         missing,
         strangers,
         litter,
+        forgotten,
         stock,
         stranded,
-        // An edge that cannot serve the lane, or a lane no sandbox got through, outranks every row-level
-        // reading: the fleet can be perfect and still reach nobody.
-        healthy:
-            edge?.fault === undefined &&
-            lane.fault === undefined &&
-            !capacity.full &&
-            missing.length === 0 &&
-            strangers.length === 0 &&
-            stranded.length === 0 &&
-            stock.every((r) => r.warm >= r.target),
+        repaired: NOTHING_REPAIRED,
     };
+    return { ...reading, healthy: healthyReading(reading) };
+};
+
+// An edge that cannot serve the lane, or a lane no sandbox got through, outranks every row-level reading: the fleet can
+// be perfect and still reach nobody. Litter and forgotten apps never count against it.
+const healthyReading = (health: Omit<HostedHealth, `healthy`>): boolean =>
+    health.edge?.fault === undefined &&
+    health.lane.fault === undefined &&
+    !health.capacity.full &&
+    health.missing.length === 0 &&
+    health.strangers.length === 0 &&
+    health.stranded.length === 0 &&
+    health.stock.every((r) => r.warm >= r.target);
+
+// At most this many rows dropped by one pass, the rest left for the next: a 404 is positive evidence, and still a
+// pass that wants to drop half the fleet's rows at once is more likely a wrong token than a provider that lost them.
+const REPAIRS_PER_PASS = 10;
+// Machines read per pass for "gone inside a live app", rotating through the fleet: every machine is read within a few
+// passes (a quarter of an hour each) without a fleet's worth of reads on every tick.
+const MACHINE_READS_PER_PASS = 40;
+// Where the next pass's machine reads start; process memory, so a restart starts again from the top, which is harmless.
+let machineCursor = 0;
+
+// One row as a repair reads it.
+interface RepairRow {
+    readonly id: string;
+    readonly sandboxId: string;
+    readonly appName: string;
+    readonly machineId: string;
+    readonly migratingId: string | null;
+    readonly buildingId: string | null;
+    readonly sandbox: { readonly ownerId: string };
+}
+
+// Whether Fly answered 404 for this row's app (`app`) or for its machine (`machine`); anything else, an answer or a
+// failure, is not a verdict.
+type GoneVerdict = `app` | `machine` | undefined;
+
+const goneVerdict = async (config: Config, row: RepairRow, appListed: boolean): Promise<GoneVerdict> => {
+    const { flyApiToken } = config.hosted;
+    if (!appListed) {
+        // Left out of the org's listing; only the app's own 404 is the verdict.
+        return (await appExists(flyApiToken, row.appName)) ? undefined : `app`;
+    }
+    try {
+        await getMachine(flyApiToken, row.appName, row.machineId);
+        return undefined;
+    } catch (error) {
+        if (!isFlyGone(error)) {
+            throw error;
+        }
+        return (await appExists(flyApiToken, row.appName)) ? `machine` : `app`;
+    }
+};
+
+/* THE ROWS FLY HAS NO MACHINE FOR, DROPPED (2026-10-05). Two shapes, both on positive evidence only:
+ * - a row whose app is left out of the org's listing, confirmed by Fly answering 404 for the app itself
+ * - a row whose machine Fly answers 404 for inside an app that still stands, which the listing cannot see at all
+ *   (hosted-fleet.ts reads apps, not machines); read for a rotating slice of the fleet each pass
+ * Either way the row goes through `forgetHostedMachine`, as the wake and the idle sweep drop a machine Fly no longer
+ * has: the sandbox row stays, its address is cleared so the browser offers a new machine, and an app that still stands
+ * is kept, volume included, for the sandbox's next provision to adopt (hosted.ts `adoptHostedApp`). A row mid-change (a
+ * build or a migration on it) is not read, and each drop re-reads the row and the provider under the app's lock, taken
+ * only if free, so a restart or a rebuild holding the machine is never read as its loss. Capped per pass. */
+export const repairHostedRows = async (prisma: PrismaClient, config: Config, logger: Logger, missing: readonly string[]): Promise<HostedRepairs> => {
+    const rows: RepairRow[] = await prisma.hostedMachine.findMany({
+        select: {
+            id: true,
+            sandboxId: true,
+            appName: true,
+            machineId: true,
+            migratingId: true,
+            buildingId: true,
+            sandbox: { select: { ownerId: true } },
+        },
+        orderBy: { appName: `asc` },
+    });
+    const absent = new Set(missing);
+    const start = rows.length === 0 ? 0 : machineCursor % rows.length;
+    const rotated = [...rows.slice(start), ...rows.slice(0, start)];
+    // Every row whose app is unlisted, then this pass's slice of the rest.
+    const candidates = [
+        ...rows.filter((row) => absent.has(row.appName)),
+        ...rotated.filter((row) => !absent.has(row.appName)).slice(0, MACHINE_READS_PER_PASS),
+    ];
+    machineCursor = start + MACHINE_READS_PER_PASS;
+    const repaired: { appGone: string[]; machineGone: string[] } = { appGone: [], machineGone: [] };
+    for (const row of candidates) {
+        if (repaired.appGone.length + repaired.machineGone.length >= REPAIRS_PER_PASS) {
+            logger.warn({ cap: REPAIRS_PER_PASS }, `hosted health: more rows to drop than one pass drops; the rest wait for the next pass`);
+            break;
+        }
+        if (row.migratingId !== null || row.buildingId !== null) {
+            continue;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one machine at a time, gentle on the provider
+        const verdict = await withHostedAppLock(config, row.appName, false, async (): Promise<GoneVerdict> => {
+            const held = await prisma.hostedMachine.findUnique({
+                where: { id: row.id },
+                select: { machineId: true, migratingId: true, buildingId: true },
+            });
+            if (held?.machineId !== row.machineId || held.migratingId !== null || held.buildingId !== null) {
+                return undefined;
+            }
+            const gone = await goneVerdict(config, row, !absent.has(row.appName));
+            if (gone !== undefined) {
+                await forgetHostedMachine(prisma, { id: row.id, sandboxId: row.sandboxId, ownerId: row.sandbox.ownerId });
+            }
+            return gone;
+        }).catch((error: unknown) => {
+            logger.warn({ err: error, app: row.appName }, `hosted health: could not tell whether this row's machine is gone; asked again next pass`);
+            return undefined;
+        });
+        if (verdict === `app`) {
+            repaired.appGone.push(row.appName);
+            logger.warn(
+                { app: row.appName, sandboxId: row.sandboxId },
+                `hosted health: the provider has no such app; the machine row is dropped and the sandbox kept, so its owner's next start builds a new machine`,
+            );
+        } else if (verdict === `machine`) {
+            repaired.machineGone.push(row.appName);
+            logger.warn(
+                { app: row.appName, sandboxId: row.sandboxId, machine: row.machineId },
+                `hosted health: the provider has no such machine in an app that still stands; the row is dropped and the app kept, so the sandbox's next start adopts its disk`,
+            );
+        }
+    }
+    return repaired;
 };
 
 const andList = (parts: readonly string[]): string =>
@@ -238,6 +381,7 @@ const alertSubject = (health: HostedHealth): string => {
             ? `the fleet is full (${health.capacity.used ?? `all`}${health.capacity.cap === 0 ? `` : ` of ${health.capacity.cap}`} machines)`
             : ``,
         health.missing.length > 0 ? `${health.missing.length} machine(s) gone` : ``,
+        health.repaired.appGone.length > 0 ? `${health.repaired.appGone.length} app(s) gone from the provider, rows dropped` : ``,
         health.strangers.length > 0 ? `${health.strangers.length} app(s) another deployment is running` : ``,
         health.stranded.length > 0 ? `${health.stranded.length} machine(s) stranded by a failed rollback` : ``,
     ].filter((part) => part !== ``);
@@ -276,6 +420,9 @@ const alertMail = (config: Config, health: HostedHealth) => ({
             health.capacity.full ? capacityLine(health.capacity, configuredRegions(config)) : ``,
             health.missing.length > 0
                 ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.`
+                : ``,
+            health.repaired.appGone.length > 0
+                ? `${health.repaired.appGone.length} sandbox row(s) pointed at Fly apps the provider answered 404 for, so their disks are gone: ${health.repaired.appGone.join(`, `)}. Their machine records were dropped and the sandboxes kept, so each owner's next start builds a new machine; several at once is another deployment's reaper, or a person, deleting this fleet's apps.`
                 : ``,
             health.strangers.length > 0
                 ? `${health.strangers.length} app(s) under this platform's prefix are running machines stamped by a DIFFERENT deployment: ${health.strangers.join(`, `)}. Another deployment is sharing this Fly org and credential, which is how a fleet gets destroyed out from under its rows.`
@@ -343,8 +490,23 @@ const worthMailing = (health: HostedHealth, edgeConfirmed: boolean): boolean =>
     health.lane.fault !== undefined ||
     health.capacity.full ||
     health.missing.length > 0 ||
+    health.repaired.appGone.length > 0 ||
     health.strangers.length > 0 ||
     health.stranded.length > 0;
+
+/* THE READING AFTER THIS PASS'S REPAIRS: rows dropped for an app that is gone leave `missing`, and the pass that
+ * dropped them is unhealthy once, so the loss of those disks is mailed; a machine gone inside a standing app is only
+ * logged, since its disk is still there for the sandbox's next start. A repair that fails is logged and leaves the
+ * reading as it was. */
+const repairedReading = async (prisma: PrismaClient, config: Config, logger: Logger, read: HostedHealth): Promise<HostedHealth> => {
+    const repaired = await repairHostedRows(prisma, config, logger, read.missing).catch((error: unknown) => {
+        logger.error({ err: error }, `hosted health: repairing rows failed; the reading stands as read`);
+        return NOTHING_REPAIRED;
+    });
+    const dropped = new Set(repaired.appGone);
+    const after = { ...read, missing: read.missing.filter((app) => !dropped.has(app)), repaired };
+    return { ...after, healthy: healthyReading(after) && repaired.appGone.length === 0 };
+};
 
 // One pass: read, log, and mail at most every ALERT_EVERY_MS. Errors are the caller's to swallow; a health check that
 // takes the process down would be worse than the fault it watches for.
@@ -357,16 +519,19 @@ export const sweepHostedHealth = async (
     if (!hostedEnabled(config)) {
         return undefined;
     }
-    const health = await hostedHealth(prisma, config, now);
+    const health = await repairedReading(prisma, config, logger, await hostedHealth(prisma, config, now));
     const unreached = health.edge !== undefined && !health.edge.reached;
     const edgeConfirmed = !unreached || edgeMissed;
     edgeMissed = unreached;
-    // Litter rides on both branches: it doesn't affect health, and would otherwise be invisible on a healthy day.
+    // Litter and forgotten apps ride on both branches: neither affects health, and both would otherwise be invisible
+    // on a healthy day.
     if (health.healthy) {
         logger.info(
             {
                 stock: health.stock,
                 litter: health.litter,
+                forgotten: health.forgotten,
+                repaired: health.repaired,
                 capacity: health.capacity,
                 edge: edgeLine(health.edge),
                 lane: health.lane,
@@ -381,8 +546,10 @@ export const sweepHostedHealth = async (
             lane: health.lane,
             capacity: health.capacity,
             missing: health.missing,
+            repaired: health.repaired,
             strangers: health.strangers,
             litter: health.litter,
+            forgotten: health.forgotten,
             stock: health.stock,
             stranded: health.stranded,
         },
@@ -403,10 +570,11 @@ export const sweepHostedHealth = async (
 export const forgetHostedHealthAlert = (): void => {
     lastAlertAt = 0;
     edgeMissed = false;
+    machineCursor = 0;
 };
 
-// Boot wiring (main.ts): every `healthMinutes`, one replica at a time. Read-only; the lock is about not repeating Fly
-// calls, not about safety.
+// Boot wiring (main.ts): every `healthMinutes`, one replica at a time. The lock is about not repeating Fly calls; the
+// repairs are safe without it, since each drop holds its app's own lock and re-reads the row under it.
 export const startHostedHealth = (prisma: PrismaClient, config: Config, logger: Logger): void => {
     if (!hostedEnabled(config) || config.hosted.healthMinutes === 0) {
         return;

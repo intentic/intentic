@@ -1,6 +1,7 @@
 export * from "./deploy-config.js";
 export * from "./exec.js";
 export * from "./git.js";
+export * from "./git-locks.js";
 export * from "./inject-template.js";
 export * from "./intent-repo.js";
 export * from "./secret-inventory.js";

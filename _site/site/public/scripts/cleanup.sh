@@ -20,7 +20,12 @@
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- SLUG      # remove one sandbox by slug
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all     # remove EVERY sandbox
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all -y  # …skip the confirm (scripts/CI)
-#   ./_site/site/public/scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth]
+#   ./_site/site/public/scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth] [--purge]
+#
+# Once no sandbox is left, the machine agent's state goes too, all but two things it keeps on purpose, as its own
+# `device uninstall` does: the restore points of synced folders (copies of the owner's own files, taken before a
+# bring-back or a delivery wrote over them) and the record of what agents did on this machine (audit.jsonl). They are
+# moved to ~/.intentic/kept-<date>/ and the script says so; --purge deletes them with the rest.
 #
 # Non-interactive runs (no terminal, e.g. a bare pipe with no controlling tty) NEVER auto-remove: they print the
 # list and exit. Pass a SLUG or --all to act.
@@ -40,12 +45,13 @@ fi
 
 usage() {
     echo "intentic cleanup — remove sandbox(es) on this machine (containers + named /work volumes + networks)."
-    echo "Usage: cleanup.sh [SLUG...] [--all] [-y] [--agent-auth]"
+    echo "Usage: cleanup.sh [SLUG...] [--all] [-y] [--agent-auth] [--purge]"
     echo "  (no arg)      pick which sandbox(es) to remove (interactive); non-interactive runs list and stop"
     echo "  SLUG...       remove the named sandbox(es)"
     echo "  -a, --all     remove EVERY sandbox on this machine"
     echo "  -y, --yes     skip confirmation prompts (scripts/CI); alias --force"
     echo "  --agent-auth  also remove the shared dev agent-auth volume (AI logins for ALL dev sandboxes)"
+    echo "  --purge       also delete the restore points of synced folders and the agents' audit log (kept otherwise)"
     echo "  -h, --help    show this help"
 }
 
@@ -149,8 +155,24 @@ remove_sync_state() {
         # shellcheck disable=SC2086 -- $sync_user word-splits into `sudo -u <user> -H` on purpose (empty when not under sudo)
         $sync_user "$sync_home/.intentic/machine/bin/intentic-machine" uninstall >/dev/null 2>&1 || true
     fi
+    # What the agent's own uninstall keeps on purpose survives this too (2026-10-05): the restore points hold copies of
+    # the owner's own files, and the audit log is their record of what agents ran here. A blanket rm -rf deleted both.
+    machine="$sync_home/.intentic/machine"
+    if [ "$PURGE" != 1 ]; then
+        kept="$sync_home/.intentic/kept-$(date +%Y-%m-%d-%H%M%S)"
+        moved=""
+        for keep in restore audit.jsonl audit.jsonl.1; do
+            [ -e "$machine/$keep" ] || continue
+            # shellcheck disable=SC2086 -- see above
+            $sync_user mkdir -p "$kept" && $sync_user mv "$machine/$keep" "$kept/$keep" && moved="$moved $keep"
+        done
+        if [ -n "$moved" ]; then
+            echo "intentic: kept your synced folders' restore points and the record of what agents did here in $kept (${moved# })."
+            echo "          Delete that folder if you do not need them; --purge removes them with the rest next time."
+        fi
+    fi
     # shellcheck disable=SC2086 -- see above
-    $sync_user rm -rf "$sync_home/.intentic/machine" "$sync_home/.local/bin/intentic-machine" "$sync_home/.ssh/intentic-machine.conf" 2>/dev/null || true
+    $sync_user rm -rf "$machine" "$sync_home/.local/bin/intentic-machine" "$sync_home/.ssh/intentic-machine.conf" 2>/dev/null || true
 }
 
 # The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME): the AI-provider OAuth stores for
@@ -184,12 +206,14 @@ maybe_remove_agent_auth() {
 FORCE=0
 ALL=0
 AUTH=0
+PURGE=0
 SLUGS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -a | --all) ALL=1 ;;
         -y | --yes | --force) FORCE=1 ;;
         --agent-auth) AUTH=1 ;;
+        --purge) PURGE=1 ;;
         -h | --help) usage; exit 0 ;;
         --) shift; break ;;
         -*) echo "error: unknown flag '$1'." >&2; usage >&2; exit 2 ;;

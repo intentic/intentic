@@ -65,3 +65,58 @@ test("skips create when the repo exists, skips commit on a clean tree, and reuse
     expect(calls.some((c) => c.includes("commit"))).toBe(false);
     expect(calls).toContainEqual(["/w/intent", "remote", "set-url", "origin", "https://git.example.com/intentic/intent.git"]);
 });
+
+test("seeds an annotated tag from a file before pushing main, and never forces it over the remote's", async () => {
+    const api = fakeForgejoApi({ findRepo: async () => ({ cloneUrl: "x", sshUrl: "y" }) });
+    const { git, calls } = recordingGit({ remotes: "origin\n" });
+    await adoptRepos({
+        baseUrl,
+        originBaseUrl,
+        user: "intentic",
+        password: "pw",
+        repos: [
+            {
+                dir: "/w/desired-state",
+                name: "desired-state",
+                seedTag: { name: "intentic-applied", messageFile: "/w/desired-state/.last-applied.json" },
+            },
+        ],
+        log: () => {},
+        api,
+        git,
+    });
+    const tag = calls.findIndex((c) => c.includes("tag"));
+    const tagPush = calls.findIndex((c) => c.includes("push") && c.includes("refs/tags/intentic-applied"));
+    const mainPush = calls.findIndex((c) => c.includes("push") && c.includes("main"));
+    expect(calls[tag]).toEqual(
+        expect.arrayContaining(["-a", "--cleanup=verbatim", "-F", "/w/desired-state/.last-applied.json", "intentic-applied", "HEAD"]),
+    );
+    expect(tag).toBeLessThan(tagPush);
+    expect(tagPush).toBeLessThan(mainPush);
+    expect(calls[tagPush]).not.toContain("-f");
+});
+
+test("a rejected tag push (the remote already has one) is logged and adopt carries on", async () => {
+    const api = fakeForgejoApi({ findRepo: async () => ({ cloneUrl: "x", sshUrl: "y" }) });
+    const logs: string[] = [];
+    const calls: string[][] = [];
+    const git: GitRunner = async (dir, args) => {
+        calls.push([dir, ...args]);
+        if (args.includes("refs/tags/intentic-applied")) {
+            throw new Error("! [rejected] intentic-applied -> intentic-applied (already exists)");
+        }
+        return { stdout: args[0] === "remote" ? "origin\n" : "", stderr: "" };
+    };
+    await adoptRepos({
+        baseUrl,
+        originBaseUrl,
+        user: "intentic",
+        password: "pw",
+        repos: [{ dir: "/w/ds", name: "desired-state", seedTag: { name: "intentic-applied", messageFile: "/w/ds/.last-applied.json" } }],
+        log: (message) => logs.push(message),
+        api,
+        git,
+    });
+    expect(logs.some((line) => line.includes("kept intentic/desired-state's intentic-applied tag as it is"))).toBe(true);
+    expect(calls.some((c) => c.includes("push") && c.includes("main"))).toBe(true);
+});

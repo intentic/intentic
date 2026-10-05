@@ -111,20 +111,73 @@ describe(`reapOrphanDnsRecords`, () => {
             { match: (method) => method === `DELETE`, respond: () => ok({}) },
         ]);
 
+    // The ids this database holds a deletion record for: bbbb's tunnel and cccc's stale challenge were deleted.
+    const deletedAmong = (deleted: readonly string[]) => async (ids: readonly string[]) => new Set(ids.filter((id) => deleted.includes(id)));
+    const quiet = { log: () => {}, onError: () => {} };
+
     it(`never touches a record belonging to a sandbox that still exists`, async () => {
         const calls = stubRecords();
         const result = await reapOrphanDnsRecords({
             apiToken: `api`,
             zone,
             liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            deletedAmong: deletedAmong([`bbbbbbbbbbbb`, `cccccccccccc`]),
             dryRun: false,
-            log: () => {},
-            onError: () => {},
+            ...quiet,
         });
         // Only nothing depends on it licenses a delete, not nothing mints it anymore; the id in the name answers this.
         const deleted = calls.filter((call) => call.method === `DELETE`).map((call) => call.url.split(`/dns_records/`)[1]);
         expect(deleted.toSorted()).toEqual([`r-acme-gone`, `r-local-live`, `r-local-old`, `r-tunnel-b`]);
-        expect(result).toEqual({ total: 9, orphaned: 4, reaped: 4, failed: 0 });
+        expect(result).toEqual({ total: 9, orphaned: 4, reaped: 4, failed: 0, deferred: 0, forgotten: 0 });
+    });
+
+    // A restore from an older backup has neither a row nor a deletion record for every sandbox made since: their
+    // records are forgotten, not gone. The per-sandbox A records still go, since the wildcard answers the same names.
+    it(`deletes a sandbox's tunnel and challenge records only on its deletion record, and counts the rest as forgotten`, async () => {
+        const calls = stubRecords();
+        const result = await reapOrphanDnsRecords({
+            apiToken: `api`,
+            zone,
+            liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            deletedAmong: deletedAmong([]),
+            dryRun: false,
+            ...quiet,
+        });
+        const deleted = calls.filter((call) => call.method === `DELETE`).map((call) => call.url.split(`/dns_records/`)[1]);
+        expect(deleted.toSorted()).toEqual([`r-local-live`, `r-local-old`]);
+        expect(result).toMatchObject({ orphaned: 2, reaped: 2, forgotten: 2 });
+    });
+
+    it(`asks about deletion records only for ids no row holds`, async () => {
+        stubRecords();
+        const asked: string[][] = [];
+        await reapOrphanDnsRecords({
+            apiToken: `api`,
+            zone,
+            liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            deletedAmong: async (ids) => {
+                asked.push([...ids]);
+                return new Set();
+            },
+            dryRun: true,
+            ...quiet,
+        });
+        expect(asked.map((ids) => ids.toSorted())).toEqual([[`bbbbbbbbbbbb`, `cccccccccccc`]]);
+    });
+
+    it(`deletes no more than its cap in one pass and reports the rest as deferred`, async () => {
+        const calls = stubRecords();
+        const result = await reapOrphanDnsRecords({
+            apiToken: `api`,
+            zone,
+            liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            deletedAmong: deletedAmong([`bbbbbbbbbbbb`, `cccccccccccc`]),
+            dryRun: false,
+            perPass: 3,
+            ...quiet,
+        });
+        expect(calls.filter((call) => call.method === `DELETE`)).toHaveLength(3);
+        expect(result).toMatchObject({ orphaned: 4, reaped: 3, deferred: 1 });
     });
 
     it(`leaves a record it cannot attribute to any sandbox alone`, async () => {
@@ -149,9 +202,9 @@ describe(`reapOrphanDnsRecords`, () => {
             apiToken: `api`,
             zone,
             liveSandboxIds: new Set(),
+            deletedAmong: deletedAmong([]),
             dryRun: false,
-            log: () => {},
-            onError: () => {},
+            ...quiet,
         });
         expect(result.orphaned).toBe(0);
         expect(calls.some((call) => call.method === `DELETE`)).toBe(false);
@@ -160,7 +213,7 @@ describe(`reapOrphanDnsRecords`, () => {
     it(`asks Cloudflare for nothing but DNS: the sweep must survive a DNS-only token`, async () => {
         // A tunnel-listing call needs a scope this token no longer has; asking for it would break the sweep silently.
         const calls = stubRecords();
-        await reapOrphanDnsRecords({ apiToken: `api`, zone, liveSandboxIds: new Set(), dryRun: true, log: () => {}, onError: () => {} });
+        await reapOrphanDnsRecords({ apiToken: `api`, zone, liveSandboxIds: new Set(), deletedAmong: deletedAmong([]), dryRun: true, ...quiet });
         expect(calls.some((call) => call.url.includes(`cfd_tunnel`))).toBe(false);
     });
 
@@ -171,11 +224,12 @@ describe(`reapOrphanDnsRecords`, () => {
             apiToken: `api`,
             zone,
             liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            deletedAmong: deletedAmong([`bbbbbbbbbbbb`, `cccccccccccc`]),
             dryRun: true,
             log: (record) => seen.push(record.name),
             onError: () => {},
         });
-        expect(result).toEqual({ total: 9, orphaned: 4, reaped: 0, failed: 0 });
+        expect(result).toEqual({ total: 9, orphaned: 4, reaped: 0, failed: 0, deferred: 0, forgotten: 0 });
         expect(seen).toHaveLength(4);
         expect(calls.some((call) => call.method === `DELETE`)).toBe(false);
     });

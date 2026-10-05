@@ -21,7 +21,8 @@ const JITTER_MS = 60 * 60_000;
 
 // Running sandboxes only (a stopped one has not changed since its last copy) and never a runner, whose /work is a
 // mirror of its parent's git and comes back from there. A parked one is down mid-swap: ic would skip it anyway.
-// The other side of this computer's sandboxes are backed up by its own agent, into its own repos (ic: sandbox/side.rs).
+// The other side of this computer's sandboxes are backed up by its own agent, into its own repos (ic: sandbox/side.rs);
+// every environment runs this round for its own (resident.ts).
 export const backupTargets = (boxes: readonly DeviceSandbox[]): string[] =>
     boxes
         .filter((box) => box.running && box.parked !== true && !box.slug.startsWith("runner-") && box.keptElsewhere === undefined)
@@ -78,7 +79,7 @@ export const runBackupRound = async (
 
 /* THE DAILY TIDY, after the backups: `ic sandbox tidy` clears what swaps and removals leave behind on this machine (images
    no sandbox can go back to any more, records of sandboxes that are gone, the trash past its week). It never deletes a
-   volume; one no sandbox claims is only named, so a person can decide. */
+   volume: a set no sandbox claims is moved into ic's trash, from which a person can still restore it for a week. */
 
 export const autoTidyArgs = (): string[] => ["sandbox", "tidy", "--json"];
 
@@ -88,6 +89,11 @@ const TidyAnswerSchema = z.object({
     records: z.array(z.string()).default([]),
     purgedFromTrash: z.array(z.string()).default([]),
     orphanVolumes: z.array(z.string()).default([]),
+    // From an ic that converges leftovers by itself (2026-10-05): volume sets no sandbox claims, moved into the trash so
+    // its week starts; builds a rebuild left untagged; backups of sandboxes long gone or kept fresher by the other side.
+    trashedVolumeSets: z.array(z.string()).default([]),
+    danglingBuilds: z.number().default(0),
+    backups: z.array(z.object({ slug: z.string(), reason: z.string().optional() })).default([]),
 });
 
 const tidyAnswer = (line: string): z.infer<typeof TidyAnswerSchema> | undefined => {
@@ -113,11 +119,17 @@ export const tidyNews = (run: IcRun): string => {
     }
     const removed = [
         answer.images.length === 0 ? undefined : plural(answer.images.length, "image"),
+        answer.danglingBuilds === 0 ? undefined : plural(answer.danglingBuilds, "leftover build"),
         answer.records.length === 0 ? undefined : `${plural(answer.records.length, "record")} of sandboxes that are gone`,
         answer.purgedFromTrash.length === 0 ? undefined : `${plural(answer.purgedFromTrash.length, "sandbox", "sandboxes")} from the trash`,
+        answer.backups.length === 0 ? undefined : `${plural(answer.backups.length, "stale backup")} (${answer.backups.map((backup) => backup.slug).join(", ")})`,
     ].filter((part) => part !== undefined);
-    const kept = answer.orphanVolumes.length === 0 ? "" : `; volumes no sandbox claims, kept for you to decide: ${answer.orphanVolumes.join(", ")}`;
-    return `auto-tidy: ${removed.length === 0 ? "nothing to clear" : `cleared ${removed.join(", ")}`}${kept}`;
+    const trashed =
+        answer.trashedVolumeSets.length === 0 ? "" : `; volumes no sandbox claims moved to the trash for a week: ${answer.trashedVolumeSets.join(", ")}`;
+    // An ic that moves them names them above instead; one that only lists them leaves them named here.
+    const listed = answer.orphanVolumes.filter((volume) => !answer.trashedVolumeSets.some((slug) => volume.endsWith(slug)));
+    const kept = listed.length === 0 ? "" : `; volumes no sandbox claims, kept for you to decide: ${listed.join(", ")}`;
+    return `auto-tidy: ${removed.length === 0 ? "nothing to clear" : `cleared ${removed.join(", ")}`}${trashed}${kept}`;
 };
 
 // The tidy, when its switch is on. A throw (no ic at all) is a failed line like any other, since the round goes on.
@@ -131,12 +143,13 @@ export const runTidy = async (tidy: () => Promise<IcRun>, log: Log): Promise<voi
 
 // Both switches (`intentic-machine updates --backups`, `--tidy`) are re-read every round; a config that does not read
 // skips the round, since it may be the one holding them off.
-export const startAutoBackup = (log: Log): Rounds => {
+// `delayMs` pushes the first round later, for the second environment on one engine (resident.ts).
+export const startAutoBackup = (log: Log, { delayMs = 0 }: { readonly delayMs?: number } = {}): Rounds => {
     const state = newBackupState();
     return startRounds(
         "auto-backup",
         log,
-        FIRST_TICK_MS + Math.floor(Math.random() * FIRST_SPREAD_MS),
+        delayMs + FIRST_TICK_MS + Math.floor(Math.random() * FIRST_SPREAD_MS),
         () => TICK_MS + Math.floor(Math.random() * JITTER_MS),
         async () => {
             const config = await readMachineConfig();

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../../logger.js";
@@ -102,4 +102,58 @@ test("one failing task costs only itself", async () => {
 
     const withoutCommitGraph = ALL_TASKS.filter((task) => task !== "--task=commit-graph");
     expect(ran).toEqual([...withoutCommitGraph, ...withoutCommitGraph]);
+});
+
+// git takes objects/maintenance.lock for every run and skips, silently and exiting 0, while it exists: a lock left by a
+// killed run made every later one a no-op nobody saw (2026-10-01 to 10-05 in this sandbox).
+describe("a maintenance.lock in the way", () => {
+    const MINUTE = 60_000;
+    // The nested repo `intent`, its git dir out of tree as the daemon keeps it, holding a lock this old.
+    const lockedRepo = async (ageMs: number): Promise<{ work: string; lock: string }> => {
+        const work = await setup();
+        const gitDir = await mkdtemp(join(tmpdir(), "intentic-maintenance-gitdir-"));
+        tempDirs.push(gitDir);
+        await mkdir(join(gitDir, "objects"), { recursive: true });
+        await writeFile(join(work, "intent", ".git"), `gitdir: ${gitDir}\n`);
+        const lock = join(gitDir, "objects", "maintenance.lock");
+        await writeFile(lock, "");
+        const at = new Date(Date.now() - ageMs);
+        await utimes(lock, at, at);
+        return { work, lock };
+    };
+    const ranIn = async (work: string, gitRunning: () => Promise<boolean | undefined>): Promise<string[]> => {
+        const dirs: string[] = [];
+        await runGitMaintenance(
+            workspacePaths(work),
+            logger,
+            async (dir, args) => {
+                if (args[0] === "maintenance") {
+                    dirs.push(dir);
+                }
+                return packed;
+            },
+            { gitRunning },
+        );
+        return [...new Set(dirs)];
+    };
+
+    test("one older than ten minutes that no git holds is removed, and the run goes ahead", async () => {
+        const { work, lock } = await lockedRepo(11 * MINUTE);
+        expect(await ranIn(work, async () => false)).toEqual([work, join(work, "intent")]);
+        expect(await Bun.file(lock).exists()).toBe(false);
+    });
+
+    test("one a running git may hold, or that /proc cannot rule out, stays, and that repo is skipped", async () => {
+        for (const running of [true, undefined]) {
+            const { work, lock } = await lockedRepo(11 * MINUTE);
+            expect(await ranIn(work, async () => running)).toEqual([work]);
+            expect(await Bun.file(lock).exists()).toBe(true);
+        }
+    });
+
+    test("a fresh one is a run in progress: that repo is skipped and the lock left", async () => {
+        const { work, lock } = await lockedRepo(MINUTE);
+        expect(await ranIn(work, async () => false)).toEqual([work]);
+        expect(await Bun.file(lock).exists()).toBe(true);
+    });
 });

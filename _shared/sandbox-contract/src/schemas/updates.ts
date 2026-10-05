@@ -52,6 +52,10 @@ export type SkipUpdateInput = z.infer<typeof SkipUpdateInputSchema>;
 export const RollbackTargetSchema = z.object({
     image: z.string().describe("The local image a rollback would run, pinned under a tag no other flow writes."),
     version: z.string().optional().describe("What that image says it is. Absent when it would not say."),
+    download: z
+        .boolean()
+        .optional()
+        .describe("The local pin is gone (pruned outside ic); going back downloads the published image of `version`."),
 });
 export type RollbackTarget = z.infer<typeof RollbackTargetSchema>;
 

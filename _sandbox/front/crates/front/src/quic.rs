@@ -1,8 +1,12 @@
 //! The tunnel over QUIC, dialled only once the edge has declared it serves one (its answer to the socket's upgrade names
 //! `quic`), and held beside the WebSocket rather than instead of it: the edge sends every request down it while it
 //! lasts, and the socket already standing carries everything the moment it goes. Each stream the edge opens is one
-//! HTTP/1.1 connection, served as the socket's streams are (`Front::serve_stream`). A network that carries no UDP to a
-//! declaring edge is retried on the socket's own ladder, never probed for.
+//! HTTP/1.1 connection, served as the socket's streams are (`Front::serve_stream`), except the edge's probe, answered
+//! here. A network that carries no UDP to a declaring edge is retried on the socket's own ladder, never probed for.
+//!
+//! 2026-10-05: the hello waits `tunnel::HELLO_PATIENCE`, past the edge's slowest answer (it was 5 s, the same as the
+//! edge's platform lookup, so the edge could register a connection this front had abandoned), carries this front's
+//! identity, and is acknowledged before the edge registers it. A dead accept loop now closes the connection.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -13,21 +17,22 @@ use http::Uri;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ConnectionError, Endpoint, VarInt};
 use tokio::sync::watch;
-use tunnel::Close;
-use tunnel::quic::{DISPLACED, Hello, REFUSED};
+use tunnel::quic::{DELETED, DEMOTED, DISPLACED, HELD_ELSEWHERE, Hello, REFUSED};
+use tunnel::{Close, HELLO_PATIENCE, Heard, Identity};
 
 use crate::proxy::Front;
-use crate::tunnel::{DISPLACED_WAIT, REDIAL, trusted};
+use crate::standing::{Outcome, Pace, Standing};
+use crate::tunnel::trusted;
 
 // A connection held this long counts as working: the next failure is news again.
 const STABLE_AFTER: Duration = Duration::from_secs(60);
 
-// A handshake or hello not answered by now is UDP that does not reach the edge.
+// A TLS handshake not answered by now is UDP that does not reach the edge; the edge answers it without asking anyone.
 const HANDSHAKE_PATIENCE: Duration = Duration::from_secs(5);
 
-enum Ended {
-    Displaced,
-    Dropped(String),
+// How a dial ended, as `standing.rs` paces the next, or this end closing it.
+enum Dialled {
+    Ended(Outcome),
     ClosedHere,
 }
 
@@ -35,10 +40,12 @@ enum Ended {
 pub async fn run(
     front: Arc<Front>,
     config: TunnelConfig,
+    identity: Identity,
+    standing: Arc<Standing>,
     mut declared: watch::Receiver<bool>,
     mut closed: watch::Receiver<Option<Close>>,
 ) {
-    let mut backoff = REDIAL;
+    let mut pace = Pace::default();
     // Said once per run of failures, so a network without UDP is one line, not one every backoff.
     let mut told = false;
     loop {
@@ -49,41 +56,57 @@ pub async fn run(
             _ = tunnel::raised(&mut closed) => return,
         }
         let started = Instant::now();
-        let ended = dial_once(&front, &config, closed.clone()).await;
+        let dialled = dial_once(&front, &config, &identity, &standing, closed.clone()).await;
+        standing.quic(false);
         let lived = started.elapsed();
-        if lived >= STABLE_AFTER {
+        let outcome = match dialled {
+            Dialled::ClosedHere => return,
+            Dialled::Ended(outcome) => outcome,
+        };
+        if lived >= STABLE_AFTER || matches!(outcome, Outcome::Dropped { proven: true, .. }) {
             told = false;
         }
-        let wait = match ended {
-            Ended::ClosedHere => return,
-            Ended::Displaced => {
-                tracing::warn!("another tunnel took this sandbox's QUIC connection; standing back");
-                DISPLACED_WAIT
+        let next = pace.next(&outcome, lived);
+        let reason = outcome.reason();
+        match &outcome {
+            Outcome::Displaced | Outcome::Elsewhere(_) => {
+                tracing::warn!(%reason, wait = ?next.wait, "standing back from the QUIC tunnel");
             }
-            Ended::Dropped(why) => {
+            Outcome::Deleted => {
+                tracing::warn!(wait = ?next.wait, "the platform deleted this sandbox; no longer dialling QUIC");
+            }
+            Outcome::Demoted => {
+                tracing::warn!(wait = ?next.wait, "the edge demoted the QUIC tunnel; the WebSocket carries it meanwhile");
+            }
+            Outcome::Dropped { .. } => {
                 if told {
-                    tracing::debug!(%why, "the QUIC tunnel is still not held");
+                    tracing::debug!(%reason, "the QUIC tunnel is still not held");
                 } else {
-                    tracing::info!(%why, "the edge declares QUIC and it is not held; the WebSocket carries the tunnel meanwhile");
+                    tracing::info!(%reason, "the edge declares QUIC and it is not held; the WebSocket carries the tunnel meanwhile");
                     told = true;
                 }
-                backoff.after(lived)
             }
-        };
+        }
         tokio::select! {
-            () = tokio::time::sleep(wait) => {}
+            () = tokio::time::sleep(next.wait) => {}
             _ = tunnel::raised(&mut closed) => return,
         }
     }
 }
 
+fn dropped(why: String) -> Dialled {
+    Dialled::Ended(Outcome::Dropped { why, proven: false })
+}
+
 async fn dial_once(
     front: &Arc<Front>,
     config: &TunnelConfig,
+    identity: &Identity,
+    standing: &Standing,
     mut closed: watch::Receiver<Option<Close>>,
-) -> Ended {
+) -> Dialled {
     let Some((host, port)) = edge_address(&config.url) else {
-        return Ended::Dropped(format!("{} names no host", config.url));
+        return dropped(format!("{} names no host", config.url));
     };
     // IPv4 first: an edge on Fly takes UDP on its dedicated IPv4 only, and a resolver ranks an AAAA answer ahead of it.
     let address = match tokio::net::lookup_host((host.as_str(), port))
@@ -97,8 +120,8 @@ async fn dial_once(
                 .copied()
         }) {
         Ok(Some(address)) => address,
-        Ok(None) => return Ended::Dropped(format!("{host} resolves to nothing")),
-        Err(error) => return Ended::Dropped(format!("{host} did not resolve: {error}")),
+        Ok(None) => return dropped(format!("{host} resolves to nothing")),
+        Err(error) => return dropped(format!("{host} did not resolve: {error}")),
     };
     let bind: SocketAddr = if address.is_ipv6() {
         "[::]:0"
@@ -109,54 +132,98 @@ async fn dial_once(
     .expect("an unspecified address parses");
     let endpoint = match Endpoint::client(bind) {
         Ok(endpoint) => endpoint,
-        Err(error) => return Ended::Dropped(format!("no UDP socket: {error}")),
+        Err(error) => return dropped(format!("no UDP socket: {error}")),
     };
     let connection = match endpoint.connect_with(client_config(), address, &host) {
         Ok(connecting) => match tokio::time::timeout(HANDSHAKE_PATIENCE, connecting).await {
             Ok(Ok(connection)) => connection,
-            Ok(Err(error)) => return Ended::Dropped(format!("the handshake failed: {error}")),
-            Err(_) => return Ended::Dropped("no handshake answer".into()),
+            Ok(Err(error)) => return dropped(format!("the handshake failed: {error}")),
+            Err(_) => return dropped("no handshake answer".into()),
         },
-        Err(error) => return Ended::Dropped(format!("could not dial: {error}")),
+        Err(error) => return dropped(format!("could not dial: {error}")),
     };
-    match tokio::time::timeout(
-        HANDSHAKE_PATIENCE,
-        tunnel::quic::hello(&connection, &config.grant),
+    let greeting = match tokio::time::timeout(
+        HELLO_PATIENCE,
+        tunnel::quic::introduce(&connection, &config.grant, identity),
     )
     .await
     {
-        Ok(Ok(Hello::Held)) => {}
-        Ok(Ok(refusal)) => {
-            return Ended::Dropped(format!("the edge refused the hello: {refusal:?}"));
+        Ok(Ok(greeting)) => greeting,
+        Ok(Err(error)) => return dropped(format!("the hello failed: {error}")),
+        Err(_) => {
+            // Said, so the edge drops it at once rather than after its idle timeout.
+            connection.close(VarInt::from_u32(0), b"the hello went unanswered");
+            return dropped("the hello went unanswered".into());
         }
-        Ok(Err(error)) => return Ended::Dropped(format!("the hello failed: {error}")),
-        Err(_) => return Ended::Dropped("the hello went unanswered".into()),
+    };
+    match greeting.hello {
+        Hello::Held => {}
+        Hello::Gone => return Dialled::Ended(Outcome::Deleted),
+        Hello::HeldElsewhere => return Dialled::Ended(Outcome::Elsewhere(greeting.holder)),
+        Hello::Refused => return dropped("the edge refused the hello: no valid grant".into()),
     }
     tracing::info!("reachable over QUIC: the edge carries requests on it");
+    standing.quic(true);
+    // Marked by every probe this front answers: a carrier that served one worked, whatever ends it later.
+    let heard = Arc::new(Heard::default());
     let serving = connection.clone();
     let front = front.clone();
-    let accepting = tokio::spawn(async move {
+    let probed = heard.clone();
+    let mut accepting = tokio::spawn(async move {
         while let Ok((send, recv)) = serving.accept_bi().await {
             let front = front.clone();
-            tokio::spawn(async move { front.serve_stream(tunnel::quic::stream(send, recv)).await });
+            let probed = probed.clone();
+            tokio::spawn(async move {
+                match tunnel::quic::accepted(send, recv).await {
+                    Some(stream) => front.serve_stream(stream).await,
+                    None => probed.answer(),
+                }
+            });
         }
     });
     let ended = tokio::select! {
-        error = connection.closed() => match error {
-            ConnectionError::ApplicationClosed(close) if close.error_code == DISPLACED => Ended::Displaced,
-            ConnectionError::ApplicationClosed(close) if close.error_code == REFUSED => {
-                Ended::Dropped("the edge refused the tunnel".into())
-            }
-            other => Ended::Dropped(other.to_string()),
-        },
+        error = connection.closed() => Dialled::Ended(outcome_of(error, &heard)),
+        // Its streams would arrive nowhere: the edge would send requests down a connection nobody serves.
+        _ = &mut accepting => {
+            connection.close(VarInt::from_u32(0), b"the accept loop ended");
+            dropped("the accept loop ended".into())
+        }
         close = tunnel::raised(&mut closed) => {
             connection.close(VarInt::from_u32(u32::from(close.code)), close.reason.as_bytes());
-            Ended::ClosedHere
+            Dialled::ClosedHere
         }
     };
     accepting.abort();
     let _ = tokio::time::timeout(Duration::from_secs(1), endpoint.wait_idle()).await;
     ended
+}
+
+// What the edge's close of a held connection says.
+fn outcome_of(error: ConnectionError, heard: &Heard) -> Outcome {
+    match error {
+        ConnectionError::ApplicationClosed(close) if close.error_code == DISPLACED => {
+            Outcome::Displaced
+        }
+        ConnectionError::ApplicationClosed(close) if close.error_code == HELD_ELSEWHERE => {
+            Outcome::Elsewhere(String::from_utf8_lossy(&close.reason).into_owned())
+        }
+        ConnectionError::ApplicationClosed(close) if close.error_code == DELETED => {
+            Outcome::Deleted
+        }
+        ConnectionError::ApplicationClosed(close) if close.error_code == DEMOTED => {
+            Outcome::Demoted
+        }
+        ConnectionError::ApplicationClosed(close) if close.error_code == REFUSED => {
+            Outcome::Dropped {
+                why: "the edge refused the tunnel".into(),
+                proven: false,
+            }
+        }
+        other => Outcome::Dropped {
+            why: other.to_string(),
+            proven: heard.answered(),
+        },
+    }
 }
 
 // The edge's name and port, as the tunnel URL spells them; `wss` defaults to 443, which UDP shares.

@@ -4,7 +4,7 @@ use crate::docker;
 use crate::logfile::intentic_home;
 use crate::record;
 use crate::sandbox::recreate::{self, Preflight};
-use crate::sandbox::CONTAINER_PREFIX;
+use crate::sandbox::{lock, mirror, CONTAINER_PREFIX};
 use crate::shape::{Ask, Shape};
 use crate::util::{bail, Fail, Result};
 
@@ -37,9 +37,11 @@ pub fn set(slug: String, ask: Ask, when: When, preflight: Preflight) -> Result<(
         bail!("nothing to change — give at least one of --memory, --cpus, --privileged, --gpus (`ic sandbox restart {slug}` applies what is saved).");
     }
     let container = existing(&slug)?;
+    // Read, laid over and written under the sandbox's lock, so a swap or another save in between cannot be lost.
+    let _held = lock::hold_for_person(&slug)?;
     adopt_legacy(&slug, &container)?;
     let running = running(&container);
-    let target = record::read(&slug)?
+    let target = mirror::reconcile(&slug)
         .desired
         .unwrap_or_else(|| running.clone())
         .with(&ask);
@@ -58,6 +60,7 @@ pub fn save_later(slug: String, ask: Ask) -> Result<()> {
         bail!("nothing to save — give at least one of --memory, --cpus, --privileged, --gpus (or --forget to drop what is saved).");
     }
     let container = existing(&slug)?;
+    let _held = lock::hold_for_person(&slug)?;
     adopt_legacy(&slug, &container)?;
     let running = running(&container);
     let target = running.with(&ask);
@@ -67,7 +70,12 @@ pub fn save_later(slug: String, ask: Ask) -> Result<()> {
 
 /// Save `target` for the next restart, after the image has said it would start with it. A target that is what
 /// already runs leaves nothing waiting, so it forgets instead of saving a restart that changes nothing.
+///
+/// (2026-10-05) Under the sandbox's lock, read through the mirror and pushed back to it: the record is the one every
+/// side of this computer reads (mirror.rs), and a save written to this home alone was invisible to the side whose ic
+/// restarts the sandbox next, and could be written over by a swap that read the record before it.
 fn save(slug: &str, target: &Shape, running: &Shape) -> Result<()> {
+    let _held = lock::hold_for_person(slug)?;
     if target == running {
         clear(slug)?;
         println!(
@@ -81,7 +89,9 @@ fn save(slug: &str, target: &Shape, running: &Shape) -> Result<()> {
             "{reason}\n       Nothing was saved, and the sandbox is untouched."
         ))
     })?;
-    let saved = record::read(slug)?;
+    // An unreadable home record is still an error: writing over it would lose the rollback target it names.
+    record::read(slug)?;
+    let saved = mirror::reconcile(slug);
     record::write(
         slug,
         &record::ChannelRecord {
@@ -89,6 +99,7 @@ fn save(slug: &str, target: &Shape, running: &Shape) -> Result<()> {
             ..saved
         },
     )?;
+    mirror::push(slug);
     println!(
         "intentic: saved for the next restart of {slug} — {}. The sandbox keeps running as it is.",
         target.describe()
@@ -110,7 +121,9 @@ pub fn forget(slug: String) -> Result<()> {
 }
 
 fn clear(slug: &str) -> Result<()> {
-    let saved = record::read(slug)?;
+    let _held = lock::hold_for_person(slug)?;
+    record::read(slug)?;
+    let saved = mirror::reconcile(slug);
     if saved.desired.is_some() {
         record::write(
             slug,
@@ -119,6 +132,7 @@ fn clear(slug: &str) -> Result<()> {
                 ..saved
             },
         )?;
+        mirror::push(slug);
     }
     Ok(())
 }

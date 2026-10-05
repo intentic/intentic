@@ -22,6 +22,7 @@ flowchart LR
 - [extensions.md](docs/architecture/extensions.md): how extensions are packaged, loaded and kept to what they declare.
 - [capabilities.md](docs/architecture/capabilities.md): connectors, accounts and machines, the catalog they come from, and where their credentials live.
 - [needs.md](docs/architecture/needs.md): how an agent asks a person for a connection, a secret, access or a tool, and how the answer finds the conversation again.
+- [convergence.md](docs/architecture/convergence.md): how containers, sync sessions, records, tunnels and hosted apps left behind return to the current shape by themselves, and the six rules every component follows for it.
 - [deploy-engine.md](docs/architecture/deploy-engine.md): the bundled engine that turns an intent file into running infrastructure.
 - [packages.md](docs/architecture/packages.md): the `_area/package` layout, package naming, the `@intentic/src` export condition, build and typecheck.
 - [conventions.md](docs/architecture/conventions.md): the rules the repository's checks and linter enforce.

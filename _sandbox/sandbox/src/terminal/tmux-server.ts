@@ -2,6 +2,7 @@ import { readlink } from "node:fs/promises";
 import { errnoCode } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { forkedExec } from "@intentic/scaffold";
+import { DAEMON_GEN_ENV, DAEMON_ONLY_ENV, WORKLOAD_ENV } from "../seams/workload-stamp.js";
 
 // tmux's answer for "no sessions exist": no binary, no socket, nothing listening on it, or a server holding no session.
 // The last is the daemon's own normal state between boot and the first terminal (pinTmuxServer keeps an emptied server
@@ -20,7 +21,39 @@ export const isNoTmuxServer = (error: unknown): boolean => {
 // A tmux client that finds no server forks one, keeping the forker's mount namespace for every pane it holds; an
 // isolated turn forking it first would put every terminal in that turn's worktree. The daemon forks it at boot via a
 // holder session (killed right after); `exit-empty off` keeps the server alive so nothing else can win the fork.
-const HOLDER_SESSION = "intentic-server-pin";
+export const HOLDER_SESSION = "intentic-server-pin";
+
+// What the server's own environment must not hand every pane it starts (2026-10-05): the front's two sockets, which a
+// server the front or an earlier daemon started holds, and a daemon run's generation, which would date every pane by
+// the run that happened to start the server. The tmux sessions have their own sweeps.
+const SCRUBBED_SERVER_ENV = [...DAEMON_ONLY_ENV, DAEMON_GEN_ENV];
+
+/** Whether tmux already copies the owner stamp from a creating client into each new session it makes. */
+export const copiesOwnerStamp = (updateEnvironment: string): boolean =>
+    updateEnvironment
+        .split("\n")
+        .map((line) => line.trim())
+        .includes(WORKLOAD_ENV);
+
+// Takes the daemon-only variables out of the server's global environment, and has a session made by a client whose
+// environment names a conversation (an agent's shell running `tmux new-session`) carry that owner, so the reaper can
+// tell the sessions an agent made by hand from a person's (system/boot/reaper.ts). Idempotent, best-effort.
+export const prepareTmuxServer = async (logger: Logger): Promise<void> => {
+    for (const name of SCRUBBED_SERVER_ENV) {
+        await forkedExec("tmux", ["set-environment", "-g", "-u", name], { timeout: 10_000 }).catch(() => undefined);
+    }
+    try {
+        const { stdout } = await forkedExec("tmux", ["show-options", "-gv", "update-environment"], { timeout: 10_000 });
+        if (!copiesOwnerStamp(stdout)) {
+            await forkedExec("tmux", ["set-option", "-ga", "update-environment", WORKLOAD_ENV], { timeout: 10_000 });
+        }
+    } catch (err) {
+        // No server yet: the daemon's own pin starts it from an environment that no longer holds them.
+        if (!isNoTmuxServer(err)) {
+            logger.warn({ err }, "tmux: sessions an agent makes by hand will not carry its conversation");
+        }
+    }
+};
 
 // Best-effort: a container without tmux, or one where the server is already up (a daemon restart), must boot exactly as
 // before; not pinning is better than failing to start.
@@ -29,6 +62,7 @@ export const pinTmuxServer = async (logger: Logger): Promise<void> => {
         // `-d` forks; `-A` attaches rather than erroring if a server already exists (daemon restart).
         await forkedExec("tmux", ["new-session", "-A", "-d", "-s", HOLDER_SESSION], { timeout: 10_000 });
         await forkedExec("tmux", ["set-option", "-g", "exit-empty", "off"], { timeout: 10_000 });
+        await prepareTmuxServer(logger);
         await forkedExec("tmux", ["kill-session", "-t", `=${HOLDER_SESSION}`], { timeout: 10_000 }).catch(() => undefined);
         logger.info({ session: HOLDER_SESSION }, "tmux: server pinned to the daemon's namespace");
     } catch (err) {

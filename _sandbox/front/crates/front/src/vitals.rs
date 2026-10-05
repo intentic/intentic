@@ -2,7 +2,10 @@
 //! waits for Node: whether Node's link is up, how long its event loop takes to answer the front's ping, how often the
 //! front restarted it, how long the container has run, and the container's pressure stall. Node's own heartbeat on
 //! `/events` rides its event loop, so a sandbox busy enough to starve that loop would look exactly like a dead one.
-//! The same ping is how the front finds a Node that is stuck rather than busy, and has it restarted.
+//! The same ping is how the front finds a Node that is stuck rather than busy, and has it restarted; a Node that never
+//! says hello at all is found by a deadline on its first one (2026-10-05: one that hung before its hello was never
+//! killed, since pings start only at the hello). The vitals also carry where the ingress tunnel stands and how often it
+//! dropped in the last hour.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -17,6 +20,7 @@ use tokio::sync::watch;
 use tokio::time::MissedTickBehavior;
 
 use crate::link::Link;
+use crate::standing::Standing;
 use crate::supervise::Restarts;
 
 // How often the front pings Node, each ping only once the one before it was answered.
@@ -27,6 +31,12 @@ const PING_EVERY: Duration = Duration::from_secs(2);
 // long has a loop that is not turning at all, and would otherwise stay up for good as an outage the editor reads as
 // busy. Pings start only once Node said hello, which it does last in its start, so a long boot is never timed.
 const STUCK_AFTER: Duration = Duration::from_secs(5 * 60);
+
+// How long a started Node has to say its first hello before it is called stuck and restarted as after a crash. Node says
+// hello last in its start, after it converged the stored files and opened its stores, which includes setting aside and
+// salvaging a damaged conversations database (ready-aspen-kd6c); generous for that, and for a loaded machine, while a
+// Node hung at boot is still found within minutes rather than never.
+const HELLO_DEADLINE: Duration = Duration::from_secs(3 * 60);
 
 // The container's own cgroup: its pressure covers everything in the box, the daemon and its workload alike.
 const CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -45,24 +55,60 @@ pub fn serves(path: &str) -> bool {
 pub struct Vitals {
     link: &'static Link,
     restarts: Arc<Restarts>,
+    tunnel: Arc<Standing>,
     started: Instant,
     cgroup: PathBuf,
     ping: Mutex<Ping>,
     stuck: watch::Sender<()>,
-    // `STUCK_AFTER`, a field so a test runs the rule in a second rather than five minutes.
+    // `STUCK_AFTER` and `HELLO_DEADLINE`, fields so a test runs the rules in a second rather than minutes.
     stuck_after: Duration,
+    hello_within: Duration,
 }
 
 impl Vitals {
-    pub fn new(link: &'static Link, restarts: Arc<Restarts>) -> Self {
+    pub fn new(link: &'static Link, restarts: Arc<Restarts>, tunnel: Arc<Standing>) -> Self {
         Self {
             link,
             restarts,
+            tunnel,
             started: Instant::now(),
             cgroup: PathBuf::from(CGROUP_ROOT),
             ping: Mutex::default(),
             stuck: watch::Sender::new(()),
             stuck_after: STUCK_AFTER,
+            hello_within: HELLO_DEADLINE,
+        }
+    }
+
+    /// Calls each Node the supervisor starts (its pid on `started`) stuck when it has not said hello within
+    /// `HELLO_DEADLINE`, for as long as the front runs: a Node hung before its hello answers no ping, since none is
+    /// sent until it says hello, and would otherwise hold the sandbox down for good.
+    pub async fn deadline_first_hellos(&self, mut started: watch::Receiver<Option<u32>>) {
+        loop {
+            let pid = match started.wait_for(Option::is_some).await {
+                Ok(pid) => *pid,
+                Err(_) => return,
+            };
+            let mut state = self.link.state();
+            // A connection of the Node before may not be read as gone yet; only a hello on another one counts.
+            let before = *state.borrow_and_update();
+            let greeted = tokio::time::timeout(
+                self.hello_within,
+                state.wait_for(|up| up.is_some() && *up != before),
+            )
+            .await
+            .is_ok_and(|seen| seen.is_ok());
+            if !greeted && *started.borrow() == pid {
+                tracing::error!(
+                    pid,
+                    "the daemon has not said hello {:?} after it started: it is stuck before serving",
+                    self.hello_within
+                );
+                self.stuck.send_replace(());
+            }
+            if started.wait_for(|now| *now != pid).await.is_err() {
+                return;
+            }
         }
     }
 
@@ -120,6 +166,7 @@ impl Vitals {
             restarts: self.restarts.within_window(now),
             uptime_s: u32::try_from(now.duration_since(self.started).as_secs()).unwrap_or(u32::MAX),
             pressure: pressure(&self.cgroup),
+            tunnel: self.tunnel.vitals(now),
         }
     }
 
@@ -422,7 +469,7 @@ mod tests {
         let socket = path.clone();
         tokio::spawn(async move { link.serve(&socket).await });
         tokio::time::sleep(Duration::from_millis(50)).await;
-        let mut vitals = Vitals::new(link, Arc::default());
+        let mut vitals = Vitals::new(link, Arc::default(), Arc::default());
         vitals.stuck_after = LIMIT;
         let vitals = Arc::new(vitals);
         let mut stuck = vitals.stuck();
@@ -441,6 +488,7 @@ mod tests {
         let hello = FromNode::Hello {
             build: "test".into(),
             pid: 7,
+            generation: None,
         };
         writer.write_all(&frame(&hello).unwrap()).await.unwrap();
         // A quarter of the limit to answer is lag, not a hang.
@@ -458,6 +506,42 @@ mod tests {
         asked_ping(&mut reader).await;
         assert!(timeout(LIMIT * 3, stuck.changed()).await.is_ok());
         assert!(answered.elapsed() >= LIMIT);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A Node that never says hello is called stuck once the deadline passes; the next one, which does, is left alone.
+    #[tokio::test]
+    async fn a_node_silent_past_its_first_hello_deadline_is_called_stuck() {
+        const LIMIT: Duration = Duration::from_millis(500);
+        let dir = std::env::temp_dir().join(format!("front-vitals-hello-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("front.sock");
+        let (pushed, _received) = mpsc::unbounded_channel();
+        let link: &'static Link = Box::leak(Box::new(Link::new(pushed)));
+        let socket = path.clone();
+        tokio::spawn(async move { link.serve(&socket).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let mut vitals = Vitals::new(link, Arc::default(), Arc::default());
+        vitals.hello_within = LIMIT;
+        let vitals = Arc::new(vitals);
+        let mut stuck = vitals.stuck();
+        let (pid, started) = watch::channel(None);
+        let watching = vitals.clone();
+        tokio::spawn(async move { watching.deadline_first_hellos(started).await });
+
+        pid.send_replace(Some(41));
+        assert!(timeout(LIMIT * 4, stuck.changed()).await.is_ok());
+
+        pid.send_replace(None);
+        pid.send_replace(Some(42));
+        let (_reader, mut writer) = UnixStream::connect(&path).await.unwrap().into_split();
+        let hello = FromNode::Hello {
+            build: "test".into(),
+            pid: 42,
+            generation: Some(2),
+        };
+        writer.write_all(&frame(&hello).unwrap()).await.unwrap();
+        assert!(timeout(LIMIT * 3, stuck.changed()).await.is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

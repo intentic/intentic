@@ -6,14 +6,14 @@ import { resolveInputs } from "../resolve-inputs.js";
 import { createStore } from "../store.js";
 import type { Action, ApplyOutcome, EngineConfig, Step } from "../types.js";
 import { validateOutputs } from "./outputs-check.js";
-import { decideDiff, makeContext, narratedRead, requireProvider } from "./reconcile.js";
+import { checkSignal, decideDiff, makeContext, narratedRead, requireProvider, runScope } from "./reconcile.js";
 
 // Converge: walk the graph in dependency order, reconcile each node (create/update/noop), record its
 // outputs for downstream refs, then gate on readiness. Strictly sequential, a dependent must observe
 // its dependencies' outputs in the store, which holds because linearize() places deps first.
 export const apply = async (graph: DesiredStateGraph, config: EngineConfig): Promise<ApplyOutcome> => {
-    const env = config.env ?? process.env;
-    const log = config.log ?? console.log;
+    const scope = runScope(config);
+    const { env, log } = scope;
     const emit = config.onEvent ?? (() => {});
     const probe = config.probe ?? httpProbe;
     const store = createStore();
@@ -26,9 +26,10 @@ export const apply = async (graph: DesiredStateGraph, config: EngineConfig): Pro
             continue;
         }
         const type = node.type as ResourceType;
+        checkSignal(config);
         emit({ kind: "node", phase: "apply", state: "start", id, type });
         const provider = requireProvider(config.providers, type, id);
-        const ctx = makeContext(id, store, env, log, hashInputs(node.inputs));
+        const ctx = makeContext(id, store, scope, hashInputs(node.inputs));
         const inputs = resolveInputs(node.inputs, store, env, { lenient: false });
         const observed = await narratedRead(provider, inputs, ctx, id, log);
 
@@ -39,7 +40,7 @@ export const apply = async (graph: DesiredStateGraph, config: EngineConfig): Pro
             action = "create";
             produced = await provider.apply(inputs, undefined, ctx);
         } else {
-            const result = decideDiff(provider, node, inputs, observed);
+            const result = decideDiff(provider, node, inputs, observed, scope.owner);
             if (result.action === "update") {
                 action = "update";
                 reason = result.reason;

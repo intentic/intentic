@@ -34,6 +34,9 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
         readonly rekey: (ctx: CapabilityCtx, from: string, to: string) => Promise<void>;
         readonly forget: (ctx: CapabilityCtx, id: string) => Promise<void>;
     };
+    // What else a removed card's computers hold here under another door (a device's desktop-sync key): read BEFORE the
+    // card's enrollments go, since they are what says which computers those were, and revoked once they have gone.
+    readonly alsoRevoke?: (ctx: CapabilityCtx, card: string) => Promise<() => Promise<void>>;
 }
 
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
@@ -94,10 +97,12 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
     // Every enrollment of the card goes in one write, before any socket is cut: a failure leaves the card whole rather
     // than some of its keys live with no card listing them.
     remove: async (ctx, id) => {
+        const companions = await spec.alsoRevoke?.(ctx, id);
         for (const held of await spec.store(ctx).revokeCard(id)) {
             spec.hub(ctx).disconnect(held, `this ${spec.noun} was disconnected from the sandbox`);
             await spec.kept?.forget(ctx, held);
         }
+        await companions?.();
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },
 });

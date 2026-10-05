@@ -46,6 +46,7 @@ tunnel = { path = "../../_sandbox/front/crates/tunnel" }
 
 [dev-dependencies]
 rcgen = "0.14"
+tokio = { version = "1", features = ["full", "test-util"] }
 toml = "1"
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }
 wtransport = { version = "0.7", default-features = false, features = ["ring", "dangerous-configuration"] }

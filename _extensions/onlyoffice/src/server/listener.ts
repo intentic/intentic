@@ -343,7 +343,13 @@ export const createListener = (deps: ListenerDeps): Listener => {
                 return bind(0);
             }
         },
-        close: () => new Promise((resolve) => server.close(() => resolve())),
+        // A close waits for every open connection: the idle keep-alive ones are let go of at once, so only a request
+        // still being answered can hold it (the desktop sidecar bounds even that, local-files cli.ts).
+        close: () =>
+            new Promise((resolve) => {
+                server.close(() => resolve());
+                server.closeIdleConnections();
+            }),
         editorsConnected: () => editorSockets,
     };
 };

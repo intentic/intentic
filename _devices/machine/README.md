@@ -68,7 +68,8 @@ flowchart LR
   of the sandbox's is written into it: no state backup session, no git bridge, and an ignore list that keeps a
   project's own `.intentic/` and `refs/` ([`sync/config.ts`](src/sync/config.ts) holds a remote dir to those two
   shapes, and refuses `sync.json` whole otherwise). `setup` refuses a folder that is, holds or sits inside another
-  sandbox's, and a set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
+  sandbox's, in this environment or another of this PC's (see [What folder sync owns](#what-folder-sync-owns)), and a
+  set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
   its owner opted into two-way: see [Copy-first projects](#copy-first-projects).
 - **Through Docker** ([`sync/endpoint.ts`](src/sync/endpoint.ts)): with `setup --transport auto`, the default, a
   project's sandbox is reached through this machine's own Docker engine when the container `ic` named after the
@@ -81,6 +82,12 @@ flowchart LR
     container's, and the container is checked to still be this sandbox before any session is made through it.
   - Enrollment, the ports read and the report still go to the sandbox's own address, so the tunnel is untouched.
   - Existing ssh pairings keep ssh until they are set up again.
+  - (2026-10-05) The transport is no longer decided once: the container is asked after on every prepare and every
+    minute (`checkContainers` in [`sync/gone-watch.ts`](src/sync/gone-watch.ts)). A stopped container, or an engine that
+    does not answer, changes nothing. A container the engine no longer holds is looked up in ic: still listed (a swap
+    moving it) changes nothing; in ic's trash pauses the folder's sync with that reason; in neither is the sandbox gone
+    (below). When ic cannot say and the sandbox still answers at its address, the pairing moves onto ssh; otherwise its
+    sync is paused until the container is back.
 
   (2026-10-01) Measured on Docker Desktop from Windows and from WSL: a session was up in 2–4 s, against up to 90 s
   through the tunnel. Bind-mounting the folder into the container was rejected: a land or an agent's `rm -rf` would
@@ -91,7 +98,9 @@ flowchart LR
   name, terminating any extras, and recreates a session whose rules drifted (its ignores, its folders, its sync mode,
   its symlink mode, how often it scans the sandbox). A two-way session replaced by another waits until no conflicts
   are left and has its derived residue swept first; every other replacement happens as soon as the sandbox answers
-  (`settlesFirst` in [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each).
+  (`settlesFirst` in [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each). Every session and forward is created
+  with three Mutagen labels, `intentic-owner=<machineId>-<environment>`, `intentic-sandbox=<sanitized id>` and
+  `intentic-kind=sync|state|forward`; see [What folder sync owns](#what-folder-sync-owns).
 - **This computer's own sandbox takes folders** (see [Folders attached to this computer's sandbox](#folders-attached-to-this-computers-sandbox)):
   `sync setup --projects-host` enrolls it with no folder of its own, and each folder the owner opens attaches to it as
   `/work/<name>` (`sync attach`), copy-first, with the land of a conversation written back into it by itself
@@ -121,8 +130,12 @@ flowchart LR
   host key the enrollment carries when it carries one (a sandbox reads its sshd's public key off its history volume and
   answers with it, `SyncEnrollmentAnswerSchema` in the contract), else with nothing, so `accept-new` records the key
   the sandbox presents now, as it does for an older sandbox. Outside an enrollment a changed key is still refused. A sandbox whose ports poll has failed for ten
-  minutes has its forwards taken off localhost, and they come back with its first answer. `sync uninstall` stops and
-  unregisters Mutagen's daemon only when it is this agent's own copy, never a Mutagen the user installed.
+  minutes has its forwards taken off localhost, and they come back with its first answer; after an hour its sessions
+  are paused, an hour counted from `unreachableSince` in `sync.json` (2026-10-05: it was counted in memory, so an agent
+  restarted more often than hourly never paused a dead sandbox's sessions). A sandbox that no longer exists is another
+  matter: see [Sandboxes that are gone](#sandboxes-that-are-gone). `sync uninstall` stops and unregisters Mutagen's
+  daemon only when it is this agent's own copy and no Mutagen the user installed is on PATH, since one daemon serves
+  both.
 - Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A
   Windows PC without Developer Mode refuses every link, and Mutagen would try again on every cycle, so its sessions
   use `--symlink-mode ignore`. Turning Developer Mode on brings them back at the agent's next start.
@@ -145,7 +158,9 @@ flowchart LR
   set after startup; a test holds the sources to it.
 - Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.
   Files stay inside the configured roots, writes need their own switch, and every call is appended to
-  `~/.intentic/machine/audit.jsonl`. While an agent drives input on Windows, a notice shows on screen and
+  `~/.intentic/machine/audit.jsonl`, set aside as `audit.jsonl.1` once it reaches 8 MB (2026-10-05: it grew without
+  limit; the writer rolls it itself, and the [upkeep](#upkeep) does for an agent that wrote nothing lately). While an
+  agent drives input on Windows, a notice shows on screen and
   `PAUSE_HOTKEY` pauses every link. The one door behind no switch is this agent's own Update and Restart
   (`runAgentFlow`, [`device/tools/agent.ts`](src/device/tools/agent.ts)): no agent tool reaches it, and the sandbox
   admits only a maintainer to it, so the owner's maintenance does not wait on the agents' "Run commands" (2026-09-29;
@@ -336,7 +351,8 @@ object, `{ "ok": false, "error": "<sentence>" }` and exit code 1 on failure, as 
   - a folder that is not there;
   - a whole disk, the home folder or one holding it, `/var/home` or a whole home in it, and the system's folders, as
     the desktop app does ([`folderRefusal`](src/sync/folders.ts));
-  - a folder that is, holds or sits inside any other pairing's;
+  - a folder that is, holds or sits inside any other pairing's, this environment's or (2026-10-05) another environment
+    of this PC's ([`sync/siblings.ts`](src/sync/siblings.ts), as `setup` does);
   - a name already attached for another folder.
 - It records `{ key: "<sandboxId>~<name>", sandboxId, sandboxUrl, syncToken (the host's), mode: "sync", localDir,
   remoteDir: "/work/<name>", project: true, direction: "to-sandbox", deliver: "auto", transport?, container? }`.
@@ -415,6 +431,96 @@ appended to the audit file like every call.
 (2026-10-05) The merge runs `git merge-file` in place on copies in the staging folder and reads the result back as bytes,
 rather than with `-p`: stdout comes back decoded as UTF-8, which would rewrite a Latin-1 file's bytes.
 
+### Sandboxes that are gone
+
+(2026-10-05) A pairing used to be dropped only on three rejected polls in a row, an uninstall or a setup again. A sandbox
+deleted elsewhere answered 502 forever, which is also what a restarting one answers, so its pairing, its paused sessions
+and its forwards stayed for good: one PC held 13 pairings, 10 for gone sandboxes, logged a failed reconcile for each every
+ten minutes and posted 5,760 unlogged reports a day to each.
+
+Two witnesses can say a sandbox is gone ([`sync/gone.ts`](src/sync/gone.ts)); absence alone never does:
+
+- **The edge.** Every answer from the sandbox's address that is not OK (the ports poll, a report, the announcement of a
+  folder's first copy) has its `x-intentic-edge` header read. `unknown-sandbox`, the contract's final verdict
+  (`edgeVerdictIsFinal`), means the platform has no such sandbox.
+- **This machine's ic**, only for a sandbox kept here: one its pairing reaches through Docker, or one ic has listed here
+  before (the slug is recorded as `icSlug` the first time `ic sandbox list --json` names it; a sandbox whose daemon
+  answered on loopback is asked about). It is gone when ic answered its listing and its trash (`ic sandbox list`'s
+  "removed, still recoverable" lines) and neither holds it. Asked every ten minutes, and only on a machine that keeps
+  one of its pairings' sandboxes. An ic that does not answer (Docker Desktop not started yet) concludes nothing.
+
+What follows is the same for both ([`sync/gone-watch.ts`](src/sync/gone-watch.ts)):
+
+- **Marked.** Every pairing of the sandbox gets `goneSince` (first heard), `goneCheckedAt` and `goneBy` (`edge` or
+  `local`) in `sync.json`. Its sessions are paused with the watcher's own marker, `fileSyncPausedFor: "gone"`; a pause
+  somebody else made is left alone. Its ports come off localhost, its tunnel listener closes, no report is posted to
+  it, nothing is created for it, and its folders do nothing more. One line says so, with the day it will be retired.
+- **Asked again** at most hourly (one ports poll), whatever the outcome. An answer clears all three fields, lifts the
+  pause, and the next pass puts the ports back. A sandbox ic listed again (restored from its trash) is cleared at once
+  when ic was the witness; the edge's word is withdrawn only by the sandbox answering.
+- **Retired** once seven days (the trash window) have passed since it was first said to be gone, on a verdict asked
+  within the last hour, so an agent that was off for a week asks once first. Retiring ([`sync/retire.ts`](src/sync/retire.ts))
+  removes the pairings from `sync.json` first, then terminates their Mutagen sessions and forwards, rewrites the ssh
+  config fragment without the sandbox's block, strips its alias from this agent's `known_hosts` under every port it
+  was bound to, deletes each pairing's `hashes/<key>.json`, and removes the git bridge's `sandbox` remote,
+  `refs/remotes/sandbox/*` and `refs/intentic/bridged/*` from each repo whose remote pointed at the sandbox. The local
+  folder and every restore point under `restore/<key>/` stay, and the one log line says so.
+
+**`intentic-machine sync forget <slug|sandboxId> [--json] [--here]`** retires a sandbox's pairings now, with the same
+retirement. The name is matched exactly: the sandbox id (as written or sanitized), either slug its URL carries, the
+slug ic listed it under, or its container's name. Naming nothing paired is not a failure (`Nothing paired in this
+environment is called <name>.`), since the caller is a removal that already happened. On a Windows PC's Windows side it
+also runs `sync forget <name> --here --json` in each supervised WSL distro, through `wsl.exe` as the distros' agents
+are run. `ic sandbox remove` calls it, best effort. With `--json` it prints one object:
+`{ "ok": true, "retired": [{ "sandboxId", "pairings": [<key>], "folders": [<dir>] }], "environments"?: [{ "environment": "wsl:<distro>", "ok", "retired"?, "error"? }] }`,
+or `{ "ok": false, "error" }` with exit code 1.
+
+**The device link** ([`device/connection.ts`](src/device/connection.ts)) has its own form of the same rule. A WebSocket
+cannot read the edge's 502, so after six failed dials in a row each further attempt first asks the sandbox's address
+with a plain `GET /health`. On `unknown-sandbox` the link stops dialling and is marked with `goneSince` on its own entry
+in `device.json` (matched by address and token, so connecting the sandbox again replaces the mark with the link). It is
+asked again every hour and dials at once when the sandbox answers; seven days on it is forgotten, as a revoked (1008)
+link is.
+
+### What folder sync owns
+
+(2026-10-05) Several things folder sync makes are shared with somebody else: a Mutagen daemon with the owner's own
+Mutagen, a sandbox's enrollments and the PC's loopback ports with the other environments of the same PC. Each now says
+whose it is.
+
+- **Mutagen sessions carry their owner.** Created with `--label intentic-owner=<machineId>-<environment>` (environment is
+  `windows`, `macos`, `linux` or the WSL distro's name, [`sync/environment.ts`](src/sync/environment.ts)),
+  `intentic-sandbox=<sanitized id>` and `intentic-kind=sync|state|forward`. Listings print each session as
+  `<name>@<owner>@<identifier>`. A sweep acts on a session labelled with this owner, or on an unlabelled one under the
+  `intentic-` prefix (every session made before labels); one labelled with another owner is never touched, and
+  terminations go by identifier so a session of another owner under the same name never goes along. Mutagen cannot add
+  a label to an existing session, so an unlabelled one is recreated only when that is safe (the sandbox answers, and a
+  two-way session has settled, as for any replacement) and at most one per pass (`RelabelBudget`): a recreate over two
+  copies that agree rescans and copies nothing. Forwards get labels when they are next created.
+- **The orphan sweep is standing**: every minute, not only at the watcher's start, a setup and a revocation.
+- **Mutagen is this agent's pinned copy** (0.18.1, downloaded into its own bin), with a Mutagen on PATH used only while
+  that download cannot be had. A daemon of another version refuses every client ("client/daemon version mismatch"),
+  and each failed listing used to read as "no sessions". Now a listing that fails is a failure everywhere (the report
+  leaves session statuses out, nothing is created or swept on it, the pass skips that step), and a version mismatch
+  restarts the daemon with this agent's copy, at most once every half hour. Sessions are kept on disk and come back.
+- **Every child call is bounded**: listings and terminations 60 s, a create 5 minutes, a flush 60 s, ssh's config and
+  key calls 30 s, and any child started without a bound of its own 10 minutes (`CHILD_TIMEOUT_MS`, sync/exec.ts). On
+  top of that the watcher marks its progress at every step; one that has made none for 20 minutes is abandoned, says so
+  in one line ("no progress for 20 minutes (it was at: ...); restarting it"), releases its tunnels and is replaced by a
+  fresh loop. Its heartbeat going stale is what `status` reports meanwhile.
+- **Keys and enrollments per environment.** A newly made key is commented `<hostname>-<environment>`, so the sandbox
+  files a new enrollment under that name. An existing key keeps its comment (a sandbox older than this agent would read
+  a changed comment on the same key as a second machine holding sync); the sandbox tells existing ones apart by machine
+  and environment instead (`_sandbox/sandbox/src/hosts/desktop-sync.ts`).
+- **Tunnel ports per environment.** Under WSL's mirrored networking a distro's loopback is the Windows side's, so both
+  sides pairing one sandbox derived one port twice. A distro now derives its ports in 20000-23999 from its name and the
+  sandbox id; every native environment keeps 24000-27999 exactly as before, so nothing outside WSL moves.
+- **One folder, one sync, across the PC.** `setup` and `attach` read the other environments' `sync.json` (from the
+  Windows side each supervised distro's through `wsl.exe -d <distro> cat`; from a distro the Windows side's beside its
+  agent) and compare after one spelling: `C:\code\app` and `/mnt/c/code/app` are `drive:c/code/app`, and
+  `\\wsl.localhost\Ubuntu\home\ada\app` and Ubuntu's `/home/ada/app` are `wsl:ubuntu/home/ada/app`. An overlap is refused
+  naming the side that syncs it; a side that could not be read is said in a note, and not checked.
+
 ### Upgrades that can be undone
 
 - **A swap is never cut short by this agent.** `ic` runs in a process group of its own on POSIX, keeps its pipes, and
@@ -423,17 +529,23 @@ rather than with `-p`: stdout comes back decoded as UTF-8, which would rewrite a
   tick, `upgrade`, `run`, the browser's Update and Restart) waits while any channel record in this environment's ic
   home (`INTENTIC_HOME`, else `~/.intentic`) says `swap_phase=cutover` with `swap_at` in the last 30 minutes, or while
   this process runs a flow that moves a container ([`device/sandbox-rounds/swap-records.ts`](src/device/sandbox-rounds/swap-records.ts)); the tick
-  looks again in five minutes, a command waits and says so.
+  looks again in five minutes, a command waits and says so. A keeper's fix is not such a flow (see [The keeper](#the-keeper)).
 - **The probation watch** ([`device/sandbox-rounds/probation-watch.ts`](src/device/sandbox-rounds/probation-watch.ts)) runs
   `ic sandbox watch <slug> --json` every minute for each sandbox whose record names a `swap_phase`, and
   `ic sandbox watch --json` over every sandbox half a minute after start (a reboot mid-swap) and every ten minutes.
   ic finishes or undoes an interrupted cutover and rolls a failing new version back; the agent logs what it did.
-  The per-record watch runs in every environment, since only the environment that swapped holds the record; the sweep
-  over every sandbox runs on the root only, as the daily jobs below do, because a WSL distro shares the Windows
-  side's Docker engine.
-- **Daily**, on the root: `ic sandbox backup <slug> --auto --json` for each running sandbox, one at a time, twenty to
-  forty minutes after start and then every day, then one `ic sandbox tidy --json`, whose volumes nobody claims are
-  named and never deleted. Both back off from a slug that keeps failing, as auto-prepare does, and each has its switch
+  The per-record watch runs in every environment, since only the environment that swapped holds the record, and so
+  does the sweep: ic answers each environment only for the sandboxes it keeps (`HOST_PLATFORM` on the container,
+  [`ic`'s side.rs](../../_sandbox/ic/src/sandbox/side.rs)).
+- **Daily**, in every environment, for the sandboxes it keeps: `ic sandbox backup <slug> --auto --json` for each
+  running sandbox, one at a time, twenty to forty minutes after start (a supervised distro half an hour later than the
+  root, so the two sides of a PC never read one engine's disks at once) and then every day, then one
+  `ic sandbox tidy --json`. Volumes nobody claims are never deleted outright: ic moves each unclaimed set into its
+  trash, where a person can restore it for a week.
+
+  (2026-10-05) These ran on the root only, because a WSL distro shares the Windows side's engine. Once ic began leaving
+  each side's sandboxes to that side, a sandbox made from WSL had nobody backing it up, preparing its update or tidying
+  after it, so each environment now runs them for its own. Both back off from a slug that keeps failing, as auto-prepare does, and each has its switch
   beside the update ones (`intentic-machine updates --backups off`, `--tidy off`).
 - **File sync holds still while its sandbox is swapped here** ([`sync/swap-pause.ts`](src/sync/swap-pause.ts)). A
   pairing's local slug is the first label of its sandbox's public hostname (what ic names a sandbox with one) or the
@@ -453,8 +565,8 @@ rather than with `-p`: stdout comes back decoded as UTF-8, which would rewrite a
   this same agent with other settings. What outlives the agent on purpose is `ic` (bounded by its own swap), Mutagen's
   daemon and the browser it opened; what must not, the agent ends itself: every `run_command` group still running
   when it stops, and on Linux the groups a crashed agent left, which the next agent ends at its start
-  ([`tools/command-ledger.ts`](src/device/tools/command-ledger.ts)). The login entries of the two agents this one
-  replaced on 2026-08-29 (`intentic-host`, the sync mirror) are removed once, at start.
+  ([`tools/command-ledger.ts`](src/device/tools/command-ledger.ts)). What older generations of the agent left (the
+  login entries, folders and PATH links of the two agents this one replaced on 2026-08-29) is the [upkeep](#upkeep)'s.
 - `intentic-machine sandbox <verb> [slug]` passes `list`, `start`, `stop`, `restart`, `update`, `rollback [--to]`,
   `versions`, `logs`, `doctor`, `watch`, `backup`, `backups` and `fix [--code] [--auto] [--yes] [--accept] [--json]
   [--source]` straight to ic, in this terminal, with ic's exit code: a sandbox can be looked at and repaired from here
@@ -478,8 +590,15 @@ clock.
 - **What the keeper never does**: apply a fix that needs a yes (each is logged with `intentic-machine sandbox fix
   <slug>`, which asks in a terminal, as the desktop app's buttons and the recovery panel's command do), run two fixes at
   once, run while the probation watch is running ic, fix a sandbox a swap is moving or one a flow of this agent holds,
-  or start the sweep while any flow runs. Each run holds the sandboxes it may touch as a flow that moves a container,
-  so the other rounds leave them alone and the agent does not restart under it.
+  or start the sweep while any flow runs. Each run holds the sandboxes it acts on (this side's containers, and any
+  other ic names in a progress line) so the other rounds leave them alone.
+
+  (2026-10-05) A run used to hold every slug it might touch, records of removed sandboxes included, as a flow that
+  MOVES a container, and auto-upgrade reads those as swaps: rog put its agent upgrade off seven times "while" eight
+  sandboxes were "mid-swap", one with no container and two in the trash. A fix is now held as fixing, which no agent
+  restart waits for. A fix starts or restarts a container at most; on POSIX `ic` outlives an agent restart, on Windows
+  the restart ends the run and the next sweep starts it again. The one step of a fix a restart must not land in,
+  finishing an interrupted cutover, is in ic's own cutover record, which every restart already waits for.
 - **Bounded.** A run is stopped after eight minutes (starting Docker Desktop alone can take five), with its process
   group on POSIX and its process tree on Windows.
 - **Waiting.** A sandbox whose run left something (needs-you, failed, no verdict) waits 3 minutes, then 6, 12, 24 and
@@ -487,32 +606,104 @@ clock.
   asked about again after five minutes, not every ten seconds. The sweep's own cadence stretches on the same ladder
   (never under five minutes) while a sweep leaves something. An ic that cannot fix (one from before `sandbox fix`,
   which clap refuses with no JSON, or no ic at all) is said once and asked again on the same ladder.
+
+  (2026-10-05) A "fixed" no longer always clears the ladder: the first one after two or more failures within the hour
+  keeps it (the next look waits that rung, never under five minutes, and the next failure goes a rung higher), so a
+  sandbox that breaks again after each restart is restarted less and less often instead of every three minutes. A
+  second "fixed" in a row, a "healthy", or an hour without a failure clears it. The ladder stays in memory: ic keeps the
+  lasting ledger of its own repairs.
 - **The log** (`~/.intentic/machine/machine.log`, like every round): what ic is doing as it does it, and each
   sandbox's verdict when it changes (a standing `healthy` or `needs-you` is said once per stretch; `fixed` always).
 - **Where.** Every environment runs its own keeper, since `ic sandbox fix` knows only the sandboxes its own ic keeps
-  records of; a WSL distro's shares the Windows side's Docker Desktop.
+  records of; a WSL distro's shares the Windows side's Docker Desktop. Each keeper sweeps only while its environment
+  keeps a sandbox of its own: one the listing names without `keptElsewhere`, or one its ic still has a record of that
+  sits in ic's trash (read off ic's `intentic-trashed-<time>-<slug>` marker volumes). An environment that keeps none
+  says so once and does not sweep, so it never starts Docker Desktop for the other side's sandboxes. A sandbox that ic
+  stops marking `keptElsewhere` (adopted from a side whose keeper went silent) counts as this side's by the same rule.
+- **Gone is gone.** (2026-10-05) A slug with no container and no trash entry is not fixed, whatever names it: a link
+  that is down, a leftover record, a loopback address. rog ran `ic sandbox fix sandbox-2e8d89d75865` every few minutes
+  for a sandbox removed long before. It is said once and left. Until Docker has answered a listing once, nothing can be
+  told, so the records stand in for the listing, which is the logon case the keeper is for.
 - **The switch** is this environment's `sandboxKeeper` in `machine.json` (absent means on), set by
   `intentic-machine sandbox keeper on|off` and read by `keeper status`. It is re-read every round.
 - **It keeps the agent resident.** An agent with no link, no pairing and no distro to serve used to take its login
   entry away and exit, and then nothing started Docker Desktop after the next reboot. It now stays while the keeper is
   on and this machine hosts a sandbox other than a runner: the ones `ic sandbox list --json` names when Docker answers,
-  else the ones ic keeps a record of (a removed sandbox's record lasts until `ic sandbox tidy` archives it, so the
-  listing wins whenever it answers). The resident asks at start and then every five minutes, and only while it has
+  except those another side keeps (`keptElsewhere`, 2026-10-05: a distro's agent stayed for the Windows side's
+  sandboxes), else the ones ic keeps a record of (a removed sandbox's record lasts until `ic sandbox tidy` archives it,
+  so the listing wins whenever it answers). The resident asks at start and then every five minutes, and only while it has
   nothing else to serve. `keeper off` lets it go; `intentic-machine uninstall` retires it whatever this machine hosts,
   while `device uninstall` and `sync uninstall` leave it running for the sandboxes here and say so (2026-09-30:
   retiring as before was rejected, since a machine whose last link was revoked kept its sandbox down after every
   reboot).
 
+### Upkeep
+
+What older releases left on a device, and the stores with no bound, are put right by a reconciler that ships with each
+release ([`upkeep/`](src/upkeep)). Every environment's agent runs it a minute after it starts and every six hours, so a
+machine converges whether or not it restarts. It replaced `legacy-autostart.ts`, whose one marker file retired five
+login entries once and then stood in for every later cleanup too (2026-10-05).
+
+- **The manifest** ([`upkeep/manifest.ts`](src/upkeep/manifest.ts)) is a list in code that grows with every release.
+  Each entry says how to find one kind of thing and what is done with it: `retire`, `trash` (moved to
+  `~/.intentic/machine/trash/<stamp>-<name>`, never deleted outright), `prune`, `rotate`, `repair` or `report`. An entry
+  is an idempotent check, or done once behind a marker of its own (`~/.intentic/machine/upkeep/<id>`), so an entry a
+  later release adds runs on machines that hold every older marker. Nothing is acted on in doubt: what cannot be read,
+  or is in use, is skipped and reported with why.
+- **What it covers now:**
+  - the login entries of `intentic-host` and `intentic-sync`'s mirror, once (the old `legacy-autostart-retired` marker
+    counts as done and is moved to the new name);
+  - their folders `~/.intentic/host` and `~/.intentic/sync`, their `~/.local/bin` links where those point into them,
+    and `sync.json.bak-loopback`, to the trash, unless a program from the folder is running (read from `/proc` on
+    Linux, `ps` on macOS; on Windows a running binary makes the move fail, which is the same skip);
+  - `intentic-link-watch` (its script and systemd timer and unit): disabled and trashed, since the link has its own
+    silence watchdog (`peerLinkSilenceMs`);
+  - this agent's own login entry, written again where it differs from what this build writes, a logon task's action
+    and settings included ([local-agent](../local-agent)); an entry launching another install's command is left on
+    Linux and macOS, as at start. Only the installed agent checks it, never a `doctor` run from a checkout;
+  - `IntenticMutagenDaemon` on Windows: removed once no pairing needs Mutagen, written again (by sync's own
+    `registerMutagenAutostart`) while one does and this agent's own Mutagen copy is the one in use;
+  - `~/.intentic/machine/trash` entries older than 30 days, by the stamp in their name (a moved folder keeps its old
+    times), deleted; a name with no stamp is left and reported;
+  - `audit.jsonl` set aside at 8 MB;
+  - the install command's half downloads in `bin/` (`*.part`, `*.part-<release>`) older than a day, never while an
+    upgrade runs;
+  - a second `ic` found first on PATH (a root install's `/usr/local/bin/ic`), reported with both versions, since only
+    sudo could change it.
+- **What it says.** One line in `machine.log` per pass, and `~/.intentic/machine/upkeep.json`:
+  `{ at, version, found: { <kind>: n }, fixed: { <kind>: n }, skipped: [{ kind, what, why }] }` (`at` in epoch ms).
+  The device's facts carry it to the sandboxes it is linked to as `upkeep` (`DeviceUpkeepSchema` in the contract's
+  `schemas/hosts.ts`), with at most ten skipped lines, refreshed on every pull of the Devices view.
+- **`intentic-machine doctor`** runs the same pass in a terminal and changes nothing; `--fix` does what the agent's pass
+  would, under the same lock, and writes `upkeep.json`; `--json` prints one object, `upkeep.json`'s shape plus `fix`
+  and `items: [{ id, kind, action, what, outcome: "fixed" | "would-fix" | "skipped", why? }]`. While another pass that
+  fixes runs, it answers with that pass's pid.
+
+### The hang watchdog
+
+Every supervisor of this agent restarts it when it exits, and none can tell a hung agent from a busy one
+([`watchdog.ts`](src/watchdog.ts), 2026-10-05). So the agent watches its own event loop from a Worker thread, which has
+a loop of its own: the main loop pings it every five seconds, and after three minutes without a ping the Worker writes
+`event loop stalled for N s; exiting so the supervisor restarts the agent` to the log (straight to fd 2, where every
+supervisor sends it) and kills the process with SIGKILL. That is an unclean exit to every supervisor: systemd's
+`Restart=on-failure` and launchd's `KeepAlive` restart it, on Windows TerminateProcess leaves exit code 1, which the
+launcher passes to the logon task, and the Windows side restarts a distro's agent that stopped. The Worker is made from
+source text, so the compiled binary needs no second file; both it and the SIGKILL were checked under
+`bun build --compile`. Like any crash, a stall counts toward a new release's trial ([`agent-trial.ts`](src/agent-trial.ts)).
+
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `sandbox`, `run`, `status`, `upgrade`, `updates`, `uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `sandbox`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
 - [src/resident.ts](src/resident.ts) — the resident process that holds links, pairings and WSL distros.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
 - [src/sync/endpoint.ts](src/sync/endpoint.ts) — how a pairing reaches its sandbox: the tunnelled sshd (`tunnel.ts`), or Docker for a project on this machine.
 - [src/sync/attach-commands.ts](src/sync/attach-commands.ts) — `sync attach` and `sync detach`, folders on this computer's own sandbox.
 - [src/sync/project-delivery.ts](src/sync/project-delivery.ts) — landed work written into an attached folder (`deliverProject`).
+- [src/sync/gone.ts](src/sync/gone.ts) — when a paired sandbox counts as gone; `gone-watch.ts` acts on it, `retire.ts` retires its pairings, `forget-command.ts` is `sync forget`.
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
+- [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
+- [src/watchdog.ts](src/watchdog.ts) — the agent's own hang watchdog.
 
 ## Commands
 
@@ -520,4 +711,5 @@ clock.
 pnpm --filter @intentic/machine test
 pnpm turbo run build --filter=./_devices/machine
 node _devices/machine/dist/cli.js status
+node _devices/machine/dist/cli.js doctor        # what the upkeep would do here; --fix does it
 ```

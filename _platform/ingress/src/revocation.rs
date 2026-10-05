@@ -16,13 +16,16 @@ use crate::platform::{self, PlatformClient};
 
 const REACHABILITY_PATH: &str = "/api/reachability/";
 
-// Flattens a redial storm without much revocation delay; asked only at registration and on a miss.
-const KEEP_FOR: Duration = Duration::from_secs(60);
+/// Flattens a redial storm without much revocation delay. Asked at registration, on a miss, and for every held sandbox
+/// once its answer expires (`Edge::recheck_held`), so a deleted sandbox's tunnels close within about two of these.
+pub const KEEP_FOR: Duration = Duration::from_secs(60);
 
 // The platform is on no hot path and must not hang one.
 const PATIENCE: Duration = Duration::from_secs(5);
 
-// Past this many answers the expired ones go, so ids nobody holds cannot grow the map without bound.
+// Past this many answers the expired ones go, and if every one is still fresh the new answer is not kept: a miss is
+// asked for any 12 hex digits a stranger names, so ids nobody holds must not grow the map without bound. (Before
+// 2026-10-05 a full map of fresh answers still took the new one.)
 const ROOM: usize = 10_000;
 
 pub struct Revocation {
@@ -78,13 +81,21 @@ impl Revocation {
                 return true;
             }
         };
+        self.keep(id, answer, ROOM);
+        answer
+    }
+
+    // Keeps an answer, sweeping the expired first when the map is at `room`, and keeping nothing new past it.
+    fn keep(&self, id: &str, answer: bool, room: usize) {
         let mut kept = self.kept();
-        if kept.len() >= ROOM {
+        if kept.len() >= room && !kept.contains_key(id) {
             let keep_for = self.keep_for;
             kept.retain(|_, (_, at)| at.elapsed() < keep_for);
+            if kept.len() >= room {
+                return;
+            }
         }
         kept.insert(id.to_owned(), (answer, Instant::now()));
-        answer
     }
 
     // `None` for an answer that is no statement about this sandbox (a 5xx), which is neither kept nor acted on.
@@ -107,5 +118,38 @@ impl Revocation {
         self.kept
             .lock()
             .expect("the reachability cache is never poisoned")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_cache_never_grows_past_its_room_and_sweeps_the_expired_first() {
+        let fresh = Revocation::keeping("http://platform.test", Duration::from_secs(3600));
+        for index in 0..5 {
+            fresh.keep(&format!("{index:012x}"), true, 3);
+        }
+        assert_eq!(fresh.kept().len(), 3, "nothing new is kept past the room");
+        fresh.keep(&format!("{:012x}", 0), false, 3);
+        assert_eq!(
+            fresh
+                .kept()
+                .get(&format!("{:012x}", 0))
+                .map(|(answer, _)| *answer),
+            Some(false),
+            "a kept id is refreshed"
+        );
+
+        let expiring = Revocation::keeping("http://platform.test", Duration::ZERO);
+        for index in 0..5 {
+            expiring.keep(&format!("{index:012x}"), true, 3);
+        }
+        assert!(expiring.kept().len() <= 3);
+        assert!(
+            expiring.kept().contains_key(&format!("{:012x}", 4)),
+            "the expired made room"
+        );
     }
 }

@@ -53,9 +53,11 @@ pub fn ic_url(version: &str) -> Option<String> {
 /// that never ends. The flag says so outright, and every prompt in `ic` then reads as "no answer" — which is
 /// what each of them already treats as a refusal.
 ///
-/// `IC_VERSION` rides beside the pinned `IC_URL` so a script that finds exactly that `ic` installed skips the
+/// `IC_VERSION` rides beside the pinned `IC_URL` so a script that finds that `ic` or a newer one installed skips the
 /// download (every shim's fetch block): the same binary fetched again on every setup, recreate and fix was seconds
-/// of nothing, most of them Windows PowerShell 5.1 redrawing its progress bar.
+/// of nothing, most of them Windows PowerShell 5.1 redrawing its progress bar. "Or a newer one" since 2026-10-05: the
+/// shims used to require exactly this pin, and the machine agent moves `ic` up by itself, so an app left in the tray
+/// for days put an older `ic` back on every Start, Stop or Restart. The pin is a floor, never a ceiling.
 pub(crate) fn app_env(version: &str) -> Vec<(String, String)> {
     let mut env: Vec<(String, String)> = vec![("INTENTIC_NO_PROMPT".into(), "1".into())];
     if let Some(url) = ic_url(version) {
@@ -567,10 +569,22 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<serde_json::Value
     .await
     .map_err(|error| error.to_string())??;
     let state = app.state::<AppState>();
-    // A listing with a sandbox in it is the proof that this machine hosts one — and the only cheap proof
-    // there is, since the next launch may find Docker stopped and be unable to ask anything at all.
-    if !rows.is_empty() {
+    // A listing with a sandbox of this side's in it is the proof that this machine hosts one — and the only cheap proof
+    // there is, since the next launch may find Docker stopped and be unable to ask anything at all. A listing with none
+    // clears it, once nothing else could still need this machine's Docker (state.rs `forgets_hosting`, 2026-10-05).
+    if rows
+        .iter()
+        .any(|row| row["keptElsewhere"].as_str().is_none())
+    {
         state.remember_hosts_sandboxes();
+    } else if state.hosts_sandboxes() {
+        let machine_holds = crate::machine_sandbox::kept_sandbox_id(&app).is_some();
+        let trash_empty = tauri::async_runtime::spawn_blocking(ic_trash_empty)
+            .await
+            .unwrap_or(None);
+        if crate::state::forgets_hosting(&rows, trash_empty, machine_holds) {
+            state.forget_hosts_sandboxes();
+        }
     }
     Ok(rows
         .into_iter()
@@ -582,6 +596,24 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<serde_json::Value
             row
         })
         .collect())
+}
+
+/// Whether `ic`'s trash holds nothing a `restore` could bring back: a removed sandbox is a marker volume
+/// (`intentic-trashed-<when>-<slug>`, ic's trash.rs) for its whole recovery window. `None` when Docker would not say,
+/// which is a doubt and never a "nothing there". `ic` has no listing of its trash to ask instead.
+fn ic_trash_empty() -> Option<bool> {
+    scripts::docker_output(
+        &[
+            "volume",
+            "ls",
+            "--quiet",
+            "--filter",
+            "name=^intentic-trashed-",
+        ],
+        scripts::DOCKER_READ_LIMIT,
+    )
+    .ok()
+    .map(|listing| listing.trim().is_empty())
 }
 
 /// The recreate shim with `ic`'s own verb behind the shim's switch for it: `recreate.sh <slug> --restart` /
@@ -782,6 +814,9 @@ pub fn remove_script(slug: &str, host: Host, version: &str) -> ScriptRun {
     ic_verb_script(slug, ("--remove", "-Remove"), Vec::new(), host, version)
 }
 
+/// A removal also has this machine's sync let go of the sandbox (2026-10-05): it used to forget only the display
+/// name, and the machine agent went on syncing the folder of a sandbox that was gone until a new one was made for that
+/// same folder (project.rs `forget_sandbox`). The platform id it falls back on is read before the name is forgotten.
 #[tauri::command]
 pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
     let run = remove_script(&slug, Host::current(), VERSION);
@@ -790,7 +825,13 @@ pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
     tauri::async_runtime::spawn_blocking(move || scripts::run(&handle, &id, run))
         .await
         .map_err(|error| error.to_string())??;
+    let sandbox_id = crate::project::sandbox_id_of_slug(&app, &slug);
     app.state::<AppState>().forget(&slug);
+    // Not waited for: the row is done when its removal is, and the agent's answer goes to the log either way.
+    let forgotten = slug.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::forget_sandbox(Some(&forgotten), sandbox_id.as_deref());
+    });
     Ok(())
 }
 

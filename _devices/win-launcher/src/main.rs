@@ -127,6 +127,94 @@ fn note(log: &std::path::Path, why: &str) {
     }
 }
 
+/* THE CHILD LIVES AND DIES WITH THIS PROCESS under `--wait` (2026-10-05). The logon task supervises this process, not
+the agent: a launcher ended from Task Scheduler, or killed, used to leave the agent running with nobody watching it, and
+the next watchdog start then found the agent's pidfile held and left again. So the child goes into a job that is killed
+when its last handle closes, which is when this process ends, however it ends. `SILENT_BREAKAWAY_OK` keeps the job to
+the child alone: what the agent starts to outlive itself (`ic` mid-swap, Mutagen's daemon, an upgrade) never joins it.
+Best-effort, like the log: a job that cannot be made is noted, and the agent runs as before. */
+#[cfg(windows)]
+mod job {
+    use std::ffi::c_void;
+
+    type Handle = *mut c_void;
+
+    /// JOBOBJECT_BASIC_LIMIT_INFORMATION, field for field.
+    #[repr(C)]
+    struct BasicLimits {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: u32,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+    }
+
+    /// JOBOBJECT_EXTENDED_LIMIT_INFORMATION, its IO_COUNTERS spelled out.
+    #[repr(C)]
+    struct ExtendedLimits {
+        basic: BasicLimits,
+        io: [u64; 6],
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    const EXTENDED_LIMIT_INFORMATION: i32 = 9;
+    const LIMIT_SILENT_BREAKAWAY_OK: u32 = 0x0000_1000;
+    const LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(attributes: *mut c_void, name: *const u16) -> Handle;
+        fn SetInformationJobObject(job: Handle, class: i32, info: *mut c_void, length: u32) -> i32;
+        fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
+        fn GetLastError() -> u32;
+    }
+
+    /// Puts `child` in a job that ends it when this process ends. The job's handle is never closed here on purpose:
+    /// the system closes it as this process exits, and that is what kills the child.
+    pub fn bind(child: &std::process::Child) -> Result<(), String> {
+        use std::os::windows::io::AsRawHandle;
+        // SAFETY: plain Win32 calls on a handle this process owns and a zeroed C struct of integers.
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                return Err(format!(
+                    "could not create a job object (error {})",
+                    GetLastError()
+                ));
+            }
+            let mut limits: ExtendedLimits = std::mem::zeroed();
+            limits.basic.limit_flags = LIMIT_KILL_ON_JOB_CLOSE | LIMIT_SILENT_BREAKAWAY_OK;
+            let size = u32::try_from(std::mem::size_of::<ExtendedLimits>()).unwrap_or(u32::MAX);
+            if SetInformationJobObject(
+                job,
+                EXTENDED_LIMIT_INFORMATION,
+                std::ptr::from_mut(&mut limits).cast(),
+                size,
+            ) == 0
+            {
+                return Err(format!(
+                    "could not set the job's limits (error {})",
+                    GetLastError()
+                ));
+            }
+            if AssignProcessToJobObject(job, child.as_raw_handle().cast()) == 0 {
+                return Err(format!(
+                    "could not put the child in its job (error {})",
+                    GetLastError()
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(windows)]
 fn main() -> ExitCode {
     let launch = match parse(std::env::args_os().skip(1).collect()) {
@@ -151,7 +239,16 @@ fn main() -> ExitCode {
     if !launch.wait {
         return ExitCode::SUCCESS;
     }
-    /* THE CHILD'S OWN VERDICT, PASSED THROUGH, because with `--wait` this process is standing in for it: Task Scheduler reads the action's exit code. */
+    if let Err(why) = job::bind(&child) {
+        note(
+            &launch.log,
+            &format!("{why}; the agent is not ended if this launcher is"),
+        );
+    }
+    /* THE CHILD'S OWN VERDICT, PASSED THROUGH, because with `--wait` this process is standing in for it: Task Scheduler
+    reads the action's exit code. Only the child's own 0 is a success: a code that does not fit a byte (an NTSTATUS from a
+    crash, the agent's watchdog ending it with TerminateProcess) and a wait that failed are both failures, so the task
+    never reads a dead agent as one that finished. */
     match child.wait() {
         Ok(status) => match status.code() {
             Some(0) => ExitCode::SUCCESS,

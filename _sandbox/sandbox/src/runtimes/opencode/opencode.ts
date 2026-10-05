@@ -17,6 +17,7 @@ import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import { applyToStampedChild, carriesStamp, SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
+import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { type InputModality, OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { cacheFile } from "../../store/open-document.js";
@@ -39,8 +40,8 @@ export interface OpenCodeService {
     // A turn's client, with Google registrations refreshed once the server is idle. Held until the turn's cleanup ends,
     // including helpers and turns with no permission judge, so a later acquisition cannot restart their server.
     readonly acquire: (model: { readonly providerID: string; readonly modelID?: string }) => Promise<OpenCodeLease>;
-    // Shuts the server down; idempotent, and leaves the service able to boot a fresh one. The daemon never calls it:
-    // only a caller that owns a short-lived service (e.g. tests) needs to release the process.
+    // Shuts the server down; idempotent, and leaves the service able to boot a fresh one. The daemon calls it on its
+    // own shutdown, and the service itself once the server has sat idle for OPENCODE_IDLE_STOP_MS (2026-10-05).
     readonly stop: () => Promise<void>;
     // This directory's session-event stream; scoped, since an unscoped subscription carries no session events (see
     // subscribeEvents).
@@ -88,6 +89,30 @@ const BOOT_TIMEOUT_MS = 60_000;
 // still carries this boot's spawn stamp is killed, so a pid the kernel has handed to something else is left alone.
 const STOP_GRACE_MS = 3_000;
 const STOP_TIMEOUT_MS = 10_000;
+
+// How long `opencode serve` may sit with no turn, no session judge and no call before it is stopped; the next turn boots
+// it again in a few seconds. Before this it ran from the first Grok or Gemini turn to the daemon's end.
+export const OPENCODE_IDLE_STOP_MS = 30 * 60_000;
+
+/** Whether a booted server has been idle long enough to stop: nothing holds it and nothing used it for `idleMs`. */
+// The clock that looks for an idle server, a few times per idle span; unref'd, never what keeps the daemon up.
+const idleStopClock = (idleMs: number, look: () => void): NodeJS.Timeout => {
+    const clock = setInterval(look, Math.max(1_000, Math.min(idleMs / 6, 5 * 60_000)));
+    clock.unref();
+    return clock;
+};
+
+// A stop that could not finish is retried by the next acquisition (finishStopping), so nothing waits on this one.
+const ignored = (): void => undefined;
+
+export const openCodeIdleStop = (state: {
+    readonly booted: boolean;
+    readonly activeTurns: number;
+    readonly judges: number;
+    readonly lastUsedAt: number;
+    readonly now: number;
+    readonly idleMs: number;
+}): boolean => state.booted && state.activeTurns === 0 && state.judges === 0 && state.now - state.lastUsedAt >= state.idleMs;
 
 // The served process: its pid, found by the stamp its spawn carried, and that stamp.
 interface ServedProcess {
@@ -680,11 +705,24 @@ export const createOpenCodeService = (
         readonly spawnServer?: typeof createOpencodeServer;
         // Whether the served process still runs; the real process table unless a test stands in for it.
         readonly alive?: (pid: number) => boolean;
+        // How long an idle server is kept before it is stopped; 0 keeps it for the service's life.
+        readonly idleStopMs?: number;
         // The privacy shield's gateway base URL for a provider's requests, or undefined while the shield is off.
         readonly route?: (provider: "grok" | "gemini", upstream: string) => Promise<string | undefined>;
     } = {},
 ): OpenCodeService => {
-    const { gemini, workspaceRoot, route, fetchImpl = fetch, spawnServer = createOpencodeServer, alive = processAlive } = options;
+    const {
+        gemini,
+        workspaceRoot,
+        route,
+        fetchImpl = fetch,
+        spawnServer = createOpencodeServer,
+        alive = processAlive,
+        idleStopMs = OPENCODE_IDLE_STOP_MS,
+    } = options;
+    // When anything last used the server, and the clock that stops it once that is long enough ago.
+    let lastUsedAt = Date.now();
+    let idleClock: NodeJS.Timeout | undefined;
     const xai = createXaiCatalog(join(xdgDataHome, "opencode"), fetchImpl);
     // Whether the server now running was booted behind the gateway; undefined before any boot.
     let bootedShielded: boolean | undefined;
@@ -726,6 +764,9 @@ export const createOpenCodeService = (
                 XDG_DATA_HOME: xdgDataHome,
                 PATH: stored === undefined ? undefined : `${dirname(stored)}:${process.env["PATH"] ?? ""}`,
                 [SPAWN_STAMP_ENV]: stamp,
+                // Shared by every conversation, so the daemon's; stamped so a later boot ends one a dead daemon left
+                // holding the port (system/boot/generation-sweep.ts).
+                [WORKLOAD_ENV]: DAEMON_OWNER,
             },
             () =>
                 spawnServer({
@@ -761,7 +802,24 @@ export const createOpenCodeService = (
         if (workspaceRoot !== undefined) {
             watchers.watch(clients, workspaceRoot);
         }
+        if (idleStopMs > 0) {
+            idleClock ??= idleStopClock(idleStopMs, stopIfIdle);
+        }
         return clients;
+    };
+
+    const stopIfIdle = (): void => {
+        const idle = openCodeIdleStop({
+            booted: booting !== undefined,
+            activeTurns,
+            judges: sessionJudges.size,
+            lastUsedAt,
+            now: Date.now(),
+            idleMs: idleStopMs,
+        });
+        if (idle) {
+            void closeServer().then(ignored, ignored);
+        }
     };
 
     let stoppingServer: ServedProcess | undefined;
@@ -784,6 +842,7 @@ export const createOpenCodeService = (
     // Memoize the in-flight boot as well as the finished client. A failed boot stays retryable; a dead process loses its
     // cached client so the next turn boots a fresh server rather than fetching a dead port.
     const ensure = async (geminiModels?: GeminiModels): Promise<OpenCodeClients> => {
+        lastUsedAt = Date.now();
         await finishStopping();
         if (booting !== undefined && served !== undefined && !alive(served.pid)) {
             forget();
@@ -794,6 +853,8 @@ export const createOpenCodeService = (
     const mounts = mcpHolds(async () => (await ensure()).client);
     // Everything that belonged to the last server: its client, its watchers and its mounted MCP clients.
     function forget(): void {
+        clearInterval(idleClock);
+        idleClock = undefined;
         booting = undefined;
         served = undefined;
         bootedShielded = undefined;
@@ -846,6 +907,7 @@ export const createOpenCodeService = (
                     if (!released) {
                         released = true;
                         activeTurns -= 1;
+                        lastUsedAt = Date.now();
                     }
                 },
             };

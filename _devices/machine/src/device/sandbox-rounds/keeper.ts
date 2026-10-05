@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
@@ -25,11 +27,24 @@ export const UNREACHABLE_AFTER_MS = 60_000;
 // Starting Docker Desktop alone can take five minutes; past eight the run is stopped, so one hung run cannot hold the
 // keeper for good.
 export const FIX_DEADLINE_MS = 8 * 60_000;
-// After a run that left something (needs-you, failed, no verdict), the wait before the next: 3 minutes, doubling to 30.
+// After a run that left something (needs-you, failed, no verdict), the wait before the next: 3 minutes, doubling to 20.
+// (2026-10-05) The ceiling was 30 minutes, the same as the silence after which ic lets the other side of the computer
+// adopt a sandbox whose keeper stopped writing its heartbeat (ic: sandbox/side.rs, `/history/.ic/keeper.json`). A
+// keeper backing off from a sandbox it could not fix would have looked silent and been adopted now and then, so the
+// ceiling stays well under that limit.
 const BACKOFF_FIRST_MS = 3 * 60_000;
-const BACKOFF_MAX_MS = 30 * 60_000;
+const BACKOFF_MAX_MS = 20 * 60_000;
 
 export const backoffMs = (failures: number): number => (failures <= 0 ? 0 : Math.min(BACKOFF_FIRST_MS * 2 ** (failures - 1), BACKOFF_MAX_MS));
+
+/* A "FIXED" IS NOT ALWAYS THE END OF IT. A sandbox that breaks, is restarted by ic, and breaks again a few minutes later
+   used to have its ladder wiped by every "fixed", so the keeper restarted it every three minutes for as long as it kept
+   breaking. ic now keeps a ledger of its own repairs (count and last time, in the sandbox's history), which is where the
+   lasting memory lives; this in-memory ladder only has to stop being the thing that forgets. So the first "fixed" after
+   repeated failures within the hour keeps the ladder where it was (the next failure waits longer still), and only a
+   second "fixed" in a row, a "healthy", or an hour without a failure clears it. (2026-10-05) */
+const REPEATED_FAILURES = 2;
+const FAILURES_REMEMBERED_MS = 60 * 60_000;
 
 // `--auto` is what makes the run safe unattended: ic applies only the fixes that need no yes and reports the others.
 export const keeperFixArgs = (slug?: string): string[] => ["sandbox", "fix", ...(slug === undefined ? [] : [slug]), "--auto", "--json", "--source", "agent"];
@@ -182,12 +197,82 @@ const answeringSlugs = (links: readonly LinkView[]): string[] => links.filter(({
 // Runners belong to a parent sandbox, which brings them back itself.
 const people = (slugs: readonly string[]): string[] => slugs.filter((slug) => !slug.startsWith("runner-"));
 
-// The sandboxes this machine hosts, for the resident's "is anything left to serve": the listing when Docker answers (it
-// alone knows a removed sandbox is gone), else this environment's records, which are all there is while Docker is down.
-export const hostedSlugs = async (listing: () => Promise<readonly string[]>, records: () => Promise<readonly string[]>): Promise<string[]> => {
+// One row of `ic sandbox list --json` as far as the keeper reads it: which sandbox, and the other side of this computer
+// that keeps it, when another does (`keptElsewhere`, absent for this side's own and from an older ic).
+export interface ListedSandbox {
+    readonly slug: string;
+    readonly keptElsewhere?: string | undefined;
+}
+
+/* WHOSE SANDBOXES THE KEEPER LOOKS AFTER (2026-10-05). On Windows, ic on Windows and ic in each WSL distro list every
+   sandbox on the one Docker engine, but only the side that created a sandbox keeps it, and every environment runs a
+   keeper. So each keeper sweeps only while its environment keeps a sandbox of its own: one the listing names without
+   `keptElsewhere` (a sandbox the other side has stopped keeping is listed without it once ic adopts it, so adoption
+   reaches this side by the same rule), or one this environment's ic still holds a record of that sits in ic's trash.
+   And a slug with no container and no trash entry is gone: a dead link or a leftover record naming it is not a reason
+   to run `ic sandbox fix` on it every few minutes for ever, which is what rog did for sandbox-2e8d89d75865. Absence
+   proves nothing until Docker has answered, though: until a listing has, the records are all there is, and the logon
+   case (Docker Desktop off after a reboot) is exactly when the keeper must still run. */
+export interface KeeperScope {
+    // The sandboxes this environment keeps, which are what a sweep is for; and those of them with a container, which are
+    // what ic acts on and what a sweep holds up front (none while no listing has answered: ic names what it acts on).
+    readonly own: readonly string[];
+    readonly running: readonly string[];
+    // Whether a slug still exists on this engine (a container, or an entry in ic's trash); always true while no listing
+    // has answered, since nothing can be told then.
+    readonly present: (slug: string) => boolean;
+    // The listed sandboxes another side keeps: never this keeper's to fix.
+    readonly elsewhere: ReadonlySet<string>;
+}
+
+// Pure over the last listing that answered (undefined while none has), this environment's records, and the slugs in
+// ic's trash (undefined when they could not be read, which counts as none: on doubt, nothing is acted on).
+export const keeperScope = (
+    listed: readonly ListedSandbox[] | undefined,
+    records: readonly string[],
+    trashed: readonly string[] | undefined,
+): KeeperScope => {
+    if (listed === undefined) {
+        return { own: people(records), running: [], present: () => true, elsewhere: new Set() };
+    }
+    const containers = new Set(listed.map((row) => row.slug));
+    const binned = new Set(trashed ?? []);
+    const mine = listed.filter((row) => row.keptElsewhere === undefined).map((row) => row.slug);
+    const recordedInTrash = records.filter((slug) => !containers.has(slug) && binned.has(slug));
+    return {
+        own: people([...new Set([...mine, ...recordedInTrash])]),
+        running: people(mine),
+        present: (slug) => containers.has(slug) || binned.has(slug),
+        elsewhere: new Set(listed.filter((row) => row.keptElsewhere !== undefined).map((row) => row.slug)),
+    };
+};
+
+// The sandboxes this machine hosts and this environment keeps, for the resident's "is anything left to serve": the
+// listing when Docker answers (it alone knows a removed sandbox is gone, and which side keeps the rest), else this
+// environment's records, which are all there is while Docker is down.
+export const hostedSlugs = async (listing: () => Promise<readonly ListedSandbox[]>, records: () => Promise<readonly string[]>): Promise<string[]> => {
     // allow(silent-catch): a listing that fails is Docker being down, which is exactly when the records answer instead
     const listed = await listing().catch(() => undefined);
-    return people(listed ?? (await records()));
+    return people(listed === undefined ? await records() : listed.filter((row) => row.keptElsewhere === undefined).map((row) => row.slug));
+};
+
+// ic's trash on this engine, read off the marker volume each removal leaves (`intentic-trashed-<unix seconds>-<slug>`,
+// ic: sandbox/trash.rs), which is the one place ic writes it down. Pure.
+export const trashedFrom = (volumes: string): string[] =>
+    volumes
+        .split(/\r?\n/)
+        .map((name) => /^intentic-trashed-\d+-(.+)$/.exec(name.trim())?.[1])
+        .filter((slug): slug is string => slug !== undefined);
+
+const exec = promisify(execFile);
+
+// Throws when docker does not answer: an unread trash is not an empty one.
+const readTrashed = async (): Promise<string[]> => {
+    const { stdout } = await exec("docker", ["volume", "ls", "--format", "{{.Name}}", "--filter", "name=intentic-trashed-"], {
+        timeout: 20_000,
+        windowsHide: true,
+    });
+    return trashedFrom(stdout);
 };
 
 /* THE ROUND. */
@@ -198,9 +283,12 @@ export interface KeeperSeams {
     readonly enabled: () => Promise<boolean>;
     // `ic sandbox fix`, for one sandbox or, with none named, every one this environment's ic knows.
     readonly fix: (slug: string | undefined, onLine: (line: string) => void) => Promise<IcRun>;
-    // `ic sandbox list --json`'s slugs, which throws while Docker is down; and the slugs of ic's records.
-    readonly listing: () => Promise<readonly string[]>;
+    // `ic sandbox list --json`'s rows, which throws while Docker is down; the slugs of ic's records; and the slugs in
+    // ic's trash on this engine, which throws when docker does not answer (asked only when a record names a sandbox the
+    // listing does not).
+    readonly listing: () => Promise<readonly ListedSandbox[]>;
     readonly records: () => Promise<readonly string[]>;
+    readonly trashed: () => Promise<readonly string[]>;
     // The sandboxes a swap is moving right now (ic's cutover records): the probation watch's, never the keeper's.
     readonly swapping: () => Promise<readonly string[]>;
     readonly links: () => readonly LinkView[];
@@ -208,7 +296,7 @@ export interface KeeperSeams {
     readonly loopback: ReadonlySet<string>;
     // Whether the probation watch is running ic right now: the keeper waits for it rather than racing it.
     readonly watching: () => boolean;
-    // The slugs a flow of this process is touching, and how the keeper marks the ones its own run may touch.
+    // The slugs a flow of this process is touching, and how the keeper marks the ones its own run acts on.
     readonly busy: ReadonlySet<string>;
     readonly hold: (slug: string) => () => void;
     // The clock, read after a run as well as before it: a wait is measured from when the run ended.
@@ -218,6 +306,9 @@ export interface KeeperSeams {
 interface Wait {
     readonly failures: number;
     readonly until: number;
+    // When the last of those failures was, and whether a "fixed" has already been let through without clearing them.
+    readonly failedAt?: number;
+    readonly fixedOnce?: boolean;
 }
 
 export interface KeeperState {
@@ -230,8 +321,10 @@ export interface KeeperState {
     // The last line said per sandbox (and per machine-wide subject, `:ic` and the like, which no slug can spell), so a
     // standing verdict is said once per stretch.
     readonly said: Map<string, string>;
-    // The last listing that answered, kept while Docker is down.
-    listed: readonly string[];
+    // The last listing that answered, kept while Docker is down; undefined until one has. ic's trash as read with it,
+    // undefined when it could not be read.
+    listed: readonly ListedSandbox[] | undefined;
+    trashed: readonly string[] | undefined;
     // Only one fix at a time, whoever asks.
     fixing: boolean;
     // The switch as last read, so turning it off or on is said once.
@@ -244,7 +337,8 @@ export const newKeeperState = (start: number): KeeperState => ({
     unavailable: { failures: 0, until: 0 },
     waits: new Map(),
     said: new Map(),
-    listed: [],
+    listed: undefined,
+    trashed: undefined,
     fixing: false,
     on: undefined,
 });
@@ -284,34 +378,55 @@ const minutes = (ms: number): string => `${Math.round(ms / 60_000)} min`;
 // The wait after a sandbox's n-th unsettled run in a row, said with the line that begins it.
 const waitAfter = (state: KeeperState, slug: string, now: number): number => {
     const failures = (state.waits.get(slug)?.failures ?? 0) + 1;
-    state.waits.set(slug, { failures, until: now + backoffMs(failures) });
+    state.waits.set(slug, { failures, until: now + backoffMs(failures), failedAt: now });
     return backoffMs(failures);
 };
 
-// One sandbox's verdict. Settled resets its wait to a sweep's length (a link that stays down after ic found nothing
-// wrong is not this machine's to fix, and is not asked about every ten seconds); anything else doubles it. The line is
-// said when it is news.
-const noteAnswer = (state: KeeperState, answer: FixAnswer, log: Log, now: number): void => {
+// Whether a "fixed" clears a sandbox's ladder (see REPEATED_FAILURES): not the first one after repeated failures within
+// the hour. Pure.
+export const fixedClears = (wait: Pick<Wait, "failures" | "failedAt" | "fixedOnce"> | undefined, now: number): boolean =>
+    wait === undefined ||
+    wait.failures < REPEATED_FAILURES ||
+    wait.fixedOnce === true ||
+    wait.failedAt === undefined ||
+    now - wait.failedAt > FAILURES_REMEMBERED_MS;
+
+// One sandbox's verdict; answers whether it cleared the sandbox's ladder. Settled resets its wait to a sweep's length (a
+// link that stays down after ic found nothing wrong is not this machine's to fix, and is not asked about every ten
+// seconds), unless it is a "fixed" that does not clear (fixedClears), which keeps the ladder; anything else doubles it.
+// The line is said when it is news.
+const noteAnswer = (state: KeeperState, answer: FixAnswer, log: Log, now: number): boolean => {
     const line = verdictLine(answer);
     if (settled(answer)) {
+        const held = state.waits.get(answer.slug);
+        const fixed = answer.report.outcome === "fixed";
+        if (fixed && held !== undefined && !fixedClears(held, now)) {
+            const wait = Math.max(SWEEP_EVERY_MS, backoffMs(held.failures));
+            state.waits.set(answer.slug, { ...held, until: now + wait, fixedOnce: true });
+            state.said.set(answer.slug, line);
+            log(`${line} — after ${held.failures} failures within the hour, so the next look waits ${minutes(wait)}`);
+            return false;
+        }
         state.waits.set(answer.slug, { failures: 0, until: now + SWEEP_EVERY_MS });
         // "fixed" is always news; a standing "healthy" is said once.
-        if (answer.report.outcome === "fixed") {
+        if (fixed) {
             state.said.set(answer.slug, line);
             log(line);
         } else {
             sayOnce(state, answer.slug, line, log);
         }
-        return;
+        return true;
     }
     const wait = waitAfter(state, answer.slug, now);
     if (state.said.get(answer.slug) !== line) {
         state.said.set(answer.slug, line);
         log(`${line} — looking again in ${minutes(wait)}`);
     }
+    return false;
 };
 
-// Whether the run left nothing to wait out: false for an unavailable ic, or any sandbox it could not settle.
+// Whether the run left nothing to wait out: false for an unavailable ic, or any sandbox it could not settle or whose
+// "fixed" kept its ladder.
 const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log: Log, now: number): boolean => {
     const reading = readFixRun(run);
     if ("unavailable" in reading) {
@@ -326,9 +441,7 @@ const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log:
     }
     state.unavailable = { failures: 0, until: 0 };
     state.said.delete(":ic");
-    for (const answer of reading.answers) {
-        noteAnswer(state, answer, log, now);
-    }
+    const cleared = reading.answers.map((answer) => noteAnswer(state, answer, log, now));
     if (run.code === EXIT_RESTART) {
         sayOnce(state, ":restart", "keeper: this computer needs a restart or a sign-out to finish what ic started.", log);
     } else {
@@ -340,17 +453,21 @@ const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log:
         state.said.delete(asked);
         log(`keeper ${asked}: ic gave no verdict (${lastLine(run.output)?.trim() ?? "no output"}) — looking again in ${minutes(wait)}`);
     }
-    return !unanswered && reading.answers.every(settled);
+    return !unanswered && cleared.every(Boolean);
 };
 
-// One run of `ic sandbox fix`, the only one in flight: every sandbox it may touch is marked for its length, so the
-// other rounds leave them alone and this agent does not restart under it. What ic is doing is said as it happens.
+// One run of `ic sandbox fix`, the only one in flight. The sandboxes it acts on are held for its length, so the other
+// rounds leave them alone: the ones it was pointed at, and any other ic names as it works. What ic is doing is said as
+// it happens.
 const runFix = async (state: KeeperState, seams: KeeperSeams, slug: string | undefined, touches: readonly string[], log: Log): Promise<IcRun> => {
     state.fixing = true;
-    const releases = touches.map((touched) => seams.hold(touched));
+    const releases = new Map(touches.map((touched) => [touched, seams.hold(touched)] as const));
     const doings = new Set<string>();
     const onLine = (line: string): void => {
         const progress = fixProgress(line);
+        if (progress?.slug !== undefined && !releases.has(progress.slug)) {
+            releases.set(progress.slug, seams.hold(progress.slug));
+        }
         const doing = progress?.doing;
         const about = progress?.slug ?? slug;
         const said = `keeper${about === undefined ? "" : ` ${about}`}: ${doing ?? ""}`;
@@ -365,36 +482,62 @@ const runFix = async (state: KeeperState, seams: KeeperSeams, slug: string | und
         // runIc throws when this machine has no ic at all: the same as an ic without the verb, waited out the same way.
         return { code: 127, output: errorMessage(error) };
     } finally {
-        for (const release of releases) {
+        for (const release of releases.values()) {
             release();
         }
         state.fixing = false;
     }
 };
 
-// Every sandbox, when the sweep is due: its cadence stretches on the same ladder while a sweep leaves something.
-const sweep = async (state: KeeperState, seams: KeeperSeams, known: ReadonlySet<string>, log: Log): Promise<void> => {
-    // allow(silent-catch): a listing that fails is Docker being down; the last one that answered still names this machine's sandboxes
-    state.listed = await seams.listing().catch(() => state.listed);
-    const touches = [...new Set([...known, ...state.listed])];
-    const run = await runFix(state, seams, undefined, touches, log);
+// The listing again, and ic's trash with it when a record names a sandbox the listing does not: what a sweep decides on,
+// and what the links are judged by until the next. A listing that fails keeps the last one that answered.
+const relist = async (state: KeeperState, seams: KeeperSeams, records: readonly string[]): Promise<void> => {
+    // allow(silent-catch): a listing that fails is Docker being down; the last one that answered (and the trash read with it) still stands
+    const listed = await seams.listing().catch(() => undefined);
+    if (listed === undefined) {
+        return;
+    }
+    state.listed = listed;
+    const containers = new Set(listed.map((row) => row.slug));
+    // allow(silent-catch): a trash that cannot be read is none (keeperScope): no record is taken for a sandbox on a guess
+    state.trashed = records.some((slug) => !containers.has(slug)) ? await seams.trashed().catch(() => undefined) : [];
+};
+
+// Every sandbox this environment keeps, when the sweep is due: its cadence stretches on the same ladder while a sweep
+// leaves something. An environment that keeps none has nothing to sweep (KeeperScope says why), and says so once.
+const sweep = async (state: KeeperState, seams: KeeperSeams, scope: KeeperScope, log: Log): Promise<void> => {
+    if (scope.own.length === 0) {
+        sayOnce(state, ":none", "keeper: this environment keeps no sandbox of its own, so there is nothing to sweep.", log);
+        state.sweepDueAt = seams.now() + SWEEP_EVERY_MS;
+        return;
+    }
+    state.said.delete(":none");
+    const run = await runFix(state, seams, undefined, scope.running, log);
     const now = seams.now();
     const clean = noteRun(state, run, undefined, log, now);
     state.sweepFailures = clean ? 0 : state.sweepFailures + 1;
     state.sweepDueAt = now + Math.max(SWEEP_EVERY_MS, backoffMs(state.sweepFailures));
 };
 
-// The first sandbox of this machine whose link has failed for a minute and that nothing is waiting out.
+// The first sandbox of this machine whose link has failed for a minute, that still exists here and is this side's, and
+// that nothing is waiting out. A gone one is said once and left alone.
 const dueTarget = async (
     state: KeeperState,
     seams: KeeperSeams,
     links: readonly LinkView[],
     known: ReadonlySet<string>,
+    scope: KeeperScope,
+    log: Log,
     now: number,
 ): Promise<string | undefined> => {
-    const candidates = unreachableHere(links, known, seams.loopback, now).filter(
-        (slug) => !seams.busy.has(slug) && (state.waits.get(slug)?.until ?? 0) <= now,
-    );
+    const here = unreachableHere(links, known, seams.loopback, now).filter((slug) => {
+        if (!scope.present(slug)) {
+            sayOnce(state, slug, `keeper ${slug}: its link is down, but this engine has no container and no trash entry for it, so there is nothing here to fix.`, log);
+            return false;
+        }
+        return !scope.elsewhere.has(slug);
+    });
+    const candidates = here.filter((slug) => !seams.busy.has(slug) && (state.waits.get(slug)?.until ?? 0) <= now);
     if (candidates.length === 0) {
         return undefined;
     }
@@ -413,13 +556,20 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
     for (const slug of answeringSlugs(links)) {
         state.waits.delete(slug);
     }
-    const known = new Set([...(await seams.records()), ...state.listed]);
-    const now = seams.now();
-    if (now >= state.sweepDueAt && seams.busy.size === 0) {
-        await sweep(state, seams, known, log);
-        return;
+    const records = await seams.records();
+    const sweepDue = seams.now() >= state.sweepDueAt && seams.busy.size === 0;
+    if (sweepDue) {
+        await relist(state, seams, records);
     }
-    const target = await dueTarget(state, seams, links, known, now);
+    const scope = keeperScope(state.listed, records, state.trashed);
+    if (sweepDue) {
+        await sweep(state, seams, scope, log);
+        if (scope.own.length > 0) {
+            return;
+        }
+    }
+    const known = new Set([...records, ...(state.listed ?? []).map((row) => row.slug)]);
+    const target = await dueTarget(state, seams, links, known, scope, log, seams.now());
     if (target !== undefined) {
         const run = await runFix(state, seams, target, [target], log);
         noteRun(state, run, target, log, seams.now());
@@ -433,20 +583,31 @@ export interface KeeperWiring {
     readonly watching: () => boolean;
 }
 
+// How the keeper holds a sandbox its run acts on: as a flow that does not move a container (machineKeeperSeams says why).
+export const KEEPER_HOLD = { moves: false } as const;
+
 export const keeperOn = async (): Promise<boolean> => (await readMachineConfig()).sandboxKeeper !== false;
 
 export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring): KeeperSeams => ({
     enabled: keeperOn,
     fix: async (slug, onLine) => await runIc(keeperFixArgs(slug), onLine, {}, { deadlineMs: FIX_DEADLINE_MS }),
-    listing: async () => (await fleet()).map((box) => box.slug),
+    listing: async () => (await fleet()).map(({ slug, keptElsewhere }) => ({ slug, keptElsewhere })),
     records: async () => await readChannelSlugs(),
+    trashed: readTrashed,
     swapping: async () => swapsUnderway(await readSwapRecords(), Date.now()),
     links,
     loopback,
     watching,
     busy: icInFlight,
-    // A fix may restart a container, so it is held as a flow that moves one.
-    hold: (slug) => holdIcFlow(slug, { moves: true }),
+    /* HELD AS FIXING, NOT AS MOVING (2026-10-05). The other rounds leave a held sandbox alone, which a fix needs; an
+       agent restart (auto-upgrade, Update and Restart) waits only for a flow that MOVES a container. A fix used to be
+       held as one, over every slug it might touch, and rog put off its agent upgrade seven times "while" eight
+       sandboxes, one with no container and two in the trash, were "mid-swap". A fix starts or restarts a container at
+       most. On POSIX ic outlives an agent restart (a process group of its own); on Windows a restart ends the run, and
+       the next sweep starts it again. The one step of a fix an agent restart must never land in, finishing an
+       interrupted cutover, is written in ic's own cutover record, which every restart already waits for
+       (swap-records.ts). */
+    hold: (slug) => holdIcFlow(slug, KEEPER_HOLD),
     now: Date.now,
 });
 

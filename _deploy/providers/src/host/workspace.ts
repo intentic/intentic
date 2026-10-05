@@ -5,6 +5,7 @@ import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
+import { stampLabelPairs, stampOf } from "../core/stamp.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { connectWithRetry, sshExecutor } from "../core/ssh.js";
 
@@ -165,7 +166,9 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                     `${parsed.internalIp}:${parsed.previewPort}:${parsed.previewPort}`,
                     `${parsed.internalIp}:${parsed.daemonPort}:${parsed.daemonPort}`,
                 ],
-                labels: [`intentic.id=${ctx.id}`, `intentic.type=workspace`, `intentic.tools=${digest}`],
+                // The owner is stamped on every (re)create but not read back: recreating the sandbox just to add a label
+                // would cut off the agent working in it, possibly this very apply. It is adopted on its next recreate.
+                labels: [...stampLabelPairs("workspace", stampOf(ctx)), `intentic.tools=${digest}`],
                 dns: ["1.1.1.1", "1.0.0.1"],
                 env: [
                     ["WORKSPACE_ROOT", WORKSPACE_ROOT],
@@ -205,5 +208,5 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
             await session.dispose();
         }
     },
-    list: (sources, ctx) => listStampedContainers(executor, "workspace", sources, ctx.log),
+    list: (sources, ctx) => listStampedContainers(executor, "workspace", sources, ctx),
 });

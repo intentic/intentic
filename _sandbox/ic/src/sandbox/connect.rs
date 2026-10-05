@@ -363,6 +363,8 @@ fn connect(
     // Created first because the container joins it: a Windows self-host target (the dind container above) is
     // reached by name on it, and nothing else on this machine is.
     crate::sandbox::ensure_network(&slug)?;
+    // A re-run over a running sandbox replaces its container: the turns that cuts are picked up again (resume.rs).
+    crate::sandbox::resume::ask(&container);
     docker::quiet(&["rm", "-f", &container]);
 
     // Windows self-host: the Docker-in-Docker deploy target, ALONGSIDE the sandbox on Docker Desktop, not
@@ -445,17 +447,33 @@ fn connect(
         // A person's sandbox is set up by its owner in the browser; the seed is the runner/fleet door.
         definition_b64: None,
     };
-    let argv = contract::run_command(&request, &env_pairs, false, &[], &[], &log)?;
+    // What ic adds to the image's run line (labels.rs): its labels, and HOST_ENV. HOST_ENV rides here and not in the
+    // pairs above because the run contract replays only the names it lists, and the images already published do not
+    // list it (2026-10-05): handed over with the pairs, it would be dropped before the container ever saw it.
+    let stamped_run = stamped_run(&slug, &crate::sandbox::side::here());
+    let argv = crate::sandbox::labels::into_run(
+        &contract::run_command(&request, &env_pairs, false, &[], &[], &log)?,
+        &stamped_run,
+    );
+    // The volumes are made here, labelled, instead of by `docker run` in passing, and this run remembers which it
+    // made: a first setup that fails to start leaves none of them behind (audit 2026-10 item 14), and a re-run's
+    // existing volumes, which hold a sandbox's data, are never among them.
+    let made = make_volumes(&slug);
     log.section(&format!("docker run {sandbox_image}"));
     // Two attempts: the loopback shortcut (127.0.0.1:<derived port>:8787, a browser on this machine skipping
     // the tunnel) is the one part whose failure doesn't mean a broken sandbox — docker refuses the WHOLE
     // launch when the port is held, so the retry drops just the shortcut.
     if docker::run_argv(&argv, &log).is_err() {
         docker::quiet(&["rm", "-f", &container]);
-        let retry = contract::run_command(&request, &env_pairs, true, &[], &[], &log)?;
+        let retry = crate::sandbox::labels::into_run(
+            &contract::run_command(&request, &env_pairs, true, &[], &[], &log)?,
+            &stamped_run,
+        );
         if let Err(refusal) = docker::run_argv(&retry, &log) {
+            docker::quiet(&["rm", "-f", &container]);
+            let left = remove_made(&made);
             bail!(
-                "starting the sandbox failed — the full docker error is saved to {}.\n{refusal}",
+                "starting the sandbox failed — the full docker error is saved to {}.\n{refusal}{left}",
                 log.path.display()
             );
         }
@@ -526,6 +544,50 @@ fn connect(
 
     ending(&slug, &container, &sandbox_public_url, self_host);
     Ok(())
+}
+
+/// The options ic puts into a new sandbox's run line beside the image's own: its labels, and HOST_ENV when this
+/// side's environment is known. Pure.
+fn stamped_run(slug: &str, here: &crate::sandbox::side::Side) -> Vec<String> {
+    let mut extra =
+        crate::sandbox::labels::args(slug, crate::sandbox::labels::Kind::Sandbox, &here.wire());
+    if let Some(env) = &here.env {
+        extra.extend(["-e".to_string(), format!("HOST_ENV={env}")]);
+    }
+    extra
+}
+
+/// The volumes the run contract mounts, made with ic's labels where they do not exist yet; returns the ones made now.
+pub(crate) fn make_volumes(slug: &str) -> Vec<String> {
+    use crate::sandbox::labels::{create_volume, Kind};
+    [
+        (format!("intentic-workspace-{slug}"), Kind::VolumeWorkspace),
+        (format!("intentic-history-{slug}"), Kind::VolumeHistory),
+        (format!("intentic-docker-{slug}"), Kind::VolumeDocker),
+    ]
+    .into_iter()
+    .filter(|(name, kind)| create_volume(name, slug, *kind))
+    .map(|(name, _)| name)
+    .collect()
+}
+
+/// Remove the volumes this run made, after a launch that never started: they hold nothing yet. Says which could not
+/// go, as the tail of the failure message.
+pub(crate) fn remove_made(made: &[String]) -> String {
+    let left: Vec<&String> = made
+        .iter()
+        .filter(|volume| !docker::ok(&["volume", "rm", volume.as_str()]))
+        .collect();
+    if left.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n       These empty volumes this setup made could not be removed: {} (docker volume rm <name>).",
+        left.iter()
+            .map(|volume| volume.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 /* WHAT THIS RUN CAN PROMISE ABOUT REACHABILITY — three states, and the middle one is the reason this is a function rather than a boolean. */
@@ -615,7 +677,7 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
 /// `intentic-sandbox:dev` has none (its `:` is the TAG separator, not a port), so docker would resolve it
 /// against Docker Hub — which is why such a reference is never pulled: that pull can only ever fail, and its
 /// "denied" output is pure noise on top of a dev image that is sitting right there locally.
-fn is_registryless(image: &str) -> bool {
+pub(crate) fn is_registryless(image: &str) -> bool {
     match image.split('/').next() {
         Some(first) if image.contains('/') => {
             !(first.contains('.') || first.contains(':') || first == "localhost")
@@ -871,6 +933,45 @@ pub fn host_platform() -> &'static str {
     }
 }
 
+/// Which environment of this machine this ic runs in, beside the platform above (side.rs): `windows`, the distro's
+/// own name inside WSL, `macos` or `linux` elsewhere. Two WSL distros on one PC both say `linux` as their platform,
+/// and this is what tells them apart. None inside WSL when the distro is not named (a process WSL did not start
+/// itself, a systemd unit): a guessed name could disagree with the one stamped by the same distro's next run and leave
+/// its own sandbox to nobody, where no name compares on the platform alone.
+pub fn host_env() -> Option<String> {
+    env_named(
+        cfg!(windows),
+        cfg!(target_os = "macos"),
+        std::env::var("WSL_DISTRO_NAME").ok(),
+        || {
+            crate::sandbox::fix::host::inside_wsl(
+                &std::fs::read_to_string("/proc/version").unwrap_or_default(),
+            )
+        },
+    )
+}
+
+/// The environment's name from what the process can see. Pure apart from `in_wsl`, asked only when it decides.
+pub fn env_named(
+    windows: bool,
+    macos: bool,
+    distro: Option<String>,
+    in_wsl: impl FnOnce() -> bool,
+) -> Option<String> {
+    if windows {
+        return Some("windows".to_string());
+    }
+    if macos {
+        return Some("macos".to_string());
+    }
+    if let Some(distro) = distro.map(|name| name.trim().to_string()) {
+        if !distro.is_empty() {
+            return Some(distro);
+        }
+    }
+    (!in_wsl()).then(|| "linux".to_string())
+}
+
 /// What to call this machine in the sandbox's UI, and how the agent will address it ("run the tests on
 /// ada-laptop"). The hostname is what a person recognises; the daemon cannot read it for itself, since inside
 /// the container the hostname is the container's own.
@@ -912,8 +1013,16 @@ fn start_dind_target(slug: &str, log: &Log) -> Result<(String, String, String)> 
     let dind_volume = format!("intentic-dind-docker-{slug}");
     ui::note("starting the Docker-in-Docker deploy target…");
     docker::quiet(&["rm", "-f", &dind_container]);
-    let run = [
-        "run",
+    crate::sandbox::labels::create_volume(
+        &dind_volume,
+        slug,
+        crate::sandbox::labels::Kind::VolumeDindDocker,
+    );
+    let labels = crate::sandbox::labels::here(slug, crate::sandbox::labels::Kind::Dind);
+    let mut run: Vec<&str> = vec!["run"];
+    run.extend(labels.iter().map(String::as_str));
+    let mount = format!("{dind_volume}:/var/lib/docker");
+    run.extend_from_slice(&[
         "-d",
         "--privileged",
         "--restart",
@@ -925,13 +1034,13 @@ fn start_dind_target(slug: &str, log: &Log) -> Result<(String, String, String)> 
         "-e",
         "DOCKER_TLS_CERTDIR=",
         "-v",
-        &format!("{dind_volume}:/var/lib/docker"),
+        &mount,
         "--dns",
         "1.1.1.1",
         "--dns",
         "1.0.0.1",
         &dind_image,
-    ];
+    ]);
     docker::capture(&run).map_err(|err| {
         crate::util::Fail(format!(
             "failed to start the Docker-in-Docker deploy target: {}",
@@ -1076,6 +1185,42 @@ mod tests {
         assert!(sync_unfinished(&project).contains("to sync your folder"));
         let workspace = project_dir::placement(None, false, true).unwrap();
         assert!(sync_unfinished(&workspace).contains("Desktop sync card"));
+    }
+
+    #[test]
+    fn a_new_sandbox_carries_ic_labels_and_its_environment_beside_the_contracts_line() {
+        use crate::sandbox::side::Side;
+        let extra = stamped_run("sandbox-abc", &Side::new("linux", Some("archlinux")));
+        assert!(extra.contains(&"dev.intentic.sandbox=sandbox-abc".to_string()));
+        assert!(extra.contains(&"dev.intentic.kind=sandbox".to_string()));
+        assert!(extra.contains(&"dev.intentic.side=linux/archlinux".to_string()));
+        assert_eq!(&extra[extra.len() - 2..], ["-e", "HOST_ENV=archlinux"]);
+        // An environment that is not known is not guessed at.
+        let unknown = stamped_run("x", &Side::new("linux", None));
+        assert!(!unknown.iter().any(|arg| arg.starts_with("HOST_ENV")));
+    }
+
+    #[test]
+    fn the_environment_names_the_distro_inside_wsl_and_nothing_it_cannot_know() {
+        assert_eq!(
+            env_named(true, false, None, || false).as_deref(),
+            Some("windows")
+        );
+        assert_eq!(
+            env_named(false, true, None, || false).as_deref(),
+            Some("macos")
+        );
+        assert_eq!(
+            env_named(false, false, Some("archlinux".into()), || true).as_deref(),
+            Some("archlinux")
+        );
+        assert_eq!(
+            env_named(false, false, None, || false).as_deref(),
+            Some("linux")
+        );
+        // Inside WSL without its name: unknown, so the platform alone is compared, never a guess.
+        assert_eq!(env_named(false, false, None, || true), None);
+        assert_eq!(env_named(false, false, Some(" ".into()), || true), None);
     }
 
     #[test]

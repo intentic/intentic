@@ -444,7 +444,8 @@ async fn the_front_answers_its_vitals_itself_whatever_state_node_is_in() {
     assert!(refused.starts_with("HTTP/1.1 400 "), "{refused}");
     assert_eq!(vitals(daemon, &own).await.1.node, NodeLink::Up);
 
-    // A restarted Node's first frame takes the link from the old one, and it is not up until it says hello.
+    // A second daemon's first frame no longer takes the link from one that said hello (2026-10-05): it is held back
+    // until its own hello, which takes the link only when it names a newer start.
     let mut next = tokio::net::UnixStream::connect(harness.dir.join("front.sock"))
         .await
         .unwrap();
@@ -454,6 +455,38 @@ async fn the_front_answers_its_vitals_itself_whatever_state_node_is_in() {
     next.write_all(&front_wire::frame(&first).unwrap())
         .await
         .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(vitals(daemon, &own).await.1.node, NodeLink::Up);
+    let newer = FromNode::Hello {
+        build: "test".into(),
+        pid: 2,
+        generation: Some(2),
+    };
+    next.write_all(&front_wire::frame(&newer).unwrap())
+        .await
+        .unwrap();
+    // The newer start holds the link: it is told where the tunnel stands, as every Node that says hello is, and the
+    // front's next ping goes to it.
+    let pinged = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let mut length = [0_u8; front_wire::LENGTH_BYTES];
+            next.read_exact(&mut length).await.unwrap();
+            let mut told = vec![0; u32::from_be_bytes(length) as usize];
+            next.read_exact(&mut told).await.unwrap();
+            if let front_wire::ToNode::Ask {
+                question: front_wire::Question::Ping,
+                ..
+            } = serde_json::from_slice::<front_wire::ToNode>(&told).unwrap()
+            {
+                return;
+            }
+        }
+    });
+    pinged
+        .await
+        .expect("the front pings the daemon holding the link");
+    // And once it goes, the front reads Node as restarting.
+    drop(next);
     let restarting = vitals_once(daemon, &own, |read| read.node != NodeLink::Up).await;
     assert_eq!(
         (restarting.node, restarting.lag_ms),

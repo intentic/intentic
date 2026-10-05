@@ -5,7 +5,7 @@ import { OUTPUTS } from "@intentic/resources";
 import { resolveInputs } from "../resolve-inputs.js";
 import { createStore, type OutputStore, PENDING } from "../store.js";
 import type { EngineConfig, PlanOutcome, Step } from "../types.js";
-import { decideDiff, makeContext, narratedRead, requireProvider } from "./reconcile.js";
+import { decideDiff, makeContext, narratedRead, requireProvider, runScope } from "./reconcile.js";
 
 // A prefix output ("appWebhook:") names no key of its own, so only seed PENDING for actual $refs in the graph
 // matching it, found by walking each node's inputs.
@@ -23,8 +23,8 @@ const seedPendingRefs = (graph: DesiredStateGraph, store: OutputStore, prefix: s
 // Dry run: read actual state and decide create/update/noop per node without mutating. Existing resources seed
 // the store from their real observed outputs; pending creates seed PENDING.
 export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Promise<PlanOutcome> => {
-    const env = config.env ?? process.env;
-    const log = config.log ?? console.log;
+    const scope = runScope(config);
+    const { env, log } = scope;
     const emit = config.onEvent ?? (() => {});
     const store = createStore();
     const steps: Step[] = [];
@@ -36,7 +36,7 @@ export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Prom
         }
         const type = node.type as ResourceType;
         const provider = requireProvider(config.providers, type, id);
-        const ctx = makeContext(id, store, env, log);
+        const ctx = makeContext(id, store, scope);
         // Announce the read before it starts: reads go over live SSH/HTTP and can take seconds, and a progress consumer
         // needs to name the node currently being checked.
         emit({ kind: "node", phase: "plan", state: "start", id, type });
@@ -59,7 +59,7 @@ export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Prom
             continue;
         }
 
-        const result = decideDiff(provider, node, inputs, observed);
+        const result = decideDiff(provider, node, inputs, observed, scope.owner);
         steps.push(result.action === "update" ? { id, type, action: "update", reason: result.reason } : { id, type, action: "noop" });
         emit(
             result.action === "update"

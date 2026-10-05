@@ -71,6 +71,57 @@ pub struct SandboxVitals {
     pub uptime_s: u32,
     /// The container's pressure stall; null where the cgroup's pressure files cannot be read.
     pub pressure: Option<Pressure>,
+    /// Where the ingress tunnel stands and how often it dropped (2026-10-05: a tunnel that dropped once a minute for
+    /// four hours was counted nowhere). Absent from an older front.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub tunnel: Option<TunnelVitals>,
+}
+
+/// The ingress tunnel as the front holds it: the interactive socket, which every request can ride, and QUIC beside it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct TunnelVitals {
+    pub state: TunnelState,
+    /// How many times a registered interactive socket dropped in the last hour.
+    pub drops_last_hour: u32,
+    /// Where the copy holding this sandbox's tunnel runs, as the edge named it, while `state` is `elsewhere`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub holder: Option<String>,
+    /// Whether a QUIC connection is held beside the socket.
+    pub quic: bool,
+}
+
+/// Where the front's tunnel stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum TunnelState {
+    /// No tunnel is configured: the sandbox is reachable on loopback only.
+    Off,
+    /// Configured and not held right now: dialling, or waiting to redial.
+    Dialling,
+    /// The edge holds the interactive socket.
+    Held,
+    /// Another copy of this sandbox holds the tunnel, and the edge refused this one three times in a row; the front
+    /// dials every 15 minutes meanwhile.
+    Elsewhere,
+    /// The platform deleted this sandbox, and the front stopped dialling.
+    Deleted,
+}
+
+impl TunnelState {
+    pub const ALL: [Self; 5] = [
+        Self::Off,
+        Self::Dialling,
+        Self::Held,
+        Self::Elsewhere,
+        Self::Deleted,
+    ];
 }
 
 /// Where the front's control link to Node stands.
@@ -211,10 +262,39 @@ mod tests {
                 memory: 0.0,
                 io: 1.5,
             }),
+            tunnel: None,
         };
         assert_eq!(
             serde_json::to_string(&vitals).unwrap(),
             r#"{"node":"restarting","lagMs":null,"restarts":2,"uptimeS":3600,"pressure":{"cpu":12.34,"memory":0.0,"io":1.5}}"#
+        );
+        let flapping = SandboxVitals {
+            tunnel: Some(TunnelVitals {
+                state: TunnelState::Elsewhere,
+                drops_last_hour: 171,
+                holder: Some("rog (linux)".into()),
+                quic: false,
+            }),
+            ..vitals
+        };
+        assert!(
+            serde_json::to_string(&flapping).unwrap().ends_with(
+                r#""tunnel":{"state":"elsewhere","dropsLastHour":171,"holder":"rog (linux)","quic":false}}"#
+            )
+        );
+        let states: Vec<String> = TunnelState::ALL
+            .iter()
+            .map(|state| serde_json::to_string(state).unwrap())
+            .collect();
+        assert_eq!(
+            states,
+            [
+                r#""off""#,
+                r#""dialling""#,
+                r#""held""#,
+                r#""elsewhere""#,
+                r#""deleted""#
+            ]
         );
         let spellings: Vec<String> = NodeLink::ALL
             .iter()

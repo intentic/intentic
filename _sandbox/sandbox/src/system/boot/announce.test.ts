@@ -46,7 +46,7 @@ const requestMock = jest.fn((url: URL, _opts: unknown, cb: (res: EventEmitter & 
 });
 jest.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
 
-const { createAnnouncer } = await import("./announce.js");
+const { createAnnouncer, HEARTBEAT_MS } = await import("./announce.js");
 
 const config = {
     platform: { url: "https://host.docker.internal:6480" },
@@ -79,22 +79,89 @@ const failForever = (outcome: { err?: boolean; status?: number }): void => {
 };
 
 describe("createAnnouncer", () => {
-    it("announces this build's version beside the address it is reached at", () => {
+    it("announces this build's version beside the address it is reached at, and which copy it is", () => {
         outcomes.push({ status: 200 });
         createAnnouncer(config, logger).start();
-        expect(calls).toEqual([{ path: "/sandbox/announce", body: { daemonUrl: "https://sandbox-x.intentic.dev", version } }]);
+        expect(calls).toEqual([
+            { path: "/sandbox/announce", body: { daemonUrl: "https://sandbox-x.intentic.dev", version, instance: expect.any(String) } },
+        ]);
     });
 
-    it("registers once on a 200 and then goes silent: never a heartbeat", () => {
-        outcomes.push({ status: 200 });
-        createAnnouncer(config, logger).start();
+    /* WHICH COPY (2026-10-05): one id for this process's life, or the front's for the container's; and where it runs. */
+    describe("which copy it is", () => {
+        afterEach(() => {
+            delete process.env["INTENTIC_INSTANCE"];
+            delete process.env["HOST_ENV"];
+        });
 
-        expect(requestMock).toHaveBeenCalledTimes(1);
-        jest.advanceTimersByTime(120_000);
-        expect(requestMock).toHaveBeenCalledTimes(1);
+        it("names the same instance on every announce of this process, its heartbeats included", async () => {
+            createAnnouncer(config, logger).start();
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 1.2);
+            const named = calls.map((call) => (call.body as { instance: string }).instance);
+            expect(named).toHaveLength(2);
+            expect(new Set(named).size).toBe(1);
+        });
+
+        it("names the container's instance when the front sets one, and the machine and side it runs on", () => {
+            process.env["INTENTIC_INSTANCE"] = "front-7f3a";
+            process.env["HOST_ENV"] = "Ubuntu";
+            createAnnouncer({ ...config, hostLabel: "rog", hostPlatform: "linux" } as typeof config, logger).start();
+            expect(calls[0]?.body).toMatchObject({ instance: "front-7f3a", host: "rog", os: "Ubuntu" });
+        });
+
+        it("names the platform `ic` stamped as its side when no environment is set, and leaves out what is unknown", () => {
+            createAnnouncer({ ...config, hostLabel: "", hostPlatform: "windows" } as typeof config, logger).start();
+            expect(calls[0]?.body).not.toHaveProperty("host");
+            expect(calls[0]?.body).toMatchObject({ os: "windows" });
+        });
     });
 
-    it("retries a failed attempt with backoff, then stops the moment it's acked", async () => {
+    /* THE HEARTBEAT (2026-10-05). Registered, it announces again about once an hour, so the platform's `lastSeenAt`
+     * says the sandbox ran recently rather than when it first registered. */
+    describe("heartbeat", () => {
+        it("is silent for the better part of an hour after a 200, then announces again", async () => {
+            createAnnouncer(config, logger).start();
+            expect(requestMock).toHaveBeenCalledTimes(1);
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 0.85);
+            expect(requestMock).toHaveBeenCalledTimes(1);
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 0.3);
+            expect(requestMock).toHaveBeenCalledTimes(2);
+        });
+
+        it("logs a heartbeat that lands only when it is news", async () => {
+            const info = jest.fn();
+            createAnnouncer(config, { info, warn: jest.fn() } as unknown as Parameters<typeof createAnnouncer>[1]).start();
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 2.5);
+            expect(requestMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+            expect(info).toHaveBeenCalledTimes(1);
+        });
+
+        it("ends for good on a deletion record, as a registration does", async () => {
+            outcomes.push({ status: 200 }, { status: 410 });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 1.2);
+            expect(announcer.status()).toMatchObject({ state: "rejected", reason: "deleted", retrying: false });
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 3);
+            expect(requestMock).toHaveBeenCalledTimes(2);
+        });
+
+        it("goes back to asking from the shortest wait when the platform has forgotten the sandbox", async () => {
+            // No jitter, so the heartbeat lands on the hour exactly.
+            const random = jest.spyOn(Math, "random").mockReturnValue(0.5);
+            outcomes.push({ status: 200 }, { status: 404 }, { status: 200 });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await advanceTimersByTimeAsync(HEARTBEAT_MS);
+            expect(announcer.status()).toMatchObject({ state: "rejected", reason: "unknown", retrying: true });
+            await advanceTimersByTimeAsync(2_000);
+            expect(announcer.status().state).toBe("registered");
+            expect(requestMock).toHaveBeenCalledTimes(3);
+            random.mockRestore();
+        });
+    });
+
+    it("retries a failed attempt with backoff, then waits for its heartbeat the moment it's acked", async () => {
         outcomes.push({ err: true }, { status: 200 });
         createAnnouncer(config, logger).start();
         expect(requestMock).toHaveBeenCalledTimes(1);
@@ -241,7 +308,11 @@ describe("createAnnouncer", () => {
             announcer.start();
             await settle();
             outcomes.length = 0;
-            outcomes.push({ status: 404 }, { status: 200, body: `{"ok":true,"sandboxId":"adopted"}` }, { status: 200, body: `{"ok":true,"identity":"id-2"}` });
+            outcomes.push(
+                { status: 404 },
+                { status: 200, body: `{"ok":true,"sandboxId":"adopted"}` },
+                { status: 200, body: `{"ok":true,"identity":"id-2"}` },
+            );
             calls.length = 0;
             expect(await announcer.relink(adoption)).toEqual({
                 announce: { state: "registered", identity: "id-2", at: Date.now() },
@@ -264,10 +335,16 @@ describe("createAnnouncer", () => {
             announcer.start();
             await settle();
             outcomes.length = 0;
-            outcomes.push({ status: 404 }, { status: 410, body: "error: this sandbox was deleted from intentic: restore it from the trash, or set up a new one" });
+            outcomes.push(
+                { status: 404 },
+                { status: 410, body: "error: this sandbox was deleted from intentic: restore it from the trash, or set up a new one" },
+            );
             failForever({ status: 404 });
             const answer = await announcer.relink(adoption);
-            expect(answer.adoption).toEqual({ status: 410, detail: "this sandbox was deleted from intentic: restore it from the trash, or set up a new one" });
+            expect(answer.adoption).toEqual({
+                status: 410,
+                detail: "this sandbox was deleted from intentic: restore it from the trash, or set up a new one",
+            });
             expect(answer.announce).toMatchObject({ state: "rejected", reason: "unknown", retrying: true });
         });
 

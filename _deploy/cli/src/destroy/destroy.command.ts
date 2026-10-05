@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { plural } from "@intentic/base/format";
 import { createStore, prune, resolveInputs } from "@intentic/engine";
@@ -7,6 +6,7 @@ import { collectSecretUsage, linearize } from "@intentic/graph";
 import { createProviders, createSshExecutor, hostTarget } from "@intentic/providers";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { acquireApplyLock } from "../apply/apply-lock.js";
+import { nextBaseline, writeBaseline } from "../apply/baseline.js";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_PATH, LAST_APPLIED_FILE, loadEnvFile, readArtifact } from "../lib/artifact.js";
 import { createKnownHostsStore } from "../lib/known-hosts.js";
@@ -72,9 +72,26 @@ export const destroy = buildCommand<DestroyFlags>({
             // Read-only secret load (no backfill): API-backed deletes resolve generated admin passwords from env.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, out.log), collectSecrets(graph).generated, process.env);
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
-            const pruned = await prune(graph, EMPTY, { providers: createProviders({ ssh }), log: out.log, onEvent: out.onEvent, env: process.env });
-            // Nothing is applied anymore, a later apply must not prune against this stale baseline.
-            await rm(join(dir, LAST_APPLIED_FILE), { force: true });
+            const pruned = await prune(graph, EMPTY, {
+                providers: createProviders({ ssh }),
+                log: out.log,
+                onEvent: out.onEvent,
+                env: process.env,
+                ...(graph.owner !== undefined ? { owner: graph.owner } : {}),
+            });
+            // Nothing is applied anymore: the baseline becomes empty rather than absent, so a later apply prunes nothing
+            // against stale state yet still knows it is not a first apply. A delete that failed for want of a secret stays
+            // pending in it.
+            const retry = new Set(pruned.skipped.filter((skip) => skip.reason === "missing-secret").map((skip) => skip.id));
+            await writeBaseline(
+                join(dir, LAST_APPLIED_FILE),
+                nextBaseline({
+                    graph: EMPTY,
+                    owner: graph.owner,
+                    pending: Object.values(graph.resources).filter((node) => retry.has(node.id)),
+                    retiredHosts: [],
+                }),
+            );
             out.text(
                 `destroyed ${plural(pruned.deleted.length, "resource")}${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`,
             );

@@ -42,8 +42,9 @@ export interface PiProcess {
     readonly kill: () => void;
 }
 
-// The seam tests inject through: production is spawnPiProcess below, a fixture is a scripted object.
-export type PiSpawn = (config: AcpAgentConfig, cwd: string, handlers: PiProcessHandlers) => PiProcess;
+// The seam tests inject through: production is spawnPiProcess below, a fixture is a scripted object. `owner` is the
+// conversation the turn runs for, stamped on the process so the reaper retires it and its tools like a Claude turn's.
+export type PiSpawn = (config: AcpAgentConfig, cwd: string, handlers: PiProcessHandlers, owner?: string) => PiProcess;
 
 // Splits a stream into LF-terminated records, tolerating \r\n and multi-byte splits. Shared shape with Pi's own
 // reference client.
@@ -73,19 +74,19 @@ const attachJsonlReader = (stream: Readable, onLine: (line: string) => void): vo
 // composition, not inside a turn.
 export const piSpawner = (sessionDir: string): PiSpawn => {
     mkdirSync(sessionDir, { recursive: true });
-    return (config, cwd, handlers) => {
+    return (config, cwd, handlers, owner) => {
         const [head, ...rest] = splitCommand(config.command);
-        // Pooled across turns like the ACP agents, so it ranks at the top of the spawn tree.
+        // Ranked like the ACP agents, at the top of the spawn tree.
         const proc: ChildProcessByStdio<Writable, Readable, Readable> = spawnAs(
             { class: "agentRuntime", spawnDepth: 0 },
             head as string,
             [...rest, "--mode", "rpc", "--session-dir", sessionDir],
             {
                 cwd,
-                // Daemon-owned, like the ACP pool it mirrors: kept warm across turns on purpose, so only a previous
-                // daemon's copy is ever a leftover, and intentic-front ends that one with the crashed daemon's process
-                // group (supervise.rs).
-                env: { ...process.env, ...parseEnvBlock(config.env), ...workloadStamp(DAEMON_OWNER) },
+                // One process per turn, so it is the conversation's, as a Claude turn's CLI is: once the turn ends,
+                // whatever it or its tools left running is the reaper's (2026-10-05; stamped `daemon` before, which
+                // nothing reaps while the daemon runs). A spawn that names no conversation stays the daemon's.
+                env: { ...process.env, ...parseEnvBlock(config.env), ...workloadStamp(owner ?? DAEMON_OWNER) },
                 stdio: ["pipe", "pipe", "pipe"],
             },
         );

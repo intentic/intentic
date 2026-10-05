@@ -222,6 +222,14 @@
         {
             "means": "The product you look at. Separate from the deployment engine, which is a bundled tool.",
             "term": "the app plane"
+        },
+        {
+            "term": "keeper",
+            "means": "The machine agent's background check that brings this computer's sandboxes back after a reboot or a hang, through `ic sandbox fix`."
+        },
+        {
+            "term": "upkeep pass",
+            "means": "The machine agent's standing clean-up of what older releases left on a computer: retired installs, stale sync, old trash."
         }
     ],
     "provenance": {

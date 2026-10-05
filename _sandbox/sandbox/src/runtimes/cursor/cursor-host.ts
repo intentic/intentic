@@ -8,6 +8,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { opt } from "../../opt.js";
 import { nsenterArgv } from "../../workload/namespace-entry.js";
 import { spawnAs } from "../../workload/workload-class.js";
+import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import type {
     CodedError,
     CallMethod,
@@ -69,11 +70,33 @@ export interface RuntimeProcess {
     once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
 }
 
-// Starts the runtime process from a finished argv; a seam so a suite can stand in for the process.
-export type CursorRuntimeSpawn = (command: string, args: readonly string[], spawnDepth: number) => RuntimeProcess;
+// Starts the runtime process from a finished argv; a seam so a suite can stand in for the process. `owner` is the
+// conversation whose turn it serves.
+export type CursorRuntimeSpawn = (command: string, args: readonly string[], spawnDepth: number, owner?: string) => RuntimeProcess;
 
-const spawnRuntime: CursorRuntimeSpawn = (command, args, spawnDepth) =>
-    spawnAs({ class: "agentRuntime", spawnDepth }, command, args, { stdio: ["ignore", "pipe", "pipe", "ipc"] });
+// The runtime processes this daemon started and has not seen exit, for its shutdown to end (2026-10-05): a clean stop
+// left them running, unstamped, with nothing that would ever end them.
+const liveRuntimes = new Set<RuntimeProcess>();
+
+/** Ends every Cursor runtime process still running; the daemon's shutdown. */
+export const stopCursorRuntimes = (): void => {
+    for (const child of liveRuntimes) {
+        child.kill("SIGTERM");
+    }
+    liveRuntimes.clear();
+};
+
+// Stamped with its conversation, so once the turn is over the reaper retires a runtime nobody closed, as it does a
+// Claude turn's CLI.
+const spawnRuntime: CursorRuntimeSpawn = (command, args, spawnDepth, owner) => {
+    const child = spawnAs({ class: "agentRuntime", spawnDepth }, command, args, {
+        env: { ...process.env, ...workloadStamp(owner ?? DAEMON_OWNER) },
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+    });
+    liveRuntimes.add(child);
+    child.once("exit", () => liveRuntimes.delete(child));
+    return child;
+};
 
 // The runtime entry beside this file, so dev and dist take the same path (.ts under tsx, .js under node), absolute so
 // no cwd changes which one runs. Its name carries "agent-runtime", which is how the process scan files it.
@@ -253,6 +276,8 @@ export interface NamespacedHostInput {
     readonly sdkEntry: string | undefined;
     readonly spawnDepth: number;
     readonly logger: Logger;
+    // The conversation the turn runs for.
+    readonly owner?: string;
     readonly spawn?: CursorRuntimeSpawn;
     readonly command?: { readonly file: string; readonly args: readonly string[] };
 }
@@ -266,7 +291,7 @@ export const namespacedHost =
         // nsenter execs the runtime into the anchor's namespace and stays a direct child; --wdns makes its cwd /work as
         // the namespace sees it, before the SDK is even loaded.
         const argv = nsenterArgv(input.namespace.pid, input.namespace.cwd, command.file, [...command.args, input.sdkEntry ?? ""]);
-        const child = (input.spawn ?? spawnRuntime)(argv.command, argv.args, input.spawnDepth);
+        const child = (input.spawn ?? spawnRuntime)(argv.command, argv.args, input.spawnDepth, input.owner);
         const channel = runtimeChannel(child, customTools, input.sdk, input.logger);
         try {
             const opened = await channel.call({

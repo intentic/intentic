@@ -6,21 +6,13 @@ import { isProjectDirName, projectRemoteDir } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { baseDir } from "../config.js";
 import { ensureResident } from "../resident.js";
-import {
-    attachedKey,
-    isAttachedPairing,
-    type Pairing,
-    pairingKey,
-    pairingTransport,
-    readState,
-    removePairing,
-    upsertPairing,
-} from "./config.js";
+import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransport, readState, removePairing, upsertPairing } from "./config.js";
 import { transportFor } from "./endpoint.js";
 import { canonicalFolder, folderRefusal, overlappingPairing, sameFolder } from "./folders.js";
 import { ensureMutagen, existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, syncSessionNames } from "./mutagen.js";
 import { answer, projectPairingFor } from "./project-commands.js";
 import { assertFolder, listingRecordPath } from "./project-local.js";
+import { refuseAcrossPc, type Siblings } from "./siblings.js";
 import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
 
 // FOLDERS ATTACH TO THIS COMPUTER'S OWN SANDBOX. `sync setup --projects-host` enrolls that sandbox once, with no folder
@@ -58,6 +50,8 @@ export interface AttachSeams {
     readonly locate?: (sandboxUrl: string) => Promise<string | undefined>;
     // The user's home folder, which a folder may neither be nor hold.
     readonly home?: string;
+    // The folders the other environments of this PC sync (siblings.ts), which a folder may neither be, hold, nor sit in.
+    readonly siblings?: () => Promise<Siblings>;
 }
 
 const hostOf = (url: string): string | undefined => (URL.canParse(url) ? new URL(url).host.toLowerCase() : undefined);
@@ -127,9 +121,16 @@ export const planAttach = async (pairings: readonly Pairing[], ask: AttachAsk, s
     const remoteDir = projectRemoteDir(name);
     const sameName = pairings.find((pairing) => pairingKey(pairing) === key);
     if (sameName?.localDir !== undefined && !sameFolder(await canonicalFolder(sameName.localDir), folder)) {
-        throw new Error(`${sameName.localDir} is already attached as ${remoteDir}; detach it first (\`intentic-machine sync detach --dir ${JSON.stringify(sameName.localDir)}\`) or pick another name`);
+        throw new Error(
+            `${sameName.localDir} is already attached as ${remoteDir}; detach it first (\`intentic-machine sync detach --dir ${JSON.stringify(sameName.localDir)}\`) or pick another name`,
+        );
     }
     await refuseOverlap(folder, key, host, pairings);
+    // (2026-10-05) And across the PC: a distro's folder and the Windows side's are compared in one spelling.
+    const across = await refuseAcrossPc(wanted, seams.siblings);
+    if (across.refusal !== undefined) {
+        throw new Error(across.refusal);
+    }
     // Docker whenever the sandbox's container runs here, as it does for the machine's own sandbox: the copy is then up in
     // seconds and nothing of it rides ssh.
     const reach = await transportFor("auto", { project: true }, host.sandboxUrl, seams.locate);
@@ -156,7 +157,11 @@ export const planAttach = async (pairings: readonly Pairing[], ask: AttachAsk, s
 // ATTACH: the pairing recorded, the ssh alias written when the folder rides ssh, and the resident agent made sure of,
 // which creates the session. Returns as soon as the pairing is on disk: the first copy is the agent's, and a folder of
 // any size would hold the command (and the window that asked) for as long as it took.
-export const attachFolder = async (ask: AttachAsk, log: Log, seams: AttachSeams & { readonly ensureAgent?: (log: Log) => Promise<void> } = {}): Promise<AttachResult> => {
+export const attachFolder = async (
+    ask: AttachAsk,
+    log: Log,
+    seams: AttachSeams & { readonly ensureAgent?: (log: Log) => Promise<void> } = {},
+): Promise<AttachResult> => {
     const pairing = await planAttach((await readState()).pairings, ask, seams);
     await upsertPairing(pairing);
     if (pairingTransport(pairing) === "ssh") {
@@ -171,12 +176,13 @@ export interface DetachSeams {
     readonly terminate?: (names: readonly string[]) => Promise<void>;
 }
 
-// The sessions named, those Mutagen holds, ended: `sync terminate a b` fails whole on one name it does not know.
+// The sessions named, those Mutagen holds, ended: `sync terminate a b` fails whole on one name it does not know. A
+// listing that did not answer is no reason to leave them running: each name is then ended on its own.
 const terminateSessions = async (names: readonly string[]): Promise<void> => {
     const mutagen = await ensureMutagen();
     const live = existingSyncSessions(mutagen, names);
-    if (live.length > 0) {
-        spawnSync(mutagen, ["sync", "terminate", ...live], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    for (const batch of live === undefined ? names.map((name) => [name]) : live.length > 0 ? [live] : []) {
+        spawnSync(mutagen, ["sync", "terminate", ...batch], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
     }
 };
 
@@ -210,7 +216,12 @@ const attach = buildCommand<AttachFlags>({
     docs: { brief: "Attach a folder to this computer's sandbox as /work/<name>: copied one way into it, landed work delivered back" },
     parameters: {
         flags: {
-            sandboxUrl: { kind: "parsed", parse: String, optional: true, brief: "This computer's sandbox, as `sync setup --projects-host` enrolled it" },
+            sandboxUrl: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "This computer's sandbox, as `sync setup --projects-host` enrolled it",
+            },
             dir: { kind: "parsed", parse: String, optional: true, brief: "The folder to attach" },
             name: { kind: "parsed", parse: String, optional: true, brief: "Its name in the sandbox: it becomes /work/<name>" },
             json: { kind: "boolean", brief: "Print one JSON object, `ok` first (what the desktop app reads)" },

@@ -5,7 +5,8 @@ import { unstubbed } from "@intentic/testing";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { DaemonBase } from "../daemon-base.js";
 import type { HostLink } from "./config.js";
-import { connect, type Dial } from "./connection.js";
+import { connect, type Dial, GONE_PROBE_AFTER_ATTEMPTS, goneLinkStep, type LinkGoneStore, probeEdge, probesFirst } from "./connection.js";
+import { GONE_RETIRE_MS } from "../sync/gone.js";
 import type { Indicator } from "./indicator.js";
 
 // Pins that the socket asks the resolver on every reconnect and dials the answer unchanged; the resolver
@@ -249,4 +250,105 @@ test(`a link's notice goes when its socket closes, and not when a socket it alre
 
     connection.stop();
     await connection.done;
+});
+
+// (2026-10-05) A LINK TO A SANDBOX THAT NO LONGER EXISTS STOPS DIALLING IT. A WebSocket cannot read the edge's 502, so
+// after enough failed dials a plain GET asks the edge, whose final word marks the link gone; it is asked again hourly,
+// brought back by an answer, and forgotten past the trash window.
+describe(`a link whose sandbox is gone`, () => {
+    const marks = (): { readonly store: LinkGoneStore; readonly marked: (number | undefined)[] } => {
+        const marked: (number | undefined)[] = [];
+        return { store: { mark: async (_link, since) => void marked.push(since) }, marked };
+    };
+
+    test(`asks the edge only after a run of failed dials, and reads only its final verdict as gone`, async () => {
+        expect([1, GONE_PROBE_AFTER_ATTEMPTS, GONE_PROBE_AFTER_ATTEMPTS + 1].map(probesFirst)).toEqual([false, false, true]);
+        const answering = (status: number, said?: string) => async () =>
+            new Response(``, { status, headers: said === undefined ? {} : { "x-intentic-edge": said } });
+        expect(await probeEdge(PUBLIC, answering(502, `unknown-sandbox`) as unknown as typeof fetch)).toBe(true);
+        expect(await probeEdge(PUBLIC, answering(502, `no-tunnel`) as unknown as typeof fetch)).toBe(false);
+        expect(await probeEdge(PUBLIC, answering(502) as unknown as typeof fetch)).toBe(false);
+        expect(
+            await probeEdge(PUBLIC, (async () => {
+                throw new Error(`offline`);
+            }) as unknown as typeof fetch),
+        ).toBe(false);
+    });
+
+    test(`dials again on an answer, waits while it is gone, and is forgotten past the trash window`, () => {
+        expect(goneLinkStep(0, 60_000, false)).toBe(`dial`);
+        expect(goneLinkStep(0, GONE_RETIRE_MS - 1, true)).toBe(`wait`);
+        expect(goneLinkStep(0, GONE_RETIRE_MS, true)).toBe(`forget`);
+    });
+
+    test(`stops dialling once the edge says so after the run of failures, and records since when`, async () => {
+        jest.useFakeTimers();
+        const { dial, sockets } = dialing([]);
+        const said: string[] = [];
+        const { store, marked } = marks();
+        const connection = connect(
+            link,
+            `1.0.0`,
+            (line) => void said.push(line),
+            { ...dial, gone: async () => true },
+            async () => undefined,
+            undefined,
+            store,
+            () => 1_000,
+        );
+
+        for (let attempt = 1; attempt <= GONE_PROBE_AFTER_ATTEMPTS; attempt += 1) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one dial after another, as the loop makes them
+            await waitFor(() => expect(sockets).toHaveLength(attempt));
+            sockets[attempt - 1]?.drops(1002);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            await advanceTimersByTimeAsync(31_000);
+        }
+        await waitFor(() => expect(marked).toEqual([1_000]));
+        expect(sockets).toHaveLength(GONE_PROBE_AFTER_ATTEMPTS);
+        expect(said.join(`\n`)).toContain(`the platform says this sandbox no longer exists, so this link stops dialling it`);
+
+        connection.stop();
+        await connection.done;
+    });
+
+    test(`a link marked gone before this start is asked first, and dials again at once when the sandbox answers`, async () => {
+        const { dial, sockets } = dialing([{ base: PUBLIC, local: false }]);
+        const { store, marked } = marks();
+        const connection = connect(
+            { ...link, goneSince: 1_000 } as typeof link,
+            `1.0.0`,
+            quiet,
+            { ...dial, gone: async () => false },
+            async () => undefined,
+            undefined,
+            store,
+            () => 2_000,
+        );
+
+        await waitFor(() => expect(sockets).toHaveLength(1));
+        expect(marked).toEqual([undefined]);
+
+        connection.stop();
+        await connection.done;
+    });
+
+    test(`a link gone past the trash window is forgotten without another dial`, async () => {
+        const { dial, sockets } = dialing([]);
+        const forgotten: string[] = [];
+        const connection = connect(
+            { ...link, goneSince: 1_000 } as typeof link,
+            `1.0.0`,
+            quiet,
+            { ...dial, gone: async () => true },
+            async (url) => void forgotten.push(url),
+            undefined,
+            marks().store,
+            () => 1_000 + GONE_RETIRE_MS,
+        );
+
+        await connection.done;
+        expect(forgotten).toEqual([PUBLIC]);
+        expect(sockets).toHaveLength(0);
+    });
 });

@@ -13,7 +13,7 @@ use intentic_ingress::body;
 use intentic_ingress::cluster::{self, Cluster, HOLDS_PATH, HOP_HEADER, Holds, Op, REMOTE_TTL};
 use intentic_ingress::edge::{Edge, EdgeOptions};
 use intentic_ingress::peers::Peer;
-use intentic_ingress::registry::{Held, Registry, Slot};
+use intentic_ingress::registry::{Held, Holder, Holding, Registry, Slot, now_ms};
 use intentic_ingress::revocation::Revocation;
 use intentic_ingress::serve::{self, Listening};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -63,6 +63,7 @@ impl FakePeer {
             instance: format!("peer-{}", self.peer.internal_port),
             op,
             ids: ids.iter().map(|id| (*id).to_owned()).collect(),
+            tunnels: Vec::new(),
         }
     }
 }
@@ -94,6 +95,7 @@ async fn fake_peer(holds: &'static [&'static str]) -> FakePeer {
                 instance: format!("peer-{}", peer.internal_port),
                 op: Op::Set,
                 ids: holds.iter().map(|id| (*id).to_owned()).collect(),
+                tunnels: Vec::new(),
             };
             Response::new(body::full(serde_json::to_vec(&own).unwrap()))
         }
@@ -172,6 +174,7 @@ async fn an_id_routes_to_the_peer_whose_delta_claimed_it_and_only_a_known_peer_i
         instance: "stranger".into(),
         op: Op::Add,
         ids: vec![Y.into()],
+        tunnels: Vec::new(),
     });
     assert_eq!(w.cluster.holder(Y), None);
 }
@@ -359,15 +362,29 @@ async fn the_internal_surface_answers_its_holds_and_refuses_anything_malformed()
     };
 
     let own: Holds = serde_json::from_str(&get(port, "internal", HOLDS_PATH).await.body).unwrap();
+    // Every slot rides beside the socket ids an older peer reads, each with when it registered.
+    let tunnels = own.tunnels.clone();
     assert_eq!(
-        own,
+        Holds {
+            tunnels: Vec::new(),
+            ..own
+        },
         Holds {
             from: this(),
             instance: "self".into(),
             op: Op::Set,
-            ids: vec![X.into()]
+            ids: vec![X.into()],
+            tunnels: Vec::new(),
         }
     );
+    assert_eq!(
+        tunnels
+            .iter()
+            .map(|tunnel| (tunnel.id.as_str(), tunnel.slot, tunnel.instance.as_deref()))
+            .collect::<Vec<_>>(),
+        [(X, Slot::Socket, None)]
+    );
+    assert!(tunnels[0].since > 0);
 
     let valid = serde_json::to_string(&w.a.from(Op::Add, &[Y])).unwrap();
     let answer = send(
@@ -546,6 +563,7 @@ async fn a_miss_is_final_once_hop_marked_and_a_holder_is_forgotten_only_when_unr
         instance: "a".into(),
         op: Op::Add,
         ids: vec![NOBODY_ID.into()],
+        tunnels: Vec::new(),
     });
 
     let marked = send(
@@ -574,6 +592,7 @@ async fn a_miss_is_final_once_hop_marked_and_a_holder_is_forgotten_only_when_unr
         instance: "ghost".into(),
         op: Op::Add,
         ids: vec![GHOST_ID.into()],
+        tunnels: Vec::new(),
     });
     assert_eq!(b.cluster.holder(GHOST_ID), Some(ghost));
     assert_eq!(
@@ -613,4 +632,158 @@ async fn a_redial_on_the_other_machine_displaces_the_first_which_then_forwards()
         (200, format!("second sandbox-{SANDBOX_ID}.{ZONE}/moved"))
     );
     let _ = StatusCode::OK;
+}
+
+// A tunnel of the front instance `instance`, registered here, as the edge admits one from a front that named itself.
+async fn admit(
+    registry: &Registry,
+    id: &str,
+    slot: Slot,
+    instance: &str,
+) -> (
+    intentic_ingress::session::Session,
+    watch::Receiver<Option<Close>>,
+    tokio::io::DuplexStream,
+) {
+    let (session, pipe) = idle_session().await;
+    let (closing, closed) = watch::channel(None);
+    let identity = tunnel::Identity {
+        instance: instance.into(),
+        host: format!("{instance}-host"),
+    };
+    registry
+        .admit(
+            id,
+            slot,
+            Held {
+                session: session.clone(),
+                closing,
+            },
+            Holder::new(Some(identity), Arc::new(tunnel::Heard::default())),
+        )
+        .unwrap();
+    (session, closed, pipe)
+}
+
+fn tunnel_of(id: &str, slot: Slot, since: u64, instance: &str) -> Holding {
+    Holding {
+        id: id.into(),
+        slot,
+        since,
+        instance: Some(instance.into()),
+        host: format!("{instance}-host"),
+    }
+}
+
+impl FakePeer {
+    fn holding(&self, op: Op, tunnels: Vec<Holding>) -> Holds {
+        Holds {
+            tunnels,
+            ..self.from(op, &[])
+        }
+    }
+}
+
+// 2026-10-05: a delayed `add` displaced a newer local tunnel. Now a peer's holding is ordered by when it registered.
+#[tokio::test]
+async fn an_add_older_than_the_local_tunnel_is_stale_and_a_newer_one_of_the_same_front_displaces_it()
+ {
+    let w = world(&[], &[], this(), REMOTE_TTL).await;
+    let (held, closed, _pipe) = admit(&w.registry, X, Slot::Socket, "a1").await;
+    let since = w.registry.holding(X, Slot::Socket).unwrap().since;
+    w.cluster.receive(w.a.holding(
+        Op::Add,
+        vec![tunnel_of(X, Slot::Socket, since - 5_000, "a1")],
+    ));
+    assert!(closed.borrow().is_none());
+    assert!(w.registry.lookup(X, Slot::Socket).unwrap().same(&held));
+    assert_eq!(w.cluster.holder(X), None, "a stale add names no holder");
+
+    w.cluster.receive(w.a.holding(
+        Op::Add,
+        vec![tunnel_of(X, Slot::Socket, since + 5_000, "a1")],
+    ));
+    assert_eq!(
+        closed.borrow().as_ref().map(|close| close.code),
+        Some(DISPLACED_CODE)
+    );
+    assert_eq!(w.cluster.holder(X), Some(w.a.peer.clone()));
+}
+
+// Two copies of one sandbox on two machines: whichever registered first holds it, on both.
+#[tokio::test]
+async fn between_two_copies_the_first_to_register_holds_the_sandbox_on_every_machine() {
+    let w = world(&[], &[], this(), REMOTE_TTL).await;
+    let (_, closed, _pipe) = admit(&w.registry, X, Slot::Socket, "a1").await;
+    let since = w.registry.holding(X, Slot::Socket).unwrap().since;
+    w.cluster
+        .receive(w.a.holding(Op::Add, vec![tunnel_of(X, Slot::Quic, since - 1_000, "b2")]));
+    let close = closed.borrow().clone().unwrap();
+    assert_eq!(
+        (close.code, close.reason.as_ref()),
+        (tunnel::HELD_ELSEWHERE_CODE, "b2-host")
+    );
+    assert_eq!(w.cluster.holder(X), Some(w.a.peer.clone()));
+
+    // The copy here registered first: the peer's later one is told so, and is never recorded as the holder.
+    let (held, closed, _pipe) = admit(&w.registry, Y, Slot::Socket, "c3").await;
+    w.cluster.receive(w.b.holding(
+        Op::Add,
+        vec![tunnel_of(Y, Slot::Socket, now_ms() + 60_000, "d4")],
+    ));
+    assert!(closed.borrow().is_none());
+    assert!(w.registry.lookup(Y, Slot::Socket).unwrap().same(&held));
+    assert_eq!(w.cluster.holder(Y), None);
+    wait_for("the peer to hear who registered first", || {
+        w.b.heard.lock().unwrap().iter().any(|holds| {
+            holds
+                .tunnels
+                .iter()
+                .any(|tunnel| tunnel.id == Y && tunnel.instance.as_deref() == Some("c3"))
+        })
+    })
+    .await;
+    // And a front of another instance asking this machine for X is refused while the peer's copy is fresh.
+    let refusing = tunnel::Identity {
+        instance: "z9".into(),
+        host: String::new(),
+    };
+    assert_eq!(
+        w.cluster
+            .held_elsewhere(X, Some(&refusing))
+            .map(|elsewhere| elsewhere.host),
+        Some("b2-host".into())
+    );
+}
+
+// A sandbox held only over QUIC on a peer is that peer's to answer, not `no-tunnel` here.
+#[tokio::test]
+async fn a_quic_only_holding_is_news_and_names_its_peer_as_the_holder() {
+    let w = world(&[], &[], this(), REMOTE_TTL).await;
+    w.cluster
+        .receive(w.a.holding(Op::Add, vec![tunnel_of(X, Slot::Quic, now_ms(), "a1")]));
+    assert_eq!(w.cluster.holder(X), Some(w.a.peer.clone()));
+    // Its departure withdraws only that slot of that peer's.
+    w.cluster
+        .receive(w.a.holding(Op::Remove, vec![tunnel_of(X, Slot::Socket, 0, "a1")]));
+    assert_eq!(w.cluster.holder(X), Some(w.a.peer.clone()));
+    w.cluster
+        .receive(w.a.holding(Op::Remove, vec![tunnel_of(X, Slot::Quic, 0, "a1")]));
+    assert_eq!(w.cluster.holder(X), None);
+
+    // And a local QUIC arrival is news to every peer, with its slot, while the socket ids an older peer reads stay empty.
+    let (_, _, _pipe) = admit(&w.registry, Y, Slot::Quic, "c3").await;
+    wait_for("every peer to hear the QUIC arrival", || {
+        [&w.a, &w.b].iter().all(|peer| {
+            peer.heard.lock().unwrap().iter().any(|holds| {
+                holds.op == Op::Add
+                    && holds.ids.is_empty()
+                    && holds
+                        .tunnels
+                        .iter()
+                        .any(|tunnel| tunnel.id == Y && tunnel.slot == Slot::Quic)
+            })
+        })
+    })
+    .await;
 }

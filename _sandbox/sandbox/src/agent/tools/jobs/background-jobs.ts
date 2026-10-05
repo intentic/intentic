@@ -30,7 +30,8 @@ const LOST = "lost";
 // The job itself, rewritten whole as it is named and adopted, so a restarted daemon can take it back.
 const JOB_FILE = "job.json";
 
-// Longest a job may hold a terminal and an armed watch, in ms, whether or not it ever exits.
+// Longest a job may hold a terminal and an armed watch, in ms, whether or not it ever exits; a job left running for the
+// person (`handed`) is theirs, and holds its terminal until it exits or they stop it.
 export const JOB_MAX_MS = 6 * 3_600_000;
 
 // Under the reaper's `intentic-run-` tmp sweep.
@@ -479,6 +480,31 @@ export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"
     return lost;
 };
 
+// Whether a job is past its time: one left running for the person is theirs to stop, so it never is (2026-10-05: kept
+// servers were forgotten after six hours, and with them the session the reaper spared for them).
+const expired = (record: JobRecord, now: number): boolean => record.fate !== "handed" && now - record.job.startedAt > JOB_MAX_MS;
+
+/**
+ * The capture dirs of jobs left running for the person and still running, read from their own files: the boot sweep
+ * spares their sessions (bootstrap/boot-chain.ts) and the tmp sweep their dirs (system/boot/reaper.ts), before any
+ * daemon has taken them back. Never throws.
+ */
+export const keptJobDirs = (root: string = tmpdir()): readonly string[] => {
+    try {
+        return readdirSync(root, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX))
+            .map((entry) => join(root, entry.name))
+            .filter((dir) => recordOf(dir)?.fate === "handed" && !existsSync(join(dir, STATUS_FILE)));
+    } catch {
+        return [];
+    }
+};
+
+/** The tmux sessions holding a job left running for the person, by its own file. */
+export const keptJobSessions = (root: string = tmpdir()): readonly string[] => [
+    ...new Set(keptJobDirs(root).flatMap((dir) => recordOf(dir)?.job.session ?? [])),
+];
+
 /** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
 export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now()): readonly BackgroundJob[] => {
     const jobs = actors.holdings(JOBS);
@@ -489,7 +515,7 @@ export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now()):
         if (record !== undefined && !jobStarted(record.job)) {
             endNeverRan(record.job);
         }
-        if (record === undefined || jobs.has(record.job.id) || jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
+        if (record === undefined || jobs.has(record.job.id) || jobFinished(record.job) || expired(record, now)) {
             continue;
         }
         jobs.hold(record.job.conversationId, record.job.id, record);
@@ -573,7 +599,7 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
 export const backgroundJobSessions = (actors: Actors, now: number = Date.now()): ReadonlySet<string> => {
     const live = new Set<string>();
     for (const [, record] of actors.holdings(JOBS).entries()) {
-        if (jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
+        if (jobFinished(record.job) || expired(record, now)) {
             forgetJob(actors, record);
             continue;
         }

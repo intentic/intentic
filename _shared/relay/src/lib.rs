@@ -8,6 +8,6 @@ pub mod body;
 mod exchange;
 mod headers;
 
-pub use backoff::Backoff;
+pub use backoff::{Backoff, between};
 pub use exchange::exchange;
 pub use headers::{HOP_BY_HOP, for_next_hop, host_of, is_upgrade, label_of, strip_hop_by_hop};

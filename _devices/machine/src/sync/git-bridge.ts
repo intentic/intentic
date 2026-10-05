@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
@@ -176,4 +177,91 @@ export const runGitBridge = async (
         await bridgeRepo(exec, alias, pairing.localDir, repo, log);
     }
     return repos;
+};
+
+// UNDOING THE BRIDGE, for a pairing retired because its sandbox is gone (retire.ts). The bridge added a `sandbox` remote
+// to each repo it followed (pointing at `<alias>:/history/gits/<repo>`), its remote-tracking refs, and the
+// `refs/intentic/bridged/*` markers; once the sandbox is gone all three point at nothing, and a `git fetch --all` in that
+// clone fails on the remote for good. Each is removed, and nothing else: the repo, its commits, its branches and the
+// owner's own remotes stay. The repos are found where the bridge put them, one to four folders deep (isSafeRepoId), and
+// only a repo whose `sandbox` remote is this alias's is touched: a remote of that name the owner made points elsewhere.
+
+// The folders a bridged repo can be in, walked breadth-first and bounded: a workspace with a huge tree of build output
+// must not turn a retirement into a crawl, and the bridge never puts a repo under what file sync ignores.
+const UNBRIDGE_MAX_DIRS = 5_000;
+const NEVER_A_BRIDGED_REPO: ReadonlySet<string> = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    ".cache",
+    ".turbo",
+    ".next",
+    ".venv",
+    "venv",
+    ".pnpm-store",
+    ".intentic",
+    "refs",
+]);
+
+export interface UnbridgeFs {
+    readonly subdirs: (dir: string) => Promise<readonly string[]>;
+}
+
+export const bridgedRepoCandidates = async (fs: UnbridgeFs, exec: BridgeExec, localDir: string): Promise<string[]> => {
+    const found: string[] = [];
+    let frontier = [localDir];
+    let visited = 0;
+    for (let depth = 0; depth < 4 && frontier.length > 0 && visited < UNBRIDGE_MAX_DIRS; depth += 1) {
+        const next: string[] = [];
+        for (const dir of frontier) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- breadth-first and bounded; a directory at a time keeps it gentle
+            for (const name of await fs.subdirs(dir)) {
+                visited += 1;
+                if (NEVER_A_BRIDGED_REPO.has(name) || visited > UNBRIDGE_MAX_DIRS) {
+                    continue;
+                }
+                const child = join(dir, name);
+                if (exec.exists(join(child, ".git"))) {
+                    found.push(child);
+                }
+                next.push(child);
+            }
+        }
+        frontier = next;
+    }
+    return found;
+};
+
+// The remote, its tracking refs and the bridge's markers gone from every repo the bridge followed for `alias`. Answers
+// how many repos were touched.
+export const unbridgeRepos = async (exec: BridgeExec, fs: UnbridgeFs, alias: string, localDir: string): Promise<number> => {
+    let touched = 0;
+    for (const dir of await bridgedRepoCandidates(fs, exec, localDir)) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one repo at a time, as the bridge itself runs
+        const url = (await exec.run("git", ["remote", "get-url", "sandbox"], dir))?.trim();
+        if (url === undefined || !url.startsWith(`${alias}:`)) {
+            continue;
+        }
+        // `remote remove` takes the remote-tracking refs (refs/remotes/sandbox/*) with it.
+        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        await exec.run("git", ["remote", "remove", "sandbox"], dir);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        const markers = (await exec.run("git", ["for-each-ref", "--format=%(refname)", "refs/intentic/bridged/"], dir)) ?? "";
+        for (const ref of markers
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith("refs/intentic/bridged/"))) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            await exec.run("git", ["update-ref", "-d", ref], dir);
+        }
+        touched += 1;
+    }
+    return touched;
+};
+
+export const realUnbridgeFs: UnbridgeFs = {
+    subdirs: async (dir) => {
+        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+        return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
+    },
 };

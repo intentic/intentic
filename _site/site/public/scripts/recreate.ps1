@@ -125,7 +125,7 @@ function Add-IntenticPath {
 # ---- fetch the ic CLI (the same block connect.ps1 and connect-host.ps1 carry, apart from its one narration
 #      line - these are standalone irm|iex files and cannot share code, so a test holds them to it instead) ----
 # Downloaded on every run that pins no release, so re-running a card's command upgrades an existing install;
-# a run pinned to the release already installed (IC_VERSION) skips it, and only a failed download falls back
+# a run pinned to a release (IC_VERSION) that finds it or a newer one installed skips it, and only a failed download falls back
 # to what's installed. IC_BIN overrides for local dev.
 $Ic = $env:IC_BIN
 if (-not $Ic) {
@@ -135,11 +135,159 @@ if (-not $Ic) {
     $IcDest = "$IcDir\ic.exe"
     $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
     # A caller that pins its release (IC_VERSION beside IC_URL, which the desktop app sets to its own) and finds
-    # exactly that release installed has nothing to fetch: asking the binary costs milliseconds, the download
-    # seconds. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
+    # that release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds, the download
+    # seconds. Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the
+    # tray for days put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions,
+    # major.minor.patch first, a pre-release below its own release; an installed ic whose answer is not a version
+    # is replaced. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
     $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
-    if ($IcHave -and $IcHave -eq "ic $env:IC_VERSION") {
-        Write-Host "note: $IcHave is already installed - not downloading it again."
+    $IcCurrent = $false
+    if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-Host 'intentic: fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
+            } else {
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
+            }
+        }
+    }
+}
+
+# recreate.sh reads only the first switch after the slug; here every switch binds, so the order below decides a
+# caller that passed two by mistake: read-only verbs first, and -Remove after every other named mode.
+# -Versions and -Watch forward what follows them verbatim (ic's --json), as recreate.sh does.
+if ($List) {
+    & $Ic sandbox list --json
+} elseif ($Versions) {
+    & $Ic sandbox versions $Slug @ReshapeArgs
+} elseif ($Doctor) {
+    & $Ic sandbox doctor $Slug
+} elseif ($Watch) {
+    & $Ic sandbox watch $Slug @ReshapeArgs
+} elseif ($Backup) {
+    & $Ic sandbox backup $Slug
+} elseif ($Start) {
+    & $Ic sandbox start $Slug
+} elseif ($Stop) {
+    & $Ic sandbox stop $Slug
+} elseif ($Restart) {
+    & $Ic sandbox restart $Slug
+} elseif ($Shape) {
+    & $Ic sandbox shape $Slug @ReshapeArgs
+} elseif ($RollbackTo) {
+    & $Ic sandbox rollback $Slug --to $RollbackTo
+} elseif ($Rollback) {
+    & $Ic sandbox rollback $Slug
+} elseif ($Prepare) {
+    & $Ic sandbox prepare $Slug
+} elseif ($Reshape) {
+    & $Ic sandbox reshape $Slug @ReshapeArgs
+} elseif ($Hash) {
+    & $Ic sandbox rebuild $Slug $Hash
+} elseif ($Remove) {
+    & $Ic sandbox remove $Slug -y
+} else {
+    & $Ic sandbox update $Slug
+}
+exit $LASTEXITCODE
+) {
+        $IcHaveCore = [version]$Matches[1]
+        $IcHavePre = $Matches[2]
+        if ($env:IC_VERSION -match '^v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-Host 'intentic: fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
+            } else {
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
+            }
+        }
+    }
+}
+
+# recreate.sh reads only the first switch after the slug; here every switch binds, so the order below decides a
+# caller that passed two by mistake: read-only verbs first, and -Remove after every other named mode.
+# -Versions and -Watch forward what follows them verbatim (ic's --json), as recreate.sh does.
+if ($List) {
+    & $Ic sandbox list --json
+} elseif ($Versions) {
+    & $Ic sandbox versions $Slug @ReshapeArgs
+} elseif ($Doctor) {
+    & $Ic sandbox doctor $Slug
+} elseif ($Watch) {
+    & $Ic sandbox watch $Slug @ReshapeArgs
+} elseif ($Backup) {
+    & $Ic sandbox backup $Slug
+} elseif ($Start) {
+    & $Ic sandbox start $Slug
+} elseif ($Stop) {
+    & $Ic sandbox stop $Slug
+} elseif ($Restart) {
+    & $Ic sandbox restart $Slug
+} elseif ($Shape) {
+    & $Ic sandbox shape $Slug @ReshapeArgs
+} elseif ($RollbackTo) {
+    & $Ic sandbox rollback $Slug --to $RollbackTo
+} elseif ($Rollback) {
+    & $Ic sandbox rollback $Slug
+} elseif ($Prepare) {
+    & $Ic sandbox prepare $Slug
+} elseif ($Reshape) {
+    & $Ic sandbox reshape $Slug @ReshapeArgs
+} elseif ($Hash) {
+    & $Ic sandbox rebuild $Slug $Hash
+} elseif ($Remove) {
+    & $Ic sandbox remove $Slug -y
+} else {
+    & $Ic sandbox update $Slug
+}
+exit $LASTEXITCODE
+) {
+            $IcPinCore = [version]$Matches[1]
+            $IcCurrent = ($IcHaveCore -gt $IcPinCore) -or ($IcHaveCore -eq $IcPinCore -and (-not $IcHavePre -or $IcHavePre -eq $Matches[2]))
+        }
+    }
+    if ($IcCurrent) {
+        Write-Host "note: $IcHave is installed (this run asks for ic $env:IC_VERSION or newer) - not downloading it."
         $Ic = $IcDest
         Add-IntenticPath -Folder $IcDir -Command 'ic'
     } else {

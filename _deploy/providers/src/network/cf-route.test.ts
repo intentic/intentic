@@ -97,3 +97,79 @@ test("malformed inputs are rejected", async () => {
     const provider = createCfRouteProvider(api({}));
     await expect(provider.read({ hostname: "h", zoneId: "z" }, ctx())).rejects.toThrow(/cf-route inputs malformed/);
 });
+
+test("apply stamps the owner first in the record comment when the run has one", async () => {
+    let comment: string | undefined;
+    const provider = createCfRouteProvider(
+        api({
+            findDnsRecord: async () => undefined,
+            createDnsRecord: async (args) => {
+                comment = args.comment;
+            },
+        }),
+        noPropagationWait,
+    );
+    await provider.apply(inputs, undefined, { ...ctx(), owner: "3f9a1c2b7d4e" });
+    expect(comment).toBe("intentic.owner=3f9a1c2b7d4e intentic.id=cf-app-example-com");
+});
+
+test("read reports the record's owner stamp, empty for a legacy comment, and nothing when the run has no owner", async () => {
+    const reading = (comment: string) =>
+        createCfRouteProvider(api({ findDnsRecord: async () => ({ id: "rec-1", content: "tunnel-abc.cfargotunnel.com", comment }) }));
+    const owned = { ...ctx(), owner: "aaa" };
+    expect((await reading("intentic.owner=aaa intentic.id=cf-app-example-com").read(inputs, owned))?.stampOwner).toBe("aaa");
+    expect((await reading("intentic.owner=bbb intentic.id=cf-app-example-com").read(inputs, owned))?.stampOwner).toBe("bbb");
+    expect((await reading("intentic.id=cf-app-example-com").read(inputs, owned))?.stampOwner).toBe("");
+    expect(await reading("intentic.id=cf-app-example-com").read(inputs, ctx())).not.toHaveProperty("stampOwner");
+});
+
+test("a route whose owned comment would pass Cloudflare's 100-character cap keeps the legacy stamp and is not owner-checked", async () => {
+    let comment: string | undefined;
+    const longId = `cf-${"a".repeat(70)}`;
+    const provider = createCfRouteProvider(
+        api({
+            findDnsRecord: async () => ({ id: "rec-1", content: "tunnel-abc.cfargotunnel.com", comment: `intentic.id=${longId}` }),
+            updateDnsRecord: async (args) => {
+                comment = args.comment;
+            },
+        }),
+        noPropagationWait,
+    );
+    const longCtx = { ...ctx(), id: longId, owner: "3f9a1c2b7d4e" };
+    expect(await provider.read(inputs, longCtx)).not.toHaveProperty("stampOwner");
+    await provider.apply(inputs, undefined, longCtx);
+    expect(comment).toBe(`intentic.id=${longId}`);
+});
+
+test("list scans both stamp forms and returns each record's owner, skipping comments that are not stamps", async () => {
+    const prefixes: string[] = [];
+    const provider = createCfRouteProvider(
+        api({
+            getZone: async () => ({ id: "zone-1", accountId: "acct" }),
+            listStampedDnsRecords: async ({ commentPrefix }) => {
+                prefixes.push(commentPrefix);
+                return commentPrefix === "intentic.id="
+                    ? [{ name: "old.example.com", comment: "intentic.id=cf-old" }]
+                    : [
+                          { name: "mine.example.com", comment: "intentic.owner=aaa intentic.id=cf-mine" },
+                          { name: "odd.example.com", comment: "intentic.owner=aaa but not a stamp" },
+                      ];
+            },
+        }),
+    );
+    const sources = [{ id: "cf", type: "cloudflare" as const, inputs: { apiToken: "tok", zone: "example.com" } }];
+    const listed = await provider.list?.(sources, ctx());
+    expect(prefixes).toEqual(["intentic.id=", "intentic.owner="]);
+    expect(listed).toEqual([
+        { id: "cf-old", inputs: { hostname: "old.example.com", zoneId: "zone-1", apiToken: "tok" } },
+        { id: "cf-mine", inputs: { hostname: "mine.example.com", zoneId: "zone-1", apiToken: "tok" }, owner: "aaa" },
+    ]);
+});
+
+test("list reports a zone it cannot find as a skipped source, not as an empty zone", async () => {
+    const skipped: string[] = [];
+    const provider = createCfRouteProvider(api({ getZone: async () => undefined }));
+    const sources = [{ id: "cf", type: "cloudflare" as const, inputs: { apiToken: "tok", zone: "example.com" } }];
+    expect(await provider.list?.(sources, { ...ctx(), skipped: (source, reason) => skipped.push(`${source}: ${reason}`) })).toEqual([]);
+    expect(skipped).toEqual(['cf: zone "example.com" not found']);
+});

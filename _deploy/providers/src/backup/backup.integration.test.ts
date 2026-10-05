@@ -11,7 +11,7 @@ const SEP = "|";
 // Drives the backup provider over SSH: docker ps reports the container, docker inspect reports the create-time
 // image + schedule/repo labels, `command -v docker` finds the host CLI, docker run can fail.
 const fakeSsh = (
-    opts: { running?: boolean; image?: string; schedule?: string; repo?: string; runFails?: boolean; failWrite?: string } = {},
+    opts: { running?: boolean; image?: string; schedule?: string; repo?: string; owner?: string; runFails?: boolean; failWrite?: string } = {},
 ): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
@@ -24,7 +24,7 @@ const fakeSsh = (
                 const image = opts.image ?? IMAGE;
                 const schedule = opts.schedule ?? "0 3 * * *";
                 const repo = opts.repo ?? "s3:s3.example.com/bucket";
-                return res(`${image}${SEP}${schedule}${SEP}${repo}`);
+                return res(`${image}${SEP}${schedule}${SEP}${repo}${opts.owner === undefined ? "" : `${SEP}${SEP}${opts.owner}`}`);
             }
             if (command.includes("docker ps")) {
                 return res(opts.running ? "intentic-backup" : "");
@@ -79,9 +79,24 @@ test("read returns undefined when the backup container is not running", async ()
     expect(await createBackupProvider(fakeSsh({ running: false }).executor).read(inputs, ctx())).toBeUndefined();
 });
 
-test("read returns the observed image + schedule + repo when running", async () => {
+test("read returns the observed image + schedule + repo when running, and the empty owner of a container from before owners", async () => {
     const observed = await createBackupProvider(fakeSsh({ running: true }).executor).read(inputs, ctx());
-    expect(observed).toEqual({ outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" } });
+    expect(observed).toEqual({
+        outputs: {},
+        detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" },
+        stampOwner: "",
+    });
+});
+
+test("read reports the owner stamp, and apply stamps the run's owner on the container it recreates", async () => {
+    const ssh = fakeSsh({ running: true, owner: "aaa" });
+    expect((await createBackupProvider(ssh.executor).read(inputs, ctx()))?.stampOwner).toBe("aaa");
+    await createBackupProvider(ssh.executor).apply(inputs, undefined, { ...ctx(), owner: "aaa" });
+    expect(
+        ssh.commands.some(
+            (c) => c.includes("docker run") && c.includes("--label intentic.owner=aaa") && c.includes("--label intentic.id=host-backup"),
+        ),
+    ).toBe(true);
 });
 
 test("diff is noop when image, schedule, and repo all match", () => {

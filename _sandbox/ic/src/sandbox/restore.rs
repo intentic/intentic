@@ -1,4 +1,5 @@
 use crate::docker;
+use crate::sandbox::lock;
 use crate::sandbox::trash::GRACE_DAYS;
 use crate::sandbox::{list_slugs, trash};
 use crate::tty;
@@ -81,6 +82,8 @@ pub fn run(args: Args) -> Result<()> {
         return Ok(());
     }
 
+    // One ic at a time on a sandbox: a sweep or a purge of the same slug must not run underneath the restore.
+    let _held = lock::hold_for_person(&slug)?;
     trash::restore(&slug);
     println!("intentic: restored '{slug}'. Its /work and /history are as they were.");
     // Its address is minted per connection, so a restored container answers where it used to only if the
@@ -137,9 +140,21 @@ pub fn purge(args: PurgeArgs) -> Result<()> {
         println!("intentic: cancelled — nothing purged.");
         return Ok(());
     }
+    let mut kept: Vec<String> = Vec::new();
     for slug in &selected {
+        let _held = lock::hold_for_person(slug)?;
         println!("intentic: deleting '{slug}'…");
-        trash::purge(slug);
+        if let Err(why) = trash::purge(slug) {
+            eprintln!("intentic: {why}.");
+            kept.push(slug.clone());
+        }
+    }
+    if !kept.is_empty() {
+        bail!(
+            "{} could not be deleted completely and stay in the trash, so the next purge or the sweep tries again: {}",
+            crate::util::plural(kept.len(), "sandbox"),
+            kept.join(", ")
+        );
     }
     println!("intentic: done.");
     Ok(())

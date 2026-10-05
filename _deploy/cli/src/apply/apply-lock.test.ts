@@ -1,5 +1,5 @@
 import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
-import { acquireApplyLock } from "./apply-lock.js";
+import { acquireApplyLock, type ApplyLock, LockLostError, startLockHeartbeat } from "./apply-lock.js";
 
 // Fake host fleet driven by the `#APPLYLOCK <op> <nonce> <ttl>` header each lock script starts with (a real shell reads
 // it as a no-op comment). Clock ages locks past TTL for stale-takeover tests; `commands` records per-host op order.
@@ -148,5 +148,71 @@ describe("acquireApplyLock", () => {
         fleet.clock.now += 50;
         await lock.renew();
         expect(fleet.locks.get("10.0.0.1:22")?.expiresAt).toBeGreaterThan(original);
+    });
+});
+
+// Waits for a timer-driven condition without betting on how many beats a loaded machine fits into a fixed sleep.
+const until = async (condition: () => boolean, timeoutMs = 2_000): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    while (!condition() && Date.now() < deadline) {
+        await Bun.sleep(5);
+    }
+};
+
+describe("renew and the heartbeat", () => {
+    it("renew throws LockLostError once another run holds the lock", async () => {
+        const fleet = createFakeFleet();
+        const lock = await acquireApplyLock(fleet.executor, [target("10.0.0.1")]);
+        fleet.locks.set("10.0.0.1:22", { nonce: "stolen", expiresAt: 999_999 });
+        await expect(lock.renew()).rejects.toBeInstanceOf(LockLostError);
+    });
+
+    it("renews on every beat for as long as the run lasts, then stops", async () => {
+        const fleet = createFakeFleet();
+        const lock = await acquireApplyLock(fleet.executor, [target("10.0.0.1")], { ttlSeconds: 100 });
+        const heartbeat = startLockHeartbeat(lock, { intervalMs: 5, onLost: () => {} });
+        await until(() => fleet.commands.filter((c) => c.op === "renew").length >= 2);
+        heartbeat.stop();
+        const renewals = fleet.commands.filter((c) => c.op === "renew").length;
+        expect(renewals).toBeGreaterThanOrEqual(2);
+        await Bun.sleep(20);
+        expect(fleet.commands.filter((c) => c.op === "renew").length).toBe(renewals);
+    });
+
+    it("stops the run at once when the lock is taken over", async () => {
+        const fleet = createFakeFleet();
+        const lock = await acquireApplyLock(fleet.executor, [target("10.0.0.1")]);
+        const lost: Error[] = [];
+        const heartbeat = startLockHeartbeat(lock, { intervalMs: 5, onLost: (error) => lost.push(error) });
+        fleet.locks.set("10.0.0.1:22", { nonce: "stolen", expiresAt: 999_999 });
+        await until(() => lost.length > 0);
+        await Bun.sleep(20);
+        heartbeat.stop();
+        expect(lost).toHaveLength(1);
+        expect(lost[0]).toBeInstanceOf(LockLostError);
+    });
+
+    it("rides out one failed renewal, and stops the run on a second in a row", async () => {
+        let failing = 0;
+        const lock: ApplyLock = {
+            verify: async () => {},
+            release: async () => {},
+            ttlSeconds: 100,
+            renew: async () => {
+                failing += 1;
+                if (failing === 1 || failing >= 3) {
+                    throw new Error("connect ETIMEDOUT");
+                }
+            },
+        };
+        const lost: Error[] = [];
+        const heartbeat = startLockHeartbeat(lock, { intervalMs: 5, onLost: (error) => lost.push(error) });
+        await until(() => lost.length > 0);
+        await Bun.sleep(20);
+        heartbeat.stop();
+        // Beat 1 failed and beat 2 succeeded (reset), so only beats 3 and 4 in a row stop it.
+        expect(lost).toHaveLength(1);
+        expect(lost[0]?.message).toContain("could not renew the apply lock twice in a row");
+        expect(failing).toBe(4);
     });
 });

@@ -27,4 +27,6 @@ flowchart LR
 | [engine](engine) | Stateless plan, apply, prune and reconcile loop over a provider map. |
 | [providers](providers) | One provider per resource kind, over SSH and vendor HTTP APIs. |
 
+Every resource the tool deploys is stamped with its node id and, since 2026-10-05, the intent that owns it, so intents that share a host or a Cloudflare zone never prune each other's resources. See [the deployment engine](../docs/architecture/deploy-engine.md) for ownership and the prune baseline.
+
 The `intentic` binary ships inside the sandbox image, where the daemon's Infra check and apply shell out to it, and in the Forgejo Actions pipelines `intentic deploy adopt` installs. A complete intent file is [`_tools/examples/deploy.config.ts`](../_tools/examples/deploy.config.ts).

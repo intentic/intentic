@@ -1,24 +1,24 @@
 //! A tunnel's WebSocket as the byte stream its session runs on (yamux on `/tunnel/v2`, h2 on the edge's legacy door).
 //! Two tasks, one per direction, since a session that cannot write while its reader is parked on a full buffer
 //! deadlocks; either ending ends the tunnel. The socket's liveness is the tunnel's only one: the front pings, and both
-//! ends drop a peer silent past `DEAD_AFTER`, since a path that died without a FIN reports nothing else.
+//! ends drop a peer silent past `DEAD_AFTER`, since a path that died without a FIN reports nothing else. That check runs
+//! in a task of its own beside both directions: in the writer's loop, as it was until 2026-10-05, a write stalled on a
+//! dead path held it, and the tunnel stayed up until TCP gave up minutes later.
 
 use std::borrow::Cow;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tokio::time::Instant;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
-use crate::{DEAD_AFTER, PING_EVERY};
+use crate::{DEAD_AFTER, Heard, PING_EVERY};
 
 // Bytes in flight between the WebSocket and the session, each way; past it the reader simply waits. Small, since every
 // stream's frames queue here in the order the session wrote them: a keystroke waits behind at most this much.
@@ -29,6 +29,10 @@ const READ_CHUNK: usize = 64 * 1024;
 
 // A far end's close reaches the reader just after it made the writer fail; waited for this long, its code says why.
 const CLOSE_HEARD_WITHIN: Duration = Duration::from_secs(1);
+
+// A single write the socket has not taken by now is a path that stopped carrying anything. The silence check says the
+// same within a ping's interval; this also ends the writer rather than leave it parked on the dead socket.
+const WRITE_PATIENCE: Duration = DEAD_AFTER;
 
 /// A close this end sends: why the tunnel is ending, in the WebSocket's own terms. The reason fits a close frame: 123
 /// bytes at most.
@@ -77,23 +81,31 @@ where
     let (session, pump) = tokio::io::duplex(PIPE_BYTES);
     let (mut from_session, mut into_session) = tokio::io::split(pump);
     let (mut sink, mut frames) = socket.split();
-    let epoch = Instant::now();
-    // Milliseconds since `epoch` of the last frame heard; any frame proves the far end alive, not only a pong.
-    let heard = Arc::new(AtomicU64::new(0));
+    // Any frame proves the far end alive, not only a pong; a pong also proves a round this end asked for.
+    let heard = Arc::new(Heard::default());
+    let because = Arc::new(Mutex::new(None));
 
     let hearing = heard.clone();
+    let giving = because.clone();
     let inbound = tokio::spawn(async move {
         while let Some(frame) = frames.next().await {
-            hearing.store(
-                u64::try_from(epoch.elapsed().as_millis()).unwrap_or(u64::MAX),
-                Ordering::Relaxed,
-            );
+            hearing.mark();
             let bytes = match frame {
                 Ok(Message::Binary(bytes)) => bytes,
                 // A stray text frame is coerced rather than dropped.
                 Ok(Message::Text(text)) => Bytes::from(text.as_str().to_owned()),
                 Ok(Message::Close(frame)) => {
+                    if let Some(frame) = &frame
+                        && !frame.reason.is_empty()
+                    {
+                        *giving.lock().expect("a close reason is never poisoned") =
+                            Some(frame.reason.as_str().to_owned());
+                    }
                     return Ended::Closed(frame.map(|frame| u16::from(frame.code)));
+                }
+                Ok(Message::Pong(_)) => {
+                    hearing.answer();
+                    continue;
                 }
                 Ok(_) => continue,
                 Err(error) => return Ended::Dropped(error.to_string()),
@@ -114,30 +126,80 @@ where
                 read = from_session.read(&mut buffer) => match read {
                     Ok(0) | Err(_) => return Outbound::Ended(Ended::Dropped("the session ended".into())),
                     Ok(read) => {
-                        if sink.send(Message::Binary(Bytes::copy_from_slice(&buffer[..read]))).await.is_err() {
-                            return Outbound::Refused("the tunnel socket refused a write");
+                        let message = Message::Binary(Bytes::copy_from_slice(&buffer[..read]));
+                        if let Some(failed) = send_within(&mut sink, message, Sent::Write).await {
+                            return failed;
                         }
                     }
                 },
                 _ = ping.tick() => {
-                    let silent = epoch.elapsed().saturating_sub(Duration::from_millis(heard.load(Ordering::Relaxed)));
-                    if silent > DEAD_AFTER {
-                        return Outbound::Ended(Ended::Dropped(format!("no frame from the far end in {silent:?}")));
-                    }
-                    if liveness == Liveness::Pings && sink.send(Message::Ping(Bytes::new())).await.is_err() {
-                        return Outbound::Refused("the tunnel socket refused a ping");
+                    if liveness == Liveness::Pings
+                        && let Some(failed) = send_within(&mut sink, Message::Ping(Bytes::new()), Sent::Ping).await
+                    {
+                        return failed;
                     }
                 }
                 close = raised(&mut closing) => {
                     let frame = CloseFrame { code: close.code.into(), reason: Utf8Bytes::from(close.reason.to_string()) };
-                    let _ = sink.send(Message::Close(Some(frame))).await;
+                    let _ = tokio::time::timeout(WRITE_PATIENCE, sink.send(Message::Close(Some(frame)))).await;
                     return Outbound::Ended(Ended::Dropped(format!("closed here: {}", close.reason)));
                 }
             }
         }
     });
 
-    (session, Pumping { inbound, outbound })
+    // Its own task, so nothing either direction waits on can postpone it.
+    let watching = heard.clone();
+    let silence = tokio::spawn(async move {
+        let mut check = tokio::time::interval(PING_EVERY);
+        check.tick().await;
+        loop {
+            check.tick().await;
+            let silent = watching.silent();
+            if silent > DEAD_AFTER {
+                return Ended::Dropped(format!("no frame from the far end in {silent:?}"));
+            }
+        }
+    });
+
+    (
+        session,
+        Pumping {
+            inbound,
+            outbound,
+            silence,
+            heard,
+            because,
+        },
+    )
+}
+
+// What the writer was sending when the socket failed it.
+#[derive(Clone, Copy)]
+enum Sent {
+    Write,
+    Ping,
+}
+
+// Sends one message, or answers how the writer ends: the socket refused it, or did not take it in time.
+async fn send_within<K>(sink: &mut K, message: Message, sent: Sent) -> Option<Outbound>
+where
+    K: Sink<Message> + Unpin,
+{
+    match tokio::time::timeout(WRITE_PATIENCE, sink.send(message)).await {
+        Ok(Ok(())) => None,
+        Ok(Err(_)) => Some(Outbound::Refused(match sent {
+            Sent::Write => "the tunnel socket refused a write",
+            Sent::Ping => "the tunnel socket refused a ping",
+        })),
+        Err(_) => Some(Outbound::Ended(Ended::Dropped(format!(
+            "{} the tunnel socket stalled for {WRITE_PATIENCE:?}",
+            match sent {
+                Sent::Write => "a write to",
+                Sent::Ping => "a ping on",
+            }
+        )))),
+    }
 }
 
 // How the writing direction stopped: on its own account, or refused by a socket the far end may just have closed.
@@ -146,17 +208,36 @@ enum Outbound {
     Refused(&'static str),
 }
 
-/// Both directions of a pumped tunnel; dropping it stops them.
+/// Both directions of a pumped tunnel and its silence check; dropping it stops them.
 pub struct Pumping {
     inbound: JoinHandle<Ended>,
     outbound: JoinHandle<Outbound>,
+    silence: JoinHandle<Ended>,
+    heard: Arc<Heard>,
+    because: Arc<Mutex<Option<String>>>,
 }
 
 impl Pumping {
-    /// How the tunnel ended, once either direction has; the other is stopped then.
+    /// The reason the far end's close frame gave, once it closed with one: where another copy runs, for a tunnel the
+    /// edge closed with `HELD_ELSEWHERE_CODE`.
+    pub fn close_reason(&self) -> Option<String> {
+        self.because
+            .lock()
+            .expect("a close reason is never poisoned")
+            .clone()
+    }
+
+    /// When the far end was last heard, and whether it ever answered a ping: what the edge reads to know a holder is
+    /// alive, and what the front reads to count a carrier as having worked.
+    pub fn heard(&self) -> Arc<Heard> {
+        self.heard.clone()
+    }
+
+    /// How the tunnel ended, once either direction has or the far end went silent; the rest is stopped then.
     pub async fn ended(&mut self) -> Ended {
         let ended = tokio::select! {
             ended = &mut self.inbound => ended.unwrap_or_else(|error| Ended::Dropped(error.to_string())),
+            silent = &mut self.silence => silent.unwrap_or_else(|error| Ended::Dropped(error.to_string())),
             outbound = &mut self.outbound => match outbound {
                 Ok(Outbound::Ended(ended)) => ended,
                 Ok(Outbound::Refused(why)) => match tokio::time::timeout(CLOSE_HEARD_WITHIN, &mut self.inbound).await {
@@ -168,6 +249,7 @@ impl Pumping {
         };
         self.inbound.abort();
         self.outbound.abort();
+        self.silence.abort();
         ended
     }
 }
@@ -176,6 +258,7 @@ impl Drop for Pumping {
     fn drop(&mut self) {
         self.inbound.abort();
         self.outbound.abort();
+        self.silence.abort();
     }
 }
 
@@ -197,6 +280,7 @@ pub async fn raised(flag: &mut watch::Receiver<Option<Close>>) -> Close {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::time::Instant;
     use tokio_tungstenite::tungstenite::protocol::Role;
 
     async fn pair() -> (WebSocketStream<DuplexStream>, WebSocketStream<DuplexStream>) {
@@ -229,6 +313,7 @@ mod tests {
             reason: "displaced".into(),
         }));
         assert_eq!(near_pumping.ended().await, Ended::Closed(Some(4001)));
+        assert_eq!(near_pumping.close_reason().as_deref(), Some("displaced"));
         assert!(matches!(far_pumping.ended().await, Ended::Dropped(_)));
     }
 
@@ -300,5 +385,50 @@ mod tests {
         assert!(why.starts_with("no frame from the far end"), "{why}");
         assert!(started.elapsed() > DEAD_AFTER);
         assert!(started.elapsed() <= DEAD_AFTER + PING_EVERY);
+    }
+
+    // A pong is a round this end asked for coming back: the front counts a carrier that carried one as having worked.
+    #[tokio::test(start_paused = true)]
+    async fn a_pong_marks_the_pinging_end_answered() {
+        let (near, far) = pair().await;
+        let (_near_close, near_closing) = watch::channel(None);
+        let (_far_close, far_closing) = watch::channel(None);
+        let (_near_session, near_pumping) = pump(near, Liveness::Pings, near_closing);
+        let (_far_session, far_pumping) = pump(far, Liveness::Listens, far_closing);
+        assert!(!near_pumping.heard().answered());
+        tokio::time::sleep(PING_EVERY + Duration::from_secs(1)).await;
+        assert!(near_pumping.heard().answered());
+        assert!(near_pumping.heard().alive());
+        assert!(
+            !far_pumping.heard().answered(),
+            "the listening end asks nothing"
+        );
+    }
+
+    // The 2026-10-05 gap: a far end that stops reading parks this end's write, and the silence check that shared the
+    // writer's loop waited behind it. Now it runs beside it, and the tunnel ends within a dead window and a ping.
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_write_cannot_postpone_the_silence_check() {
+        let (client, _never_read) = tokio::io::duplex(4 * 1024);
+        let near = WebSocketStream::from_raw_socket(client, Role::Client, None).await;
+        let (_near_close, near_closing) = watch::channel(None);
+        let (mut near_session, mut near_pumping) = pump(near, Liveness::Pings, near_closing);
+        let writing = tokio::spawn(async move {
+            while near_session.write_all(&[7_u8; 16 * 1024]).await.is_ok() {}
+        });
+        let started = Instant::now();
+        let Ended::Dropped(why) = near_pumping.ended().await else {
+            panic!("a silent far end is dropped, not closed");
+        };
+        assert!(
+            why.starts_with("no frame from the far end") || why.contains("stalled"),
+            "{why}"
+        );
+        assert!(
+            started.elapsed() <= DEAD_AFTER + PING_EVERY,
+            "{:?}",
+            started.elapsed()
+        );
+        writing.abort();
     }
 }

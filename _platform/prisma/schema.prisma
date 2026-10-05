@@ -218,10 +218,24 @@ model Sandbox {
     // minted for a hosted sandbox.
     fixCode            String?         @unique
     fixCodeExpiresAt   DateTime?
-    // What the machine this sandbox runs on last found of it (HostReportSchema), posted by `ic sandbox fix` to
-    // POST /host-report under the report key (HMAC of the connect token). Only the latest is kept; the owner's
-    // summary shows it, a member's never does. No mint lifecycle: it describes the machine, not a fix code.
+    // What the machines this sandbox runs on last found of it (HostReportSchema), posted by `ic sandbox fix` to
+    // POST /host-report under the report key (HMAC of the connect token). The newest report per reporter (machine, OS
+    // and environment), at most three, as `{ reporters: { <key>: report } }` (api host-report.ts); a row from before
+    // (2026-10-05) holds one bare report, read as a single reporter. The owner's summary shows the newest, a member's
+    // never does. No mint lifecycle: it describes the machine, not a fix code.
     hostReport         Json?
+    // The last two distinct copies of this sandbox that announced, as [{instance, host, os, firstAt, at}] (api
+    // announce-copies.ts): an `instance` is minted once per container start, so two that keep announcing side by side
+    // are two containers holding one connect token, which is what pasting the setup command into PowerShell and into
+    // WSL makes. Null until a daemon that names its instance announces.
+    seenInstances      Json?
+    // Since when two copies have been announcing side by side, and null while one copy announces alone. Set by the
+    // announce that proves the overlap, cleared by the first announce after the other copy has been silent an hour.
+    duplicateSince     DateTime?
+    // Which machine redeemed the CURRENT setup code first, as {host, os, instance, at}, from what `ic` named in its
+    // claim; null until a claim names itself. A second claim naming a different machine is refused while the code
+    // lives, so one pasted command cannot start two copies (api app.ts). Cleared on every mint, like the stamp above.
+    setupClaimedBy     Json?
     /* Records container deletion while retaining the sandbox identity for a later re-announce. */
     removedAt          DateTime?
     // Who said so, for the sentence the editor shows: the machine's own label ("radarsu-rog"), or null when

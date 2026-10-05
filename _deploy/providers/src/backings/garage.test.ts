@@ -68,7 +68,11 @@ test("instance read returns undefined until garage status passes", async () => {
 });
 
 test("instance read returns the endpoints + observed image when ready; endpoint is public when a domain is set", async () => {
-    expect(await createGarageProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({ outputs, detail: { image: IMAGE } });
+    expect(await createGarageProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({
+        outputs,
+        detail: { image: IMAGE },
+        stampOwner: "",
+    });
     const exposed = await createGarageProvider(fakeSsh({ ready: true }).executor).read({ ...inputs, domain: "s3.example.com" }, ctx());
     expect((exposed as { outputs: Record<string, unknown> }).outputs["endpoint"]).toBe("https://s3.example.com");
 });

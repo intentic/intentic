@@ -9,12 +9,23 @@ import { adminAttention } from "./admin-attention.js";
 
 const TOP_ITEMS = 12;
 
+/* A LINE ONE OF THE DAY'S SWEEPS HAS FOR A HUMAN, beside the attention feed's rows (2026-10-05): what the reapers left
+ * standing because nothing proves it gone (apps of sandboxes this database has no record of), what they refused or put
+ * off, and what the app-shape check would not touch. Mail-only: the feed's rows come from the database, while these
+ * exist only in the pass that found them, so they ride the digest that pass sends. */
+export interface AdminDigestLine {
+    readonly severity: `danger` | `warning`;
+    readonly title: string;
+    readonly detail?: string;
+}
+
 export const sendAdminDigest = async (
     prisma: PrismaClient,
     config: Config,
     logger: Logger,
     day: string,
     now: () => Date = () => new Date(),
+    extra: readonly AdminDigestLine[] = [],
 ): Promise<void> => {
     const admins = config.admin.emails
         .split(`,`)
@@ -29,19 +40,21 @@ export const sendAdminDigest = async (
         return;
     }
     const attention = await adminAttention(prisma, now);
-    if (attention.items.length === 0) {
+    // The sweeps' own lines first: they are this morning's, and the feed's rows are in the panel anyway.
+    const items: readonly AdminDigestLine[] = [...extra, ...attention.items];
+    if (items.length === 0) {
         return;
     }
-    const dangers = attention.items.filter((item) => item.severity === `danger`).length;
-    const subject = `intentic admin: ${attention.items.length} ${attention.items.length === 1 ? `item needs` : `items need`} a human${dangers > 0 ? ` (${dangers} urgent)` : ``}`;
-    const lines = attention.items
+    const dangers = items.filter((item) => item.severity === `danger`).length;
+    const subject = `intentic admin: ${items.length} ${items.length === 1 ? `item needs` : `items need`} a human${dangers > 0 ? ` (${dangers} urgent)` : ``}`;
+    const lines = items
         .slice(0, TOP_ITEMS)
         .map(
             (item) =>
                 `<li style="margin: 0.4rem 0;">${item.severity === `danger` ? `🔴` : `🟡`} ${item.title}${item.detail ? `<br/><span style="color:#888; font-size: 0.85rem;">${item.detail}</span>` : ``}</li>`,
         )
         .join(``);
-    const more = attention.items.length > TOP_ITEMS ? `<p style="color:#888;">…and ${attention.items.length - TOP_ITEMS} more in the panel.</p>` : ``;
+    const more = items.length > TOP_ITEMS ? `<p style="color:#888;">…and ${items.length - TOP_ITEMS} more in the panel.</p>` : ``;
     const html = `
     <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 34rem; margin: 0 auto; color: #1a1a1a;">
         <h2 style="font-size: 1.15rem; font-weight: 600;">The platform's attention feed, ${day}</h2>
@@ -57,5 +70,5 @@ export const sendAdminDigest = async (
             logger.error({ err: error, to }, `admin digest send failed`);
         }
     }
-    logger.info({ day, items: attention.items.length, dangers, admins: admins.length }, `admin digest sent`);
+    logger.info({ day, items: items.length, dangers, admins: admins.length }, `admin digest sent`);
 };

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { ForgejoApi } from "@intentic/providers";
 import { forgejoApi } from "@intentic/providers";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
@@ -6,6 +7,9 @@ export interface AdoptRepo {
     // Local git repo to push, and the name it takes under the Forgejo admin owner.
     readonly dir: string;
     readonly name: string;
+    // An annotated tag to create from a file's content and push only if the remote lacks it: the desired-state repo's
+    // intentic-applied tag, seeded with the local prune baseline so the first pipeline apply has one to read.
+    readonly seedTag?: { readonly name: string; readonly messageFile: string };
 }
 
 export interface AdoptOptions {
@@ -31,7 +35,7 @@ export const adoptRepos = async (options: AdoptOptions): Promise<{ readonly name
     const authHeader = `AUTHORIZATION: basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
     // Repos are independent; adopted concurrently, but each stays sequential internally. Order mirrors `repos`.
     return Promise.all(
-        repos.map(async ({ dir, name }) => {
+        repos.map(async ({ dir, name, seedTag }) => {
             const existing = await api.findRepo({ baseUrl, user, password, owner: user, name });
             if (existing === undefined) {
                 await api.createRepo({ baseUrl, user, password, owner: user, ownerIsOrg: false, name, private: true, autoInit: false });
@@ -41,8 +45,33 @@ export const adoptRepos = async (options: AdoptOptions): Promise<{ readonly name
             const cloneUrl = `${originBaseUrl}/${user}/${name}.git`;
             const remotes = (await git(dir, ["remote"])).stdout.split("\n").map((line) => line.trim());
             await git(dir, remotes.includes("origin") ? ["remote", "set-url", "origin", cloneUrl] : ["remote", "add", "origin", cloneUrl]);
+            const pushUrl = `${baseUrl}/${user}/${name}.git`;
+            // The tag goes first, so the pipeline the push of main starts already finds it. Never forced: a remote tag is
+            // the pipeline's own, newer baseline. Best-effort, since without it the first apply still checks what is live.
+            if (seedTag !== undefined) {
+                try {
+                    await git(dir, [
+                        "-c",
+                        `user.name=${user}`,
+                        "-c",
+                        `user.email=${email}`,
+                        "tag",
+                        "-f",
+                        "-a",
+                        "--cleanup=verbatim",
+                        "-F",
+                        seedTag.messageFile,
+                        seedTag.name,
+                        "HEAD",
+                    ]);
+                    await git(dir, ["-c", `http.extraHeader=${authHeader}`, "push", pushUrl, `refs/tags/${seedTag.name}`]);
+                    log(`seeded ${user}/${name}'s ${seedTag.name} tag with the local prune baseline`);
+                } catch (error) {
+                    log(`kept ${user}/${name}'s ${seedTag.name} tag as it is (${errorMessage(error)})`);
+                }
+            }
             // Pushes to the transport url, not `origin`: origin may not resolve yet (DNS/tunnel).
-            await git(dir, ["-c", `http.extraHeader=${authHeader}`, "push", `${baseUrl}/${user}/${name}.git`, "main"]);
+            await git(dir, ["-c", `http.extraHeader=${authHeader}`, "push", pushUrl, "main"]);
             log(`pushed ${dir} → ${cloneUrl}`);
             return { name, cloneUrl };
         }),

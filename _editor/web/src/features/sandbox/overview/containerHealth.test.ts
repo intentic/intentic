@@ -49,6 +49,18 @@ describe(`containerNotices`, () => {
         expect(notices[0]?.detail).toBe(REACHABILITY_GAP.lost);
     });
 
+    // Two copies taking turns at one address are why it stops answering: the copies are the errand, not the silence.
+    it(`names the machines running two copies of one sandbox, ahead of the silence they cause`, () => {
+        const notices = containerNotices({
+            bootReport: report({ retrying: false, detail: `nothing answered.` }),
+            announceRefusal: null,
+            duplicateCopies: { hosts: [`rog (windows)`, `rog (linux/archlinux)`], since: `2026-10-05T19:00:00.000Z` },
+        });
+        expect(notices.map((notice) => notice.fault)).toEqual([`duplicate`]);
+        expect(notices[0]?.detail).toContain(`rog (windows), rog (linux/archlinux)`);
+        expect(containerNotices({ bootReport: null, announceRefusal: null, duplicateCopies: null })).toEqual([]);
+    });
+
     // A container that is both drifted and unreachable reports only drift; unreachable is its symptom.
     it(`reports the cause instead of the symptom it explains`, () => {
         const notices = containerNotices({

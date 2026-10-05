@@ -11,7 +11,9 @@ flowchart LR
 ```
 
 - `createProviders` assembles the full kind-to-provider map over injectable dependencies: the SSH executor and each vendor API client. Tests pass fakes and drive the whole suite in memory.
-- Every container intentic starts on a host carries `intentic.id` and `intentic.type` labels, so `list` finds orphans with one `docker ps` per host.
+- Every container intentic starts on a host carries `intentic.id` and `intentic.type` labels, so `list` finds orphans with one `docker ps` per host. Since 2026-10-05 it also carries `intentic.owner`, the intent that made it, and a Cloudflare route's DNS comment starts with the owner. `list` reports each resource's owner and the engine decides what is whose; a host it cannot reach or list is reported as skipped, not as empty.
+- Adopting an unowned resource means re-stamping it, which for a container means recreating it. Backings, catalog services, the backup container and Cloudflare routes read their owner back, so the next apply adopts them (2026-10-05). Forgejo, its runner, Komodo and the agent workspace only get the label on their next real recreate: recreating them for a label would restart the forge and runner a CI apply runs on, or the sandbox an agent works in.
+- Repos, Komodo deployments and users, tunnels and database bindings have no `list`: they carry no stamp a scan could attribute, so the CLI's prune baseline keeps a removed one pending until its delete succeeds (2026-10-05).
 - Forgejo and Komodo APIs are reached through a loopback port-forward over SSH, because the Cloudflare tunnel behind their public routes may be the very thing an apply is changing.
 - A NAT'd host is reached through its own Cloudflare tunnel (`via: "cloudflared"`). Host keys are trusted on first use and pinned.
 - Stateful services on a host with the `guarded` update policy snapshot their volumes with restic before an image bump and roll back if the new image fails its health check.
@@ -22,6 +24,7 @@ flowchart LR
 - [src/core/ssh.ts](src/core/ssh.ts) — the SSH executor, cloudflared forwarding and host-key pinning.
 - [src/core/over-ssh.ts](src/core/over-ssh.ts) — why and how control-plane APIs go over SSH.
 - [src/core/backing-provider.ts](src/core/backing-provider.ts) — the shared shape of Postgres, Valkey, Garage and Authentik.
+- [src/core/stamp.ts](src/core/stamp.ts) — the labels every container is stamped with, owner included, and reading them back.
 - [src/komodo/deployment.ts](src/komodo/deployment.ts) — one Komodo deployment per app environment.
 - [src/suite.engine.test.ts](src/suite.engine.test.ts) — the whole provider stack reconciling an app over fakes, then again as a noop.
 

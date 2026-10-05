@@ -1,5 +1,6 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import { plainText } from "@intentic/base/plain-text";
+import { detachedStamp } from "../seams/workload-stamp.js";
 import { spawnAs } from "../workload/workload-class.js";
 import { conditionHolds, reposOf, standing } from "./rules.js";
 import { workspaceRelative } from "./workspace-relative.js";
@@ -118,7 +119,13 @@ export const spawnEditCommand =
         new Promise((resolve) => {
             let output = "";
             let timedOut = false;
-            const child = spawnAs({ class: "command" }, "bash", ["-c", command], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+            // Its deadline rides along, so the reaper ends it even when the daemon that set it is gone.
+            const child = spawnAs({ class: "command" }, "bash", ["-c", command], {
+                cwd,
+                env: { ...process.env, ...detachedStamp("edit-rule", Date.now() + timeoutMs) },
+                detached: true,
+                stdio: ["ignore", "pipe", "pipe"],
+            });
             const keep = (chunk: Buffer): void => {
                 output = `${output}${chunk.toString("utf8")}`.slice(-OUTPUT_BYTES * 4);
             };

@@ -18,6 +18,7 @@ import {
     hostedMachineConfig,
     hostedEnabled,
     hostedInstanceId,
+    HostedAppNotOurs,
     HostedNothingKept,
     provisionHosted,
     reapHostedOrphans,
@@ -124,6 +125,11 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
             findMany: jest.fn().mockResolvedValue([]),
             ...overrides[`sandboxTrash`],
         },
+        // The deletion records the reaper destroys on: none unless a test says which sandboxes were deleted.
+        sandboxTombstone: {
+            findMany: jest.fn().mockResolvedValue([]),
+            ...overrides[`sandboxTombstone`],
+        },
         // Empty pool by default so tests not about the pool exercise the cold path.
         hostedPoolMachine: {
             findMany: jest.fn().mockResolvedValue([]),
@@ -147,6 +153,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
             update: jest.fn().mockResolvedValue({}),
             findUnique: jest.fn().mockResolvedValue({ tokenDigest: sha256Hex(`t0k3n`) }),
             findUniqueOrThrow: jest.fn().mockResolvedValue({ ownerId: `u1` }),
+            // The reaper's "does this app's sandbox still exist" read: none unless a test says so.
+            findMany: jest.fn().mockResolvedValue([]),
             ...overrides[`sandbox`],
         },
     };
@@ -409,7 +417,7 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-    it(`refuses without touching the provider when the fleet is at its ceiling`, async () => {
+    it(`refuses without making anything on the provider when the fleet is at its ceiling`, async () => {
         const fetchSpy = stubFetch([]);
         const full = fakePrisma({
             hostedMachine: { create: jest.fn(), count: jest.fn().mockResolvedValue(100) },
@@ -419,7 +427,8 @@ describe(`provisionHosted`, () => {
         await expect(
             provisionHosted(full as never, config({ hosted: { ...config().hosted, maxMachines: 100 } }), logger, args),
         ).rejects.toBeInstanceOf(HostedAtCapacity);
-        expect(fetchSpy).toHaveLength(0);
+        // Only the read of whether this sandbox's own app is still on the provider (heldAppOf).
+        expect(fetchSpy.map((entry) => entry.method)).toEqual([`GET`]);
     });
 
     it(`reads the provider's own "no machines left" as the same refusal, and still cleans up`, async () => {
@@ -437,6 +446,14 @@ describe(`provisionHosted`, () => {
         );
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
+
+    // The provider has no app named for this sandbox yet: the ordinary case, and the only one the warm pool is asked in
+    // (hosted.ts heldAppOf). A case that does not answer this read gets a cold build, never a claim.
+    const OWN_APP = `intentic-sbx-${sandboxIdFromToken(`t0k3n`)}`;
+    const noOwnApp = {
+        match: (method: string, url: string) => method === `GET` && url.endsWith(`/apps/${OWN_APP}`),
+        respond: () => json({ error: `Could not find App "${OWN_APP}"` }, 404),
+    };
 
     // Pool machine named after a token minted when it was built; secrets.key is empty in these fixtures, so the stored
     // token is the plaintext one.
@@ -467,6 +484,7 @@ describe(`provisionHosted`, () => {
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
+            noOwnApp,
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
@@ -536,6 +554,7 @@ describe(`provisionHosted`, () => {
         const poolDelete = jest.fn().mockResolvedValue({});
         const machine = settlingMachine(`m7`, { replacingFor: 2 });
         const calls = stubFetch([
+            noOwnApp,
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `replacing` }) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
@@ -558,6 +577,7 @@ describe(`provisionHosted`, () => {
 
     it(`ignores warm machines in the wrong region: the residency promise beats the fast path`, async () => {
         const calls = stubFetch([
+            noOwnApp,
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
@@ -577,6 +597,7 @@ describe(`provisionHosted`, () => {
         const created = jest.fn().mockResolvedValue({});
         const poolDelete = jest.fn().mockResolvedValue({});
         const calls = stubFetch([
+            noOwnApp,
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `host unavailable` }, 500) },
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
@@ -603,6 +624,7 @@ describe(`provisionHosted`, () => {
     it(`boots the digest the warm machine already holds, never the configured tag`, async () => {
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
+            noOwnApp,
             {
                 match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`),
                 respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }),
@@ -631,6 +653,7 @@ describe(`provisionHosted`, () => {
     // the pull, so the claim steps over it and reconcile destroys it on its own tick.
     it(`steps over a warm machine on a superseded image and builds cold instead`, async () => {
         const calls = stubFetch([
+            noOwnApp,
             {
                 match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`),
                 respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }),
@@ -666,6 +689,7 @@ describe(`provisionHosted`, () => {
         const poolDelete = jest.fn().mockResolvedValue({});
         const secondMachine = settlingMachine(`m8`);
         const calls = stubFetch([
+            noOwnApp,
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `machine not found` }, 404) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8`), respond: () => json({ id: `m8`, state: `stopped` }) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8/start`), respond: () => secondMachine.start() },
@@ -701,6 +725,7 @@ describe(`provisionHosted`, () => {
         const poolDelete = jest.fn().mockResolvedValue({});
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
+            noOwnApp,
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
@@ -742,6 +767,151 @@ describe(`provisionHosted`, () => {
         });
         await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
+    });
+
+    /* FLY LOST THE MACHINE, NOT THE DISK. The platform dropped the row (`forgetHostedMachine`), and the next provision
+     * computes the same app name from the same token: the app and its volume are this sandbox's, and it takes them
+     * back rather than failing at createApp, or claiming warm stock and rotating its token away from its own disk. */
+    describe(`this sandbox's own app, still on the provider`, () => {
+        const ownApp = {
+            match: (method: string, url: string) => method === `GET` && url.endsWith(`/apps/${OWN_APP}`),
+            respond: () => json({ name: OWN_APP }),
+        };
+        const ownMachines = (machines: unknown[]) => ({
+            match: (method: string, url: string) => method === `GET` && url.endsWith(`/apps/${OWN_APP}/machines`),
+            respond: () => json(machines),
+        });
+        const ownVolumes = {
+            match: (method: string, url: string) => method === `GET` && url.endsWith(`/apps/${OWN_APP}/volumes`),
+            respond: () =>
+                json([
+                    { id: `vol_old`, created_at: `2026-09-01T00:00:00Z`, region: `arn`, size_gb: 20 },
+                    { id: `vol_new`, created_at: `2026-09-20T00:00:00Z`, region: `arn`, size_gb: 20 },
+                ]),
+        };
+        const anyCreate = (calls: { method: string; url: string }[]) =>
+            calls.filter((entry) => entry.method === `POST` && (entry.url.endsWith(`/apps`) || entry.url.endsWith(`/volumes`)));
+
+        it(`makes a new machine on the newest volume, in the volume's region and at its size, and asks the pool nothing`, async () => {
+            const created = jest.fn().mockResolvedValue({});
+            const claim = jest.fn().mockResolvedValue({ count: 1 });
+            const calls = stubFetch([
+                ownApp,
+                ownMachines([]),
+                ownVolumes,
+                {
+                    match: (method, url) => method === `POST` && url.endsWith(`/apps/${OWN_APP}/machines`),
+                    respond: () => json({ id: `m9`, state: `created` }),
+                },
+            ]);
+            const cleanup = jest.fn().mockResolvedValue({});
+            const prisma = fakePrisma({
+                hostedMachine: { create: created },
+                hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow]), updateMany: claim },
+                hostedCleanup: { create: cleanup },
+            });
+            expect(await provisionHosted(prisma as never, config(), logger, args)).toEqual({ appName: OWN_APP, region: `arn`, warm: false });
+            expect(anyCreate(calls)).toEqual([]);
+            const made = calls.find((entry) => entry.method === `POST` && entry.url.endsWith(`/machines`))?.body as {
+                region: string;
+                config: { mounts: { volume: string; path: string }[] };
+            };
+            expect(made.region).toBe(`arn`);
+            expect(made.config.mounts).toEqual([{ volume: `vol_new`, path: FLY_VOLUME_PATH }]);
+            expect(created).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    sandboxId: `s1`,
+                    appName: OWN_APP,
+                    machineId: `m9`,
+                    volumeId: `vol_new`,
+                    region: `arn`,
+                    volumeGb: 20,
+                }),
+            });
+            // Warm stock would rotate the token away from this disk; the cleanup record would delete it on a failure.
+            expect(claim).not.toHaveBeenCalled();
+            expect(cleanup).not.toHaveBeenCalled();
+            expect(calls.some((entry) => entry.method === `DELETE`)).toBe(false);
+        });
+
+        it(`re-configures a machine of its own it finds there, onto the volume that machine mounts, and starts it`, async () => {
+            const created = jest.fn().mockResolvedValue({});
+            const mine = {
+                id: `m5`,
+                state: `stopped`,
+                created_at: `2026-09-20T00:00:00Z`,
+                config: { metadata: { intentic_role: `sandbox`, intentic_platform: INSTANCE } },
+            };
+            const calls = stubFetch([
+                ownApp,
+                ownMachines([mine]),
+                ownVolumes,
+                {
+                    match: (method, url) => method === `GET` && url.endsWith(`/machines/m5`),
+                    respond: () =>
+                        json({
+                            id: `m5`,
+                            state: `started`,
+                            config: { image: `ghcr.io/intentic/sandbox:old`, mounts: [{ volume: `vol_old`, path: `/data` }] },
+                        }),
+                },
+                { match: (method, url) => method === `POST` && url.endsWith(`/machines/m5`), respond: () => json({ id: `m5`, state: `stopped` }) },
+            ]);
+            await provisionHosted(fakePrisma({ hostedMachine: { create: created } }) as never, config(), logger, args);
+            const update = calls.find((entry) => entry.method === `POST` && entry.url.endsWith(`/machines/m5`))?.body as {
+                config: { mounts: { volume: string; path: string }[]; env: Record<string, string> };
+            };
+            expect(update.config.mounts).toEqual([{ volume: `vol_old`, path: FLY_VOLUME_PATH }]);
+            expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
+            expect(calls.some((entry) => entry.method === `POST` && entry.url.endsWith(`/apps/${OWN_APP}/machines`))).toBe(false);
+            expect(created).toHaveBeenCalledWith({ data: expect.objectContaining({ machineId: `m5`, volumeId: `vol_old` }) });
+        });
+
+        it(`never adopts an app holding a machine another deployment stamped, and touches nothing in it`, async () => {
+            const calls = stubFetch([ownApp, ownMachines([flyMachine({ platform: `deadbeefcafe`, role: `sandbox` })]), ownVolumes]);
+            await expect(
+                provisionHosted(fakePrisma({ hostedMachine: { create: jest.fn() } }) as never, config(), logger, args),
+            ).rejects.toBeInstanceOf(HostedAppNotOurs);
+            expect(calls.filter((entry) => entry.method !== `GET`)).toEqual([]);
+        });
+
+        it(`builds to order without the warm pool when the provider cannot say whether the app is there`, async () => {
+            const claim = jest.fn().mockResolvedValue({ count: 1 });
+            const calls = stubFetch([
+                {
+                    match: (method, url) => method === `GET` && url.endsWith(`/apps/${OWN_APP}`),
+                    respond: () => json({ error: `internal error` }, 500),
+                },
+                { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
+                { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+                { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+            ]);
+            const prisma = fakePrisma({
+                hostedMachine: { create: jest.fn().mockResolvedValue({}) },
+                hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow]), updateMany: claim },
+            });
+            expect((await provisionHosted(prisma as never, config(), logger, args)).warm).toBe(false);
+            expect(claim).not.toHaveBeenCalled();
+            expect(calls.some((entry) => entry.method === `POST` && entry.url.endsWith(`/apps`))).toBe(true);
+        });
+
+        it(`takes back down only the machine it made when the adoption fails, never the app or its disk`, async () => {
+            const calls = stubFetch([
+                ownApp,
+                ownMachines([]),
+                ownVolumes,
+                {
+                    match: (method, url) => method === `POST` && url.endsWith(`/apps/${OWN_APP}/machines`),
+                    respond: () => json({ id: `m9`, state: `created` }),
+                },
+                { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 200 }) },
+            ]);
+            const failing = fakePrisma({ hostedMachine: { create: jest.fn().mockRejectedValue(new Error(`database went away`)) } });
+            await expect(provisionHosted(failing as never, config(), logger, args)).rejects.toThrow(/database went away/);
+            expect(calls.filter((entry) => entry.method === `DELETE`).map((entry) => entry.url)).toEqual([
+                `https://api.machines.dev/v1/apps/${OWN_APP}/machines/m9?force=true`,
+            ]);
+        });
     });
 });
 
@@ -1121,17 +1291,25 @@ describe(`reapHostedOrphans`, () => {
     // Machines keyed by app name; an app missing from the table has none (also models a volume-only app).
     const machinesOf = (byApp: Record<string, unknown[]>) => ({
         match: (method: string, url: string) => method === `GET` && (url.endsWith(`/machines`) || url.endsWith(`/volumes`)),
-        respond: (url: string) => json(url.endsWith(`/volumes`) ? [] : (byApp[Object.keys(byApp).find((app) => url.includes(app)) ?? ``] ?? [])),
+        respond: (url: string) =>
+            json(url.endsWith(`/volumes`) ? [] : (byApp[Object.keys(byApp).find((app) => url.includes(`/apps/${app}/`)) ?? ``] ?? [])),
     });
 
     const deleteRoute = { match: (method: string) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) };
-    const knownRows = fakePrisma({
-        hostedMachine: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
-        hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
-    });
+    // The tunnel id an app is named for: its name past the prefix.
+    const idOf = (app: string): string => app.slice(`intentic-sbx-`.length);
+    // A database whose deletion records name these apps' sandboxes, on top of the case's own rows.
+    const withDeleted = (apps: readonly string[], over: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {}) =>
+        fakePrisma({
+            hostedMachine: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
+            sandboxTombstone: { findMany: jest.fn().mockResolvedValue(apps.map((app) => ({ tunnelId: idOf(app) }))) },
+            ...over,
+        });
+    const knownRows = withDeleted([]);
     const deletedApps = (calls: { method: string; url: string }[]) => calls.filter((entry) => entry.method === `DELETE`).map((entry) => entry.url);
 
-    it(`destroys only apps THIS platform stamped and no longer has a row for`, async () => {
+    it(`destroys only apps THIS platform stamped whose sandbox's deletion is on record`, async () => {
         const calls = stubFetch([
             appList(
                 `intentic-sbx-live`,
@@ -1143,32 +1321,53 @@ describe(`reapHostedOrphans`, () => {
                 `unrelated-app`,
             ),
             machinesOf({
-                "intentic-sbx-orphan": [flyMachine({ platform: INSTANCE })],
-                // Different platform stamp: another deployment's machine in the same org/prefix must be left standing.
-                "intentic-sbx-stranger": [flyMachine({ platform: `deadbeefcafe` })],
+                "intentic-sbx-orphan": [flyMachine({ platform: INSTANCE, role: `sandbox` })],
+                // Different platform stamp: another deployment's machine in the same org/prefix must be left standing,
+                // whatever this database's records say about a sandbox of that name.
+                "intentic-sbx-stranger": [flyMachine({ platform: `deadbeefcafe`, role: `sandbox` })],
                 // No stamp: predates the rule or an unupdated deployment; left standing, flagged by the health sweep
                 // instead.
                 "intentic-sbx-unstamped": [flyMachine()],
             }),
             deleteRoute,
         ]);
-        await reapHostedOrphans(knownRows as never, config(), logger);
+        const report = await reapHostedOrphans(
+            withDeleted([`intentic-sbx-orphan`, `intentic-sbx-stranger`, `intentic-sbx-unstamped`]) as never,
+            config(),
+            logger,
+        );
         const deleted = deletedApps(calls);
         expect(deleted).toHaveLength(1);
         expect(deleted[0]).toContain(`intentic-sbx-orphan`);
+        expect(report).toMatchObject({ destroyed: [`intentic-sbx-orphan`], forgotten: [], skipped: { theirs: 1, unknown: 1 } });
         // Prefix is the jurisdiction: an app outside it is never even queried.
         expect(calls.some((entry) => entry.url.includes(`unrelated-app`))).toBe(false);
+    });
+
+    // Absence is not deletion. A platform restored from an older backup has no row and no record for every sandbox made
+    // since, and their apps are those sandboxes' disks: reported for an operator, never destroyed.
+    it(`leaves an app of ours standing when no deletion record names its sandbox, and reports it as forgotten`, async () => {
+        const calls = stubFetch([
+            appList(`intentic-sbx-orphan`),
+            machinesOf({ "intentic-sbx-orphan": [flyMachine({ platform: INSTANCE, role: `sandbox` })] }),
+            deleteRoute,
+        ]);
+        const report = await reapHostedOrphans(knownRows as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
+        expect(report).toMatchObject({ destroyed: [], forgotten: [`intentic-sbx-orphan`], skipped: { forgotten: 1 } });
     });
 
     it(`spares the app of a deleted sandbox still inside its recovery window`, async () => {
         const calls = stubFetch([
             appList(`intentic-sbx-deleted`),
-            // Stamped ours and holding no machine row: without the trash read this is the reaper's clearest orphan,
-            // and destroying it would take the volume the owner can still restore from.
-            machinesOf({ "intentic-sbx-deleted": [flyMachine({ platform: INSTANCE })] }),
+            // Stamped ours, holding no machine row, its sandbox deleted: without the trash read this is the reaper's
+            // clearest orphan, and destroying it would take the volume the owner can still restore from.
+            machinesOf({ "intentic-sbx-deleted": [flyMachine({ platform: INSTANCE, role: `sandbox` })] }),
             deleteRoute,
         ]);
-        const held = fakePrisma({ sandboxTrash: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-deleted` }]) } });
+        const held = withDeleted([`intentic-sbx-deleted`], {
+            sandboxTrash: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-deleted` }]) },
+        });
         await reapHostedOrphans(held as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
@@ -1179,10 +1378,22 @@ describe(`reapHostedOrphans`, () => {
             machinesOf({ "intentic-sbx-leftover-builder": [flyMachine({ platform: INSTANCE, role: `build` })] }),
             deleteRoute,
         ]);
-        await reapHostedOrphans(knownRows as never, config(), logger);
+        await reapHostedOrphans(withDeleted([`intentic-sbx-leftover-builder`]) as never, config(), logger);
         const deleted = deletedApps(calls);
         expect(deleted).toHaveLength(1);
         expect(deleted[0]).toContain(`intentic-sbx-leftover-builder`);
+    });
+
+    // Warm stock carries no person's work (a claim re-stamps its machine `sandbox` first), so its stamp is evidence of
+    // its own: a pool build whose cleanup failed is collected without any record.
+    it(`collects warm stock nobody claimed, with no record needed`, async () => {
+        const calls = stubFetch([
+            appList(`intentic-sbx-lost-stock`),
+            machinesOf({ "intentic-sbx-lost-stock": [flyMachine({ platform: INSTANCE, role: `warm` })] }),
+            deleteRoute,
+        ]);
+        await reapHostedOrphans(knownRows as never, config(), logger);
+        expect(deletedApps(calls)).toEqual([expect.stringContaining(`intentic-sbx-lost-stock`)]);
     });
 
     it(`leaves a young app alone: a provision in flight owns Fly resources before its row exists`, async () => {
@@ -1191,7 +1402,7 @@ describe(`reapHostedOrphans`, () => {
             machinesOf({ "intentic-sbx-newborn": [flyMachine({ platform: INSTANCE, ageMinutes: 2 })] }),
             deleteRoute,
         ]);
-        await reapHostedOrphans(knownRows as never, config(), logger);
+        await reapHostedOrphans(withDeleted([`intentic-sbx-newborn`]) as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
 
@@ -1202,40 +1413,89 @@ describe(`reapHostedOrphans`, () => {
     });
     const noMachines = { match: (method: string, url: string) => method === `GET` && url.endsWith(`/machines`), respond: () => json([]) };
 
-    // Past the grace window, an empty app can only be a failed provision, ours or someone else's, so it's collected
-    // either way.
-    it(`collects an app holding no machine at all, which nothing could ever prove was ours`, async () => {
+    it(`collects an app holding no machine once its sandbox's deletion is on record`, async () => {
         const calls = stubFetch([appList(`intentic-sbx-hollow`), noMachines, volumesAged(120), deleteRoute]);
-        await reapHostedOrphans(knownRows as never, config(), logger);
+        await reapHostedOrphans(withDeleted([`intentic-sbx-hollow`]) as never, config(), logger);
         const deleted = deletedApps(calls);
         expect(deleted).toHaveLength(1);
         expect(deleted[0]).toContain(`intentic-sbx-hollow`);
     });
 
+    // (2026-10-05) Emptiness used to be its own evidence. It is exactly what Fly losing a machine leaves of a sandbox
+    // nobody deleted, once its row has been dropped too: a volume, which is that sandbox's disk.
+    it(`keeps an empty app no deletion record explains: its volume may be a sandbox's only disk`, async () => {
+        const calls = stubFetch([appList(`intentic-sbx-hollow`), noMachines, volumesAged(120), deleteRoute]);
+        const report = await reapHostedOrphans(knownRows as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
+        expect(report.forgotten).toEqual([`intentic-sbx-hollow`]);
+    });
+
+    // Fly lost the machine and the platform dropped its row (`forgetHostedMachine`): what is left is the sandbox's own
+    // disk, and the sandbox row still names the app's tunnel id. Collecting it would delete a workspace nobody released.
+    it(`never collects an empty app whose sandbox still exists: its volume is that sandbox's disk`, async () => {
+        const calls = stubFetch([appList(`intentic-sbx-alive`), noMachines, volumesAged(120), deleteRoute]);
+        const liveRows = fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([{ tunnelId: `alive` }]) } });
+        const report = await reapHostedOrphans(liveRows as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
+        expect(report.skipped).toEqual({ live: 1 });
+    });
+
     it(`leaves an empty app whose volume was made minutes ago: that is a provision mid-flight`, async () => {
         const calls = stubFetch([appList(`intentic-sbx-mid-provision`), noMachines, volumesAged(2), deleteRoute]);
-        await reapHostedOrphans(knownRows as never, config(), logger);
+        await reapHostedOrphans(withDeleted([`intentic-sbx-mid-provision`]) as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
 
-    // Every signal here is "the database didn't mention it", so a wrong database (bad replica, restore in flight, unrun
-    // migration) reads as "destroy everything", exactly when the sweep is most confident and most wrong.
+    // A wrong database (a copy with its own deletions, an unrun migration) can still read as "destroy everything", and a
+    // share of the fleet that large is more likely that than litter.
     it(`refuses the whole pass when it would destroy an implausible share of the fleet`, async () => {
-        const ours = Array.from({ length: 8 }, (_, index) => `intentic-sbx-${index}`);
+        const ours = Array.from({ length: 8 }, (_, index) => `intentic-sbx-k${index}z`);
         const calls = stubFetch([
             appList(...ours),
-            machinesOf(Object.fromEntries(ours.map((app) => [app, [flyMachine({ platform: INSTANCE })]]))),
+            machinesOf(Object.fromEntries(ours.map((app) => [app, [flyMachine({ platform: INSTANCE, role: `sandbox` })]]))),
             deleteRoute,
         ]);
-        // An empty database: nothing is known, so every app looks like litter.
-        await reapHostedOrphans(fakePrisma({ hostedMachine: { findMany: jest.fn().mockResolvedValue([]) } }) as never, config(), logger);
+        // No rows, and a deletion record for every app's sandbox: everything looks collectable.
+        const everything = fakePrisma({
+            hostedMachine: { findMany: jest.fn().mockResolvedValue([]) },
+            sandboxTombstone: { findMany: jest.fn().mockResolvedValue(ours.map((app) => ({ tunnelId: idOf(app) }))) },
+        });
+        const report = await reapHostedOrphans(everything as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
+        expect(report.refused).toHaveLength(8);
+    });
+
+    // (2026-10-05) A backlog past the cap used to refuse the whole pass, so after an outage the reaper never caught up.
+    it(`destroys the oldest collectable apps up to its cap and defers the rest to the next pass`, async () => {
+        // Forty apps, thirty-four of them rows: a cap of four (a tenth of the fleet), and six collectable, well under the
+        // quarter that would read as a wrong database.
+        const known = Array.from({ length: 34 }, (_, index) => `intentic-sbx-row${index}z`);
+        const gone = Array.from({ length: 6 }, (_, index) => `intentic-sbx-k${index}z`);
+        const calls = stubFetch([
+            appList(...known, ...gone),
+            // k0z is the newest and k5z the oldest: ages climb with the index.
+            machinesOf(
+                Object.fromEntries(
+                    gone.map((app, index) => [app, [flyMachine({ platform: INSTANCE, role: `sandbox`, ageMinutes: 120 + index * 60 })]]),
+                ),
+            ),
+            deleteRoute,
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: { findMany: jest.fn().mockResolvedValue(known.map((appName) => ({ appName }))) },
+            sandboxTombstone: { findMany: jest.fn().mockResolvedValue(gone.map((app) => ({ tunnelId: idOf(app) }))) },
+        });
+        const report = await reapHostedOrphans(prisma as never, config(), logger);
+        expect(report.destroyed).toEqual([`intentic-sbx-k5z`, `intentic-sbx-k4z`, `intentic-sbx-k3z`, `intentic-sbx-k2z`]);
+        expect(report.deferred).toEqual([`intentic-sbx-k1z`, `intentic-sbx-k0z`]);
+        expect(deletedApps(calls)).toHaveLength(4);
     });
 
     it(`does nothing when the lane is off`, async () => {
         const fetchSpy = stubFetch([]);
-        await reapHostedOrphans(fakePrisma({}) as never, config({ hosted: { ...config().hosted, flyApiToken: `` } }), logger);
+        const report = await reapHostedOrphans(fakePrisma({}) as never, config({ hosted: { ...config().hosted, flyApiToken: `` } }), logger);
         expect(fetchSpy).toHaveLength(0);
+        expect(report.destroyed).toEqual([]);
     });
 });
 
@@ -1477,7 +1737,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             code: `SERVICE_UNAVAILABLE`,
             message: AT_CAPACITY_MESSAGE,
         });
-        expect(fetchSpy).toHaveLength(0);
+        // The one call is the read of whether this sandbox's own app is still there (hosted.ts heldAppOf); nothing is made.
+        expect(fetchSpy.filter((entry) => entry.method !== `GET`)).toHaveLength(0);
     });
 
     it(`hostedProvision 404s when the lane is off: a platform without the config simply has no such route`, async () => {
@@ -1789,6 +2050,60 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(rowDelete).toHaveBeenCalledWith({ where: { id: `h1` } });
         expect(machineCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m2`, sandboxId: `s1` }) }));
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
+    });
+
+    // The machine is gone and the app, with its volume, is not: the restart's replacement adopts the disk (hosted.ts
+    // adoptHostedApp) instead of failing at createApp on a name that exists.
+    it(`hostedRestart adopts the sandbox's own app and its disk when only the machine is gone`, async () => {
+        const own = `intentic-sbx-${sandboxIdFromToken(`t0k3n`)}`;
+        const machineCreate = jest.fn().mockResolvedValue({});
+        let row: Record<string, unknown> | null = {
+            id: `h1`,
+            appName: own,
+            machineId: `m1`,
+            volumeId: `vol_1`,
+            region: `iad`,
+            wokeAt: null,
+            tier: `free`,
+        };
+        const calls = stubFetch([
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`),
+                respond: () => json({ error: `machine not found` }, 404),
+            },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => json({ error: `machine not found` }, 404) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ error: `machine not found` }, 404) },
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+            },
+            { match: (method, url) => method === `GET` && url.endsWith(`/apps/${own}`), respond: () => json({ name: own }) },
+            { match: (method, url) => method === `GET` && url.endsWith(`/apps/${own}/machines`), respond: () => json([]) },
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/apps/${own}/volumes`),
+                respond: () => json([{ id: `vol_1`, region: `iad`, size_gb: 10 }]),
+            },
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/apps/${own}/machines`),
+                respond: () => json({ id: `m2`, state: `created` }),
+            },
+        ]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: {
+                findUnique: jest.fn(async () => row),
+                create: machineCreate,
+                delete: jest.fn(async () => {
+                    row = null;
+                    return {};
+                }),
+                update: jest.fn().mockResolvedValue({}),
+            },
+        });
+        expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
+        expect(machineCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ machineId: `m2`, volumeId: `vol_1`, appName: own }) });
+        expect(calls.some((entry) => entry.method === `POST` && (entry.url.endsWith(`/apps`) || entry.url.endsWith(`/volumes`)))).toBe(false);
+        expect(calls.some((entry) => entry.method === `DELETE`)).toBe(false);
     });
 
     it(`hostedRestart destroys nothing when the provider merely refuses`, async () => {

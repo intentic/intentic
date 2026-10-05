@@ -145,8 +145,15 @@ pub fn up(args: Up) -> Result<()> {
                 "intentic: building {} from the parent's approved overlay…",
                 verified.target
             );
-            recreate::build_overlay(&verified.target, &overlay_path, false, &verified.base, &log)
-                .map_err(|_| {
+            recreate::build_overlay(
+                &verified.target,
+                &slug,
+                &overlay_path,
+                false,
+                &verified.base,
+                &log,
+            )
+            .map_err(|_| {
                 crate::util::Fail(format!(
                     "the overlay build failed — nothing was started. Log: {}",
                     log.path.display()
@@ -198,14 +205,21 @@ pub fn up(args: Up) -> Result<()> {
     };
     // no_local_publish unconditionally: the loopback shortcut exists for a browser on this machine, and
     // nobody browses to a runner — claiming a port here could only collide with the sandbox someone uses.
-    let argv = contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?;
+    // ic's labels on the runner too (labels.rs): what made it, for which parent, from which side of this computer.
+    let argv = sandbox::labels::into_run(
+        &contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?,
+        &sandbox::labels::here(&slug, sandbox::labels::Kind::Runner),
+    );
     // Nothing else creates it on this machine: a runner's slug never goes through the connect flow.
     sandbox::ensure_network(&slug)?;
+    // Its volumes too, labelled like a sandbox's; a launch that never starts leaves none of the ones it made.
+    let made = sandbox::connect::make_volumes(&slug);
     log.section(&format!("docker run {run_image}"));
     if let Err(refusal) = docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
+        let left = sandbox::connect::remove_made(&made);
         bail!(
-            "starting the runner failed — the full docker output is saved to {}.\n{refusal}",
+            "starting the runner failed — the full docker output is saved to {}.\n{refusal}{left}",
             log.path.display()
         );
     }

@@ -1,18 +1,34 @@
 //! The change feed: a generation per checkout Node asked the front to count, moving whenever anything a `git status`
 //! there reads may have changed. Every watch lives in one inotify instance, whose one queue orders every event, so a
 //! sync that creates a sentinel and waits to read its event back has counted every write that finished before it.
+//!
+//! A read error no longer turns the feed off for good (2026-10-05): every count reads as unknown, the inotify instance
+//! is opened again with backoff and every checkout watched again, and each count moves past where it stood, since what
+//! happened meanwhile went unseen.
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use front_wire::WatchedCheckout;
-use futures_util::StreamExt;
-use inotify::{EventMask, EventStream, Inotify, WatchDescriptor, WatchMask, Watches};
+use futures_util::{Stream, StreamExt};
+use inotify::{EventMask, EventOwned, Inotify, WatchDescriptor, WatchMask, Watches};
+use relay::Backoff;
 use tokio::sync::watch;
+
+// What the reader reads: one inotify instance's events, boxed so a reopened instance takes its place.
+type Events = Pin<Box<dyn Stream<Item = std::io::Result<EventOwned>> + Send>>;
+
+// Between attempts to open the feed again after its reader failed.
+const REOPEN: Backoff = Backoff::new(
+    Duration::from_secs(1),
+    Duration::from_secs(60),
+    Duration::from_secs(60),
+);
 
 // What a git dir holds that a status reads: the index, HEAD, and the heads of a merge, pick, revert or rebase underway.
 const CHECKOUT_FILES: [&str; 6] = [
@@ -104,11 +120,19 @@ pub struct Feed {
     next_sentinel: AtomicU64,
     /// The highest sentinel the reader has read back.
     seen: watch::Sender<u64>,
+    /// The reader failed and the feed is not open again yet: every count is unknown.
+    stalled: AtomicBool,
 }
 
 impl Feed {
     /// Starts the feed with its sentinels under `sentinels` (created here); the reader runs until the process ends.
     pub fn start(sentinels: PathBuf) -> anyhow::Result<Arc<Self>> {
+        let (feed, events) = Self::open(sentinels)?;
+        tokio::spawn(feed.clone().read(events));
+        Ok(feed)
+    }
+
+    fn open(sentinels: PathBuf) -> anyhow::Result<(Arc<Self>, Events)> {
         std::fs::create_dir_all(&sentinels)?;
         let inotify = Inotify::init()?;
         let events = inotify.into_event_stream(vec![0_u8; 64 * 1024])?;
@@ -120,14 +144,61 @@ impl Feed {
             sentinels,
             next_sentinel: AtomicU64::new(0),
             seen: watch::Sender::new(0),
+            stalled: AtomicBool::new(false),
         });
         feed.state
             .lock()
             .expect("feed state poisoned")
             .watched
             .insert(sentinel, Watched::Sentinel);
-        tokio::spawn(feed.clone().read(events));
-        Ok(feed)
+        Ok((feed, Box::pin(events)))
+    }
+
+    // A new inotify instance in place of the failed one, every checkout watched again on it, each count moved past where
+    // it stood: nothing that changed while the reader was down was seen.
+    async fn reopen(self: Arc<Self>) -> anyhow::Result<Events> {
+        let inotify = Inotify::init()?;
+        let events = inotify.into_event_stream(vec![0_u8; 64 * 1024])?;
+        let mut watches = events.watches();
+        let sentinel = watches.add(&self.sentinels, WatchMask::CREATE | WatchMask::ONLYDIR)?;
+        let counted: Vec<(WatchedCheckout, u64)> = {
+            let mut state = self.state.lock().expect("feed state poisoned");
+            state.watched.clear();
+            state.watched.insert(sentinel, Watched::Sentinel);
+            state
+                .checkouts
+                .drain()
+                .map(|(dir, checkout)| {
+                    (
+                        WatchedCheckout {
+                            dir: dir.to_string_lossy().into_owned(),
+                            git_dir: checkout.git_dir.to_string_lossy().into_owned(),
+                            common_dir: checkout.common_dir.to_string_lossy().into_owned(),
+                        },
+                        checkout.generation,
+                    )
+                })
+                .collect()
+        };
+        *self.watches.lock().expect("feed watches poisoned") = watches;
+        let feed = self.clone();
+        tokio::task::spawn_blocking(move || {
+            for (checkout, was) in counted {
+                feed.watch(&checkout);
+                if let Some(again) = feed
+                    .state
+                    .lock()
+                    .expect("feed state poisoned")
+                    .checkouts
+                    .get_mut(Path::new(&checkout.dir))
+                {
+                    again.generation += was + 1;
+                }
+            }
+        })
+        .await?;
+        self.stalled.store(false, Ordering::Relaxed);
+        Ok(Box::pin(events))
     }
 
     /// Counts a checkout from now on: its tree as git sees it, and the git files a status reads. Again for one already
@@ -243,7 +314,12 @@ impl Feed {
                 state
                     .checkouts
                     .get(Path::new(dir))
-                    .filter(|checkout| caught_up && checkout.walked && !checkout.blind)
+                    .filter(|checkout| {
+                        caught_up
+                            && checkout.walked
+                            && !checkout.blind
+                            && !self.stalled.load(Ordering::Relaxed)
+                    })
                     .map(|checkout| checkout.generation)
             })
             .collect()
@@ -294,21 +370,29 @@ impl Feed {
         self.state.lock().expect("feed state poisoned").bump(root);
     }
 
-    async fn read(self: Arc<Self>, mut events: EventStream<Vec<u8>>) {
-        while let Some(event) = events.next().await {
-            match event {
-                Ok(event) => self.handle(event.wd, event.mask, event.name.as_deref()),
-                Err(error) => {
-                    tracing::error!(%error, "the change feed stopped reading; every count is now unknown");
-                    self.state
-                        .lock()
-                        .expect("feed state poisoned")
-                        .checkouts
-                        .values_mut()
-                        .for_each(|checkout| checkout.blind = true);
-                    return;
+    async fn read(self: Arc<Self>, mut events: Events) {
+        loop {
+            let why = match events.next().await {
+                Some(Ok(event)) => {
+                    self.handle(event.wd, event.mask, event.name.as_deref());
+                    continue;
                 }
-            }
+                Some(Err(error)) => error.to_string(),
+                None => "its events ended".to_owned(),
+            };
+            tracing::error!(%why, "the change feed stopped reading; every count is unknown until it reads again");
+            self.stalled.store(true, Ordering::Relaxed);
+            let mut retry = REOPEN;
+            events = loop {
+                tokio::time::sleep(retry.after(Duration::ZERO)).await;
+                match self.clone().reopen().await {
+                    Ok(reopened) => break reopened,
+                    Err(error) => {
+                        tracing::warn!(%error, "the change feed could not open again; trying again")
+                    }
+                }
+            };
+            tracing::info!("the change feed reads again; every checkout counts as changed");
         }
     }
 
@@ -582,6 +666,46 @@ mod tests {
         let first = generation(&feed, &repo).await.unwrap();
         std::fs::write(inner.join("x.txt"), "x").unwrap();
         assert_eq!(generation(&feed, &repo).await.unwrap(), first);
+    }
+    // A reader that fails comes back on a new instance: unknown meanwhile, and every count past where it stood after.
+    #[tokio::test]
+    async fn a_failed_reader_opens_again_and_counts_on_from_past_where_it_was() {
+        let repo = repo("reopen");
+        let (feed, events) = Feed::open(repo.root.join("sentinels")).unwrap();
+        let failing: Events = Box::pin(
+            futures_util::stream::once(async {
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                Err(std::io::Error::other("injected"))
+            })
+            .chain(events),
+        );
+        tokio::spawn(feed.clone().read(failing));
+        feed.watch(&checkout(&repo));
+        // Before the failure the reader reads nothing at all, so no sync catches up: unknown, then unknown while stalled.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(feed.stalled.load(Ordering::Relaxed));
+        let was = feed
+            .state
+            .lock()
+            .unwrap()
+            .checkouts
+            .values()
+            .map(|checkout| checkout.generation)
+            .max()
+            .unwrap();
+        assert_eq!(generation(&feed, &repo).await, None);
+        let mut again = None;
+        for _ in 0..50 {
+            again = generation(&feed, &repo).await;
+            if again.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let again = again.expect("the feed reads again");
+        assert!(again > was, "{again} after {was}");
+        std::fs::write(repo.dir.join("src/a.txt"), "after\n").unwrap();
+        assert!(generation(&feed, &repo).await.unwrap() > again);
     }
 }
 

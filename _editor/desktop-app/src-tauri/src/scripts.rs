@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
+use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -46,20 +46,86 @@ pub enum RunEvent {
 
 pub const RUN_EVENT: &str = "desktop://run";
 
-/* Until now a run existed only as events in one webview: the lines a user could see were the lines that window happened to still be holding. */
-fn log_path(id: &str) -> Option<PathBuf> {
+/// `~/.intentic/logs`, where every run's transcript goes, beside `ic`'s own logs.
+fn logs_dir() -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .ok()
         .filter(|home| !home.is_empty())?;
-    let dir = Path::new(&home).join(".intentic").join("logs");
-    std::fs::create_dir_all(&dir).ok()?;
-    // `recreate:work` is not a filename on Windows, where a colon opens an alternate data stream.
-    let safe: String = id
-        .chars()
+    Some(Path::new(&home).join(".intentic").join("logs"))
+}
+
+/// A run id as a filename: `recreate:work` is not one on Windows, where a colon opens an alternate data stream.
+fn safe_name(id: &str) -> String {
+    id.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
+/* Until now a run existed only as events in one webview: the lines a user could see were the lines that window happened to still be holding. */
+fn log_path(id: &str) -> Option<PathBuf> {
+    let dir = logs_dir()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join(format!("desktop-{}-{}.log", safe_name(id), stamp())))
+}
+
+/* HOW MANY TRANSCRIPTS STAY (2026-10-05). Every run wrote one and none was ever removed, so a machine that ran this app
+ * for months held thousands of `desktop-*.log`: the newest KEPT_RUNS runs stay, counted at launch and after every run. */
+
+/// How many runs' files `~/.intentic/logs` keeps: the newest by when each was last written.
+pub const KEPT_RUNS: usize = 30;
+
+/// The extensions one run writes: its transcript, and the two files its child writes to ([`Spool`]).
+const RUN_FILES: [&str; 3] = ["log", "out", "err"];
+
+/// Which of this app's files in the logs folder to delete so that only the newest `keep` runs remain, given each file's
+/// name and when it was last written. A run is its transcript and its child's two files (`desktop-<run>-<stamp>` with
+/// `.log`, `.out` or `.err`), kept or deleted together and dated by the newest of them, so a run that is still writing
+/// is never the old one. `ic`'s logs and anything else in the folder are not this app's to count. Pure.
+pub fn prune_selection(files: &[(String, SystemTime)], keep: usize) -> Vec<String> {
+    let mut runs: HashMap<&str, (SystemTime, Vec<&str>)> = HashMap::new();
+    for (name, written) in files {
+        let Some((stem, extension)) = name.rsplit_once('.') else {
+            continue;
+        };
+        if !stem.starts_with("desktop-") || !RUN_FILES.contains(&extension) {
+            continue;
+        }
+        let run = runs.entry(stem).or_insert((*written, Vec::new()));
+        run.0 = run.0.max(*written);
+        run.1.push(name.as_str());
+    }
+    let mut ordered: Vec<(&str, (SystemTime, Vec<&str>))> = runs.into_iter().collect();
+    // Newest first; a tie goes to the later name, whose stamp is the later one.
+    ordered.sort_by(|a, b| (b.1 .0, b.0).cmp(&(a.1 .0, a.0)));
+    let mut doomed: Vec<String> = ordered
+        .into_iter()
+        .skip(keep)
+        .flat_map(|(_, (_, names))| names.into_iter().map(str::to_string))
         .collect();
-    Some(dir.join(format!("desktop-{safe}-{}.log", stamp())))
+    doomed.sort();
+    doomed
+}
+
+/// Delete every run's files past the newest [`KEPT_RUNS`] (lib.rs at launch, and [`follow`] after each run). Best effort:
+/// a file another process still holds open on Windows stays until the next count.
+pub fn prune_logs() {
+    let Some(dir) = logs_dir() else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    let files: Vec<(String, SystemTime)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let written = entry.metadata().ok()?.modified().ok()?;
+            Some((entry.file_name().to_string_lossy().into_owned(), written))
+        })
+        .collect();
+    for name in prune_selection(&files, KEPT_RUNS) {
+        let _ = std::fs::remove_file(dir.join(name));
+    }
 }
 
 /// `YYYYmmdd-HHMMSS`, UTC, for a log filename — the same spelling `ic` uses, so the two sets of logs in the
@@ -112,6 +178,17 @@ pub fn busy() -> bool {
         .lock()
         .map(|live| !live.is_empty())
         .unwrap_or(true)
+}
+
+/// The ids of the runs going right now, sorted: what a Quit asks about (windows.rs `hold_quit`). A poisoned lock answers
+/// none, since that question is only ever a courtesy on the way out.
+pub fn running_ids() -> Vec<String> {
+    let mut ids: Vec<String> = running()
+        .lock()
+        .map(|live| live.keys().cloned().collect())
+        .unwrap_or_default();
+    ids.sort();
+    ids
 }
 
 /// Whether the run `id` is going right now: a second setup asked for while one runs is refused before it makes anything
@@ -680,18 +757,154 @@ fn own_group(mut command: Command) -> Command {
     command
 }
 
-/* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever: the crate's grace, shared with `ic`. */
-use intentic_bounded::{await_drain, DRAIN_GRACE};
+/* WHERE A RUN'S CHILD WRITES — a file of its own, never a pipe this process holds (2026-10-05).
+ *
+ * A pipe dies with the app. A Quit mid-run left the shim and the `ic` under it writing into a pipe nobody read any more,
+ * and `ic` prints with `println!`, which panics on a broken pipe: a recreate or a remove stopped half way through, with
+ * nothing on screen to say so. A file outlives the app. The child writes its two streams to two files beside the run's
+ * transcript (`desktop-<run>-<stamp>.out` and `.err`, [`Spool`]), and this process reads them back as they grow
+ * ([`tail`]) for the window and the transcript, exactly as it read the pipes. A run followed to its end leaves only its
+ * transcript, which holds every line by then; a run the app quit in the middle keeps writing, and its two files are the
+ * record of the rest (its transcript says where, [`note_quit`]). The two streams now interleave in the transcript as
+ * finely as one read of each file ([`TAIL_EVERY`]) rather than one write to each pipe: a line or two out of order at
+ * worst. */
+
+/// How often a run's files are read for what its child wrote since.
+const TAIL_EVERY: Duration = Duration::from_millis(50);
+
+/// The two files a run's child writes to, and the transcript beside them.
+struct Spool {
+    /// The transcript this process writes, both streams in one, as before; none where the logs folder cannot be made.
+    log: Option<PathBuf>,
+    out: PathBuf,
+    err: PathBuf,
+    out_file: std::fs::File,
+    err_file: std::fs::File,
+}
+
+impl Spool {
+    /// The run's transcript path and its child's two files, made empty: beside the transcript when there is one, else in
+    /// the system's temporary folder under a name no other run has.
+    fn open(id: &str) -> std::io::Result<Spool> {
+        let log = log_path(id);
+        let base = match &log {
+            Some(log) => log.with_extension(""),
+            None => std::env::temp_dir().join(format!(
+                "intentic-desktop-{}-{}",
+                safe_name(id),
+                uuid::Uuid::new_v4().simple()
+            )),
+        };
+        let (out, err) = (base.with_extension("out"), base.with_extension("err"));
+        Ok(Spool {
+            out_file: std::fs::File::create(&out)?,
+            err_file: std::fs::File::create(&err)?,
+            log,
+            out,
+            err,
+        })
+    }
+
+    /// Point `command`'s two streams at the files, and close its stdin (see [`run`] for why nothing is ever asked on
+    /// it). Fresh handles each time, so a caller that tries several binaries hands each its own.
+    fn attach(&self, command: &mut Command) -> std::io::Result<()> {
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(self.out_file.try_clone()?))
+            .stderr(Stdio::from(self.err_file.try_clone()?));
+        Ok(())
+    }
+
+    /// The child's files, once every line in them is in the transcript.
+    fn remove(&self) {
+        let _ = std::fs::remove_file(&self.out);
+        let _ = std::fs::remove_file(&self.err);
+    }
+}
+
+/// The whole lines in `pending`, taken out of it, each without its line ending; whatever follows the last newline stays
+/// for the next read. Bytes that are not UTF-8 are replaced, never a reason to stop reading. Pure.
+pub fn take_lines(pending: &mut Vec<u8>) -> Vec<String> {
+    let Some(last) = pending.iter().rposition(|byte| *byte == b'\n') else {
+        return Vec::new();
+    };
+    let rest = pending.split_off(last + 1);
+    let whole = std::mem::replace(pending, rest);
+    whole[..whole.len() - 1]
+        .split(|byte| *byte == b'\n')
+        .map(|line| String::from_utf8_lossy(line.strip_suffix(b"\r").unwrap_or(line)).into_owned())
+        .collect()
+}
+
+/// Every line written to the file at `path`, handed to `line` as it arrives, until `exited` is set and the file has been
+/// read to its end; a last line with no newline is handed over then. Whether the child has exited is asked BEFORE each
+/// read, so what it wrote just before it exited is always read: a read that finds nothing after the exit is the end.
+pub(crate) fn tail(path: &Path, exited: &AtomicBool, mut line: impl FnMut(&str)) {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return;
+    };
+    let mut pending: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        let done = exited.load(Ordering::Acquire);
+        match file.read(&mut chunk) {
+            Ok(0) | Err(_) if done => break,
+            Ok(0) | Err(_) => std::thread::sleep(TAIL_EVERY),
+            Ok(read) => {
+                pending.extend_from_slice(&chunk[..read]);
+                for text in take_lines(&mut pending) {
+                    line(&text);
+                }
+            }
+        }
+    }
+    if !pending.is_empty() {
+        let text = String::from_utf8_lossy(&pending);
+        line(text.strip_suffix('\r').unwrap_or(&text));
+    }
+}
+
+/// A run being followed right now: its transcript and its child's two files.
+type Followed = (Arc<Mutex<std::fs::File>>, PathBuf, PathBuf);
+
+/// The runs being followed, by id, so a quit can say in each transcript where the rest of it went ([`note_quit`]).
+fn followed() -> &'static Mutex<HashMap<String, Followed>> {
+    static FOLLOWED: OnceLock<Mutex<HashMap<String, Followed>>> = OnceLock::new();
+    FOLLOWED.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The app is ending with runs still going (the person chose "Quit now", windows.rs `hold_quit`): each carries on writing
+/// to its own files, and its transcript says so, and where, since nothing will copy the rest into it. `except` are the
+/// runs the quit stops instead (machine_sandbox.rs `before_exit`).
+pub fn note_quit(except: &[&str]) {
+    let Ok(live) = followed().lock() else {
+        return;
+    };
+    for (id, (transcript, out, err)) in live.iter() {
+        if except.contains(&id.as_str()) {
+            continue;
+        }
+        if let Ok(mut file) = transcript.lock() {
+            let _ = writeln!(
+                file,
+                "\n[Intentic quit while this was running. It carries on; the rest of what it says goes to {} and {}]",
+                out.display(),
+                err.display()
+            );
+        }
+    }
+}
 
 /// Run a script to completion, streaming every line to the window as it arrives. BLOCKING — call it from
 /// `spawn_blocking`; the scripts pull multi-gigabyte images and a setup legitimately takes minutes.
 ///
 /// stdin is closed. These scripts prompt when they have a terminal (`ic`'s "Proceed?" before a removal, connect's
-/// "install Docker?"), and a prompt written to a pipe nobody answers is a run that hangs forever with no UI
-/// for it — so every caller passes the non-interactive flags instead (`-y`, `INSTALL_DOCKER=1`).
+/// "install Docker?"), and a prompt nobody can answer is a run that hangs forever with no UI for it — so every caller
+/// passes the non-interactive flags instead (`-y`, `INSTALL_DOCKER=1`).
 pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
     let file = script.file;
-    let ended = run_heard(app, id, script, None)?;
+    let ended = run_heard(app, id, script, None, None)?;
     if ended.success {
         return Ok(());
     }
@@ -705,19 +918,51 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
 /// the line.
 pub type Heard = Arc<dyn Fn(Stream, &str) + Send + Sync>;
 
+/// A run's child, the moment it started: its pid and the two files it writes to (machine_sandbox.rs keeps them in its
+/// run lock, so a launch after a crash finds the run still going and follows it there).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Spawned {
+    pub pid: u32,
+    pub out: PathBuf,
+    pub err: PathBuf,
+}
+
+/// What is told of a run's start: see [`Spawned`].
+pub type OnSpawn = Box<dyn FnOnce(&Spawned) + Send>;
+
 /// [`run`], with every line also handed to `heard` (machine_sandbox.rs reads its setup's progress in Rust, since no
-/// window need be there to read it), and how it ended answered whatever the exit: a designed stop (exit 3 or 4) is
-/// an answer for the caller to read, not an error. `Err` only when the script never started. BLOCKING.
+/// window need be there to read it), `spawned` told the child's pid and files once it starts, and how it ended answered
+/// whatever the exit: a designed stop (exit 3 or 4) is an answer for the caller to read, not an error. `Err` only when
+/// the script never started. BLOCKING.
 pub fn run_heard(
     app: &AppHandle,
     id: &str,
     script: ScriptRun,
     heard: Option<Heard>,
+    spawned: Option<OnSpawn>,
 ) -> Result<Ended, String> {
     let mut command = command_for(app, &script)?;
-    let child = spawn_piped(&mut command)
-        .map_err(|error| format!("could not start {}: {error}", script.file))?;
-    follow(app, id, script.file, child, None, heard)
+    let spool = Spool::open(id).map_err(|error| {
+        format!(
+            "could not start {}: nowhere to write what it says ({error})",
+            script.file
+        )
+    })?;
+    let child = spool
+        .attach(&mut command)
+        .and_then(|()| command.spawn())
+        .map_err(|error| {
+            spool.remove();
+            format!("could not start {}: {error}", script.file)
+        })?;
+    if let Some(spawned) = spawned {
+        spawned(&Spawned {
+            pid: child.id(),
+            out: spool.out.clone(),
+            err: spool.err.clone(),
+        });
+    }
+    follow(app, id, script.file, child, spool, None, heard)
 }
 
 /// How a followed run ended.
@@ -731,106 +976,89 @@ pub struct Ended {
     pub log: Option<String>,
 }
 
-fn spawn_piped(command: &mut Command) -> std::io::Result<Child> {
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-}
-
-/// Follow a spawned run under `id` to its exit: every line to the window and to the transcript as it arrives, then
-/// the exit. `what` names it in the transcript and in errors. With a `limit`, a run still going when it runs out is
-/// stopped with everything it started, as [`stop`] would, and says so in [`Ended::timed_out`].
+/// Follow a spawned run under `id` to its exit: every line its child writes to its files, to the window and to the
+/// transcript as it arrives, then the exit. `what` names it in the transcript and in errors. With a `limit`, a run still
+/// going when it runs out is stopped with everything it started, as [`stop`] would, and says so in [`Ended::timed_out`].
 fn follow(
     app: &AppHandle,
     id: &str,
     what: &str,
     mut child: Child,
+    spool: Spool,
     limit: Option<Duration>,
     heard: Option<Heard>,
 ) -> Result<Ended, String> {
     remember(id, child.id());
 
-    // Opened before the first line and shared by both pumps, so the transcript interleaves the two streams
-    // in the order they actually arrived — which is the order that makes a failure readable.
-    let path = log_path(id);
-    let transcript = path.as_ref().and_then(|path| {
+    // Opened before the first line and shared by both readers, so the transcript interleaves the two streams in the
+    // order they were read — which is the order that makes a failure readable.
+    let transcript = spool.log.as_ref().and_then(|path| {
         std::fs::File::create(path)
             .ok()
             .map(|file| Arc::new(Mutex::new(file)))
     });
+    if let (Some(transcript), Ok(mut live)) = (&transcript, followed().lock()) {
+        live.insert(
+            id.to_string(),
+            (Arc::clone(transcript), spool.out.clone(), spool.err.clone()),
+        );
+    }
     let _ = app.emit(
         RUN_EVENT,
         RunEvent::Started {
             run: id.to_string(),
-            log: path.as_ref().map(|path| path.to_string_lossy().to_string()),
+            log: spool
+                .log
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
         },
     );
 
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    // Live for as long as this run is the one being drawn. A pump left parked on a pipe a background agent
-    // still holds checks this before it emits, so its next line goes nowhere instead of into a finished run.
-    let reporting = Arc::new(AtomicBool::new(true));
-    let (drained, drains) = channel::<()>();
-    let pump =
-        |handle: Option<Box<dyn std::io::Read + Send>>, stream: Stream, drained: Sender<()>| {
-            let app = app.clone();
-            let id = id.to_string();
-            let reporting = Arc::clone(&reporting);
-            let transcript = transcript.clone();
-            let heard = heard.clone();
-            std::thread::spawn(move || {
-                if let Some(handle) = handle {
-                    for line in BufReader::new(handle).lines().map_while(Result::ok) {
-                        if !reporting.load(Ordering::Relaxed) {
-                            return;
-                        }
-                        // To disk first: the window is the copy that can be closed, and the whole point of
-                        // the file is that it outlives whoever was watching.
-                        if let Some(file) = &transcript {
-                            if let Ok(mut file) = file.lock() {
-                                let _ = writeln!(
-                                    file,
-                                    "{}{line}",
-                                    match stream {
-                                        Stream::Stdout => "",
-                                        Stream::Stderr => "! ",
-                                    }
-                                );
+    let exited = Arc::new(AtomicBool::new(false));
+    let reader = |path: PathBuf, stream: Stream| {
+        let app = app.clone();
+        let id = id.to_string();
+        let exited = Arc::clone(&exited);
+        let transcript = transcript.clone();
+        let heard = heard.clone();
+        std::thread::spawn(move || {
+            tail(&path, &exited, |line| {
+                // To disk first: the window is the copy that can be closed, and the whole point of the file is that it
+                // outlives whoever was watching.
+                if let Some(file) = &transcript {
+                    if let Ok(mut file) = file.lock() {
+                        let _ = writeln!(
+                            file,
+                            "{}{line}",
+                            match stream {
+                                Stream::Stdout => "",
+                                Stream::Stderr => "! ",
                             }
-                        }
-                        if let Some(heard) = &heard {
-                            heard(stream, &line);
-                        }
-                        let _ = app.emit(
-                            RUN_EVENT,
-                            RunEvent::Line {
-                                run: id.clone(),
-                                stream,
-                                text: line,
-                            },
                         );
                     }
                 }
-                let _ = drained.send(());
-            })
-        };
-    pump(
-        stdout.map(|handle| Box::new(handle) as Box<dyn std::io::Read + Send>),
-        Stream::Stdout,
-        drained.clone(),
-    );
-    pump(
-        stderr.map(|handle| Box::new(handle) as Box<dyn std::io::Read + Send>),
-        Stream::Stderr,
-        drained,
-    );
+                if let Some(heard) = &heard {
+                    heard(stream, line);
+                }
+                let _ = app.emit(
+                    RUN_EVENT,
+                    RunEvent::Line {
+                        run: id.clone(),
+                        stream,
+                        text: line.to_string(),
+                    },
+                );
+            });
+        })
+    };
+    let readers = [
+        reader(spool.out.clone(), Stream::Stdout),
+        reader(spool.err.clone(), Stream::Stderr),
+    ];
 
-    // The limit is watched beside the wait rather than by polling it: the exit drops `exited`, which wakes the
+    // The limit is watched beside the wait rather than by polling it: the exit drops `exited_now`, which wakes the
     // watch with nothing to do; running out first kills the tree, which is what ends the wait.
-    let (exited, watch) = channel::<()>();
+    let (exited_now, watch) = channel::<()>();
     let timed_out = Arc::new(AtomicBool::new(false));
     if let Some(limit) = limit {
         let pid = child.id();
@@ -843,14 +1071,19 @@ fn follow(
         });
     }
     let status = child.wait();
-    drop(exited);
+    drop(exited_now);
+    // The child is gone: the readers take what is left in its files and stop. A file never blocks, so there is no grace
+    // to wait out as there was for a pipe, which a background process the child left could hold open past its exit.
+    exited.store(true, Ordering::Release);
+    for reader in readers {
+        let _ = reader.join();
+    }
     forget(id);
+    if let Ok(mut live) = followed().lock() {
+        live.remove(id);
+    }
     let status = status.map_err(|error| format!("{what} did not finish: {error}"))?;
     let timed_out = timed_out.load(Ordering::Relaxed);
-    // The child is gone; give its pipes a moment to hand over the tail of their buffers, then stop listening
-    // whether or not they closed. See DRAIN_GRACE — on Windows they may never close at all.
-    await_drain(&drains, 2, DRAIN_GRACE);
-    reporting.store(false, Ordering::Relaxed);
     if let Some(file) = &transcript {
         if let Ok(mut file) = file.lock() {
             let _ = match limit.filter(|_| timed_out) {
@@ -863,6 +1096,11 @@ fn follow(
             };
         }
     }
+    // Every line is in the transcript now. Without one (no logs folder), the child's files are all there is, and stay.
+    if transcript.is_some() {
+        spool.remove();
+    }
+    prune_logs();
 
     let _ = app.emit(
         RUN_EVENT,
@@ -876,7 +1114,7 @@ fn follow(
         code: status.code(),
         success: status.success() && !timed_out,
         timed_out,
-        log: path.map(|path| path.to_string_lossy().to_string()),
+        log: spool.log.map(|path| path.to_string_lossy().to_string()),
     })
 }
 
@@ -990,6 +1228,10 @@ pub fn run_ic(
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .ok();
+    // Its words go to files, as every run's do (see `Spool`): `ic` prints with `println!`, the one writer here that a
+    // dead pipe would end mid-flow.
+    let spool = Spool::open(id)
+        .map_err(|error| format!("ic would not start: nowhere to write what it says ({error})"))?;
     for candidate in ic_candidates(Host::current(), home.as_deref()) {
         let mut command = own_group(quiet(Command::new(&candidate)));
         command.args(args);
@@ -997,13 +1239,17 @@ pub fn run_ic(
             env.iter()
                 .map(|(name, value)| (name.as_str(), value.as_str())),
         );
-        match spawn_piped(&mut command) {
+        match spool.attach(&mut command).and_then(|()| command.spawn()) {
             // Not at this path: the next one.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(format!("ic would not start: {error}")),
-            Ok(child) => return follow(app, id, "ic", child, Some(limit), None),
+            Err(error) => {
+                spool.remove();
+                return Err(format!("ic would not start: {error}"));
+            }
+            Ok(child) => return follow(app, id, "ic", child, spool, Some(limit), None),
         }
     }
+    spool.remove();
     Err(IC_MISSING.to_string())
 }
 
@@ -1127,6 +1373,45 @@ pub fn agent_unpair(sandbox_id: &str) -> Result<String, String> {
         }
     }
     Err("no intentic-machine on this device".to_string())
+}
+
+/// Whether an agent's answer is it not knowing the verb it was given: the words stricli, the agent's command parser,
+/// answers an unknown route with. Pure.
+pub fn unknown_verb(said: &str) -> bool {
+    said.contains("No command registered for")
+}
+
+/// How long `intentic-machine sync forget` may take: it lets go of one sandbox's pairings on this machine.
+const AGENT_FORGET_LIMIT: Duration = Duration::from_secs(60);
+
+/// This machine's sync lets go of a sandbox that is gone (2026-10-05): `intentic-machine sync forget <slug>`, which
+/// retires whatever the agent keeps for it. An agent older than that verb answers it as unknown, and is asked the way
+/// it always was, `sync uninstall --sandbox <id>` ([`agent_unpair`]), when the sandbox's platform id is known. An agent
+/// that is not installed has nothing to let go of. Answers what the agent said.
+pub fn agent_forget(slug: Option<&str>, sandbox_id: Option<&str>) -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    if let Some(slug) = slug {
+        for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
+            match ask_agent(&candidate, &["sync", "forget", slug], AGENT_FORGET_LIMIT) {
+                None => continue,
+                Some(Ok(answer)) if answer.success => return Ok(answer.stdout.trim().to_string()),
+                Some(Ok(answer)) => {
+                    let said = format!("{}{}", answer.stdout, answer.stderr);
+                    if !unknown_verb(&said) {
+                        return Err(said.trim().to_string());
+                    }
+                    break;
+                }
+                Some(Err(silence)) => return Err(silence.to_string()),
+            }
+        }
+    }
+    match sandbox_id {
+        Some(id) => agent_unpair(id),
+        None => Err("this machine's agent has no way to let go of that sandbox".to_string()),
+    }
 }
 
 /// Restart this machine's agent loop — `intentic-machine run --stop`, then `intentic-machine run` — the two
@@ -1370,6 +1655,103 @@ mod tests {
             }
             other => panic!("a start the OS refused came back as {other:?}"),
         }
+    }
+
+    /* A RUN'S WORDS, read back from the files its child writes. */
+
+    #[test]
+    fn whole_lines_are_taken_and_a_partial_one_waits_for_the_next_read() {
+        let mut pending = b"one\r\ntwo\nthr".to_vec();
+        assert_eq!(take_lines(&mut pending), vec!["one", "two"]);
+        assert_eq!(pending, b"thr".to_vec());
+        pending.extend_from_slice(b"ee\n\n");
+        assert_eq!(take_lines(&mut pending), vec!["three", ""]);
+        assert!(pending.is_empty());
+        assert!(take_lines(&mut pending).is_empty());
+        // Not UTF-8 is replaced, never a reason to stop reading.
+        let mut odd = b"caf\xe9\n".to_vec();
+        assert_eq!(take_lines(&mut odd), vec!["caf\u{fffd}"]);
+    }
+
+    #[test]
+    fn a_followed_file_is_read_to_its_end_once_its_writer_has_exited() {
+        let path = std::env::temp_dir().join(format!("intentic-tail-{}", std::process::id()));
+        std::fs::write(&path, "first\nsecond\nlast without newline").unwrap();
+        let exited = AtomicBool::new(true);
+        let mut lines = Vec::new();
+        tail(&path, &exited, |line| lines.push(line.to_string()));
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(lines, vec!["first", "second", "last without newline"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_child_writing_to_its_files_is_followed_while_it_runs() {
+        let dir = std::env::temp_dir().join(format!("intentic-spool-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("run.out");
+        let file = std::fs::File::create(&out).unwrap();
+        let mut child = shell("echo early; sleep 0.3; echo late")
+            .stdout(Stdio::from(file))
+            .spawn()
+            .unwrap();
+        let exited = Arc::new(AtomicBool::new(false));
+        let reading = {
+            let (out, exited) = (out.clone(), Arc::clone(&exited));
+            std::thread::spawn(move || {
+                let mut lines = Vec::new();
+                tail(&out, &exited, |line| lines.push(line.to_string()));
+                lines
+            })
+        };
+        child.wait().unwrap();
+        exited.store(true, Ordering::Release);
+        assert_eq!(reading.join().unwrap(), vec!["early", "late"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /* HOW MANY RUNS' FILES STAY. */
+
+    fn at(seconds: u64) -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(seconds)
+    }
+
+    #[test]
+    fn only_the_newest_runs_stay_each_with_all_its_files() {
+        let files: Vec<(String, SystemTime)> = vec![
+            ("desktop-setup-20261001-100000.log".into(), at(100)),
+            ("desktop-setup-20261001-100000.out".into(), at(101)),
+            ("desktop-recreate-work-20261002-100000.log".into(), at(200)),
+            ("desktop-power-work-20261003-100000.log".into(), at(300)),
+            ("desktop-power-work-20261003-100000.err".into(), at(300)),
+            // A run still being written to is the newest, whatever its name says.
+            ("desktop-fix-20261001-090000.log".into(), at(400)),
+            // Not this app's: `ic`'s own logs, and anything else in the folder.
+            ("ic-20261001-100000.log".into(), at(1)),
+            ("notes.txt".into(), at(2)),
+            ("desktop-setup.json".into(), at(3)),
+        ];
+        assert_eq!(
+            prune_selection(&files, 2),
+            vec![
+                "desktop-recreate-work-20261002-100000.log".to_string(),
+                "desktop-setup-20261001-100000.log".to_string(),
+                "desktop-setup-20261001-100000.out".to_string(),
+            ]
+        );
+        assert!(prune_selection(&files, KEPT_RUNS).is_empty());
+        assert_eq!(prune_selection(&files, 0).len(), 6);
+    }
+
+    /// An agent that predates a verb says so in its parser's words, which is what turns `sync forget` into the older
+    /// `sync uninstall --sandbox`; any other refusal is the agent's answer.
+    #[test]
+    fn an_agent_that_does_not_know_a_verb_is_told_from_one_that_refused_it() {
+        assert!(unknown_verb(
+            "No command registered for `forget`, did you mean `uninstall`?"
+        ));
+        assert!(!unknown_verb("no pairing for work on this machine"));
+        assert!(!unknown_verb(""));
     }
 
     #[test]

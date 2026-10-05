@@ -35,14 +35,15 @@ export const previousRunDied = (): boolean => previousDied;
 
 // Reads the previous run's fate, logs it if it died unannounced, and claims the marker for this run. Never throws: a
 // sandbox that cannot write its marker still runs, just with worse forensics.
-export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: (code: number) => void } => {
+// `claimed`: this run took the marker, which is to say it owns the history root (a live daemon's left alone is not).
+export const claimBootMarker = (logsDir: string, logger: Logger): { readonly claimed: boolean; readonly markExited: (code: number) => void } => {
     const path = join(logsDir, MARKER_FILE);
     try {
         const previous = JSON.parse(readFileSync(path, "utf8")) as ExitMarker;
         // Not a death: a live daemon owns this history root; leave its marker alone and claim nothing.
         if (previous.state === "running" && sameProcess(previous)) {
             logger.warn({ ownerPid: previous.pid, logsDir }, "another live daemon owns this history root, leaving its boot marker alone");
-            return { markExited: () => undefined };
+            return { claimed: false, markExited: () => undefined };
         }
         if (previous.state === "running") {
             previousDied = true;
@@ -73,11 +74,12 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
     };
     const identity = processIdentity();
     if (identity === undefined) {
-        return { markExited: () => undefined };
+        return { claimed: true, markExited: () => undefined };
     }
     const startedAt = Date.now();
     write({ state: "running", ...identity, startedAt });
     return {
+        claimed: true,
         markExited: (code) => write({ state: "exited", ...identity, startedAt, endedAt: Date.now(), exitCode: code }),
     };
 };

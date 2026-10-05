@@ -1,4 +1,4 @@
-import { observeGitCommands } from "@intentic/scaffold";
+import { observeGitCommands, observeStaleLocks } from "@intentic/scaffold";
 import { turnRunMetrics } from "../conversations/actor/conversation-holdings.js";
 import { browserSessionMetrics } from "../browser/sessions/browser-sessions.js";
 import { startResourceMetrics } from "../system/resources/resource-metrics.js";
@@ -19,6 +19,11 @@ export const startDaemonMetrics = ({ config, logger, services, shutdown }: BootP
         }),
     });
     shutdown.push(() => resourceMetrics.stop());
+
+    // A lock git's own retry found stale and removed (scaffold git-locks.ts), said in the daemon's log, not the console.
+    observeStaleLocks(({ path, ageMs }) =>
+        logger.warn({ path, ageMinutes: Math.round(ageMs / 60_000) }, "git: removed a stale lock no git process held"),
+    );
 
     // `args` keeps the subcommand and drops trailing pathspecs, which can be hundreds.
     observeGitCommands(({ dir, args, ms, execMs, attempts, failed, forked, queueDepth }) => {

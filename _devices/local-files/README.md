@@ -15,7 +15,10 @@ flowchart LR
 
 - **Only the app grants.** A folder is served once the app writes a `grant` line on this process's stdin, naming a
   random token and a path the user chose. A page only ever presents its token, so nothing a page sends can widen
-  what it reads. The process exits when its stdin closes, so it never outlives the app.
+  what it reads. The process exits when its stdin closes, so it never outlives the app: it gives its office editor
+  at most 3 seconds to close, then exits anyway. _(2026-10-05) That close waited for every open connection, which an
+  editor page left open could hold, and kept this process and its binary past the app's exit, where an installer could
+  not replace it._
 - **Three gates before any route.** A loopback port is reachable by every page the user has open, so the Host header
   must name this port (a DNS-rebound page names its own host), a page's Origin must be one of the app's own, and
   the bearer must be a granted token (`server.ts`).

@@ -8,6 +8,7 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { stampLabelArgs, stampOf } from "../core/stamp.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 const forgejoSchema = sshSchema.extend({
@@ -97,6 +98,8 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             if (runnerToken === "" || gitToken === "" || packagesToken === "") {
                 return undefined;
             }
+            // The owner stamp is not read back: an update recreates the forge (behind a guarded snapshot) that CI itself
+            // runs on, too disruptive just to add a label. It picks up its owner on its next real recreate.
             const stampHash = (
                 await session.exec(`docker inspect --format ${shellQuote(`{{index .Config.Labels "${HASH_KEY}"}}`)} ${CONTAINER}`)
             ).stdout.trim();
@@ -126,7 +129,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             const bringUp = async (image: string): Promise<void> => {
                 await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
                 const run = await session.exec(
-                    `docker run -d --restart unless-stopped --network host --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=forgejo --label intentic.hash=${ctx.inputsHash ?? ""} ` +
+                    `docker run -d --restart unless-stopped --network host --name ${CONTAINER} ${stampLabelArgs("forgejo", stampOf(ctx))} ` +
                         `-v ${CONTAINER}-data:/data ` +
                         `-e FORGEJO__security__INSTALL_LOCK=true -e FORGEJO__database__DB_TYPE=sqlite3 ` +
                         `-e FORGEJO__server__ROOT_URL=https://${parsed.domain} -e FORGEJO__server__DOMAIN=${parsed.domain} ${image}`,
@@ -203,5 +206,5 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             await session.dispose();
         }
     },
-    list: (sources, ctx) => listStampedContainers(executor, "forgejo", sources, ctx.log),
+    list: (sources, ctx) => listStampedContainers(executor, "forgejo", sources, ctx),
 });

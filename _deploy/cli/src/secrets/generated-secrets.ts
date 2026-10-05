@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { SECRETS_FILE } from "../lib/artifact.js";
 import type { SecretStore } from "./secret-store.js";
 
@@ -27,6 +28,36 @@ export const ensureGeneratedSecrets = async (store: SecretStore, keys: readonly 
         await store.set(key, value);
         env[key] = value;
     }
+};
+
+// Read-only twin of ensureGeneratedSecrets for secrets only a pruned node still references: loads a stored value when
+// there is one and never mints, since a fresh value for a resource being deleted is wrong by construction. A key no
+// store holds stays unset (prune then deletes without it, or keeps the node pending), as does one a store cannot answer
+// for. Returns the keys it could not load.
+export const loadStoredSecrets = async (
+    store: SecretStore,
+    keys: readonly string[],
+    env: MutableEnv,
+    log: (message: string) => void,
+): Promise<string[]> => {
+    const unloaded: string[] = [];
+    for (const key of keys) {
+        if (env[key] !== undefined && env[key] !== "") {
+            continue;
+        }
+        try {
+            const existing = await store.get(key);
+            if (existing === undefined) {
+                unloaded.push(key);
+                continue;
+            }
+            env[key] = existing;
+        } catch (error) {
+            log(`secrets: could not load "${key}" for a pruned resource, deleting without it: ${errorMessage(error)}`);
+            unloaded.push(key);
+        }
+    }
+    return unloaded;
 };
 
 // Reads generated secrets back as a map ({} if none), from the laptop-local .secrets.json cache tools have after an

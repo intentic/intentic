@@ -1,13 +1,12 @@
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import { pollUntil } from "@intentic/base/async";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
-import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
-import { containerLabel } from "../core/backing-ssh.js";
 import { type EnvEntry, type HostFile, writeEnvOnce, writeHostFiles } from "../core/host-files.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshSession, SshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, containerStampOf, observedStamp, stampOf } from "../core/stamp.js";
 
 // Inputs every catalog service shares: host SSH block, host-internal ip, and routed domain; services extend this with
 // their own image pins.
@@ -27,8 +26,8 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
     // Appended to the internal url for the readiness probe ("" probes the root).
     readonly healthPath: string;
     readonly readyTimeoutMs?: number;
-    // filename -> content, written every apply; must include compose.yaml, stamped with `id` + intentic.hash.
-    readonly files: (parsed: z.infer<S>, id: string, hash: string) => Record<string, string | HostFile>;
+    // filename -> content, written every apply; must include compose.yaml, its stamped service carrying `stampLabels`.
+    readonly files: (parsed: z.infer<S>, stamp: ContainerStamp) => Record<string, string | HostFile>;
     readonly env?: (parsed: z.infer<S>) => readonly EnvEntry[];
     // Extra outputs merged over url/internalUrl, derived from inputs alone; e.g. signoz's `otlpEndpoint`.
     readonly extraOutputs?: (parsed: z.infer<S>) => Record<string, unknown>;
@@ -89,8 +88,8 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
 
     // Config files are rewritten every apply; the .env is write-once, since re-keying would invalidate sessions and
     // database credentials. Both come from host-files.ts.
-    const ensureFiles = async (session: SshSession, parsed: z.infer<S>, id: string, hash: string): Promise<void> => {
-        await writeHostFiles(session, spec.kind, stateDir, spec.files(parsed, id, hash));
+    const ensureFiles = async (session: SshSession, parsed: z.infer<S>, stamp: ContainerStamp): Promise<void> => {
+        await writeHostFiles(session, spec.kind, stateDir, spec.files(parsed, stamp));
         await writeEnvOnce(session, spec.kind, stateDir, spec.env?.(parsed) ?? []);
     };
 
@@ -112,8 +111,13 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
                 if (!(await running(session, ctx.id)) || !(await healthy(session, parsed))) {
                     return undefined;
                 }
-                const stampHash = await containerLabel(session, ctx.id, HASH_KEY);
-                return { outputs: outputsFor(parsed), detail: { images: await runningImages(session) }, ...(stampHash === "" ? {} : { stampHash }) };
+                // The owner is read back too: compose recreates the stamped service when its labels change, so an update
+                // adopts an unowned stack.
+                return {
+                    outputs: outputsFor(parsed),
+                    detail: { images: await runningImages(session) },
+                    ...observedStamp(await containerStampOf(session, ctx.id)),
+                };
             } finally {
                 await session.dispose();
             }
@@ -135,7 +139,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
             const parsed = parse(inputs);
             const session = await executor.connect(sshTarget(parsed));
             try {
-                await ensureFiles(session, parsed, ctx.id, ctx.inputsHash ?? "");
+                await ensureFiles(session, parsed, stampOf(ctx));
                 // Streams compose's progress line-by-line, so a slow first pull shows live instead of one blob at the
                 // end.
                 let pending = "";
@@ -177,6 +181,6 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
                 await session.dispose();
             }
         },
-        list: (sources, ctx) => listStampedContainers(executor, spec.kind, sources, ctx.log),
+        list: (sources, ctx) => listStampedContainers(executor, spec.kind, sources, ctx),
     };
 };

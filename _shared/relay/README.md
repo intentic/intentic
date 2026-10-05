@@ -18,7 +18,9 @@ How the tunnel's two Rust ends relay HTTP: one body type, one list of what never
 
 - [src/exchange.rs](src/exchange.rs) — one HTTP/1.1 exchange over any stream, an upgrade spliced on a 101.
 - [src/headers.rs](src/headers.rs) — hop-by-hop headers, upgrades, the host a request names, its leftmost label.
-- [src/backoff.rs](src/backoff.rs) — the jittered redial ladder the front's carriers and its supervisor climb.
+- [src/backoff.rs](src/backoff.rs) — the jittered redial ladder the front's carriers and its supervisor climb, started
+  again by a long life or (2026-10-05) by one answered ping or probe, and `between`, the drawn wait for standing back
+  from a sandbox another party holds.
 - [src/body.rs](src/body.rs) — the one body type every relayed request and answer is carried in.
 
 ## Commands

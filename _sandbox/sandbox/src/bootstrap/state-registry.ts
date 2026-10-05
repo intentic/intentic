@@ -6,6 +6,7 @@
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { restartResumeDocument } from "../agent/run/turn/restart-resume.js";
+import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
@@ -81,6 +82,8 @@ import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
+import { bootHistoryDocument } from "../system/boot/boot-history.js";
+import { choreClockDocument } from "../system/chore-clock.js";
 import { attachedProjectsDocument } from "../system/projects-registry.js";
 import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
@@ -100,6 +103,7 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 
 export const stateDocuments = (): readonly DocumentSpec[] => [
     restartResumeDocument,
+    pausedChildrenDocument,
     approvalsDocument,
     areasDocument,
     membersDocument,
@@ -176,6 +180,8 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webchatInstallsDocument,
     newestRunDocument,
     bootFailureDocument,
+    bootHistoryDocument,
+    choreClockDocument,
     attachedProjectsDocument,
     heavyCommandsDocument,
     stagedUpdateDocument,

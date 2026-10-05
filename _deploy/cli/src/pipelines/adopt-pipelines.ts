@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { LAST_APPLIED_FILE } from "@intentic/scaffold";
 import type { DesiredStateGraph } from "@intentic/graph";
 import type { ForgejoAdmin, ForgejoApi } from "@intentic/providers";
 import { renderTemplate } from "../lib/templates.js";
@@ -15,8 +16,12 @@ export const GIT_TOKEN_ENV = "GIT_TOKEN";
 
 // Package the pipelines install the CLI from, pinned to the adopting CLI's own version via `pnpm dlx`.
 const CLI_PACKAGE = "@intentic/cli";
-// Git ref the apply pipeline force-moves onto each successfully-applied commit; next apply's prune baseline.
-const APPLIED_TAG = "intentic-applied";
+// Git ref the apply pipeline force-moves onto each successfully-applied commit; an annotated tag whose message is the
+// baseline record the apply wrote (since 2026-10-05; a plain tag before), the next apply's prune baseline.
+export const APPLIED_TAG = "intentic-applied";
+
+// When the scheduled drift check runs (UTC): daily, off the hour so a fleet of pipelines doesn't fire at once.
+const DRIFT_CRON = "17 5 * * *";
 
 export const INTENT_WORKFLOW_PATH = ".forgejo/workflows/resolve.yaml";
 export const APPLY_WORKFLOW_PATH = ".forgejo/workflows/apply.yaml";
@@ -64,16 +69,20 @@ export const intentWorkflowYaml = (inputs: PipelineInputs): string =>
         domain: inputs.domain,
     });
 
-// On a push that changes the artifact, applies it. Full history lets it diff against the intentic-applied tag (the
-// prune baseline), moving the tag on success.
+// On a push that changes the artifact, applies it against the baseline the intentic-applied tag carries, and re-tags on
+// success with the baseline that apply wrote. Daily, the same job's twin runs `plan --check`, which changes nothing and
+// fails on drift, orphans, unowned resources or pending deletions, so a missed change shows up in CI.
 export const applyWorkflowYaml = (inputs: PipelineInputs): string =>
     renderTemplate("workflows/apply.yaml", {
         artifactFile: inputs.artifactFile,
+        baselineFile: join(dirname(inputs.artifactFile), LAST_APPLIED_FILE),
         envEntries: inputs.applySecretKeys.map((key) => ({ env: key, secret: forgejoSecretName(key) })),
         appliedTag: APPLIED_TAG,
+        driftCron: DRIFT_CRON,
         cliPackage: CLI_PACKAGE,
         cliVersion: inputs.cliVersion,
         user: inputs.user,
+        domain: inputs.domain,
         forgejoPasswordKey: inputs.forgejoPasswordKey,
     });
 

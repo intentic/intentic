@@ -9,6 +9,7 @@ import { shellFor } from "./shell.js";
 import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../wsl.js";
 import { machineId } from "../../machine-id.js";
 import { deviceFeatures, icOutOfDate } from "./ic-binary.js";
+import { readUpkeepSummary } from "../../upkeep/reconcile.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -70,13 +71,14 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
 };
 
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, stamped, features] = await Promise.all([
+    const [os, engine, wsl, distros, stamped, features, upkeep] = await Promise.all([
         osName(),
         engineFacts(),
         wslEnvironment(),
         wslDistros(),
         readLinkStates(),
         deviceFeatures(),
+        readUpkeepSummary(),
     ]);
     const links = linkFacts(stamped);
     // Read after deviceFeatures, which fetched (or failed to fetch) the current ic first.
@@ -101,6 +103,10 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
     // Why that list is short, when the ic under it could not be brought up to date.
     if (stale !== undefined) {
         facts.icOutOfDate = stale;
+    }
+    // What the last upkeep pass here found, put right and left (upkeep/reconcile.ts): counts and the first lines only.
+    if (upkeep !== undefined) {
+        facts.upkeep = upkeep;
     }
     return facts;
 };

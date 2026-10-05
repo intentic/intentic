@@ -90,10 +90,17 @@ export const DeviceSandboxSchema = z.object({
     lastUpdate: UpdateOutcomeSchema.optional(),
     // Newest first: what `rollback` would return to, then the older versions kept on this machine for `rollback --to`.
     rollbackTargets: z.array(RollbackTargetSchema).optional(),
-    // The other side of this computer that keeps it (`windows`, `linux`). On Windows, ic on Windows and ic in WSL drive
-    // one Docker engine and each lists every sandbox on it, but only the side whose ic created a sandbox runs its
-    // background rounds (keeper, updates, backups, probation); absent for this side's own, and from an older ic.
+    // The other side of this computer that keeps it (`windows`, `linux`; from 2026-10-05 `platform/env`, e.g.
+    // `linux/archlinux`, so two WSL distros are told apart). On Windows, ic on Windows and ic in WSL drive one Docker
+    // engine and each lists every sandbox on it, but only the side whose ic created a sandbox runs its background rounds
+    // (keeper, updates, backups, probation); absent for this side's own, and from an older ic.
     keptElsewhere: z.string().optional(),
+    // How a person reads that side ("WSL (archlinux)", "Windows").
+    keptElsewhereName: z.string().optional(),
+    // The side that keeps it has gone silent (its keeper stopped writing `/history/.ic/keeper.json` for half an hour),
+    // so this side adopted it for its rounds: `keptElsewhere` is left out, and these say whose it was and since when.
+    adoptedFrom: z.string().optional(),
+    keeperSilentSince: z.number().optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending

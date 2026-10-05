@@ -99,6 +99,12 @@ export interface DeviceSandboxRow {
     probationUntil?: number | undefined;
     // What a rollback can go back to, newest first.
     rollbackTargets?: readonly { readonly image: string; readonly version?: string | undefined }[] | undefined;
+    // The other side of this computer that keeps it (a WSL distro, or Windows), and how a person reads that side: one
+    // Docker engine serves both, but only the keeping side runs its updates, backups and repairs.
+    keptElsewhere?: string | undefined;
+    keptElsewhereName?: string | undefined;
+    // This side took it over because the keeping side's agent went quiet (ic's keeper heartbeat).
+    adoptedFrom?: string | undefined;
 }
 
 /**
@@ -679,10 +685,22 @@ export const portsLine = (group: DeviceSandboxGroup): CardPart[] | undefined => 
 
 // The line under a card's name: the exact id somebody types into a terminal (only where the name is not it already),
 // what version runs, and the container's share of the machine.
+// Which side of this computer looks after the sandbox, when it is not the one this card was read from: a Windows PC
+// lists its WSL distros' sandboxes too, and a reader who wonders why one never updates here is reading the answer.
+export const keeperLine = (sandbox: DeviceSandboxRow): string | undefined => {
+    if (sandbox.adoptedFrom !== undefined) {
+        return `looked after from here: ${sandbox.adoptedFrom} went quiet`;
+    }
+    const side = sandbox.keptElsewhereName ?? sandbox.keptElsewhere;
+    return side === undefined ? undefined : `kept by ${side} on this computer`;
+};
+
 export const cardSubline = (group: DeviceSandboxGroup, now: number): string[] =>
-    [group.sandbox === undefined ? undefined : versionLine(group.sandbox, now), group.sandbox === undefined ? undefined : resourcesSummary(group.sandbox)].filter(
-        (part): part is string => part !== undefined && part !== ``,
-    );
+    [
+        group.sandbox === undefined ? undefined : versionLine(group.sandbox, now),
+        group.sandbox === undefined ? undefined : resourcesSummary(group.sandbox),
+        group.sandbox === undefined ? undefined : keeperLine(group.sandbox),
+    ].filter((part): part is string => part !== undefined && part !== ``);
 
 // Whether a sandbox this computer does not run still does anything here: a folder whose sync session is up, or a port
 // that reached localhost. One that does neither (its sync paused or gone, nothing mirrored) is a leftover of a sandbox

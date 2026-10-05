@@ -16,7 +16,7 @@ export type Endpoint = { host: string, port: number, };
 /**
  * Everything Node sends the front.
  */
-export type FromNode = { "kind": "hello", build: string, pid: number, } | { "kind": "listen", config: ListenConfig, } | { "kind": "certificate", certificate?: Certificate, } | { "kind": "tunnel", tunnel?: TunnelConfig, } | { "kind": "ask", id: number, question: FrontQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, };
+export type FromNode = { "kind": "hello", build: string, pid: number, generation?: number, } | { "kind": "listen", config: ListenConfig, } | { "kind": "certificate", certificate?: Certificate, } | { "kind": "tunnel", tunnel?: TunnelConfig, } | { "kind": "ask", id: number, question: FrontQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, };
 
 export type FrontAnswer = { "answer": "sync", generations: Array<number | null>, };
 
@@ -73,13 +73,18 @@ export type TerminalPlan = { "plan": "session", name: string, createIn?: string,
 /**
  * Everything the front sends Node.
  */
-export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: FrontAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, };
+export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: FrontAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, };
 
 /**
  * The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces
  * (`METHOD /path` each, as the daemon names them), which the edge sends down the bulk socket.
  */
 export type TunnelConfig = { url: string, grant: string, bulk: Array<string>, };
+
+/**
+ * Why the front stopped dialling the ingress at its usual pace, past an ordinary drop it redials at once.
+ */
+export type TunnelRefusal = { "refusal": "elsewhere", host: string, } | { "refusal": "deleted" };
 
 /**
  * A local upstream a preview host relays to.

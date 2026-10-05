@@ -4,6 +4,9 @@ pub mod desired;
 pub mod doctor;
 pub mod fix;
 pub mod identity;
+pub mod inside;
+pub mod labels;
+pub mod ledger;
 pub mod listing;
 pub mod lock;
 pub mod logs;
@@ -18,6 +21,7 @@ pub mod project_dir;
 pub mod recreate;
 pub mod remove;
 pub mod restore;
+pub mod resume;
 pub mod side;
 pub mod staged;
 pub mod storage;
@@ -116,11 +120,16 @@ fn slug_named(given: String) -> String {
 }
 
 /// The sandbox's own network, before any container joins it: docker mints a missing named volume at run
-/// time but never a missing network, so `--network` naming one that is absent refuses the whole launch.
+/// time but never a missing network, so `--network` naming one that is absent refuses the whole launch. A network
+/// made here carries ic's labels (labels.rs); one that exists is used as it is.
 pub fn ensure_network(slug: &str) -> Result<()> {
     let network = trash::network(slug);
     if !docker::ok(&["network", "inspect", &network]) {
-        docker::capture(&["network", "create", &network])?;
+        let mut args: Vec<String> = vec!["network".to_string(), "create".to_string()];
+        args.extend(labels::here(slug, labels::Kind::Network));
+        args.push(network);
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        docker::capture(&refs)?;
     }
     Ok(())
 }

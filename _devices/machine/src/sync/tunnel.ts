@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { pollUntil } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import type { Dialed } from "../daemon-base.js";
 import { type Pairing, pairingTransport } from "./config.js";
+import { type SyncEnvironment, syncEnvironment } from "./environment.js";
 
 // A loopback port on this machine that is the sandbox's sshd: Mutagen speaks only SSH, so something must front it
 // with TCP. One socket per SSH connection, opened on demand, closed with it; a failed socket just fails the TCP
@@ -14,12 +16,36 @@ import { type Pairing, pairingTransport } from "./config.js";
 const SSH_PORT_BASE = 24000;
 const SSH_PORT_SPAN = 4000;
 
-export const syncSshPort = (sandboxId: string): number => {
+// (2026-10-05) A WSL DISTRO DERIVES ITS PORTS IN A BAND OF ITS OWN. Under WSL's mirrored networking a distro's loopback
+// IS the Windows side's, so a PC whose Windows side and a distro both paired one sandbox derived one port twice: the
+// second listener failed with EADDRINUSE and that environment's file sync had no transport at all. A distro now hashes
+// its own name in with the id and lands in 20000-23999, so it can never derive a port the Windows side (or a Mac, or a
+// plain Linux box, all still in 24000-27999 exactly as before) derives; nothing outside WSL moves. A distro's ports move
+// once, at the first start of this build, which costs nothing: the ssh config block is rewritten from the same rule at
+// every start, and known_hosts keys an entry by its alias (HostKeyAlias), not its port.
+const WSL_PORT_BASE = 20000;
+
+// The pre-2026-10-05 derivation, still every native environment's: a sandbox id's first six hex digits.
+const legacyOffset = (sandboxId: string): number => {
     // The id may be 12 hex or a sanitized alias; digits are taken from wherever they are, not a fixed offset, since
     // only a stable one-id-to-one-port mapping matters.
     const hex = (/[0-9a-f]{6}/i.exec(sandboxId)?.[0] ?? "000000").toLowerCase();
-    return SSH_PORT_BASE + (Number.parseInt(hex, 16) % SSH_PORT_SPAN);
+    return Number.parseInt(hex, 16) % SSH_PORT_SPAN;
 };
+
+export const syncSshPort = (sandboxId: string, environment: SyncEnvironment = syncEnvironment()): number => {
+    if (!environment.wsl) {
+        return SSH_PORT_BASE + legacyOffset(sandboxId);
+    }
+    const digest = createHash("sha256").update(`${environment.name}\0${sandboxId}`).digest();
+    return WSL_PORT_BASE + (digest.readUInt32BE(0) % SSH_PORT_SPAN);
+};
+
+// Every port this environment's alias for a sandbox was ever bound to: today's, and the pre-2026-10-05 one a distro
+// derived before its band moved. What a known_hosts cleanup strips (`[alias]:port` spellings).
+export const syncSshPorts = (sandboxId: string, environment: SyncEnvironment = syncEnvironment()): readonly number[] => [
+    ...new Set([syncSshPort(sandboxId, environment), SSH_PORT_BASE + legacyOffset(sandboxId)]),
+];
 
 // The socket URL for a resolved base, ws-scheme, at the transport route. One prefix swap covers both
 // `https://`→`wss://` and the loopback shortcut's plain `http://`→`ws://`, since the trailing `s` (or lack of it)
@@ -55,9 +81,13 @@ export interface TunnelTarget {
 // Only pairings with a sync token get a transport; otherwise a bound listener would accept ssh and fail every
 // connection, worse than none. A pairing reached through Docker (endpoint.ts) needs none either: nothing of it rides
 // ssh. Bases arrive pre-resolved, shared with the ports poll and report, avoiding a third probe.
+// (2026-10-05) Nor does a sandbox the platform or this machine says is gone (gone.ts): a listener for it only answers
+// ssh with a socket that fails, and the watcher no longer dials it. It comes back with the sandbox's first answer.
 export const tunnelTargets = (dialed: readonly Dialed<Pairing>[]): readonly TunnelTarget[] =>
     dialed.flatMap(({ pairing, base }) =>
-        pairing.syncToken === undefined || pairingTransport(pairing) === "docker" ? [] : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
+        pairing.syncToken === undefined || pairingTransport(pairing) === "docker" || pairing.goneSince !== undefined
+            ? []
+            : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
     );
 
 // Bridges one accepted TCP connection to one WebSocket. Exported so a test can drive it without binding a real

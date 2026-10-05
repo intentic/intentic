@@ -5,6 +5,7 @@
 //! while QUIC is not held, a transfer on the bulk one (`bulk`). The edge opens the streams, the front serves them.
 
 mod bulk;
+mod identity;
 pub mod mux;
 mod pump;
 pub mod quic;
@@ -12,7 +13,8 @@ pub mod quic;
 use std::time::Duration;
 
 pub use bulk::{BULK_HEADER, BulkRoutes, LANE_HEADER, Lane};
-pub use pump::{Close, Ended, Liveness, pump, raised};
+pub use identity::{HOLDER_HEADER, HOST_HEADER, Heard, INSTANCE_HEADER, Identity};
+pub use pump::{Close, Ended, Liveness, Pumping, pump, raised};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 /// The tunnel door on the edge, versioned so a new session shape takes a new path. `/tunnel/v1`, an h2 session over
@@ -32,10 +34,38 @@ pub const WEBSOCKET_UPGRADE: &str = "websocket";
 /// The close code of a tunnel a newer one for the same sandbox and slot displaced.
 pub const DISPLACED_CODE: u16 = 4001;
 
+/// The close code of a tunnel refused because another copy of the same sandbox holds it: a front of another instance
+/// (`INSTANCE_HEADER`) whose carrier is alive. The reason names where that copy runs. A front hearing it stands back
+/// rather than taking the sandbox back, so two containers started with one grant (from Windows and from WSL, say) stop
+/// swapping its tunnel every minute (2026-10-05). An upgrade the edge can refuse before answering it is refused with 409
+/// and `HOLDER_HEADER` instead.
+pub const HELD_ELSEWHERE_CODE: u16 = 4009;
+
+/// The close code of a held tunnel whose sandbox the platform deleted (its reachability answered 404, a deletion
+/// record): the front stops redialling, and its daemon hears the same at its next announce (410) (2026-10-05).
+pub const DELETED_CODE: u16 = 4010;
+
+/// The close code of a QUIC connection the edge stopped trusting: a probe it opened went unanswered, or a request's
+/// stream did not open or answer in time while a probe failed beside it. The WebSocket, held beside it all along,
+/// carries every request while the front redials QUIC (2026-10-05: a half-dead QUIC path kept all the traffic, since
+/// QUIC outranks the socket and its own keep-alive still crossed).
+pub const DEMOTED_CODE: u16 = 4008;
+
 /// The front pings this often, and both ends forget a peer silent this long: a path that died without a FIN reports
 /// nothing else. QUIC's keep-alive and idle timeout run on the same two.
 pub const PING_EVERY: Duration = Duration::from_secs(15);
 pub const DEAD_AFTER: Duration = Duration::from_secs(45);
+
+/// The edge proves a QUIC carrier with a probe stream this often (the first at registration, which is when the carrier
+/// starts taking requests), and closes it with `DEMOTED_CODE` when one is not answered within `PROBE_PATIENCE`: QUIC's
+/// own keep-alive proves only that packets cross, not that streams are served (2026-10-05).
+pub const PROBE_EVERY: Duration = PING_EVERY;
+pub const PROBE_PATIENCE: Duration = Duration::from_secs(10);
+
+/// How long a front waits for the edge to answer its QUIC hello: past the edge's slowest answer, which waits up to 5 s on
+/// the platform's existence check, with room to spare. At 5 s, as before 2026-10-05, a front gave up on a hello the edge
+/// went on to answer and register, and that abandoned connection then outranked the socket until its idle timeout.
+pub const HELLO_PATIENCE: Duration = Duration::from_secs(15);
 
 /// Per-stream receive window on QUIC and the legacy h2 session: the session crosses the internet, where h2's 64 KiB
 /// default starves a transfer.
@@ -139,10 +169,21 @@ mod tests {
                 "displaced": DISPLACED_CODE,
                 "away": quic::AWAY.into_inner(),
                 "refused": quic::REFUSED.into_inner(),
+                "heldElsewhere": HELD_ELSEWHERE_CODE,
+                "deleted": DELETED_CODE,
+                "demoted": DEMOTED_CODE,
+            },
+            "identity": {
+                "instance": INSTANCE_HEADER,
+                "host": HOST_HEADER,
+                "holder": HOLDER_HEADER,
             },
             "liveness": {
                 "pingEveryMs": PING_EVERY.as_millis(),
                 "deadAfterMs": DEAD_AFTER.as_millis(),
+                "probeEveryMs": PROBE_EVERY.as_millis(),
+                "probePatienceMs": PROBE_PATIENCE.as_millis(),
+                "helloPatienceMs": HELLO_PATIENCE.as_millis(),
             },
             "quic": {
                 "alpn": std::str::from_utf8(quic::ALPN).unwrap(),
@@ -151,7 +192,10 @@ mod tests {
                     "held": quic::Hello::Held as u8,
                     "refused": quic::Hello::Refused as u8,
                     "gone": quic::Hello::Gone as u8,
+                    "heldElsewhere": quic::Hello::HeldElsewhere as u8,
+                    "acknowledged": quic::ACKNOWLEDGED,
                 },
+                "probe": std::str::from_utf8(quic::PROBE).unwrap(),
             },
         });
         let path = concat!(

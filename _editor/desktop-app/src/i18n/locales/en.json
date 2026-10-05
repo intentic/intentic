@@ -40,7 +40,9 @@
         "stoppedInstallNothingElse": "You stopped this install. Nothing else is running on this device.",
         "stopping": "Stopping…",
         "updateRestart": "Update and restart",
-        "yourSandbox": "your sandbox"
+        "yourSandbox": "your sandbox",
+        "newerIntenticInstalled": "A newer Intentic is installed. Restart Intentic to use it.",
+        "restartIntentic": "Restart Intentic"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Always do this: don't ask again",
@@ -148,7 +150,10 @@
         "needsYouBadge": "needs you",
         "startingDockerBadge": "starting Docker",
         "updateReadyBadge": "an update is ready",
-        "machineBadge": "setting up this computer's sandbox"
+        "machineBadge": "setting up this computer's sandbox",
+        "keptBy": "Kept by {place}",
+        "keptByNote": "Its updates, backups and restarts run there. Start, stop and restart still work from here.",
+        "agentsElsewhere": "Intentic's machine agent also runs in {places} on this computer, and looks after the sandboxes set up there."
     },
     "machineSandbox": {
         "title": "This computer's sandbox",

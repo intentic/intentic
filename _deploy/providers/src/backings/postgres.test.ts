@@ -59,7 +59,11 @@ test("instance read returns undefined until pg_isready passes", async () => {
 });
 
 test("instance read returns the deterministic internalHost/port + observed image when ready", async () => {
-    expect(await createPostgresProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({ outputs, detail: { image: IMAGE } });
+    expect(await createPostgresProvider(fakeSsh({ ready: true }).executor).read(inputs, ctx())).toEqual({
+        outputs,
+        detail: { image: IMAGE },
+        stampOwner: "",
+    });
 });
 
 test("instance diff is noop on the desired image and update on drift", () => {
@@ -161,4 +165,31 @@ test("binding delete drops the database and role", async () => {
     await createPostgresDatabaseProvider(ssh.executor).delete!(bindingInputs, ctx("app-uses-db"));
     expect(ssh.commands.some((c) => c.includes("DROP DATABASE IF EXISTS"))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("DROP ROLE IF EXISTS"))).toBe(true);
+});
+
+test("instance read reports the hash and owner stamps read back from the container's labels", async () => {
+    const session: SshSession = {
+        exec: async (command) =>
+            /pg_isready/u.test(command)
+                ? res("")
+                : /docker ps -q/u.test(command)
+                  ? res("cid123")
+                  : /\.Config\.Labels/u.test(command)
+                    ? res("0123456789abcdef|aaa")
+                    : /docker inspect/u.test(command)
+                      ? res(IMAGE)
+                      : res(""),
+        dispose: async () => {},
+    };
+    const observed = await createPostgresProvider({ connect: async () => session }).read(inputs, ctx());
+    expect(observed).toMatchObject({ stampHash: "0123456789abcdef", stampOwner: "aaa" });
+});
+
+// Adoption converges only if the update that follows re-stamps: the rewritten compose file carries the owner label, so
+// `up -d` recreates the container with it.
+test("instance apply stamps the run's owner into the compose labels, after the hash", async () => {
+    const ssh = fakeSsh({ ready: true });
+    await createPostgresProvider(ssh.executor).apply(inputs, undefined, { ...ctx(), inputsHash: "0123456789abcdef", owner: "aaa" });
+    const compose = ssh.commands.find((command) => command.includes("compose.yaml") && command.includes("labels:"));
+    expect(compose).toContain(`labels: [ "intentic.id=db", "intentic.type=postgres", "intentic.hash=0123456789abcdef", "intentic.owner=aaa" ]`);
 });

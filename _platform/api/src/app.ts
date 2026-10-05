@@ -15,6 +15,8 @@ import { hostReportHttpRoutes } from "./sandbox/host-report.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
 import { identityField, isTombstoned } from "./sandbox/recovery.js";
+import { announcedCopyOf, noteAnnounce, seenCopiesOf } from "./sandbox/announce-copies.js";
+import { claimerOf, heldClaimerOf, namesMachine, secondMachine } from "./sandbox/setup-code.js";
 import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
@@ -46,9 +48,14 @@ const TRIAL_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
  * timeout (10s by default) with no response at all, which cut the owner off from the answer, the reason a version was
  * put back included, while the change went on without them; these lift it for themselves. */
 const MACHINE_CHANGE_PATHS = new Set(
-    [`/sandbox/hosted-restart`, `/sandbox/hosted-rollback`, `/sandbox/hosted-rebuild`, `/sandbox/wake`, `/sandbox/hosted-provision`, `/hosted-plan/tier`].map(
-        (path) => `${API_BASE_PATH}${path}`,
-    ),
+    [
+        `/sandbox/hosted-restart`,
+        `/sandbox/hosted-rollback`,
+        `/sandbox/hosted-rebuild`,
+        `/sandbox/wake`,
+        `/sandbox/hosted-provision`,
+        `/hosted-plan/tier`,
+    ].map((path) => `${API_BASE_PATH}${path}`),
 );
 
 const keepMachineChangesOpen: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -140,7 +147,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     );
     app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }));
 
-/* HOW MUCH BODY A REQUEST MAY CARRY, decided before any route reads one. */
+    /* HOW MUCH BODY A REQUEST MAY CARRY, decided before any route reads one. */
     app.use(`*`, (c, next) =>
         bodyLimit({
             maxSize: c.req.path.startsWith(`/trial/`) ? TRIAL_BODY_LIMIT_BYTES : BODY_LIMIT_BYTES,
@@ -160,15 +167,28 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         }
     });
 
-    // The connect script redeems the setup code for plain KEY=value lines; 404 for unknown and expired alike.
+    // The connect script redeems the setup code for plain KEY=value lines; 404 for unknown and expired alike. Beside
+    // `code`, an `ic` new enough names the machine claiming (`host`, `os`, `instance`; setup-code.ts): the first claim
+    // that does is recorded, and the same code claimed by a different machine is refused with 409 while it lives, so one
+    // pasted command cannot start two copies of a sandbox (2026-10-05). The same machine running it again is let through.
     app.post(`/setup/claim`, async (c) => {
-        const code = (await c.req.parseBody())[`code`];
+        const form = await c.req.parseBody();
+        const code = form[`code`];
         if (typeof code !== `string` || code === ``) {
             return c.text(`error: missing code`, 400);
         }
         const sandbox = await prisma.sandbox.findUnique({ where: { setupCode: code } });
         if (!sandbox || !sandbox.setupCodeExpiresAt || sandbox.setupCodeExpiresAt < new Date()) {
             return c.text(`error: setup code invalid or expired`, 404);
+        }
+        const claimer = claimerOf(form);
+        const refusal = secondMachine(sandbox, claimer);
+        if (refusal !== undefined) {
+            c.get(`logger`).warn(
+                { sandboxId: sandbox.id, held: sandbox.setupClaimedBy, claimer },
+                `setup claim refused: the code was already used on another machine`,
+            );
+            return c.text(`error: ${refusal}`, 409);
         }
         // token/setupPayload are encrypted at rest (crypto.ts); payload is the decrypted JSON sandbox.setupCode stored.
         const payload =
@@ -185,8 +205,18 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         // Same, for the connected-computer agent installed beside it; unconditional and inert when unused.
         lines.push(`HOST_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
         lines.push(...Object.entries(payload).map(([key, value]) => `${key}=${value}`));
-        // Re-claimable: overwrites the stamp and clears the prior setupReport, so a re-run hides last run's failure.
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupCodeClaimedAt: new Date(), setupReport: Prisma.DbNull } });
+        // Re-claimable: overwrites the stamp and clears the prior setupReport, so a re-run hides last run's failure. The
+        // first machine to name itself is kept for the code's life; a later one is the same machine, or was refused above.
+        const now = new Date();
+        const recordClaimer = namesMachine(claimer) && heldClaimerOf(sandbox.setupClaimedBy) === undefined;
+        await prisma.sandbox.update({
+            where: { id: sandbox.id },
+            data: {
+                setupCodeClaimedAt: now,
+                setupReport: Prisma.DbNull,
+                ...(recordClaimer ? { setupClaimedBy: { ...claimer, at: now.toISOString() } } : {}),
+            },
+        });
         return c.text(lines.join(`\n`));
     });
 
@@ -217,12 +247,16 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // deletion record, else 404: the second is what a registry that forgot the sandbox says, and the daemon keeps
     // asking (and its owner can have it adopted, POST /sandbox/adopt), where the first is final. Telling them apart
     // takes possessing the token, so neither is an oracle. An accepted announce answers with this database's identity.
+    // (2026-10-05) A daemon sends it again every hour once registered, so `lastSeenAt` is its heartbeat rather than its
+    // registration; and one new enough names which copy it is, which the row keeps to tell two containers on one token
+    // apart from one that restarted (announce-copies.ts).
     app.post(`/sandbox/announce`, async (c) => {
         const token = c.req.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {
             return c.text(`error: missing token`, 400);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { daemonUrl?: unknown; version?: unknown } | undefined;
+        const body = (await c.req.json().catch(() => undefined)) as
+            { daemonUrl?: unknown; version?: unknown; instance?: unknown; host?: unknown; os?: unknown } | undefined;
         const daemonUrl = body?.daemonUrl;
         if (typeof daemonUrl !== `string` || !isHttpsUrl(daemonUrl)) {
             return c.text(`error: daemonUrl must be an https URL`, 400);
@@ -253,6 +287,19 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             });
             return c.text(`error: this sandbox announces at ${expected}`, 409);
         }
+        // Which copy this is, beside the last other one that announced; a daemon too old to say leaves the record as it is.
+        const now = new Date();
+        const copy = announcedCopyOf(body);
+        const copies =
+            copy === undefined
+                ? undefined
+                : noteAnnounce({ seen: seenCopiesOf(sandbox.seenInstances), duplicateSince: sandbox.duplicateSince }, copy, now);
+        if (copies !== undefined && copies.duplicateSince !== null && sandbox.duplicateSince === null) {
+            c.get(`logger`).warn(
+                { sandboxId: sandbox.id, copies: copies.seen },
+                `announce: two copies of this sandbox are running side by side on one token`,
+            );
+        }
         // Cleared here since a stored refusal must describe a live disagreement; firstAnnouncedAt is written once.
         // The removal tombstone goes with it, and for the same reason: this sandbox is plainly here, whatever was
         // deleted on some machine before. A box set up again on the same token heals its own record.
@@ -261,11 +308,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             data: {
                 daemonUrl,
                 daemonVersion: version.success ? version.data : null,
-                lastSeenAt: new Date(),
+                lastSeenAt: now,
                 announceRefusal: Prisma.DbNull,
                 removedAt: null,
                 removedBy: null,
-                ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: new Date() } : {}),
+                ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: now } : {}),
+                ...(copies === undefined ? {} : { seenInstances: [...copies.seen], duplicateSince: copies.duplicateSince }),
             },
         });
         if (announced.count === 0) {
@@ -341,12 +389,18 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (token === undefined || token === ``) {
             return c.text(`error: missing token`, 400);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { reach?: unknown; detail?: unknown; boot?: unknown; cpu?: unknown } | undefined;
+        const body = (await c.req.json().catch(() => undefined)) as
+            { reach?: unknown; detail?: unknown; retrying?: unknown; boot?: unknown; cpu?: unknown; drift?: unknown } | undefined;
+        // Every field the schema states, named one by one so nothing else a body carries is stored. (2026-10-05)
+        // `retrying` and `drift` were left out, so the editor's "unreachable for good" card, which waits for
+        // `retrying: false`, never showed, and no setup's missing environment ever reached it.
         const report = BootReportSchema.safeParse({
             reach: body?.reach,
             detail: body?.detail,
+            retrying: body?.retrying,
             boot: body?.boot,
             cpu: body?.cpu,
+            drift: body?.drift,
             at: new Date().toISOString(),
         });
         if (!report.success) {
@@ -398,7 +452,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // The loopback certificate's DNS relay: a same-machine sandbox still needs a real cert for 127.0.0.1. Both routes take
     // `{ challenge? }` from a sandbox presenting its connect token, and act only on that sandbox's own record.
-    const loopbackRequest = async (request: HonoRequest): Promise<{ hostname: string; challenge: string | undefined } | { error: string; status: 400 | 404 }> => {
+    const loopbackRequest = async (
+        request: HonoRequest,
+    ): Promise<{ hostname: string; challenge: string | undefined } | { error: string; status: 400 | 404 }> => {
         const token = request.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {
             return { error: `missing token`, status: 400 };
@@ -425,7 +481,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     };
 
     // Runs a Cloudflare call for a route: its answer, or the failure as the route's error (a bad token is the caller's 400).
-    const viaCloudflare = async <T extends object>(work: () => Promise<T>): Promise<{ body: T; status: 200 } | { body: { error: string }; status: 400 | 502 }> => {
+    const viaCloudflare = async <T extends object>(
+        work: () => Promise<T>,
+    ): Promise<{ body: T; status: 200 } | { body: { error: string }; status: 400 | 502 }> => {
         try {
             return { body: await work(), status: 200 };
         } catch (error) {

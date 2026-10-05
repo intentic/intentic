@@ -49,12 +49,13 @@ export const runTick = async (
 
 // First look minutes after start (jittered, so a PC's sides never pull at once), then every few hours; the switch
 // (`intentic-machine updates --sandboxes`) is re-read every tick.
-export const startAutoPrepare = (log: Log): Rounds => {
+// `delayMs` pushes the first round later, for the second environment on one engine (resident.ts).
+export const startAutoPrepare = (log: Log, { delayMs = 0 }: { readonly delayMs?: number } = {}): Rounds => {
     const state = newState();
     return startRounds(
         "auto-prepare",
         log,
-        FIRST_TICK_MS + Math.floor(Math.random() * JITTER_MS),
+        delayMs + FIRST_TICK_MS + Math.floor(Math.random() * JITTER_MS),
         () => TICK_MS + Math.floor(Math.random() * JITTER_MS),
         async () => {
             // A config that does not read skips the round (it throws), since it may be the one holding the switch off.

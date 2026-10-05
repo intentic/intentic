@@ -18,6 +18,16 @@ pub const FRONT_SOCKET_ENV: &str = "INTENTIC_FRONT_SOCKET";
 /// Where the front tells the daemon it spawns to serve HTTP, the only listener the daemon has.
 pub const NODE_SOCKET_ENV: &str = "INTENTIC_NODE_SOCKET";
 
+/// The front's instance, which the front tells the daemon it spawns: random, minted once per front process, which lives
+/// as long as its container. The front presents it on every tunnel it dials and the daemon in its announce, so the edge
+/// and the platform can tell two copies of one sandbox apart (2026-10-05).
+pub const INSTANCE_ENV: &str = "INTENTIC_INSTANCE";
+
+/// Which start of the daemon this is, counted by the front from 1 and set on each daemon it spawns, which says it back
+/// in its hello. A connection whose hello names an older start, or none, never takes the control socket from a daemon
+/// that already said hello on it (2026-10-05).
+pub const GENERATION_ENV: &str = "INTENTIC_NODE_GENERATION";
+
 /// How long either side waits for the answer to a question it asked before giving up on it.
 pub const ASK_PATIENCE: Duration = Duration::from_secs(5);
 
@@ -266,10 +276,14 @@ pub struct WatchedCheckout {
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum FromNode {
-    /// Node's HTTP socket is accepting; once per Node process.
+    /// Node's HTTP socket is accepting; once per Node process. `generation` is the `GENERATION_ENV` it was started with,
+    /// absent from a Node that predates it.
     Hello {
         build: String,
         pid: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "number")]
+        generation: Option<u64>,
     },
     Listen {
         config: ListenConfig,
@@ -312,16 +326,60 @@ pub enum FromNode {
     },
 }
 
+/// Why the front stopped dialling the ingress at its usual pace, past an ordinary drop it redials at once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "refusal", rename_all = "camelCase")]
+#[ts(export, export_to = "wire.ts")]
+pub enum TunnelRefusal {
+    /// Another copy of this sandbox (a container holding the same grant) holds its tunnel, running on `host` as the
+    /// edge named it: the edge refused this front three times in a row, and the front now dials every 15 minutes.
+    Elsewhere { host: String },
+    /// The platform deleted this sandbox: the edge closed its tunnel for that, and the front stopped dialling.
+    Deleted,
+}
+
 /// Everything the front sends Node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum ToNode {
-    Ask { id: u32, question: Question },
-    Answer { id: u32, answer: FrontAnswer },
-    Refused { id: u32, message: String },
-    Tunnel { connected: bool },
+    Ask {
+        id: u32,
+        question: Question,
+    },
+    Answer {
+        id: u32,
+        answer: FrontAnswer,
+    },
+    Refused {
+        id: u32,
+        message: String,
+    },
+    /// Where the ingress tunnel's interactive socket stands, told on every change and again to each Node that says
+    /// hello. `reason` says why it is not held, in the front's words (a drop, the edge's refusal), and `refused` when
+    /// the front stopped redialling at its usual pace (2026-10-05).
+    Tunnel {
+        connected: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        refused: Option<TunnelRefusal>,
+    },
+}
+
+impl ToNode {
+    /// The tunnel is held.
+    pub fn tunnel_held() -> Self {
+        Self::Tunnel {
+            connected: true,
+            reason: None,
+            refused: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -344,6 +402,8 @@ mod tests {
             "env": {
                 "frontSocket": FRONT_SOCKET_ENV,
                 "nodeSocket": NODE_SOCKET_ENV,
+                "instance": INSTANCE_ENV,
+                "generation": GENERATION_ENV,
             },
             "askPatienceMs": ASK_PATIENCE.as_millis(),
             "frame": {
@@ -366,7 +426,7 @@ mod tests {
 
     #[test]
     fn a_frame_is_its_length_then_its_json() {
-        let bytes = frame(&ToNode::Tunnel { connected: true }).unwrap();
+        let bytes = frame(&ToNode::tunnel_held()).unwrap();
         let json = br#"{"kind":"tunnel","connected":true}"#;
         assert_eq!(
             &bytes[..LENGTH_BYTES],
@@ -477,6 +537,60 @@ mod tests {
             FromNode::Answer {
                 id: 9,
                 answer: Answer::Pong
+            }
+        );
+    }
+
+    // An older Node reads `connected` alone and a newer one the rest; an older front's frame reads as a bare state.
+    #[test]
+    fn a_tunnel_report_names_why_only_when_it_has_a_reason() {
+        let refused = ToNode::Tunnel {
+            connected: false,
+            reason: Some("held by another copy on omen (windows)".into()),
+            refused: Some(TunnelRefusal::Elsewhere {
+                host: "omen (windows)".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_string(&refused).unwrap(),
+            r#"{"kind":"tunnel","connected":false,"reason":"held by another copy on omen (windows)","refused":{"refusal":"elsewhere","host":"omen (windows)"}}"#
+        );
+        let deleted: ToNode = serde_json::from_str(
+            r#"{"kind":"tunnel","connected":false,"refused":{"refusal":"deleted"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            deleted,
+            ToNode::Tunnel {
+                connected: false,
+                reason: None,
+                refused: Some(TunnelRefusal::Deleted)
+            }
+        );
+        let older: ToNode = serde_json::from_str(r#"{"kind":"tunnel","connected":true}"#).unwrap();
+        assert_eq!(older, ToNode::tunnel_held());
+    }
+
+    #[test]
+    fn a_hello_names_its_generation_and_an_older_one_none() {
+        let hello: FromNode =
+            serde_json::from_str(r#"{"kind":"hello","build":"b","pid":7,"generation":3}"#).unwrap();
+        assert_eq!(
+            hello,
+            FromNode::Hello {
+                build: "b".into(),
+                pid: 7,
+                generation: Some(3)
+            }
+        );
+        let older: FromNode =
+            serde_json::from_str(r#"{"kind":"hello","build":"b","pid":7}"#).unwrap();
+        assert_eq!(
+            older,
+            FromNode::Hello {
+                build: "b".into(),
+                pid: 7,
+                generation: None
             }
         );
     }

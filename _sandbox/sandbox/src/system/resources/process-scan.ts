@@ -2,7 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { endianness } from "node:os";
 import { mapPool } from "@intentic/base/async";
 import type { ProcessRole } from "@intentic/sandbox-contract";
-import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { DAEMON_GEN_ENV, DEADLINE_ENV, DETACHED_ENV, DETACHED_KINDS, type DetachedKind, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { opt } from "../../opt.js";
 import { type ReadText, readText } from "./cgroup.js";
 import { type ParsedProcStat, parseProcStat } from "./proc-stat.js";
 
@@ -50,13 +51,37 @@ export const procUnits = (): Promise<ProcUnits> =>
         .catch(() => DEFAULT_UNITS));
 
 // Reads procfs's NUL-separated environ, fixed at exec, so a process cannot rewrite the stamp it was born with.
-export const ownerOf = (environ: string): string | undefined => {
+export const ownerOf = (environ: string): string | undefined => envValue(environ, WORKLOAD_ENV);
+
+const envValue = (environ: string, name: string): string | undefined => {
     for (const entry of environ.split("\0")) {
-        if (entry.startsWith(`${WORKLOAD_ENV}=`)) {
-            return entry.slice(WORKLOAD_ENV.length + 1);
+        if (entry.startsWith(`${name}=`)) {
+            return entry.slice(name.length + 1);
         }
     }
     return undefined;
+};
+
+// The stamps besides the owner (seams/workload-stamp.ts): which daemon run started it, and for a detached child of the
+// daemon's own, what it is and when it is overdue. Absent fields were not stamped.
+export interface ProcessStamps {
+    readonly generation?: string;
+    readonly detached?: DetachedKind;
+    readonly deadlineAt?: number;
+}
+
+const DETACHED: ReadonlySet<string> = new Set(DETACHED_KINDS);
+
+export const stampsOf = (environ: string): ProcessStamps => {
+    const generation = envValue(environ, DAEMON_GEN_ENV);
+    const detached = envValue(environ, DETACHED_ENV);
+    const deadlineAt = Number(envValue(environ, DEADLINE_ENV) ?? Number.NaN);
+    return {
+        ...opt("generation", generation === "" ? undefined : generation),
+        // SAFETY: membership in DETACHED_KINDS is checked in the same expression.
+        ...opt("detached", detached !== undefined && DETACHED.has(detached) ? (detached as DetachedKind) : undefined),
+        ...opt("deadlineAt", Number.isFinite(deadlineAt) && deadlineAt > 0 ? deadlineAt : undefined),
+    };
 };
 
 // A label is one of these words or nothing, never argv (a prompt, a path); longer first so `vue-tsc` is not read as `tsc`.
@@ -181,6 +206,7 @@ export interface ScannedProcess extends ParsedProcStat {
     readonly pid: number;
     // The conversation its stamp names; undefined for unstamped work.
     readonly owner: string | undefined;
+    readonly stamps?: ProcessStamps | undefined;
     readonly role: ProcessRole;
     readonly program: string | undefined;
 }
@@ -191,7 +217,7 @@ export interface ProcSource {
 }
 
 // `key` is start time and comm, so a reused pid or a renaming exec is read again.
-type Identity = Pick<ScannedProcess, "owner" | "role" | "program"> & { readonly key: string };
+type Identity = Pick<ScannedProcess, "owner" | "stamps" | "role" | "program"> & { readonly key: string };
 
 // Scans every process but `except`, keeping what each was found to be for the next scan.
 export const createProcessScanner = (source: ProcSource = { listPids, readText }): ((except?: number) => Promise<ScannedProcess[]>) => {
@@ -208,7 +234,13 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
             source.readText(`/proc/${pid}/cgroup`),
         ]);
         const command = commandOf(stat.comm, cmdline ?? "");
-        const identity = { key, owner: ownerOf(environ ?? ""), role: classifyProcess(command, cgroup ?? ""), program: programOf(command) };
+        const identity = {
+            key,
+            owner: ownerOf(environ ?? ""),
+            stamps: stampsOf(environ ?? ""),
+            role: classifyProcess(command, cgroup ?? ""),
+            program: programOf(command),
+        };
         identities.set(pid, identity);
         return identity;
     };
@@ -222,8 +254,8 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
             if (stat === undefined) {
                 return;
             }
-            const { owner, role, program } = await identify(pid, stat);
-            scanned.push({ pid, ...stat, owner, role, program });
+            const { owner, stamps, role, program } = await identify(pid, stat);
+            scanned.push({ pid, ...stat, owner, stamps, role, program });
         });
         const alive = new Set(scanned.map((entry) => entry.pid));
         for (const pid of identities.keys()) {

@@ -1,4 +1,14 @@
-import { type AgentSessionState, parseAgentSessions, reapableAgentSessionNames, type TerminalPolicy, tmpSweepAgeOf } from "./reaper.js";
+import {
+    type AgentSessionState,
+    parseAgentSessions,
+    parseSessionOwner,
+    parseSessions,
+    reapableAgentSessionNames,
+    reapableTaggedSessionNames,
+    sessionKind,
+    type TerminalPolicy,
+    tmpSweepAgeOf,
+} from "./reaper.js";
 
 /* The terminal half of the reaper's policy: which agent sessions go, decided purely from what tmux lists and the owner stop clock. */
 
@@ -91,4 +101,41 @@ test("the /tmp sweep keeps its own ages, and touches no name it does not know", 
     expect(tmpSweepAgeOf("intentic-land-x")).toBe(6 * 60 * MINUTE);
     expect(tmpSweepAgeOf("tsx-0")).toBeUndefined();
     expect(tmpSweepAgeOf("my-offload-x")).toBeUndefined();
+});
+
+// 2026-10-05: a session an agent made by hand (`tmux new-session` from its shell) carries its conversation, and goes once
+// that conversation is gone for good; one nobody can name is left alone.
+test("every session is parsed for the hand-made sweep, and each is the sandbox's own, an agent's, or nobody's", () => {
+    const stdout = ["agent-a\tconv-1\t0\t1779996400", "dev\tconv-2\t0\t1779996400", "work\t\t1\t1779996400", "intentic-server-pin\t\t0\t1", ""].join(
+        "\n",
+    );
+    const sessions = parseSessions(stdout, NOW);
+    expect(sessions.map((entry) => [entry.name, sessionKind(entry)])).toEqual([
+        ["agent-a", "own"],
+        ["dev", "tagged"],
+        ["work", "untagged"],
+        ["intentic-server-pin", "own"],
+    ]);
+    // The agent-only listing the agent sweep reads is unchanged.
+    expect(parseAgentSessions(stdout, NOW).map((entry) => entry.name)).toEqual(["agent-a"]);
+});
+
+test("an agent's hand-made session goes once its conversation is gone past the grace, and never on doubt", () => {
+    const dev = session({ name: "dev", owner: "conv-gone" });
+    const gone = (owner: string): number | undefined => (owner === "conv-gone" ? NOW - GRACE : undefined);
+    expect(reapableTaggedSessionNames([dev], NOW, { goneSince: gone, graceMs: GRACE })).toEqual(["dev"]);
+    expect(reapableTaggedSessionNames([dev], NOW, { goneSince: () => NOW - GRACE + MINUTE, graceMs: GRACE })).toEqual([]);
+    // Standing, or the registry cannot say.
+    expect(reapableTaggedSessionNames([dev], NOW, { goneSince: () => undefined, graceMs: GRACE })).toEqual([]);
+    // Attached is absolute here too, and neither the sandbox's own sessions nor nobody's are this sweep's.
+    expect(reapableTaggedSessionNames([{ ...dev, attached: true }], NOW, { goneSince: gone, graceMs: GRACE })).toEqual([]);
+    expect(reapableTaggedSessionNames([session({ name: "agent-x", owner: "conv-gone" })], NOW, { goneSince: gone, graceMs: GRACE })).toEqual([]);
+    expect(reapableTaggedSessionNames([session({ name: "work", owner: undefined })], NOW, { goneSince: gone, graceMs: GRACE })).toEqual([]);
+});
+
+test("the owner a hand-made session's shell carried in is read from tmux's environment listing", () => {
+    expect(parseSessionOwner("INTENTIC_TURN_OWNER=conv-7\n")).toBe("conv-7");
+    // tmux marks a variable the attaching client lacked as removed, and says nothing for one never set.
+    expect(parseSessionOwner("-INTENTIC_TURN_OWNER\n")).toBeUndefined();
+    expect(parseSessionOwner("")).toBeUndefined();
 });

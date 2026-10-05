@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
 import type { Logger } from "pino";
+import { opt } from "../opt.js";
 import type { DomainEvents } from "../seams/domain-events.js";
 
 // HOW MANY AGENT TURNS ARE RUNNING, FOR THE HOST. The machine agent's keeper restarts a sandbox unasked when its tunnel
@@ -16,8 +17,22 @@ export const WORK_SIGNAL_PATH = "/run/intentic/work.json";
 const POLL_MS = 10_000;
 const REFRESH_MS = 60_000;
 
+// What the signal says about this boot (2026-10-05), so a keeper deciding on a restart can see the sandbox is already in
+// a storm of them: when this daemon booted, the boot before it, how many boots fell in the storm window, whether that
+// made a storm (system/boot/boot-history.ts), and when the restart this boot follows was asked for (restart-resume.ts),
+// which `ic` writes before every restart it makes.
+export interface WorkSignalBoot {
+    readonly bootedAt: number;
+    readonly previousBootAt?: number;
+    readonly bootsInWindow: number;
+    readonly storm: boolean;
+    readonly restartAskedAt?: number;
+}
+
 export interface WorkSignalDeps {
     readonly conversations: { readonly liveSessionIds: () => readonly string[] };
+    // This boot's facts once known; absent for a daemon that keeps no boot record.
+    readonly boot?: () => Promise<WorkSignalBoot | undefined>;
     readonly events: Pick<DomainEvents, "subscribe">;
     readonly logger: Pick<Logger, "warn">;
     readonly path?: string;
@@ -30,12 +45,24 @@ export interface WorkSignal {
     readonly stop: () => void;
 }
 
-export const workSignalBody = (liveTurns: number, at: number): string => `${JSON.stringify({ liveTurns, at })}\n`;
+// `liveTurns` and `at` first and always, as every keeper reads them; the boot's facts after, when known.
+export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalBoot): string =>
+    `${JSON.stringify({
+        liveTurns,
+        at,
+        ...opt("bootedAt", boot?.bootedAt),
+        ...opt("previousBootAt", boot?.previousBootAt),
+        ...opt("bootsInWindow", boot?.bootsInWindow),
+        ...opt("restartStorm", boot?.storm),
+        ...opt("lastRestartAt", boot?.restartAskedAt),
+    })}\n`;
 
-export const startWorkSignal = ({ conversations, events, logger, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
+export const startWorkSignal = ({ conversations, events, logger, boot, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
     let written: { liveTurns: number; at: number } | undefined;
     let failing = false;
     let chain: Promise<void> = Promise.resolve();
+    // Read once: a boot's facts never change after it.
+    const booted = boot?.().catch(() => undefined) ?? Promise.resolve(undefined);
     const write = async (): Promise<void> => {
         const liveTurns = conversations.liveSessionIds().length;
         const at = now();
@@ -44,7 +71,7 @@ export const startWorkSignal = ({ conversations, events, logger, path = WORK_SIG
         }
         try {
             await mkdir(dirname(path), { recursive: true });
-            await writeFileAtomic(path, workSignalBody(liveTurns, at));
+            await writeFileAtomic(path, workSignalBody(liveTurns, at, await booted));
             written = { liveTurns, at };
             failing = false;
         } catch (error) {

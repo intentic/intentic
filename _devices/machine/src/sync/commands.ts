@@ -5,8 +5,14 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
-import { environmentKeyOf, projectDirNameOf, sandboxIdFromUrl, type SyncEnrollmentRequest, SyncEnrollmentAnswerSchema } from "@intentic/sandbox-contract";
+import { clearWindowsRunValue, createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import {
+    environmentKeyOf,
+    projectDirNameOf,
+    sandboxIdFromUrl,
+    type SyncEnrollmentRequest,
+    SyncEnrollmentAnswerSchema,
+} from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
 import { z } from "zod";
 import { postWhileWarming } from "../daemon-base.js";
@@ -42,13 +48,18 @@ import {
     existingSyncSessions,
     healDerivedConflicts,
     isOwnMutagen,
+    MUTAGEN_CALL_TIMEOUT_MS,
+    MUTAGEN_RUN_VALUE,
     registerMutagenAutostart,
     retireOrphanSessions,
     runMutagen,
     sessionName,
     syncSessionNames,
     unregisterMutagenAutostart,
+    userMutagenOnPath,
 } from "./mutagen.js";
+import { forget } from "./forget-command.js";
+import { refuseAcrossPc } from "./siblings.js";
 import { syncSshPort, tunnelReady } from "./tunnel.js";
 import {
     assertSshConfigVisible,
@@ -343,6 +354,8 @@ const planSetup = async (
     readonly placement: Pick<Pairing, "remoteDir" | "project">;
     readonly folder: string | undefined;
     readonly reach: Pick<Pairing, "transport" | "container">;
+    // The other environments of this PC whose folders could not be read, so the overlap check could not include them.
+    readonly unread?: readonly string[];
 }> => {
     const skewed = flags.projectsHost === true ? undefined : projectAskedWithoutFlag(flags);
     if (skewed !== undefined) {
@@ -357,7 +370,12 @@ const planSetup = async (
         throw new Error(hostChange);
     }
     if (flags.projectsHost === true) {
-        return { sandboxId, placement: {}, folder: undefined, reach: await transportFor(flags.transport ?? "auto", { projectsHost: true }, flags.url) };
+        return {
+            sandboxId,
+            placement: {},
+            folder: undefined,
+            reach: await transportFor(flags.transport ?? "auto", { projectsHost: true }, flags.url),
+        };
     }
     const placement = placementOf(flags);
     const folder = wantedFolder(flags, sandboxId);
@@ -371,13 +389,23 @@ const planSetup = async (
             `${folder} overlaps ${clash.localDir}, which already syncs with ${clash.sandboxId}: two syncs over one folder overwrite each other's files. Choose a folder that neither is, holds nor sits inside one this machine syncs (\`intentic-machine status\` lists them).`,
         );
     }
+    // (2026-10-05) And the other environments of this PC, each with a sync.json of its own (siblings.ts).
+    const across = await refuseAcrossPc(folder);
+    if (across.refusal !== undefined) {
+        throw new Error(across.refusal);
+    }
     const reach = await transportFor(flags.transport ?? "auto", placement, flags.url);
-    return { sandboxId, placement, folder, reach };
+    return { sandboxId, placement, folder, reach, unread: across.unread };
 };
 
 const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("sync-enrolling", "enrolling this machine with your sandbox…");
-    const { sandboxId, placement, folder, reach } = await planSetup(flags);
+    const { sandboxId, placement, folder, reach, unread = [] } = await planSetup(flags);
+    if (unread.length > 0) {
+        out(
+            `note: ${unread.join(", ")} could not be asked which folders ${unread.length === 1 ? "it syncs" : "they sync"}, so ${folder ?? "this folder"} was not checked against ${unread.length === 1 ? "it" : "them"}.`,
+        );
+    }
     const publicKey = await ensureSshKey();
     // Enrollment can retry for ~30s while the sandbox tunnel warms; overlapped with the two binary downloads
     // (independent: distinct endpoints, distinct install paths).
@@ -499,7 +527,9 @@ const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: rea
     if (pairings.length > 1) {
         ui.note(`This machine now syncs ${pairings.length} pairings:`);
         for (const held of pairings) {
-            ui.note(`  ${pairingKey(held)}${held.projectsHost === true ? " (this computer's sandbox, for folders)" : held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
+            ui.note(
+                `  ${pairingKey(held)}${held.projectsHost === true ? " (this computer's sandbox, for folders)" : held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`,
+            );
         }
     }
     if (pairing.projectsHost === true) {
@@ -540,7 +570,7 @@ const SESSION_READY_MS = 90_000;
 // here: this is the one-shot CLI, which serves no transport (exec.ts).
 const syncSessionAppears = async (mutagen: string, key: string, withinMs: number): Promise<boolean> => {
     const deadline = Date.now() + withinMs;
-    while (existingSyncSessions(mutagen, [sessionName(key)]).length === 0) {
+    while ((existingSyncSessions(mutagen, [sessionName(key)]) ?? []).length === 0) {
         if (Date.now() >= deadline) {
             return false;
         }
@@ -634,13 +664,16 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
             }
             const mutagen = await ensureMutagen();
             // Both sessions of the pair, and only names the daemon holds: one it can't resolve fails the whole call.
-            const plan = syncSwitchPlan(
-                syncing,
-                existingSyncSessions(
-                    mutagen,
-                    syncing.flatMap((pairing) => syncSessionNames(pairing)),
-                ),
+            const held = existingSyncSessions(
+                mutagen,
+                syncing.flatMap((pairing) => syncSessionNames(pairing)),
             );
+            if (held === undefined) {
+                throw new Error(
+                    `Mutagen did not answer when asked which sessions it holds, so nothing was ${verb === "pause" ? "paused" : "resumed"}. Try again in a moment.`,
+                );
+            }
+            const plan = syncSwitchPlan(syncing, held);
             if (plan.names.length === 0) {
                 // Not a failure: a sandbox that has never answered has no session yet, and the agent creates one when it does.
                 out(`No file-sync session is running for: ${named(syncing)}. Nothing to ${verb}; syncing starts when the sandbox answers again.`);
@@ -824,7 +857,11 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
         if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
             // The pair goes together: a surviving backup session would keep mirroring a sandbox this machine has just
             // unpaired, writing into a folder the owner considers released.
-            spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { stdio: "ignore", windowsHide: true });
+            spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], {
+                stdio: "ignore",
+                windowsHide: true,
+                timeout: MUTAGEN_CALL_TIMEOUT_MS,
+            });
         }
         if (firstOfSandbox) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
@@ -853,11 +890,15 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
     await removeManagedSshConfig();
     // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A `mutagen` of the user's
     // own, found on PATH, may hold their own sessions: leave its daemon alone and say so instead. ensureMutagen answers an
-    // absolute path either way, so which one this is is read off where it lives.
-    const ownCopy = isOwnMutagen(mutagen);
+    // absolute path either way, so which one this is is read off where it lives. (2026-10-05) This agent now runs its own
+    // copy even beside the user's, and one daemon serves both, so the user's install on PATH is what keeps it running.
+    const ownCopy = isOwnMutagen(mutagen) && userMutagenOnPath() === undefined;
     if (ownCopy) {
         unregisterMutagenAutostart(mutagen);
-        spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true });
+        spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    } else if (process.platform === "win32") {
+        // Only this agent's own logon entry for the daemon; Mutagen's own registration is the user's.
+        clearWindowsRunValue(MUTAGEN_RUN_VALUE);
     }
     out(
         ownCopy
@@ -878,4 +919,4 @@ const uninstall = buildCommand<SandboxFlags>({
 const pause = fileSyncSwitch("Pause file syncing", "pause");
 const resume = fileSyncSwitch("Resume file syncing", "resume");
 
-export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, ...attachCommands, ...projectCommands };
+export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, forget, ...attachCommands, ...projectCommands };

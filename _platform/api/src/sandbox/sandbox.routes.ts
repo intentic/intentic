@@ -15,6 +15,7 @@ import { edgeTransports } from "./edge-transports.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
 import {
     forgetHostedMachine,
+    HostedAppNotOurs,
     HostedNothingKept,
     type HostedProvisionArgs,
     hostedEnabled,
@@ -46,9 +47,17 @@ import {
 import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/hosted-plan.js";
 import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import { dropHostedMachine, hostedArrivalBudget, type HostedBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
+import {
+    dropHostedMachine,
+    hostedArrivalBudget,
+    type HostedBudget,
+    hostedBudgetOf,
+    openHostedStretch,
+    settleHostedStretch,
+} from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
-import { hostReportOf, mintFixCode } from "./host-report.js";
+import { hostReportsOf, mintFixCode } from "./host-report.js";
+import { duplicateCopiesOf } from "./announce-copies.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
 import { definitionSeedFor } from "./profiles/profiles.js";
@@ -145,15 +154,29 @@ const keptVersion = async (
 };
 
 // Reboots the machine, or replaces it when Fly says it's gone. The dead row is deleted before reprovisioning:
-// `sandboxId` is unique on HostedMachine, so keeping it would fail the new machine's write and strand the owner.
+// `sandboxId` is unique on HostedMachine, so keeping it would fail the new machine's write and strand the owner. The
+// replacement adopts the sandbox's own app when the provider still holds it, so a machine lost with its disk intact
+// comes back on that disk (hosted.ts adoptHostedApp, 2026-10-05) instead of failing at createApp.
 const restartOrRebuild = async (
     context: OrpcContext,
     args: HostedProvisionArgs,
-    hosted: { id: string; appName: string; machineId: string; volumeId: string; image?: string | null; environmentHash?: string | null; skippedDigest?: string | null },
+    hosted: {
+        id: string;
+        appName: string;
+        machineId: string;
+        volumeId: string;
+        image?: string | null;
+        environmentHash?: string | null;
+        skippedDigest?: string | null;
+    },
     ownerId: string,
 ): Promise<boolean> => {
     try {
-        await refreshHosted(context.config, args, hosted, context.logger, { prisma: context.prisma, hostedMachineId: hosted.id, sandboxId: args.sandboxId });
+        await refreshHosted(context.config, args, hosted, context.logger, {
+            prisma: context.prisma,
+            hostedMachineId: hosted.id,
+            sandboxId: args.sandboxId,
+        });
         return false;
     } catch (error) {
         if (!isFlyGone(error)) {
@@ -276,7 +299,10 @@ const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.t
 // `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
 // command reached a machine, and the wizard's wait reads very differently before and after it.
 // `hostReport` is what the machine a sandbox runs on last found of it (host-report.ts), the owner's alone like the
-// token, and only for a sandbox on a machine of its own: a hosted one is narrated by hostedStatus.
+// token, and only for a sandbox on a machine of its own: a hosted one is narrated by hostedStatus. `hostReporters` is
+// the newest report of each machine and environment that reported, newest first, on the same rows (2026-10-05).
+// `duplicateCopies` names two copies of the sandbox announcing side by side (announce-copies.ts), on the owner's row:
+// only the owner can remove one of them (2026-10-05).
 const toSummary = (
     sandbox: {
         id: string;
@@ -294,6 +320,9 @@ const toSummary = (
         daemonVersion?: string | null;
         // Absent likewise; reads as no report.
         hostReport?: Prisma.JsonValue;
+        // Absent likewise; reads as one copy announcing.
+        seenInstances?: Prisma.JsonValue;
+        duplicateSince?: Date | null;
         // Hosted machine relation; optional so a caller that skipped the include reads as not-hosted, never crashes.
         hosted?: { region: string; warm: boolean; previousImage?: string | null } | null;
         token: string;
@@ -304,6 +333,7 @@ const toSummary = (
     const zone = intenticZoneOf(context);
     const providedAddress = sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`);
     const hosted = sandbox.hosted ?? null;
+    const hostReports = role === `owner` && hosted === null ? hostReportsOf(sandbox.hostReport) : [];
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -322,7 +352,9 @@ const toSummary = (
         // `canRollBack`: the platform kept the image the machine ran before its last image change (hostedRollback).
         hosted: hosted === null ? null : { region: hosted.region, warm: hosted.warm, canRollBack: (hosted.previousImage ?? null) !== null },
         token: connectTokenFor(context.config, sandbox.token, role),
-        hostReport: role === `owner` && hosted === null ? hostReportOf(sandbox.hostReport) : null,
+        hostReport: hostReports[0] ?? null,
+        ...(role === `owner` && hosted === null ? { hostReporters: hostReports } : {}),
+        duplicateCopies: role === `owner` ? duplicateCopiesOf(sandbox.seenInstances, sandbox.duplicateSince ?? null, new Date()) : null,
         role,
         providedAddress,
         // Derived from the loopback zone, never `daemonUrl`: they are two different zones now.
@@ -502,7 +534,9 @@ export const sandboxRoutes = {
                 context.logger.error({ err: error, sandboxId: sandbox.id }, `hosted provision: recording the source failed`),
             );
         } catch (error) {
-            if (error instanceof HostedProvisionCancelled) {
+            // The sandbox's own app holds a machine this platform did not make (hosted.ts heldAppOf): nobody's fault here,
+            // and nothing a retry changes until an operator says whose it is.
+            if (error instanceof HostedProvisionCancelled || error instanceof HostedAppNotOurs) {
                 throw new ORPCError(`CONFLICT`, { message: error.message });
             }
             // The `existing` check above has no lock, so a concurrent provision can slip past it; answered with the
@@ -635,6 +669,9 @@ export const sandboxRoutes = {
             if (error instanceof HostedSlotsExhausted) {
                 throw new ORPCError(`BAD_REQUEST`, { message: error.message });
             }
+            if (error instanceof HostedAppNotOurs) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
+            }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }
         return { ok: true };
@@ -649,7 +686,11 @@ export const sandboxRoutes = {
         }
         const args = await stopForChange(context, { sandbox, hosted, user }, `rollback`);
         try {
-            await rollbackHosted(context.config, args, hosted, context.logger, { prisma: context.prisma, hostedMachineId: hosted.id, sandboxId: sandbox.id });
+            await rollbackHosted(context.config, args, hosted, context.logger, {
+                prisma: context.prisma,
+                hostedMachineId: hosted.id,
+                sandboxId: sandbox.id,
+            });
             await openStretchOrStop(context, hosted, sandbox.ownerId);
         } catch (error) {
             if (error instanceof ORPCError) {

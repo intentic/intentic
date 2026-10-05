@@ -3,12 +3,20 @@
 //! per request, never per connection, since h2 coalesces names. A request rides its sandbox's tunnel here, else goes to
 //! the peer holding it, else is refused with a verdict. A hosted sandbox is no exception: it is reached only down the
 //! tunnel it dials, and one that dials nothing answers `no-tunnel`, which is what the editor wakes it on.
+//!
+//! One holder per sandbox (2026-10-05): a tunnel from a front of another instance than the live one holding the sandbox,
+//! here or on a peer, is refused (409 naming where the holder runs, or `HELD_ELSEWHERE_CODE`). A held QUIC connection is
+//! proven by a probe stream at registration and every `PROBE_EVERY`, takes requests only once proven, and is closed with
+//! `DEMOTED_CODE` when a probe or a stalled request finds it serving nothing, the socket carrying on meanwhile. Every held
+//! sandbox's existence is asked again as its cached answer expires, and one the platform deleted is closed with
+//! `DELETED_CODE`, rather than staying reachable until its front happened to redial.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 pub use browser_wire::{EdgeVerdict as Verdict, VERDICT_HEADER};
+use futures_util::StreamExt;
 use http::header::{self, HeaderValue};
 use http::uri::PathAndQuery;
 use http::{Method, Request, Response, StatusCode};
@@ -21,8 +29,10 @@ use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tunnel::{
-    BULK_HEADER, BulkRoutes, CONNECTION_WINDOW, Ended, GRANT_HEADER, LANE_HEADER, Lane, Liveness,
-    STREAM_WINDOW, TRANSPORTS_HEADER, TUNNEL_PATH, Transport, host_owner_id, mux,
+    BULK_HEADER, BulkRoutes, CONNECTION_WINDOW, Close, DELETED_CODE, DEMOTED_CODE, Ended,
+    GRANT_HEADER, HELD_ELSEWHERE_CODE, HOLDER_HEADER, HOST_HEADER, Heard, INSTANCE_HEADER,
+    Identity, LANE_HEADER, Lane, Liveness, PROBE_EVERY, PROBE_PATIENCE, STREAM_WINDOW,
+    TRANSPORTS_HEADER, TUNNEL_PATH, Transport, host_owner_id, mux,
 };
 
 use crate::body::{self, Body};
@@ -31,12 +41,22 @@ use crate::forward::{ForwardError, Forwarder};
 use crate::grant::GrantKey;
 use crate::legacy;
 use crate::peers::Peers;
-use crate::registry::{Held, Registry, Slot};
+use crate::registry::{Elsewhere, Held, Holder, Registry, Slot};
 use crate::revocation::Revocation;
-use crate::session::Session;
+use crate::session::{Failed, Session};
 
 // A QUIC connection that has not said who it is by now never will.
 const HELLO_PATIENCE: Duration = Duration::from_secs(10);
+
+// A front acknowledges a `Held` the moment it reads it; one that has not by now gave up on this connection.
+const ACKNOWLEDGED_WITHIN: Duration = Duration::from_secs(5);
+
+// A refused socket's close frame gets this long to leave before the connection goes.
+const REFUSAL_GRACE: Duration = Duration::from_secs(2);
+
+/// How many held sandboxes' existence is asked of the platform at once when their cached answers expire: thousands of
+/// tunnels must not become thousands of simultaneous requests.
+pub const RECHECK_AT_ONCE: usize = 8;
 
 pub struct EdgeOptions {
     pub key: GrantKey,
@@ -102,17 +122,12 @@ impl Edge {
             return self.serve_own(&request);
         };
         let hop = request.headers().contains_key(HOP_HEADER);
-        if let Some(session) = self.session_for(&id, &host, &request) {
+        if let Some((session, slot)) = self.session_for(&id, &host, &request, true) {
             let mut request = request;
             request.headers_mut().remove(HOP_HEADER);
-            return session.exchange(request, &host).await.unwrap_or_else(|dropped| {
-                tracing::debug!(sandbox = %id, upgrade, why = %dropped.0, "an exchange through a held tunnel failed");
-                if upgrade {
-                    refused_upgrade(Verdict::Dropped, &format!("{} dropped the connection.", label_of(&host)))
-                } else {
-                    unreachable(&host, Verdict::Dropped)
-                }
-            });
+            return self
+                .through(&id, &host, session, slot, request, upgrade)
+                .await;
         }
         let holder = if hop {
             None
@@ -155,11 +170,18 @@ impl Edge {
         unreachable(&host, verdict)
     }
 
-    // The QUIC connection while it holds, whose streams never queue behind each other; else the interactive socket, unless
-    // the daemon announced the request as a transfer (or it is a preview's) and the bulk socket is held.
-    fn session_for(&self, id: &str, host: &str, request: &Request<Body>) -> Option<Session> {
-        if let Some(quic) = self.registry.lookup(id, Slot::Quic) {
-            return Some(quic);
+    // The QUIC connection while it holds and was proven, whose streams never queue behind each other; else the
+    // interactive socket, unless the daemon announced the request as a transfer (or it is a preview's) and the bulk
+    // socket is held.
+    fn session_for(
+        &self,
+        id: &str,
+        host: &str,
+        request: &Request<Body>,
+        quic: bool,
+    ) -> Option<(Session, Slot)> {
+        if quic && let Some(quic) = self.registry.lookup(id, Slot::Quic) {
+            return Some((quic, Slot::Quic));
         }
         let socket = self.registry.lookup(id, Slot::Socket);
         let bulk = self.registry.lookup(id, Slot::Bulk);
@@ -171,10 +193,119 @@ impl Edge {
             .as_ref()
             .or(bulk.as_ref())
             .is_some_and(|held| held.carries_bulk(host, request.method().as_str(), path));
-        if transfer && bulk.is_some() {
-            return bulk;
+        if transfer && let Some(bulk) = bulk {
+            return Some((bulk, Slot::Bulk));
         }
-        socket
+        socket.map(|socket| (socket, Slot::Socket))
+    }
+
+    // One exchange down a held tunnel. A QUIC carrier that stalled on it is demoted (closed, its front redialling it) and
+    // the request, when it can be sent again, rides the socket instead, once.
+    async fn through(
+        &self,
+        id: &str,
+        host: &str,
+        session: Session,
+        slot: Slot,
+        request: Request<Body>,
+        upgrade: bool,
+    ) -> Response<Body> {
+        let (why, again) = match session.send(request, host).await {
+            Ok(answer) => return answer,
+            Err(Failed::Dropped(dropped)) => (dropped.0, None),
+            Err(Failed::Stalled { why, request }) => {
+                let demoted = slot == Slot::Quic
+                    && self.registry.close_if(
+                        id,
+                        Slot::Quic,
+                        &session,
+                        Close {
+                            code: DEMOTED_CODE,
+                            reason: "a request stalled on it".into(),
+                        },
+                    );
+                if demoted {
+                    tracing::warn!(sandbox = %id, %why, "demoted a QUIC tunnel that stalled a request; the socket carries it");
+                }
+                (why, request)
+            }
+        };
+        if let Some(request) = again
+            && let Some((socket, _)) = self.session_for(id, host, &request, false)
+        {
+            match socket.exchange(*request, host).await {
+                Ok(answer) => return answer,
+                Err(dropped) => {
+                    tracing::debug!(sandbox = %id, why = %dropped.0, "the socket dropped a request QUIC stalled on");
+                }
+            }
+        }
+        tracing::debug!(sandbox = %id, upgrade, %why, "an exchange through a held tunnel failed");
+        if upgrade {
+            refused_upgrade(
+                Verdict::Dropped,
+                &format!("{} dropped the connection.", label_of(host)),
+            )
+        } else {
+            unreachable(host, Verdict::Dropped)
+        }
+    }
+
+    // Whether another live copy holds `id`, here or on a peer: a front naming no instance never asks.
+    fn held_elsewhere(&self, id: &str, identity: Option<&Identity>) -> Option<Elsewhere> {
+        self.registry.held_elsewhere(id, identity).or_else(|| {
+            self.cluster
+                .as_ref()
+                .and_then(|cluster| cluster.held_elsewhere(id, identity))
+        })
+    }
+
+    /// Asks the platform again, every `every`, whether each sandbox held here still exists, `RECHECK_AT_ONCE` at a
+    /// time; the revocation cache asks only for answers that expired. One the platform deleted has every tunnel closed
+    /// with `DELETED_CODE`, and its front stops dialling. Before 2026-10-05 existence was asked only at registration,
+    /// so a deleted sandbox stayed reachable until its front happened to redial.
+    pub fn recheck_held(self: &Arc<Self>, every: Duration) {
+        if !self.revocation.enforced() {
+            return;
+        }
+        let edge = Arc::downgrade(self);
+        tokio::spawn(async move {
+            let mut ticks = tokio::time::interval(every);
+            ticks.tick().await;
+            loop {
+                ticks.tick().await;
+                let Some(edge) = edge.upgrade() else {
+                    return;
+                };
+                edge.recheck_once().await;
+            }
+        });
+    }
+
+    /// One pass of `recheck_held`; answers how many sandboxes it closed.
+    pub async fn recheck_once(&self) -> usize {
+        let held = self.registry.held_ids();
+        let deleted = std::sync::atomic::AtomicUsize::new(0);
+        futures_util::stream::iter(held)
+            .for_each_concurrent(RECHECK_AT_ONCE, |id| {
+                let deleted = &deleted;
+                async move {
+                    if self.revocation.allows(&id).await {
+                        return;
+                    }
+                    let close = Close {
+                        code: DELETED_CODE,
+                        reason: "this sandbox was deleted".into(),
+                    };
+                    let closed = self.registry.close_id(&id, &close);
+                    if closed > 0 {
+                        deleted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        tracing::info!(sandbox = %id, closed, "closed the tunnels of a sandbox the platform deleted");
+                    }
+                }
+            })
+            .await;
+        deleted.into_inner()
     }
 
     // Which verdict a miss answers: a sandbox the platform no longer knows is gone, any other is not connected, hosted or
@@ -246,7 +377,28 @@ impl Edge {
         };
         if !self.revocation.allows(&claim.sandbox_id).await {
             tracing::info!(sandbox = %claim.sandbox_id, "tunnel refused: the platform says this sandbox is gone");
-            return refused(StatusCode::FORBIDDEN, "that sandbox no longer exists");
+            // The verdict tells a front this is a deletion, after which it stops dialling.
+            return with_verdict(
+                refused(StatusCode::FORBIDDEN, "that sandbox no longer exists"),
+                Verdict::UnknownSandbox,
+            );
+        }
+        let header = |name: &str| {
+            request
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+        };
+        let identity = Identity::of_headers(header(INSTANCE_HEADER), header(HOST_HEADER));
+        if let Some(elsewhere) = self.held_elsewhere(&claim.sandbox_id, identity.as_ref()) {
+            tracing::info!(
+                sandbox = %claim.sandbox_id,
+                instance = ?identity.as_ref().map(|identity| &identity.instance),
+                holder = %elsewhere.instance,
+                holder_host = %elsewhere.host,
+                "tunnel refused: another copy of this sandbox holds it"
+            );
+            return held_by_another(&elsewhere);
         }
         let Some(accept) = websocket_accept(&request) else {
             return refused(
@@ -258,7 +410,7 @@ impl Edge {
         let edge = self.clone();
         tokio::spawn(async move {
             match upgrading.await {
-                Ok(upgraded) => edge.hold(claim.sandbox_id, door, upgraded).await,
+                Ok(upgraded) => edge.hold(claim.sandbox_id, door, identity, upgraded).await,
                 Err(error) => tracing::debug!(%error, "a tunnel's upgrade never completed"),
             }
         });
@@ -273,17 +425,21 @@ impl Edge {
         switching.body(body::empty()).expect("a 101 builds")
     }
 
-    /// Holds a front's QUIC connection as its sandbox's carrier: the hello's grant is checked as a WebSocket's is, and the
-    /// connection is closed with the code a displacement or a shutdown names.
+    /// Holds a front's QUIC connection as its sandbox's carrier: the hello's grant is checked as a WebSocket's is, a
+    /// front of another instance than the live holder is refused, and a named front's acknowledgement is waited for
+    /// before the connection is registered. Proven by a probe at once and every `PROBE_EVERY`, it takes requests from its
+    /// first answered probe and is closed with `DEMOTED_CODE` at its first unanswered one; else it is closed with the
+    /// code a displacement, a deletion or a shutdown names.
     pub async fn hold_quic(self: Arc<Self>, connection: quinn::Connection) {
         let remote = connection.remote_address();
-        let Ok(Ok((grant, answering))) =
-            tokio::time::timeout(HELLO_PATIENCE, tunnel::quic::heard(&connection)).await
+        let Ok(Ok(introduction)) =
+            tokio::time::timeout(HELLO_PATIENCE, tunnel::quic::introduced(&connection)).await
         else {
             connection.close(quinn::VarInt::from_u32(0), b"no hello");
             return;
         };
-        let refusal = match self.key.verify(&grant) {
+        let identity = introduction.identity.clone();
+        let refusal = match self.key.verify(&introduction.grant) {
             None => Err((tunnel::quic::Hello::Refused, None)),
             Some(claim) if !self.revocation.allows(&claim.sandbox_id).await => {
                 Err((tunnel::quic::Hello::Gone, Some(claim.sandbox_id)))
@@ -294,33 +450,80 @@ impl Edge {
             Ok(claim) => claim,
             Err((hello, sandbox)) => {
                 tracing::info!(%remote, ?sandbox, ?hello, "QUIC tunnel refused");
-                let _ =
-                    tokio::time::timeout(HELLO_PATIENCE, tunnel::quic::answer(answering, hello))
-                        .await;
+                let _ = tokio::time::timeout(
+                    HELLO_PATIENCE,
+                    introduction.answer(hello, ACKNOWLEDGED_WITHIN),
+                )
+                .await;
                 connection.close(tunnel::quic::REFUSED, b"refused");
                 return;
             }
         };
-        if tunnel::quic::answer(answering, tunnel::quic::Hello::Held)
-            .await
-            .is_err()
-        {
+        let id = claim.sandbox_id;
+        if let Some(elsewhere) = self.held_elsewhere(&id, identity.as_ref()) {
+            tracing::info!(sandbox = %id, %remote, holder = %elsewhere.instance, holder_host = %elsewhere.host, "QUIC tunnel refused: another copy of this sandbox holds it");
+            let named = Identity::named_host(&elsewhere.host).to_owned();
+            let _ = tokio::time::timeout(HELLO_PATIENCE, introduction.held_elsewhere(&named)).await;
+            connection.close(tunnel::quic::HELD_ELSEWHERE, named.as_bytes());
             return;
         }
-        let id = claim.sandbox_id;
+        match introduction
+            .answer(tunnel::quic::Hello::Held, ACKNOWLEDGED_WITHIN)
+            .await
+        {
+            Ok(true) => {}
+            _ => {
+                tracing::info!(sandbox = %id, %remote, "QUIC tunnel not registered: its front did not acknowledge the hello");
+                connection.close(quinn::VarInt::from_u32(0), b"no acknowledgement");
+                return;
+            }
+        }
         let (closing, mut closed) = watch::channel(None);
         let session = Session::quic(connection.clone());
-        let displaced = self.registry.register(
+        let heard = Arc::new(Heard::default());
+        let holder = Holder::proving(identity, heard.clone());
+        let ready = holder.ready.clone();
+        let admitted = self.registry.admit(
             &id,
             Slot::Quic,
             Held {
                 session: session.clone(),
                 closing,
             },
+            holder,
         );
+        let displaced = match admitted {
+            Ok(displaced) => displaced,
+            Err(elsewhere) => {
+                let named = Identity::named_host(&elsewhere.host).to_owned();
+                tracing::info!(sandbox = %id, %remote, holder = %elsewhere.instance, "QUIC tunnel refused: another copy of this sandbox took it first");
+                connection.close(tunnel::quic::HELD_ELSEWHERE, named.as_bytes());
+                return;
+            }
+        };
         tracing::info!(sandbox = %id, displaced, %remote, "QUIC tunnel registered");
+        let probing = connection.clone();
+        let proven = heard.clone();
+        let probes = async move {
+            loop {
+                match tokio::time::timeout(PROBE_PATIENCE, tunnel::quic::probe(&probing)).await {
+                    Ok(Ok(())) => {
+                        proven.answer();
+                        ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Ok(Err(error)) => return format!("a probe failed: {error}"),
+                    Err(_) => return format!("a probe went unanswered for {PROBE_PATIENCE:?}"),
+                }
+                tokio::time::sleep(PROBE_EVERY).await;
+            }
+        };
         let ended = tokio::select! {
             error = connection.closed() => error.to_string(),
+            why = probes => {
+                connection.close(tunnel::quic::DEMOTED, why.as_bytes());
+                tracing::warn!(sandbox = %id, %why, "demoted a QUIC tunnel that serves no probe; the socket carries it");
+                format!("demoted: {why}")
+            }
             close = tunnel::raised(&mut closed) => {
                 connection.close(quinn::VarInt::from_u32(u32::from(close.code)), close.reason.as_bytes());
                 format!("closed here: {}", close.reason)
@@ -332,7 +535,13 @@ impl Edge {
 
     // Holds a registered tunnel for as long as its WebSocket lives; every way it can end (a close, a silent peer, a
     // displacement, the session failing) ends the pump, and one teardown follows, so the registry never keeps a dead one.
-    async fn hold(self: Arc<Self>, id: String, door: Door, upgraded: Upgraded) {
+    async fn hold(
+        self: Arc<Self>,
+        id: String,
+        door: Door,
+        identity: Option<Identity>,
+        upgraded: Upgraded,
+    ) {
         let socket = WebSocketStream::from_raw_socket(
             TokioIo::new(upgraded),
             Role::Server,
@@ -365,14 +574,30 @@ impl Edge {
             }
         };
         let slot = door.slot();
-        let displaced = self.registry.register(
+        let refusing = closing.clone();
+        let admitted = self.registry.admit(
             &id,
             slot,
             Held {
                 session: session.clone(),
                 closing,
             },
+            Holder::new(identity, pumping.heard()),
         );
+        let displaced = match admitted {
+            Ok(displaced) => displaced,
+            // Another copy registered between this one's upgrade and now.
+            Err(elsewhere) => {
+                tracing::info!(sandbox = %id, door = door.name(), holder = %elsewhere.instance, "tunnel refused: another copy of this sandbox took it first");
+                refusing.send_replace(Some(Close {
+                    code: HELD_ELSEWHERE_CODE,
+                    reason: Identity::named_host(&elsewhere.host).to_owned().into(),
+                }));
+                let _ = tokio::time::timeout(REFUSAL_GRACE, pumping.ended()).await;
+                driving.abort();
+                return;
+            }
+        };
         tracing::info!(sandbox = %id, door = door.name(), displaced, tunnels = self.registry.size(), "tunnel registered");
         let ended = tokio::select! {
             ended = pumping.ended() => ended,
@@ -566,6 +791,19 @@ fn preflight(verdict: Verdict) -> Response<Body> {
 // and for a terminal held open against the box.
 fn refused_upgrade(verdict: Verdict, sentence: &str) -> Response<Body> {
     with_verdict(refused(StatusCode::BAD_GATEWAY, sentence), verdict)
+}
+
+// A tunnel another live copy of its sandbox holds: 409, naming where that copy runs for the refused front to say.
+fn held_by_another(elsewhere: &Elsewhere) -> Response<Body> {
+    let named = Identity::named_host(&elsewhere.host);
+    let mut response = refused(
+        StatusCode::CONFLICT,
+        &format!("another copy of this sandbox holds its tunnel, on {named}"),
+    );
+    if let Ok(holder) = HeaderValue::from_str(&elsewhere.host) {
+        response.headers_mut().insert(HOLDER_HEADER, holder);
+    }
+    response
 }
 
 // An answer to an upgrade that is not taken, closing the connection since no keep-alive follows one.

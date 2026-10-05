@@ -9,6 +9,7 @@ mod listen;
 mod proxy;
 mod quic;
 mod route;
+mod standing;
 mod supervise;
 mod term;
 mod tls;
@@ -21,7 +22,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use front_wire::{FRONT_SOCKET_ENV, FrontAnswer, FrontQuestion, NODE_SOCKET_ENV};
+use front_wire::{FRONT_SOCKET_ENV, FrontAnswer, FrontQuestion, INSTANCE_ENV, NODE_SOCKET_ENV};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{Mutex, mpsc, watch};
 use tracing_subscriber::EnvFilter;
@@ -30,6 +31,7 @@ use crate::feed::Feed;
 use crate::link::{Link, Pushed};
 use crate::listen::Listeners;
 use crate::proxy::Front;
+use crate::standing::Standing;
 use crate::supervise::{NodeCommand, Restarts};
 use crate::term::{Hubs, Terminals, Tmux};
 use crate::tls::CertificateSlot;
@@ -84,20 +86,29 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     let control = run_dir.join("front.sock");
     let http = run_dir.join("node.sock");
 
+    // This front, as its tunnels present it and as its daemon announces it: an instance minted once per process, which
+    // lives as long as the container, and the machine the container's environment names.
+    let instance = instance_id();
+    let identity = ::tunnel::Identity::new(
+        instance.clone(),
+        &std::env::var("HOST_LABEL").unwrap_or_default(),
+        &std::env::var("HOST_PLATFORM").unwrap_or_default(),
+        &std::env::var("HOST_ENV").unwrap_or_default(),
+    );
+    tracing::info!(instance = %identity.instance, host = %identity.host, "this front's instance");
+
     let (pushed_sender, mut pushed) = mpsc::unbounded_channel();
     let link: &'static Link = Box::leak(Box::new(Link::new(pushed_sender)));
     let serving = control.clone();
-    tokio::spawn(async move {
-        if let Err(error) = link.serve(&serving).await {
-            tracing::error!(%error, "the control socket stopped");
-        }
-    });
+    tokio::spawn(async move { link.serve(&serving).await });
 
     let restarts = Arc::new(Restarts::default());
-    let vitals = Arc::new(Vitals::new(link, restarts.clone()));
+    let standing = Arc::new(Standing::default());
+    let vitals = Arc::new(Vitals::new(link, restarts.clone(), standing.clone()));
     let stuck = vitals.stuck();
     let pinging = vitals.clone();
     tokio::spawn(async move { pinging.keep_pinging().await });
+    let greeting = vitals.clone();
 
     let (config_sender, config) = watch::channel(None);
     let terminals = Terminals::new(Hubs::new(Tmux::default()));
@@ -110,12 +121,14 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     ));
     let certificates = Arc::new(CertificateSlot::default());
     let mut listeners = Listeners::new(front.clone(), certificates.clone());
-    let tunnel = Arc::new(Mutex::new(Tunnel::new(front, link)));
+    let tunnel = Arc::new(Mutex::new(Tunnel::new(front, link, identity, standing)));
 
     let (node_pid, node_pids) = watch::channel(None);
     if std::process::id() == 1 {
         tokio::spawn(supervise::reap_orphans(node_pids.clone()));
     }
+    let started = node_pids.clone();
+    tokio::spawn(async move { greeting.deadline_first_hellos(started).await });
     tokio::spawn(cgroup::govern(node_pids));
 
     // Unavailable (no inotify) is a feed that knows nothing: every sync answers null and Node reads git itself.
@@ -197,9 +210,26 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         env: vec![
             (FRONT_SOCKET_ENV.into(), control.into_os_string()),
             (NODE_SOCKET_ENV.into(), http.into_os_string()),
+            (INSTANCE_ENV.into(), instance.into()),
         ],
     };
     let code = supervise::supervise(command, node_pid, stopping, stuck, &restarts).await;
     tunnel.lock().await.shut().await;
     code
+}
+
+// Sixteen hex digits from the kernel's randomness: unique among the copies of one sandbox, which is all it is compared
+// against. Should the kernel refuse (it does not), the clock and the pid still tell two processes apart.
+fn instance_id() -> String {
+    let mut bytes = [0_u8; 8];
+    // SAFETY: getrandom writes at most `bytes.len()` bytes into a buffer this function owns.
+    let filled = unsafe { libc::getrandom(bytes.as_mut_ptr().cast(), bytes.len(), 0) };
+    if usize::try_from(filled).ok() != Some(bytes.len()) {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_nanos());
+        let mixed = (nanos as u64) ^ (u64::from(std::process::id()) << 40);
+        bytes = mixed.to_be_bytes();
+    }
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

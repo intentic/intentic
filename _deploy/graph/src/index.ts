@@ -46,7 +46,11 @@ export const subgraph = (graph: DesiredStateGraph, targets: readonly string[]): 
     for (const id of targets) {
         visit(id);
     }
-    return { version: graph.version, resources: Object.fromEntries(Object.entries(graph.resources).filter(([id]) => keep.has(id))) };
+    return {
+        version: graph.version,
+        ...(graph.owner !== undefined ? { owner: graph.owner } : {}),
+        resources: Object.fromEntries(Object.entries(graph.resources).filter(([id]) => keep.has(id))),
+    };
 };
 
 // Fold a resolver's RawNode list into the id-keyed map compile() consumes, rejecting duplicate ids.
@@ -64,7 +68,18 @@ export const toNodeMap = (nodes: readonly RawNode[]): Map<string, RawNode> => {
 export { compile } from "./compile.js";
 export { isRef, makeRef, refKey } from "./ref.js";
 export { collectSecretUsage, type SecretUsage, secretRef } from "./secrets.js";
-export { formatStamp, HASH_KEY, hashInputs, parseStamp, STAMP_KEY } from "./stamp.js";
+export {
+    formatStamp,
+    HASH_KEY,
+    hashInputs,
+    isOwnerId,
+    OWNER_KEY,
+    type Ownership,
+    ownershipOf,
+    type ParsedStamp,
+    parseStamp,
+    STAMP_KEY,
+} from "./stamp.js";
 
 export type {
     DesiredStateGraph,

@@ -2,7 +2,10 @@ import { errorMessage } from "@intentic/base/errors";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { parentOfActor } from "../../auth/principal.js";
 import type { Logger } from "pino";
+import { cancelFamily, type Family, type FamilyDeps, familyOf } from "../../agent/subagents/children.js";
+import type { FamilyEnd } from "../../agent/subagents/family-cancel.js";
 import { cancelWatchersFor } from "../../agent/verification/watchers.js";
+import type { TurnStarter } from "../../seams/turn-starter.js";
 import type { ResourceReaper } from "../../system/boot/reaper.js";
 import type { ConversationActors } from "../actor/conversation-actors.js";
 import type { AgentsRegistry } from "./agents-registry.js";
@@ -37,15 +40,37 @@ export const archivableByAge = (agent: AgentSummary, now: number, retentionMs: n
 
 export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
-    // What a purge disposes through, the one way a conversation's in-memory state and entry leave together.
-    readonly conversations: Pick<ConversationActors, "running" | "dispose">;
+    // What a purge disposes through, the one way a conversation's in-memory state and entry leave together; and where
+    // the children of a conversation leaving are read and stopped.
+    readonly conversations: Pick<ConversationActors, "running" | "dispose" | "holdings" | "state" | "send">;
     readonly agentWorktrees: AgentWorktrees;
     readonly logger: Logger;
     // Hard stop for everything the conversation still runs (terminals, viewers); archiving already committed its work,
     // so nothing is owed a grace window.
     readonly reaper?: Pick<ResourceReaper, "reapConversation">;
     readonly purgeConversationState?: (removed: readonly PersistedAgent[], retained: readonly PersistedAgent[]) => Promise<void>;
+    // What stops the children a conversation leaving spawned, their running turns and booked re-runs (children.ts
+    // cancelFamily). A suite that spawns nothing leaves it out.
+    readonly turns?: Pick<TurnStarter, "stop">;
 }
+
+// The deps a family's end runs on, where these can stop a turn.
+const familyDeps = (deps: AgentArchiveDeps): FamilyDeps | undefined =>
+    deps.turns === undefined ? undefined : { agents: deps.agents, conversations: deps.conversations, turns: deps.turns, logger: deps.logger };
+
+// Read while the heads are still on the board, since a dispose takes the records of the children they supervise.
+const familyBelow = (deps: AgentArchiveDeps, heads: readonly string[]): Family | undefined => {
+    const family = familyDeps(deps);
+    return family === undefined ? undefined : familyOf(family, heads);
+};
+
+// Cancels what the family below them still runs or has booked; their conversations stay.
+const endFamily = async (deps: AgentArchiveDeps, family: Family | undefined, why: FamilyEnd): Promise<void> => {
+    const door = familyDeps(deps);
+    if (door !== undefined && family !== undefined) {
+        await cancelFamily(door, family, why);
+    }
+};
 
 // Throttle on process pressure, not on the lock; past a small number the per-repo worktree lock is the real ceiling
 // anyway.
@@ -120,6 +145,9 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             await cancelWatchersFor(id);
             await deps.reaper?.reapConversation(id, { force: true });
         }
+        // Their children stop with them, by hand, by the Clear and by the aged sweep alike: filed away first, so a child
+        // stopped now tells its parent nothing and lands as any conversation does.
+        await endFamily(deps, familyBelow(deps, archived), "archived");
     }
     return { archived, failed: refused.filter((entry) => entry !== undefined) };
 };
@@ -152,6 +180,8 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
     const removed = done.filter((id) => id !== undefined);
     if (removed.length > 0) {
         const removedSet = new Set(removed);
+        // Anything their children took up again since the archive stops before the records go with the parents.
+        await endFamily(deps, familyBelow(deps, removed), "purged");
         await forgetConversations(
             deps,
             targets.filter((entry) => removedSet.has(entry.id)),

@@ -1,5 +1,5 @@
 import type { Step } from "@intentic/engine";
-import { planSummary, planTable, resourceTable, teardownTable } from "./tables.js";
+import { pendingBlock, planSummary, planTable, resourceTable, retiredBlock, scanGapBlock, teardownTable, unownedBlock } from "./tables.js";
 
 const steps: Step[] = [
     { id: "host-1", type: "host", action: "create" },
@@ -76,4 +76,46 @@ test("teardownTable separates a protected resource's count from the number that 
 test("teardownTable says there is nothing to delete when everything is protected", () => {
     const lines = teardownTable([{ id: "host-1", type: "host", protected: true }]);
     expect(lines.at(-1)).toBe("Every resource the artifact declares is protected: destroy has nothing to delete.");
+});
+
+test("unownedBlock reports stamped resources with no owner as something a person settles, never a deletion", () => {
+    expect(unownedBlock([{ id: "legacy-db", type: "postgres" }])).toEqual([
+        "",
+        "1 stamped resource with no owner stamp, not in the desired graph (made before owner stamps, never pruned):",
+        "  legacy-db  postgres",
+        "Unowned: adopt it by declaring it (the next apply stamps it), or remove it by hand.",
+    ]);
+    expect(unownedBlock([])).toEqual([]);
+});
+
+test("pendingBlock lists what the baseline still holds for deletion", () => {
+    expect(pendingBlock([{ id: "old-repo", type: "repo" }])).toEqual([
+        "",
+        "1 resource removed from the desired graph, pending deletion:",
+        "  old-repo  repo",
+        "Delete it with `intentic deploy apply --yes`.",
+    ]);
+});
+
+test("retiredBlock says whether an old host is clean, still runs something, or could not be scanned", () => {
+    expect(retiredBlock([{ id: "host", address: "10.0.0.1", leftovers: [], unowned: [] }])).toEqual([
+        "",
+        "old host host (10.0.0.1), retired by a migration: clean, nothing of this intent left on it.",
+    ]);
+    expect(retiredBlock([{ id: "host", address: "10.0.0.1", leftovers: [], unowned: [], error: "connect ECONNREFUSED" }])[1]).toContain(
+        "not scanned (connect ECONNREFUSED)",
+    );
+    const busy = retiredBlock([
+        { id: "host", address: "10.0.0.1", leftovers: [{ id: "db", type: "postgres" }], unowned: [{ id: "old", type: "outline" }] },
+    ]);
+    expect(busy[1]).toBe("old host host (10.0.0.1), retired by a migration, still runs:");
+    expect(busy.slice(2).join("\n")).toContain("unowned: remove by hand");
+});
+
+test("scanGapBlock names every source the scan could not read", () => {
+    expect(scanGapBlock([{ source: "host", reason: "not reachable over SSH" }])).toEqual([
+        "",
+        "The orphan scan is incomplete:",
+        "  host: not reachable over SSH",
+    ]);
 });

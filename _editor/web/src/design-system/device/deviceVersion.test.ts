@@ -1,4 +1,4 @@
-import { groupChips, groupSummary, type DeviceSandboxGroup, versionLine } from "@intentic/ui/device";
+import { cardSubline, groupChips, groupSummary, type DeviceSandboxGroup, keeperLine, versionLine } from "@intentic/ui/device";
 import { rollbackToPrompt } from "@intentic/ui";
 
 // A sandbox row's version facts (_editor/ui/src/components/sandbox/deviceDetail.ts), read off an `ic` new enough to
@@ -32,4 +32,16 @@ it(`asks before going back to an older kept version, naming it`, () => {
         header: `Roll work back to 1.314.0?`,
         body: `The sandbox restarts onto 1.314.0, an older version this machine kept. Its files are kept.`,
     });
+});
+
+// One Docker engine serves a Windows PC and its WSL distros, so a card lists the other side's sandboxes too: it says
+// which side looks after each, and when this side took one over because the other went quiet.
+it(`names the side of this computer that keeps a sandbox, and an adoption`, () => {
+    const box = { slug: `work`, running: true, image: `intentic/sandbox:stable` };
+    expect(keeperLine(box)).toBeUndefined();
+    expect(keeperLine({ ...box, keptElsewhere: `linux/archlinux`, keptElsewhereName: `WSL (archlinux)` })).toBe(`kept by WSL (archlinux) on this computer`);
+    expect(keeperLine({ ...box, keptElsewhere: `windows` })).toBe(`kept by windows on this computer`);
+    expect(keeperLine({ ...box, adoptedFrom: `WSL (archlinux)` })).toBe(`looked after from here: WSL (archlinux) went quiet`);
+    const group: DeviceSandboxGroup = { sandboxId: `work`, title: `work`, sandbox: { ...box, keptElsewhereName: `Windows`, keptElsewhere: `windows` }, ports: [] };
+    expect(cardSubline(group, NOW)).toEqual([`kept by Windows on this computer`]);
 });

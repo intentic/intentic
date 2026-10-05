@@ -2,6 +2,7 @@ import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const openprojectSchema = serviceSchema.extend({
@@ -18,7 +19,7 @@ const PORT = 8082;
 // The all-in-one image (NOT -slim): it bundles postgres + memcached + web + worker under supervisord, so
 // the stack is one container with the pgdata/assets volume pair. OPENPROJECT_HTTPS makes Rails generate
 // https URLs behind the Cloudflare-terminated tunnel; HSTS stays off since the container itself serves http.
-const composeYaml = (parsed: OpenprojectInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: OpenprojectInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  openproject:",
@@ -38,7 +39,7 @@ const composeYaml = (parsed: OpenprojectInputs, id: string, hash: string): strin
         "    volumes:",
         "      - pgdata:/var/openproject/pgdata",
         "      - assets:/var/openproject/assets",
-        `    labels: [ "intentic.id=${id}", "intentic.type=openproject", "intentic.hash=${hash}" ]`,
+        stampLabels("openproject", stamp),
         "volumes: { pgdata: {}, assets: {} }",
         "",
     ].join("\n");
@@ -54,7 +55,7 @@ export const createOpenprojectProvider = (executor: SshExecutor = sshExecutor): 
             port: PORT,
             healthPath: "/health_checks/default",
             readyTimeoutMs: 600_000,
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp) }),
             env: (parsed) => [{ key: "OPENPROJECT_SECRET_KEY_BASE" }, { key: "OPENPROJECT_SEED_ADMIN_USER_PASSWORD", value: parsed.adminPassword }],
             images: (parsed) => ({ openproject: parsed.openprojectImage }),
         },

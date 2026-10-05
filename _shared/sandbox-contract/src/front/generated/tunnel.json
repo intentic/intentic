@@ -1,7 +1,10 @@
 {
   "close": {
     "away": 1001,
+    "deleted": 4010,
+    "demoted": 4008,
     "displaced": 4001,
+    "heldElsewhere": 4009,
     "refused": 4003
   },
   "headers": {
@@ -10,23 +13,34 @@
     "lane": "x-intentic-lane",
     "transports": "x-intentic-transports"
   },
+  "identity": {
+    "holder": "x-intentic-holder",
+    "host": "x-intentic-host",
+    "instance": "x-intentic-instance"
+  },
   "lanes": [
     "interactive",
     "bulk"
   ],
   "liveness": {
     "deadAfterMs": 45000,
-    "pingEveryMs": 15000
+    "helloPatienceMs": 15000,
+    "pingEveryMs": 15000,
+    "probeEveryMs": 15000,
+    "probePatienceMs": 10000
   },
   "mux": "yamux",
   "path": "/tunnel/v2",
   "quic": {
     "alpn": "intentic-tunnel/1",
     "hello": {
+      "acknowledged": 1,
       "gone": 2,
       "held": 0,
+      "heldElsewhere": 3,
       "refused": 1
     },
+    "probe": "\u0000intentic-probe\n",
     "yieldAfterBytes": 1048576
   },
   "transports": [

@@ -76,6 +76,17 @@ test("a tidy is one line of counts, with the volumes nobody claims named", () =>
         "auto-tidy: cleared 2 sandboxes from the trash",
     );
     expect(tidyNews({ code: 0, output: '{"dryRun":false}' })).toBe("auto-tidy: nothing to clear");
+    // An ic that converges leftovers moves unclaimed volume sets into its trash instead of only naming them.
+    const converging = JSON.stringify({
+        images: [],
+        orphanVolumes: ["intentic-workspace-sandbox-fc55412d2c28", "intentic-history-sandbox-fc55412d2c28"],
+        trashedVolumeSets: ["sandbox-fc55412d2c28"],
+        danglingBuilds: 2,
+        backups: [{ slug: "sandbox-82789f4106b4", reason: "kept fresher elsewhere" }],
+    });
+    expect(tidyNews({ code: 0, output: converging })).toBe(
+        "auto-tidy: cleared 2 leftover builds, 1 stale backup (sandbox-82789f4106b4); volumes no sandbox claims moved to the trash for a week: sandbox-fc55412d2c28",
+    );
     expect(tidyNews({ code: 1, output: "docker is not running\n" })).toBe("auto-tidy: failed — docker is not running");
 });
 

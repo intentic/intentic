@@ -1,7 +1,9 @@
 import { homedir } from "node:os";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import {
+    decodeToolOutput,
     entryCurrent,
+    fileEntryState,
     linuxDesktopEntry,
     macLaunchAgentXml,
     ROTATE_LOG_SH,
@@ -10,6 +12,7 @@ import {
     windowsRunDeleteArgs,
     windowsTaskCreateArgs,
     windowsTaskDeleteArgs,
+    windowsTaskDrift,
     windowsTaskXml,
     type AutostartSpec,
     type LaunchAgentSpec,
@@ -248,6 +251,51 @@ describe("windowsTaskXml", () => {
     it("deletes exactly the task it creates, or uninstall leaves it resurrecting every five minutes", () => {
         expect(windowsTaskCreateArgs(SPEC, "C:\\Temp\\t.xml")).toEqual(["/create", "/tn", "IntenticSyncMirror", "/xml", "C:\\Temp\\t.xml", "/f"]);
         expect(windowsTaskDeleteArgs(SPEC)).toEqual(["/delete", "/tn", "IntenticSyncMirror", "/f"]);
+    });
+});
+
+/* The repair compares the task Windows holds with the one this build writes (2026-10-05): it used to ask only whether
+   one existed, so a task from an older build, or one pointing at a moved install, was never brought up to date. */
+describe("windowsTaskDrift", () => {
+    const wanted = windowsTaskXml(SPEC, BINARY, STUB, "OMEN\\radar");
+    // What Export-ScheduledTask hands back for that same task: ids on the triggers, the settings Windows holds at their
+    // default left out, its own extra nodes, quotes unescaped.
+    const exported = wanted
+        .replace("<LogonTrigger>", '<LogonTrigger id="logon">')
+        .replace("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "")
+        .replace("<Enabled>true</Enabled>\n    <Hidden>", "<Hidden>")
+        .replace("<IdleSettings>", "<IdleSettings>\n      <Duration>PT10M</Duration>\n      <Enabled>false</Enabled>")
+        .replaceAll("&quot;", '"');
+
+    it("reads a task Windows exports as the one this build writes", () => {
+        expect(windowsTaskDrift(exported, wanted)).toEqual([]);
+    });
+
+    it("names what an older build's task, or a moved install's, does differently", () => {
+        const unsupervised = exported.replace(/"--wait" /, "").replace(/<RestartOnFailure>[\s\S]*?<\/RestartOnFailure>/, "");
+        expect(windowsTaskDrift(unsupervised, wanted)).toEqual(["arguments", "restart"]);
+        const moved = exported.replaceAll("C:\\Users\\dev", "D:\\old");
+        expect(windowsTaskDrift(moved, wanted)).toEqual(["command"]);
+        const limited = exported.replace("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", "").replace("<Interval>PT5M</Interval>", "<Interval>PT1H</Interval>");
+        expect(windowsTaskDrift(limited, wanted)).toEqual(["repeat", "ExecutionTimeLimit"]);
+        expect(windowsTaskDrift(exported.replace("<Hidden>", "<Enabled>false</Enabled>\n    <Hidden>"), wanted)).toEqual(["Enabled"]);
+    });
+
+    // schtasks prints its export as UTF-16 where PowerShell was asked for UTF-8; both must read back as the same text.
+    it("reads a tool's output in either encoding", () => {
+        expect(decodeToolOutput(Buffer.from("\uFEFF<Task>é</Task>", "utf16le"))).toBe("<Task>é</Task>");
+        expect(decodeToolOutput(Buffer.from("<Task>é</Task>", "utf16le"))).toBe("<Task>é</Task>");
+        expect(decodeToolOutput(Buffer.from("<Task>é</Task>", "utf8"))).toBe("<Task>é</Task>");
+    });
+});
+
+describe("fileEntryState", () => {
+    const launch = (entry: string): string | undefined => entry.split("\n").find((line) => line.startsWith("Exec="));
+    it("tells a missing, current, older and another install's entry apart", () => {
+        expect(fileEntryState(undefined, "Exec=a\nX=1", launch)).toBe("missing");
+        expect(fileEntryState("Exec=a\nX=1", "Exec=a\nX=1", launch)).toBe("current");
+        expect(fileEntryState("Exec=a\nX=0", "Exec=a\nX=1", launch)).toBe("stale");
+        expect(fileEntryState("Exec=b\nX=1", "Exec=a\nX=1", launch)).toBe("foreign");
     });
 });
 

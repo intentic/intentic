@@ -19,12 +19,15 @@ import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTa
 import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "./child-report.js";
 import { childLandingWords } from "./child-lands.js";
+import { filePausedChildren } from "./paused-children.js";
 import {
     adoptChildTurn,
     answerChild,
     armSupervisor,
     cancelChild,
+    cancelFamily,
     childReportOf,
+    familyOf,
     type ChildSpawnSpec,
     mergeChild,
     pendingQuestionOf,
@@ -1870,6 +1873,67 @@ describe("a child whose allowance runs out", () => {
             ok: false,
             message: "It is not running, and nothing is booked to run it again: there is nothing to cancel.",
         });
+    });
+
+    // The parent archived, purged or discarded stops its children with it: nothing re-runs for a parent that will never
+    // read the report. The pause is struck off the record a restart reads too, so no boot tells anyone about it later.
+    it("a parent leaving the board cancels its paused child as its own cancel would, and strikes the pause off", async () => {
+        const { fleet, services } = await refusingFleet();
+        const result = await spawnChild(services, parent, { prompt: "Review the audit", provider: "codex", model: "gpt-5.1-codex" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await waitForSubagent(fleet.conversations, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
+        await fleet.conversations.send(result.id, {
+            kind: "turn-held",
+            held: { input: { conversationId: result.id, prompt: "Review the audit" }, reason: "limit", ran: true, reopensAt: RESETS_AT },
+        }).settled;
+        const ledger = filePausedChildren(services.config.historyRoot, services.logger);
+        // A write queued behind every earlier one of the file, so the read after it sees them.
+        const settledLedger = async (): Promise<readonly string[]> => {
+            await ledger.forget(["nothing-of-this-suite"]);
+            return Object.keys(await ledger.read());
+        };
+        expect(await settledLedger()).toContain(result.id);
+
+        expect(await cancelFamily(services, familyOf(services, [parent.conversationId]), "archived")).toEqual([
+            { child: result.id, parent: parent.conversationId, move: { kind: "cancel" } },
+        ]);
+        expect(fleet.conversations.state(result.id)?.resume.held).toBeUndefined();
+        expect((await finishedIn(fleet, result.id)).matched).toMatchObject({
+            status: "killed",
+            error: "You've hit your usage limit. Stopped: its parent cancelled it.",
+        });
+        expect(await settledLedger()).not.toContain(result.id);
+        // Its conversation stays; only what it would have run again is gone.
+        expect(fleet.agents.get(result.id)).toMatchObject({ id: result.id });
+        // A second end finds nothing left to stop.
+        expect(await cancelFamily(services, familyOf(services, [parent.conversationId]), "purged")).toEqual([]);
+    });
+
+    // After a restart the daemon holds no record of a child it spawned; the registry still names its parent, and what the
+    // sandbox booked for it is read off its own conversation.
+    it("a parent leaving drops the re-run booked for a child it lost track of, and never a person's own", async () => {
+        const { fleet, services } = await refusingFleet();
+        const result = await spawnChild(services, parent, { prompt: "Review the audit", provider: "codex", model: "gpt-5.1-codex" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await waitForSubagent(fleet.conversations, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
+        resetChildrenForTest(fleet.conversations);
+        const hold = (input: TurnInput & { conversationId: string }) =>
+            fleet.conversations.send(result.id, { kind: "turn-held", held: { input, reason: "limit", ran: true } }).settled;
+        const asked = { conversationId: result.id, prompt: "Review the audit" };
+
+        await hold({ ...asked, speaker: { kind: "person", email: "owner@example.com" } });
+        expect(await cancelFamily(services, familyOf(services, [parent.conversationId]), "discarded")).toEqual([]);
+        expect(fleet.conversations.state(result.id)?.resume.held).toMatchObject({ reason: "limit", fired: false });
+
+        await hold(asked);
+        expect(await cancelFamily(services, familyOf(services, [parent.conversationId]), "discarded")).toEqual([
+            { child: result.id, parent: parent.conversationId, move: { kind: "halt", stop: false, drop: true } },
+        ]);
+        expect(fleet.conversations.state(result.id)?.resume.held).toBeUndefined();
     });
 
     // Only a spawned child answers for itself: the same refusal on a conversation a person opened keeps the sandbox's

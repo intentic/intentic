@@ -60,6 +60,8 @@ const {
     restartAgent,
     sandboxRows,
     groups,
+    keptByOf,
+    agentsElsewhere,
     busy,
     act,
     busyVerb,
@@ -188,6 +190,11 @@ onUnmounted(() => {
                 <span>{{ t(`desktop.app.intenticDownloadedInstallsQuit`, { version: update.version }) }}</span>
                 <Button class="ml-2" size="small" severity="secondary" :label="t(`desktop.app.updateRestart`)" @click="applyUpdate" />
             </Notice>
+            <!-- A deb or rpm upgrade already replaced this app on disk: the restart onto it is all that is left. -->
+            <Notice v-else-if="update.kind === `installed`" tone="info" class="items-center">
+                <span>{{ t(`desktop.app.newerIntenticInstalled`) }}</span>
+                <Button class="ml-2" size="small" severity="secondary" :label="t(`desktop.app.restartIntentic`)" @click="applyUpdate" />
+            </Notice>
             <Notice v-else-if="update.kind === `downloading`" tone="info" class="items-center">{{
                 t(`desktop.app.downloadingIntentic`, { version: update.version, percent: update.percent })
             }}</Notice>
@@ -198,7 +205,9 @@ onUnmounted(() => {
                     {{ t(`desktop.app.getLatestVersion`) }}
                 </button>
             </Notice>
-            <Notice v-if="updateError && update.kind === `ready`" tone="warning" class="items-center">{{ updateError }}</Notice>
+            <Notice v-if="updateError && (update.kind === `ready` || update.kind === `installed`)" tone="warning" class="items-center">{{
+                updateError
+            }}</Notice>
 
             <!-- The recovery panel's "Fix it", first: it is what the app brought this page forward for (fix.rs). -->
             <FixProgress
@@ -427,6 +436,15 @@ onUnmounted(() => {
                         </template>
                         <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
                         <template #footer="{ group }">
+                            <!-- Another side of this computer keeps it (a WSL distro's agent): its care runs there, and the verbs above still reach it. -->
+                            <p
+                                v-if="keptByOf(group.sandbox?.slug)"
+                                class="flex items-start gap-1.5 text-2xs text-subtle"
+                                v-tooltip.top="t(`desktop.device.keptByNote`)"
+                            >
+                                <Icon name="server" class="mt-0.5 shrink-0" />
+                                <span>{{ t(`desktop.device.keptBy`, { place: keptByOf(group.sandbox?.slug) }) }}</span>
+                            </p>
                             <DeviceRunLog
                                 v-if="busyVerb(group) || logOpen(group)"
                                 :lines="paneLines(group)"
@@ -487,6 +505,11 @@ onUnmounted(() => {
                     <p v-else class="text-xs text-muted">{{ agentRestartOutcome }}</p>
                 </template>
             </DeviceAgentGroup>
+            <!-- This computer's other environments with an agent of their own (a WSL distro's), which keep the sandboxes set up there. -->
+            <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-2.5 text-xs text-subtle">
+                <Icon name="server" class="mt-0.5 shrink-0" />
+                <span>{{ t(`desktop.device.agentsElsewhere`, { places: agentsElsewhere.join(`, `) }) }}</span>
+            </p>
         </div>
 
         <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails. -->

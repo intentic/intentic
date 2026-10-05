@@ -326,6 +326,8 @@ pub struct Report {
     pub slug: String,
     pub action: &'static str,
     pub reason: Option<String>,
+    /// The line saying this side acted on a sandbox whose keeping side has fallen silent (side.rs).
+    pub adopted: Option<String>,
 }
 
 impl Report {
@@ -334,6 +336,7 @@ impl Report {
             slug: slug.to_string(),
             action,
             reason,
+            adopted: None,
         }
     }
 
@@ -341,6 +344,9 @@ impl Report {
         let mut value = json!({"slug": self.slug, "action": self.action});
         if let Some(reason) = &self.reason {
             value["reason"] = json!(reason);
+        }
+        if let Some(adopted) = &self.adopted {
+            value["adopted"] = json!(adopted);
         }
         value.to_string()
     }
@@ -377,20 +383,35 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
     };
     for slug in slugs {
         // Unattended (the machine agent's round has no terminal), the other side's swap is that side's to judge: two
-        // watches on one swap each hold only their own side's lock, and could both roll it back (side.rs).
-        let elsewhere = (!crate::tty::have_tty())
-            .then(|| super::side::kept_elsewhere(&slug))
-            .flatten();
-        let report = match elsewhere {
-            Some(side) => Report::new(&slug, "elsewhere", Some(super::side::sentence(&side))),
-            None => match lock::hold(&slug, Wait::Skip)? {
-                None => Report::new(&slug, "busy", None),
-                Some(_held) => watch_one(&slug)?,
-            },
+        // watches on one swap each hold only their own side's lock, and could both roll it back (side.rs). A side that
+        // has fallen silent leaves its swap to be judged here, said as such.
+        let unattended = if crate::tty::have_tty() {
+            super::side::Unattended::Ours
+        } else {
+            super::side::unattended(&slug)
+        };
+        let report = match unattended {
+            super::side::Unattended::Theirs(side) => {
+                Report::new(&slug, "elsewhere", Some(super::side::sentence(&side)))
+            }
+            other => {
+                let adopted = match &other {
+                    super::side::Unattended::Adopted(adoption) => Some(adoption.sentence()),
+                    _ => None,
+                };
+                let report = match lock::hold(&slug, Wait::Skip)? {
+                    None => Report::new(&slug, "busy", None),
+                    Some(_held) => watch_one(&slug)?,
+                };
+                Report { adopted, ..report }
+            }
         };
         if as_json {
             println!("{}", report.json());
         } else {
+            if let Some(adopted) = &report.adopted {
+                println!("intentic: {}: {adopted}", report.slug);
+            }
             println!("{}", report.sentence());
         }
     }
@@ -607,8 +628,10 @@ fn write_swap(slug: &str, record: &ChannelRecord, swap: Swap) -> Result<()> {
     Ok(())
 }
 
-/// Put a parked container back under its name and start it. The replacement, if any, is removed first.
+/// Put a parked container back under its name and start it. The replacement, if any, is removed first, and the turns
+/// it was running are picked up by the version put back (resume.rs).
 fn unpark(container: &str, parked: &str) {
+    crate::sandbox::resume::ask(container);
     docker::quiet(&["rm", "-f", container]);
     docker::quiet(&["rename", parked, container]);
     docker::quiet(&["start", container]);

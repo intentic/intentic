@@ -42,6 +42,27 @@ flowchart LR
 - The hosted lane is one Fly app, machine and volume per sandbox, named `<HOSTED_APP_PREFIX>-<id>`. The background
   jobs started in `src/main.ts` (warm pool, meter, abuse watch, builds, health) take a Postgres advisory lock per run
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.
+- Destruction needs a record (2026-10-05; [platform.md](../../docs/architecture/platform.md#when-the-platform-forgets)).
+  The daily orphan reaper (`reapHostedOrphans`) destroys an app no row names only when its sandbox's tunnel id is in
+  `SandboxTombstone`, or when every machine in it is unclaimed warm stock this platform stamped. Any other unknown app
+  is skipped as `forgotten` (beside `live`, `theirs`, `young`, `unknown`, `unreadable`), named in the hosted health log
+  and in the admin digest, and never destroyed: an app with no machine used to be collected for its emptiness, which is
+  what Fly losing a machine leaves. A pass destroys the oldest of what it may, up to a tenth of the fleet and at least
+  three, and defers the rest; it refuses outright only when that is more than a quarter of the fleet. The DNS sweep
+  follows the same rule for tunnel and challenge records (`deletedAmong`), at most 100 deletes a pass, and counts the
+  rest as `deferred` or `forgotten`.
+- A provision or a restart's replacement first reads the app named for the sandbox's token (`heldAppOf`). An app the
+  provider still holds is adopted (`adoptHostedApp`): a machine this platform stamped is re-configured onto the volume
+  it mounts and started, or a machine is made on the newest volume, in its region and at its size, with no cleanup
+  record that could delete the app on a failure. An app holding a machine another deployment or nobody stamped is
+  refused (`HostedAppNotOurs`, CONFLICT). The warm pool is asked only when Fly answers that no such app exists, since a
+  claim rotates the token away from whatever disk is there.
+- The health sweep (`hosted-health.ts`) drops a row whose app Fly answers 404 for (mailed once) or whose machine Fly
+  answers 404 for inside a standing app (logged; a rotating slice of forty machines a pass), through
+  `forgetHostedMachine`, ten a pass at most, under the app's lock and never for a row mid-build or mid-move. The
+  retention sweep holds every person's app to its row once a day (`hosted-app-shape.ts`): a stray machine of ours older
+  than half an hour is destroyed (ten a pass), and a foreign machine or a volume no row names is reported in the digest
+  and left.
 - A hosted sandbox can be made for one folder of the owner's computer. `hostedProvision` takes an optional `project`,
   a folder name held to the rule `ic` and the desktop app hold it to (sandbox-contract's `isProjectDirName`), and the
   machine boots with `SANDBOX_PROJECT_DIR=/work/<project>`, as `ic` starts a project container, so its daemon seeds no
@@ -100,14 +121,34 @@ flowchart LR
   change went on.
 - A daemon's announce may name its `version` (semver, at most 64 characters). It is stored on the sandbox row
   (`daemonVersion`), and an announce that names none, or something else, clears it.
+- (2026-10-05) A daemon announces again every hour once registered (`_sandbox/sandbox` `announce.ts`), and every
+  accepted announce moves `lastSeenAt`, so it is the sandbox's heartbeat rather than its registration. A 410 is still
+  final. An announce may also name which copy it is (`AnnounceBodySchema`: `instance`, minted once per container
+  start, `host`, `os`); one that does not leaves the record alone. The row keeps the last two distinct copies
+  (`seenInstances`), and when their running stretches overlap by ten minutes or more, `duplicateSince` says since when;
+  the owner's `sandbox.list` row carries `duplicateCopies: { hosts, since }` until one copy has been silent an hour
+  (`src/sandbox/announce-copies.ts`). A label that is too long is dropped, never a reason to refuse the announce.
+- (2026-10-05) `POST /setup/claim` takes optional `host`, `os` and `instance` form fields beside `code`
+  (`SetupClaimerSchema`). The first claim that names a machine is kept (`setupClaimedBy`, cleared by every mint and by
+  a release), and a claim of the same live code naming a different machine (another name, case aside, or another
+  side) is answered 409 with a sentence that says where it was used and what to do; the same machine retrying is let
+  through, and so is any machine once the first copy has reported its removal (`/sandbox/farewell`). A claim that names
+  nothing is never refused for it. `ic` does not send these fields yet, so until it does nothing is refused.
+- (2026-10-05) `POST /sandbox/boot-report` keeps `retrying` and `drift` as the daemon sends them; both used to be
+  dropped, so the editor never learned that a reachability probe had given up.
 - A sandbox on its owner's own machine can be reported on from outside it, for when the browser cannot reach it
   (`src/sandbox/host-report.ts`). `ic sandbox fix` checks the machine (Docker, WSL, disk, container, daemon, tunnel)
   and posts what it found to `POST /host-report` as `{ sandbox, report }` (`HostReportPostSchema`: the 12-hex tunnel
-  id and the report), with `Authorization: Bearer <report key>`. The platform stamps `at` and keeps only the latest on
-  the row (`hostReport`), which `sandbox.list` puts on the owner's summary of an own-machine sandbox and on no member's
-  or hosted row. It answers 204 for a report stored, 400 for a malformed body, 401 alike for a wrong key and an unknown
-  sandbox, and 404 for a hosted one. A report with the same `stage` and `outcome` as the stored one, less than two
-  seconds after it, is skipped and still answered 204, so `ic` never retries.
+  id and the report), with `Authorization: Bearer <report key>`. The platform stamps `at` and keeps the newest report
+  of each reporter on the row (`hostReport`, as `{ reporters: { <machine|os|env>: report } }`, three reporters at most;
+  a row written before holds one bare report and reads as one reporter). `sandbox.list` puts the newest on the owner's
+  summary of an own-machine sandbox as `hostReport`, all of them newest first as `hostReporters`, and neither on a
+  member's or hosted row. It answers 204 for a report stored, 400 for a malformed body, 401 alike for a wrong key and
+  an unknown sandbox, and 404 for a hosted one. A report with the same `stage` and `outcome` as the same reporter's
+  stored one, less than two seconds after it, is skipped and still answered 204, so `ic` never retries. A report may
+  carry `env` (the WSL distro) and `upkeep` (the machine's upkeep counts), both optional. (2026-10-05) There was one
+  slot, so a PC's Windows and WSL agents overwrote each other, and the throttle read one's report as the other's
+  repeat.
 - The report key is lowercase hex HMAC-SHA256 over `intentic/host-report/v1` (`HOST_REPORT_KEY_LABEL`), keyed with
   the connect token. `ic` derives it from the container's env and keeps it, so the machine agent's own runs report
   with no code. The platform derives it from the token it keeps encrypted and compares in constant time, and it

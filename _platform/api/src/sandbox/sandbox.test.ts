@@ -518,9 +518,9 @@ describe(`sandbox.list and the connect token`, () => {
         const prisma = fakePrisma({
             sandbox: { findMany: jest.fn().mockResolvedValue([{ ...sandboxRow, hosted: null }]) },
             sandboxMember: {
-                findMany: jest.fn().mockResolvedValue([
-                    { role: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } },
-                ]),
+                findMany: jest
+                    .fn()
+                    .mockResolvedValue([{ role: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } }]),
             },
         });
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
@@ -611,7 +611,10 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
                     return {};
                 }),
             },
-            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...hostedMachineRow, wokeAt: held }), delete: jest.fn().mockResolvedValue({}) },
+            hostedMachine: {
+                findUnique: jest.fn().mockResolvedValue({ ...hostedMachineRow, wokeAt: held }),
+                delete: jest.fn().mockResolvedValue({}),
+            },
             hostedUsage: { upsert },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
@@ -690,7 +693,10 @@ describe(`sandbox.fixCode`, () => {
         const first = await call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) });
         const second = await call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) });
         expect(second.code).not.toBe(first.code);
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { fixCode: second.code, fixCodeExpiresAt: new Date(second.expiresAt) } });
+        expect(update).toHaveBeenLastCalledWith({
+            where: { id: `s1` },
+            data: { fixCode: second.code, fixCodeExpiresAt: new Date(second.expiresAt) },
+        });
     });
 
     // A member finds no row through the owner-only gate, the same NOT_FOUND every owner-only route answers.
@@ -698,7 +704,10 @@ describe(`sandbox.fixCode`, () => {
         const findFirst = jest.fn().mockResolvedValue(null);
         const update = jest.fn();
         const prisma = fakePrisma({ sandbox: { findFirst, update } });
-        await expectOrpcCode(call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma, user: { ...user, id: `u2` } }) }), `NOT_FOUND`);
+        await expectOrpcCode(
+            call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma, user: { ...user, id: `u2` } }) }),
+            `NOT_FOUND`,
+        );
         expect(findFirst).toHaveBeenCalledWith({ where: { id: `s1`, ownerId: `u2` } });
         expect(update).not.toHaveBeenCalled();
     });
@@ -739,7 +748,10 @@ describe(`sandbox.list and the host report`, () => {
 
     it(`shows the report on the owner's row and null on a member's`, async () => {
         expect(
-            await listed([{ ...sandboxRow, hostReport: report, hosted: null }], [{ role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: report, hosted: null } }]),
+            await listed(
+                [{ ...sandboxRow, hostReport: report, hosted: null }],
+                [{ role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: report, hosted: null } }],
+            ),
         ).toEqual([
             { id: `s1`, role: `owner`, hostReport: report },
             { id: `s2`, role: `writer`, hostReport: null },
@@ -759,6 +771,62 @@ describe(`sandbox.list and the host report`, () => {
             { id: `s2`, role: `owner`, hostReport: null },
             { id: `s3`, role: `owner`, hostReport: null },
         ]);
+    });
+
+    // (2026-10-05) A Windows agent and a WSL agent each keep their own report; the newest stays `hostReport`.
+    it(`lists every reporter's newest report beside the newest of all, on the owner's row only`, async () => {
+        const wsl: HostReport = { ...report, os: `wsl`, env: `Ubuntu`, outcome: `fixed`, at: `2026-09-30T12:05:00.000Z` };
+        const stored = { reporters: { "rog|windows|": report, "rog|wsl|Ubuntu": wsl } };
+        const prisma = fakePrisma({
+            sandbox: { findMany: jest.fn().mockResolvedValue([{ ...sandboxRow, hostReport: stored, hosted: null }]) },
+            sandboxMember: {
+                findMany: jest
+                    .fn()
+                    .mockResolvedValue([{ role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: stored, hosted: null } }]),
+            },
+        });
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
+        expect(sandboxes.map(({ hostReport, hostReporters }) => ({ hostReport, hostReporters }))).toEqual([
+            { hostReport: wsl, hostReporters: [wsl, report] },
+            { hostReport: null, hostReporters: undefined },
+        ]);
+    });
+});
+
+/* TWO COPIES OF ONE SANDBOX (2026-10-05): named on the owner's row while either still announces (announce-copies.ts). */
+describe(`sandbox.list and two copies of one sandbox`, () => {
+    const minutesAgo = (minutes: number): string => new Date(Date.now() - minutes * 60_000).toISOString();
+    const seenInstances = [
+        { instance: `wsl`, host: `rog`, os: `linux`, firstAt: minutesAgo(80), at: minutesAgo(2) },
+        { instance: `pwsh`, host: `ROG`, os: `windows`, firstAt: minutesAgo(90), at: minutesAgo(20) },
+    ];
+    const duplicateSince = new Date(Date.now() - 30 * 60_000);
+
+    it(`names both copies and since when to the owner, and nothing to a member`, async () => {
+        const prisma = fakePrisma({
+            sandbox: { findMany: jest.fn().mockResolvedValue([{ ...sandboxRow, seenInstances, duplicateSince, hosted: null }]) },
+            sandboxMember: {
+                findMany: jest
+                    .fn()
+                    .mockResolvedValue([
+                        { role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, seenInstances, duplicateSince, hosted: null } },
+                    ]),
+            },
+        });
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
+        expect(sandboxes.map((sandbox) => sandbox.duplicateCopies)).toEqual([
+            { hosts: [`rog (linux)`, `ROG (windows)`], since: duplicateSince.toISOString() },
+            null,
+        ]);
+    });
+
+    it(`says nothing while one copy announces alone`, async () => {
+        const prisma = fakePrisma({
+            sandbox: { findMany: jest.fn().mockResolvedValue([{ ...sandboxRow, seenInstances, duplicateSince: null, hosted: null }]) },
+            sandboxMember: { findMany: jest.fn().mockResolvedValue([]) },
+        });
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
+        expect(sandboxes[0]?.duplicateCopies).toBeNull();
     });
 });
 
@@ -785,13 +853,15 @@ describe(`recovery`, () => {
 
     it(`looks remembered ids up for the signed-in account`, async () => {
         const prisma = registry([{ id: `s1`, tunnelId: SANDBOX, ownerId: `u1` }], [`cccccccccccc`]);
-        expect(await call(sandboxRoutes.lookup, { sandboxIds: [SANDBOX, `bbbbbbbbbbbb`, `cccccccccccc`] }, { context: context({ prisma }) })).toEqual({
-            sandboxes: [
-                { sandboxId: SANDBOX, standing: `yours`, id: `s1` },
-                { sandboxId: `bbbbbbbbbbbb`, standing: `unknown` },
-                { sandboxId: `cccccccccccc`, standing: `deleted` },
-            ],
-        });
+        expect(await call(sandboxRoutes.lookup, { sandboxIds: [SANDBOX, `bbbbbbbbbbbb`, `cccccccccccc`] }, { context: context({ prisma }) })).toEqual(
+            {
+                sandboxes: [
+                    { sandboxId: SANDBOX, standing: `yours`, id: `s1` },
+                    { sandboxId: `bbbbbbbbbbbb`, standing: `unknown` },
+                    { sandboxId: `cccccccccccc`, standing: `deleted` },
+                ],
+            },
+        );
     });
 
     it(`tickets an id the registry has no record of, for the signed-in account`, async () => {
@@ -804,8 +874,12 @@ describe(`recovery`, () => {
     });
 
     it(`refuses a ticket for an id the registry holds or deleted`, async () => {
-        const ask = (prisma: OrpcContext[`prisma`]) => refusalOf(call(sandboxRoutes.adoptionTicket, { sandboxId: SANDBOX }, { context: context({ prisma }) }));
-        expect(await ask(registry([{ id: `s1`, tunnelId: SANDBOX, ownerId: `u1` }], []))).toEqual({ code: `CONFLICT`, message: `this sandbox is already in your list` });
+        const ask = (prisma: OrpcContext[`prisma`]) =>
+            refusalOf(call(sandboxRoutes.adoptionTicket, { sandboxId: SANDBOX }, { context: context({ prisma }) }));
+        expect(await ask(registry([{ id: `s1`, tunnelId: SANDBOX, ownerId: `u1` }], []))).toEqual({
+            code: `CONFLICT`,
+            message: `this sandbox is already in your list`,
+        });
         expect(await ask(registry([{ id: `s9`, tunnelId: SANDBOX, ownerId: `u2` }], []))).toEqual({
             code: `CONFLICT`,
             message: `this sandbox is registered to another account`,
@@ -819,7 +893,11 @@ describe(`recovery`, () => {
     it(`refuses on a platform that hands out no addresses, which has no grant to vouch with`, async () => {
         const addressless = context({ prisma: registry([], []) });
         const refused = await refusalOf(
-            call(sandboxRoutes.adoptionTicket, { sandboxId: SANDBOX }, { context: { ...addressless, config: { ...addressless.config, ingress: { ...addressless.config.ingress, signingKey: `` } } } }),
+            call(
+                sandboxRoutes.adoptionTicket,
+                { sandboxId: SANDBOX },
+                { context: { ...addressless, config: { ...addressless.config, ingress: { ...addressless.config.ingress, signingKey: `` } } } },
+            ),
         );
         expect(refused).toEqual({
             code: `PRECONDITION_FAILED`,

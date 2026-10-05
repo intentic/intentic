@@ -13,6 +13,7 @@ import type { CursorCatalog } from "./models/cursor-catalog.js";
 import { createCursorEventMapper } from "./cursor-events.js";
 import { type CursorRunHandle, type CursorSession, inProcessHost, namespacedHost, type NamespacedHostInput } from "./cursor-host.js";
 import type { CursorHookService } from "./cursor-hooks.js";
+import { opt } from "../../opt.js";
 import { selectionFor } from "./models/cursor-models.js";
 import { CURSOR_SDK_MISSING, cursorSdk, cursorSdkEntry } from "./cursor-sdk.js";
 import { cursorCustomTools, cursorMcpServers, TOOLS_WITHHELD } from "./cursor-tools.js";
@@ -298,6 +299,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                       sdkEntry: await cursorSdkEntry(),
                       spawnDepth: request.spec.spawnDepth ?? 0,
                       logger: deps.logger,
+                      ...opt("owner", request.spec.conversationId),
                       ...deps.runtime,
                   });
 

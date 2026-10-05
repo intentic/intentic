@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { isolationScript, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
+import { detachedStamp } from "../../seams/workload-stamp.js";
 
 // A watch check runs in the world its arming turn saw: that turn's namespace rebuilt, or its paths rewritten likewise.
 
@@ -60,7 +61,8 @@ const run = (argv: readonly string[], options: { readonly cwd: string; readonly 
         let settled = false;
         const child = spawn(program, args, {
             cwd: options.cwd,
-            env: { ...process.env, ...options.env },
+            // Its deadline rides along, so the reaper ends it even when the daemon that set it is gone.
+            env: { ...process.env, ...options.env, ...detachedStamp("watch-check", Date.now() + CHECK_TIMEOUT_MS) },
             detached: true,
             stdio: ["ignore", "pipe", "pipe"],
         });

@@ -27,6 +27,8 @@ export interface RestartResume {
     readonly withdraw: () => Promise<void>;
     // Whether the restart this boot follows was asked to resume, spending the ask either way.
     readonly take: (now: number) => Promise<boolean>;
+    // When the standing ask was made, without spending it; undefined when none stands. Optional for a stand-in.
+    readonly askedAt?: () => Promise<number | undefined>;
 }
 
 // Opened wherever it is needed: every handle on the path shares its write queue. A restart asked for WITHOUT picking up
@@ -42,6 +44,7 @@ export const fileRestartResume = (historyRoot: string): RestartResume => {
             await file.update(() => ({ askedAt: at }));
         },
         withdraw,
+        askedAt: async () => (await file.read()).askedAt,
         take: async (now) => {
             const { askedAt } = await file.read();
             if (askedAt === undefined) {

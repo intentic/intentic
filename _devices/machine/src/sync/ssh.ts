@@ -2,16 +2,26 @@ import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { hostname } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
 import { SshHostKeySchema, STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
-import { isProjectPairing, knownHostsPath, type Pairing, pairingTransport, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import {
+    isProjectPairing,
+    knownHostsPath,
+    type Pairing,
+    pairingTransport,
+    sshConfigName,
+    sshConfigPath,
+    sshDir,
+    sshKeyPath,
+    userSshConfigPath,
+} from "./config.js";
+import { keyComment } from "./environment.js";
 import { runProcess } from "./exec.js";
-import { syncSshPort } from "./tunnel.js";
+import { syncSshPort, syncSshPorts } from "./tunnel.js";
 
 // Mutagen's two-way ignore set: also excludes secrets and the daemon's `.intentic` state, never the search-ignore
 // set's job. `.git` matches every level, since git state travels by git's own protocol (git-bridge.ts), not file sync.
@@ -150,7 +160,11 @@ const namesHost = (pattern: string, names: readonly string[]): boolean => {
         return names.includes(pattern);
     }
     const [, , salt, hash] = pattern.split("|");
-    return salt !== undefined && hash !== undefined && names.some((name) => createHmac("sha1", Buffer.from(salt, "base64")).update(name).digest("base64") === hash);
+    return (
+        salt !== undefined &&
+        hash !== undefined &&
+        names.some((name) => createHmac("sha1", Buffer.from(salt, "base64")).update(name).digest("base64") === hash)
+    );
 };
 
 // known_hosts with every entry for `alias` gone (ssh records it bare, since HostKeyAlias replaces host and port alike,
@@ -167,6 +181,20 @@ export const knownHostsFor = (current: string, alias: string, port: number, host
         kept.pop();
     }
     return [...kept, ...(hostKey === undefined ? [] : [`${alias} ${hostKey}`])].map((line) => `${line}\n`).join("");
+};
+
+// Every entry for an alias gone from this agent's known_hosts, under every port it was ever bound to: what retiring a
+// pairing leaves of its sandbox there (retire.ts). A file that is not there has nothing to strip.
+export const forgetKnownHost = async (sandboxId: string): Promise<void> => {
+    const current = await readFile(knownHostsPath, "utf8").catch(undefinedIfMissing);
+    if (current === undefined) {
+        return;
+    }
+    const alias = sshAlias(sandboxId);
+    const next = syncSshPorts(sandboxId).reduce((kept, port) => knownHostsFor(kept, alias, port, undefined), current);
+    if (next !== current) {
+        await writeSecretFile(knownHostsPath, baseDir, next);
+    }
 };
 
 // The enrollment's half: this alias's entries replaced in this agent's own known_hosts (never the user's).
@@ -193,6 +221,9 @@ export const stripManagedIncludes = (config: string): string =>
         .filter((line) => !MANAGED_INCLUDE.test(line))
         .join("\n");
 
+// A local ssh call that reads config or writes a key: it answers in milliseconds, and past this it is stuck.
+const SSH_CALL_TIMEOUT_MS = 30_000;
+
 // Generate the ed25519 keypair on first setup; return the public key line to enroll on the daemon.
 export const ensureSshKey = async (): Promise<string> => {
     await mkdir(baseDir, { recursive: true });
@@ -202,10 +233,13 @@ export const ensureSshKey = async (): Promise<string> => {
     if (existing !== undefined) {
         return existing.trim();
     }
-    // This machine's name, whitespace stripped to stay one authorized_keys token; the daemon shows it as the
-    // "Syncing from X" label.
-    const comment = hostname().replace(/\s+/g, "-") || "intentic-machine";
-    const result = spawnSync("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", comment, "-f", sshKeyPath], { stdio: "inherit" });
+    // This machine's name and which environment of it this is (environment.ts `keyComment`), one authorized_keys token;
+    // the daemon shows it as the "Syncing from X" label. Only a new key: an existing one keeps its comment.
+    const comment = keyComment();
+    const result = spawnSync("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", comment, "-f", sshKeyPath], {
+        stdio: "inherit",
+        timeout: SSH_CALL_TIMEOUT_MS,
+    });
     if (result.status !== 0) {
         throw new Error("ssh-keygen failed: is an OpenSSH client installed?");
     }
@@ -287,7 +321,7 @@ export const resolvedEndpoint = (sshGOutput: string): { hostname?: string; port?
 // receive server magic number" EOF.
 export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort: number): void => {
     // `windowsHide`: a console-less parent (the watcher) would otherwise pop a window for this child on Windows.
-    const result = spawnSync(ssh, ["-G", alias], { encoding: "utf8", windowsHide: true });
+    const result = spawnSync(ssh, ["-G", alias], { encoding: "utf8", windowsHide: true, timeout: SSH_CALL_TIMEOUT_MS });
     if (result.error !== undefined) {
         throw new Error(`could not run "${ssh}", the SSH client Mutagen drives the sync transport with: ${result.error.message}`);
     }

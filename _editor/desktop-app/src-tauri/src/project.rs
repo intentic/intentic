@@ -699,6 +699,154 @@ pub(crate) fn release_folder(folder: &Path) {
     }
 }
 
+/* WHEN A SANDBOX IS GONE, its folders' records and this machine's sync of it go too (2026-10-05).
+ *
+ * Neither went before. A sandbox removed from This device lost only its display name (commands.rs `sandbox_remove`),
+ * the machine agent kept syncing its folder until a NEW sandbox was made for that same folder (`release_folder`), and
+ * `projects.json` kept every folder's entry for good. Now the agent is told to let go whenever a sandbox goes: removed
+ * here, or dropped from the account's own listing (the workspace's roster, read from the platform, for the same
+ * account as before). A folder's entry goes once the account no longer lists its sandbox. The account listing a sandbox
+ * no more is the platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing. */
+
+/// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in. Never the
+/// sandbox this computer's own supervisor keeps (`kept`, machine_sandbox.rs), which says for itself when that one is
+/// gone, nor an entry with no sandbox id. Pure.
+pub(crate) fn stale_projects(
+    projects: &[Project],
+    roster: &Roster,
+    kept: Option<&str>,
+) -> Vec<Project> {
+    if roster.account.is_none() {
+        return Vec::new();
+    }
+    projects
+        .iter()
+        .filter(|project| {
+            project.sandbox_id.as_deref().is_some_and(|id| {
+                Some(id) != kept && !roster.sandboxes.iter().any(|entry| entry.id == id)
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+/// The sandboxes the account listed before and lists no more, when both listings are the same account's: a sign-out or
+/// another account signing in is not a sandbox going. Pure.
+pub(crate) fn dropped_sandboxes(before: &Roster, after: &Roster) -> Vec<String> {
+    let same_account = match (&before.account, &after.account) {
+        (Some(before), Some(after)) => before.email == after.email,
+        _ => false,
+    };
+    if !same_account {
+        return Vec::new();
+    }
+    before
+        .sandboxes
+        .iter()
+        .filter(|entry| !after.sandboxes.iter().any(|now| now.id == entry.id))
+        .map(|entry| entry.id.clone())
+        .collect()
+}
+
+/// The platform id of the sandbox whose container is `slug` here, as this app remembers it: a folder's project, or this
+/// computer's own sandbox.
+pub(crate) fn sandbox_id_of_slug(app: &AppHandle, slug: &str) -> Option<String> {
+    app.state::<AppState>()
+        .projects()
+        .into_iter()
+        .find(|project| project.slug.as_deref() == Some(slug))
+        .and_then(|project| project.sandbox_id)
+        .or_else(|| {
+            let record = crate::machine_sandbox::status(app);
+            record
+                .slug
+                .as_deref()
+                .filter(|held| *held == slug)
+                .and(record.sandbox_id)
+        })
+}
+
+/// The slug of the sandbox with platform id `id` here, as this app remembers it.
+fn slug_of_sandbox(app: &AppHandle, id: &str) -> Option<String> {
+    app.state::<AppState>()
+        .projects()
+        .into_iter()
+        .find(|project| project.sandbox_id.as_deref() == Some(id))
+        .and_then(|project| project.slug)
+        .or_else(|| {
+            let record = crate::machine_sandbox::status(app);
+            record
+                .sandbox_id
+                .as_deref()
+                .filter(|held| *held == id)
+                .and(record.slug)
+        })
+}
+
+/// This machine's sync lets go of a sandbox that is gone (scripts.rs `agent_forget`). Best effort, and said in the log:
+/// a sync the agent still holds is retried by the agent itself, and costs nothing here.
+pub(crate) fn forget_sandbox(slug: Option<&str>, sandbox_id: Option<&str>) {
+    let named = slug.or(sandbox_id).unwrap_or("a sandbox");
+    match crate::scripts::agent_forget(slug, sandbox_id) {
+        Ok(said) => eprintln!("intentic: this machine let go of {named}: {said}"),
+        Err(error) => eprintln!("intentic: this machine did not let go of {named}: {error}"),
+    }
+}
+
+/// The sandboxes this machine's agent syncs (`intentic-machine status --json`, `sync.pairings`): only those are told
+/// to let go, since the account's other sandboxes (hosted, shared) were never synced here. None when the agent could
+/// not be read.
+fn paired_sandboxes() -> Option<HashSet<String>> {
+    let report = crate::scripts::sync_report().ok()??;
+    let status: serde_json::Value = serde_json::from_str(&report).ok()?;
+    Some(
+        status["sync"]["pairings"]
+            .as_array()
+            .map(|pairings| {
+                pairings
+                    .iter()
+                    .filter_map(|pairing| pairing["sandboxId"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    )
+}
+
+/// The workspace said again which sandboxes the account has (windows.rs, `intentic://roster`): folders whose sandbox
+/// is no longer listed are forgotten, and this machine's sync lets go of every sandbox that went. Off the calling
+/// thread, since the agent is asked.
+pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
+    if after.account.is_none() {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let kept = crate::machine_sandbox::kept_sandbox_id(&app);
+        let stale = stale_projects(&app.state::<AppState>().projects(), &after, kept.as_deref());
+        let forgotten = app
+            .state::<AppState>()
+            .forget_projects(|project| stale.contains(project));
+        let mut gone: Vec<(Option<String>, String)> = forgotten
+            .into_iter()
+            .filter_map(|project| Some((project.slug, project.sandbox_id?)))
+            .collect();
+        for id in dropped_sandboxes(&before, &after) {
+            if Some(&id) != kept.as_ref() && !gone.iter().any(|(_, held)| *held == id) {
+                gone.push((slug_of_sandbox(&app, &id), id));
+            }
+        }
+        if gone.is_empty() {
+            return;
+        }
+        let Some(paired) = paired_sandboxes() else {
+            return;
+        };
+        for (slug, id) in gone.iter().filter(|(_, id)| paired.contains(id)) {
+            forget_sandbox(slug.as_deref(), Some(id));
+        }
+    });
+}
+
 /// What `sandbox/create` came back with.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Made {
@@ -862,6 +1010,48 @@ fn write_paths(dir: &Path, paths: &[String]) -> std::io::Result<PathBuf> {
     let file = dir.join(format!("bring-back-{}.json", uuid::Uuid::new_v4().simple()));
     std::fs::write(&file, serde_json::to_vec(paths)?)?;
     Ok(file)
+}
+
+/// How old a bring-back's paths file is before a launch sweeps it: no run lasts a day, so one that old belongs to a run a
+/// crash ended, whose own removal ([`PathsFile`]'s drop) never ran.
+const PATHS_FILE_STALE: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// The paths files among `files` (name and when it was last written) older than `stale` at `now`: only this module's own
+/// (`bring-back-<id>.json`), and never one dated in the future, which is a clock that moved rather than an old file.
+/// Pure.
+pub(crate) fn stale_paths_files(
+    files: &[(PathBuf, std::time::SystemTime)],
+    now: std::time::SystemTime,
+    stale: Duration,
+) -> Vec<PathBuf> {
+    files
+        .iter()
+        .filter(|(path, _)| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("bring-back-") && name.ends_with(".json"))
+        })
+        .filter(|(_, written)| now.duration_since(*written).is_ok_and(|age| age > stale))
+        .map(|(path, _)| path.clone())
+        .collect()
+}
+
+/// The paths files a crash left in the app's cache folder, swept at launch (lib.rs, 2026-10-05): only a run that ended
+/// removed its own, so every crash mid bring-back left one behind for good, naming the reader's files.
+pub fn sweep_paths_files(app: &AppHandle) {
+    let Ok(dir) = app.path().app_cache_dir().map(|dir| dir.join("bring-back")) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    let files: Vec<(PathBuf, std::time::SystemTime)> = entries
+        .flatten()
+        .filter_map(|entry| Some((entry.path(), entry.metadata().ok()?.modified().ok()?)))
+        .collect();
+    for path in stale_paths_files(&files, std::time::SystemTime::now(), PATHS_FILE_STALE) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// A bring-back's paths file, in the app's own cache folder, removed however the run ends.
@@ -1432,6 +1622,63 @@ mod tests {
             sandbox_id: sandbox_id.map(str::to_string),
             slug: None,
         }
+    }
+
+    /// A folder's entry goes once the account's own listing no longer has its sandbox; never on a roster with nobody
+    /// signed in, never one with no sandbox id, and never this computer's own sandbox, whose supervisor says when it is
+    /// gone.
+    #[test]
+    fn a_projects_entry_goes_with_the_sandbox_the_account_no_longer_lists() {
+        let projects = vec![
+            project(Some("cm-gone")),
+            project(Some("cm-live")),
+            project(None),
+            project(Some("cm-machine")),
+        ];
+        let listed = roster_of(&["cm-live"], true);
+        let stale = stale_projects(&projects, &listed, Some("cm-machine"));
+        assert_eq!(stale, vec![project(Some("cm-gone"))]);
+        assert!(stale_projects(&projects, &roster_of(&[], false), None).is_empty());
+    }
+
+    /// Only the same account's listing losing a sandbox says it went: a sign-out or another account says nothing.
+    #[test]
+    fn a_sandbox_dropped_from_the_same_accounts_listing_is_one_that_went() {
+        let before = roster_of(&["cm-a", "cm-b"], true);
+        assert_eq!(
+            dropped_sandboxes(&before, &roster_of(&["cm-b", "cm-c"], true)),
+            vec!["cm-a".to_string()]
+        );
+        assert!(dropped_sandboxes(&before, &roster_of(&[], false)).is_empty());
+        let mut other = roster_of(&[], true);
+        other.account.as_mut().unwrap().email = "someone@example.com".into();
+        assert!(dropped_sandboxes(&before, &other).is_empty());
+        assert!(dropped_sandboxes(&roster_of(&["cm-a"], false), &roster_of(&[], true)).is_empty());
+    }
+
+    #[test]
+    fn a_launch_sweeps_only_this_modules_paths_files_older_than_a_day() {
+        let now = std::time::UNIX_EPOCH + Duration::from_secs(10 * 24 * 60 * 60);
+        let ago = |hours: u64| now - Duration::from_secs(hours * 60 * 60);
+        let files = vec![
+            (
+                PathBuf::from("/cache/bring-back/bring-back-old.json"),
+                ago(25),
+            ),
+            (
+                PathBuf::from("/cache/bring-back/bring-back-new.json"),
+                ago(2),
+            ),
+            (PathBuf::from("/cache/bring-back/notes.txt"), ago(100)),
+            (
+                PathBuf::from("/cache/bring-back/bring-back-ahead.json"),
+                now + Duration::from_secs(60),
+            ),
+        ];
+        assert_eq!(
+            stale_paths_files(&files, now, PATHS_FILE_STALE),
+            vec![PathBuf::from("/cache/bring-back/bring-back-old.json")]
+        );
     }
 
     /// The owner's first project was remembered against a machine of ours removed a minute later: a folder whose

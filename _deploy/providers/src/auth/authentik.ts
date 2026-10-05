@@ -1,9 +1,9 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
-import { stampLabels } from "../core/backing-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "authentik";
 
@@ -22,7 +22,7 @@ const internalUrl = (parsed: AuthentikInputs): string => `http://${parsed.intern
 
 // Authentik as a self-contained compose stack: its own Postgres + Redis (Valkey) + the server (HTTP, stamped
 // intentic.id=<id>) + the worker. Image refs are inlined into the YAML so a bump recreates the changed service.
-const composeYaml = (parsed: AuthentikInputs, id: string, hash: string): string =>
+const composeYaml = (parsed: AuthentikInputs, stamp: ContainerStamp): string =>
     [
         "services:",
         "  postgresql:",
@@ -45,7 +45,7 @@ const composeYaml = (parsed: AuthentikInputs, id: string, hash: string): string 
         `    ports: [ "${parsed.publishPort}:9000" ]`,
         "    volumes: [ media:/media, templates:/templates ]",
         "    depends_on: { postgresql: { condition: service_healthy }, redis: { condition: service_healthy } }",
-        stampLabels(KIND, id, hash, parsed.protect),
+        stampLabels(KIND, stamp, parsed.protect),
         "  worker:",
         `    image: ${parsed.image}`,
         "    restart: unless-stopped",
@@ -71,7 +71,7 @@ export const createAuthentikProvider = (executor: SshExecutor = sshExecutor): Pr
                 issuerUrl: `https://${parsed.domain}/application/o/`,
                 internalUrl: internalUrl(parsed),
             }),
-            files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
+            files: (parsed, stamp) => ({ "compose.yaml": composeYaml(parsed, stamp) }),
             // Write-once: this file carries the signing key, the bootstrap credentials the bindings reuse, and the
             // database
             // password. Re-keying it would lock the stack out of its own database.

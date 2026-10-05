@@ -181,3 +181,19 @@ test("flush writes back a held tail that never turned out to be a secret", () =>
     redactor.flush();
     expect(s.chunks.join("")).toBe("the prefix is s3cr3t");
 });
+
+test("an orphan event says whether the resource is this intent's or carries no owner, and a skipped prune says why", () => {
+    const s = sink();
+    const out = createOutput(s, "text");
+    out.onEvent({ kind: "orphan", id: "old-db", type: "postgres", ownership: "mine" });
+    out.onEvent({ kind: "orphan", id: "legacy-db", type: "postgres", ownership: "unowned" });
+    out.onEvent({ kind: "prune", state: "skipped", id: "user-ann", type: "komodo-user", reason: "missing-secret" });
+    out.onEvent({ kind: "prune", state: "skipped", id: "db", type: "postgres", reason: "protected" });
+    const rendered = s.chunks.join("");
+    expect(rendered).toContain("orphan old-db (postgres): exists on the host but is not in the desired graph");
+    expect(rendered).toContain(
+        "unowned legacy-db (postgres): stamped without an owner and not in the desired graph; adopt it by declaring it, or remove it by hand",
+    );
+    expect(rendered).toContain("left user-ann (komodo-user) in place: its delete needs a secret that is no longer set");
+    expect(rendered).toContain("left db (postgres) in place: it is protected");
+});
