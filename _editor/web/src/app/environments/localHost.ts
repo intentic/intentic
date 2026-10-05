@@ -112,9 +112,11 @@ export interface LocalView {
     readonly badge?: Readonly<Ref<ViewBadge | undefined>>;
 }
 
-/* A FOLDER'S OWN SANDBOX: "Work on this with an agent" asks the app in the window's own dialog (local/LocalProject.vue),
-   and the sandbox is built on this computer while the reader keeps working, drawn as a card over the folder. The folder
-   is never named here: the app always means the window's own (its project.rs). */
+/* A FOLDER'S WAY TO AN AGENT: "Work on this with an agent" asks the app in the window's own dialog (local/LocalProject.vue),
+   and the folder goes into this computer's own sandbox, which the app makes once, after sign-in, in the background (its
+   machine_sandbox.rs) and keeps; nothing waits on it, and a card in the window's corner says how far it and the folder
+   are. A folder that already has a sandbox of its own keeps opening that one. The folder is never named here: the app
+   always means the window's own (its project.rs). */
 
 /** Why a folder cannot have a sandbox, by kind, drawn in the reader's words (local/projectWords.ts). */
 export type LocalProjectRefusal =
@@ -123,6 +125,42 @@ export type LocalProjectRefusal =
 
 /** What to beware of before a folder gets its sandbox. */
 export type LocalProjectCaution = { readonly kind: `synced`; readonly service: string } | { readonly kind: `away` };
+
+/** Why Docker is in the way of this computer's sandbox. */
+export type LocalDockerReason = `notInstalled` | `notRunning` | `notAllowed`;
+
+/**
+ * Where this computer's own sandbox stands: nobody signed in yet (it is made after sign-in), Docker in the way (never
+ * started for the reader), being made (its setup's running phase, the app's setupPlan.ts ids, and how far), stopped on
+ * a question, ready, its container stopped, its setup failed, picked up after a quit, or gone from the account.
+ */
+export type LocalMachineState =
+    | { readonly state: `signedOut` | `ready` | `stopped` | `interrupted` | `gone` }
+    | { readonly state: `needsDocker`; readonly reason: LocalDockerReason }
+    | { readonly state: `creating`; readonly phase: string | undefined; readonly step: string | undefined; readonly percent: number }
+    | { readonly state: `waiting`; readonly for: `consent` | `restart` | `signOut` }
+    | { readonly state: `failed`; readonly reason: string };
+
+/** This computer's own sandbox, as every local window's card draws it. */
+export type LocalMachineSandbox = LocalMachineState & {
+    /** Its name on the account, once it has one. */
+    readonly name: string | undefined;
+    /** How many folders wait for it to be ready. */
+    readonly waiting: number;
+    /** Its last setup's transcript can be shown. */
+    readonly hasLog: boolean;
+};
+
+/** This window's folder on its way into this computer's sandbox: in line, being added, its first copy, in, or not. */
+export interface LocalFolderSandbox {
+    /** Its name inside the sandbox's /work. */
+    readonly name: string;
+    readonly state: `queued` | `attaching` | `copying` | `ready` | `failed`;
+    /** Why it could not be added, in the machine agent's own words. */
+    readonly reason: string | undefined;
+    /** The copy's own word for what it is doing, while it copies. */
+    readonly status: string | undefined;
+}
 
 /** What the folder's dialog draws. */
 export type LocalProjectPreview =
@@ -133,7 +171,7 @@ export type LocalProjectPreview =
     | { readonly kind: `refused`; readonly refusal: LocalProjectRefusal }
     | {
           readonly kind: `new`;
-          // The folder's own name, which the sandbox is named after.
+          // The folder's own name, which its name in the sandbox is derived from.
           readonly name: string;
           readonly path: string;
           // What the first copy carries, counted as the sync counts it; `more` when the count stopped short.
@@ -143,52 +181,29 @@ export type LocalProjectPreview =
           // Enough that the first copy is a long upload.
           readonly large: boolean;
           readonly cautions: readonly LocalProjectCaution[];
-          // The workspace's session is here; without it the press signs in first, in the workspace.
-          readonly signedIn: boolean;
-          // A sandbox is being set up on this computer already, and they go one at a time.
-          readonly busy: boolean;
+          // How far this computer's sandbox is: whether the copy starts now or once it is ready.
+          readonly machine: LocalMachineState;
       };
 
-/** A folder's sandbox being built in this window, as its card draws it. */
-export interface LocalProjectBuild {
-    /** The sandbox's name. */
-    readonly name: string;
-    /**
-     * `building` while it runs; `waiting` on the reader (something this computer needs, answered on This computer);
-     * `ready` once the folder's copy is in its sandbox; `failed` or `stopped` as it ended.
-     */
-    readonly state: `building` | `waiting` | `ready` | `failed` | `stopped`;
-    /** The setup's running phase (the app's setupPlan.ts ids), which the house is drawn by. */
-    readonly phase: string | undefined;
-    /** How far into the running phase it is (0..1), where the phase measures it (the image's download). */
-    readonly phaseProgress: number;
-    /** The running step in the setup's own words, for the reader who wants what is actually happening. */
-    readonly step: string | undefined;
-    readonly percent: number;
-    /** Milliseconds left at this machine's pace so far; undefined while there is nothing honest to say. */
-    readonly remainingMs: number | undefined;
-    /** Why it stopped, in the setup's own words. */
-    readonly error: string | undefined;
-}
+/** What a press of the dialog's button came to: the folder in line for this computer's sandbox, or its own sandbox opened. */
+export type LocalProjectStart = `queued` | `opened`;
 
-/** What a press of "Create sandbox" came to. */
-export type LocalProjectStart = `building` | `signIn` | `opened`;
+/** What the card's buttons ask of the app: sign in, start Docker (on the reader's press, never by itself), try the setup
+ * again, start its stopped container, make a new one in place of one that is gone, show the last setup's transcript. */
+export type LocalMachineAction = `signIn` | `startDocker` | `retry` | `start` | `recreate` | `log`;
 
 export interface LocalProjectHost {
     preview(): Promise<LocalProjectPreview>;
-    /** The sandbox made, named as the page derived from the folder's name, and its build started in this window. */
-    create(names: { readonly name: string; readonly project: string }): Promise<LocalProjectStart>;
-    /** The build in this window, while there is one to draw. */
-    readonly build: Readonly<Ref<LocalProjectBuild | undefined>>;
-    /** The built sandbox, opened on the folder. */
+    /** This window's folder put in line for this computer's sandbox under `project`, its name in /work. Never waits. */
+    attach(names: { readonly project: string }): Promise<LocalProjectStart>;
+    /** This computer's own sandbox, once the app has said. */
+    readonly machine: Readonly<Ref<LocalMachineSandbox | undefined>>;
+    /** This window's folder on its way into it, while it is. */
+    readonly folder: Readonly<Ref<LocalFolderSandbox | undefined>>;
+    /** The folder's sandbox, opened on the folder. */
     open(): Promise<void>;
-    /** The build again, from the start, on the same sandbox. */
-    retry(): Promise<void>;
-    /** Stops the build and everything it started. */
-    stop(): Promise<void>;
-    /** Puts a finished or failed build's card away. */
-    dismiss(): void;
-    /** The route of this shell where the build's every step, its log and anything it asks of the reader are drawn. */
+    act(action: LocalMachineAction): Promise<void>;
+    /** The route of this shell where this computer's sandbox, its every step and anything it asks are drawn. */
     readonly detailsPath: string;
 }
 

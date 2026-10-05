@@ -1,12 +1,10 @@
-import { projectDirNameFor } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { LocalProjectCaution, LocalProjectRefusal } from "../app/environments/localHost";
-import { autoSandboxName } from "../features/sandbox/client/sandboxName";
 import type { HouseStage } from "./agentHouse";
 
-// WHAT A FOLDER'S SANDBOX DIALOG AND BUILD CARD SAY, in the reader's language: the app answers with kinds and numbers
-// (its project.rs), and the words are chosen here, where the catalogs are.
+// WHAT A FOLDER'S SANDBOX DIALOG AND THE HOUSE ON ITS CARD SAY, in the reader's language: the app answers with kinds
+// and numbers (its project.rs), and the words are chosen here, where the catalogs are.
 
 /** Why the folder at `path` cannot have a sandbox. */
 export const refusalSentence = (refusal: LocalProjectRefusal, path: string): string => {
@@ -30,26 +28,5 @@ export const copyWeight = (copy: { readonly files: number; readonly bytes: numbe
     return copy.bytes > 0 ? t(`local.project.weight`, { files, size: formatBytes(copy.bytes) }) : files;
 };
 
-/**
- * The names a folder's sandbox is made under, from the folder's own: the sandbox is called after it, numbered past a
- * name the account already gives another (features/sandbox/client/sandboxName.ts, as /setup names one), and the folder lands at `/work/<project>`.
- */
-export const projectNames = (folder: string, taken: readonly string[]): { readonly name: string; readonly project: string } => ({
-    name: autoSandboxName(taken, folder),
-    project: projectDirNameFor(folder),
-});
-
 /** What the house is doing at `stage`, the card's headline while the build runs. */
 export const stageHeadline = (stage: HouseStage): string => t(`local.project.stage.${stage}`);
-
-/** Time left, at this machine's pace so far; nothing while there is nothing honest to say. */
-export const remainingWords = (ms: number | undefined): string | undefined => {
-    if (ms === undefined || !Number.isFinite(ms) || ms < 0) {
-        return undefined;
-    }
-    if (ms < 60_000) {
-        return t(`local.project.lessThanAMinute`);
-    }
-    const minutes = Math.round(ms / 60_000);
-    return t(`local.project.minutesLeft`, { count: minutes }, minutes);
-};

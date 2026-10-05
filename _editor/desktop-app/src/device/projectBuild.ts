@@ -1,65 +1,46 @@
-import type { LocalProjectBuild } from "@intentic/web/local-host";
-import type { SetupArgs, SetupReport } from "../desktop";
-import type { ProgressView } from "../setupPlan";
+import type { LocalFolderSandbox, LocalMachineSandbox, LocalMachineState } from "@intentic/web/local-host";
+import type { MachineSandbox, MachineStanding } from "../desktop";
+import { machineFolderOf } from "./machineSandbox";
 
-// A FOLDER'S BUILD AS ITS CARD DRAWS IT (the web's local/LocalProjectBuild.vue): this window's setup store, adopted for
-// the folder (setup.ts `adoptSetup`), read into the few facts the card shows. Pure, so the one rule in it is testable:
-// a folder is READY once its copy is in, while the device's own connection still finishes behind it.
+// THIS COMPUTER'S SANDBOX AND A FOLDER ON ITS WAY INTO IT, AS THE WINDOW'S CARD AND BUTTON DRAW THEM (the web's
+// local/LocalMachineCard.vue, local/LocalFiles.vue): the app's record (machine_sandbox.rs, device/machineSandbox.ts),
+// read into the few facts the shell takes. Pure, so what each state comes to is tested by value.
 
-export interface BuildFacts {
-    /** The folder build this window adopted, kept past the run's end. */
-    readonly adopted: SetupArgs | undefined;
-    /** How the setup stands (setup.ts `setupState`). */
-    readonly state: SetupReport[`state`];
-    readonly view: ProgressView | undefined;
-    /** Why it stopped, in the setup's own words. */
-    readonly error: string | undefined;
-}
-
-// The last phase of a setup, connecting this machine as a device so the workspace can manage its sandboxes: nothing in
-// it is the folder's, so the folder's sandbox is ready from the moment it starts (and the reader is spared its ~20s).
-const AFTER_THE_FOLDER = `connecting-machine`;
-
-const stateOf = (facts: BuildFacts, phase: string | undefined): LocalProjectBuild[`state`] => {
-    switch (facts.state) {
-        case `running`:
-            return phase === AFTER_THE_FOLDER ? `ready` : `building`;
+/** Where it stands, in the shell's shape: what the record leaves out is said as undefined. */
+export const machineStateOf = (standing: MachineStanding): LocalMachineState => {
+    switch (standing.state) {
+        case `creating`:
+            return { state: `creating`, phase: standing.phase, step: standing.step, percent: standing.percent };
+        case `needsDocker`:
+            return { state: `needsDocker`, reason: standing.reason };
         case `waiting`:
-            return `waiting`;
-        case `stopped`:
-            return `stopped`;
-        case `done`:
-            return `ready`;
+            return { state: `waiting`, for: standing.for };
+        case `failed`:
+            return { state: `failed`, reason: standing.reason };
         default:
-            return `failed`;
+            return { state: standing.state };
     }
 };
 
-export const projectBuildOf = (facts: BuildFacts): LocalProjectBuild | undefined => {
-    const args = facts.adopted;
-    if (args === undefined) {
-        return undefined;
-    }
-    const steps = facts.view?.steps ?? [];
-    const running = steps.find((step) => step.state === `running`);
-    // A run that ended keeps the phase it ended on: the house stands as far as it got.
-    const reachedTo = running ?? steps.findLast((step) => step.state === `done`);
-    const phase = reachedTo?.phase;
-    const state = stateOf(facts, running?.phase);
-    return {
-        name: args.name ?? args.project ?? ``,
-        state,
-        phase,
-        phaseProgress: facts.view?.stepProgress ?? 0,
-        step: running?.label,
-        percent: state === `ready` ? 100 : (facts.view?.percent ?? 0),
-        remainingMs: state === `building` ? facts.view?.remainingMs : undefined,
-        error: state === `failed` ? facts.error : undefined,
-    };
+/** The record as every window's card draws it; nothing before the app has said. */
+export const machineOf = (record: MachineSandbox | undefined): LocalMachineSandbox | undefined =>
+    record === undefined
+        ? undefined
+        : {
+              ...machineStateOf(record),
+              name: record.name,
+              waiting: record.folders.filter((folder) => folder.state === `queued`).length,
+              hasLog: record.logPath !== undefined,
+          };
+
+/** The folder this window shows (its face's `path`) on its way into this computer's sandbox; nothing when it is not. */
+export const folderOf = (record: MachineSandbox | undefined, path: string | undefined): LocalFolderSandbox | undefined => {
+    const folder = machineFolderOf(record, path);
+    return folder === undefined ? undefined : { name: folder.name, state: folder.state, reason: folder.reason, status: folder.status };
 };
 
-/** The workspace's address for the built sandbox, opened on the folder (the app's project.rs `project_path`). */
-export const projectPathOf = (args: Pick<SetupArgs, `sandboxId` | `project`>): string | undefined => {
+/** The workspace's address for a folder's sandbox, opened on the folder (the app's project.rs `project_path`). */
+export const projectPathOf = (args: { readonly sandboxId: string | undefined; readonly project: string | undefined }): string | undefined => {
     if (args.sandboxId === undefined || args.sandboxId === ``) {
         return undefined;
     }

@@ -1,4 +1,5 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ import {
 } from "@intentic/local-agent";
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
-import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingRemoteDir, projectDirection } from "./config.js";
+import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
@@ -36,19 +37,37 @@ export const MUTAGEN_CALL_TIMEOUT_MS = 60_000;
 // Prefix every session this agent creates carries, sync and forward alike, so they're all findable again.
 const SESSION_PREFIX = "intentic-";
 
-// The Mutagen session name (letters/digits/dashes) that `sync list/pause/resume/terminate` target.
-export const sessionName = (sandboxId: string): string => `${SESSION_PREFIX}${sanitizeId(sandboxId)}`;
+// The Mutagen session name (letters/digits/dashes) that `sync list/pause/resume/terminate` target, from a pairing's key
+// (config.ts `pairingKey`). A key that is a sandbox id names its session as it always has. An attached folder's
+// (`<sandboxId>~<name>`) is `intentic-<sandbox>--<name>-<hash>`: a sanitized id never holds `--`, so it can be no
+// sandbox's session nor its `-state` backup, and the hash of the exact name keeps `my.app` and `my_app`, which sanitize
+// alike, two sessions.
+export const sessionName = (key: string): string => {
+    const at = key.lastIndexOf("~");
+    if (at === -1) {
+        return `${SESSION_PREFIX}${sanitizeId(key)}`;
+    }
+    const name = key.slice(at + 1);
+    const hash = createHash("sha256").update(name).digest("hex").slice(0, 8);
+    return `${SESSION_PREFIX}${sanitizeId(key.slice(0, at))}--${sanitizeId(name)}-${hash}`;
+};
 
 // The backup session's name, carrying the sandbox's state dir one-way. Hangs off the workspace session's name
 // rather than its own prefix, so prefix-based sweeps (oursIn, parseOrphanSyncNames) still find it.
-export const backupSessionName = (sandboxId: string): string => `${sessionName(sandboxId)}-state`;
+export const backupSessionName = (key: string): string => `${sessionName(key)}-state`;
 
 // A pairing's sync sessions, workspace then backup; pause, resume, terminate and the orphan sweep all act on these names
 // together. A project pairing has the workspace session alone: its folder is the owner's project, and the backup would
-// write the sandbox's state into it. Naming a session that does not exist is not harmless either, since `sync terminate
-// a b` fails whole on one unresolved name.
-export const syncSessionNames = (pairing: Pick<Pairing, "sandboxId" | "project">): readonly string[] =>
-    isProjectPairing(pairing) ? [sessionName(pairing.sandboxId)] : [sessionName(pairing.sandboxId), backupSessionName(pairing.sandboxId)];
+// write the sandbox's state into it. The projects host has none at all: it holds no folder, only the token its attached
+// folders share. Naming a session that does not exist is not harmless either, since `sync terminate a b` fails whole on
+// one unresolved name.
+export const syncSessionNames = (pairing: Pick<Pairing, "sandboxId" | "project" | "key" | "projectsHost">): readonly string[] => {
+    if (pairing.projectsHost === true) {
+        return [];
+    }
+    const key = pairingKey(pairing);
+    return isProjectPairing(pairing) ? [sessionName(key)] : [sessionName(key), backupSessionName(key)];
+};
 
 // One forward session per port, deterministically named so reconcile can target it without querying Mutagen's
 // session list. The name carries the sandbox id, so a session outlives the config that could name it.
@@ -175,7 +194,7 @@ export const syncMode = (pairing: Pick<Pairing, "project" | "direction">): "two-
 // The workspace session for a pairing: name and alias namespace on the sandbox id; the remote side is /work, or the
 // project folder a project pairing syncs (config.ts), and each kind gets its own ignore list (ssh.ts).
 export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
-    name: sessionName(pairing.sandboxId),
+    name: sessionName(pairingKey(pairing)),
     localDir: pairing.localDir,
     remote: pairingEndpoint(pairing),
     remoteDir: pairingRemoteDir(pairing),
@@ -190,7 +209,7 @@ export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, sy
 // writer. Halts rather than emptying beta when alpha's root disappears, so a mid-rebuild sandbox isn't read as a
 // deleted backup. Never for a project pairing (syncSessionNames says why).
 const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
-    name: backupSessionName(pairing.sandboxId),
+    name: backupSessionName(pairingKey(pairing)),
     localDir: join(pairing.localDir, STATE_DIR),
     remote: pairingEndpoint(pairing),
     remoteDir: `${WORKSPACE_ROOT}/${STATE_DIR}`,
@@ -603,7 +622,7 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     const symlinks = await deviceSymlinks();
     if (symlinks.refusal !== undefined) {
         log(
-            `${pairing.sandboxId}: this device cannot create symbolic links (${symlinks.refusal}), so its file sync leaves them out instead of failing on each one every cycle. On Windows, turning on Developer Mode lets the next start of this agent carry them.`,
+            `${pairingKey(pairing)}: this device cannot create symbolic links (${symlinks.refusal}), so its file sync leaves them out instead of failing on each one every cycle. On Windows, turning on Developer Mode lets the next start of this agent carry them.`,
         );
     }
     // Both sessions, converged in order, sequential since they share one ssh transport and daemon; workspace first
@@ -624,16 +643,16 @@ export const sessionSpecs = (pairing: Pairing & { readonly localDir: string }, s
 // A state backup a project pairing should never have had, found and terminated: an older agent's, or one left from when
 // this sandbox was paired as a workspace. Surplus rather than a choice, since it writes the sandbox's state dir into the
 // owner's own project folder for as long as it runs.
-export const strayBackupSessions = (pairing: Pick<Pairing, "sandboxId" | "project">, live: readonly string[]): string[] =>
-    isProjectPairing(pairing) ? live.filter((name) => name === backupSessionName(pairing.sandboxId)) : [];
+export const strayBackupSessions = (pairing: Pick<Pairing, "sandboxId" | "project" | "key">, live: readonly string[]): string[] =>
+    isProjectPairing(pairing) ? live.filter((name) => name === backupSessionName(pairingKey(pairing))) : [];
 
 const retireStrayBackup = (mutagen: string, pairing: Pairing, log: Log): void => {
-    const stray = strayBackupSessions(pairing, existingSyncSessions(mutagen, [backupSessionName(pairing.sandboxId)]));
+    const stray = strayBackupSessions(pairing, existingSyncSessions(mutagen, [backupSessionName(pairingKey(pairing))]));
     if (stray.length === 0) {
         return;
     }
     spawnSync(mutagen, ["sync", "terminate", ...stray], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
-    log(`${pairing.sandboxId}: its folder is a project of yours, which carries no copy of the sandbox's state; terminated the state backup that was writing one into it.`);
+    log(`${pairingKey(pairing)}: its folder is a project of yours, which carries no copy of the sandbox's state; terminated the state backup that was writing one into it.`);
 };
 
 // Every session under one name except the oldest, by identifier. Mutagen lists sessions by creation time. Terminating
@@ -801,13 +820,13 @@ export const healDerivedConflicts = async (mutagen: string, pairing: Pairing, lo
     if (!asked && (pairing.autoHealOff === true || pairing.fileSyncAutoPaused === true)) {
         return idle;
     }
-    const held = readSessionConflicts(mutagen, sessionName(pairing.sandboxId));
+    const held = readSessionConflicts(mutagen, sessionName(pairingKey(pairing)));
     if (held === undefined || held.conflicts.length === 0) {
         return idle;
     }
     const outcome = await clearConflictResidue({ root: pairing.localDir, conflicts: held.conflicts, ignores: held.ignores, log });
     if (outcome.removed.length > 0) {
-        await flushSession(mutagen, sessionName(pairing.sandboxId));
+        await flushSession(mutagen, sessionName(pairingKey(pairing)));
     }
     return outcome;
 };

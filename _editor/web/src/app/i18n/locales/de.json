@@ -5518,7 +5518,6 @@
     "local": {
         "localFiles": {
             "keepsFolderSynced": "Hält diesen Ordner synchron",
-            "newSandbox": "Neue Sandbox",
             "reveal": "Datei zeigen",
             "startsIfStopped": "Startet sie bei Bedarf",
             "syncedSandbox": "Synchrone Sandbox",

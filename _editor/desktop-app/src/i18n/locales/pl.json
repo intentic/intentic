@@ -147,6 +147,50 @@
         "settingUpBadge": "konfiguracja: {name}",
         "needsYouBadge": "czeka na Ciebie",
         "startingDockerBadge": "uruchamianie Dockera",
-        "updateReadyBadge": "aktualizacja jest gotowa"
+        "updateReadyBadge": "aktualizacja jest gotowa",
+        "machineBadge": "konfiguracja sandboxa tego komputera"
+    },
+    "machineSandbox": {
+        "title": "Sandbox tego komputera",
+        "state": {
+            "signedOut": "powstanie po zalogowaniu",
+            "needsDocker": "potrzebuje Dockera",
+            "creating": "konfiguracja",
+            "waiting": "czeka na Twoją zgodę",
+            "ready": "gotowy",
+            "stopped": "zatrzymany",
+            "failed": "nieskonfigurowany",
+            "interrupted": "wznawianie konfiguracji",
+            "gone": "usunięty"
+        },
+        "detail": {
+            "signedOut": "Zaloguj się, a Intentic utworzy na tym komputerze jeden sandbox na foldery, nad którymi pracujesz z agentem.",
+            "needsDocker": {
+                "notInstalled": "Działa w Dockerze, którego nie ma na tym komputerze. Zainstaluj Docker Desktop, a Intentic skonfiguruje sandbox, gdy tylko Docker zadziała.",
+                "notRunning": "Działa w Dockerze, który nie jest uruchomiony. Uruchom go, a Intentic sam dokończy resztę.",
+                "notAllowed": "Docker działa, ale odmawia temu kontu dostępu. Dodaj swoje konto do grupy Dockera (w Windows: docker-users), a potem wyloguj się i zaloguj ponownie."
+            },
+            "creating": "Intentic konfiguruje go w tle. Twoje foldery trafią do niego, gdy tylko będzie gotowy.",
+            "interrupted": "Intentic został zamknięty w trakcie konfiguracji, więc wznawia ją od miejsca, w którym przerwał.",
+            "waiting": "Ten komputer potrzebuje kilku rzeczy, zanim uruchomi sandbox.",
+            "ready": "Foldery, nad którymi pracujesz z agentem, trafiają do niego, każdy do osobnego folderu.",
+            "stopped": "Jest na tym komputerze, ale nie działa. Uruchom go, aby pracować nad folderami z agentem.",
+            "failed": "Konfiguracja się zatrzymała. Log pokazuje, co wtedy robiła.",
+            "gone": "Nie ma go już na Twoim koncie ani na tym komputerze. Utwórz nowy, a Twoje foldery do niego trafią."
+        },
+        "percent": "{percent}%",
+        "open": "Otwórz",
+        "signIn": "Zaloguj się",
+        "getDocker": "Pobierz Docker Desktop",
+        "showLog": "Pokaż log",
+        "start": "Uruchom",
+        "recreate": "Utwórz nowy",
+        "folder": {
+            "queued": "czeka",
+            "attaching": "dodawanie",
+            "copying": "kopiowanie",
+            "ready": "w środku",
+            "failed": "nie udało się dodać"
+        }
     }
 }

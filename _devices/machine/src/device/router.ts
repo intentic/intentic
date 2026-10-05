@@ -1,11 +1,14 @@
 import { narrate } from "@intentic/base/async";
-import type { DeviceScopes, DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
+import type { DeviceScopes, DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp, ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { audit } from "./audit.js";
 import { readGrant, tolerantDeviceContract } from "./grant.js";
 import { calling } from "./indicator.js";
 import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
+import { DeliveryRefused, deliverProject } from "../sync/project-delivery.js";
 import { machineReport } from "../sync/report.js";
 import { runAgentOp } from "./tools/agent.js";
 import {
@@ -142,6 +145,27 @@ const flowFor: FlowFor = (input, scopes) =>
           }
         : FLOWS[input.op](input, scopes);
 
+// LANDED WORK INTO A FOLDER ATTACHED TO THIS COMPUTER'S SANDBOX (sync/project-delivery.ts). Behind no switch of the
+// grant: the folder's own opt-in (`deliver: "auto"`, which `sync attach` records) is the permission, and only a folder of
+// the sandbox on this link's other end is ever found. Not a tool either, so no agent can call it; the daemon does, after
+// a land. Logged and audited like every call, and a refusal travels as its own sentence for the land's card.
+const deliverOverLink = async (runtime: HostRuntime, delivery: ProjectDelivery): Promise<ProjectDeliveryResult> => {
+    const asked = `${delivery.remoteDir} ← ${delivery.landing.agentId}${delivery.landing.title === undefined ? "" : ` (${delivery.landing.title})`}, ${delivery.files.length} file(s)`;
+    try {
+        const result = await deliverProject(delivery, runtime.sandboxUrl);
+        const said = `${asked}: ${result.applied.length} applied, ${result.merged.length} merged, ${result.already.length} already there, ${result.conflicts.length} kept as the owner has them${result.point === undefined ? "" : `, restore point ${result.point}`}`;
+        void audit({ tool: "deliverProject", ok: true, detail: `${result.folder}: ${said}` });
+        runtime.log(`${runtime.sandboxUrl}: delivered ${said}`);
+        return result;
+    } catch (error) {
+        void audit({ tool: "deliverProject", ok: false, detail: `${asked}: ${error instanceof DeliveryRefused ? "refused" : "failed"}: ${errorMessage(error)}` });
+        runtime.log(`${runtime.sandboxUrl}: did not deliver ${asked}: ${errorMessage(error)}`);
+        throw error instanceof DeliveryRefused
+            ? new ORPCError(error.code, { message: error.message })
+            : new ORPCError("INTERNAL_SERVER_ERROR", { message: errorMessage(error) });
+    }
+};
+
 export const createHostRouter = (runtime: HostRuntime) => {
     const os = implement(tolerantDeviceContract);
     // Switches a grant carried that this agent does not know, each said once per link rather than on every reconnect.
@@ -191,5 +215,6 @@ export const createHostRouter = (runtime: HostRuntime) => {
         catchLoopback: os.catchLoopback.handler(({ input, signal }) =>
             catchLoopback(input, signal, (message) => runtime.log(`${runtime.sandboxUrl}: ${message}`)),
         ),
+        deliverProject: os.deliverProject.handler(async ({ input }) => await deliverOverLink(runtime, input)),
     });
 };

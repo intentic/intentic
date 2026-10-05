@@ -223,6 +223,9 @@ export const REPLAY_ENV = [
     // The folder of the owner's computer this sandbox was made for, synced into `/work/<name>` (connect.rs). What the
     // sandbox IS rather than a setting: a recreate that dropped it would seed a starter site beside the owner's project.
     "SANDBOX_PROJECT_DIR",
+    // This computer's own sandbox, which folders attach to later (connect.rs). Also what the sandbox is: a recreate that
+    // dropped it would seed a starter site and stop taking the folders the machine agent attaches.
+    "SANDBOX_PROJECTS_HOST",
 ] as const;
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:

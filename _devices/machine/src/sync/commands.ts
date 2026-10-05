@@ -17,8 +17,10 @@ import { ensureResident, readResidentBuild, readResidentPid } from "../resident.
 import { MACHINE_VERSION } from "../version.js";
 import { machineLauncher } from "../supervision.js";
 import {
+    isAttachedPairing,
     isProjectPairing,
     type Pairing,
+    pairingKey,
     pairingRemoteDir,
     readState,
     removePairing,
@@ -27,13 +29,13 @@ import {
     setPortIgnored,
     type SyncMode,
     type SyncState,
-    type SyncTransport,
     upsertPairing,
 } from "./config.js";
-import { localSandboxContainer } from "./endpoint.js";
+import { type TransportAsk, transportFor } from "./endpoint.js";
 import { overlappingPairing } from "./folders.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
+import { attachCommands } from "./attach-commands.js";
 import { projectCommands } from "./project-commands.js";
 import {
     ensureMutagen,
@@ -62,26 +64,26 @@ import {
     writeManagedSshConfig,
 } from "./ssh.js";
 
+// Where a new pairing's transport is decided now lives beside the transports themselves (endpoint.ts).
+export { transportFor } from "./endpoint.js";
+
 // Which pairings a command acts on. No selector means every one this machine holds; `--sandbox` takes the
-// sandbox id or any substring matching exactly one (real ids are `sandbox-<hex>-<zone>`-shaped).
+// sandbox id or any substring matching exactly one (real ids are `sandbox-<hex>-<zone>`-shaped), and selects every
+// pairing of that sandbox: its own, and each folder attached to it.
 export const selectPairings = (state: SyncState, selector: string | undefined): readonly Pairing[] => {
     if (selector === undefined) {
         return state.pairings;
     }
-    const exact = state.pairings.filter((pairing) => pairing.sandboxId === sanitizeId(selector));
-    if (exact.length === 1) {
-        return exact;
-    }
-    const matched = state.pairings.filter((pairing) => pairing.sandboxId.includes(selector));
+    const ids = [...new Set(state.pairings.map((pairing) => pairing.sandboxId))];
+    const exact = ids.filter((id) => id === sanitizeId(selector));
+    const matched = exact.length === 1 ? exact : ids.filter((id) => id.includes(selector));
     if (matched.length === 0) {
-        throw new Error(
-            `no paired sandbox matches "${selector}". This machine pairs: ${state.pairings.map((pairing) => pairing.sandboxId).join(", ") || "none"}`,
-        );
+        throw new Error(`no paired sandbox matches "${selector}". This machine pairs: ${ids.join(", ") || "none"}`);
     }
     if (matched.length > 1) {
-        throw new Error(`"${selector}" matches more than one paired sandbox: ${matched.map((pairing) => pairing.sandboxId).join(", ")}`);
+        throw new Error(`"${selector}" matches more than one paired sandbox: ${matched.join(", ")}`);
     }
-    return matched;
+    return state.pairings.filter((pairing) => pairing.sandboxId === matched[0]);
 };
 
 // Enrolls this machine's SSH key with the single-use pairing token; a 423 or any other 4xx is the daemon's final answer.
@@ -167,45 +169,15 @@ interface SetupFlags {
     readonly remoteDir?: string;
     readonly project: boolean;
     readonly transport?: TransportAsk;
+    // This computer's own sandbox, enrolled with no folder of its own: folders attach to it (`sync attach`).
+    readonly projectsHost?: boolean;
 }
-
-// What `--transport` may ask for: a transport by name, or `auto`, the default, which lets transportFor decide.
-type TransportAsk = "auto" | SyncTransport;
 
 const parseTransport = (value: string): TransportAsk => {
     if (value !== "auto" && value !== "ssh" && value !== "docker") {
         throw new Error(`"${value}" is not a transport: auto (the default), ssh or docker.`);
     }
     return value;
-};
-
-// HOW A NEW PAIRING REACHES ITS SANDBOX (endpoint.ts). A project folder whose sandbox container runs on this machine's
-// own Docker engine is reached through Docker, with nothing on ssh, the tunnel or a public address on the data path;
-// every other pairing over ssh, as before. `--transport` overrides the choice, and docker asked for where it cannot work
-// is refused before the pairing token is spent. Stored as absent for ssh, the shape every earlier pairing has.
-export const transportFor = async (
-    asked: TransportAsk,
-    placement: Pick<Pairing, "project">,
-    sandboxUrl: string,
-    locate: (sandboxUrl: string) => Promise<string | undefined> = localSandboxContainer,
-): Promise<Pick<Pairing, "transport" | "container">> => {
-    if (asked === "ssh") {
-        return {};
-    }
-    if (!isProjectPairing(placement)) {
-        if (asked === "docker") {
-            throw new Error("--transport docker is for a project folder (--project): a workspace pairing's git bridge and state backup ride ssh.");
-        }
-        return {};
-    }
-    const container = await locate(sandboxUrl);
-    if (container === undefined) {
-        if (asked === "docker") {
-            throw new Error(`--transport docker needs this sandbox's container running on this machine's Docker engine, and none here serves ${sandboxUrl}.`);
-        }
-        return {};
-    }
-    return { transport: "docker", container };
 };
 
 // `--remote-dir`, held to the two shapes a pairing may take (config.ts pairingProblem) before anything is enrolled.
@@ -277,6 +249,11 @@ const setup = buildCommand<SetupFlags>({
                 optional: true,
                 brief: "How the sandbox is reached: auto (the default: Docker for a project whose sandbox runs on this machine's engine, ssh otherwise), ssh or docker",
             },
+            projectsHost: {
+                kind: "boolean",
+                optional: true,
+                brief: "Enroll this computer's own sandbox with no folder of its own, for folders to attach to (`sync attach`); takes no --dir, --remote-dir or --project",
+            },
         },
     },
     async func(this: CommandContext, flags: SetupFlags) {
@@ -334,28 +311,57 @@ export const projectAskedWithoutFlag = (flags: Pick<SetupFlags, "project">, env:
         : undefined;
 };
 
+// THE PROJECTS HOST, this computer's own sandbox that folders attach to, is a pairing of its own kind: it holds the
+// sync token and mirrors the ports, and holds no folder. Setting a sandbox up again as the other kind would either leave
+// its attached folders with no sandbox pairing, or drop the folder it syncs; either is an unpair first, said out loud.
+// `--projects-host` takes no folder flag at all. Undefined when nothing disagrees.
+export const projectsHostChange = (
+    held: Pick<Pairing, "sandboxId" | "localDir" | "projectsHost"> | undefined,
+    flags: Pick<SetupFlags, "projectsHost" | "dir" | "remoteDir" | "project">,
+): string | undefined => {
+    if (flags.projectsHost === true && (flags.dir !== undefined || flags.remoteDir !== undefined || flags.project)) {
+        return "--projects-host enrolls this computer's sandbox with no folder of its own, so it takes no --dir, --remote-dir or --project. Attach folders to it afterwards with `intentic-machine sync attach`.";
+    }
+    if (held === undefined) {
+        return undefined;
+    }
+    if (flags.projectsHost === true && held.localDir !== undefined) {
+        return `${held.sandboxId} already syncs ${held.localDir}; setting it up as this computer's sandbox for folders would stop that. Unpair it first (\`intentic-machine sync uninstall --sandbox ${held.sandboxId}\`), then set it up again.`;
+    }
+    if (flags.projectsHost !== true && held.projectsHost === true) {
+        return `${held.sandboxId} is this computer's sandbox for folders, which attach to it; setting it up for a folder of its own would leave them without it. Set it up again with --projects-host, or unpair it first (\`intentic-machine sync uninstall --sandbox ${held.sandboxId}\`).`;
+    }
+    return undefined;
+};
+
 // Everything that can refuse this setup, asked before the single-use pairing token is spent on it: where the folder
-// syncs to, whether this sandbox already syncs it somewhere else, and whether another sandbox's pairing holds it.
+// syncs to, whether this sandbox already syncs it somewhere else, and whether another pairing holds it.
 const planSetup = async (
     flags: SetupFlags,
 ): Promise<{
     readonly sandboxId: string;
     readonly placement: Pick<Pairing, "remoteDir" | "project">;
-    readonly folder: string;
+    readonly folder: string | undefined;
     readonly reach: Pick<Pairing, "transport" | "container">;
 }> => {
-    const skewed = projectAskedWithoutFlag(flags);
+    const skewed = flags.projectsHost === true ? undefined : projectAskedWithoutFlag(flags);
     if (skewed !== undefined) {
         throw new Error(skewed);
     }
     const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
+    const { pairings } = await readState();
+    // The sandbox's own pairing, never a folder attached to it: those are filed under keys of their own.
+    const held = pairings.find((pairing) => pairingKey(pairing) === sandboxId);
+    const hostChange = projectsHostChange(held, flags);
+    if (hostChange !== undefined) {
+        throw new Error(hostChange);
+    }
+    if (flags.projectsHost === true) {
+        return { sandboxId, placement: {}, folder: undefined, reach: await transportFor(flags.transport ?? "auto", { projectsHost: true }, flags.url) };
+    }
     const placement = placementOf(flags);
     const folder = wantedFolder(flags, sandboxId);
-    const { pairings } = await readState();
-    const changed = placementChange(
-        pairings.find((held) => held.sandboxId === sandboxId),
-        placement,
-    );
+    const changed = placementChange(held, placement);
     if (changed !== undefined) {
         throw new Error(changed);
     }
@@ -388,36 +394,42 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     await pinHostKey(sandboxId, hostKey, container);
 
     // A project folder is only ever file sync: an enrollment that came back ports-only (another machine holds this
-    // sandbox's sync) would leave the owner's project unsynced under a card that says it is, so it is handed back.
-    if (placement.project === true && mode !== "sync") {
+    // sandbox's sync) would leave the owner's project unsynced under a card that says it is, so it is handed back. The
+    // projects host likewise: the folders that attach to it are file sync.
+    if ((placement.project === true || flags.projectsHost === true) && mode !== "sync") {
         await revokeEnrollment(flags.url, syncToken).catch((error: unknown) =>
             out(
                 `note: ${flags.url} could not be told to forget this machine (${errorMessage(error)}), so its sync key is still authorized there. Remove this machine from that sandbox's Devices view.`,
             ),
         );
         throw new Error(
-            "another machine holds file sync for this sandbox, so this project folder cannot sync here. Re-run with --takeover to move sync to this machine.",
+            `another machine holds file sync for this sandbox, so ${flags.projectsHost === true ? "no folder can attach to it" : "this project folder cannot sync"} here. Re-run with --takeover to move sync to this machine.`,
         );
     }
 
-    // File sync exists only in "sync" mode; a mirror-only enrollment has no local dir, just port forwards.
+    // File sync exists only in "sync" mode; a mirror-only enrollment has no local dir, just port forwards, and the
+    // projects host has none by design.
     const localDir = mode === "sync" ? folder : undefined;
     if (localDir !== undefined) {
         // Create the local root up front: an immediately-visible folder is the user's anchor that setup worked.
         await mkdir(localDir, { recursive: true });
     }
 
-    const pairing: Pairing = {
-        sandboxUrl: flags.url,
-        sandboxId,
-        mode,
-        syncToken,
-        ...(localDir === undefined ? {} : { localDir, ...placement, ...reach }),
-    };
+    const pairing: Pairing =
+        flags.projectsHost === true
+            ? { sandboxUrl: flags.url, sandboxId, mode, syncToken, projectsHost: true, ...reach }
+            : {
+                  sandboxUrl: flags.url,
+                  sandboxId,
+                  mode,
+                  syncToken,
+                  ...(localDir === undefined ? {} : { localDir, ...placement, ...reach }),
+              };
 
     ui.step("sync-linking", "linking the folder to your sandbox…");
     // ADD this pairing to whatever this machine already holds: pairing a second sandbox used to overwrite the
-    // first, dropping its ssh alias, folder and file-sync session.
+    // first, dropping its ssh alias, folder and file-sync session. A new token reaches every folder attached to the
+    // sandbox too (config.ts withPairing).
     await upsertPairing(pairing);
     const pairings = (await readState()).pairings;
 
@@ -433,8 +445,8 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // command's as well. The two used to race, and one name ended up holding two identical sessions. Waiting for it is
     // only so the lines below can say it began. Every other pairing's session keeps running; only sessions no pairing
     // claims are swept.
-    if (mode === "sync" && !(await syncSessionAppears(mutagen, sandboxId, SESSION_READY_MS))) {
-        out(await notStartedYet(localDir ?? sandboxId));
+    if (mode === "sync" && localDir !== undefined && !(await syncSessionAppears(mutagen, sandboxId, SESSION_READY_MS))) {
+        out(await notStartedYet(localDir));
     }
     retireOrphanSessions(mutagen, pairings, out);
     // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from the first
@@ -485,10 +497,22 @@ const proveTransport = async (out: Log, sandboxId: string, container: string | u
 // they open, and an immediately visible path is the anchor that setup worked.
 const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: readonly Pairing[]): void => {
     if (pairings.length > 1) {
-        ui.note(`This machine now syncs ${pairings.length} sandboxes:`);
+        ui.note(`This machine now syncs ${pairings.length} pairings:`);
         for (const held of pairings) {
-            ui.note(`  ${held.sandboxId}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
+            ui.note(`  ${pairingKey(held)}${held.projectsHost === true ? " (this computer's sandbox, for folders)" : held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
         }
+    }
+    if (pairing.projectsHost === true) {
+        ui.finished(
+            "This computer's sandbox is ready for folders.",
+            undefined,
+            `Ports from ${sandboxUrl} answer on this machine's localhost, and folders attach to it as ${WORKSPACE_ROOT}/<name>.`,
+            [
+                ["attach a folder", "intentic-machine sync attach --sandbox-url <url> --dir <folder> --name <name>"],
+                ["check it", "intentic-machine status"],
+            ],
+        );
+        return;
     }
     const syncing = pairing.mode === "sync";
     ui.finished(
@@ -514,9 +538,9 @@ const SESSION_READY_MS = 90_000;
 
 // Whether the agent has created this pairing's workspace session within `withinMs`. Blocking `sync list` is fine
 // here: this is the one-shot CLI, which serves no transport (exec.ts).
-const syncSessionAppears = async (mutagen: string, sandboxId: string, withinMs: number): Promise<boolean> => {
+const syncSessionAppears = async (mutagen: string, key: string, withinMs: number): Promise<boolean> => {
     const deadline = Date.now() + withinMs;
-    while (existingSyncSessions(mutagen, [sessionName(sandboxId)]).length === 0) {
+    while (existingSyncSessions(mutagen, [sessionName(key)]).length === 0) {
         if (Date.now() >= deadline) {
             return false;
         }
@@ -562,7 +586,8 @@ export const syncSwitchPlan = (
     return { names: acted.flatMap(covered), acted, idle: syncing.filter((pairing) => covered(pairing).length === 0) };
 };
 
-const named = (pairings: readonly Pairing[]): string => pairings.map((pairing) => pairing.sandboxId).join(", ");
+// Each pairing by its key: the sandbox id, or `<sandboxId>~<name>` for a folder attached to it.
+const named = (pairings: readonly Pairing[]): string => pairings.map(pairingKey).join(", ");
 
 // A command over the pairings `--sandbox` selects; `none` is what it says when that selects nothing.
 const pairingCommand = <F extends SandboxFlags>(
@@ -601,7 +626,8 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
         sandboxFlag,
         `no sandboxes are paired on this machine: nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`,
         async (selected, _flags, out) => {
-            const syncing = selected.filter((pairing) => pairing.mode === "sync");
+            // The projects host holds no folder of its own: its folders' sessions are theirs.
+            const syncing = selected.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
             if (syncing.length === 0) {
                 out(`mirror-only enrollment${selected.length > 1 ? "s" : ""}, no file sync to ${verb}.`);
                 return;
@@ -632,13 +658,17 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
 const mirrorSwitch = (brief: string, off: boolean) =>
     pairingCommand<SandboxFlags>(brief, sandboxFlag, NONE_TO_MIRROR, async (selected, _flags, out) => {
         const mutagen = await ensureMutagen();
+        // Every pairing of the sandbox carries the switch (a folder attached to it reports it), and the forwards are the
+        // sandbox's, torn down once.
         for (const pairing of selected) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-            await setMirrorOff(pairing.sandboxId, off);
-            // OFF takes effect now, ON is the watcher's: creating a forward dials over the transport that agent holds.
-            if (off) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
-                await retirePairingMirror(mutagen, pairing.sandboxId);
+            await setMirrorOff(pairingKey(pairing), off);
+        }
+        // OFF takes effect now, ON is the watcher's: creating a forward dials over the transport that agent holds.
+        if (off) {
+            for (const sandboxId of new Set(selected.map((pairing) => pairing.sandboxId))) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox's teardown at a time, as everywhere else here
+                await retirePairingMirror(mutagen, sandboxId);
             }
         }
         if (off) {
@@ -672,9 +702,10 @@ const mirrorPortSwitch = (brief: string, ignored: boolean) =>
         async (selected, flags, out) => {
             const mutagen = await ensureMutagen();
             let taken = 0;
-            for (const pairing of selected) {
+            // Only the pairing that mirrors its sandbox's ports (never a folder attached to it) holds the number.
+            for (const pairing of selected.filter((held) => !isAttachedPairing(held))) {
                 // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-                await setPortIgnored(pairing.sandboxId, flags.port, ignored);
+                await setPortIgnored(pairingKey(pairing), flags.port, ignored);
                 if (ignored) {
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
                     taken += (await retireMirroredPort(mutagen, pairing.sandboxId, flags.port)) ? 1 : 0;
@@ -748,7 +779,7 @@ const autoHealSwitch = (brief: string, off: boolean) =>
     pairingCommand<SandboxFlags>(brief, sandboxFlag, "no sandboxes are paired on this machine: nothing to switch.", async (selected, _flags, out) => {
         for (const pairing of selected) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-            await setAutoHealOff(pairing.sandboxId, off);
+            await setAutoHealOff(pairingKey(pairing), off);
         }
         out(
             off
@@ -773,12 +804,16 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
     const state = await readState();
     const dropped = selectPairings(state, sandbox);
     const mutagen = await ensureMutagen();
-    const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairing.sandboxId === held.sandboxId));
+    const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairingKey(pairing) === pairingKey(held)));
+    // One enrollment per sandbox, however many of its pairings go (its projects host and its attached folders).
+    const revoked = new Set<string>();
 
     // Self-revoke each dropped enrollment so its sandbox drops the key + token. An unreachable sandbox doesn't block
     // local teardown, but the owner is told the key is still authorized there.
     for (const pairing of dropped) {
-        if (pairing.syncToken !== undefined) {
+        const firstOfSandbox = !revoked.has(pairing.sandboxId);
+        revoked.add(pairing.sandboxId);
+        if (pairing.syncToken !== undefined && firstOfSandbox) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- Drops are sequenced so failures identify one sandbox.
             await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch((error: unknown) =>
                 out(
@@ -786,16 +821,18 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
                 ),
             );
         }
-        if (pairing.mode === "sync") {
+        if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
             // The pair goes together: a surviving backup session would keep mirroring a sandbox this machine has just
             // unpaired, writing into a folder the owner considers released.
             spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { stdio: "ignore", windowsHide: true });
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-        await retirePairingMirror(mutagen, pairing.sandboxId);
+        if (firstOfSandbox) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            await retirePairingMirror(mutagen, pairing.sandboxId);
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await removePairing(pairing.sandboxId);
-        out(`unpaired ${pairing.sandboxId}${pairing.localDir === undefined ? "" : ` (${pairing.localDir} is no longer synced)`}.`);
+        await removePairing(pairingKey(pairing));
+        out(`unpaired ${pairingKey(pairing)}${pairing.localDir === undefined ? "" : ` (${pairing.localDir} is no longer synced)`}.`);
     }
 
     if (remaining.length > 0) {
@@ -805,7 +842,7 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
         // alone too.
         await writeManagedSshConfig(pairingSshConfig(remaining));
         await ensureResident(out, { forGood });
-        out(`Still syncing ${plural(remaining.length, "sandbox")}: ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
+        out(`Still syncing ${plural(remaining.length, "pairing")}: ${named(remaining)}`);
         return;
     }
 
@@ -841,4 +878,4 @@ const uninstall = buildCommand<SandboxFlags>({
 const pause = fileSyncSwitch("Pause file syncing", "pause");
 const resume = fileSyncSwitch("Resume file syncing", "resume");
 
-export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, ...projectCommands };
+export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, ...attachCommands, ...projectCommands };

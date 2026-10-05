@@ -2,6 +2,7 @@ import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { childLandingWords, reportChildLanded } from "../agent/subagents/child-lands.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { adoptChildTurn, childKillNote } from "../agent/subagents/children.js";
+import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
@@ -11,6 +12,8 @@ import { createCiPoller } from "../ci/poller.js";
 import { createOriginFollow, type OriginFollowDeps } from "../git/remote/follow-origin.js";
 import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import type { BootPhase } from "./boot-phase.js";
+import { publicAddressOf } from "../env.config.js";
+import { reportedPairings } from "../hosts/device-reports.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
@@ -43,6 +46,29 @@ const originFollowDeps = (services: BootPhase["services"], logger: BootPhase["lo
     logger,
 });
 
+// What delivering landed work to the owner's folder reads off the daemon (land/project-delivery.ts): the machines and
+// what each reports of its folders (hosts/), and the names this sandbox goes by on them.
+const projectDeliveryDeps = (services: BootPhase["services"]): ProjectDeliveryDeps => ({
+    agents: services.agents,
+    agentWorktrees: services.agentWorktrees,
+    events: services.events,
+    hostHub: services.hostHub,
+    logger: services.logger,
+    syncFleet: services.syncFleet,
+    historyRoot: services.config.historyRoot,
+    publicUrl: services.config.sandbox.publicUrl,
+    platformId: publicAddressOf(services.config).sandboxId,
+    pairingsOf: async (host) => await reportedPairings(services, host),
+});
+
+// Work landing in a folder attached to this computer's own sandbox goes to the folder on the computer as well
+// (land/project-delivery.ts): only on that sandbox, and only from the daemon that owns the container.
+const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
+    if (role.container && services.config.sandbox.projectsHost) {
+        shutdown.push(createProjectDelivery(projectDeliveryDeps(services)).start());
+    }
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     const scheduler = createAutomationsScheduler(services);
@@ -68,6 +94,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
+    startProjectDelivery({ role, services, shutdown });
 
     // A settled turn a person asked for arms a hold on its prompt cache where the setting says so; each hold sets its
     // own deadline, so there is nothing to start, only timers to clear.

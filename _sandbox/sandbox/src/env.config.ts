@@ -137,6 +137,14 @@ const configSchema = z.object({
                 .string()
                 .default("")
                 .transform((value) => value.trim()),
+            // This computer's own sandbox, which the desktop app keeps with no folder of its own: any number of the owner's
+            // folders attach to it later, each as `/work/<name>`, and it learns of each from the machine agent's sync
+            // report (system/projects-registry.ts). Set by `ic` (SYNC_PROJECTS_HOST); never beside projectDir, which
+            // refuses the boot (system/project-dir.ts).
+            projectsHost: z
+                .string()
+                .default("")
+                .transform((value) => value === "true" || value === "1"),
         })
         .prefault({}),
     // Outbound edge address this sandbox dials with `sandbox.grant`; empty ⇒ no tunnel, loopback only.

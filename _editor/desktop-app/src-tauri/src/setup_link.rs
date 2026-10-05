@@ -402,7 +402,7 @@ pub struct SetupArgs {
     #[serde(default)]
     pub project: Option<String>,
     /// The slug `ic` names this sandbox's container by, where the app knows it before the run: a setup the app made
-    /// itself (project.rs `project_create`) reads it off the address its code was minted for. Never from a link: a
+    /// itself (machine_sandbox.rs) reads it off the address its code was minted for. Never from a link: a
     /// finished setup without one finds its container as the newest (commands.rs `newest_slug`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,

@@ -11,6 +11,7 @@ import { heldDistros } from "./environments/machine.js";
 import { readResidentPid } from "./resident.js";
 import { readResident } from "./supervision.js";
 import { registeredDistro } from "./wsl.js";
+import { pairingKey, readState } from "./sync/config.js";
 import { existingSyncSessions, runMutagen, syncSessionNames } from "./sync/mutagen.js";
 import { deviceReport, pairedMutagen } from "./sync/report.js";
 import { MACHINE_VERSION } from "./version.js";
@@ -62,10 +63,11 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
     if (!working) {
         return "nothing connected";
     }
-    const halves = [
-        linksHalf(links, connected),
-        sync.pairings.length === 0 ? undefined : `syncing ${sync.pairings.length} sandbox${sync.pairings.length === 1 ? "" : "es"}`,
-    ].filter((part) => part !== undefined);
+    // Sandboxes, not pairings: the folders attached to this computer's sandbox are several pairings of one.
+    const sandboxes = new Set(sync.pairings.map((pairing) => pairing.sandboxId)).size;
+    const halves = [linksHalf(links, connected), sync.pairings.length === 0 ? undefined : `syncing ${sandboxes} sandbox${sandboxes === 1 ? "" : "es"}`].filter(
+        (part) => part !== undefined,
+    );
     if (running === undefined) {
         return `NOT RUNNING · ${halves.join(" · ")}`;
     }
@@ -194,6 +196,10 @@ export const conflictLines = (pairing: DeviceReport["pairings"][number]): string
 };
 
 export const pairingLine = (pairing: DeviceReport["pairings"][number]): string => {
+    // This computer's own sandbox holds no folder: the folders attached to it have lines of their own.
+    if (pairing.projectsHost === true) {
+        return `  ${pairing.sandboxId}  (this computer's sandbox: folders attach to it)${pairing.mirroring === "off" ? "  [port mirroring OFF]" : ""}`;
+    }
     const folder = pairing.localDir ?? "(no folder)";
     const where = pairing.mode === "sync" ? (reportedKind(pairing).project === true ? `${folder} ↔ ${pairing.remoteDir}` : folder) : "(ports only)";
     const state = [
@@ -201,6 +207,8 @@ export const pairingLine = (pairing: DeviceReport["pairings"][number]): string =
         // other evidence (an empty port list) is identical to a sandbox serving nothing. Absent means on.
         pairing.mirroring === "off" ? "port mirroring OFF" : undefined,
         ...(pairing.mode === "sync" ? fileSyncState(pairing) : []),
+        // A folder that takes landed work by itself says so, since nothing else on the line would.
+        pairing.deliver === "auto" ? "landed work delivered here" : undefined,
     ].filter((part) => part !== undefined);
     return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
 };
@@ -290,8 +298,8 @@ const printReport = (report: DeviceReport, out: (message: string) => void): void
     }
     // A pairing whose mirroring is off has no rows above, which is exactly what a sandbox serving nothing looks
     // like; say which it is, and say the command that undoes it.
-    for (const pairing of report.pairings.filter((held) => held.mirroring === "off")) {
-        out(`  ${pairing.sandboxId}: port mirroring is OFF here. Put its ports back with \`intentic-machine sync mirror on --sandbox ${pairing.sandboxId}\`.`);
+    for (const sandboxId of new Set(report.pairings.filter((held) => held.mirroring === "off").map((held) => held.sandboxId))) {
+        out(`  ${sandboxId}: port mirroring is OFF here. Put its ports back with \`intentic-machine sync mirror on --sandbox ${sandboxId}\`.`);
     }
 };
 
@@ -319,21 +327,23 @@ const printLinks = (links: readonly StatusLink[], out: (message: string) => void
 
 // Mutagen's own listings, for pairings whose session EXISTS and only those: `mutagen sync list a b` is all-or-nothing,
 // so one pairing with a lost session used to take the whole command down. The missing ones are named here instead.
-const printMutagen = (mutagen: string, report: DeviceReport, out: (message: string) => void): void => {
-    const syncing = report.pairings.filter((pairing) => pairing.mode === "sync");
+// The pairings are read off the state rather than the report, which carries no key to name an attached folder's
+// session by.
+const printMutagen = async (mutagen: string, out: (message: string) => void): Promise<void> => {
+    const syncing = (await readState()).pairings.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
     if (syncing.length > 0) {
         out("");
         out("File sync:");
         // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only the
         // first would report a healthy sync while the backup was not running at all.
-        const wanted = syncing.flatMap((pairing) => syncSessionNames(reportedKind(pairing)));
+        const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing));
         const live = new Set(existingSyncSessions(mutagen, wanted));
         if (live.size > 0) {
             runMutagen(mutagen, ["sync", "list", ...wanted.filter((name) => live.has(name))]);
         }
-        for (const pairing of syncing.filter((held) => !syncSessionNames(reportedKind(held)).every((name) => live.has(name)))) {
+        for (const pairing of syncing.filter((held) => !syncSessionNames(held).every((name) => live.has(name)))) {
             out(
-                `  ${pairing.sandboxId}: no file-sync session exists on this machine, ${pairing.localDir ?? "its folder"} is NOT syncing. The agent retries every few minutes; if it stays this way the sandbox is unreachable (check ${runLogPath}).`,
+                `  ${pairingKey(pairing)}: no file-sync session exists on this machine, ${pairing.localDir ?? "its folder"} is NOT syncing. The agent retries every few minutes; if it stays this way the sandbox is unreachable (check ${runLogPath}).`,
             );
         }
     }
@@ -401,7 +411,7 @@ export const status = buildCommand<StatusFlags>({
         printLinks(report.device.links, out);
         printReport(report.sync, out);
         if (mutagen !== undefined) {
-            printMutagen(mutagen, report.sync, out);
+            await printMutagen(mutagen, out);
         }
     },
 });

@@ -22,7 +22,7 @@ when the daemon runs from a checkout), the process environment, then command-lin
 
 | Group | For example |
 | --- | --- |
-| Roots | `WORKSPACE_ROOT`, `HISTORY_ROOT`, `AGENT_AUTH_DIR`, `SANDBOX_PROJECT_DIR` |
+| Roots | `WORKSPACE_ROOT`, `HISTORY_ROOT`, `AGENT_AUTH_DIR`, `SANDBOX_PROJECT_DIR`, `SANDBOX_PROJECTS_HOST` |
 | Owner and sign-in | `CONNECT_TOKEN`, `OWNER_EMAIL`, `GOOGLE_CLIENT_ID`, `WEB_ORIGIN` |
 | Reachability | `SANDBOX_GRANT`, `INGRESS_URL`, `SANDBOX_PUBLIC_URL`, `PLATFORM_URL`, `SANDBOX_PORT` |
 | Posture | `SANDBOX_PROFILE`, `SANDBOX_VM`, `SANDBOX_PREWARM`, `IDLE_STOP_MINUTES` |
@@ -42,6 +42,12 @@ when the daemon runs from a checkout), the process environment, then command-lin
   synced into that folder rather than into `/work` itself. The daemon then seeds no starter site, makes the folder a
   repo of its own (its git dir on `/history`, nothing committed at boot), tells agents about it in the workspace's
   `AGENTS.md`, and names it in the `/events` hello ([src/system/project-dir.ts](../src/system/project-dir.ts)).
+- `ic` sets `SANDBOX_PROJECTS_HOST=1` on the desktop app's one sandbox per computer, made with no folder: the owner's
+  folders attach to it later, each as `/work/<name>`. The daemon seeds no starter site, and takes in each folder the
+  machine agent's sync report names: it makes the folder a repo as above, keeps its name in `/history/projects.json`
+  ([src/system/projects-registry.ts](../src/system/projects-registry.ts)), and names every attached folder in one
+  `AGENTS.md` note ([src/bootstrap/projects-host.ts](../src/bootstrap/projects-host.ts)). The `/events` hello names no
+  folder; the editor opens one by its address (`?project=<name>`).
 - The daemon sets `INTENTIC_LOG_DIR`, `INTENTIC_TERMINAL_LOGS_DIR` and `INTENTIC_AGENT_TMUX` for its own children
   ([src/bootstrap/daemon-env.ts](../src/bootstrap/daemon-env.ts)).
 - The nightly update drill sets `INTENTIC_FAULT` (`crash-at-boot`, `crash-after-ready`, `fail-conversion`) to make a
@@ -58,4 +64,6 @@ The daemon exits with code 78 rather than serve an unsafe posture:
 - a `SANDBOX_PROJECT_DIR` that is not one folder directly under the workspace root with a name a project may take: the
   root itself, `public/` or any other name the daemon keeps for its own would put the owner's files where the daemon
   serves, seeds or keeps state (`requireProjectDir` in [src/system/project-dir.ts](../src/system/project-dir.ts));
+- `SANDBOX_PROJECT_DIR` and `SANDBOX_PROJECTS_HOST` both set: a sandbox is made for one folder or is the one folders
+  attach to, never both;
 - started without the two front sockets.

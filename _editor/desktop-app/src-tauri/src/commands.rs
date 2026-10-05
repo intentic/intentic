@@ -206,7 +206,7 @@ pub struct SetupContext {
 }
 
 impl SetupContext {
-    fn of(app: &AppHandle, consented: bool) -> SetupContext {
+    pub(crate) fn of(app: &AppHandle, consented: bool) -> SetupContext {
         let state = app.state::<AppState>();
         let host = Host::current();
         SetupContext {
@@ -351,6 +351,11 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     let project = args.clone();
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        // This computer's own sandbox going up drives the same docker: a setup handed over meanwhile waits its turn
+        // (machine_sandbox.rs waits for this one the same way).
+        while scripts::is_running(crate::machine_sandbox::RUN) {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
         let run = setup_script(&args, &SetupContext::of(&handle, install));
         scripts::run(&handle, "setup", run)
     })
@@ -430,7 +435,7 @@ pub fn forget_resumable_setup(state: State<'_, AppState>) {
 }
 
 #[cfg(windows)]
-fn end_session(how: SessionEnd) -> CommandResult<()> {
+pub(crate) fn end_session(how: SessionEnd) -> CommandResult<()> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -484,7 +489,7 @@ fn end_session(how: SessionEnd) -> CommandResult<()> {
 
 /// Only Windows ever asks for this: no step of the Unix install needs a new session to take effect.
 #[cfg(not(windows))]
-fn end_session(_how: SessionEnd) -> CommandResult<()> {
+pub(crate) fn end_session(_how: SessionEnd) -> CommandResult<()> {
     Err("nothing on this system needs a restart to finish installing.".to_string())
 }
 

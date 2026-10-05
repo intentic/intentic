@@ -5551,7 +5551,6 @@
     "local": {
         "localFiles": {
             "keepsFolderSynced": "Mantiene la carpeta sincronizada",
-            "newSandbox": "Nuevo sandbox",
             "reveal": "Mostrar archivo",
             "startsIfStopped": "La inicia si está parada",
             "syncedSandbox": "Sandbox sincronizado",

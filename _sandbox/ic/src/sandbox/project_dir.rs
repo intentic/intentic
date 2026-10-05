@@ -3,6 +3,11 @@ itself, which is the daemon's own (its state, its starter repo, the public outbo
 in SYNC_REMOTE_DIR and asks for it with SYNC_PROJECT; this checks both before anything starts, hands the installer
 what it needs and tells the container which folder it was made for (SANDBOX_PROJECT_DIR).
 
+A PROJECTS HOST is the other shape: the one sandbox the desktop app keeps on this computer, made with no folder at all
+(SYNC_PROJECTS_HOST), which any number of folders attach to later, each as its own `/work/<name>`. Its sync pairing
+holds no folder, only the token the attached folders sync under, and the container is told what it is
+(SANDBOX_PROJECTS_HOST) so it seeds no starter site and learns its folders from the machine agent's reports.
+
 The name rule is @intentic/sandbox-contract's (`_shared/sandbox-contract/src/ids/project-dir.ts`), the source of
 truth; this is its copy for the host side, held to the same cases by `project-dir.fixture.json`. */
 
@@ -53,6 +58,8 @@ pub struct Placement {
     pub remote_dir: Option<String>,
     /// SANDBOX_PROJECT_DIR for the container, `/work/<name>`: set exactly when this is a project sandbox.
     pub project_dir: Option<String>,
+    /// SANDBOX_PROJECTS_HOST for the container: this computer's own sandbox, which folders attach to later.
+    pub projects_host: bool,
 }
 
 impl Placement {
@@ -60,6 +67,10 @@ impl Placement {
     /// this is a project, which sync.sh/.ps1 pass to `intentic-machine sync setup` as `--remote-dir`/`--project`.
     pub fn installer_vars(&self) -> Vec<(&'static str, &str)> {
         let mut vars = Vec::new();
+        // A projects host pairs with no folder: sync.sh/.ps1 pass `--projects-host` and no `--dir`.
+        if self.projects_host {
+            vars.push(("SYNC_PROJECTS_HOST", "1"));
+        }
         if let Some(remote_dir) = &self.remote_dir {
             vars.push(("SYNC_REMOTE_DIR", remote_dir.as_str()));
         }
@@ -68,6 +79,52 @@ impl Placement {
         }
         vars
     }
+
+    /// Whether desktop sync is set up at all: a folder asked for (SYNC_DIR), or the projects host's folderless pairing,
+    /// without which no folder can attach to it later.
+    pub fn syncs(&self, has_sync_dir: bool) -> bool {
+        has_sync_dir || self.projects_host
+    }
+
+    /// SANDBOX_PROJECTS_HOST as the container is handed it; empty, and so dropped, on every other sandbox.
+    pub fn projects_host_env(&self) -> &'static str {
+        if self.projects_host {
+            "1"
+        } else {
+            ""
+        }
+    }
+}
+
+/// SYNC_PROJECTS_HOST, refused before anything starts beside any of the variables that name a folder: this computer's
+/// own sandbox holds none of its own, and a folder it was handed now would be synced over /work or made a project
+/// sandbox, neither of which is what was asked for.
+pub fn projects_host(
+    remote_dir: Option<&str>,
+    project: bool,
+    has_sync_dir: bool,
+) -> Result<Placement, String> {
+    let named: Vec<&str> = [
+        (has_sync_dir, "SYNC_DIR"),
+        (remote_dir.is_some(), "SYNC_REMOTE_DIR"),
+        (project, "SYNC_PROJECT"),
+    ]
+    .into_iter()
+    .filter_map(|(set, name)| set.then_some(name))
+    .collect();
+    if let Some((last, rest)) = named.split_last() {
+        let unset = if rest.is_empty() {
+            last.to_string()
+        } else {
+            format!("{} and {last}", rest.join(", "))
+        };
+        return Err(format!("SYNC_PROJECTS_HOST sets up this computer's own sandbox, which holds no folder: folders attach to it later, each as {WORKSPACE_ROOT}/<name>. Unset {unset}, or drop SYNC_PROJECTS_HOST to make a sandbox for that folder instead."));
+    }
+    Ok(Placement {
+        remote_dir: None,
+        project_dir: None,
+        projects_host: true,
+    })
 }
 
 /// SYNC_REMOTE_DIR and SYNC_PROJECT, refused before anything starts when they are not a shape the sync agent accepts:
@@ -85,6 +142,7 @@ pub fn placement(
             Ok(Placement {
                 remote_dir: None,
                 project_dir: None,
+                projects_host: false,
             })
         };
     };
@@ -95,6 +153,7 @@ pub fn placement(
             Ok(Placement {
                 remote_dir: Some(remote_dir.to_string()),
                 project_dir: None,
+                projects_host: false,
             })
         };
     }
@@ -110,6 +169,7 @@ pub fn placement(
     Ok(Placement {
         remote_dir: Some(remote_dir.to_string()),
         project_dir: Some(remote_dir.to_string()),
+        projects_host: false,
     })
 }
 
@@ -165,6 +225,7 @@ mod tests {
             Ok(Placement {
                 remote_dir: Some("/work/my-app".to_string()),
                 project_dir: Some("/work/my-app".to_string()),
+                projects_host: false,
             })
         );
     }
@@ -174,6 +235,7 @@ mod tests {
         let workspace = Placement {
             remote_dir: None,
             project_dir: None,
+            projects_host: false,
         };
         assert_eq!(placement(None, false, true), Ok(workspace));
         assert_eq!(
@@ -181,6 +243,7 @@ mod tests {
             Ok(Placement {
                 remote_dir: Some("/work".to_string()),
                 project_dir: None,
+                projects_host: false,
             })
         );
     }
@@ -234,5 +297,63 @@ mod tests {
         assert!(placement(Some("/work/my-app"), true, false)
             .unwrap_err()
             .contains("needs SYNC_DIR"));
+    }
+
+    #[test]
+    fn a_projects_host_names_no_folder_and_tells_the_installer_and_the_container_what_it_is() {
+        let host = projects_host(None, false, false).unwrap();
+        assert_eq!(
+            host,
+            Placement {
+                remote_dir: None,
+                project_dir: None,
+                projects_host: true,
+            }
+        );
+        // The installer pairs with no folder: no SYNC_DIR to hand over, only the flag `--projects-host` comes from.
+        assert_eq!(host.installer_vars(), vec![("SYNC_PROJECTS_HOST", "1")]);
+        assert_eq!(host.projects_host_env(), "1");
+        // Its sync is set up without a folder, since the attached folders sync under the token it enrolls.
+        assert!(host.syncs(false));
+    }
+
+    #[test]
+    fn every_other_sandbox_hands_the_container_no_projects_host_flag() {
+        for placed in [
+            placement(None, false, true).unwrap(),
+            placement(Some("/work"), false, false).unwrap(),
+            placement(Some("/work/my-app"), true, true).unwrap(),
+        ] {
+            assert_eq!(placed.projects_host_env(), "", "{placed:?}");
+            assert!(placed
+                .installer_vars()
+                .iter()
+                .all(|(name, _)| *name != "SYNC_PROJECTS_HOST"));
+        }
+        // An ordinary sandbox still syncs only when a folder was asked for.
+        assert!(!placement(None, false, false).unwrap().syncs(false));
+        assert!(placement(None, false, false).unwrap().syncs(true));
+    }
+
+    #[test]
+    fn a_projects_host_beside_any_folder_variable_is_refused_before_anything_starts() {
+        // Each one alone, named in the refusal so the reader knows which to unset.
+        for (remote, project, has_sync_dir, named) in [
+            (None, false, true, "SYNC_DIR"),
+            (Some("/work/my-app"), false, false, "SYNC_REMOTE_DIR"),
+            (Some("/work"), false, false, "SYNC_REMOTE_DIR"),
+            (None, true, false, "SYNC_PROJECT"),
+        ] {
+            let refusal = projects_host(remote, project, has_sync_dir).unwrap_err();
+            assert!(
+                refusal.starts_with("SYNC_PROJECTS_HOST sets up this computer's own sandbox"),
+                "{refusal}"
+            );
+            assert!(refusal.contains(&format!("Unset {named},")), "{refusal}");
+        }
+        // All of them at once: a project sandbox's whole ask, which is the likeliest mix-up.
+        assert!(projects_host(Some("/work/my-app"), true, true)
+            .unwrap_err()
+            .contains("Unset SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT,"));
     }
 }

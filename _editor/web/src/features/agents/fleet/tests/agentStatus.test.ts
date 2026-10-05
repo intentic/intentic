@@ -15,6 +15,7 @@ import {
     conflictIsYours,
     drillTarget,
     landedAway,
+    landedDelivery,
     landFailure,
     laneOf,
     standingFrom,
@@ -915,6 +916,72 @@ describe("landedAway, named", () => {
         expect(took({ kind: `person`, email: `ana@example.com`, name: `Ana` })).toMatchObject({ text: `Removed by Ana`, offerReland: true });
         expect(took({ kind: `person` })).toMatchObject({ text: `Removed`, offerReland: true });
         expect(took({ kind: `person` })?.tip.note).toBe(`Still on its branch. Thrown away in the Changes panel after it landed.`);
+    });
+});
+
+// What a land did in the folder on the owner's computer: a line for each outcome, warm only where the owner has
+// something to look at or to do.
+describe("landedDelivery", () => {
+    const base = { at: 1, project: `my-app`, folder: `~/code/my-app`, applied: 0, conflicts: [] };
+
+    it("says nothing for a land that was not delivered anywhere", () => {
+        expect(landedDelivery({})).toBeUndefined();
+    });
+
+    it("names the folder it was delivered to, quietly, with the restore point in the hover", () => {
+        const line = landedDelivery({ delivery: { ...base, state: `delivered`, applied: 3, point: `20261005-1` } });
+        expect(line).toMatchObject({ text: `Delivered to ~/code/my-app`, icon: `folder`, warm: false });
+        expect(line?.tip).toEqual({ title: `Delivered`, rows: [{ label: `Files written`, value: 3 }], note: `Undo point 20261005-1` });
+    });
+
+    it("counts the files it kept out because the owner edited them too, and names each in the hover", () => {
+        const one = landedDelivery({ delivery: { ...base, state: `partial`, conflicts: [{ path: `src/app.ts`, reason: `edited` }] } });
+        expect(one).toMatchObject({ text: `1 file kept out of ~/code/my-app: you edited it too`, icon: `file-edit`, warm: true });
+        const two = landedDelivery({
+            delivery: {
+                ...base,
+                state: `partial`,
+                conflicts: [
+                    { path: `src/app.ts`, reason: `edited` },
+                    { path: `README.md`, reason: `edited` },
+                ],
+            },
+        });
+        expect(two?.text).toBe(`2 files kept out of ~/code/my-app: you edited them too`);
+        expect(two?.tip?.rows).toEqual([
+            { label: `src/app.ts`, value: `you edited it` },
+            { label: `README.md`, value: `you edited it` },
+        ]);
+    });
+
+    it("does not blame the owner's edits for a path kept out for another reason", () => {
+        const line = landedDelivery({ delivery: { ...base, state: `partial`, conflicts: [{ path: `current`, reason: `link` }] } });
+        expect(line?.text).toBe(`1 file kept out of ~/code/my-app`);
+        expect(line?.tip?.rows).toEqual([{ label: `current`, value: `a link` }]);
+    });
+
+    it("counts the paths past the ones the hover names", () => {
+        const conflicts = Array.from({ length: 8 }, (_, index) => ({ path: `f${index}.ts`, reason: `edited` as const }));
+        const line = landedDelivery({ delivery: { ...base, state: `partial`, conflicts } });
+        expect(line?.tip?.rows).toHaveLength(6);
+        expect(line?.tip?.note).toBe(`and 2 more`);
+    });
+
+    it("says it waits for the computer, refused in the machine's words, and sends a large one to Bring back", () => {
+        expect(landedDelivery({ delivery: { ...base, state: `waiting`, reason: `ada-laptop is not connected.` } })).toMatchObject({
+            text: `Waiting for your computer to deliver to ~/code/my-app`,
+            warm: false,
+        });
+        expect(landedDelivery({ delivery: { ...base, state: `waiting`, folder: undefined } })?.text).toBe(
+            `Waiting for your computer to deliver to your folder`,
+        );
+        expect(landedDelivery({ delivery: { ...base, state: `failed`, reason: `That folder does not take deliveries.` } })).toMatchObject({
+            text: `Couldn't deliver to your folder: That folder does not take deliveries.`,
+            warm: true,
+        });
+        expect(landedDelivery({ delivery: { ...base, state: `too-large` } })?.text).toBe(
+            `Too large to deliver by itself: press "Bring back changes" in the folder's window`,
+        );
     });
 });
 

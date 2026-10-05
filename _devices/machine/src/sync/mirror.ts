@@ -5,13 +5,15 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { writeFileAtomic } from "@intentic/base/fs";
 import type { Log } from "@intentic/local-agent";
-import { type PortSkipReason, type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
+import { type DeviceReport, type PortSkipReason, type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import {
+    isAttachedPairing,
     mirrorHeartbeatPath,
     type MirroredPort,
     type Pairing,
+    pairingKey,
     readState,
-    removePairing,
+    removeSandboxPairings,
     setFileSyncAutoPaused,
     setFileSyncSwapPaused,
     type SkippedPort,
@@ -390,9 +392,9 @@ const beat = async (): Promise<void> => await writeFileAtomic(mirrorHeartbeatPat
 
 // Persists one pairing's ports, leaving every other pairing's alone: avoids clobbering a concurrent `setup`'s
 // write with this tick's stale read.
-const savePorts = async (sandboxId: string, mirroredPorts: readonly MirroredPort[], skippedPorts: readonly SkippedPort[]): Promise<void> =>
+const savePorts = async (key: string, mirroredPorts: readonly MirroredPort[], skippedPorts: readonly SkippedPort[]): Promise<void> =>
     await updateState((state) => ({
-        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirroredPorts, skippedPorts } : held)),
+        pairings: state.pairings.map((held) => (pairingKey(held) === key ? { ...held, mirroredPorts, skippedPorts } : held)),
     }));
 
 // The whole of a pass for a pairing whose mirroring is off: torn down once, right after the switch flips, so later
@@ -435,6 +437,11 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
     // Ports are polled even with mirroring off: the read doubles as the pairing's liveness probe and the only way a
     // revoked enrollment is noticed. The switch only changes what's done with the answer.
     const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(base, pairing.syncToken);
+    // A folder attached to its sandbox polls only when nothing else of that sandbox does (`pollingPairings`), as its
+    // liveness probe; the projects host is what mirrors the sandbox's ports, once, whatever number of folders it holds.
+    if (isAttachedPairing(pairing)) {
+        return [];
+    }
     if (pairing.mirrorOff === true) {
         await retireSwitchedOff(mutagen, pairing, log);
         return [];
@@ -446,15 +453,38 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
     const skipped = skippedPortsOf(ports, next, othersHolding(holding, pairing.sandboxId), ignored);
     // Either set changing triggers a write, even a port flipping mirrored-to-contended without changing set size.
     if (!sameMirrorSet(baseline, next) || !sameSkippedSet(pairing.skippedPorts ?? [], skipped)) {
-        await savePorts(pairing.sandboxId, next, skipped);
+        await savePorts(pairingKey(pairing), next, skipped);
     }
     return next;
 };
 
-// Reports each pairing's folder/ports/liveness to its own sandbox, scoped per token so none leaks to another.
-// Best-effort telemetry: failures are logged and dropped; a definitive 404 retires reporting for that pairing.
+// One report per sandbox, carried by the first of its pairings that holds a token (they share one): several pairings
+// of one sandbox (its projects host and the folders attached to it) are one machine to its daemon, which keeps one
+// report per machine, so posting each would only send the same slice again.
+export const reportCarriers = <T extends { readonly pairing: Pick<Pairing, "sandboxId" | "syncToken"> }>(dialed: readonly T[], unsupported: ReadonlySet<string>): T[] => {
+    const seen = new Set<string>();
+    return dialed.filter(({ pairing }) => {
+        if (pairing.syncToken === undefined || unsupported.has(pairing.sandboxId) || seen.has(pairing.sandboxId)) {
+            return false;
+        }
+        seen.add(pairing.sandboxId);
+        return true;
+    });
+};
+
+// One sandbox's slice of the report, posted to it over the pairing's token.
+const sendReport = async (base: string, pairing: Pick<Pairing, "sandboxId" | "syncToken">, report: DeviceReport): Promise<Response> =>
+    await fetch(`${base.replace(/\/$/, "")}/system/sync/report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-sync": pairing.syncToken ?? "" },
+        body: JSON.stringify(scopedReport(report, pairing.sandboxId)),
+        signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
+    });
+
+// Reports each sandbox's folders/ports/liveness to that sandbox, scoped per sandbox so none leaks to another.
+// Best-effort telemetry: failures are logged and dropped; a definitive 404 retires reporting for that sandbox.
 const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
-    const reportable = dialed.filter(({ pairing }) => pairing.syncToken !== undefined && !unsupported.has(pairing.sandboxId));
+    const reportable = reportCarriers(dialed, unsupported);
     if (reportable.length === 0) {
         return;
     }
@@ -462,12 +492,7 @@ const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, 
     for (const { pairing, base } of reportable) {
         try {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, like every other pass in this agent
-            const response = await fetch(`${base.replace(/\/$/, "")}/system/sync/report`, {
-                method: "POST",
-                headers: { "content-type": "application/json", "x-intentic-sync": pairing.syncToken ?? "" },
-                body: JSON.stringify(scopedReport(report, pairing.sandboxId)),
-                signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
-            });
+            const response = await sendReport(base, pairing, report);
             // 404 means a daemon predating machine reports; that never heals, so stop asking and say so once.
             if (response.status === 404) {
                 unsupported.add(pairing.sandboxId);
@@ -479,12 +504,16 @@ const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, 
     }
 };
 
-// Forgets a revoked pairing and lets the orphan sweep terminate its file sync and forwards. Its ssh-config block
+// Forgets a revoked sandbox's pairings, every one of them since they share its one enrollment (the projects host and
+// the folders attached to it), and lets the orphan sweep terminate their file sync and forwards. Its ssh-config block
 // is left in place (an unreached alias is inert) until the next setup or uninstall regenerates the fragment.
 const dropRevokedPairing = async (mutagen: string, sandboxId: string, log: Log): Promise<void> => {
-    await removePairing(sandboxId);
+    await removeSandboxPairings(sandboxId);
     retireOrphanSessions(mutagen, (await readState()).pairings, log);
 };
+
+// Whether a pairing key is one of this sandbox's: its own id, or a folder attached to it.
+const keyOfSandbox = (key: string, sandboxId: string): boolean => key === sandboxId || key.startsWith(`${sandboxId}~`);
 
 // Isolates one fallible step: a rejection here costs only this step, not the whole agent, and is always logged.
 const guard = async (log: Log, what: string, step: () => void | Promise<void>): Promise<boolean> => {
@@ -525,7 +554,9 @@ const absorbRejectedPoll = async (
     log(`${pairing.sandboxId} rejected the sync token ${REVOKED_POLLS} polls in a row: this machine's enrollment was revoked.`);
     rejectedPolls.delete(pairing.sandboxId);
     repos.delete(pairing.sandboxId);
-    sessionsPending.delete(pairing.sandboxId);
+    for (const key of [...sessionsPending].filter((held) => keyOfSandbox(held, pairing.sandboxId))) {
+        sessionsPending.delete(key);
+    }
     await dropRevokedPairing(mutagen, pairing.sandboxId, log);
     return true;
 };
@@ -546,12 +577,19 @@ const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreacha
             `  ${pairing.sandboxId}: unreachable for ${RELEASE_FORWARDS_MS / 60_000} minutes; took its ${plural(mirrored, "port")} off localhost. They come back when it answers again.`,
         );
     }
-    if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(now - since) || !pauseUnreachableSync(mutagen, pairing)) {
+    return await pauseIfLongUnreachable(mutagen, pairing, now - since, log);
+};
+
+// Past an hour unreachable, a pairing's own sessions are paused (and the pause recorded as the watcher's, so it lifts
+// it): the sandbox's poll above says so for the pairing that polls, and for the folders attached to that sandbox too
+// (`followSandbox`).
+const pauseIfLongUnreachable = async (mutagen: string, pairing: Pairing, unreachableForMs: number, log: Log): Promise<boolean> => {
+    if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(unreachableForMs) || !pauseUnreachableSync(mutagen, pairing)) {
         return false;
     }
-    await setFileSyncAutoPaused(pairing.sandboxId, true);
+    await setFileSyncAutoPaused(pairingKey(pairing), true);
     log(
-        `  ${pairing.sandboxId}: unreachable for one hour; paused its Mutagen sessions to stop permanent reconnect/scanning load. They resume automatically when it returns.`,
+        `  ${pairingKey(pairing)}: unreachable for one hour; paused its Mutagen sessions to stop permanent reconnect/scanning load. They resume automatically when it returns.`,
     );
     return true;
 };
@@ -586,13 +624,13 @@ const healPairing = async (mutagen: string, pairing: Pairing, tick: number, log:
     if (tick % HEAL_EVERY_TICKS !== 0) {
         return;
     }
-    await guard(log, `${pairing.sandboxId}: clearing derived residue`, async () => void (await healDerivedConflicts(mutagen, pairing, log)));
+    await guard(log, `${pairingKey(pairing)}: clearing derived residue`, async () => void (await healDerivedConflicts(mutagen, pairing, log)));
 };
 
 // Which setup of a pairing this is. Every `setup` mints a fresh sync token, so a pairing set up again (another folder,
 // a takeover, a re-pair after an unpair) reads as new here and is prepared again; one that is merely re-read does not.
 // So does a project whose direction was switched (`sync direction`): the mode is what its session is recreated for.
-const setupOf = (pairing: Pairing): string => [pairing.sandboxId, pairing.localDir ?? "", pairing.syncToken ?? "", syncMode(pairing)].join("\n");
+const setupOf = (pairing: Pairing): string => [pairingKey(pairing), pairing.localDir ?? "", pairing.syncToken ?? "", syncMode(pairing)].join("\n");
 
 // The pairings this pass has to prepare: every setup the watcher has not seen. Pure, so "each setup exactly once" is a
 // rule with a test rather than a branch in the loop.
@@ -605,13 +643,13 @@ export const markPrepared = (prepared: Set<string>, pairing: Pairing): void => v
 // replacement put off until the sandbox answers or its conflicts settle) is pending, and retried on the cadence below.
 const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<string>, say: Log): Promise<boolean> => {
     let converged = false;
-    await guard(say, `${pairing.sandboxId}: preparing its file sync`, async () => {
+    await guard(say, `${pairingKey(pairing)}: preparing its file sync`, async () => {
         converged = await ensureSyncSession(mutagen, pairing, say);
     });
     if (converged) {
-        pending.delete(pairing.sandboxId);
+        pending.delete(pairingKey(pairing));
     } else {
-        pending.add(pairing.sandboxId);
+        pending.add(pairingKey(pairing));
     }
     return converged;
 };
@@ -624,18 +662,83 @@ const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<st
 const dormant = (mutagen: string, pairing: Pairing): boolean =>
     pairing.fileSyncAutoPaused === true && existingSyncSessions(mutagen, syncSessionNames(pairing)).length > 0;
 
+// BEFORE A FOLDER'S FIRST COPY, ITS SANDBOX IS TOLD OF IT. The daemon makes an attached folder's `/work/<name>` a
+// repository of its own once a report names it. A session that began filling `/work/<name>` first would leave those
+// files untracked in the sandbox's root repository for a while, where a commit there could take them. So a folder
+// attached to a sandbox whose session does not exist yet gets one only after a report naming it was taken, and is
+// tried again on the next tick when it was not. One report per sandbox and pass, however many of its folders wait.
+// Pure over its two seams, so "never a first copy before the report" is a rule with a test.
+export const readyToPrepare = async (
+    setups: readonly Pairing[],
+    firstCopyAhead: (pairing: Pairing) => boolean,
+    announce: (pairing: Pairing) => Promise<boolean>,
+): Promise<Pairing[]> => {
+    const told = new Map<string, boolean>();
+    const ready: Pairing[] = [];
+    for (const pairing of setups) {
+        if (isAttachedPairing(pairing) && pairing.mode === "sync" && pairing.localDir !== undefined && firstCopyAhead(pairing)) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one report per sandbox, and the folders of one wait on it
+            const said = told.get(pairing.sandboxId) ?? (await announce(pairing));
+            told.set(pairing.sandboxId, said);
+            if (!said) {
+                continue;
+            }
+        }
+        ready.push(pairing);
+    }
+    return ready;
+};
+
+// The real announcement: the report as it stands (the new folder in it, with no session yet), posted to the folder's
+// sandbox. A daemon with no report route (404) cannot be waiting for one, so the folder goes ahead; a sandbox whose
+// polls are backing off is not asked more often than they are.
+const announcer =
+    (mutagen: string, bases: DaemonBases, unsupported: Set<string>, unreachable: ReadonlyMap<string, Unreachable>, say: Log) =>
+    async (pairing: Pairing): Promise<boolean> => {
+        if (pairing.syncToken === undefined || unsupported.has(pairing.sandboxId)) {
+            return true;
+        }
+        if (!pollDue(unreachable.get(pairing.sandboxId), Date.now())) {
+            return false;
+        }
+        try {
+            const response = await sendReport(await bases.resolve(pairing), pairing, await deviceReport(mutagen));
+            if (response.status === 404) {
+                unsupported.add(pairing.sandboxId);
+                say(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Devices view will stay empty.`);
+                return true;
+            }
+            if (!response.ok) {
+                say(`  ${pairingKey(pairing)}: ${pairing.sandboxId} did not take the report naming this folder (${response.status}); its first copy waits for it.`);
+            }
+            return response.ok;
+        } catch (error) {
+            say(`  ${pairingKey(pairing)}: ${pairing.sandboxId} could not be told of this folder (${errorMessage(error)}); its first copy waits until it can.`);
+            return false;
+        }
+    };
+
 // Every pairing this watcher has not prepared yet. At startup that is all of them, which is where an upgraded agent's
 // inherited sessions pick up the new rules, since Mutagen bakes them in at creation. After that it is each pairing a
-// `setup` adds or sets up again while the watcher runs. Per pairing, so one dead sandbox costs only itself; a dormant
-// one is left pending for the cadence below.
+// `setup` or an `attach` adds or sets up again while the watcher runs. Per pairing, so one dead sandbox costs only
+// itself; a dormant one is left pending for the cadence below, and a folder whose sandbox has not been told of it yet
+// stays unprepared, to be tried again next pass (`readyToPrepare`).
 // THE WATCHER IS THE ONLY THING THAT CREATES SESSIONS. `setup` used to create them too, at the same moment the agent it
 // had just started was preparing the same pairing, so each create found no session and both went ahead: one name came
 // to hold two identical sessions over the same folder, each flagging the other's writes as conflicts.
-const prepareSessions = async (mutagen: string, pairings: readonly Pairing[], prepared: Set<string>, pending: Set<string>, say: Log): Promise<void> => {
-    for (const pairing of unpreparedSetups(pairings, prepared)) {
+const prepareSessions = async (
+    mutagen: string,
+    pairings: readonly Pairing[],
+    prepared: Set<string>,
+    pending: Set<string>,
+    announce: (pairing: Pairing) => Promise<boolean>,
+    say: Log,
+): Promise<void> => {
+    const firstCopyAhead = (pairing: Pairing): boolean => existingSyncSessions(mutagen, syncSessionNames(pairing)).length === 0;
+    for (const pairing of await readyToPrepare(unpreparedSetups(pairings, prepared), firstCopyAhead, announce)) {
         markPrepared(prepared, pairing);
         if (dormant(mutagen, pairing)) {
-            pending.add(pairing.sandboxId);
+            pending.add(pairingKey(pairing));
             continue;
         }
         await prepareSession(mutagen, pairing, pending, say);
@@ -655,9 +758,9 @@ const retryPendingSessions = async (
     if (sessionsPending.size === 0 || tick % SESSION_RETRY_EVERY_TICKS !== 0) {
         return;
     }
-    for (const pairing of pairings.filter((held) => sessionsPending.has(held.sandboxId) && !dormant(mutagen, held))) {
+    for (const pairing of pairings.filter((held) => sessionsPending.has(pairingKey(held)) && !dormant(mutagen, held))) {
         if (await prepareSession(mutagen, pairing, sessionsPending, say)) {
-            say(`  ${pairing.sandboxId}: file sync is running on this build's rules`);
+            say(`  ${pairingKey(pairing)}: file sync is running on this build's rules`);
         }
     }
 };
@@ -683,13 +786,13 @@ const holdSyncDuringSwaps = async (
         const step = swapPauseStep(pairing, holds);
         if (step === "pause" && pauseRunningSync(mutagen, pairing)) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-            await setFileSyncSwapPaused(pairing.sandboxId, true);
-            say(`  ${pairing.sandboxId}: its sandbox is being swapped on this machine; file sync is paused until the new version has held.`);
+            await setFileSyncSwapPaused(pairingKey(pairing), true);
+            say(`  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync is paused until the new version has held.`);
         } else if (step === "resume") {
             resumeSwapPausedSync(mutagen, pairing);
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await setFileSyncSwapPaused(pairing.sandboxId, false);
-            say(`  ${pairing.sandboxId}: its sandbox's swap is settled; file sync resumed.`);
+            await setFileSyncSwapPaused(pairingKey(pairing), false);
+            say(`  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync resumed.`);
         }
     }
     return held;
@@ -728,17 +831,20 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
         // its sandbox is mid-swap, which holds that sync still whoever paused it.
         if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
-            await setFileSyncAutoPaused(pairing.sandboxId, false);
-            say(`  ${pairing.sandboxId}: reachable again; resumed its automatically paused file sync`);
+            await setFileSyncAutoPaused(pairingKey(pairing), false);
+            say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
-        for (const port of mirrored) {
-            claimedBy.set(port.port, pairing.sandboxId);
-        }
-        handOver(holding, pairing.sandboxId, mirrored);
-        // Only on a pass that reconciled, and with the list that pass produced: against a stale record this would
-        // take down live forwards rather than stranded ones.
-        if (tick % STRANDED_SWEEP_EVERY_TICKS === 0) {
-            sweepStrandedForwards(mutagen, pairing.sandboxId, mirrored, say);
+        // A folder attached to its sandbox mirrors nothing, and its sandbox's forwards are not its to hand over or sweep.
+        if (!isAttachedPairing(pairing)) {
+            for (const port of mirrored) {
+                claimedBy.set(port.port, pairing.sandboxId);
+            }
+            handOver(holding, pairing.sandboxId, mirrored);
+            // Only on a pass that reconciled, and with the list that pass produced: against a stale record this would
+            // take down live forwards rather than stranded ones.
+            if (tick % STRANDED_SWEEP_EVERY_TICKS === 0) {
+                sweepStrandedForwards(mutagen, pairing.sandboxId, mirrored, say);
+            }
         }
     } catch (error) {
         // Reports that this pass's resolved base failed, which daemon-base.ts can't detect itself; matters only for a
@@ -750,7 +856,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         }
         pausedThisPass = outcome.paused;
         // A transient tunnel blip must not kill the agent, log and try again next tick.
-        say(`  ${pairing.sandboxId}: reconcile skipped: ${errorMessage(error)}`);
+        say(`  ${pairingKey(pairing)}: reconcile skipped: ${errorMessage(error)}`);
     }
     // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap.
     if (pairing.fileSyncAutoPaused === true || pausedThisPass || swapping) {
@@ -771,6 +877,62 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         }
     } catch (error) {
         say(`  ${pairing.sandboxId}: git bridge skipped: ${errorMessage(error)}`);
+    }
+};
+
+// WHICH PAIRINGS POLL their sandbox's ports, which is also how a sandbox's liveness and a revoked enrollment are
+// noticed: one per sandbox. That is the sandbox's own pairing (the projects host, or any pairing made before folders
+// could attach), else the first folder attached to it. Every other folder attached to that sandbox follows what the
+// poll found (`followSandbox`) rather than asking again, so ten folders cost the daemon one poll, not eleven.
+export const pollingPairings = (pairings: readonly Pick<Pairing, "sandboxId" | "key">[]): ReadonlySet<string> => {
+    const polling = new Set<string>();
+    for (const sandboxId of new Set(pairings.map((pairing) => pairing.sandboxId))) {
+        const own = pairings.filter((pairing) => pairing.sandboxId === sandboxId);
+        const poller = own.find((pairing) => !isAttachedPairing(pairing)) ?? own[0];
+        if (poller !== undefined) {
+            polling.add(pairingKey(poller));
+        }
+    }
+    return polling;
+};
+
+// The whole pass of a folder attached to a sandbox that another pairing polls: its file sync paused after an hour of
+// that sandbox not answering and resumed once it answers, as the poller's own is, then the heal (which a copy-first
+// folder never needs). No ports, no git bridge: the folder is the owner's project, and the projects host mirrors.
+const followSandbox = async (context: PassContext, pairing: Pairing): Promise<void> => {
+    const { mutagen, tick, tracking, swapHeld, say } = context;
+    const down = tracking.unreachable.get(pairing.sandboxId);
+    const swapping = swapHeld.has(pairing.sandboxId);
+    if (down === undefined) {
+        if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
+            await setFileSyncAutoPaused(pairingKey(pairing), false);
+            say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
+        }
+    } else if (await pauseIfLongUnreachable(mutagen, pairing, Date.now() - down.since, say)) {
+        return;
+    }
+    if (pairing.fileSyncAutoPaused === true || swapping) {
+        return;
+    }
+    await healPairing(mutagen, pairing, tick, say);
+};
+
+// Every pairing's pass for one tick. The pairings that poll go first, so a folder following its sandbox reads this
+// tick's answer.
+const runPasses = async (context: PassContext, dialed: readonly Dialed<Pairing>[], pairings: readonly Pairing[]): Promise<void> => {
+    const polling = pollingPairings(pairings);
+    for (const { pairing, base } of dialed.filter((held) => polling.has(pairingKey(held.pairing)))) {
+        // A pairing that has been failing for a while is not polled every tick (pollBackoffMs). The record is kept
+        // rather than cleared, so the hour that auto-pauses file sync still runs on wall-clock while it waits.
+        if (!pollDue(context.tracking.unreachable.get(pairing.sandboxId), Date.now())) {
+            continue;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
+        await runPairingPass(context, pairing, base);
+    }
+    for (const { pairing } of dialed.filter((held) => !polling.has(pairingKey(held.pairing)))) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one folder at a time, as every pass here
+        await guard(context.say, `${pairingKey(pairing)}: following its sandbox`, async () => await followSandbox(context, pairing));
     }
 };
 
@@ -799,22 +961,23 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         "opening the sync transports",
         async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))),
     );
-    const sessionsPending = new Set<string>();
-    const sessionsPrepared = new Set<string>();
-    await prepareSessions(mutagen, initial.pairings, sessionsPrepared, sessionsPending, say);
-    await guard(say, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, say));
-    log(`sync started; polling ${plural(initial.pairings.length, "paired sandbox")} every ${POLL_MS / 1000}s`);
-
-    // Per-pairing state keyed by sandbox id; entries come and go with the pairing.
+    // Per-sandbox state keyed by sandbox id, and the sessions still owed by pairing key; entries come and go with them.
     const rejectedPolls = new Map<string, number>();
     const unreachable = new Map<string, Unreachable>();
     const repos = new Map<string, readonly string[]>();
+    const sessionsPending = new Set<string>();
+    const sessionsPrepared = new Set<string>();
     const tracking = { rejectedPolls, unreachable, repos, sessionsPending };
+    // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
+    const reportUnsupported = new Set<string>();
+    const announce = announcer(mutagen, bases, reportUnsupported, unreachable, say);
+    await prepareSessions(mutagen, initial.pairings, sessionsPrepared, sessionsPending, announce, say);
+    await guard(say, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, say));
+    log(`sync started; polling ${plural(initial.pairings.length, "paired sandbox")} every ${POLL_MS / 1000}s`);
+
     // What the bind probe cannot see, kept for the watcher's lifetime: Docker's answer, cached, and the grace each port a
     // pass found busy is serving. Only the busy rows reach the disk, so a restart starts every grace over.
     const holders: HolderMemory = { dockerPorts: publishedPortsReader(say), freeSince: new Map() };
-    // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
-    const reportUnsupported = new Set<string>();
     for (let tick = 0; ; tick += 1) {
         // Re-read every tick so a concurrent setup/uninstall takes effect without restarting the watcher.
         const state = await readState().catch((error: unknown) => {
@@ -843,7 +1006,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         await guard(say, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(dialed)));
         // After the transport reconcile above, which is what a new pairing's sessions ride, and what a session that
         // failed to create was usually waiting on.
-        await prepareSessions(mutagen, state.pairings, sessionsPrepared, sessionsPending, say);
+        await prepareSessions(mutagen, state.pairings, sessionsPrepared, sessionsPending, announce, say);
         await retryPendingSessions(mutagen, state.pairings, sessionsPending, tick, say);
         let swapHeld: ReadonlySet<string> = new Set();
         await guard(say, "holding file sync still during swaps", async () => {
@@ -853,15 +1016,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         const claimedBy = new Map<number, string>();
         // And whose forward each port is meanwhile, so a pairing listed before its holder does not file it as busy.
         const holding = recordedForwards(state.pairings);
-        for (const { pairing, base } of dialed) {
-            // A pairing that has been failing for a while is not polled every tick (pollBackoffMs). The record is kept
-            // rather than cleared, so the hour that auto-pauses file sync still runs on wall-clock while it waits.
-            if (!pollDue(unreachable.get(pairing.sandboxId), Date.now())) {
-                continue;
-            }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
-            await runPairingPass({ mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, holders, say }, pairing, base);
-        }
+        await runPasses({ mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, holders, say }, dialed, state.pairings);
         // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state,
         // so
         // reporting last reports this tick, not the previous one.
@@ -876,8 +1031,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     }
 };
 
-// Terminates one pairing's forward sessions (or every one this agent owns with no id given), read from the
-// daemon, not a config baseline: Mutagen keeps a forward's listener bound even after its sandbox is gone.
+// Terminates one sandbox's forward sessions (or every one this agent owns with no id given), read from the
+// daemon, not a config baseline: Mutagen keeps a forward's listener bound even after its sandbox is gone. The record
+// that moves with them is the sandbox's own pairing's: a folder attached to it holds none.
 const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<number> => {
     const names = ourForwardSessions(mutagen, sandboxId);
     if (names.length > 0) {
@@ -888,7 +1044,7 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
     // reading: mirroring switched off and back on must not silently take back a number somebody released.
     await updateState((state) => ({
         pairings: state.pairings.map((held) =>
-            sandboxId === undefined || held.sandboxId === sandboxId ? { ...held, mirroredPorts: [], skippedPorts: [] } : held,
+            (sandboxId === undefined || held.sandboxId === sandboxId) && !isAttachedPairing(held) ? { ...held, mirroredPorts: [], skippedPorts: [] } : held,
         ),
     }));
     return names.length;
@@ -911,7 +1067,7 @@ export const retireMirroredPort = async (mutagen: string, sandboxId: string, por
     let wasMirrored = false;
     await updateState((state) => ({
         pairings: state.pairings.map((held) => {
-            if (held.sandboxId !== sandboxId) {
+            if (held.sandboxId !== sandboxId || isAttachedPairing(held)) {
                 return held;
             }
             const mirrored = held.mirroredPorts ?? [];

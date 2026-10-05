@@ -71,7 +71,8 @@ export interface ListingRecord {
     readonly agreed: ReadonlyMap<string, string>;
 }
 
-export const listingRecordPath = (stateDir: string, sandboxId: string): string => join(stateDir, "hashes", `${encodeURIComponent(sandboxId)}.json`);
+// Named for the pairing's key (config.ts `pairingKey`), the sandbox id for every pairing but a folder attached to one.
+export const listingRecordPath = (stateDir: string, key: string): string => join(stateDir, "hashes", `${encodeURIComponent(key)}.json`);
 
 // A record that is missing, unreadable or of other folders is an empty one: it only ever saves work and sharpens what
 // counts as the sandbox's change, and without it every difference is offered, which is the safe way round.

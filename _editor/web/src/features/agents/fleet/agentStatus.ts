@@ -10,9 +10,11 @@ import {
     type AgentSummary,
     type AgentWatch,
     awaitsWake,
+    type DeliveryConflictReason,
     type LandConflictReason,
     type LandedRemover,
     type LandFailure,
+    type LandingDelivery,
     type LoopState,
     type QueuePause,
     type SubagentStatus,
@@ -754,6 +756,86 @@ const removedBy = (by: LandedRemover | undefined, me: string | undefined): Remov
     return who === undefined
         ? { note: t(`agents.agentStatus.takenOutInChanges`) }
         : { line: t(`agents.agentStatus.removedBy`, { who }), note: t(`agents.agentStatus.takenOutBy`, { who }) };
+};
+
+// What a land did in the folder on the owner's computer, for a project folder attached to this computer's own sandbox
+// (AgentSummary.delivery): one line under the card's facts. Quiet once the work is there or on its way; warm where the
+// owner has something to look at (files kept as they had them) or to do (Bring back, in the folder's window). A land
+// into any other folder has no delivery and no line.
+export interface LandedDelivery {
+    readonly text: string;
+    readonly tip?: Tip;
+    readonly icon: IconName;
+    readonly warm: boolean;
+}
+
+// How many kept paths the hover names before it counts the rest.
+const KEPT_PATHS_NAMED = 6;
+
+const KEPT_REASON = {
+    edited: () => t(`agents.agentStatus.keptEdited`),
+    link: () => t(`agents.agentStatus.keptLink`),
+    outside: () => t(`agents.agentStatus.keptOutside`),
+    "missing-git": () => t(`agents.agentStatus.keptNeedsGit`),
+} as const satisfies Record<DeliveryConflictReason, () => string>;
+
+// The machine's restore point, as the hover's closing line: what undoes the delivery, for whoever wants it.
+const pointNote = (delivery: LandingDelivery): string | undefined =>
+    delivery.point === undefined ? undefined : t(`agents.agentStatus.undoPoint`, { point: delivery.point });
+
+// The paths a partial delivery left alone, one row each, with why.
+const keptTip = (delivery: LandingDelivery): Tip => {
+    const more = delivery.conflicts.length - KEPT_PATHS_NAMED;
+    return {
+        title: t(`agents.agentStatus.keptAsYouHadThem`),
+        rows: delivery.conflicts.slice(0, KEPT_PATHS_NAMED).map(({ path, reason }) => ({ label: path, value: KEPT_REASON[reason]() })),
+        note: more > 0 ? t(`agents.agentStatus.keptMore`, { count: more }) : pointNote(delivery),
+    };
+};
+
+export const landedDelivery = (agent: { readonly delivery?: LandingDelivery }): LandedDelivery | undefined => {
+    const delivery = agent.delivery;
+    if (delivery === undefined) {
+        return undefined;
+    }
+    const folder = delivery.folder ?? t(`agents.agentStatus.yourFolder`);
+    switch (delivery.state) {
+        case `delivered`:
+            return {
+                text: t(`agents.agentStatus.deliveredTo`, { folder }),
+                tip: {
+                    title: t(`agents.agentStatus.delivered`),
+                    rows: [{ label: t(`agents.agentStatus.filesWritten`), value: delivery.applied }],
+                    note: pointNote(delivery),
+                },
+                icon: `folder`,
+                warm: false,
+            };
+        case `partial`: {
+            const count = delivery.conflicts.length;
+            // "You edited them too" only where that is the whole of why; a link or a missing git says itself in the hover.
+            const edited = delivery.conflicts.every(({ reason }) => reason === `edited`);
+            return {
+                text: t(edited ? `agents.agentStatus.keptOutEdited` : `agents.agentStatus.keptOut`, { count, folder }, count),
+                tip: keptTip(delivery),
+                icon: `file-edit`,
+                warm: true,
+            };
+        }
+        case `waiting`:
+            return { text: t(`agents.agentStatus.waitingToDeliver`, { folder }), icon: `clock`, warm: false };
+        case `failed`:
+            return {
+                text:
+                    delivery.reason === undefined
+                        ? t(`agents.agentStatus.couldntDeliverBare`)
+                        : t(`agents.agentStatus.couldntDeliver`, { reason: delivery.reason }),
+                icon: `exclamation-circle`,
+                warm: true,
+            };
+        case `too-large`:
+            return { text: t(`agents.agentStatus.tooLargeToDeliver`), icon: `exclamation-triangle`, warm: true };
+    }
 };
 
 // One bit, "this session isn't done yet", for surfaces that name an agent by its output rather than itself (the

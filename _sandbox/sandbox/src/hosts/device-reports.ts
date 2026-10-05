@@ -3,6 +3,7 @@ import {
     type Device,
     type DeviceAgentFlow,
     type DeviceGap,
+    type DevicePairing,
     type HostSummary,
     type DeviceFlowLine,
     type DeviceReport,
@@ -433,6 +434,15 @@ export const heldHostDevices = async (services: Services): Promise<Device[]> =>
             result: pulled.get(host.id)?.result ?? ({ gap: host.online ? "unreported" : "offline" } as const),
         })),
     );
+
+// The folders one machine pairs, as its freshest reading says: a connected machine is read as every reader reads it
+// (served from memory within the TTL), one that dropped answers with what it last said before it went. Undefined when
+// it never described itself to this daemon (its "Run commands" switch is off, or it was never read): what project
+// delivery (conversations/land/project-delivery.ts) reads to find the computer holding an attached folder.
+export const reportedPairings = async (services: Services, id: string): Promise<readonly DevicePairing[] | undefined> => {
+    const result = services.hostHub.online(id) ? await pullCached(services, id) : pulled.get(id)?.result;
+    return result !== undefined && "report" in result ? result.report.pairings : undefined;
+};
 
 // A setup code is redeemable only on the platform that minted it, which is this sandbox's own.
 const mintingPlatform = (services: Services): string => {

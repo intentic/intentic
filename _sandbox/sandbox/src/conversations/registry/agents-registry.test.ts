@@ -1574,6 +1574,44 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
     });
 
+    // A land into a folder attached to this computer's sandbox is delivered to the folder on the computer too
+    // (land/project-delivery.ts); what became of that speaks for one land, so the next land that moves the tips clears it.
+    it("a land's delivery rides the card until the next land moves the tips", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "my-app", base: "a".repeat(40) }]);
+        const landed = (tip: string) => ({
+            landed: true,
+            changed: true,
+            repos: [{ repo: "my-app", base: "a".repeat(40), landedTip: tip }],
+            diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: true,
+        });
+        await registry.recordLanded("c1", landed("b".repeat(40)));
+        const delivery = {
+            state: "partial" as const,
+            at: 2_000,
+            project: "my-app",
+            folder: "/home/ada/my-app",
+            applied: 2,
+            conflicts: [{ path: "src/app.ts", reason: "edited" as const }],
+            point: "rp-1",
+        };
+        await registry.recordDelivery("c1", delivery);
+        expect(registry.get("c1")?.delivery).toEqual(delivery);
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.delivery).toEqual(delivery);
+
+        // A measure that moves no tip is not a land: the delivery still speaks for the last one.
+        await registry.recordLanded("c1", { ...landed("b".repeat(40)), landed: false, held: true, adjudicated: false });
+        expect(registry.get("c1")?.delivery).toEqual(delivery);
+
+        await registry.recordLanded("c1", landed("c".repeat(40)));
+        expect(registry.get("c1")?.delivery).toBeUndefined();
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.delivery).toBeUndefined();
+    });
+
     it("the oldest permission a running turn waits on rides the card with its line, and leaves with its release", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

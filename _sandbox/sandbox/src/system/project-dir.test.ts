@@ -73,3 +73,21 @@ test("no project folder can be a name the daemon walks past or keeps for itself"
     const daemonNames = [...IGNORED_DIRS, ...plainExcludes, ...REPO_ROLES, "root", REFERENCE_DIR, PUBLIC_DIR, STARTER_REPO, MEMORY_FILE];
     expect(daemonNames.filter((name) => isProjectDirName(name))).toEqual([]);
 });
+
+// This computer's own sandbox, which folders attach to later: no folder of its own, and no starter site beside theirs.
+const projectsHost = (projectDir = ""): Config => ({ ...testConfig, sandbox: { ...testConfig.sandbox, projectDir, projectsHost: true } });
+
+test("a projects host has no folder of its own, seeds no starter site, and has nothing to refuse", () => {
+    const config = projectsHost();
+    expect(projectDirOf(config)).toBeUndefined();
+    expect(seedsStarterSite(config)).toBe(false);
+    expect(projectDirComplaint(config)).toBeUndefined();
+});
+
+// One folder's sandbox or the one folders attach to, never both: the boot is refused, naming both variables.
+test.each([under("/my-app"), under("/public")])("SANDBOX_PROJECT_DIR=%s beside SANDBOX_PROJECTS_HOST is refused", (value) => {
+    expect(projectDirComplaint(projectsHost(value))).toBe(
+        `SANDBOX_PROJECT_DIR=${value} and SANDBOX_PROJECTS_HOST are both set: a sandbox is made for one folder, or is this ` +
+            `computer's own sandbox that folders attach to, never both`,
+    );
+});

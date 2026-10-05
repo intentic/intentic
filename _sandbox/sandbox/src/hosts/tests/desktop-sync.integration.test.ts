@@ -12,6 +12,7 @@ import {
     restoreAuthorizedKeys,
     revokeEnrollmentByMachine,
     revokeEnrollmentByToken,
+    subscribeDeviceReports,
     syncPairBurns,
     type SyncMode,
     verifySyncToken,
@@ -303,5 +304,48 @@ describe("enrollment store", () => {
         // A token nobody holds files nothing and stamps nothing.
         expect(await recordDeviceReport(history, "ist_nobody", { ...report, machineId: "m-intruder-00001" })).toBe(false);
         expect((await enrolledFleet(history)).machines.map((row) => row.machineId)).toEqual(["m-laptop-a-0001", "m-laptop-b-0001"]);
+    });
+
+    // What a projects host attaches folders from (bootstrap/projects-host.ts): only a report its enrollment's token vouched
+    // for, and nothing once the listener is gone.
+    it("tells its listeners of each report a token vouched for, and of no other", async () => {
+        const holder = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
+        const report = {
+            hostname: "laptop-a",
+            os: "linux",
+            pairings: [{ sandboxId: "sandbox-abc", mode: "sync" as const, localDir: "/home/ada/blog", remoteDir: "/work/blog" }],
+            ports: [],
+            agent: { running: true },
+            capturedAt: 1,
+        };
+        const heard: unknown[] = [];
+        const stop = subscribeDeviceReports((received) => {
+            heard.push(received);
+        });
+
+        expect(await recordDeviceReport(history, "ist_nobody", report)).toBe(false);
+        expect(heard).toEqual([]);
+        expect(await recordDeviceReport(history, holder, report)).toBe(true);
+        expect(heard).toEqual([report]);
+
+        stop();
+        await recordDeviceReport(history, holder, report);
+        expect(heard).toHaveLength(1);
+    });
+
+    // The machine agent starts copying a newly attached folder once a report naming it is answered, so the answer waits
+    // for what the report set in motion: the folder's repo stands before its first file does.
+    it("answers a report only once its listeners have settled", async () => {
+        const holder = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "sync", takeover: false }));
+        const report = { hostname: "laptop-b", os: "linux", pairings: [], ports: [], agent: { running: true }, capturedAt: 1 };
+        const order: string[] = [];
+        const stop = subscribeDeviceReports(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            order.push("attached");
+        });
+        await recordDeviceReport(history, holder, report);
+        order.push("answered");
+        stop();
+        expect(order).toEqual(["attached", "answered"]);
     });
 });

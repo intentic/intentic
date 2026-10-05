@@ -387,6 +387,12 @@ export const DevicePairingSchema = z.object({
     // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
     // owner's own folder, which carries no state backup and no git bridge. Absent means /work.
     remoteDir: z.string().optional(),
+    // The folderless pairing that holds this machine's sync token for its own local sandbox, which project folders
+    // attach to (`intentic-machine sync attach`). Absent on every other pairing.
+    projectsHost: z.boolean().optional(),
+    // Whether landed work in this project folder is delivered to `localDir` by itself (`deliverProject`). Only a
+    // folder attached to the machine's own sandbox says "auto"; absent means Bring back by hand, as before.
+    deliver: z.enum(["auto", "off"]).optional(),
     // Machine-owned switch (agent's own `sync mirror off`); absent reads as "on", not merely unknown.
     mirroring: z.enum(["on", "off"]).optional(),
     // Mutagen's own status word, kept verbatim rather than reduced to a traffic light.

@@ -7,11 +7,12 @@ import { repoGitDir, syncRootExcludes } from "../../workspace/layout/git-layout.
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 
-// A project sandbox's folder (system/project-dir.ts) as a repo in the daemon's own layout, like one it cloned or
-// created: its git dir on /history and a `.git` pointer in the folder, so the Changes review, history and isolated
-// turns read it as they read any repo. The owner's own history never arrives, since file sync leaves every `.git` out,
-// so this repo starts unborn. Nothing is committed here: the folder may still be empty or half-synced when this runs,
-// and its first commit is the snapshot machinery's, as for any repo.
+// A project folder as a repo in the daemon's own layout, like one it cloned or created: a project sandbox's one folder
+// (system/project-dir.ts), or each folder attached to a projects host (system/projects-registry.ts). It gets its git
+// dir on /history and a `.git` pointer in the folder, so the Changes review, history and isolated turns read it as they
+// read any repo. The owner's own history never arrives, since file sync leaves every `.git` out, so this repo starts
+// unborn. Nothing is committed here: the folder may still be empty or half-synced when this runs, and its first commit
+// is the snapshot machinery's, as for any repo.
 
 // What this boot did, for its log line; only the first two changed anything.
 export type ProjectRepoOutcome = "created" | "pointer restored" | "already a repo" | "left to relocation";

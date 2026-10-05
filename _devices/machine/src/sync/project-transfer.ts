@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { claimPidFile, livePidRecord, releasePidFile } from "@intentic/local-agent";
-import { type Pairing, pairingRemoteDir, projectDirection, type ProjectDirection } from "./config.js";
+import { type Pairing, pairingKey, pairingRemoteDir, projectDirection, type ProjectDirection } from "./config.js";
 import {
     capped,
     type ChangeKind,
@@ -63,14 +63,19 @@ import { ignoresFor } from "./ssh.js";
 
 export type ProjectPairing = Pairing & { readonly localDir: string };
 
-export interface ProjectContext {
-    readonly pairing: ProjectPairing;
-    // The agent's own state dir (~/.intentic/machine), where restore points, the listing record and the lock live.
-    readonly stateDir: string;
+export interface ProjectContext extends FolderContext {
     readonly sandbox: SandboxCopy;
-    readonly session: SessionControl;
     // How a restore point is flushed to the disk; the real flush unless a test watches the order.
     readonly durability?: Durability;
+}
+
+// What holding a folder still takes, for anything that writes into it (a bring-back, a restore, a delivery of landed
+// work, project-delivery.ts): the folder's pairing, the agent's own state dir (~/.intentic/machine), where restore
+// points, the listing record and the lock live, keyed by the pairing's key, and its Mutagen session.
+export interface FolderContext {
+    readonly pairing: ProjectPairing;
+    readonly stateDir: string;
+    readonly session: SessionControl;
 }
 
 // One entry of `sync changes` as printed: a held change is a conflict, which bring-back lists but never writes over.
@@ -116,7 +121,7 @@ export interface RestoreResult {
 
 // Where the session stood when a listing was taken: `current` only when it was running and a flush had just finished a
 // whole cycle, and the file conflicts Mutagen then reported.
-interface Standing {
+export interface Standing {
     readonly current: boolean;
     readonly conflicts: ReadonlyMap<string, ReportedConflict>;
 }
@@ -124,7 +129,7 @@ interface Standing {
 const STALE: Standing = { current: false, conflicts: new Map() };
 
 // A running session, flushed, so this device's latest edits are in the sandbox wherever the sandbox takes them.
-const flushedStanding = async (context: ProjectContext): Promise<Standing> => {
+const flushedStanding = async (context: FolderContext): Promise<Standing> => {
     const flushed = await context.session.flush();
     const after = await context.session.inspect();
     return { current: flushed && after.state === "running", conflicts: after.conflicts };
@@ -170,7 +175,7 @@ const listSides = async (context: ProjectContext, standing: Standing, record: bo
     const patterns = ignoresFor(pairing);
     const remoteDir = pairingRemoteDir(pairing);
     const remote = await context.sandbox.list(ignoreExpressions(patterns));
-    const recordPath = listingRecordPath(stateDir, pairing.sandboxId);
+    const recordPath = listingRecordPath(stateDir, pairingKey(pairing));
     const held = await readListingRecord(recordPath, pairing.localDir, remoteDir);
     const wantsHash = (path: string, size: number): boolean => {
         const there = remote.get(path);
@@ -189,7 +194,7 @@ const listSides = async (context: ProjectContext, standing: Standing, record: bo
 // an edit made here afterwards is this device's, not the sandbox's to bring back over it.
 const recordAgreement = async (context: ProjectContext, applied: readonly { readonly path: string; readonly hash: string | null }[]): Promise<void> => {
     const { pairing, stateDir } = context;
-    const recordPath = listingRecordPath(stateDir, pairing.sandboxId);
+    const recordPath = listingRecordPath(stateDir, pairingKey(pairing));
     const record = await readListingRecord(recordPath, pairing.localDir, pairingRemoteDir(pairing));
     const agreed = new Map(record.agreed);
     for (const { path, hash } of applied) {
@@ -202,15 +207,18 @@ const recordAgreement = async (context: ProjectContext, applied: readonly { read
     await writeListingRecord(recordPath, pairing.localDir, pairingRemoteDir(pairing), { files: record.files, agreed });
 };
 
-const lockPath = (context: ProjectContext): string => join(restoreDir(context.stateDir, context.pairing.sandboxId), ".operation.pid");
+// The folder's own place under the state dir, where its lock, its pause marker and its restore points live.
+export const folderStateDir = (context: Pick<FolderContext, "pairing" | "stateDir">): string => restoreDir(context.stateDir, pairingKey(context.pairing));
+
+const lockPath = (context: Pick<FolderContext, "pairing" | "stateDir">): string => join(folderStateDir(context), ".operation.pid");
 
 // Written just before an operation pauses the session and removed once it has resumed it: left behind, it is a pause
 // nobody will lift, since the watcher resumes only the pauses it made itself.
-const pausedPath = (context: ProjectContext): string => join(restoreDir(context.stateDir, context.pairing.sandboxId), ".paused");
+const pausedPath = (context: Pick<FolderContext, "pairing" | "stateDir">): string => join(folderStateDir(context), ".paused");
 
 // A pause an operation made and never lifted (it was killed between the two) is lifted by the next command about this
 // folder, once no operation that could still lift it is running.
-const liftAbandonedPause = async (context: ProjectContext, locked: boolean): Promise<void> => {
+const liftAbandonedPause = async (context: FolderContext, locked: boolean): Promise<void> => {
     if (!existsSync(pausedPath(context)) || (!locked && (await livePidRecord(lockPath(context))) !== undefined)) {
         return;
     }
@@ -218,7 +226,7 @@ const liftAbandonedPause = async (context: ProjectContext, locked: boolean): Pro
     await rm(pausedPath(context), { force: true });
 };
 
-interface Held {
+export interface Held {
     readonly standing: Standing;
     // What lets the session go again; undefined where it was not this operation's to hold.
     readonly release: (() => Promise<void>) | undefined;
@@ -226,7 +234,7 @@ interface Held {
 
 // The session held still for an operation, when it is running (one paused by somebody stays theirs), and what undoes
 // that. With `flush`, a cycle first carries this device's latest edits over, and says whether it finished.
-const holdStill = async (context: ProjectContext, flush: boolean): Promise<Held> => {
+const holdStill = async (context: FolderContext, flush: boolean): Promise<Held> => {
     if ((await context.session.inspect()).state !== "running") {
         return { standing: STALE, release: undefined };
     }
@@ -245,19 +253,19 @@ const holdStill = async (context: ProjectContext, flush: boolean): Promise<Held>
     return { standing, release };
 };
 
-const claim = async (context: ProjectContext): Promise<{ readonly claimed: boolean; readonly holder?: number }> => {
-    const dir = restoreDir(context.stateDir, context.pairing.sandboxId);
+const claim = async (context: Pick<FolderContext, "pairing" | "stateDir">): Promise<{ readonly claimed: boolean; readonly holder?: number }> => {
+    const dir = folderStateDir(context);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const claimed = await claimPidFile(lockPath(context), dir, { pid: process.pid });
     return claimed.claimed ? { claimed: true } : { claimed: false, holder: claimed.holder.pid };
 };
 
-// One bring-back or restore per folder at a time, across processes (the desktop app and a terminal alike). A holder
-// that died is no holder: the lock names a pid of this boot, checked alive.
-const exclusively = async <T>(context: ProjectContext, operation: () => Promise<T>): Promise<T> => {
+// One bring-back, restore or delivery per folder at a time, across processes (the desktop app, a terminal and the
+// resident agent alike). A holder that died is no holder: the lock names a pid of this boot, checked alive.
+export const exclusively = async <T>(context: FolderContext, operation: () => Promise<T>): Promise<T> => {
     const claimed = await claim(context);
     if (!claimed.claimed) {
-        throw new Error(`another bring-back or restore for ${context.pairing.localDir} is running (pid ${claimed.holder}); try again once it has finished`);
+        throw new Error(`another bring-back, restore or delivery for ${context.pairing.localDir} is running (pid ${claimed.holder}); try again once it has finished`);
     }
     try {
         await liftAbandonedPause(context, true);
@@ -269,7 +277,7 @@ const exclusively = async <T>(context: ProjectContext, operation: () => Promise<
 
 // Runs an operation with the session held still, and says so plainly if it could not be let go again: the work is
 // done and kept, but the folder has stopped syncing until something resumes it.
-const whileHeld = async <T>(context: ProjectContext, flush: boolean, operation: (standing: Standing) => Promise<T>, done: (result: T) => string): Promise<T> => {
+export const whileHeld = async <T>(context: FolderContext, flush: boolean, operation: (standing: Standing) => Promise<T>, done: (result: T) => string): Promise<T> => {
     const held = await holdStill(context, flush);
     let result: T;
     try {
@@ -303,7 +311,7 @@ export const projectChanges = async (context: ProjectContext): Promise<ChangesRe
         const running = (await context.session.inspect()).state === "running";
         const standing = running ? await flushedStanding(context) : STALE;
         const shown = capped((await listSides(context, standing, claimed)).changes);
-        const result: ChangesResult = { ok: true, pairing: context.pairing.sandboxId, direction: projectDirection(context.pairing), changes: shown.changes.map(listed) };
+        const result: ChangesResult = { ok: true, pairing: pairingKey(context.pairing), direction: projectDirection(context.pairing), changes: shown.changes.map(listed) };
         return shown.truncated ? { ...result, truncated: true } : result;
     } finally {
         if (claimed) {
@@ -348,8 +356,8 @@ const apply = async (root: string, ready: Ready, entry: RestoreEntry): Promise<v
     await installFile(root, ready.change.path, ready.fetched.staged, mode);
 };
 
-// Staging folders a killed bring-back left: only ever this pairing's, and only removed while holding its lock.
-const clearStaging = async (dir: string): Promise<void> => {
+// Staging folders a killed bring-back or delivery left: only ever this pairing's, and only removed while holding its lock.
+export const clearStaging = async (dir: string): Promise<void> => {
     for (const name of (await readdir(dir)).filter((entry) => entry.startsWith(".staging-"))) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- rarely more than one
         await rm(join(dir, name), { recursive: true, force: true });
@@ -389,20 +397,21 @@ const bringBackHeld = async (context: ProjectContext, paths: readonly string[], 
     const ready = await readyChanges(context, sides, selected, staging, skipped);
     // THE RESTORE POINT, before anything here is touched: each file about to be overwritten or deleted copied into it,
     // and all of it on the disk (sealPoint) before the first write.
-    const point = await createPointDir(stateDir, pairing.sandboxId, Date.now());
+    const key = pairingKey(pairing);
+    const point = await createPointDir(stateDir, key, Date.now());
     const kept: { readonly ready: Ready; readonly entry: RestoreEntry }[] = [];
     for (const item of ready) {
         try {
             const request = { path: item.change.path, kind: item.change.kind, applied: item.applied };
             // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
-            kept.push({ ready: item, entry: await backUp(stateDir, pairing.sandboxId, point.id, pairing.localDir, request, durability) });
+            kept.push({ ready: item, entry: await backUp(stateDir, key, point.id, pairing.localDir, request, durability) });
         } catch (error) {
             skipped.push({ path: item.change.path, reason: errorMessage(error) });
         }
     }
     const manifest = { id: point.id, createdAt: point.createdAt, dir: pairing.localDir, entries: kept.map(({ entry }) => entry) };
-    await writeManifest(stateDir, pairing.sandboxId, manifest);
-    await sealPoint(stateDir, pairing.sandboxId, point.id, durability);
+    await writeManifest(stateDir, key, manifest);
+    await sealPoint(stateDir, key, point.id, durability);
     const done: { readonly entry: RestoreEntry; readonly kind: ChangeKind }[] = [];
     for (const { ready: item, entry } of kept) {
         try {
@@ -414,7 +423,7 @@ const bringBackHeld = async (context: ProjectContext, paths: readonly string[], 
         }
     }
     // What a restore can undo is what happened: the point is cut to the entries that were written.
-    await writeManifest(stateDir, pairing.sandboxId, { ...manifest, entries: done.map(({ entry }) => entry) });
+    await writeManifest(stateDir, key, { ...manifest, entries: done.map(({ entry }) => entry) });
     await recordAgreement(
         context,
         done.map(({ entry }) => ({ path: entry.path, hash: entry.applied })),
@@ -426,7 +435,7 @@ const bringBackHeld = async (context: ProjectContext, paths: readonly string[], 
 // conflict (a change held by project-files.ts) is skipped with its reason whether or not it was asked for.
 export const bringBack = async (context: ProjectContext, paths: readonly string[]): Promise<BringBackResult> =>
     await exclusively(context, async () => {
-        const dir = restoreDir(context.stateDir, context.pairing.sandboxId);
+        const dir = folderStateDir(context);
         await clearStaging(dir);
         const result = await whileHeld(
             context,
@@ -441,14 +450,14 @@ export const bringBack = async (context: ProjectContext, paths: readonly string[
             },
             (done) => `Brought back ${done.applied.length} file(s), restore point ${done.point}`,
         );
-        await pruneRestorePoints(context.stateDir, context.pairing.sandboxId, Date.now(), result.point);
+        await pruneRestorePoints(context.stateDir, pairingKey(context.pairing), Date.now(), result.point);
         return result;
     });
 
 // Every restore point of this folder that holds something, newest first. Reads this device only.
 export const restorePoints = async (context: Pick<ProjectContext, "pairing" | "stateDir">): Promise<RestorePointsResult> => ({
     ok: true,
-    points: await listPoints(context.stateDir, context.pairing.sandboxId, context.pairing.localDir),
+    points: await listPoints(context.stateDir, pairingKey(context.pairing), context.pairing.localDir),
 });
 
 // RESTORE: a point's files put back and the files its bring-back added taken away, each only where the folder still
@@ -456,7 +465,8 @@ export const restorePoints = async (context: Pick<ProjectContext, "pairing" | "s
 export const restorePoint = async (context: ProjectContext, id: string): Promise<RestoreResult> =>
     await exclusively(context, async () => {
         const { pairing, stateDir } = context;
-        const manifest = await readManifest(stateDir, pairing.sandboxId, id, pairing.localDir);
+        const key = pairingKey(pairing);
+        const manifest = await readManifest(stateDir, key, id, pairing.localDir);
         await assertFolder(pairing.localDir);
         return await whileHeld(
             context,
@@ -467,7 +477,7 @@ export const restorePoint = async (context: ProjectContext, id: string): Promise
                 for (const entry of manifest.entries) {
                     try {
                         // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
-                        await restoreEntry(stateDir, pairing.sandboxId, id, pairing.localDir, entry);
+                        await restoreEntry(stateDir, key, id, pairing.localDir, entry);
                         restored += 1;
                     } catch (error) {
                         skipped.push({ path: entry.path, reason: errorMessage(error) });

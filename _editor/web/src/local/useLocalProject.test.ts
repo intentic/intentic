@@ -1,57 +1,57 @@
 import "@intentic/testing/dom";
 import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { ref } from "vue";
-import { LINK_HOST, type LocalHost, type LocalProjectBuild, type LocalProjectHost, type LocalProjectPreview } from "../app/environments/localHost";
+import { nextTick, ref } from "vue";
+import {
+    LINK_HOST,
+    type LocalFolderSandbox,
+    type LocalHost,
+    type LocalMachineSandbox,
+    type LocalProjectHost,
+    type LocalProjectPreview,
+} from "../app/environments/localHost";
 
-// "Work on this with an agent" in a folder's window: its own dialog, the sandbox made under names derived from the
-// folder's, and a press that never asks twice while a build is under way. The app is a fake host; the links a page
-// without one sends are caught where they leave (desktop.ts sends them a beat apart, so the clock is walked).
+// "Work on this with an agent" in a folder's window: its own dialog, the folder put in line for this computer's sandbox
+// under a name derived from the folder's, a press that never waits on the sandbox, and a card that comes back rather
+// than a second question while the folder is on its way in. The app is a fake host; the links a page without one sends
+// are caught where they leave (desktop.ts sends them a beat apart, so the clock is walked).
 
 const load = () => freshImport<typeof import("./useLocalProject")>("./useLocalProject", import.meta.url);
 
+const CREATING: LocalMachineSandbox = { state: `creating`, phase: `pulling-image`, step: `Download`, percent: 30, name: `ada-laptop sandbox`, waiting: 0, hasLog: false };
+
 const NEW: LocalProjectPreview = {
     kind: `new`,
-    name: `test-remove-me`,
-    path: `C:\\Users\\me\\Documents\\test-remove-me`,
+    name: `My App`,
+    path: `C:\\Users\\me\\Documents\\My App`,
     files: 3,
     bytes: 355,
     more: false,
     large: false,
     cautions: [],
-    signedIn: true,
-    busy: false,
+    machine: { state: `ready` },
 };
 
-const build = ref<LocalProjectBuild | undefined>(undefined);
+const machine = ref<LocalMachineSandbox | undefined>(undefined);
+const folder = ref<LocalFolderSandbox | undefined>(undefined);
 
-const fakeProject = (preview: LocalProjectPreview, created: Promise<`building` | `signIn` | `opened`> = Promise.resolve(`building`)) => {
+const fakeProject = (preview: LocalProjectPreview, attached: Promise<`queued` | `opened`> = Promise.resolve(`queued`)) => {
     const asked = jest.fn(async () => preview);
-    const made = jest.fn(async () => created);
-    const project: LocalProjectHost = {
-        preview: asked,
-        create: made,
-        build,
-        open: jest.fn(async () => undefined),
-        retry: jest.fn(async () => undefined),
-        stop: jest.fn(async () => undefined),
-        dismiss: jest.fn(),
-        detailsPath: `/device`,
-    };
-    const host: LocalHost = {
-        ...LINK_HOST,
-        native: true,
-        roster: async () => ({ account: null, sandboxes: [{ id: `cm1`, name: `test-remove-me`, place: `device`, shared: false }] }),
-        project,
-    };
+    const attach = jest.fn(async (_names: { readonly project: string }) => attached);
+    const act = jest.fn(async () => undefined);
+    const open = jest.fn(async () => undefined);
+    const project: LocalProjectHost = { preview: asked, attach, machine, folder, open, act, detailsPath: `/device` };
+    const host: LocalHost = { ...LINK_HOST, native: true, project };
     window.__INTENTIC_LOCAL_HOST__ = host;
-    return { asked, made };
+    return { asked, attach, act, open };
 };
 
 let heard: string[] = [];
 beforeEach(() => {
     jest.useFakeTimers();
     heard = [];
-    build.value = undefined;
+    machine.value = undefined;
+    folder.value = undefined;
+    localStorage.clear();
     Object.defineProperty(document, `readyState`, { configurable: true, get: () => `complete` });
     stubGlobal(`location`, {
         get href(): string {
@@ -90,62 +90,54 @@ it(`opens the sandbox a folder already has, asking nothing`, async () => {
     expect({ open: flow.dialogOpen.value, links: links() }).toEqual({ open: false, links: [`intentic://local?do=sandbox`] });
 });
 
-// The account already has a sandbox by the folder's name: the new one is numbered past it, as /setup numbers one.
-it(`makes the sandbox under names derived from the folder's, and puts the dialog away for the build's card`, async () => {
-    const { made } = fakeProject(NEW);
+// The folder's name in /work is the folder's own, made safe (`projectDirNameFor`); the app makes it unique.
+it(`puts the folder in line under the name derived from its own, and the dialog goes at once`, async () => {
+    const { attach, act } = fakeProject(NEW);
     const { useLocalProject } = await load();
     const flow = useLocalProject();
     await flow.ask();
-    flow.fold(true);
-    await flow.create();
-    expect(made).toHaveBeenCalledWith({ name: `test-remove-me-2`, project: `test-remove-me` });
+    await flow.attach();
+    expect(attach).toHaveBeenCalledWith({ project: `My-App` });
+    expect(act).not.toHaveBeenCalled();
     expect({ open: flow.dialogOpen.value, folded: flow.minimized.value }).toEqual({ open: false, folded: false });
 });
 
-it(`keeps the dialog up with the app's own reason when nothing was made`, async () => {
-    fakeProject(NEW, Promise.reject(new Error(`The platform could not be reached. Check your connection and try again.`)));
+it(`asks for the sign-in at the same press when nobody is signed in, the folder already in line`, async () => {
+    const { attach, act } = fakeProject({ ...NEW, machine: { state: `signedOut` } });
     const { useLocalProject } = await load();
     const flow = useLocalProject();
     await flow.ask();
-    await flow.create();
-    expect({ open: flow.dialogOpen.value, failure: flow.failure.value, creating: flow.creating.value }).toEqual({
+    await flow.attach();
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(act).toHaveBeenCalledWith(`signIn`);
+    expect(flow.dialogOpen.value).toBe(false);
+});
+
+it(`keeps the dialog up with the app's own reason when the folder could not go in line`, async () => {
+    fakeProject(NEW, Promise.reject(new Error(`This folder can't be used to name a folder in a sandbox.`)));
+    const { useLocalProject } = await load();
+    const flow = useLocalProject();
+    await flow.ask();
+    await flow.attach();
+    expect({ open: flow.dialogOpen.value, failure: flow.failure.value, attaching: flow.attaching.value }).toEqual({
         open: true,
-        failure: `The platform could not be reached. Check your connection and try again.`,
-        creating: false,
+        failure: `This folder can't be used to name a folder in a sandbox.`,
+        attaching: false,
     });
 });
 
-it(`makes nothing for a folder that cannot have a sandbox`, async () => {
-    const { made } = fakeProject({ kind: `refused`, refusal: { kind: `disk` } });
+it(`puts nothing in line for a folder that cannot have a sandbox`, async () => {
+    const { attach } = fakeProject({ kind: `refused`, refusal: { kind: `disk` } });
     const flow = (await load()).useLocalProject();
     await flow.ask();
-    await flow.create();
-    expect(made).not.toHaveBeenCalled();
+    await flow.attach();
+    expect(attach).not.toHaveBeenCalled();
 });
 
-it(`brings back the card of a build under way rather than asking a second time`, async () => {
+it(`brings back the card of a folder on its way in rather than asking a second time`, async () => {
     const { asked } = fakeProject(NEW);
-    build.value = { name: `test-remove-me`, state: `building`, phase: `pulling-image`, phaseProgress: 0.2, step: `Download`, percent: 30, remainingMs: 60_000, error: undefined };
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    flow.fold(true);
-    await flow.ask();
-    expect({ open: flow.dialogOpen.value, folded: flow.minimized.value, previewed: asked.mock.calls.length }).toEqual({
-        open: false,
-        folded: false,
-        previewed: 0,
-    });
-});
-
-it(`asks the app by link where there is no app behind the page to make one`, async () => {
-    const { useLocalProject } = await load();
-    await useLocalProject().ask();
-    expect(links()).toEqual([`intentic://local?do=sandbox`]);
-});
-
-it(`brings back a stopped build's card too, where its "Try again" keeps the same sandbox`, async () => {
-    const { asked } = fakeProject(NEW);
-    build.value = { name: `test-remove-me`, state: `failed`, phase: `claiming-code`, phaseProgress: 0, step: undefined, percent: 8, remainingMs: undefined, error: `refused` };
+    machine.value = CREATING;
+    folder.value = { name: `My-App`, state: `queued`, reason: undefined, status: undefined };
     const { useLocalProject } = await load();
     const flow = useLocalProject();
     flow.fold(true);
@@ -153,24 +145,50 @@ it(`brings back a stopped build's card too, where its "Try again" keeps the same
     expect({ open: flow.dialogOpen.value, folded: flow.minimized.value, previewed: asked.mock.calls.length }).toEqual({ open: false, folded: false, previewed: 0 });
 });
 
-it(`says on the card why "Try again" started nothing`, async () => {
+it(`asks the app by link where there is no app behind the page to answer`, async () => {
+    const { useLocalProject } = await load();
+    await useLocalProject().ask();
+    expect(links()).toEqual([`intentic://local?do=sandbox`]);
+});
+
+it(`carries the card while this computer's sandbox is not ready, and says for a moment when it is`, async () => {
     fakeProject(NEW);
-    const host = window.__INTENTIC_LOCAL_HOST__;
-    const project = host?.project;
-    if (host === undefined || project === undefined) {
-        throw new Error(`no host`);
-    }
-    window.__INTENTIC_LOCAL_HOST__ = {
-        ...host,
-        project: {
-            ...project,
-            retry: async () => {
-                throw new Error(`The platform could not be reached.`);
-            },
-        },
-    };
     const { useLocalProject } = await load();
     const flow = useLocalProject();
-    await flow.retry();
-    expect(flow.retryFailure.value).toBe(`The platform could not be reached.`);
+    expect(flow.card.value).toBeUndefined();
+    machine.value = CREATING;
+    await nextTick();
+    expect(flow.card.value?.tone).toBe(`working`);
+    machine.value = { state: `ready`, name: `ada-laptop sandbox`, waiting: 0, hasLog: false };
+    await nextTick();
+    expect(flow.card.value?.tone).toBe(`ready`);
+    jest.advanceTimersByTime(15_000);
+    expect(flow.card.value).toBeUndefined();
+});
+
+// A fold is remembered for what the card showed, in every window: the same news stays folded, new news unfolds.
+it(`remembers a fold for what it showed, and unfolds for something new`, async () => {
+    fakeProject(NEW);
+    machine.value = { state: `needsDocker`, reason: `notRunning`, name: undefined, waiting: 0, hasLog: false };
+    const first = (await load()).useLocalProject();
+    await nextTick();
+    first.fold(true);
+    const second = (await load()).useLocalProject();
+    await nextTick();
+    expect(second.minimized.value).toBe(true);
+    machine.value = CREATING;
+    await nextTick();
+    expect(second.minimized.value).toBe(false);
+});
+
+it(`puts a turned-down folder in line again under the name it had, and says on the card why that did nothing`, async () => {
+    const { attach } = fakeProject(NEW);
+    machine.value = { state: `ready`, name: undefined, waiting: 0, hasLog: false };
+    folder.value = { name: `My-App`, state: `failed`, reason: `That folder is already attached.`, status: undefined };
+    const flow = (await load()).useLocalProject();
+    await flow.retryFolder();
+    expect(attach).toHaveBeenCalledWith({ project: `My-App` });
+    attach.mockRejectedValueOnce(new Error(`The machine agent didn't answer in time.`));
+    await flow.retryFolder();
+    expect(flow.actionFailure.value).toBe(`The machine agent didn't answer in time.`);
 });

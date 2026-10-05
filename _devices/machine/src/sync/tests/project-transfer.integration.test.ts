@@ -341,7 +341,7 @@ describe("the session around a bring-back", () => {
         const dir = restoreDir(context.stateDir, "sandbox-a");
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, ".operation.pid"), await pidFileBody({ pid: process.ppid }));
-        await expect(bringBack(context, [])).rejects.toThrow(`another bring-back or restore for ${local} is running (pid ${process.ppid})`);
+        await expect(bringBack(context, [])).rejects.toThrow(`another bring-back, restore or delivery for ${local} is running (pid ${process.ppid})`);
     });
 });
 

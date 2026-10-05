@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import type { LocalFace } from "@intentic/web/local";
-import type { LocalHost, LocalProjectHost, LocalProjectStart, LocalView } from "@intentic/web/local-host";
+import type { LocalHost, LocalMachineAction, LocalProjectHost, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
 import { readAccount, signOutAccount, updateAccount } from "./account";
 import {
@@ -12,14 +12,22 @@ import {
     localPoint,
     localRecents,
     localRoster,
-    projectCreate,
+    projectAttach,
     projectPreview,
     signIn,
     workspaceOpen,
-    type ProjectCreated,
 } from "./desktop";
 import { deviceBadge } from "./device/badge";
-import { projectBuildOf, projectPathOf } from "./device/projectBuild";
+import {
+    machineFolderOf,
+    machineSandbox,
+    recreateMachine,
+    retryMachine,
+    revealMachineLog,
+    startMachine,
+    startMachineSandbox,
+} from "./device/machineSandbox";
+import { folderOf, machineOf, machineStateOf, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
@@ -41,6 +49,7 @@ const badge = computed(() => {
         waiting: device.setupMode.value || device.syncSetup.value?.error !== undefined,
         startingDocker: device.dockerStarting.value,
         updateReady: device.update.value.kind === `ready`,
+        machine: machineSandbox.value?.state,
     });
 });
 
@@ -53,55 +62,45 @@ const DEVICE_VIEW: LocalView = {
     badge,
 };
 
-/* A FOLDER'S OWN SANDBOX, made from its window (the app's project.rs) and built in it: this window's setup store runs the
-   setup (device/setup.ts `adoptSetup`), and the card over the folder draws it (the web's local/LocalProject.vue). */
+/* A FOLDER'S WAY TO AN AGENT: this computer's own sandbox, which the app makes after sign-in and keeps (the app's
+   machine_sandbox.rs, device/machineSandbox.ts), and the window's folder on its way into it (project.rs
+   `project_attach`). Nothing here runs anything: the app does, whichever window is open, and every window hears it. */
 
-// Whether the sandbox image was on this computer when the dialog was drawn: the build's plan weighs no download then.
-let imageWasReady = false;
+// The folder this window shows, by the path the app told it: how its own entry in the record is found.
+const folderPath = (): string | undefined => {
+    const face = window.__INTENTIC_LOCAL__;
+    return face === undefined || face.file !== undefined ? undefined : face.path;
+};
 
-// What a press came to, the setup started here when there is one to run.
-const started = (created: ProjectCreated): LocalProjectStart => {
-    if (created.kind === `setup`) {
-        // Not awaited: the build runs for its minutes while the page goes on, and its card follows the store.
-        void useDevice().adoptSetup(created.setup, { imageReady: imageWasReady });
-        return `building`;
-    }
-    return created.kind === `signIn` ? `signIn` : `opened`;
+const MACHINE_ACTIONS: Readonly<Record<LocalMachineAction, () => Promise<void>>> = {
+    signIn: () => signIn(),
+    // This window's own start of the engine, the one This device's card draws; the app looks again once it answers.
+    startDocker: () => useDevice().startDocker(`card`),
+    retry: () => retryMachine(),
+    start: () => startMachine(),
+    recreate: () => recreateMachine(),
+    log: () => revealMachineLog(),
 };
 
 const PROJECT: LocalProjectHost = {
     preview: async () => {
         const preview = await projectPreview();
-        if (preview.kind === `new`) {
-            imageWasReady = preview.imageReady;
-        }
-        return preview;
+        return preview.kind === `new` ? { ...preview, machine: machineStateOf(preview.machine) } : preview;
     },
-    create: async (names) => started(await projectCreate(names)),
-    build: computed(() => {
-        const device = useDevice();
-        return projectBuildOf({
-            adopted: device.adopted.value,
-            state: device.setupState.value,
-            view: device.progressShown.value,
-            error: device.setupError.value,
-        });
-    }),
+    attach: async (names) => {
+        const attached = await projectAttach(names);
+        return attached.kind === `queued` ? `queued` : `opened`;
+    },
+    machine: computed(() => machineOf(machineSandbox.value)),
+    folder: computed(() => folderOf(machineSandbox.value, folderPath())),
+    // The folder's sandbox, opened on the folder: this computer's, under the folder's name in it.
     open: async () => {
-        const adopted = useDevice().adopted.value;
-        await workspaceOpen(adopted === undefined ? undefined : projectPathOf(adopted));
+        const record = machineSandbox.value;
+        const folder = machineFolderOf(record, folderPath());
+        await workspaceOpen(projectPathOf({ sandboxId: record?.sandboxId, project: folder?.name }));
     },
-    // The same sandbox, set up again: the app mints its code afresh, or hands back the one still good.
-    retry: async () => {
-        const adopted = useDevice().adopted.value;
-        if (adopted === undefined || adopted.name === undefined || adopted.project === undefined) {
-            return;
-        }
-        started(await projectCreate({ name: adopted.name, project: adopted.project, ...(adopted.sandboxId === undefined ? {} : { sandboxId: adopted.sandboxId }) }));
-    },
-    stop: () => useDevice().stopSetup(),
-    dismiss: () => useDevice().forgetAdopted(),
-    // This device, where the build's every step, its log and anything it asks of the reader are drawn.
+    act: (action) => MACHINE_ACTIONS[action](),
+    // This device, where this computer's sandbox, its every step and anything it asks of the reader are drawn.
     detailsPath: `/${DEVICE_VIEW.path}`,
 };
 
@@ -141,6 +140,8 @@ export const installHost = (face: LocalFace): void => {
     }
     window.__INTENTIC_LOCAL_HOST__ = nativeHost();
     void startReading(face.home === true);
+    // Every window follows this computer's own sandbox: its card is in each of them while it is not ready.
+    void startMachineSandbox();
 };
 
 // The window's reading of the machine, started once; a failure is the console's, since the page draws what it has.

@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// Where a line came from. The app's own screen renders stderr as the failure detail when a run exits
 /// non-zero — the scripts write their progress to stdout and their diagnostics to stderr, and conflating them
 /// loses the only thing worth showing when something goes wrong.
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Stream {
     Stdout,
@@ -549,6 +549,18 @@ pub fn daemon_refusal() -> Option<String> {
     }
 }
 
+/// Whether this machine has a docker CLI at all: what tells "Docker isn't installed" from "Docker isn't running" for an
+/// engine that does not answer (machine_sandbox.rs). Only a CLI that would not start says no; one that ran and
+/// complained is an installed Docker.
+pub fn docker_cli_present() -> bool {
+    let mut command = docker();
+    command.arg("--version");
+    !matches!(
+        capture("docker --version", command, Duration::from_secs(5)),
+        Err(Unanswered::NotStarted { .. })
+    )
+}
+
 /// Whether a refusal is the engine turning THIS ACCOUNT away rather than not being there at all. Windows
 /// spells a permission failure on a named pipe exactly one way and Linux spells its socket's exactly one
 /// other; waiting longer fixes neither. Mirrors ic's `prepare::plan::engine_denied`, which decides the same
@@ -678,26 +690,45 @@ use intentic_bounded::{await_drain, DRAIN_GRACE};
 /// "install Docker?"), and a prompt written to a pipe nobody answers is a run that hangs forever with no UI
 /// for it — so every caller passes the non-interactive flags instead (`-y`, `INSTALL_DOCKER=1`).
 pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
-    let mut command = command_for(app, &script)?;
-    let child = spawn_piped(&mut command)
-        .map_err(|error| format!("could not start {}: {error}", script.file))?;
-    let ended = follow(app, id, script.file, child, None)?;
+    let file = script.file;
+    let ended = run_heard(app, id, script, None)?;
     if ended.success {
         return Ok(());
     }
     Err(match ended.code {
-        Some(code) => format!("{} exited with status {code}", script.file),
-        None => format!("{} was terminated", script.file),
+        Some(code) => format!("{file} exited with status {code}"),
+        None => format!("{file} was terminated"),
     })
 }
 
+/// What hears every line of a run as it arrives, beside the window and the transcript: the stream it came on, and
+/// the line.
+pub type Heard = Arc<dyn Fn(Stream, &str) + Send + Sync>;
+
+/// [`run`], with every line also handed to `heard` (machine_sandbox.rs reads its setup's progress in Rust, since no
+/// window need be there to read it), and how it ended answered whatever the exit: a designed stop (exit 3 or 4) is
+/// an answer for the caller to read, not an error. `Err` only when the script never started. BLOCKING.
+pub fn run_heard(
+    app: &AppHandle,
+    id: &str,
+    script: ScriptRun,
+    heard: Option<Heard>,
+) -> Result<Ended, String> {
+    let mut command = command_for(app, &script)?;
+    let child = spawn_piped(&mut command)
+        .map_err(|error| format!("could not start {}: {error}", script.file))?;
+    follow(app, id, script.file, child, None, heard)
+}
+
 /// How a followed run ended.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ended {
     pub code: Option<i32>,
     pub success: bool,
     /// It ran past its limit and was stopped, with everything it started.
     pub timed_out: bool,
+    /// Where its transcript was written, when it could be.
+    pub log: Option<String>,
 }
 
 fn spawn_piped(command: &mut Command) -> std::io::Result<Child> {
@@ -717,6 +748,7 @@ fn follow(
     what: &str,
     mut child: Child,
     limit: Option<Duration>,
+    heard: Option<Heard>,
 ) -> Result<Ended, String> {
     remember(id, child.id());
 
@@ -748,6 +780,7 @@ fn follow(
             let id = id.to_string();
             let reporting = Arc::clone(&reporting);
             let transcript = transcript.clone();
+            let heard = heard.clone();
             std::thread::spawn(move || {
                 if let Some(handle) = handle {
                     for line in BufReader::new(handle).lines().map_while(Result::ok) {
@@ -767,6 +800,9 @@ fn follow(
                                     }
                                 );
                             }
+                        }
+                        if let Some(heard) = &heard {
+                            heard(stream, &line);
                         }
                         let _ = app.emit(
                             RUN_EVENT,
@@ -840,6 +876,7 @@ fn follow(
         code: status.code(),
         success: status.success() && !timed_out,
         timed_out,
+        log: path.map(|path| path.to_string_lossy().to_string()),
     })
 }
 
@@ -964,7 +1001,7 @@ pub fn run_ic(
             // Not at this path: the next one.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(format!("ic would not start: {error}")),
-            Ok(child) => return follow(app, id, "ic", child, Some(limit)),
+            Ok(child) => return follow(app, id, "ic", child, Some(limit), None),
         }
     }
     Err(IC_MISSING.to_string())

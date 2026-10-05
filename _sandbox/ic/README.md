@@ -29,6 +29,12 @@ flowchart LR
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
   is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
   tells the container `SANDBOX_PROJECT_DIR`, which the run contract replays across every later swap.
+- The desktop app's one sandbox per computer, which folders attach to later, is asked for with `SYNC_PROJECTS_HOST=1`
+  and no folder at all: any of `SYNC_DIR`, `SYNC_REMOTE_DIR` or `SYNC_PROJECT` beside it is refused before anything
+  starts. The container is told `SANDBOX_PROJECTS_HOST=1` (replayed like the folder above), and desktop sync still runs,
+  with the installer handed `SYNC_PROJECTS_HOST=1` instead of a folder, so the machine agent holds the sync token the
+  attached folders will sync under. If that step fails, the sandbox stays up and the warning says no folder can attach
+  until it is set up again. The step names and phases are the same as any setup's.
 - **ic is the one host authority for what runs and what should run.** Every door onto a sandbox's container (the
   machine agent, the desktop app, the web's pasted fallback lines) calls ic's verbs rather than docker: `start`,
   `stop` and `restart` power the tunnel sidecar with its sandbox, and `ic sandbox list --json` answers each

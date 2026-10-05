@@ -214,14 +214,14 @@ export const ensureSshKey = async (): Promise<string> => {
 
 // One Host block per pairing, regenerated from the full list rather than appended, so adding or dropping a
 // sandbox can't duplicate or strip a sibling's block. A pairing reached through Docker (endpoint.ts) gets none: nothing
-// of it rides ssh, so an alias for it would only be a door to a listener this agent never binds.
+// of it rides ssh, so an alias for it would only be a door to a listener this agent never binds. The alias is the
+// sandbox's, so several pairings of one sandbox (folders attached to it) share one block.
 export const pairingSshConfig = (pairings: readonly Pick<Pairing, "sandboxId" | "transport" | "container">[]): string =>
-    pairings
-        .filter((pairing) => pairingTransport(pairing) === "ssh")
-        .map((pairing) =>
+    [...new Set(pairings.filter((pairing) => pairingTransport(pairing) === "ssh").map((pairing) => pairing.sandboxId))]
+        .map((sandboxId) =>
             sshConfigBlock({
-                alias: sshAlias(pairing.sandboxId),
-                port: syncSshPort(pairing.sandboxId),
+                alias: sshAlias(sandboxId),
+                port: syncSshPort(sandboxId),
                 identityFile: sshKeyPath,
                 knownHostsFile: knownHostsPath,
             }),

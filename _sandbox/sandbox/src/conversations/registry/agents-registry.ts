@@ -9,6 +9,7 @@ import {
     keepWarmCap,
     type LandConflictReason,
     type LandedMessageDraft,
+    type LandingDelivery,
     planParts,
     type TodoItem,
     type TurnBreak,
@@ -641,6 +642,10 @@ export interface AgentsRegistry {
     // Clears a failure the end-of-turn check left, once a later check read the books: a passing index.lock is not a
     // broken land, and saying so until somebody landed by hand was wrong. A land's own failure stays.
     readonly clearCheckFailure: (id: string) => Promise<void>;
+    // What became of its last land in the folder on the owner's computer (land/project-delivery.ts), replacing what the
+    // record said of it before: a delivery speaks for one land, so the next land that moves the tips clears it
+    // (recordLanded), and only this writes one.
+    readonly recordDelivery: (id: string, delivery: LandingDelivery) => Promise<void>;
     // Somebody about to take changes out of the main tree by hand (a discard in the Changes panel), for the presence
     // probe to name if landed work goes with them (landed-presence.ts).
     readonly noteRemover: (remover: Remover) => void;
@@ -756,6 +761,24 @@ const landFailureRecorder =
         }
         const kept = { reason: failure.reason, ...opt("code", failure.code), at: Date.now(), ...(failure.check === true ? { check: true } : {}) };
         books.replace({ ...entry, landing: { ...entry.landing, failure: kept } });
+        await books.persist();
+        books.broadcast();
+    };
+
+// AgentsRegistry.recordDelivery over the registry's own books: the delivery onto the record whole, published.
+const deliveryRecorder =
+    (books: {
+        readonly entryOf: (id: string) => PersistedAgent | undefined;
+        readonly replace: (next: PersistedAgent) => void;
+        readonly persist: () => Promise<void>;
+        readonly broadcast: () => void;
+    }): AgentsRegistry["recordDelivery"] =>
+    async (id, delivery) => {
+        const entry = books.entryOf(id);
+        if (entry === undefined || !isIsolated(entry)) {
+            return;
+        }
+        books.replace({ ...entry, landing: { ...entry.landing, delivery } });
         await books.persist();
         books.broadcast();
     };
@@ -1069,6 +1092,8 @@ export const createFleet = (
             ...opt("landedPresence", presenceOnCard(presences.of(entry.id), entryOf)),
             // Stands until a land runs to a verdict, whatever turns run meanwhile.
             ...opt("landFailure", entry.landing.failure === undefined ? undefined : landFailureOnCard(entry.landing.failure)),
+            // What its last land did in the owner's folder, for a project attached to this computer's sandbox.
+            ...opt("delivery", entry.landing.delivery),
         };
     };
 
@@ -1411,6 +1436,9 @@ export const createFleet = (
                     diff: outcome.diff,
                     ...opt("failure", broke),
                     ...opt("removedBy", landing.removedBy),
+                    // A delivery speaks for the land it followed; one that moved the tips is a new land, whose own
+                    // delivery (if its project is attached anywhere) is written after it.
+                    ...opt("delivery", moved ? undefined : landing.delivery),
                 },
                 social,
             });
@@ -1421,6 +1449,7 @@ export const createFleet = (
         },
         recordLandFailure: landFailureRecorder({ entryOf, replace, persist, broadcast }),
         clearCheckFailure: checkFailureClearer({ entryOf, replace, persist, broadcast }),
+        recordDelivery: deliveryRecorder({ entryOf, replace, persist, broadcast }),
         noteRemover: presences.note,
         markLandingAbsorbed: async (id, repo, landedHead, landedTip, size) => {
             const entry = entryOf(id);

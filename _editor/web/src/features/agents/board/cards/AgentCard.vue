@@ -43,6 +43,7 @@ import {
     type FleetLane,
     formatCost,
     landedAway,
+    landedDelivery,
     landFailure,
     laneOf,
     limited,
@@ -247,6 +248,9 @@ const settingsPages = useSettingsRefusal(() => props.agent, () => yoursToClear.v
 // again replaces it when both apply. Named by who took it out when the sandbox could tell, and offering no Land again
 // when that was an agent, whose doing it was on purpose (the card menu keeps it).
 const away = computed(() => (props.agent.archivedAt === undefined ? landedAway(props.agent, user.value?.email) : undefined));
+// What its last land did in the folder on the owner's computer, for a project folder attached to this computer's own
+// sandbox (landedDelivery): a fact with no press, so the archive keeps it too.
+const delivery = computed(() => landedDelivery(props.agent));
 // Whether that line carries its press. One an agent took out carries none, so the card lands whatever is new as a Ready
 // card would, leaving out what was taken, and reads as a receipt once there is nothing new.
 const relandOffered = computed(() => away.value?.offerReland === true);
@@ -831,6 +835,16 @@ const grab = (event: PointerEvent): void => {
                     <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? words.landing : words.landAgain }}
                 </Button>
             </div>
+
+            <!-- What the land did in the owner's own folder: warm only where they have something to look at or do, and the paths it kept out in the hover. -->
+            <p
+                v-if="delivery !== undefined"
+                v-tooltip.top="delivery.tip"
+                class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug"
+                :class="delivery.warm ? `text-warning` : `text-muted`"
+            >
+                <Icon :name="delivery.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
+            </p>
 
             <!-- Success-styled with the check glyph, matching the review panel's own Land now: the same action on the same work must read as such. -->
             <div v-if="(landable || shipping) && canShip" class="flex min-w-0 flex-col gap-1">

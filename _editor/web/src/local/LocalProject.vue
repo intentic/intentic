@@ -1,23 +1,19 @@
-<!-- A FOLDER'S OWN SANDBOX, AS THIS WINDOW ASKS FOR IT AND WATCHES IT GO UP: the dialog, and the build's card in the
-     corner where the window's notifications ride (shell/notifications), so the two share one lane rather than stacking
-     over each other. Mounted once, by the window's shell (LocalShell.vue), so the build stays in sight whichever screen
-     of the window the reader moves to. -->
+<!-- A FOLDER'S WAY TO AN AGENT, AS THIS WINDOW ASKS FOR IT AND WATCHES IT: the dialog, and the card of this computer's
+     sandbox and this folder going into it, in the corner where the window's notifications ride (shell/notifications), so
+     the two share one lane rather than stacking over each other. Mounted once, by the window's shell (LocalShell.vue), so
+     the card stays in sight whichever screen of the window the reader moves to. -->
 <script setup lang="ts">
-import { useT } from "@intentic/ui/i18n";
 import { onMounted, onUnmounted } from "vue";
 import { LOCAL_PROJECT_ASK_EVENT } from "../app/environments/local";
 import { hold } from "../shell/notifications/notifications";
-import LocalProjectBuild from "./LocalProjectBuild.vue";
+import LocalMachineCard from "./LocalMachineCard.vue";
 import LocalProjectDialog from "./LocalProjectDialog.vue";
 import { useLocalProject } from "./useLocalProject";
 
-const t = useT();
-const { build, ask } = useLocalProject();
+const { card, ask } = useLocalProject();
 
-// The build's card stands in the lane exactly as long as there is a build to draw; its own box, its own buttons.
-const release = hold(`local-project-build`, () =>
-    build.value === undefined ? undefined : { kind: `condition`, title: t(`local.project.${build.value.state}`, { name: build.value.name }), card: LocalProjectBuild },
-);
+// The card stands in the lane exactly as long as there is something to say; its own box, its own buttons.
+const release = hold(`local-machine-sandbox`, () => (card.value === undefined ? undefined : { kind: `condition`, title: card.value.title, card: LocalMachineCard }));
 
 // The app asking for this window's dialog (its project.rs `start`, for "Work on this with an agent" asked by link).
 const asked = (): void => void ask();

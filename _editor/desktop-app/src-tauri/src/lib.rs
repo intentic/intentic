@@ -6,6 +6,7 @@ mod commands;
 mod fix;
 mod found;
 mod local;
+mod machine_sandbox;
 mod notice;
 mod project;
 mod scripts;
@@ -180,7 +181,13 @@ pub fn run() {
             local::local_roster,
             account::account_relay,
             project::project_preview,
-            project::project_create,
+            project::project_attach,
+            machine_sandbox::machine_sandbox_status,
+            machine_sandbox::machine_sandbox_retry,
+            machine_sandbox::machine_sandbox_check,
+            machine_sandbox::machine_sandbox_recreate,
+            machine_sandbox::machine_sandbox_start,
+            machine_sandbox::machine_sandbox_end_session,
             found::found_on_machine,
         ])
         .setup(|app| {
@@ -192,6 +199,7 @@ pub fn run() {
             app.manage(sidecar::Sidecar::default());
             app.manage(badge::Badge::default());
             app.manage(notice::Notices::default());
+            app.manage(machine_sandbox::MachineSandbox::load(app.handle())?);
             create_tray(app.handle())?;
             // After the tray exists: the refresh loop retitles the agent row this row-handle now points at.
             agent_status::start(app.handle());
@@ -266,6 +274,9 @@ pub fn run() {
                     }
                 }
             }
+            // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
+            // (machine_sandbox.rs): a setup the last quit cut short is picked up here.
+            machine_sandbox::start(app.handle());
             // The file server a few seconds in, when a local window is likely: an install that has opened any is likely
             // to again.
             if !app.state::<state::AppState>().recents().is_empty() {
@@ -295,6 +306,8 @@ pub fn run() {
             }
         }
         RunEvent::Exit => {
+            // A setup of this computer's sandbox under way is stopped with all it started, and run again next launch.
+            machine_sandbox::before_exit();
             // Nothing the app put up can be answered once it has gone.
             notice::clear_before_exit(app);
             sidecar::shutdown(app);

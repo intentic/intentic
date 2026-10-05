@@ -401,6 +401,24 @@ it(`names the agent that took landed work out, offering Land now for what is new
     expect(landButton(card)?.textContent?.trim()).toBe(`Land now`);
 });
 
+// A land into a folder attached to this computer's sandbox also reached the folder on the computer: the card says
+// where, and which files it left as the owner had them, as a fact with no press of its own.
+it(`says what a land did in the owner's own folder, and what it kept out`, () => {
+    const delivered = mount({
+        ...ready(`landed`),
+        delivery: { state: `delivered`, at: 1, project: `my-app`, folder: `~/code/my-app`, applied: 2, conflicts: [] },
+    });
+    expect(delivered.textContent).toContain(`Delivered to ~/code/my-app`);
+    expect(delivered.querySelector(`[data-icon="folder"]`)).not.toBeNull();
+
+    const kept = mount({
+        ...ready(`landed`),
+        delivery: { state: `partial`, at: 1, project: `my-app`, folder: `~/code/my-app`, applied: 1, conflicts: [{ path: `src/app.ts`, reason: `edited` }] },
+    });
+    expect(kept.textContent).toContain(`1 file kept out of ~/code/my-app: you edited it too`);
+    expect(kept.querySelectorAll(`button`).length).toBe(mount(ready(`landed`)).querySelectorAll(`button`).length);
+});
+
 // Kept by the sandbox until a land goes through, after the next turn cleared the turn's own failure.
 it(`says a land broke on a card whose turn since ended cleanly`, () => {
     const card = mount({ ...ready(), landFailure: { reason: `This agent's copy of the workspace lost its link`, code: `unlinked`, at: 1 } });

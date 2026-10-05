@@ -265,7 +265,24 @@
             "takenOutBy": "Usunięte po scaleniu przez: {who}.",
             "takenOutInChanges": "Odrzucone w panelu Zmiany po scaleniu.",
             "held": "Wstrzymane",
-            "heldMemory": "Wstrzymane: w sandboxie kończy się pamięć"
+            "heldMemory": "Wstrzymane: w sandboxie kończy się pamięć",
+            "deliveredTo": "Dostarczono do {folder}",
+            "delivered": "Dostarczono",
+            "filesWritten": "Zapisane pliki",
+            "undoPoint": "Punkt cofnięcia {point}",
+            "keptOutEdited": "{count} plik pominięty w {folder}: też go edytowałeś | {count} pliki pominięte w {folder}: też je edytowałeś | {count} plików pominiętych w {folder}: też je edytowałeś",
+            "keptOut": "{count} plik pominięty w {folder} | {count} pliki pominięte w {folder} | {count} plików pominiętych w {folder}",
+            "keptAsYouHadThem": "Zostawione tak, jak je miałeś",
+            "keptEdited": "edytowałeś go",
+            "keptLink": "dowiązanie",
+            "keptOutside": "poza folderem",
+            "keptNeedsGit": "scalenie wymaga gita",
+            "keptMore": "i jeszcze {count}",
+            "waitingToDeliver": "Czeka, aż twój komputer odbierze zmiany do {folder}",
+            "couldntDeliver": "Nie udało się dostarczyć do twojego folderu: {reason}",
+            "couldntDeliverBare": "Nie udało się dostarczyć do twojego folderu",
+            "tooLargeToDeliver": "Za duże, by dostarczyć samo: naciśnij „Przenieś zmiany z powrotem” w oknie folderu",
+            "yourFolder": "twój folder"
         },
         "agentsView": {
             "agentResolveConflict": "Niech agent rozwiąże konflikt?",
@@ -7304,7 +7321,6 @@
         },
         "localFiles": {
             "keepsFolderSynced": "Synchronizuje ten folder",
-            "newSandbox": "Nowy sandbox",
             "reveal": "Pokaż plik",
             "withAgent": "Popracuj nad tym z agentem",
             "openSandbox": "Otwórz sandbox tego folderu",
@@ -7315,7 +7331,8 @@
             "startsIfStopped": "Uruchamia, gdy zatrzymany",
             "syncedSandbox": "Sandbox zsynchronizowany",
             "toggleFolder": "Przełącz folder",
-            "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}"
+            "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}",
+            "machineSandbox": "Sandbox tego komputera"
         },
         "quickOpen": {
             "goToFile": "Przejdź do pliku",
@@ -7360,17 +7377,12 @@
         },
         "project": {
             "dialogTitle": "Popracuj nad {name} z agentem",
-            "lede": "Sandbox dla tego folderu, na tym komputerze. Agenty pracują na kopii, a tutaj nic się nie zmieni, dopóki nie przeniesiesz ich pracy z powrotem.",
+            "lede": "Jego kopia trafia do sandboxa tego komputera, gdzie pracują na niej agenci. Nic tutaj się nie zmieni, dopóki nie przeniesiesz ich pracy z powrotem.",
             "files": "{count} plik do skopiowania | {count} pliki do skopiowania | {count} plików do skopiowania",
             "moreFiles": "Ponad {count} plików do skopiowania",
             "weight": "{files}, {size}",
             "staysHere": "Bez kopiowania: .git, node_modules, wyniki budowania i pliki .env. Zostają na tym komputerze.",
             "large": "To dużo do skopiowania, więc pierwsza kopia trochę potrwa.",
-            "create": "Utwórz sandbox",
-            "signInCreate": "Zaloguj się i utwórz",
-            "signInNote": "Najpierw się zalogujesz. Sandbox i tak powstanie na tym komputerze.",
-            "busy": "Na tym komputerze powstaje już inny sandbox. Spróbuj ponownie, gdy będzie gotowy.",
-            "createFailed": "Nie udało się utworzyć sandboxa",
             "refusedTitle": "Ten folder nie może mieć sandboxa",
             "documentTitle": "Najpierw otwórz folder",
             "document": "Sandbox działa na całym folderze. Otwórz folder, w którym jest ten dokument, i poproś stamtąd jeszcze raz.",
@@ -7397,25 +7409,75 @@
                 "moving": "Wnosimy Twoje pliki",
                 "home": "Wprowadzone"
             },
-            "building": "Budujemy sandbox dla {name}",
-            "waiting": "Sandbox dla {name} czeka na Twoją zgodę",
-            "waitingDetail": "Ten komputer potrzebuje kilku rzeczy, zanim uruchomi sandbox.",
-            "ready": "{name} jest gotowy na agentów",
-            "readyDetail": "Kopia jest już w sandboxie. Gdy agenty skończą, przenieś zmiany z powrotem z tego okna.",
-            "readyShort": "{name} jest gotowy",
-            "failed": "Nie udało się zbudować sandboxa dla {name}",
-            "stopped": "Budowanie sandboxa dla {name} zatrzymane",
             "percent": "{percent}%",
-            "lessThanAMinute": "zostało mniej niż minuta",
-            "minutesLeft": "została około {count} minuta | zostały około {count} minuty | zostało około {count} minut",
-            "open": "Otwórz sandbox",
-            "review": "Przejrzyj",
-            "details": "Szczegóły",
-            "retry": "Spróbuj ponownie",
             "hide": "Ukryj",
             "show": "Pokaż budowę",
-            "buildingButton": "Budowanie sandboxa… {percent}%",
-            "houseLabel": "Dom agenta: {stage}"
+            "attach": "Pracuj nad tym w sandboxie tego komputera",
+            "signInAttach": "Zaloguj się i pracuj nad tym",
+            "attachFailed": "Nie udało się dodać tego folderu",
+            "machine": {
+                "signedOut": "Najpierw się zalogujesz. Zaraz potem powstanie sandbox tego komputera, a ten folder do niego trafi.",
+                "creating": "Sandbox tego komputera jest konfigurowany ({percent}%). Ten folder trafi do niego, gdy tylko będzie gotowy.",
+                "notReady": "Sandbox tego komputera nie jest jeszcze gotowy. Ten folder na niego czeka, a karta w rogu mówi, czego potrzebuje."
+            }
+        },
+        "machine": {
+            "ready": "Sandbox tego komputera jest gotowy",
+            "readyDetail": "Foldery, nad którymi pracujesz z agentem, trafiają do niego.",
+            "signedOut": "Zaloguj się, aby skonfigurować sandbox tego komputera",
+            "signedOutDetail": "Intentic utworzy go na tym komputerze zaraz po zalogowaniu.",
+            "needsDocker": {
+                "notInstalled": "Sandbox tego komputera potrzebuje Dockera",
+                "notRunning": "Sandbox tego komputera czeka na Dockera",
+                "notAllowed": "Docker odmawia temu kontu dostępu"
+            },
+            "needsDockerDetail": {
+                "notInstalled": "Zainstaluj Docker Desktop, a Intentic skonfiguruje sandbox, gdy tylko Docker zadziała.",
+                "notRunning": "Uruchom Dockera, a Intentic sam dokończy resztę.",
+                "notAllowed": "Strona Ten komputer podpowiada, jak dać temu kontu dostęp do Dockera."
+            },
+            "creating": "Konfiguracja sandboxa tego komputera",
+            "creatingShort": "Konfiguracja sandboxa tego komputera",
+            "interrupted": "Wznawianie sandboxa tego komputera",
+            "interruptedDetail": "Intentic został zamknięty w trakcie konfiguracji, więc kontynuuje od miejsca, w którym przerwał.",
+            "waiting": "Sandbox tego komputera czeka na Twoją zgodę",
+            "waitingDetail": {
+                "consent": "Ten komputer potrzebuje kilku rzeczy, zanim uruchomi sandbox.",
+                "restart": "Ten komputer trzeba uruchomić ponownie, zanim uruchomi sandbox.",
+                "signOut": "Musisz się wylogować i zalogować ponownie, zanim ten komputer uruchomi sandbox."
+            },
+            "failed": "Nie udało się skonfigurować sandboxa tego komputera",
+            "stopped": "Sandbox tego komputera jest zatrzymany",
+            "stoppedDetail": "Uruchom go, aby pracować nad folderami z agentem.",
+            "gone": "Sandbox tego komputera został usunięty",
+            "goneDetail": "Nie ma go już na Twoim koncie ani na tym komputerze. Utwórz nowy, a Twoje foldery do niego trafią.",
+            "folderWaits": "{name} trafi do niego, gdy tylko będzie gotowy.",
+            "folder": {
+                "adding": "Dodawanie {name} do sandboxa tego komputera",
+                "copying": "Kopiowanie {name} do sandboxa tego komputera",
+                "copyingDetail": "Agenci mogą zacząć, gdy pierwsza kopia będzie gotowa. Zmiany wprowadzane tutaj są przenoszone na bieżąco.",
+                "preparing": "Przygotowywanie sandboxa na ten folder…",
+                "failed": "Nie udało się dodać {name}",
+                "ready": "{name} jest w sandboxie tego komputera",
+                "readyDetail": "Gdy zaakceptujesz pracę agenta, wraca ona do tego folderu sama. Plik, który też zmieniłeś, zostaje do Twojego przejrzenia.",
+                "readyShort": "{name} jest gotowy"
+            },
+            "button": {
+                "waiting": "Czekam na sandbox tego komputera",
+                "waitingPercent": "Czekam na sandbox tego komputera ({percent}%)",
+                "copying": "Kopiowanie folderu…",
+                "failed": "Nie udało się dodać tego folderu"
+            },
+            "action": {
+                "signIn": "Zaloguj się",
+                "startDocker": "Uruchom Dockera",
+                "retry": "Spróbuj ponownie",
+                "log": "Pokaż log",
+                "start": "Uruchom",
+                "recreate": "Utwórz nowy",
+                "details": "Otwórz Ten komputer",
+                "open": "Otwórz sandbox"
+            }
         }
     }
 }

@@ -239,6 +239,12 @@ test("replayableEnv carries a project sandbox's folder across a recreate", () =>
     expect(replayableEnv([["SANDBOX_PROJECT_DIR", ""]])).toEqual([]);
 });
 
+// So is being this computer's own sandbox, which folders attach to: a recreate that dropped it would seed a starter site.
+test("replayableEnv carries a projects host's flag across a recreate", () => {
+    expect(replayableEnv([["SANDBOX_PROJECTS_HOST", "1"]])).toEqual([["SANDBOX_PROJECTS_HOST", "1"]]);
+    expect(replayableEnv([["SANDBOX_PROJECTS_HOST", ""]])).toEqual([]);
+});
+
 test("runtime directives: allowlisted tokens pass, anything else stops the recreate by name", () => {
     const overlay = ["FROM base", "# intentic:runtime --device=/dev/net/tun --cap-add=NET_ADMIN", "RUN true"].join("\n");
     expect(runtimeDirectivesOf(overlay)).toEqual(["--device=/dev/net/tun", "--cap-add=NET_ADMIN"]);

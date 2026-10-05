@@ -92,6 +92,10 @@ flowchart LR
   its symlink mode, how often it scans the sandbox). A two-way session replaced by another waits until no conflicts
   are left and has its derived residue swept first; every other replacement happens as soon as the sandbox answers
   (`settlesFirst` in [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each).
+- **This computer's own sandbox takes folders** (see [Folders attached to this computer's sandbox](#folders-attached-to-this-computers-sandbox)):
+  `sync setup --projects-host` enrolls it with no folder of its own, and each folder the owner opens attaches to it as
+  `/work/<name>` (`sync attach`), copy-first, with the land of a conversation written back into it by itself
+  (`deliverProject`).
 - **What file sync costs this device is cycles, and the sandbox's side decides how many.** Mutagen's agent in the
   sandbox has no recursive watcher, and both sessions force it to poll (`--watch-mode-<side> force-poll`): every 2 s
   for the workspace, which is how late an agent's edit reaches the folder, and every 60 s for the state backup, which
@@ -128,7 +132,8 @@ flowchart LR
   a sandbox joins enrollments, sync enrollments and device rows on it, never on a hostname.
 - The features a device advertises (`set-shape`, `reshape-later`, `rollback-to`, `background-prepare`) are read off
   the `ic` under it, from that `ic`'s own help (`ic sandbox shape --set` for the first two, `ic sandbox rollback --to`
-  for the third, `ic sandbox prepare --auto` for the fourth), rather than listed beside the code. `background-prepare`
+  for the third, `ic sandbox prepare --auto` for the fourth), rather than listed beside the code. The agent's own two,
+  `loopback-catch` and `project-delivery`, are always advertised, since this build answers both. `background-prepare`
   is the `prepare-background` op the update card sends when it opens: the same unattended download as the timer's,
   run now. The device RPC inputs are strict, so an op or field this agent does not know is refused
   rather than dropped, and a `to` on anything but a rollback is refused. The one exception is the grant a sandbox
@@ -233,7 +238,7 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
 
 | Command | Success output |
 |---|---|
-| `sync changes` | `{ "ok": true, "pairing": "<id>", "direction": "to-sandbox"\|"both", "changes": [{ "path", "kind": "added"\|"modified"\|"deleted", "size"?, "conflict"?: true }], "truncated"?: true }` |
+| `sync changes` | `{ "ok": true, "pairing": "<pairing key>", "direction": "to-sandbox"\|"both", "changes": [{ "path", "kind": "added"\|"modified"\|"deleted", "size"?, "conflict"?: true }], "truncated"?: true }` |
 | `sync bring-back [--path <p>]... [--paths-file <file>]` | `{ "ok": true, "point": "<id>", "applied": [{ "path", "kind" }], "skipped": [{ "path", "reason" }] }` |
 | `sync restore-points` | `{ "ok": true, "points": [{ "id", "createdAt", "entries": n }] }` |
 | `sync restore --point <id>` | `{ "ok": true, "restored": n, "skipped": [{ "path", "reason" }] }` |
@@ -244,7 +249,7 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
   sandbox copy's), `deleted` was removed there. The sandbox is listed by ONE command over the pairing's ssh alias, a
   node program that walks `/work/<name>` and prints path, size and sha256 NUL-separated, so any name survives. This
   device is walked the same way, reading a file only where its size matches the sandbox's, through a hash cache keyed
-  by path, size and times in `~/.intentic/machine/hashes/<pairing>.json`. Both walks prune by the pairing's ignore list
+  by path, size and times in `~/.intentic/machine/hashes/<pairing key>.json`. Both walks prune by the pairing's ignore list
   read as Mutagen reads it: a name, `*` within it, at any depth (or at the root with a leading `/`), taking a matched
   folder's contents along; any other spelling is refused rather than approximated. Mutagen's `.mutagen-temporary-*`
   scratch files are left out too, and so are links and anything else that is not a regular file, on either side.
@@ -276,15 +281,16 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
   their last agreement to the same content: Mutagen records that and transfers nothing. A sandbox file that changed
   again meanwhile is a sandbox modification one-way-safe keeps, as a conflict. The e2e run checked all of it: no
   conflicts after resume, the sandbox still holding the agent's content, and a later edit here carried over as usual.
-- **Restore points** live in `~/.intentic/machine/restore/<pairing>/<id>/`, the id being the creation time in ISO 8601
+- **Restore points** live in `~/.intentic/machine/restore/<pairing key>/<id>/`, the id being the creation time in ISO 8601
   basic format (`20260928T213000.123Z`, a folder name on every system). Each holds `manifest.json`, which is
-  `{ id, createdAt, dir, entries: [{ path, kind, backedUp, applied, backup?, mode? }] }` (`applied` is the sha256
-  bring-back left, null for a deletion), and `files/<path>`, a copy of every file bring-back overwrote or deleted. Only
+  `{ id, createdAt, dir, entries: [{ path, kind, backedUp, applied, backup?, mode? }], landing? }` (`applied` is the
+  sha256 bring-back left, null for a deletion; `landing` names the land a delivery wrote), and `files/<path>`, a copy of
+  every file bring-back overwrote or deleted. A delivery keeps its points here in the same shape. Only
   what was actually written stays in the manifest. All of it is on the disk before the first write here: each copy is
   flushed as it is made, the manifest by a durable write, then every folder of the point up to `restore/<pairing>`, so a
   crash right after a bring-back never finds the folder rewritten and the copies empty. Files put in the folder are
   flushed before the rename that places them.
-- **Retention**, after each bring-back and under its lock: a pairing keeps its newest 20 points that hold files, plus
+- **Retention**, after each bring-back or delivery and under its lock: a pairing keeps its newest 20 points that hold files, plus
   every such point younger than 30 days. A point that holds nothing (a bring-back that wrote nothing, or one cut off
   before its manifest) never counts toward the 20, is never listed, and goes at the next bring-back. Until then it is
   the `point` that bring-back answered with, so that answer always names a real point, as the desktop app expects.
@@ -292,9 +298,122 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
   folder still holds exactly what bring-back left (by sha256). Anything else is skipped and reported, one already put
   back included. Copy-first then carries the restored files to the sandbox, as it does any edit here, so the agent's
   versions they replace are gone from there too.
-- One bring-back or restore runs per folder at a time (`restore/<pairing>/.operation.pid`, a pid of this boot, checked
-  alive). A pause an operation made and never lifted (the process killed in between) is recorded in
-  `restore/<pairing>/.paused`, and the next command about that folder resumes the session.
+- One bring-back, restore or delivery runs per folder at a time (`restore/<pairing key>/.operation.pid`, a pid of this
+  boot, checked alive). A pause an operation made and never lifted (the process killed in between) is recorded in
+  `restore/<pairing key>/.paused`, and the next command about that folder resumes the session.
+
+### Folders attached to this computer's sandbox
+
+Each computer has one always-available local sandbox, and any number of folders attach to it, each as `/work/<name>`.
+A folder used to get a project sandbox of its own (`sync setup --project`, above), which still works.
+
+**The projects host.** `intentic-machine sync setup --url <sandboxUrl> --pair <token> --projects-host` (with
+`--transport` and `--sandbox-id` as for any setup) enrolls the machine sandbox exactly as a setup does, and records a
+folderless pairing: `{ sandboxUrl, sandboxId, mode: "sync", syncToken, projectsHost: true, transport?, container? }`.
+It has no Mutagen session, no git bridge and no state backup. It holds the sandbox's sync token, and it is the one
+pairing that mirrors the sandbox's ports to localhost. It reaches the sandbox through Docker when the sandbox's
+container runs on this machine's engine, so its forwards ride `docker://` too. Refused:
+
+- `--projects-host` with `--dir`, `--remote-dir` or `--project`.
+- Turning a sandbox that syncs a folder into the projects host, and the other way round. Unpair first.
+- An enrollment that comes back ports-only.
+
+Enrolling again rotates the sandbox's one token per machine key, so the new token is written into every pairing of that
+sandbox (`withPairing` in [`sync/config.ts`](src/sync/config.ts)).
+
+**Attaching and detaching.** Both are local: no enrollment, no network. With `--json` each prints exactly one JSON
+object, `{ "ok": false, "error": "<sentence>" }` and exit code 1 on failure, as the copy-first commands do.
+
+| Command | Success output |
+|---|---|
+| `sync attach --sandbox-url <url> --dir <folder> --name <name>` | `{ "ok": true, "pairing": "<sandboxId>~<name>", "remoteDir": "/work/<name>", "folder": "<folder as given, absolute>" }` |
+| `sync detach --dir <folder>` | `{ "ok": true, "pairing": "<key>", "folder": "<folder>" }` |
+
+- `attach` finds the projects host whose URL has the same host as `--sandbox-url`. Without one it answers "this
+  computer's sandbox is not set up for folders yet".
+- It refuses:
+  - a name `isProjectDirName` refuses (the sandbox's reserved names included);
+  - a folder that is not there;
+  - a whole disk, the home folder or one holding it, `/var/home` or a whole home in it, and the system's folders, as
+    the desktop app does ([`folderRefusal`](src/sync/folders.ts));
+  - a folder that is, holds or sits inside any other pairing's;
+  - a name already attached for another folder.
+- It records `{ key: "<sandboxId>~<name>", sandboxId, sandboxUrl, syncToken (the host's), mode: "sync", localDir,
+  remoteDir: "/work/<name>", project: true, direction: "to-sandbox", deliver: "auto", transport?, container? }`.
+  Docker is preferred, as for the host. Attaching the same folder under the same name again keeps the direction its
+  owner chose. `localDir` is the folder as given, made absolute, as `setup` records one; links are resolved only to
+  compare folders (2026-10-05: the desktop app finds its folder in `status --json` by the path it passed, and on Fedora
+  Atomic `/home` is itself a link to `/var/home`, so a link-resolved path would never be found).
+- It returns once the pairing is recorded and the resident agent is running. The agent creates the session on its next
+  pass, and `status --json` lists the folder with its `localDir`, `remoteDir`, `deliver` and `mutagenStatus`.
+  `mutagenStatus` is absent until the session exists, then Mutagen's own words: `connecting-beta`, `scanning`,
+  `reconciling`, `staging-beta`, `transitioning`, `saving` while the first copy runs, and `watching` once a whole cycle
+  has finished. Read the first `watching` as "first copy done": later edits pass through the same words again.
+- `detach` removes the pairing first, so the agent recreates nothing, then ends its session and drops its listing record.
+  Its restore points stay. A folder with a sandbox of its own is refused, with the `sync uninstall` that unpairs it.
+- `changes`, `bring-back`, `restore-points`, `restore` and `direction` work on an attached folder as on any project, by
+  `--dir`.
+
+**A pairing key.** Every pairing is filed under `pairingKey` = `key ?? sandboxId`. Every pairing made before folders could
+attach has no `key`, so its key is its sandbox id and nothing of it moves: its session names, its restore points, its
+listing record, its lock. The key names what is a folder's own: the `upsertPairing`/`removePairing`/`set*` writes, the
+Mutagen session (`sessionName`), `restore/<key>/` with its lock and pause marker, and `hashes/<key>.json`. The sandbox
+id still names what is the sandbox's: the enrollment and its token, the ssh alias and tunnel (one block per sandbox),
+the container, the forwards, the swap pause, the report's `sandboxId`. `sync.json` is refused whole for:
+
+- two pairings under one key;
+- an attached key that is not `<sandboxId>~<name>` for its `/work/<name>`;
+- a projects host with a folder, remote dir, project flag or key.
+
+`--sandbox` (pause, resume, mirror, autoheal, uninstall) selects every pairing of the sandbox it names.
+
+**One poll, one mirror, one report per sandbox** ([`sync/mirror.ts`](src/sync/mirror.ts)):
+
+- The sandbox's own pairing polls its ports; with no host, the first folder attached to it does. The poll is also how the
+  sandbox's liveness and a revoked enrollment are noticed. Every other folder follows that answer
+  (`followSandbox`): paused after an hour of no answer, resumed on the first. A folder never mirrors a port, whatever
+  `mirrorOff` says. It carries the sandbox's switch only so the report says the same of it.
+- A revoked enrollment drops every pairing of the sandbox, since they share its token.
+- The report goes to each sandbox once (`reportCarriers`), and `scopedReport` carries all of its pairings, host and
+  folders, each with `remoteDir`, `projectsHost` and `deliver`: the daemon keeps one report per machine.
+- **A folder's first copy waits for its report** (`readyToPrepare`). The daemon makes `/work/<name>` a repository of its
+  own once a report names it. So a folder whose session does not exist yet gets one only after a report naming it was
+  taken, tried again each pass otherwise. A daemon with no report route (404) is not waited for.
+
+(2026-10-05) An attached folder's session is `intentic-<sandbox>--<name>-<8 hex of sha256(name)>`. A sanitized id never
+holds `--`, so the name can be no sandbox's session nor its `-state` backup (a folder called `state` included). The hash
+keeps `my.app` and `my_app` apart, which sanitize alike. Letting every folder poll was rejected: ten folders would cost
+the daemon eleven polls every five seconds, and three rejected polls counted per sandbox would revoke after one tick.
+
+**Delivering landed work** ([`sync/project-delivery.ts`](src/sync/project-delivery.ts)). When a conversation's work
+lands in `/work/<name>`, the daemon calls `deliverProject` on the device link (`ProjectDeliverySchema` in the contract),
+and this agent writes the change into the folder. It is a procedure of the link, not an MCP tool, so no agent can call
+it, and it sits behind no switch of the grant: the folder's own `deliver: "auto"` is the permission. It is logged and
+appended to the audit file like every call.
+
+- **Which folder**: a project pairing whose `remoteDir` is the delivery's, of the sandbox on the other end of the link
+  (by URL host), with `deliver: "auto"`. None is `NOT_FOUND`, one without delivery `FORBIDDEN`, each with a sentence.
+  A delivery past `PROJECT_DELIVERY_MAX_BYTES` decoded (base and next together), not base64, a kind that does not carry
+  what it says, or a path twice is refused whole as `BAD_REQUEST`.
+- **How**: under the folder's lock, with its session flushed and held still, as a bring-back is. Each file, against
+  what the folder holds now:
+  - the folder already holds `next` (or nothing, for a deletion): `already`;
+  - it holds `base` (nothing, for an addition): written as landed, or removed, `applied`;
+  - the owner changed it too, and `base`, `next` and the folder's copy are all text (no NUL in the first 8000 bytes):
+    merged by `git merge-file`, and `merged` with the content when that is clean. A clash is `edited`, and so is
+    anything not text, a file the owner deleted, a deletion of a file the owner changed, and a file the owner made
+    where the land adds one. No `git` on PATH is `missing-git`;
+  - a link or a non-file on the way is `link`; a non-portable path, or one into any `.git` folder, is `outside`.
+- **The restore point** is taken before the first write, with the bring-back's own primitives and shape, and cut to what
+  was written, so `sync restore --point <id>` undoes a delivery unchanged. None when nothing is written. A file that
+  moved between the plan and its write is the owner's, and is reported `edited` instead. A new file gets the landed
+  executable bit; an existing one keeps its own mode.
+- The answer is `{ point?, folder, applied, merged: [{ path, content }], already, conflicts: [{ path, reason }] }`. The
+  sandbox already holds what landed, so a file written as landed has moved to the same bytes on both sides, which
+  Mutagen records as agreement. A merged one differs until the daemon writes `content` there too.
+
+(2026-10-05) The merge runs `git merge-file` in place on copies in the staging folder and reads the result back as bytes,
+rather than with `-p`: stdout comes back decoded as UTF-8, which would rewrite a Latin-1 file's bytes.
 
 ### Upgrades that can be undone
 
@@ -391,6 +510,8 @@ clock.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
 - [src/sync/endpoint.ts](src/sync/endpoint.ts) — how a pairing reaches its sandbox: the tunnelled sshd (`tunnel.ts`), or Docker for a project on this machine.
+- [src/sync/attach-commands.ts](src/sync/attach-commands.ts) — `sync attach` and `sync detach`, folders on this computer's own sandbox.
+- [src/sync/project-delivery.ts](src/sync/project-delivery.ts) — landed work written into an attached folder (`deliverProject`).
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 
 ## Commands

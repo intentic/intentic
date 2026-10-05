@@ -19,6 +19,8 @@ const props = defineProps<{
     progress?: Record<string, RequirementProgress>;
     /** How the session ended for this setup before it resumed, when it did (App.vue `resumedHow`). */
     resumedFrom?: SessionEnd;
+    /** No hosted alternative to offer: this computer's own sandbox is about this computer (device/MachineSandboxSection.vue). */
+    hideElsewhere?: boolean;
 }>();
 const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; elsewhere: [] }>();
 
@@ -185,7 +187,7 @@ const sessionNote = computed(() => {
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
-            <button type="button" :class="ui.textAction()" @click="emit(`elsewhere`)">
+            <button v-if="!hideElsewhere" type="button" :class="ui.textAction()" @click="emit(`elsewhere`)">
                 <Icon name="server" class="shrink-0" />
                 <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
             </button>

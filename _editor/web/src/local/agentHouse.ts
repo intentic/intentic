@@ -1,8 +1,7 @@
-import type { LocalProjectBuild } from "../app/environments/localHost";
-
-// THE AGENT'S HOUSE, built as the sandbox is: the picture on a folder's build card (AgentHouse.vue) is drawn by the
-// setup's real phases, never by a clock of its own. Each stage is something the setup has actually reached, so a card
-// that shows a roof is a sandbox whose daemon is coming up, and one with the lights on is a sandbox that answers.
+// THE AGENT'S HOUSE, built as the sandbox is: the picture on the card of this computer's sandbox (AgentHouse.vue,
+// LocalMachineCard.vue) is drawn by its setup's real phases, never by a clock of its own. Each stage is something the
+// setup has actually reached, so a card that shows a roof is a sandbox whose daemon is coming up, and one with the
+// lights on is a sandbox that answers; a folder's copy moving in is the folder's own first copy.
 
 export const HOUSE_STAGES = [
     // Nothing built yet: the plans drawn up (the installer fetched, Docker checked, the setup code redeemed).
@@ -40,13 +39,12 @@ const STAGE_OF_PHASE: Readonly<Record<string, HouseStage>> = {
     "connecting-machine": `home`,
 };
 
+/** The stage a setup's phase builds, or `plan` for one this list does not know (or none yet). */
+export const stageOfPhase = (phase: string | undefined): HouseStage => (phase === undefined ? undefined : STAGE_OF_PHASE[phase]) ?? `plan`;
+
 /** The stage a build has reached: by its running phase, and `home` once it is ready, whatever phase it ended on. */
-export const houseStageOf = (build: Pick<LocalProjectBuild, `state` | `phase`>): HouseStage => {
-    if (build.state === `ready`) {
-        return `home`;
-    }
-    return (build.phase === undefined ? undefined : STAGE_OF_PHASE[build.phase]) ?? `plan`;
-};
+export const houseStageOf = (build: { readonly state: string; readonly phase: string | undefined }): HouseStage =>
+    build.state === `ready` ? `home` : stageOfPhase(build.phase);
 
 /** Whether the house has reached `stage`: what each part of the drawing is shown by. */
 export const reached = (current: HouseStage, stage: HouseStage): boolean => HOUSE_STAGES.indexOf(current) >= HOUSE_STAGES.indexOf(stage);

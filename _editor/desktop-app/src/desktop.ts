@@ -335,24 +335,80 @@ export type ProjectPreview =
           readonly more: boolean;
           readonly large: boolean;
           readonly cautions: readonly ProjectCaution[];
-          readonly signedIn: boolean;
-          readonly imageReady: boolean;
-          readonly busy: boolean;
+          /** How far this computer's own sandbox is, which the folder goes into. */
+          readonly machine: MachineStanding;
       };
 
-/** The names the page derived from the folder's, and the row an earlier attempt made (project.rs `CreateAsk`). */
+/** The folder's name inside the sandbox's /work, derived by the page from the folder's (project.rs `AttachAsk`). */
 export interface ProjectAsk {
-    readonly name: string;
     readonly project: string;
-    readonly sandboxId?: string;
 }
 
-/** What came of "Create sandbox" (project.rs `Created`). */
-export type ProjectCreated = { readonly kind: `setup`; readonly setup: SetupArgs } | { readonly kind: `signIn` } | { readonly kind: `opened` };
+/** What came of the press (project.rs `Attached`): in line for this computer's sandbox, or opened on its own sandbox. */
+export type ProjectAttached = { readonly kind: `queued`; readonly name: string } | { readonly kind: `opened` };
 
 export const projectPreview = (): Promise<ProjectPreview> => invoke(`project_preview`);
-// Rejects with a sentence for the reader: the platform out of reach, a refusal of its own, a setup already running here.
-export const projectCreate = (ask: ProjectAsk): Promise<ProjectCreated> => invoke(`project_create`, { ask });
+// Answers at once, whatever this computer's sandbox is doing: the folder waits for it. Rejects with a sentence for the
+// reader only for a folder that cannot go in (a refusal, a name the sandbox would not take).
+export const projectAttach = (ask: ProjectAsk): Promise<ProjectAttached> => invoke(`project_attach`, { ask });
+
+/* THIS COMPUTER'S OWN SANDBOX (src-tauri/src/machine_sandbox.rs): made once, after sign-in, in the background, by the
+   app rather than any window; folders attach to it. Every window reads it on opening and hears every change. */
+
+/** Why Docker is in the way of it. */
+export type DockerReason = `notInstalled` | `notRunning` | `notAllowed`;
+
+/** Where it stands (machine_sandbox.rs `Standing`). */
+export type MachineStanding =
+    | { readonly state: `signedOut` | `ready` | `stopped` | `interrupted` | `gone` }
+    | { readonly state: `needsDocker`; readonly reason: DockerReason }
+    | { readonly state: `creating`; readonly phase?: string; readonly step?: string; readonly percent: number }
+    | { readonly state: `waiting`; readonly for: SetupWaitingFor }
+    | { readonly state: `failed`; readonly reason: string };
+
+/** A folder on its way into it (machine_sandbox.rs `Folder`), by the path its windows are told (`face.path`). */
+export interface MachineFolder {
+    readonly path: string;
+    /** Its name inside the sandbox's /work. */
+    readonly name: string;
+    readonly state: `queued` | `attaching` | `copying` | `ready` | `failed`;
+    readonly reason?: string;
+    /** Mutagen's own word for its first copy, while it copies. */
+    readonly status?: string;
+}
+
+/** The whole record (machine_sandbox.rs `Record`), as `machine-sandbox.json` holds it. */
+export type MachineSandbox = MachineStanding & {
+    readonly sandboxId?: string;
+    readonly slug?: string;
+    readonly hostname?: string;
+    readonly name?: string;
+    readonly logPath?: string;
+    readonly made: boolean;
+    readonly attempt: number;
+    readonly startedAt?: number;
+    /** Unix seconds of the last change: an older answer never replaces a newer one. */
+    readonly updatedAt: number;
+    readonly consented: boolean;
+    readonly resumeOnLaunch: boolean;
+    /** What a setup stopped on a question said this computer needs, as `intentic-requirement:` objects. */
+    readonly requirements: readonly unknown[];
+    readonly folders: readonly MachineFolder[];
+};
+
+export const machineSandboxStatus = (): Promise<MachineSandbox> => invoke(`machine_sandbox_status`);
+/** "Try again"; `consent` is the requirements card's go-ahead, false its "Check again". */
+export const machineSandboxRetry = (consent = false): Promise<void> => invoke(`machine_sandbox_retry`, { consent });
+/** Look again now: Docker was just started here. */
+export const machineSandboxCheck = (): Promise<void> => invoke(`machine_sandbox_check`);
+/** A new one, in place of one the account no longer has. */
+export const machineSandboxRecreate = (): Promise<void> => invoke(`machine_sandbox_recreate`);
+/** Its stopped container started (`ic`). Resolves once it has. */
+export const machineSandboxStart = (): Promise<void> => invoke(`machine_sandbox_start`);
+/** The restart or sign-out its setup's first pass asked of Windows; the next launch runs it again, agreed to. */
+export const machineSandboxEndSession = (how: SessionEnd): Promise<void> => invoke(`machine_sandbox_end_session`, { how });
+export const onMachineSandbox = (handler: (record: MachineSandbox) => void): Promise<UnlistenFn> =>
+    listen<MachineSandbox>(`desktop://machine-sandbox`, (event) => handler(event.payload));
 
 /* WHAT THE SHELL AND THIS DEVICE ARE DRAWN FROM: facts the app keeps across launches (src-tauri/src/state.rs). */
 
@@ -466,24 +522,32 @@ export const parseRequirementState = (line: string): RequirementProgress | undef
     }
 };
 
+/** A requirement's object, as a line carries it or the app kept it (machine_sandbox.rs `requirements`), made whole. */
+export const requirementOf = (value: unknown): Requirement | undefined => {
+    if (typeof value !== `object` || value === null) {
+        return undefined;
+    }
+    const parsed = value as Partial<Requirement>;
+    // A requirement with no id can't be keyed, de-duplicated or acted on; leave it to the log.
+    return typeof parsed.id === `string` && parsed.id !== ``
+        ? {
+              id: parsed.id,
+              title: parsed.title ?? parsed.id,
+              problem: parsed.problem ?? ``,
+              remedy: parsed.remedy ?? ``,
+              action: parsed.action ?? `user`,
+              ...(parsed.detail ? { detail: parsed.detail } : {}),
+          }
+        : undefined;
+};
+
 export const parseRequirement = (line: string): Requirement | undefined => {
     const found = REQUIREMENT.exec(line);
     if (found === null) {
         return undefined;
     }
     try {
-        const parsed = JSON.parse(found[1] ?? ``) as Partial<Requirement>;
-        // A requirement with no id can't be keyed, de-duplicated or acted on; leave it to the log.
-        return typeof parsed.id === `string` && parsed.id !== ``
-            ? {
-                  id: parsed.id,
-                  title: parsed.title ?? parsed.id,
-                  problem: parsed.problem ?? ``,
-                  remedy: parsed.remedy ?? ``,
-                  action: parsed.action ?? `user`,
-                  ...(parsed.detail ? { detail: parsed.detail } : {}),
-              }
-            : undefined;
+        return requirementOf(JSON.parse(found[1] ?? ``));
     } catch {
         // A truncated line (pipe closed mid-write) is not worth a broken screen.
         return undefined;

@@ -42,7 +42,7 @@ export interface NotificationInput {
     readonly wide?: boolean;
     /**
      * A card that draws its own box, taking the lane's place and order (a folder's sandbox being built, with its house,
-     * local/LocalProjectBuild.vue): rendered instead of the lane's own box, so nothing else here applies to it but `title`,
+     * local/LocalMachineCard.vue): rendered instead of the lane's own box, so nothing else here applies to it but `title`,
      * which still names it to assistive technology. A condition, so it stays exactly as long as its source says.
      */
     readonly card?: Component;

@@ -1660,7 +1660,11 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         Some(Link::Launcher { files: false }) => show_device(app),
         // The workspace's account and sandboxes, for the local windows to show (state.rs `remember_roster`). Nothing
         // is shown now: the page sends it whenever either changes, not because the reader asked for anything.
-        Some(Link::Roster(roster)) => app.state::<AppState>().remember_roster(roster),
+        Some(Link::Roster(roster)) => {
+            app.state::<AppState>().remember_roster(roster);
+            // Who is signed in is what this computer's sandbox is made for (machine_sandbox.rs).
+            crate::machine_sandbox::account_changed();
+        }
         // The workspace tab's mark, for the app's icon (badge.rs); its notifications, for the system's (notice.rs).
         Some(Link::Badge(args)) => crate::badge::show(app, args),
         Some(Link::Notice(NoticeVerb::Show(args))) => crate::notice::show(app, args),

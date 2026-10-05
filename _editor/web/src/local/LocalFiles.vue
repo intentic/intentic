@@ -18,11 +18,11 @@ import { isApplePlatform } from "../shell/commands/keybindings";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../shell/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
-import { localHost } from "../app/environments/localHost";
 import { useFolderSandbox } from "./folderSandbox";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import { type LocalChord, localChord } from "./localKeys";
+import { folderButtonOf } from "./machineCard";
 import { useLocalProject } from "./useLocalProject";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 
@@ -69,25 +69,26 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
     accepts: () => face !== undefined && face.file === undefined && supportsRoute(`POST /workspace/upload`),
 });
 
-// THE WAY FROM THIS FOLDER TO AN AGENT: its own sandbox, opened once it has one; otherwise asked for in this window's own
-// dialog and built here while the reader keeps working (LocalProject.vue), the button saying how far the build is.
+// THE WAY FROM THIS FOLDER TO AN AGENT: its sandbox, opened once it has one (its own from before, or this computer's it
+// went into); otherwise asked for in this window's own dialog and put into this computer's sandbox while the reader keeps
+// working (LocalProject.vue), the button saying how far it is (machineCard.ts `folderButtonOf`).
 const hasSandbox = useFolderSandbox();
-const { build, ask: askForSandbox } = useLocalProject();
-const building = computed(() => build.value?.state === `building` || build.value?.state === `waiting`);
-const sandboxLabel = computed(() => {
-    if (hasSandbox.value || build.value?.state === `ready`) {
-        return t(`local.localFiles.openSandbox`);
-    }
-    return building.value ? t(`local.project.buildingButton`, { percent: build.value?.percent ?? 0 }) : t(`local.localFiles.withAgent`);
-});
+const { machine, folder, ask: askForSandbox, fold } = useLocalProject();
+const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.value, machine: machine.value, folder: folder.value }));
+const building = computed(() => sandboxButton.value.busy);
+const sandboxLabel = computed(() => sandboxButton.value.label);
 const toSandbox = (): void => {
-    if (hasSandbox.value) {
-        askLocalApp(`sandbox`);
-    } else if (build.value?.state === `ready`) {
-        void localHost().project?.open();
-    } else {
-        // A build on its card is unfolded rather than asked about again (useLocalProject.ts `ask`).
-        void askForSandbox();
+    switch (sandboxButton.value.press) {
+        // The folder's sandbox, started first if it is stopped (the app's project.rs `open_existing`).
+        case `open`:
+            askLocalApp(`sandbox`);
+            return;
+        // On its way in, or turned down: its card says how far, and what to do.
+        case `card`:
+            fold(false);
+            return;
+        default:
+            void askForSandbox();
     }
 };
 
@@ -295,7 +296,7 @@ onUnmounted(() => {
             </div>
             <!-- What agents changed in the folder's own sandbox, brought back on request (bring-back/LocalBringBack.vue). -->
             <LocalBringBack v-if="face !== undefined && face.file === undefined && hasSandbox" />
-            <!-- The way from this folder to an agent: a sandbox of its own, kept in sync with it (the app's project.rs). Not for
+            <!-- The way from this folder to an agent: this computer's sandbox, its copy kept in sync with it (the app's project.rs). Not for
                  a folder with nothing in it yet, which would hand an agent nothing to work on. -->
             <div v-if="face !== undefined && face.file === undefined && !folderEmpty" class="shrink-0 border-t border-line p-2">
                 <Button
@@ -304,11 +305,11 @@ onUnmounted(() => {
                     severity="secondary"
                     :label="sandboxLabel"
                     v-tooltip.top="
-                        hasSandbox
-                            ? { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) }
-                            : building
-                              ? undefined
-                              : { title: t(`local.localFiles.newSandbox`), note: t(`local.localFiles.keepsFolderSynced`) }
+                        building
+                            ? undefined
+                            : hasSandbox
+                              ? { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) }
+                              : { title: t(`local.localFiles.machineSandbox`), note: t(`local.localFiles.keepsFolderSynced`) }
                     "
                     @click="toSandbox"
                 />

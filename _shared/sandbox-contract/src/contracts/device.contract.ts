@@ -6,6 +6,7 @@ import { DeviceScopesSchema } from "../schemas/capabilities.js";
 import { DeviceFactsSchema } from "../schemas/hosts.js";
 import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopback-catch.js";
 import { OkSchema } from "../schemas/shared.js";
+import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
 // client. No `.route()`: the procedure path is the address, not HTTP. Every input is strict (devices.ts says why). `mcp` stays opaque (`z.unknown()`) so a machine
@@ -31,4 +32,8 @@ export const deviceContract = {
     // daemon arms it, never a tool, and aborting the stream is how it stops. Sent only to an agent advertising
     // `loopback-catch`.
     catchLoopback: oc.input(LoopbackCatchSchema).output(streamOf(LoopbackCatchEventSchema)),
+    // Landed work written into the owner's folder that `/work/<name>` copies (schemas/project-delivery.ts). Only the
+    // daemon calls it, after a land, and only on an agent advertising `project-delivery`; the machine refuses a folder
+    // that did not opt into delivery, takes a restore point first, and never writes over an edit of the owner's own.
+    deliverProject: oc.input(ProjectDeliverySchema).output(ProjectDeliveryResultSchema),
 };

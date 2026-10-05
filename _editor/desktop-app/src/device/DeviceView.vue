@@ -22,6 +22,8 @@ import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
 import { openUrl, signIn, workspaceOpen } from "../desktop";
+import MachineSandboxSection from "./MachineSandboxSection.vue";
+import { machineSandbox } from "./machineSandbox";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 
 // THIS DEVICE: the page the app adds to a local window's rail (host.ts), where the launcher window's card used to be.
@@ -115,9 +117,21 @@ const {
     dismissFix,
 } = device;
 
+// This computer's own sandbox (machineSandbox.ts), said at the top of the page from the moment there is anything to say
+// about it: once someone is signed in, or a folder waits for it. Before that the page's own "no sandbox" card offers the
+// sign-in, and one way to it is enough.
+const machineShown = computed(() => {
+    const record = machineSandbox.value;
+    return record !== undefined && (record.state !== `signedOut` || record.folders.some((folder) => folder.state === `queued`));
+});
+// It waits on Docker: the engine's own card and notice are its way forward.
+const machineNeedsDocker = computed(() => machineSandbox.value?.state === `needsDocker`);
+
 // Whether this machine's Docker is this page's business: a sandbox runs or has run here, or one is being set up. On a
 // machine that only opens files, an engine that is off is nobody's problem, and saying so was the launcher's old nag.
-const dockerMatters = computed(() => facts.value?.hostsSandboxes === true || groups.value.length > 0 || pending.value !== undefined);
+const dockerMatters = computed(
+    () => facts.value?.hostsSandboxes === true || groups.value.length > 0 || pending.value !== undefined || machineNeedsDocker.value,
+);
 
 // The way to a sandbox, from a computer that has none: the workspace's setup once there is an account, a sign-in before.
 const signedIn = computed(() => facts.value?.accountSeen === true);
@@ -198,6 +212,9 @@ onUnmounted(() => {
                 @accept="(id) => void runFix([id])"
                 @dismiss="dismissFix"
             />
+
+            <!-- THIS COMPUTER'S OWN SANDBOX, made by the app in the background for the folders worked on with an agent. -->
+            <MachineSandboxSection v-if="machineShown" />
 
             <!-- A SETUP HANDED OVER FROM THE WORKSPACE leads the page while it is here: the one thing on it with minutes of its own. -->
             <section v-if="setupMode" class="flex flex-col gap-4 rounded-xl bg-card shadow-sm p-5">
@@ -386,8 +403,9 @@ onUnmounted(() => {
                     <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
                     <Button class="mt-2" size="small" severity="secondary" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
                 </Notice>
-                <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. -->
-                <Notice v-else-if="engineListening === false" tone="warning" icon="box" class="items-center">
+                <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. This
+                     computer's own sandbox offers the same start in its section, which is not said twice. -->
+                <Notice v-else-if="engineListening === false && !machineNeedsDocker" tone="warning" icon="box" class="items-center">
                     <span class="min-w-0 flex-1">{{ t(`desktop.device.dockerIsntRunning`) }}</span>
                     <Button class="ml-2 shrink-0" size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker(`notice`)" />
                 </Notice>
@@ -427,7 +445,7 @@ onUnmounted(() => {
             <!-- NO SANDBOX HERE YET: what one is for, where it can run, and the one step to it. Never while a setup or a
                  sync is on the page, which is the sandbox arriving, nor before the machine has been read. -->
             <section
-                v-else-if="read && !setupMode && !syncSetup && !listError"
+                v-else-if="read && !setupMode && !syncSetup && !listError && !machineShown"
                 class="flex flex-col items-start gap-3 rounded-xl border border-dashed border-line p-5"
             >
                 <div class="flex items-start gap-3">

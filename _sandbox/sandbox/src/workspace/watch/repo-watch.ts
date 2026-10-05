@@ -13,6 +13,8 @@ export interface RepoWatch {
     subscribe(listener: (repos: string[]) => void): () => void;
     // Memo if nothing changed since, else a fresh walk shared by every concurrent caller.
     currentRepos(): Promise<string[]>;
+    // Expires the memo and walks again, as a watched write does: for a repo made where the watcher never looks.
+    expire(): void;
 }
 
 const createRepoWatch = (
@@ -84,10 +86,11 @@ const createRepoWatch = (
     // Baseline scan, so the first change compares against reality, not undefined.
     void rescan().catch((error: unknown) => logger?.warn({ err: error }, "repo scan failed"));
     // Memo expiry is untethered from the throttle: a reader must never wait out the window for a fresh set.
-    const unsubscribe = changes(() => {
+    const expire = (): void => {
         generation += 1;
         schedule();
-    });
+    };
+    const unsubscribe = changes(expire);
 
     return {
         subscribe(listener) {
@@ -95,6 +98,7 @@ const createRepoWatch = (
             return () => listeners.delete(listener);
         },
         currentRepos,
+        expire,
         close: () => {
             unsubscribe();
             if (timer !== undefined) {
@@ -116,6 +120,11 @@ export const startRepoWatch = (root: string, logger: Logger): void => {
     }
 };
 export const subscribeRepoChanges = (listener: (repos: string[]) => void): (() => void) => instance?.subscribe(listener) ?? (() => undefined);
+
+// A repo the daemon made where the watcher cannot see it: a `.git` pointer is never watched, so a folder already
+// synced in becomes a repo with no batch to say so. The set is walked again and pushed as a reposChanged frame if it
+// moved; a no-op before the watch starts, whose first scan finds it anyway.
+export const announceRepoChange = (): void => instance?.expire();
 
 // The repo set for anything that needs one: the watch's memo when it's running, a plain walk otherwise (a `local`
 // profile, a router built with no watcher in tests).

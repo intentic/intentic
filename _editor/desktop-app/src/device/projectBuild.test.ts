@@ -1,70 +1,70 @@
-import type { SetupArgs } from "../desktop";
-import type { ProgressView, StepView } from "../setupPlan";
-import { type BuildFacts, projectBuildOf, projectPathOf } from "./projectBuild";
+import type { MachineSandbox } from "../desktop";
+import { folderOf, machineOf, machineStateOf, projectPathOf } from "./projectBuild";
 
-// A folder's build card reads this window's setup store: what it says while the sandbox goes up, when the folder counts
-// as moved in, and where "Open sandbox" goes.
+// This computer's sandbox and a folder on its way into it, read off the app's record into what a window's card and
+// button draw: every state the record can be in, the folder found by the path its window is told, and where
+// "Open sandbox" goes.
 
-const ADOPTED: SetupArgs = {
-    code: `c0de`,
-    sandboxId: `cmuudvkwr001b01r822aawr1l`,
-    name: `test-remove-me`,
-    syncDir: `C:\\Users\\me\\Documents\\test-remove-me`,
-    project: `test-remove-me`,
+const RECORD: MachineSandbox = {
+    state: `creating`,
+    phase: `pulling-image`,
+    step: `using the sandbox image already here`,
+    percent: 42,
+    sandboxId: `cmmachine0001`,
+    slug: `sandbox-2c8eb2c5b3a5`,
+    hostname: `sandbox-2c8eb2c5b3a5.sbx.intentic.dev`,
+    name: `ada-laptop sandbox`,
+    made: false,
+    attempt: 1,
+    updatedAt: 1_790_000_000,
+    consented: false,
+    resumeOnLaunch: false,
+    requirements: [],
+    folders: [
+        { path: `C:\\Users\\ada\\code\\shop`, name: `shop`, state: `queued` },
+        { path: `C:\\Users\\ada\\code\\api`, name: `api`, state: `copying`, status: `staging-beta` },
+        { path: `C:\\Users\\ada\\notes`, name: `notes`, state: `failed`, reason: `That folder is already attached.` },
+    ],
 };
 
-const step = (phase: string, state: StepView[`state`]): StepView => ({ phase, label: `Label of ${phase}`, state, detail: undefined, share: 0.1 });
-
-const view = (steps: readonly StepView[], over: Partial<ProgressView> = {}): ProgressView => ({
-    steps,
-    percent: 42,
-    position: undefined,
-    remaining: undefined,
-    remainingMs: 90_000,
-    stepProgress: 0.5,
-    ...over,
+it(`draws nothing before the app has said`, () => {
+    expect(machineOf(undefined)).toBeUndefined();
 });
 
-const facts = (over: Partial<BuildFacts> = {}): BuildFacts => ({ adopted: ADOPTED, state: `running`, view: undefined, error: undefined, ...over });
-
-it(`draws nothing for a window that adopted no folder build`, () => {
-    expect(projectBuildOf(facts({ adopted: undefined }))).toBeUndefined();
-});
-
-it(`builds through the running step, with its own words, its progress and the time left`, () => {
-    const running = view([step(`preflight`, `done`), step(`pulling-image`, `running`), step(`starting-sandbox`, `waiting`)]);
-    expect(projectBuildOf(facts({ view: running }))).toEqual({
-        name: `test-remove-me`,
-        state: `building`,
+it(`says how far it is being made, how many folders wait for it, and whether it has a log`, () => {
+    expect(machineOf(RECORD)).toEqual({
+        state: `creating`,
         phase: `pulling-image`,
-        phaseProgress: 0.5,
-        step: `Label of pulling-image`,
+        step: `using the sandbox image already here`,
         percent: 42,
-        remainingMs: 90_000,
-        error: undefined,
+        name: `ada-laptop sandbox`,
+        waiting: 1,
+        hasLog: false,
     });
+    expect(machineOf({ ...RECORD, logPath: `/home/ada/.intentic/logs/desktop-machine-setup.log` })?.hasLog).toBe(true);
 });
 
-// The device's own connection is the setup's last step and none of the folder's: the reader may open the sandbox while
-// it finishes behind.
-it(`is ready once the folder is in, while the device's own connection still runs`, () => {
-    const connecting = view([step(`desktop-sync`, `done`), step(`connecting-machine`, `running`)]);
-    const build = projectBuildOf(facts({ view: connecting }));
-    expect({ state: build?.state, percent: build?.percent, remainingMs: build?.remainingMs }).toEqual({ state: `ready`, percent: 100, remainingMs: undefined });
+// Fields a state does not have are said as undefined, never carried over from the record.
+it(`reads every state the app can be in`, () => {
+    expect(machineStateOf({ state: `creating`, percent: 0 })).toEqual({ state: `creating`, phase: undefined, step: undefined, percent: 0 });
+    expect(machineStateOf({ state: `needsDocker`, reason: `notRunning` })).toEqual({ state: `needsDocker`, reason: `notRunning` });
+    expect(machineStateOf({ state: `waiting`, for: `restart` })).toEqual({ state: `waiting`, for: `restart` });
+    expect(machineStateOf({ state: `failed`, reason: `docker refused` })).toEqual({ state: `failed`, reason: `docker refused` });
+    for (const state of [`signedOut`, `ready`, `stopped`, `interrupted`, `gone`] as const) {
+        expect(machineStateOf({ state })).toEqual({ state });
+    }
 });
 
-it(`stands as far as it got when it ends, saying why only for a failure`, () => {
-    const stopped = view([step(`pulling-image`, `done`), step(`starting-sandbox`, `stopped`), step(`waiting-health`, `stopped`)]);
-    const failed = projectBuildOf(facts({ state: `failed`, view: stopped, error: `docker refused` }));
-    expect({ state: failed?.state, phase: failed?.phase, error: failed?.error }).toEqual({ state: `failed`, phase: `pulling-image`, error: `docker refused` });
-    const asked = projectBuildOf(facts({ state: `waiting`, view: stopped, error: `needs consent` }));
-    expect({ state: asked?.state, error: asked?.error }).toEqual({ state: `waiting`, error: undefined });
-    expect(projectBuildOf(facts({ state: `stopped`, view: stopped }))?.state).toBe(`stopped`);
-    expect(projectBuildOf(facts({ state: `done`, view: stopped }))?.state).toBe(`ready`);
+it(`finds the window's own folder by the path it is told, and no other`, () => {
+    expect(folderOf(RECORD, `C:\\Users\\ada\\code\\api`)).toEqual({ name: `api`, state: `copying`, reason: undefined, status: `staging-beta` });
+    expect(folderOf(RECORD, `C:\\Users\\ada\\notes`)).toEqual({ name: `notes`, state: `failed`, reason: `That folder is already attached.`, status: undefined });
+    expect(folderOf(RECORD, `C:\\Users\\ada\\code`)).toBeUndefined();
+    expect(folderOf(RECORD, undefined)).toBeUndefined();
+    expect(folderOf(undefined, `C:\\Users\\ada\\code\\api`)).toBeUndefined();
 });
 
-it(`opens the built sandbox on the folder, and nowhere without a sandbox to name`, () => {
-    expect(projectPathOf(ADOPTED)).toBe(`/?sandbox=cmuudvkwr001b01r822aawr1l&project=test-remove-me`);
+it(`opens a folder's sandbox on the folder, and nowhere without a sandbox to name`, () => {
+    expect(projectPathOf({ sandboxId: `cmmachine0001`, project: `shop` })).toBe(`/?sandbox=cmmachine0001&project=shop`);
     expect(projectPathOf({ sandboxId: `a b`, project: `x&y` })).toBe(`/?sandbox=a+b&project=x%26y`);
     expect(projectPathOf({ sandboxId: undefined, project: `x` })).toBeUndefined();
 });

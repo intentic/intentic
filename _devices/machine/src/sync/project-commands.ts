@@ -4,21 +4,17 @@ import { buildCommand, type CommandContext } from "@stricli/core";
 import { z } from "zod";
 import { baseDir } from "../config.js";
 import { readResidentPid } from "../resident.js";
-import { isProjectPairing, type Pairing, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "./config.js";
+import { isProjectPairing, type Pairing, pairingKey, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "./config.js";
 import { canonicalFolder, foldersOverlap, sameFolder } from "./folders.js";
 import { ensureMutagen, sessionName } from "./mutagen.js";
 import { pairingEndpoint } from "./endpoint.js";
 import { mutagenSession, projectShell, realProjectRunner, sandboxCopy } from "./project-remote.js";
 import {
-    type BringBackResult,
     bringBack,
-    type ChangesResult,
     type ListedChange,
     projectChanges,
     type ProjectContext,
     type ProjectPairing,
-    type RestorePointsResult,
-    type RestoreResult,
     restorePoint,
     restorePoints,
 } from "./project-transfer.js";
@@ -55,10 +51,9 @@ const sentence = (message: string): string => {
     return `${text.charAt(0).toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`;
 };
 
-type Result = ChangesResult | BringBackResult | RestorePointsResult | RestoreResult | DirectionResult;
-
-// What every one of these commands prints, and the one exit code a failure has.
-const answer = async <R extends Result>(cli: CommandContext, json: boolean, work: () => Promise<R>, human: (result: R) => string): Promise<void> => {
+// What every one of these commands prints, and the one exit code a failure has; `sync attach` and `sync detach` answer
+// the same way (attach-commands.ts).
+export const answer = async <R extends { readonly ok: true }>(cli: CommandContext, json: boolean, work: () => Promise<R>, human: (result: R) => string): Promise<void> => {
     try {
         const result = await work();
         cli.process.stdout.write(`${json ? JSON.stringify(result) : human(result)}\n`);
@@ -90,7 +85,7 @@ const contextFor = async (pairing: ProjectPairing): Promise<ProjectContext> => (
         projectShell(pairingEndpoint(pairing), mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"])),
         pairingRemoteDir(pairing),
     ),
-    session: mutagenSession(realProjectRunner, await ensureMutagen(), sessionName(pairing.sandboxId)),
+    session: mutagenSession(realProjectRunner, await ensureMutagen(), sessionName(pairingKey(pairing))),
 });
 
 // A path as a line shows it: plain, or quoted where it holds a character a line would lose (a newline, a tab).
@@ -283,14 +278,14 @@ const directionCommand = buildCommand<ProjectFlags, [string?]>({
         await answer(
             this,
             flags.json,
-            async () => {
+            async (): Promise<DirectionResult> => {
                 const direction = DIRECTIONS.find((known) => known === value);
                 if (direction === undefined) {
                     throw new Error(`say which way: \`to-sandbox\` (copy-first) or \`both\`${value === undefined ? "" : `, not ${JSON.stringify(value)}`}`);
                 }
                 const pairing = await pairingAt(flags.dir);
                 dir = pairing.localDir;
-                await setProjectDirection(pairing.sandboxId, direction);
+                await setProjectDirection(pairingKey(pairing), direction);
                 running = (await readResidentPid()) !== undefined;
                 return { ok: true, direction };
             },

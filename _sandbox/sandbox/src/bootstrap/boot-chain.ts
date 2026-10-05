@@ -19,7 +19,7 @@ import { checkEventsDir } from "../intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "../intentic/infra-apply.js";
 import { arrivedPrewarmed } from "../system/boot/prewarm.js";
 import { projectDirOf, seedsStarterSite } from "../system/project-dir.js";
-import { restoreAuthorizedKeys } from "../hosts/desktop-sync.js";
+import { restoreAuthorizedKeys, subscribeDeviceReports } from "../hosts/desktop-sync.js";
 import { applyDefinitionItems } from "../portability/apply-definition.js";
 import { sweepArrivals } from "../portability/bundle-arrival.js";
 import { parseDefinitionToml } from "../portability/definition.js";
@@ -32,6 +32,7 @@ import { linkClaudeState } from "../sessions/session-store.js";
 import { reconcileBakedSkills } from "../settings/skills.js";
 import type { BootPhase } from "./boot-phase.js";
 import { convergeProjectNote } from "./project-note.js";
+import { convergeAttachedProjects, projectsHostAttacher, type ProjectsHostDeps } from "./projects-host.js";
 
 // What a step reads: the boot phase, the runner env a definition seed is filtered by, and whether rootRepo created the
 // workspace repo this boot, which the starter seed and the baseline commit wait on.
@@ -175,10 +176,21 @@ const ensureProjectFolderRepo = async ({ config, logger, services }: BootRun): P
 
 const noteProjectFolder = async ({ config, logger }: BootRun): Promise<void> => {
     const name = projectDirOf(config);
-    if (name !== undefined && (await convergeProjectNote(config.workspaceRoot, name))) {
+    if (name !== undefined && (await convergeProjectNote(config.workspaceRoot, [name]))) {
         logger.info({ repo: name }, "project folder: the workspace's AGENTS.md tells agents it is the owner's");
     }
 };
+
+// A projects host's attached folders (bootstrap/projects-host.ts), from what a boot is handed.
+const projectsHostDeps = ({ config, logger, services, traits }: BootPhase): ProjectsHostDeps => ({
+    workspace: services.workspace,
+    historyRoot: config.historyRoot,
+    logger,
+    writesNote: traits.ownsWorkspaceConfig,
+});
+
+// Whether this daemon takes in a projects host's folders: the roots' owner, in the layout that relocates git dirs.
+const hostsProjects = ({ role, traits, config }: BootPhase): boolean => role.roots && traits.relocateGitDirs && config.sandbox.projectsHost;
 
 // The converging work every held data route waits on, in the order it runs. A request arriving mid-boot queues on the
 // gate rather than reading half-built state, and the browser is told which step is running. `role.container` owns the
@@ -231,6 +243,15 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         when: ({ role, traits, config }) => role.roots && traits.relocateGitDirs && projectDirOf(config) !== undefined,
         run: ensureProjectFolderRepo,
         failure: "project folder not made a repo, its files read as the workspace's own in the Changes review",
+    },
+    // A projects host's attached folders, each a repo of its own, and the note naming them all: projectRepo's work for
+    // every folder the registry holds, placed as it is for the same reasons, and before the baseline as projectNote is.
+    {
+        key: "attachedProjects",
+        label: "Making your attached folders repos",
+        when: hostsProjects,
+        run: (boot) => convergeAttachedProjects(projectsHostDeps(boot)),
+        failure: "attached project folders not converged, their files may read as the workspace's own in the Changes review",
     },
     {
         key: "starterSite",
@@ -315,6 +336,18 @@ export const declareBootSteps = (services: Services): void => services.boot.decl
 
 export const runBootSteps = async (phase: BootPhase, runnerEnv: RunnerModeEnv | undefined): Promise<void> => {
     const boot: BootRun = { ...phase, runnerEnv, freshRoot: false };
+    // From here on a projects host attaches each folder its computer's sync report names. Subscribed before the steps,
+    // so a report arriving mid-boot is held rather than answered unheard (the machine starts copying a folder once a
+    // report naming it is answered); its attach waits for the steps, so it never runs beside the boot's own convergence
+    // of the same repos.
+    let booted: () => void = () => undefined;
+    const steps = new Promise<void>((resolve) => {
+        booted = resolve;
+    });
+    if (hostsProjects(phase)) {
+        const attach = projectsHostAttacher(projectsHostDeps(phase));
+        phase.shutdown.push(subscribeDeviceReports(async (report) => steps.then(async () => attach(report))));
+    }
     for (const step of BOOT_STEPS) {
         await phase.services.boot.step(step.key, async () => {
             if (step.when?.(boot) === false) {
@@ -324,6 +357,7 @@ export const runBootSteps = async (phase: BootPhase, runnerEnv: RunnerModeEnv | 
             await (failure === undefined ? step.run(boot) : step.run(boot).catch((error: unknown) => phase.logger.warn({ err: error }, failure)));
         });
     }
+    booted();
     // A previous boot's check runs left per-run event files behind; their streams died with the daemon.
     if (phase.role.roots) {
         void rm(checkEventsDir(phase.config.historyRoot), { recursive: true, force: true });

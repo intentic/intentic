@@ -1,9 +1,11 @@
 import type { LocalView } from "@intentic/web/local-host";
 import { t } from "@intentic/ui/i18n";
+import type { MachineStanding } from "../desktop";
 
 // WHAT THE RAIL'S THIS DEVICE TILE SAYS while the reader is elsewhere (host.ts): a setup or a fix running here (the
-// rail's spinning mark), a setup or a sync that stopped for the reader, Docker being started, an update waiting for a
-// restart. Nothing at rest. Pure, so each case is tested by value (badge.test.ts).
+// rail's spinning mark), this computer's own sandbox being made, a setup, a sync or this computer's sandbox stopped for
+// the reader, Docker being started, an update waiting for a restart. Nothing at rest. Pure, so each case is tested by
+// value (badge.test.ts).
 
 export type DeviceBadge = NonNullable<LocalView[`badge`]>[`value`];
 
@@ -19,7 +21,13 @@ export interface DeviceSigns {
     readonly waiting: boolean;
     readonly startingDocker: boolean;
     readonly updateReady: boolean;
+    /** Where this computer's own sandbox stands (machineSandbox.ts), once the app has said. */
+    readonly machine?: MachineStanding[`state`] | undefined;
 }
+
+// This computer's sandbox waiting on the reader: a question, a failure, Docker, a stopped container, one that is gone.
+// Nobody signed in is not one: it is made after sign-in.
+const MACHINE_NEEDS_YOU: ReadonlySet<MachineStanding[`state`]> = new Set([`waiting`, `failed`, `needsDocker`, `stopped`, `gone`]);
 
 /** One badge for the tile, the most pressing first: work in flight, then what waits for the reader, then news. */
 export const deviceBadge = (signs: DeviceSigns): DeviceBadge => {
@@ -29,11 +37,18 @@ export const deviceBadge = (signs: DeviceSigns): DeviceBadge => {
     if (signs.fixing !== undefined) {
         return { running: t(`desktop.fix.fixing`, { sandbox: signs.fixing }) };
     }
+    if (signs.machine === `creating` || signs.machine === `interrupted`) {
+        return { running: t(`desktop.device.machineBadge`) };
+    }
     if (signs.waiting) {
         return { mark: `exclamation`, tone: `warning`, tooltip: t(`desktop.device.needsYouBadge`) };
     }
     if (signs.startingDocker) {
         return { running: t(`desktop.device.startingDockerBadge`) };
+    }
+    // Behind a start of Docker: that start is what most of these are waiting for.
+    if (signs.machine !== undefined && MACHINE_NEEDS_YOU.has(signs.machine)) {
+        return { mark: `exclamation`, tone: `warning`, tooltip: t(`desktop.device.needsYouBadge`) };
     }
     if (signs.updateReady) {
         return { mark: `arrow-up`, tone: `info`, tooltip: t(`desktop.device.updateReadyBadge`) };

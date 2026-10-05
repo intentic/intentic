@@ -6,7 +6,7 @@ import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../wsl.js";
-import { isProjectPairing, mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
+import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, readState, type SyncState } from "./config.js";
 import { backupSessionName, ensureMutagen, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
@@ -41,22 +41,29 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): De
     // Which sandbox folder the local one holds, stated only where it is not /work itself, so every older reader's
     // picture of every other pairing holds.
     const remote = pairing.remoteDir === undefined ? {} : { remoteDir: pairing.remoteDir };
+    // The machine's own sandbox, which folders attach to and which has no folder of its own, and whether an attached
+    // folder takes landed work by itself; each stated only where it is so, as the remote dir is.
+    const kind = {
+        ...(pairing.projectsHost === true ? { projectsHost: true } : {}),
+        ...(pairing.deliver === undefined ? {} : { deliver: deliversByItself(pairing) ? ("auto" as const) : ("off" as const) }),
+    };
     // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
-    // failed read.
-    if (pairing.mode !== "sync" || sessions === undefined) {
-        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, mirroring };
+    // failed read. Nor has the projects host, whose folders are pairings of their own.
+    if (pairing.mode !== "sync" || sessions === undefined || pairing.projectsHost === true) {
+        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, ...kind, mirroring };
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
     // renders it the same way instead of inventing a default. sessionStateOf resolves Mutagen's omitted zero.
-    const session = sessionStateOf(sessions.get(sessionName(pairing.sandboxId)));
+    const session = sessionStateOf(sessions.get(sessionName(pairingKey(pairing))));
     // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state. A
     // project pairing has none by design, which the remote dir beside it says; its absence here is not a failure.
-    const backup = isProjectPairing(pairing) ? undefined : sessionStateOf(sessions.get(backupSessionName(pairing.sandboxId)));
+    const backup = isProjectPairing(pairing) ? undefined : sessionStateOf(sessions.get(backupSessionName(pairingKey(pairing))));
     return {
         sandboxId: pairing.sandboxId,
         mode: pairing.mode,
         localDir: pairing.localDir,
         ...remote,
+        ...kind,
         mirroring,
         mutagenStatus: session.status,
         conflicts: session.conflicts,
@@ -121,8 +128,9 @@ export const deviceReport = async (mutagen: string | undefined): Promise<DeviceR
     return buildReport(state, sessions, agent, Date.now(), wsl, machineId());
 };
 
-// One pairing's slice for posting to its sandbox: only that pairing and its ports cross the network. A `mirror`
-// enrollment's folder drops too, since it never had a localDir to begin with.
+// One sandbox's slice for posting to it: only its own pairings and ports cross the network. That is every pairing of
+// it, the projects host and each folder attached to it alike, since the daemon keeps one report per machine and a slice
+// of one pairing would lose it the rest. A `mirror` enrollment's folder drops too, since it never had a localDir.
 export const scopedReport = (report: DeviceReport, sandboxId: string): DeviceReport => ({
     ...report,
     pairings: report.pairings.filter((pairing) => pairing.sandboxId === sandboxId),

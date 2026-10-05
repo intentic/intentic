@@ -68,6 +68,12 @@ const COMMANDS: &[&str] = &[
     "local_roster",
     "account_relay",
     "project_preview",
-    "project_create",
+    "project_attach",
+    "machine_sandbox_status",
+    "machine_sandbox_retry",
+    "machine_sandbox_check",
+    "machine_sandbox_recreate",
+    "machine_sandbox_start",
+    "machine_sandbox_end_session",
     "found_on_machine",
 ];

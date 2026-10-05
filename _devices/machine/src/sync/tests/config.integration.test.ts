@@ -262,7 +262,7 @@ describe("a pairing reached through Docker", () => {
     });
 
     it.each([
-        ["a workspace pairing", { ...local, transport: "docker", container: "intentic-sandbox-sandbox-0738cd6b5027" }, "reaches its sandbox through Docker, which only a project pairing may"],
+        ["a workspace pairing", { ...local, transport: "docker", container: "intentic-sandbox-sandbox-0738cd6b5027" }, "reaches its sandbox through Docker, which only a project pairing or the projects host may"],
         ["no container", { ...project, transport: "docker" }, "reaches its sandbox through Docker but names no sandbox container (undefined)"],
         ["a container that is not a sandbox's", { ...project, transport: "docker", container: "postgres" }, `names no sandbox container ("postgres")`],
         ["a container name docker would not take", { ...project, transport: "docker", container: "intentic-sandbox-a;rm" }, "names no sandbox container"],

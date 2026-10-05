@@ -581,7 +581,7 @@ fn read_roster(config_dir: &Path) -> Roster {
     }
 }
 
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
+pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
@@ -609,7 +609,7 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
 
 /// Written whole or not at all: a sibling temp file renamed over the old one, so a crash mid-write cannot leave
 /// half a file for the next launch to read.
-fn write_json<T: Serialize>(path: &Path, value: &T) {
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) {
     let written = serde_json::to_string_pretty(value)
         .map_err(std::io::Error::from)
         .and_then(|serialized| {

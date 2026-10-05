@@ -145,6 +145,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "phone-wake.json", portability: "identity" },
     // Setup-device pairing burn list; carrying it would mark another sandbox's fresh pairing as spent.
     { path: "host-pair-consumed.json", portability: "identity" },
+    // Lands waiting for the computer whose folder they go to, and which computer last held each attached folder
+    // (conversations/land/project-delivery.ts): about the machine this sandbox runs beside, whose folders a moved
+    // sandbox does not have.
+    { path: "project-deliveries.json", portability: "identity" },
+    // The folders attached to this computer's own sandbox, by name (the daemon's system/projects-registry.ts): which of the
+    // computer's folders sync in, so it stays with the sandbox that runs beside them. The folders' copies and repos travel
+    // with /work and gits/; a moved sandbox treats them as ordinary repos.
+    { path: "projects.json", portability: "identity", note: "Attach the folders again from the desktop app on the computer that holds them." },
     // A runner's enrollment names this sandbox as parent; elsewhere its digest would dial the old parent.
     { path: "runner-enrollments.json", portability: "identity" },
     { path: "runner-pair-consumed.json", portability: "identity" },

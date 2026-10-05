@@ -147,6 +147,50 @@
         "settingUpBadge": "setting up {name}",
         "needsYouBadge": "needs you",
         "startingDockerBadge": "starting Docker",
-        "updateReadyBadge": "an update is ready"
+        "updateReadyBadge": "an update is ready",
+        "machineBadge": "setting up this computer's sandbox"
+    },
+    "machineSandbox": {
+        "title": "This computer's sandbox",
+        "state": {
+            "signedOut": "made after you sign in",
+            "needsDocker": "needs Docker",
+            "creating": "setting up",
+            "waiting": "needs your OK",
+            "ready": "ready",
+            "stopped": "stopped",
+            "failed": "not set up",
+            "interrupted": "picking up where it left off",
+            "gone": "gone"
+        },
+        "detail": {
+            "signedOut": "Sign in, and Intentic makes one sandbox on this computer for the folders you work on with an agent.",
+            "needsDocker": {
+                "notInstalled": "It runs in Docker, which isn't on this computer. Install Docker Desktop, and Intentic sets the sandbox up once it runs.",
+                "notRunning": "It runs in Docker, which isn't running. Start it, and Intentic carries on by itself.",
+                "notAllowed": "Docker is running and turns this account away. Add your account to Docker's group (docker-users on Windows), then sign out and back in."
+            },
+            "creating": "Intentic is setting it up in the background. Your folders go into it as soon as it's ready.",
+            "interrupted": "Intentic closed while it was being set up, so it's picking up where it left off.",
+            "waiting": "This computer needs a few things before it can run a sandbox.",
+            "ready": "The folders you work on with an agent go into it, each in a folder of its own.",
+            "stopped": "It's on this computer and not running. Start it to work on your folders with an agent.",
+            "failed": "Its setup stopped. The log says what it was doing.",
+            "gone": "It's no longer on your account or on this computer. Make a new one, and your folders go into it."
+        },
+        "percent": "{percent}%",
+        "open": "Open",
+        "signIn": "Sign in",
+        "getDocker": "Get Docker Desktop",
+        "showLog": "Show log",
+        "start": "Start",
+        "recreate": "Make a new one",
+        "folder": {
+            "queued": "waiting",
+            "attaching": "adding",
+            "copying": "copying",
+            "ready": "in",
+            "failed": "couldn't be added"
+        }
     }
 }

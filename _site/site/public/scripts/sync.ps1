@@ -19,6 +19,9 @@
 #           folder of your own, which also needs SYNC_PROJECT.
 #           SYNC_PROJECT - any non-empty value (the desktop app sends 1): SYNC_DIR is your own project, synced into
 #           SYNC_REMOTE_DIR with no sandbox state backup and no git bridge writing into it.
+#           SYNC_PROJECTS_HOST - any non-empty value (the desktop app sends 1, through `ic`): pair this computer's own
+#           sandbox with no folder at all, so folders can attach to it later (`intentic-machine sync attach`). Takes
+#           none of SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT.
 #           TAKEOVER - any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #           AGENT_BIN - local dev / dogfooding an unreleased build: run this command instead of the installed
 #           agent, whitespace-separated (e.g. "node C:\intentic\_devices\machine\dist\cli.js").
@@ -233,8 +236,14 @@ $pair = $env:PAIR_TOKEN
 $dir = $env:SYNC_DIR
 $remoteDir = $env:SYNC_REMOTE_DIR
 $project = $env:SYNC_PROJECT
+$projectsHost = $env:SYNC_PROJECTS_HOST
 if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
     Write-Error 'SANDBOX_URL and PAIR_TOKEN are required (copy the command from the Desktop sync card).'
+    exit 1
+}
+# This computer's own sandbox holds no folder: folders attach to it later, each as /work/<name>.
+if (-not [string]::IsNullOrEmpty($projectsHost) -and -not ([string]::IsNullOrEmpty($dir) -and [string]::IsNullOrEmpty($remoteDir) -and [string]::IsNullOrEmpty($project))) {
+    Write-Error "SYNC_PROJECTS_HOST pairs this computer's own sandbox, which holds no folder - unset SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT."
     exit 1
 }
 
@@ -243,6 +252,7 @@ if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
 $speaks = @()
 if (-not [string]::IsNullOrEmpty($remoteDir)) { $speaks += '--remote-dir' }
 if (-not [string]::IsNullOrEmpty($project)) { $speaks += '--project' }
+if (-not [string]::IsNullOrEmpty($projectsHost)) { $speaks += '--projects-host' }
 
 # The only Windows agent a release publishes is x64, which Windows on ARM runs under emulation.
 $arch = 'amd64'
@@ -255,6 +265,18 @@ if (-not $bin) {
         $have = ''
     }
     if (-not $have) { Install-IntenticAgent -Dest $dest -Arch $arch }
+    # Still not spoken after the bootstrap: the newest release predates the handover's words, and the agent would
+    # refuse them with a parser error that names a flag and nothing else. Said here instead, in words, before anything
+    # is enrolled. A dev AGENT_BIN is taken as it is.
+    if ($speaks.Count -gt 0 -and -not (Test-IntenticAgentSpeaks -Path $dest -Route $route -Flags $speaks)) {
+        $version = Get-IntenticAgentVersion -Path $dest
+        if (-not [string]::IsNullOrEmpty($projectsHost)) {
+            Write-Error "the intentic machine agent here ($version) can't set up this computer's own sandbox yet (``$route setup --projects-host``), so folders can't attach to it - update the desktop app, or run this again once a newer agent is released."
+        } else {
+            Write-Error "the intentic machine agent here ($version) doesn't understand ``$route setup $($speaks -join ' ')`` yet - update the desktop app, or run this again once a newer agent is released."
+        }
+        exit 1
+    }
     $bin = $dest
 }
 
@@ -262,6 +284,7 @@ $syncArgs = @($route, 'setup', '--url', $url, '--pair', $pair)
 if (-not [string]::IsNullOrEmpty($dir)) { $syncArgs += @('--dir', $dir) }
 if (-not [string]::IsNullOrEmpty($remoteDir)) { $syncArgs += @('--remote-dir', $remoteDir) }
 if (-not [string]::IsNullOrEmpty($project)) { $syncArgs += @('--project') }
+if (-not [string]::IsNullOrEmpty($projectsHost)) { $syncArgs += @('--projects-host') }
 if (-not [string]::IsNullOrEmpty($env:TAKEOVER)) { $syncArgs += @('--takeover') }
 if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
     # A whitespace-separated command: first token is the executable, the rest are leading args before setup.

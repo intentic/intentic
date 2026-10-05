@@ -22,6 +22,7 @@ import { capabilitySecretsDocument, extensionSecretsDocument } from "../capabili
 import { dismissalsDocument } from "../capabilities/offers/dismissals-store.js";
 import { choreLedgerDocument, choreProbesDocument } from "../chores/chores-store.js";
 import { ciDocument } from "../ci/ci-store.js";
+import { projectDeliveriesDocument } from "../conversations/land/project-delivery.js";
 import { conversationRecordDocument } from "../conversations/registry/agents-store.js";
 import { pre1308ImportStep } from "../conversations/registry/pre-1308-import.js";
 import { enginePolicyDocument } from "../engines/engine-policy.js";
@@ -80,6 +81,7 @@ import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
+import { attachedProjectsDocument } from "../system/projects-registry.js";
 import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
 import { updatePolicyDocument } from "../system/updates/update-policy.js";
@@ -118,6 +120,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     choreLedgerDocument,
     choreProbesDocument,
     ciDocument,
+    projectDeliveriesDocument,
     conversationRecordDocument,
     enginePolicyDocument,
     engineStateDocument,
@@ -173,6 +176,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webchatInstallsDocument,
     newestRunDocument,
     bootFailureDocument,
+    attachedProjectsDocument,
     heavyCommandsDocument,
     stagedUpdateDocument,
     updateOutcomeDocument,

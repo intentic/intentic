@@ -24,6 +24,9 @@
 #                folder of your own, which also needs SYNC_PROJECT.
 #   SYNC_PROJECT any non-empty value (the desktop app sends 1): SYNC_DIR is your own project, synced into
 #                SYNC_REMOTE_DIR with no sandbox state backup and no git bridge writing into it.
+#   SYNC_PROJECTS_HOST  any non-empty value (the desktop app sends 1, through `ic`): pair this computer's own
+#                sandbox with no folder at all, so folders can attach to it later (`intentic-machine sync attach`).
+#                Takes none of SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT.
 #   TAKEOVER     any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #   AGENT_BIN    run THIS agent command instead of the installed one — for local dev / dogfooding an
 #                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_devices/machine/dist/cli.js".
@@ -34,8 +37,14 @@ PAIR="${PAIR_TOKEN:-}"
 DIR="${SYNC_DIR:-}"
 REMOTE_DIR="${SYNC_REMOTE_DIR:-}"
 PROJECT="${SYNC_PROJECT:-}"
+PROJECTS_HOST="${SYNC_PROJECTS_HOST:-}"
 if [ -z "$URL" ] || [ -z "$PAIR" ]; then
     echo "error: SANDBOX_URL and PAIR_TOKEN are required (copy the command from the Desktop sync card)." >&2
+    exit 1
+fi
+# This computer's own sandbox holds no folder: folders attach to it later, each as /work/<name>.
+if [ -n "$PROJECTS_HOST" ] && { [ -n "$DIR" ] || [ -n "$REMOTE_DIR" ] || [ -n "$PROJECT" ]; }; then
+    echo "error: SYNC_PROJECTS_HOST pairs this computer's own sandbox, which holds no folder — unset SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT." >&2
     exit 1
 fi
 
@@ -66,6 +75,7 @@ ROUTE="sync"
 SPEAKS=""
 [ -n "$REMOTE_DIR" ] && SPEAKS="--remote-dir"
 [ -n "$PROJECT" ] && SPEAKS="$SPEAKS --project"
+[ -n "$PROJECTS_HOST" ] && SPEAKS="$SPEAKS --projects-host"
 
 # ---- bootstrap the agent binary (identical in device.sh and sync.sh: standalone `curl | sh` files, no shared code) ----
 #
@@ -165,10 +175,23 @@ if [ -z "$BIN" ]; then
 fi
 # ---- end of the agent binary bootstrap ----
 
+# Still not spoken after the bootstrap: the newest release predates the handover's words, and the agent would refuse
+# them with a parser error that names a flag and nothing else. Said here instead, in words, before anything is enrolled.
+# A dev AGENT_BIN is taken as it is.
+if [ -z "${AGENT_BIN:-}" ] && [ -n "${SPEAKS:-}" ] && ! agent_speaks "$BIN" "$ROUTE" "$SPEAKS"; then
+    if [ -n "$PROJECTS_HOST" ]; then
+        echo "error: the intentic machine agent here ($(agent_version "$BIN")) can't set up this computer's own sandbox yet (\`$ROUTE setup --projects-host\`), so folders can't attach to it — update the desktop app, or run this again once a newer agent is released." >&2
+    else
+        echo "error: the intentic machine agent here ($(agent_version "$BIN")) doesn't understand \`$ROUTE setup ${SPEAKS# }\` yet — update the desktop app, or run this again once a newer agent is released." >&2
+    fi
+    exit 1
+fi
+
 set -- "$ROUTE" setup --url "$URL" --pair "$PAIR"
 [ -n "$DIR" ] && set -- "$@" --dir "$DIR"
 [ -n "$REMOTE_DIR" ] && set -- "$@" --remote-dir "$REMOTE_DIR"
 [ -n "$PROJECT" ] && set -- "$@" --project
+[ -n "$PROJECTS_HOST" ] && set -- "$@" --projects-host
 [ -n "${TAKEOVER:-}" ] && set -- "$@" --takeover
 # BIN may be a multi-word AGENT_BIN dev command (intentional word-split); a real path runs directly.
 # shellcheck disable=SC2086

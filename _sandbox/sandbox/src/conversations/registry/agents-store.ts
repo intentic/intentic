@@ -5,6 +5,7 @@ import {
     ForkedFromSchema,
     LandConflictSchema,
     LandedMessageSchema,
+    LandingDeliverySchema,
     LimitPolicySchema,
     profileOf,
     RetryPolicySchema,
@@ -146,13 +147,15 @@ export type Remover = z.infer<typeof RemoverSchema>;
 // commit), why it refused (evidence standing.ts reads, never state), and the base-to-tip diffstat across the composition.
 // `failure` is a land that broke rather than refused, standing until one goes through, or, marked `check`, the
 // end-of-turn check that measures held work, standing until a later check reads it; `removedBy` who took the landed
-// work back out, while some of it is still missing.
+// work back out, while some of it is still missing; `delivery` what the last land did in the owner's folder, for a
+// project attached to this computer's sandbox (land/project-delivery.ts), cleared by the next land.
 const LandingSchema = z.object({
     message: LandedMessageSchema.optional(),
     conflicts: z.array(LandConflictSchema).optional(),
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
     failure: z.object({ reason: z.string(), code: z.string().optional(), at: z.number(), check: z.boolean().optional() }).optional(),
     removedBy: RemoverSchema.optional(),
+    delivery: LandingDeliverySchema.optional(),
 });
 export type Landing = z.infer<typeof LandingSchema>;
 

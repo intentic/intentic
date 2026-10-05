@@ -1,4 +1,4 @@
-import { cautionSentence, copyWeight, projectNames, refusalSentence, remainingWords, stageHeadline } from "./projectWords";
+import { cautionSentence, copyWeight, refusalSentence, stageHeadline } from "./projectWords";
 
 // The app answers a folder's dialog with kinds and numbers; these are the words the reader gets for them.
 
@@ -23,21 +23,6 @@ it(`counts what the first copy carries, and its size where there is one`, () => 
     expect(copyWeight({ files: 1, bytes: 0, more: false })).toBe(`1 file to copy`);
     expect(copyWeight({ files: 3, bytes: 355, more: false })).toBe(`3 files to copy, 355 B`);
     expect(copyWeight({ files: 60_000, bytes: 3 * 1024 ** 3, more: true })).toBe(`More than ${(60_000).toLocaleString()} files to copy, 3.0 GB`);
-});
-
-// As /setup names a sandbox made for a folder: after the folder, numbered past a name the account already uses.
-it(`names the sandbox after the folder, and the folder's place in the sandbox after it too`, () => {
-    expect(projectNames(`test-remove-me`, [`horus`, `mig`])).toEqual({ name: `test-remove-me`, project: `test-remove-me` });
-    expect(projectNames(`My App`, [`my app`])).toEqual({ name: `My App-2`, project: `My-App` });
-    expect(projectNames(`Café`, [])).toEqual({ name: `Café`, project: `Cafe` });
-});
-
-it(`words the time left, and says nothing while there is nothing honest to say`, () => {
-    expect(remainingWords(undefined)).toBeUndefined();
-    expect(remainingWords(Number.NaN)).toBeUndefined();
-    expect(remainingWords(20_000)).toBe(`less than a minute left`);
-    expect(remainingWords(60_000)).toBe(`about 1 minute left`);
-    expect(remainingWords(150_000)).toBe(`about 3 minutes left`);
 });
 
 it(`gives every stage of the house its own headline`, () => {

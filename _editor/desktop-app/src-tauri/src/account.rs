@@ -13,8 +13,8 @@
 //! to take this account's access off every sandbox's daemon first, and a local window knows only its own folder, so
 //! the page sends that one to the workspace. The cookie never reaches the page.
 //!
-//! The app makes calls of its own with the same session ([`platform_post`]): the sandbox a folder's window asks for
-//! (project.rs), its row and its setup code, each a fixed path written there, never one a page names.
+//! The app makes calls of its own with the same session ([`platform_post`]): this computer's own sandbox
+//! (machine_sandbox.rs), its row and its setup code, each a fixed path written there, never one a page names.
 
 use std::time::Duration;
 
@@ -319,6 +319,7 @@ async fn signed_off(app: &AppHandle, window: &WebviewWindow, held: Vec<Cookie<'s
     apply(window, leftovers).await;
     app.state::<AppState>()
         .remember_roster(crate::setup_link::Roster::default());
+    crate::machine_sandbox::account_changed();
     if let Some(workspace) = app.get_webview_window(crate::windows::WORKSPACE) {
         if let Err(error) = workspace.eval("location.reload()") {
             eprintln!("intentic: the workspace could not be told of the sign-out: {error}");
@@ -403,7 +404,7 @@ fn answered(status: u16, text: &str) -> Answered {
     }
 }
 
-/// A call the app makes for itself (project.rs), with the session the workspace signed in with: `path` is the app's own,
+/// A call the app makes for itself (machine_sandbox.rs), with the session the workspace signed in with: `path` is the app's own,
 /// written where it is called, never one a page names, so it is not held to [`ROUTES`].
 pub async fn platform_post(
     app: &AppHandle,
@@ -416,19 +417,6 @@ pub async fn platform_post(
         None => Answered::SignedOut,
         Some((answer, _)) => answered(answer.status, &answer.body),
     })
-}
-
-/// Whether the store holds a session to make a sandbox with, read without asking the platform: what the folder's
-/// dialog says its button does (project.rs). A session the platform no longer takes still reads as one, and is found
-/// out at the press, which then signs in as a missing one would.
-pub async fn has_session(app: &AppHandle, window: &WebviewWindow) -> bool {
-    let platform = app.state::<AppState>().platform_url();
-    let Ok(base) = url::Url::parse(&platform) else {
-        return false;
-    };
-    cookies_for(window, base)
-        .await
-        .is_ok_and(|held| cookie_header(&held).is_some())
 }
 
 #[cfg(test)]

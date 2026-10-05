@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { arch, hostname, platform, release, type } from "node:os";
 import { homeDir } from "@intentic/local-agent";
 import { promisify } from "node:util";
-import { DEVICE_FEATURE_LOOPBACK_CATCH, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
@@ -94,8 +94,9 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         ...(distros === undefined ? {} : { wslDistros: distros }),
         ...(links === undefined ? {} : { links }),
         // What this agent and the ic under it implement: the ic's asked of that ic rather than written down here, and
-        // the agent's own (the loopback catch) always, since this build answers it.
-        features: [...features, DEVICE_FEATURE_LOOPBACK_CATCH],
+        // the agent's own (the loopback catch, landed work delivered into an attached folder) always, since this build
+        // answers both.
+        features: [...features, DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY],
     };
     // Why that list is short, when the ic under it could not be brought up to date.
     if (stale !== undefined) {

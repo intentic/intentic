@@ -1,6 +1,7 @@
-<!-- "WORK ON THIS WITH AN AGENT", ASKED IN THE WINDOW: what a sandbox for this folder is, drawn rather than explained (the
-     folder's copy carried into the agent's house), what the first copy carries, anything to beware of, and one button.
-     It replaced the system's own message box, which said all of it in two paragraphs. -->
+<!-- "WORK ON THIS WITH AN AGENT", ASKED IN THE WINDOW: what going into this computer's sandbox is, drawn rather than
+     explained (the folder's copy carried into the agent's house), what the first copy carries, anything to beware of, how
+     far the sandbox is, and one button, which never waits on it: the folder goes in line, and the card in the corner
+     follows it. It replaced the system's own message box, which said all of it in two paragraphs. -->
 <script setup lang="ts">
 import { Button, Icon, InfoHint, Modal, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -12,7 +13,7 @@ import { useLocalProject } from "./useLocalProject";
 
 const t = useT();
 const face = localFace();
-const { dialogOpen, preview, creating, failure, create, cancel } = useLocalProject();
+const { dialogOpen, preview, attaching, failure, attach, cancel } = useLocalProject();
 
 // The folder's own name, known before the app has finished weighing it.
 const name = computed(() => (preview.value?.kind === `new` ? preview.value.name : (face?.name ?? ``)));
@@ -43,9 +44,30 @@ const cautions = computed(() => {
     return fresh.value?.large === true ? [...said, t(`local.project.large`)] : said;
 });
 
-// The one press, which needs the app's answer first: whether there is a session to make it with, and room to build it.
-const ready = computed(() => fresh.value !== undefined && !fresh.value.busy);
-const label = computed(() => (fresh.value?.signedIn === false ? t(`local.project.signInCreate`) : t(`local.project.create`)));
+// The one press, which needs the app's answer first. Nobody signed in signs in on it: this computer's sandbox is made
+// right after, and the folder goes into it.
+const ready = computed(() => fresh.value !== undefined);
+const signedOut = computed(() => fresh.value?.machine.state === `signedOut`);
+const label = computed(() => (signedOut.value ? t(`local.project.signInAttach`) : t(`local.project.attach`)));
+
+// Where this computer's sandbox is, said under the folder: the copy starts now, once it is set up, or once what it
+// waits for is done (the card in the corner says what that is).
+const machineNote = computed((): string | undefined => {
+    const machine = fresh.value?.machine;
+    switch (machine?.state) {
+        case undefined:
+        case `ready`:
+            return undefined;
+        case `signedOut`:
+            return t(`local.project.machine.signedOut`);
+        case `creating`:
+            return t(`local.project.machine.creating`, { percent: machine.percent });
+        case `interrupted`:
+            return t(`local.project.machine.creating`, { percent: 0 });
+        default:
+            return t(`local.project.machine.notReady`);
+    }
+});
 
 const open = computed({
     get: () => dialogOpen.value,
@@ -58,7 +80,7 @@ const open = computed({
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="header" :dismissable="!creating">
+    <Modal v-model:open="open" size="md" :header="header" :dismissable="!attaching">
         <!-- The picture says what the button does: this folder stays where it is, and its copy goes into a house of its
              own, built beside it. A folder that cannot have one gets the empty site with the sign on it. -->
         <div class="mb-4 rounded-md border border-line bg-canvas px-3 pb-2 pt-4">
@@ -97,12 +119,11 @@ const open = computed({
 
             <Notice v-for="caution in cautions" :key="caution" tone="warning" class="mt-2 text-2xs">{{ caution }}</Notice>
 
-            <p v-if="fresh?.busy" class="mt-3 text-2xs text-warning">{{ t(`local.project.busy`) }}</p>
-            <p v-else-if="fresh?.signedIn === false" class="mt-3 text-2xs text-muted">{{ t(`local.project.signInNote`) }}</p>
+            <p v-if="machineNote" class="mt-3 text-2xs text-muted">{{ machineNote }}</p>
         </template>
 
         <Notice v-if="failure !== undefined" tone="danger" class="mt-3 text-2xs">
-            <span class="block font-medium">{{ t(`local.project.createFailed`) }}</span>
+            <span class="block font-medium">{{ t(`local.project.attachFailed`) }}</span>
             <span class="block break-words">{{ failure }}</span>
         </Notice>
 
@@ -111,8 +132,8 @@ const open = computed({
                 <Button :label="t(`ui.action.close`)" @click="cancel" />
             </template>
             <template v-else>
-                <Button severity="secondary" :text="true" :label="t(`ui.action.cancel`)" :disabled="creating" @click="cancel" />
-                <Button :label="label" :loading="creating" :disabled="!ready" @click="create" />
+                <Button severity="secondary" :text="true" :label="t(`ui.action.cancel`)" :disabled="attaching" @click="cancel" />
+                <Button :label="label" :loading="attaching" :disabled="!ready" @click="attach" />
             </template>
         </template>
     </Modal>

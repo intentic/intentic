@@ -265,7 +265,24 @@
             "takenOutBy": "{who} took them out after it landed.",
             "takenOutInChanges": "Thrown away in the Changes panel after it landed.",
             "held": "Held",
-            "heldMemory": "Held: sandbox memory is low"
+            "heldMemory": "Held: sandbox memory is low",
+            "deliveredTo": "Delivered to {folder}",
+            "delivered": "Delivered",
+            "filesWritten": "Files written",
+            "undoPoint": "Undo point {point}",
+            "keptOutEdited": "{count} file kept out of {folder}: you edited it too | {count} files kept out of {folder}: you edited them too",
+            "keptOut": "{count} file kept out of {folder} | {count} files kept out of {folder}",
+            "keptAsYouHadThem": "Left as you had them",
+            "keptEdited": "you edited it",
+            "keptLink": "a link",
+            "keptOutside": "outside the folder",
+            "keptNeedsGit": "needs git to merge",
+            "keptMore": "and {count} more",
+            "waitingToDeliver": "Waiting for your computer to deliver to {folder}",
+            "couldntDeliver": "Couldn't deliver to your folder: {reason}",
+            "couldntDeliverBare": "Couldn't deliver to your folder",
+            "tooLargeToDeliver": "Too large to deliver by itself: press \"Bring back changes\" in the folder's window",
+            "yourFolder": "your folder"
         },
         "agentsView": {
             "agentResolveConflict": "Have the agent resolve the conflict?",
@@ -2649,7 +2666,6 @@
         },
         "localFiles": {
             "keepsFolderSynced": "Keeps this folder synced",
-            "newSandbox": "New sandbox",
             "startsIfStopped": "Starts it if stopped",
             "syncedSandbox": "Synced sandbox",
             "toggleFolder": "Toggle folder",
@@ -2660,7 +2676,8 @@
             "askAgentHint": "A conversation about this file",
             "closingDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
             "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone.",
-            "dropFilesToAdd": "Drop files to add them to {name}"
+            "dropFilesToAdd": "Drop files to add them to {name}",
+            "machineSandbox": "This computer's sandbox"
         },
         "quickOpen": {
             "goToFile": "Go to a file",
@@ -2705,17 +2722,12 @@
         },
         "project": {
             "dialogTitle": "Work on {name} with an agent",
-            "lede": "A sandbox for this folder, on this computer. Agents work on a copy, and nothing here changes until you bring their work back.",
+            "lede": "Its copy goes into this computer's sandbox, where agents work on it. Nothing here changes until you bring their work back.",
             "files": "{count} file to copy | {count} files to copy",
             "moreFiles": "More than {count} files to copy",
             "weight": "{files}, {size}",
             "staysHere": "Not copied: .git, node_modules, build output and .env files. They stay on this computer.",
             "large": "That's a lot to copy, so the first copy takes a while.",
-            "create": "Create sandbox",
-            "signInCreate": "Sign in and create",
-            "signInNote": "You'll sign in first. The sandbox is still made on this computer.",
-            "busy": "Another sandbox is being set up on this computer. Try again when it's done.",
-            "createFailed": "Couldn't create the sandbox",
             "refusedTitle": "This folder can't have a sandbox",
             "documentTitle": "Open the folder first",
             "document": "A sandbox works on a whole folder. Open the folder this document is in, then ask again from there.",
@@ -2742,25 +2754,75 @@
                 "moving": "Moving your files in",
                 "home": "Moved in"
             },
-            "building": "Building a sandbox for {name}",
-            "waiting": "{name}'s sandbox needs your OK",
-            "waitingDetail": "This computer needs a few things before it can run a sandbox.",
-            "ready": "{name} is ready for agents",
-            "readyDetail": "Its copy is in the sandbox. Bring changes back from this window when agents are done.",
-            "readyShort": "{name} is ready",
-            "failed": "The sandbox for {name} wasn't built",
-            "stopped": "Building the sandbox for {name} stopped",
             "percent": "{percent}%",
-            "lessThanAMinute": "less than a minute left",
-            "minutesLeft": "about {count} minute left | about {count} minutes left",
-            "open": "Open sandbox",
-            "review": "Review",
-            "details": "Details",
-            "retry": "Try again",
             "hide": "Hide",
             "show": "Show build",
-            "buildingButton": "Building sandbox… {percent}%",
-            "houseLabel": "The agent's house: {stage}"
+            "attach": "Work on this in this computer's sandbox",
+            "signInAttach": "Sign in and work on this",
+            "attachFailed": "Couldn't add this folder",
+            "machine": {
+                "signedOut": "You'll sign in first. This computer's sandbox is made right after, and this folder goes into it.",
+                "creating": "This computer's sandbox is being set up ({percent}%). This folder goes in as soon as it's ready.",
+                "notReady": "This computer's sandbox isn't ready yet. This folder waits for it, and the card in the corner says what it needs."
+            }
+        },
+        "machine": {
+            "ready": "This computer's sandbox is ready",
+            "readyDetail": "Folders you work on with an agent go into it.",
+            "signedOut": "Sign in to set up this computer's sandbox",
+            "signedOutDetail": "Intentic makes it right after you sign in, on this computer.",
+            "needsDocker": {
+                "notInstalled": "This computer's sandbox needs Docker",
+                "notRunning": "This computer's sandbox is waiting for Docker",
+                "notAllowed": "Docker turns this account away"
+            },
+            "needsDockerDetail": {
+                "notInstalled": "Install Docker Desktop, and Intentic sets the sandbox up once it runs.",
+                "notRunning": "Start Docker, and Intentic carries on by itself.",
+                "notAllowed": "This computer says how to let this account use Docker."
+            },
+            "creating": "Setting up this computer's sandbox",
+            "creatingShort": "Setting up this computer's sandbox",
+            "interrupted": "Picking up this computer's sandbox",
+            "interruptedDetail": "Intentic closed while it was being set up, so it's carrying on where it left off.",
+            "waiting": "This computer's sandbox needs your OK",
+            "waitingDetail": {
+                "consent": "This computer needs a few things before it can run a sandbox.",
+                "restart": "This computer needs a restart before it can run a sandbox.",
+                "signOut": "This computer needs you to sign out and back in before it can run a sandbox."
+            },
+            "failed": "This computer's sandbox wasn't set up",
+            "stopped": "This computer's sandbox is stopped",
+            "stoppedDetail": "Start it to work on your folders with an agent.",
+            "gone": "This computer's sandbox is gone",
+            "goneDetail": "It's no longer on your account or on this computer. Make a new one, and your folders go into it.",
+            "folderWaits": "{name} goes in as soon as it's ready.",
+            "folder": {
+                "adding": "Adding {name} to this computer's sandbox",
+                "copying": "Copying {name} into this computer's sandbox",
+                "copyingDetail": "Agents can start once the first copy is in. Changes you make here keep going over.",
+                "preparing": "Getting the sandbox ready for this folder…",
+                "failed": "{name} couldn't be added",
+                "ready": "{name} is in this computer's sandbox",
+                "readyDetail": "When you accept an agent's work, it comes back into this folder by itself. A file you changed too is left for you to look at.",
+                "readyShort": "{name} is ready"
+            },
+            "button": {
+                "waiting": "Waiting for this computer's sandbox",
+                "waitingPercent": "Waiting for this computer's sandbox ({percent}%)",
+                "copying": "Copying your folder…",
+                "failed": "Couldn't add this folder"
+            },
+            "action": {
+                "signIn": "Sign in",
+                "startDocker": "Start Docker",
+                "retry": "Try again",
+                "log": "Show log",
+                "start": "Start",
+                "recreate": "Make a new one",
+                "details": "Open This computer",
+                "open": "Open sandbox"
+            }
         }
     },
     "needs": {

@@ -5470,7 +5470,6 @@
     "local": {
         "localFiles": {
             "keepsFolderSynced": "Garde ce dossier synchronisé",
-            "newSandbox": "Nouveau sandbox",
             "reveal": "Afficher le fichier",
             "startsIfStopped": "La démarre si arrêtée",
             "syncedSandbox": "Sandbox synchronisé",

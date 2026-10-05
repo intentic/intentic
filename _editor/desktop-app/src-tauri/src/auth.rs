@@ -105,6 +105,9 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     app.state::<crate::state::AppState>()
         .remember_account_seen();
     crate::offer_workspace(app);
+    // A session the platform turned away before is a new one now: this computer's sandbox is asked for again once the
+    // workspace says who signed in (machine_sandbox.rs).
+    crate::machine_sandbox::account_changed();
     let path = complete_path(&args.handoff, &attempt.verifier, args.profile.as_deref());
     // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
     // be drawn in that light from here on rather than waiting for the page to announce it.
