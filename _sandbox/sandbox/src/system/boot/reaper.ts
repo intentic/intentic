@@ -44,7 +44,14 @@ const TMP_SWEEPS: readonly { readonly prefix: string; readonly maxAgeMs: number 
     { prefix: "intentic-run-", maxAgeMs: 24 * 3_600_000 },
     { prefix: "intentic-classify-", maxAgeMs: 6 * 3_600_000 },
     { prefix: "intentic-land-", maxAgeMs: 6 * 3_600_000 },
+    // An offloaded command's scratch: bin/offload-run's offload-snapshot-* and offload-patch-*, which a killed run leaves,
+    // and a runner's own offload-* (runners/runner-command.ts). A day, like a run's capture: past any run's timeout (six
+    // hours at most), and a patch that would not apply is left there on purpose, for someone to apply by hand.
+    { prefix: "offload-", maxAgeMs: 24 * 3_600_000 },
 ];
+
+// How old a /tmp entry of this name may get before the sweep removes it; undefined for one it never touches.
+export const tmpSweepAgeOf = (entry: string): number | undefined => TMP_SWEEPS.find((candidate) => entry.startsWith(candidate.prefix))?.maxAgeMs;
 const SIGNALS_SWEEP = { dir: join(tmpdir(), "intentic", "agent-signals"), maxAgeMs: 24 * 3_600_000 };
 
 // One agent tmux session as the sweep sees it: owner, whether attached, last activity.
@@ -305,13 +312,13 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         let removed = 0;
         await Promise.all(
             entries.map(async (entry) => {
-                const rule = TMP_SWEEPS.find((candidate) => entry.startsWith(candidate.prefix));
-                if (rule === undefined) {
+                const maxAgeMs = tmpSweepAgeOf(entry);
+                if (maxAgeMs === undefined) {
                     return;
                 }
                 const path = join(tmp, entry);
                 const freshest = await newestMtime(path);
-                if (freshest !== undefined && freshest <= now - rule.maxAgeMs) {
+                if (freshest !== undefined && freshest <= now - maxAgeMs) {
                     await rm(path, { recursive: true, force: true }).catch(() => undefined);
                     removed += 1;
                 }

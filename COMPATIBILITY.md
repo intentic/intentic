@@ -20,7 +20,7 @@ flowchart LR
 
 There is one release lane. A release that passes the whole pipeline becomes what everyone gets in the same run: `release-images.sh` moves the sandbox's `stable` and `core-stable` tags and dind-host's `stable`, then `ship-stable.sh` moves the git `stable` tag and marks the GitHub Release as latest. Connect scripts, the deploy engine's image references, download links and every sandbox's update check follow those pointers as unpinned tags, never digests, so nothing else changes when a release ships.
 
-Un-shipping is `rollback-stable.sh <version> [reason]`, which moves the same pointers back, the latest flag first, and then withdraws the release it left: a pre-release whose notes open with `Withdrawn: <reason>`. Every sandbox running a withdrawn version tells its owner so and offers the way back (`/info` `withdrawn`), and none is offered it as an update again. The bad release stays published under its version, so anything pinned to it keeps running.
+Un-shipping is `rollback-stable.sh <version> [reason]`, which moves the same pointers back in the order shipping set them, the latest flag last so that a run stopped partway is finished by running it again, and then withdraws the release it left: a pre-release whose notes open with `Withdrawn: <reason>`. Every sandbox running a withdrawn version tells its owner so and offers the way back (`/info` `withdrawn`), and none is offered it as an update again. The bad release stays published under its version, so anything pinned to it keeps running.
 
 ## Across versions
 

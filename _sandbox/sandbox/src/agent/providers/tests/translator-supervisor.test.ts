@@ -108,11 +108,17 @@ test("the swap waits while a turn is running, then happens once it ends", async 
 });
 
 test("a crash still restarts on the backoff ladder", async () => {
-    const h = harness(OLD);
-    await h.supervisor.start();
+    // The ladder draws each wait between its floor and the next rung; a draw of 0 is the floor.
+    const draw = jest.spyOn(Math, "random").mockReturnValue(0);
+    try {
+        const h = harness(OLD);
+        await h.supervisor.start();
 
-    h.spawned[0]?.child.emit("exit", 2, null);
+        h.spawned[0]?.child.emit("exit", 2, null);
 
-    expect(h.scheduled).toEqual([10_000]);
-    expect(engineServing("translator")).toBeUndefined();
+        expect(h.scheduled).toEqual([10_000]);
+        expect(engineServing("translator")).toBeUndefined();
+    } finally {
+        draw.mockRestore();
+    }
 });

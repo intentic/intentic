@@ -813,6 +813,33 @@ test("a transport failure that outlasts the retries is surfaced in the end", asy
     expect(calls).toHaveLength(3);
 });
 
+test("a turn stopped before its retry's backoff begins ends there, without waiting the backoff out", async () => {
+    const controller = new AbortController();
+    const { runner: failing, calls } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-e" },
+        { type: "turn.failed", error: { message: DNS_STALL } },
+    ]);
+    // Stopped while the attempt that earns the retry runs, so the signal is already aborted when the wait would start.
+    const runner: CodexRunner = async function* (turn) {
+        controller.abort();
+        yield* failing(turn);
+    };
+    jest.useFakeTimers();
+    try {
+        let ended = false;
+        const events = collect(createTestAgent(runner), { ...request, signal: controller.signal }).finally(() => {
+            ended = true;
+        });
+        // The clock never moves: a wait the stop had already ended must not hold the turn open.
+        await advanceTimersByTimeAsync(0);
+        expect(ended).toBe(true);
+        expect((await events).filter((event) => event.kind === "provider_retry")).toHaveLength(1);
+    } finally {
+        jest.useRealTimers();
+    }
+    expect(calls).toHaveLength(1);
+});
+
 test("a streamed error survives the app-server process-exit throw", async () => {
     // The generic process-exit wrapper must not overwrite an actionable message Codex already streamed.
     const runner: CodexRunner = async function* () {

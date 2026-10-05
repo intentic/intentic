@@ -5,6 +5,7 @@ import { z } from "zod";
 import { keyMessage, pointerMessage, wheelGauge, type DesktopKey, type DesktopMouse, type DesktopPointerAction, type DesktopText } from "./desktopInput";
 import { videoTag } from "../browsers/frameUrls";
 import { canDecodeVideo, videoSink } from "../browsers/videoSink";
+import { useSandbox } from "../sandbox/client/useSandbox";
 import { socketUrl } from "../sandbox/session/wsTicket";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
@@ -28,6 +29,8 @@ const MOVE_THROTTLE_MS = 16;
 export const HOLD_MS = 20_000;
 // What the daemon closes with when the ticket is not enough to drive the desktop: a policy refusal, not a drop.
 const CLOSE_REFUSED = 1008;
+
+const { reachable } = useSandbox();
 
 // What to say while there is no picture; the view words it. `detail` is the failure's own sentence.
 export type DesktopStatus =
@@ -177,6 +180,7 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
 
     const connect = async (): Promise<void> => {
         window.clearTimeout(reconnect);
+        reconnect = undefined;
         const key = sandbox.value;
         if (closing || key === undefined) {
             return;
@@ -254,9 +258,20 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
 
     const teardown = (): void => {
         window.clearTimeout(reconnect);
+        reconnect = undefined;
         socket.value?.close();
         socket.value = undefined;
     };
+
+    // The sandbox's event stream answering again is the news a view waiting out a rung of its ladder is waiting for:
+    // without it, one whose ladder had climbed to MAX_RETRY_MS stayed dark that long after the rest of the page was
+    // back. `reconnect` is set only while a retry is pending.
+    watch(reachable, (up) => {
+        if (up && reconnect !== undefined) {
+            ladder.reset();
+            void connect();
+        }
+    });
 
     watch(
         sandbox,

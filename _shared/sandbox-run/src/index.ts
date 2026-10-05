@@ -349,6 +349,11 @@ const identityEnv = (run: SandboxRun): string[] => [
     ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
 ];
 
+// How long `docker stop` waits before its SIGKILL: past the 25 s intentic-front gives the daemon to dispose every
+// subsystem on SIGTERM (STOP_GRACE in _sandbox/front/crates/front/src/supervise.rs), with room for the front to close
+// its tunnel after, where Docker's default of 10 s cut that stop short.
+const STOP_TIMEOUT_SECONDS = "30";
+
 export const sandboxRunArgv = (run: SandboxRun): string[] => {
     const directives = directiveArgs(run);
     return [
@@ -357,6 +362,8 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         ...(run.init === false ? [] : ["--init"]),
         "--restart",
         "unless-stopped",
+        "--stop-timeout",
+        STOP_TIMEOUT_SECONDS,
         "--name",
         run.names.container,
         ...(run.labels ?? []).flatMap((label) => ["--label", label]),

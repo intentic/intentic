@@ -10,6 +10,8 @@ const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbo
 jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
+const { signalConnection } = await import(`../sandbox/client/useSandbox`);
+const { classifyFailure } = await import(`../sandbox/live/connection`);
 
 // Records what the view puts on the wire and can answer back; open from the start, since this suite is about the
 // handlers, not the connect dance.
@@ -118,6 +120,32 @@ test("a view whose socket couldn't be authorized says why and asks again, rather
     );
     // The retry waits out the backoff's one-second floor; five is a hang bound, not a latency.
     await waitFor(() => expect(sockets).toHaveLength(1), { timeout: 5_000 });
+    warn.mockRestore();
+});
+
+// The ladder climbs to half a minute; a view still waiting out a rung when the sandbox's event stream answers again
+// must not stay dark for the rest of it.
+test("a view waiting to retry dials again the moment the sandbox is reachable, not when its rung runs out", async () => {
+    socketUrl.mockRejectedValueOnce(new Error(`The sandbox is restarting.`));
+    const warn = jest.spyOn(console, `warn`).mockImplementation(() => undefined);
+    const sockets: FakeSocket[] = [];
+    stubGlobal(
+        `WebSocket`,
+        class extends FakeSocket {
+            constructor() {
+                super();
+                sockets.push(this);
+            }
+        },
+    );
+    signalConnection({ kind: `failed`, failure: classifyFailure({ message: `tunnel down` }), at: Date.now() });
+    const view = effectScope().run(() => useBrowserView(ref(`browser-abc12345`)))!;
+    await waitFor(() => expect(view.status.value).toBe(`Couldn't authorize the browser view (The sandbox is restarting.); retrying.`));
+
+    signalConnection({ kind: `frame`, at: Date.now() });
+
+    // The ladder's floor is a second, so a socket inside half of one came from the sandbox coming back.
+    await waitFor(() => expect(sockets).toHaveLength(1), { timeout: 500 });
     warn.mockRestore();
 });
 

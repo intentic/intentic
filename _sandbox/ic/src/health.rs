@@ -8,6 +8,12 @@ use crate::util::{bail, Result};
 
 const HEALTH_URL: &str = "http://localhost:8787/health";
 
+/// How long one read of `/health` in the waits below may take, in curl's `-m` seconds: a daemon that took the
+/// connection and never answers fails the read instead of holding the update forever. Past the half minute the front
+/// holds a request while its daemon is not up, so a read still rides that hold to its answer, and a wait's reach stays
+/// what it was.
+const WAIT_READ_SECS: &str = "35";
+
 /// How long the readiness wait holds. A clock rather than a count of reads: while its daemon restarts, the
 /// front holds a request for up to half a minute before answering 503, so a count could stretch into an hour.
 const READY_BUDGET: Duration = Duration::from_secs(120);
@@ -21,7 +27,10 @@ const JOURNAL_BUDGET: Duration = Duration::from_secs(600);
 pub fn wait_answering(container: &str, log: &Log, remedy: &str) -> Result<String> {
     let started = crate::sandbox::now_ms();
     for _ in 0..15 {
-        if let Some(answer) = docker::exec_capture(container, &["curl", "-sf", HEALTH_URL]) {
+        if let Some(answer) = docker::exec_capture(
+            container,
+            &["curl", "-sf", "-m", WAIT_READ_SECS, HEALTH_URL],
+        ) {
             return Ok(answer);
         }
         // A daemon that recorded why it could not start has answered, just not over HTTP: no point waiting out the
@@ -61,8 +70,11 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
     let started = Instant::now();
     let mut last_step = String::new();
     loop {
-        let health =
-            docker::exec_capture(container, &["curl", "-sf", HEALTH_URL]).unwrap_or_default();
+        let health = docker::exec_capture(
+            container,
+            &["curl", "-sf", "-m", WAIT_READ_SECS, HEALTH_URL],
+        )
+        .unwrap_or_default();
         let parsed = serde_json::from_str::<serde_json::Value>(&health).ok();
         if readiness.admits(parsed.as_ref()) {
             return Ok(());

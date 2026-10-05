@@ -239,6 +239,9 @@ limit=__LIMIT__
 marker=/tmp/intentic-docker-wait.$$
 trap 'rm -f "$marker"' EXIT
 trap 'exit 143' TERM INT
+# The clock, not a sum of the sleeps: each failed check can itself spend its whole 15 s timeout against an engine that
+# blocks, and counting only the sleeps stretched a 600 s limit to 25 minutes. dash has no SECONDS, hence date.
+start=$(date +%s)
 waited=0
 while ! timeout 15 docker version --format '{{.Server.Version}}' >/dev/null 2>&1; do
     if [ "$waited" -ge "$limit" ]; then
@@ -251,9 +254,9 @@ while ! timeout 15 docker version --format '{{.Server.Version}}' >/dev/null 2>&1
         : > "$marker"
     fi
     sleep 10
-    waited=$((waited + 10))
+    waited=$(($(date +%s) - start))
 done
-if [ "$waited" -gt 0 ]; then echo "docker answered after ${waited}s"; fi
+if [ "$waited" -gt 0 ]; then echo "docker answered after $(($(date +%s) - start))s"; fi
 exit 0
 '@
 $hookBody = $hookBody.Replace('__LIMIT__', "$DockerWaitSeconds")

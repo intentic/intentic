@@ -3,6 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { watch } from "vue";
 import { TERMINAL_PATH, type TerminalClientMessage, type TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
 import { clipboardOf, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { boundCommand } from "../../shell/commands/useCommands";
@@ -39,7 +40,7 @@ const STABLE_MS = 5000;
 const STALE_MS = 90_000;
 
 const { usingLocal } = useEndpoint();
-const { active } = useSandbox();
+const { active, reachable } = useSandbox();
 
 export type TerminalSession = TerminalSizing & {
     // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
@@ -133,14 +134,31 @@ const openChannel = (base: string, query: string, events: ChannelEvents): Termin
     return socketChannel(new StreamSocket(transport.createBidirectionalStream(), { host: new URL(base).host, path: TERMINAL_PATH, query }), events);
 };
 
+// Sessions sitting out a rung of their ladder, so the sandbox coming back can cut the wait short.
+const retrying = new Set<TerminalSession>();
+
 const scheduleRetry = (s: TerminalSession, uptimeMs = 0): void => {
+    retrying.add(s);
     s.reconnect = window.setTimeout(() => void connectSocket(s), s.backoff.next(uptimeMs));
 };
+
+// The sandbox's event stream answering again is the news a waiting terminal is waiting for: without it, one whose
+// ladder had climbed to MAX_RETRY_MS stayed dark that long after everything else on the page was back.
+watch(reachable, (up) => {
+    if (!up) {
+        return;
+    }
+    for (const s of retrying) {
+        s.backoff.reset();
+        void connectSocket(s);
+    }
+});
 
 // Opens or reopens a session's channel; the daemon's replay repaints the pane on reconnect, so a reset never touches
 // running processes. Runs regardless of whether the host is mounted. A one-shot ticket keeps the bearer off the query.
 const connectSocket = async (s: TerminalSession): Promise<void> => {
     window.clearTimeout(s.reconnect);
+    retrying.delete(s);
     if (s.closing) {
         return;
     }
@@ -528,6 +546,7 @@ export const parkTerminalSession = (s: TerminalSession): void => {
 export const disposeTerminalSession = (s: TerminalSession): void => {
     s.closing = true;
     window.clearTimeout(s.reconnect);
+    retrying.delete(s);
     window.clearTimeout(s.resizeSettle);
     s.unobserve?.();
     s.channel?.close();

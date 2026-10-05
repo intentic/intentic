@@ -31,8 +31,9 @@ const startWindowManager = (display: Display): void => {
         return;
     }
     // A manager left from a previous daemon life (the display is adopted across restarts) makes this one exit at once
-    // with "another window manager is already running", which is the outcome wanted.
-    const child = spawn("openbox", [], { env: { ...process.env, DISPLAY: display.name }, stdio: "ignore" });
+    // with "another window manager is already running", which is the outcome wanted. In a process group of its own, as
+    // its display is, so a crashed daemon's group going with it leaves the desktop whole.
+    const child = spawn("openbox", [], { env: { ...process.env, DISPLAY: display.name }, stdio: "ignore", detached: true });
     // Not installed until the sandbox is rebuilt with the browser pack: the desktop still works, undecorated.
     child.on("error", () => managers.delete(display.name));
     child.unref();

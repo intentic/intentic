@@ -11,6 +11,7 @@ import type { Services } from "../composition.js";
 import { type PersistedAgent, reposOf } from "../conversations/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
+import { SingleFlight } from "@intentic/base/async";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
@@ -547,7 +548,8 @@ const runFire = async (
 export interface AutomationsScheduler {
     readonly start: () => void;
     readonly stop: () => void;
-    // One poll pass over the manifest; `start` runs it on an interval. Exposed for tests.
+    // One poll pass over the manifest; `start` runs it on an interval. A call while a pass still runs joins that pass.
+    // Exposed for tests.
     readonly tick: (now?: number) => Promise<void>;
 }
 
@@ -815,8 +817,12 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
     // Where the first poll's window opens, and so where the catch-up's ends: a moment is one pass's or the other's.
     let since = Date.now();
     let timer: NodeJS.Timeout | undefined;
+    // One pass at a time: an interval that comes round while the last pass still runs joins it. A second pass would
+    // read the manifest before the first had switched a fired one-time wake off, and fire it again; skipping loses
+    // nothing, since the next pass's window opens where the last one's closed.
+    const passes = new SingleFlight<"pass", void>();
 
-    const tick = async (now = Date.now()): Promise<void> => {
+    const pass = async (now: number): Promise<void> => {
         const windowStart = since;
         since = now;
         // Read once per poll, not per automation: the owner's zone cannot change between two rows of the same pass,
@@ -824,17 +830,21 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
         const sandbox = await sandboxZone(services);
         const automations = await services.automations.list();
         const changes = armingMarks(automations, await services.scheduleCoverage.read(), windowStart);
-        for (const automation of automations) {
-            if (automation.enabled) {
+        for (const automation of automations.filter((candidate) => candidate.enabled)) {
+            // Per automation: this window is already spent, so one that throws must not cost every later one its moment.
+            try {
                 const fired = await fireIfDue(services, automation, windowStart, now, sandbox);
                 if (fired !== undefined) {
                     changes[automation.id] = { coveredUntil: fired };
                 }
+            } catch (error) {
+                loggedAs(services, "automation could not be checked for a due run", automation.id)(error);
             }
         }
         await services.scheduleCoverage.mark(changes);
         await releaseCountdownHolds(services, now);
     };
+    const tick = (now = Date.now()): Promise<void> => passes.run("pass", () => pass(now));
 
     const catchUp = async (): Promise<void> => {
         const horizon = since;

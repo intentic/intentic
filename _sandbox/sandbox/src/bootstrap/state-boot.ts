@@ -39,7 +39,9 @@ interface StateBoot {
 
 // Never fatal: a conversion that fails partway is put back before this returns, /health reports the journal failed for
 // the rest of the boot (which a host takes as the update not having taken), and the stores convert on read, which is
-// strictly better than a daemon that cannot start (a hosted sandbox has no previous image to roll back to).
+// strictly better than a daemon that cannot start. A host watching an update (ic's probation, the hosted image gate)
+// puts the previous version back on the failed journal alone, so a failed boot would tell it nothing more; and where
+// nothing is watching, or no earlier image is kept to go back to, a daemon that cannot start leaves the owner nothing.
 export const convergeStateAtBoot = async ({ config, logger, traits, role, documents, steps, fault }: StateBoot): Promise<void> => {
     try {
         await convergeState({

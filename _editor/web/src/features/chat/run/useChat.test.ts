@@ -2695,17 +2695,23 @@ describe(`a read of a chat that does not answer`, () => {
             }
             return undefined;
         });
-        const conversation = openAgentConversation({ id: `first-turn-retried`, provider: `claude`, harness: `native` });
-        hydrateOnce(conversation);
-        await waitFor(() => expect(conversation.transcript.refresh.value).toEqual({ kind: `failed` }));
-        expect(conversation.transcript.loading.value).toBe(true);
-        expect(attaches).toBe(1);
+        // The ladder draws each wait between its floor and the next rung; a draw of 0 is the floor.
+        const draw = jest.spyOn(Math, `random`).mockReturnValue(0);
+        try {
+            const conversation = openAgentConversation({ id: `first-turn-retried`, provider: `claude`, harness: `native` });
+            hydrateOnce(conversation);
+            await waitFor(() => expect(conversation.transcript.refresh.value).toEqual({ kind: `failed` }));
+            expect(conversation.transcript.loading.value).toBe(true);
+            expect(attaches).toBe(1);
 
-        await advanceTimersByTimeAsync(2_000);
-        await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`plan the migration`]));
-        expect(attaches).toBe(2);
-        expect(conversation.transcript.refresh.value).toBeUndefined();
-        conversation.turn.abort();
+            await advanceTimersByTimeAsync(2_000);
+            await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`plan the migration`]));
+            expect(attaches).toBe(2);
+            expect(conversation.transcript.refresh.value).toBeUndefined();
+            conversation.turn.abort();
+        } finally {
+            draw.mockRestore();
+        }
     });
 
     it(`keeps a painted transcript and says it is the saved copy, with the read's own reason, not the red error line`, async () => {

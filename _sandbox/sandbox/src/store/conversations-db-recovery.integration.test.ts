@@ -1,12 +1,13 @@
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
 import { conversationEntry } from "../testing.js";
 import { conversationUnit } from "./conversation-units.js";
 import { openConversationsDbAtBoot } from "./conversations-db-recovery.js";
-import { conversationsDbPath, openConversationsDb } from "./conversations-db.js";
+import { conversationsDbPath, ConversationsUpgradeError, openConversationsDb } from "./conversations-db.js";
 import { clearManifestProblems, manifestProblems } from "./manifest/manifest-problems.js";
 
 // Whatever state the conversation database is found in at boot, the daemon comes up on one, deletes nothing, and says
@@ -166,6 +167,32 @@ test("damage the check finds after a run that died is set aside, and the rows th
             fix: `The damaged file is kept at ${HISTORY_ROOT}/conversations.db.corrupt-${String(NOW)}: a conversation missing from the list may still be in it.`,
         },
     ]);
+});
+
+// A sound file the upgrade fails on is the build's fault, not the file's: setting it aside would tell the owner a healthy
+// database was damaged. A table from before the baseline, which the baseline's index cannot be built on, stands in for a
+// step that throws: the file passes SQLite's own check, the upgrade is what fails.
+test("a sound database this build cannot upgrade is left where it is, and the boot fails rather than run without it", () => {
+    const root = historyRoot();
+    const path = conversationsDbPath(root);
+    const old = new DatabaseSync(path);
+    old.exec("CREATE TABLE watch (id TEXT PRIMARY KEY); INSERT INTO watch (id) VALUES ('armed')");
+    old.close();
+
+    for (const check of [false, true]) {
+        expect(() => boot(root, check)).toThrow(ConversationsUpgradeError);
+    }
+
+    expect(() => boot(root)).toThrow(
+        "the conversation database is sound, but this build could not bring it to its schema (no such column: conversation_id); it was left as it is",
+    );
+    expect(readdirSync(root).filter((name) => name.includes("corrupt") || name.includes("salvag"))).toEqual([]);
+    const kept = new DatabaseSync(path);
+    expect(kept.prepare("SELECT id FROM watch").all()).toEqual([{ id: "armed" }]);
+    expect(kept.prepare("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+    kept.close();
+    expect(reported(root)).toBeUndefined();
+    expect(errors).toEqual([]);
 });
 
 test("a volume that refuses even a new file leaves the daemon up on a database in memory, and says so", () => {

@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { type AgentEvent, type AgentReply, type AskQuestion, CODEX, type ToolCallContent, type ToolCallLocation } from "@intentic/sandbox-contract";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
@@ -250,21 +251,6 @@ const isCodexFailure = (event: AgentEvent): event is Extract<AgentEvent, { kind:
     event.kind === "error" && event.code !== "codex-advisory";
 
 const thrownMessage = (error: unknown): string => (error instanceof Error ? error.message : "codex agent failed");
-
-// Waits out a retry's backoff, and stops waiting the moment the turn is cancelled: a turn nobody is waiting for must
-// not hold the run open for the rest of its wait.
-const waitFor = (ms: number, signal: AbortSignal | undefined): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        signal?.addEventListener(
-            "abort",
-            () => {
-                clearTimeout(timer);
-                resolve();
-            },
-            { once: true },
-        );
-    });
 
 async function* consumeAttempt(
     turn: AsyncGenerator<AgentEvent>,
@@ -778,7 +764,9 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                     break;
                 }
                 yield { kind: "provider_retry", attempt, maxAttempts: UPSTREAM_ATTEMPTS, nextAttemptAt: Date.now() + outcome.waitMs };
-                await waitFor(outcome.waitMs, request.signal);
+                // Waits out the backoff, and stops waiting the moment the turn is cancelled: a turn nobody is waiting
+                // for must not hold the run open for the rest of its wait.
+                await sleep(outcome.waitMs, { signal: request.signal });
                 // A turn cancelled while it waited has no second attempt to run.
                 if (request.signal?.aborted === true) {
                     break;

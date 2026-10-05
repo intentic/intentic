@@ -28,6 +28,8 @@ describe(`classifyFailure`, () => {
     it(`separates a refusal from a failure to connect`, () => {
         expect(forbidden().kind).toBe(`forbidden`);
         expect(classifyFailure({ status: 401, message: `unauthorized` }).kind).toBe(`unauthenticated`);
+        // A passkey step-up is a sign-in to finish, not an outage to wait out or a box to wake.
+        expect(classifyFailure({ status: 428, message: `passkey required` }).kind).toBe(`unauthenticated`);
         expect(classifyFailure({ status: 502, message: `bad gateway` }).kind).toBe(`network`);
     });
 

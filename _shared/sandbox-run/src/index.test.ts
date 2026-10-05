@@ -35,7 +35,7 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
     const argv = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" });
     // prettier-ignore
     expect(argv).toEqual([
-        "run", "-d", "--init", "--restart", "unless-stopped", "--name", "intentic-sandbox-abc-123",
+        "run", "-d", "--init", "--restart", "unless-stopped", "--stop-timeout", "30", "--name", "intentic-sandbox-abc-123",
         "--network", "intentic-workspace-abc-123", "--network-alias", ORIGIN_HOST,
         "--add-host", "host.docker.internal:host-gateway",
         "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
@@ -176,6 +176,8 @@ test("the hosted-provider shape drops init/alias and adds ports, labels, dns: sa
     });
     expect(argv).not.toContain("--init");
     expect(argv).not.toContain("--network-alias");
+    // The same front runs inside, with the same grace on a stop.
+    expect(argv.join(" ")).toContain("--stop-timeout 30");
     expect(argv).not.toContain("--memory");
     expect(argv).not.toContain("--memory-swap");
     expect(argv.join(" ")).toContain("intentic-history-abc-123:/history");

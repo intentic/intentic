@@ -12,7 +12,7 @@ interface Scopes {
 interface Client extends PeerClient<Facts, Scopes> {
     describe: ReturnType<typeof jest.fn<(input?: undefined, options?: { signal?: AbortSignal }) => Promise<Facts>>>;
     setScopes: ReturnType<typeof jest.fn<(scopes: Scopes) => Promise<{ ok: true }>>>;
-    ping: ReturnType<typeof jest.fn<() => Promise<{ ok: true }>>>;
+    ping: ReturnType<typeof jest.fn<(input?: undefined, options?: { signal?: AbortSignal }) => Promise<{ ok: true }>>>;
     mcp: ReturnType<typeof jest.fn<(payload: unknown) => Promise<unknown>>>;
 }
 
@@ -215,6 +215,29 @@ test("a peer that stops answering the heartbeat is dropped", async () => {
         live.attach("laptop", peer.connection);
         expect(live.online("laptop")).toBe(true);
         await advanceTimersByTimeAsync(31_000);
+        expect(live.online("laptop")).toBe(false);
+        expect(peer.closed).toEqual(["no answer"]);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+// Half-open: the socket neither answers nor closes, so the ping hangs rather than rejecting. Only its deadline can
+// tell this peer from a healthy one.
+test("a ping that goes unanswered until the next beat drops the peer", async () => {
+    jest.useFakeTimers();
+    try {
+        const live = hub();
+        const peer = fakePeer();
+        const hangs = (_input?: undefined, options?: { signal?: AbortSignal }): Promise<{ ok: true }> =>
+            new Promise((_resolve, reject) =>
+                options?.signal?.addEventListener("abort", () => reject(new Error("no answer in time")), { once: true }),
+            );
+        peer.client.ping.mockImplementation(hangs);
+        live.attach("laptop", peer.connection);
+        await advanceTimersByTimeAsync(spec.heartbeatMs);
+        expect(live.online("laptop")).toBe(true);
+        await advanceTimersByTimeAsync(spec.heartbeatMs);
         expect(live.online("laptop")).toBe(false);
         expect(peer.closed).toEqual(["no answer"]);
     } finally {

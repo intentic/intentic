@@ -1,6 +1,6 @@
 import { type AgentCapabilities, client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { withTimeout } from "@intentic/base/async";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
-import { withTimeout } from "./acp-connection.js";
 import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
 
 /* One-shot ACP probe for the `agent` capability handler: spawn the command, initialize, report what the agent advertises, kill. */

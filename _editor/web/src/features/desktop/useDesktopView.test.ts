@@ -9,6 +9,8 @@ const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbo
 jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
 
 const { HOLD_MS, useDesktopView } = await import(`./useDesktopView`);
+const { signalConnection } = await import(`../sandbox/client/useSandbox`);
+const { classifyFailure } = await import(`../sandbox/live/connection`);
 
 // Records what the view puts on the wire, and plays the daemon's side: opening, answering, closing.
 class FakeSocket {
@@ -231,4 +233,17 @@ test("a client that cannot decode video says so instead of showing a black recta
     stubGlobal(`VideoDecoder`, undefined);
     const { view } = await opened();
     expect(view.status.value).toEqual({ kind: `unsupported` });
+});
+
+// The ladder climbs to half a minute; a view still waiting out a rung when the sandbox's event stream answers again
+// must not stay dark for the rest of it.
+test("a dropped view dials again the moment the sandbox is reachable, not when its rung runs out", async () => {
+    const { sockets } = await opened();
+    signalConnection({ kind: `failed`, failure: classifyFailure({ message: `tunnel down` }), at: Date.now() });
+    sockets[0]!.drop(1006);
+
+    signalConnection({ kind: `frame`, at: Date.now() });
+
+    // The ladder's floor is a second, so a socket inside half of one came from the sandbox coming back.
+    await waitFor(() => expect(sockets).toHaveLength(2), { timeout: 500 });
 });

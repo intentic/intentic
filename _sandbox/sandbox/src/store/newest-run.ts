@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { version } from "../version.js";
@@ -11,8 +12,9 @@ import { defineDocument } from "./evolution/documents.js";
 // boot step reads it before any store opens, and a build writes it once its boot has converged (state-convergence.ts,
 // commitState), so a build that never got that far is not what a rolled-back one reads as newer. manifest-problems.ts
 // explains a post-rollback schema rejection as a newer file rather than a broken one; json-file.ts refuses to set such
-// a file aside; the state plan reports a downgrade when the stamp names a newer release than its own. Plain
-// read/write, not jsonFile: daemon-only state, written at most once per boot.
+// a file aside; the state plan reports a downgrade when the stamp names a newer release than its own. Read plainly
+// and written whole (atomically, so a crash mid-write never leaves a torn stamp that reads as no run recorded), not
+// through jsonFile: daemon-only state, written at most once per boot.
 
 // Declared for its shape, which the shape generator freezes; its reader below takes each field only when it is there.
 // A stamp from before the digest carries `version` and `engine`, and one from before the engine only `version`.
@@ -79,8 +81,7 @@ export const recordNewestRun = async (workspaceRoot: string, running: string = v
     newestEngine = Math.max(recorded.engine ?? 0, options.engine ?? 0);
     newestDigest = options.digest;
     try {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, `${JSON.stringify({ version: running, engine: newestEngine, ...(newestDigest === undefined ? {} : { digest: newestDigest }) }, undefined, 2)}\n`);
+        await writeFileAtomic(path, `${JSON.stringify({ version: running, engine: newestEngine, ...(newestDigest === undefined ? {} : { digest: newestDigest }) }, undefined, 2)}\n`);
     } catch {
         // A workspace that cannot be written loses nothing but the better sentence.
     }

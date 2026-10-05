@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { errorMessage } from "@intentic/base/errors";
 import { immediateTransaction, openSqlite } from "@intentic/base/sqlite";
 import { headerSchemaVersion, migrateSqlite, type SqliteStep, targetVersion } from "./evolution/sqlite-migrations.js";
 import { defineStep } from "./evolution/state-steps.js";
@@ -158,9 +159,29 @@ export const damageIn = (db: DatabaseSync): string | undefined => {
     return findings.length === 0 ? "the check did not say what" : findings.slice(0, 3).join("; ");
 };
 
+// Thrown when a file SQLite's own check calls sound could not be brought to this build's schema: a step that throws, a
+// volume that refused the upgrade's write, another process holding the lock. None of that is the file's fault, so
+// nothing may set it aside as damaged (conversations-db-recovery.ts lets this through and the boot fails).
+export class ConversationsUpgradeError extends Error {
+    constructor(cause: unknown) {
+        super(`the conversation database is sound, but this build could not bring it to its schema (${errorMessage(cause)}); it was left as it is`, { cause });
+        this.name = "ConversationsUpgradeError";
+    }
+}
+
+// What the quick check says of a database something already failed on; a check that cannot run is damage too.
+const damageAfterFailure = (db: DatabaseSync): string | undefined => {
+    try {
+        return damageIn(db);
+    } catch (error) {
+        return errorMessage(error);
+    }
+};
+
 // Opens the file, runs the quick check over it first when `check` asks, and brings it to this build's schema; throws
-// when any of that fails, having closed what it opened, so the caller can set the file aside
-// (conversations-db-recovery.ts).
+// when any of that fails, having closed what it opened. A failure to open, or damage the check finds, is the file's,
+// and the caller sets the file aside (conversations-db-recovery.ts). A failure past the open over a file the check then
+// calls sound is the upgrade's: ConversationsUpgradeError.
 export const openCheckedConversationsDb = (path: string, check: boolean): ConversationsDb => {
     const db = openSqlite(path);
     try {
@@ -168,10 +189,16 @@ export const openCheckedConversationsDb = (path: string, check: boolean): Conver
         if (damage !== undefined) {
             throw new Error(`the integrity check found damage: ${damage}`);
         }
-        return conversationsDbOver(db, path);
     } catch (error) {
         db.close();
         throw error;
+    }
+    try {
+        return conversationsDbOver(db, path);
+    } catch (error) {
+        const damage = damageAfterFailure(db);
+        db.close();
+        throw damage === undefined ? new ConversationsUpgradeError(error) : error;
     }
 };
 

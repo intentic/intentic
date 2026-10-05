@@ -2856,6 +2856,37 @@ describe(`Conversation`, () => {
         expect(conversation.turn.streaming.value).toBe(false);
     });
 
+    // Every attach replays the turn's facts, an account_usage among them: a reading taken earlier in the turn, not now.
+    // Stamped as fresh, it beat the newer reading the accounts list had brought meanwhile, and the ring went back.
+    it(`a replayed account_usage fills a gap, stamped with the turn's start, and never overwrites a newer reading`, async () => {
+        const replayed = (): Promise<ReadableStream<AttachFrame>> =>
+            Promise.resolve(
+                new ReadableStream<AttachFrame>({
+                    start(controller) {
+                        controller.enqueue(frameOf(head({ startedAt: 1234, seq: 2, rows: [userRow(`refactor the parser`, 1234, [])] })));
+                        controller.enqueue(
+                            frameOf({
+                                kind: `fact`,
+                                seq: 1,
+                                fact: { kind: `account_usage`, account: `acct-1`, windows: [{ kind: `seven_day`, utilization: 40, gates: `all` }] },
+                            }),
+                        );
+                        controller.enqueue(frameOf({ kind: `end` }));
+                        controller.close();
+                    },
+                }),
+            );
+        const newer = { windows: [{ kind: `seven_day` as const, utilization: 55, gates: `all` as const }], measuredAt: 5_000 };
+        usageByAccount.value = { "claude:acct-1": newer };
+        daemon.mockImplementation(replayed);
+        await expect(new Conversation(`c1`).turn.reattach()).resolves.toBe(true);
+        expect(usageByAccount.value[`claude:acct-1`]).toEqual(newer);
+
+        usageByAccount.value = {};
+        await expect(new Conversation(`c2`).turn.reattach()).resolves.toBe(true);
+        expect(usageByAccount.value[`claude:acct-1`]).toEqual({ windows: [{ kind: `seven_day`, utilization: 40, gates: `all` }], measuredAt: 1234 });
+    });
+
     // A send's own bubble is the row the run's head later replaces, so re-attaching to a run this window started is
     // idempotent, the same as for one it merely found (transcriptState.attachRun).
     it(`redraws a run its own send opened when attached to it again, rather than stacking a second copy`, async () => {

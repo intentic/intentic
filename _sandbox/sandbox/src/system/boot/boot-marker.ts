@@ -1,11 +1,13 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomicSync } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import { processIdentity, type ProcessIdentity, sameProcess } from "../resources/proc-stat.js";
 
 // Marker file for whether the daemon exited cleanly. Boot writes "running" and a deliberate exit rewrites it
 // synchronously; a marker still saying "running" at the next boot means the previous process was killed without
-// warning.
+// warning. Each write replaces the file whole: a kill in the middle of one would otherwise leave a torn marker, which
+// reads as a first boot and so hides exactly the death it is there to report.
 
 const MARKER_FILE = "daemon-exit.json";
 
@@ -64,7 +66,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
     const write = (marker: ExitMarker): void => {
         try {
             mkdirSync(logsDir, { recursive: true });
-            writeFileSync(path, JSON.stringify(marker));
+            writeFileAtomicSync(path, JSON.stringify(marker));
         } catch {
             // Best-effort: a failed write is not surfaced.
         }

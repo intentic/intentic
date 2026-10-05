@@ -178,8 +178,8 @@ test("a far end that never answers is reported a few times, then retried quietly
             expect.stringContaining("14 failed attempts"),
         ]);
         // The retries themselves are untouched while the outage is young: one dial per ladder delay, twenty of them.
-        // The twentieth failure is what arms the long rest, so the dial after it is LONG_OUTAGE_MS away rather than
-        // one more rung — quiet in the log and quiet on the wire, which are separate rules meeting here.
+        // The twentieth failure is what arms the long rest, so the dial after it is LONG_OUTAGE_MS past its rung rather
+        // than one more rung — quiet in the log and quiet on the wire, which are separate rules meeting here.
         expect(sockets).toHaveLength(20);
         await advanceTimersByTimeAsync(LONG_OUTAGE_MS);
         await waitFor(() => expect(sockets).toHaveLength(21));
@@ -286,8 +286,11 @@ test("a link nobody has answered in a long time rests between tries, and is neve
         await advanceTimersByTimeAsync(RUNG_MS);
         expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS);
 
-        // And it does come round: slowed, never abandoned.
-        await advanceTimersByTimeAsync(LONG_OUTAGE_MS - RUNG_MS);
+        // And it does come round, the rest on top of the ladder's own (jittered) draw so links that went quiet together
+        // do not come back together: slowed, never abandoned.
+        await advanceTimersByTimeAsync(LONG_OUTAGE_MS - 1);
+        expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS);
+        await advanceTimersByTimeAsync(1);
         await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
 
         // And one answer puts it straight back on the fast ladder — the outage is over, the penalty goes with it.

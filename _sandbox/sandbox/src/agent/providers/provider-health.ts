@@ -1,6 +1,7 @@
 // One backoff clock per provider, shared by every conversation stranded on it, not one per conversation. Waits escalate
 // with jitter, debounce to one failure per window, and clear on any successful request from anywhere. In-memory only: a
-// restart has no turns in flight to strand.
+// restart loses the clock, its spent attempts and its wait, and the next failure starts it over. The turns stranded on
+// it are not re-run after a restart: each stands on its conversation's record as an outage ending, for a press.
 
 // Escalating wait per attempt, ms; six steps top out near 38 minutes before the outage is surfaced.
 const BACKOFF_MS = [30_000, 60_000, 120_000, 300_000, 600_000, 1_200_000];

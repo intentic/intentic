@@ -67,6 +67,8 @@ export interface TurnEnd {
     readonly isolation: TurnPlacement | undefined;
     readonly experiments: Extract<TurnPlan, { readonly ok: true }>["experiments"];
     readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "metrics">;
+    // When the runtime was started (epoch ms): the turn's own clock, for the duration a provider did not report.
+    readonly startedAt: number;
 }
 
 // Nothing held on a conversation is the run getting somewhere, the one thing that puts the stop ladder back at its start.
@@ -158,7 +160,7 @@ export const costOf = (
 
 const counted = (value: number | undefined): number => value ?? 0;
 
-const usageOf = (end: TurnEnd, outcome: TurnOutcome): UsageRow => {
+const usageOf = (end: TurnEnd, outcome: TurnOutcome, now: number): UsageRow => {
     const { input } = end;
     const { usage, failure } = end.frames.readings();
     return {
@@ -170,6 +172,9 @@ const usageOf = (end: TurnEnd, outcome: TurnOutcome): UsageRow => {
         ...failureOf(failure),
         ...opt("conversationId", input.conversationId),
         ...costOf(usage),
+        // The provider's own figure where it gave one; a failed or stopped turn seldom sends the frame that carries it,
+        // and a zero would read as a turn that took no time, so the daemon's own clock stands in.
+        durationMs: usage?.durationMs ?? Math.max(0, now - end.startedAt),
         // How it ended, past its cost: what changed, what proved it, what's left open.
         ...endingOf(end),
         ...(usage === undefined ? {} : end.frames.metrics.reading(end.frames.verification.edited())),
@@ -213,7 +218,7 @@ const outcomeOf = (end: TurnEnd): TurnOutcome => {
     return end.frames.readings().failure === undefined ? "ok" : "error";
 };
 
-export const settleTurn = (end: TurnEnd): SettlementPlan => {
+export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPlan => {
     const outcome = outcomeOf(end);
     const { kind: _kind, ...billed } = end.frames.readings().usage ?? { kind: "usage" };
     const routed = KeyedProviderSchema.safeParse(end.provider).success;
@@ -221,8 +226,8 @@ export const settleTurn = (end: TurnEnd): SettlementPlan => {
         hold: holdOf(end),
         completion: { type: "turn.completed", ...(end.frames.readings().usage === undefined ? {} : { extra: billed }) },
         headroomRefresh: routed ? { scope: { providers: [end.provider] }, maxAgeMs: SETTLE_MAX_AGE_MS } : undefined,
-        usage: usageOf(end, outcome),
-        proof: proofOf(end, Date.now()),
+        usage: usageOf(end, outcome, now),
+        proof: proofOf(end, now),
         snapshot: end.isolated ? undefined : end.input.prompt,
     };
 };

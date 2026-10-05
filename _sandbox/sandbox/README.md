@@ -174,7 +174,9 @@ flowchart LR
   unannounced it is quick-checked before anything reads it, and a file that fails to open or to pass is moved aside with
   its sidecars as `conversations.db.corrupt-<ms>` (never deleted), what still reads of it is copied into a new file with
   `VACUUM INTO`, or an empty one is made, and the owner's settings-problems card names the whole file. One missing while
-  conversation directories remain is made again empty the same way.
+  conversation directories remain is made again empty the same way. A file the check calls sound but this build cannot
+  bring to its schema is the build's fault, not the file's: it is left where it is and the boot fails, so the host puts
+  an update on probation back.
 - The boot's orphan sweep (`store/conversation-units.ts`) moves a conversation directory no database row owns to
   `/history/trash/conversations/` rather than deleting it, and removes it 14 days later; the blob sweep counts the
   records there as names still standing. It moves nothing on a boot whose database was made again, or while the

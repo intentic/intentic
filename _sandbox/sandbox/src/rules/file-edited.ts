@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
 import type { Rule } from "@intentic/sandbox-contract";
 import { plainText } from "@intentic/base/plain-text";
+import { spawnAs } from "../workload/workload-class.js";
 import { conditionHolds, reposOf, standing } from "./rules.js";
 import { workspaceRelative } from "./workspace-relative.js";
 
@@ -107,14 +107,18 @@ export const fileEditedReviewer = (
 };
 
 // Default runner: one bash line in a directory, killed at the ceiling, output captured as plain text.
-// A plain child, not a tmux window like the push run's (rule-command.ts): nobody watches a linter run on one file.
+// A child of the daemon, not a tmux window like the push run's (rule-command.ts): nobody watches a linter run on one file.
+// Classed as an agent's command (workload/workload-class.ts), since it is work done on the agent's behalf: without a
+// class it would keep the daemon's own rank and outlive a turn's runtime under the OOM killer. In a process group of its
+// own, so the ceiling kills the tsc or vitest the line started along with its shell; killing the shell alone left them
+// running, holding the output pipe and with it the edit's answer.
 export const spawnEditCommand =
     (cwd: string): EditCommandRunner =>
     (command, timeoutMs) =>
         new Promise((resolve) => {
             let output = "";
             let timedOut = false;
-            const child = spawn("bash", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+            const child = spawnAs({ class: "command" }, "bash", ["-c", command], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
             const keep = (chunk: Buffer): void => {
                 output = `${output}${chunk.toString("utf8")}`.slice(-OUTPUT_BYTES * 4);
             };
@@ -122,7 +126,14 @@ export const spawnEditCommand =
             child.stderr.on("data", keep);
             const watchdog = setTimeout(() => {
                 timedOut = true;
-                child.kill("SIGKILL");
+                // Never without a pid: a group of -0 would be the daemon's own.
+                if (child.pid !== undefined) {
+                    try {
+                        process.kill(-child.pid, "SIGKILL");
+                    } catch {
+                        // allow(silent-catch): the group is already gone, which is what the kill was for.
+                    }
+                }
             }, timeoutMs);
             watchdog.unref();
             child.on("error", (error) => {

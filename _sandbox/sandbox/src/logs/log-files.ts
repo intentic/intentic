@@ -1,4 +1,4 @@
-import { type FileHandle, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { type FileHandle, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { LogFileEntry } from "@intentic/sandbox-contract";
 import { forkedExec } from "@intentic/scaffold";
@@ -62,6 +62,16 @@ export const lineAligned = (chunk: Buffer, cut: number): Buffer => {
     return newline === -1 ? chunk.subarray(cut) : chunk.subarray(newline + 1);
 };
 
+// The newest `bytes` of an open file `size` bytes long, starting on a whole line, read from where they begin: what is
+// before them never enters memory, however large the file has grown.
+const alignedTail = async (handle: FileHandle, size: number, bytes: number): Promise<Buffer> => {
+    const length = Math.min(bytes, size);
+    // One byte before the cut rides along, so lineAligned can tell a cut that already fell on a line boundary.
+    const lead = length < size ? 1 : 0;
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(length + lead), 0, length + lead, size - length - lead);
+    return lineAligned(buffer.subarray(0, bytesRead), lead);
+};
+
 // Newest `bytes` of a log file, starting on a whole line; undefined for a missing file or a name that escapes root (404).
 export const tailLogFile = async (root: string, name: string, bytes: number): Promise<{ sizeBytes: number; text: string } | undefined> => {
     const target = resolveWithin(root, name);
@@ -76,11 +86,7 @@ export const tailLogFile = async (root: string, name: string, bytes: number): Pr
     }
     try {
         const size = (await handle.stat()).size;
-        const length = Math.min(bytes, size);
-        // One byte before the cut rides along, so lineAligned can tell a cut that already fell on a line boundary.
-        const lead = length < size ? 1 : 0;
-        const { buffer } = await handle.read(Buffer.alloc(length + lead), 0, length + lead, size - length - lead);
-        return { sizeBytes: size, text: lineAligned(buffer, lead).toString("utf8") };
+        return { sizeBytes: size, text: (await alignedTail(handle, size, bytes)).toString("utf8") };
     } finally {
         await handle.close();
     }
@@ -104,9 +110,17 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
         live
             .filter((file) => file.size > capFor(root, file.path).maxBytes)
             .map(async (file) => {
-                // Read-then-rewrite can drop an append racing the rewrite; acceptable for debug logs at these caps.
-                const whole = await readFile(file.path);
-                await writeFile(file.path, lineAligned(whole, Math.max(0, whole.length - capFor(root, file.path).tailBytes)));
+                // Only the tail that is kept is read: a log storm between two passes can grow a file far past its cap, and
+                // reading it whole would put all of it in the daemon's heap. Read-then-rewrite can drop an append racing
+                // the rewrite; acceptable for debug logs at these caps.
+                const handle = await open(file.path, "r");
+                let tail: Buffer;
+                try {
+                    tail = await alignedTail(handle, (await handle.stat()).size, capFor(root, file.path).tailBytes);
+                } finally {
+                    await handle.close();
+                }
+                await writeFile(file.path, tail);
             }),
     );
 };

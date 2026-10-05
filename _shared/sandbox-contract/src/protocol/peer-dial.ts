@@ -168,7 +168,9 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             openedAt = undefined;
             failures += 1;
             failingSince ??= Date.now();
-            const delay = failures >= LONG_OUTAGE_ATTEMPTS ? Math.max(rung, LONG_OUTAGE_MS) : rung;
+            // The rest is added to the ladder's draw rather than replacing it: a flat fifteen minutes would bring back in
+            // lockstep every link that entered the long outage together.
+            const delay = failures >= LONG_OUTAGE_ATTEMPTS ? LONG_OUTAGE_MS + rung : rung;
             complain(said, delay);
             waiting = true;
             setTimeout(() => void open(), delay);

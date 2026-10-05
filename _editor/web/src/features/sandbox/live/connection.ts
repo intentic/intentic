@@ -18,7 +18,8 @@ export type ConnectionFailure =
     | { readonly kind: "timeout"; readonly message: string }
     // The daemon closed the stream cleanly; a healthy stream never ends, so this avoids hot-looping a reconnect.
     | { readonly kind: "closed"; readonly message: string }
-    // 401: the browser's Google token is missing or rejected; stays transient since a fresh token may fix it.
+    // 401, or 428 (a session the passkey rule holds short): the browser's sign-in is missing, rejected or not strong
+    // enough; stays transient since a fresh one may fix it.
     | { readonly kind: "unauthenticated"; readonly message: string }
     // 403: a verified identity that is neither the owner nor a member. Retrying is pointless.
     | { readonly kind: "forbidden"; readonly message: string }
@@ -201,7 +202,9 @@ export const classifyFailure = (observation: {
     if (observation.status === 403) {
         return { kind: `forbidden`, message: observation.message };
     }
-    if (observation.status === 401) {
+    // 428 is a bearer the daemon takes but its passkey rule holds short of this call: the same way back as a 401, a
+    // fresh sign-in (which runs through the step-up), and never an outage to wait out or wake a box for.
+    if (observation.status === 401 || observation.status === 428) {
         return { kind: `unauthenticated`, message: observation.message };
     }
     return { kind: `network`, message: observation.message };

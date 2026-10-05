@@ -45,8 +45,8 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
         cwd,
         // Stamped as the DAEMON's rather than any one turn's, because that is what a pooled agent is: it
         // deliberately outlives the turn that warmed it (acp-connection.ts), so the in-life sweep must never
-        // read one as abandoned. What the stamp is for here is the other half, a pool process from a previous
-        // daemon that nothing adopts and no other signal can tell apart from a live one (platform/leftovers.ts).
+        // read one as abandoned. A pool process a previous daemon left is no sweep's either: it stays in that
+        // daemon's process group, which intentic-front ends once the daemon has crashed (supervise.rs).
         env: { ...process.env, ...env, ...workloadStamp(DAEMON_OWNER) },
         stdio: ["pipe", "pipe", "pipe"],
     });

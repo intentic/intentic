@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { isConversationId, type SystemPromptDisclosure, SystemPromptDisclosureSchema } from "@intentic/sandbox-contract";
 import { conversationUnit } from "../../store/conversation-units.js";
 
@@ -27,8 +28,9 @@ export const filePromptRecord = (historyRoot: string): PromptRecord => ({
         if (path === undefined) {
             return;
         }
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify(disclosure));
+        // Whole or not at all: a reader racing the next turn's write, or a crash in the middle of it, would otherwise read
+        // a torn record as no record.
+        await writeFileAtomic(path, JSON.stringify(disclosure));
     },
     of: async (conversationId) => {
         const path = fileOf(historyRoot, conversationId);

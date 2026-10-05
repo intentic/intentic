@@ -1,7 +1,7 @@
-import { renameSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { writeFileAtomicSync } from "@intentic/base/fs";
 import type { BootProgress } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -39,9 +39,7 @@ export const describeBootError = (error: Error): string => {
 // Synchronous, since the process exits right after; written beside and renamed over, so the host never reads half.
 // Into the history volume as it is: a root that does not exist is no volume a host reads, so none is made for it.
 export const recordBootFailure = (historyRoot: string, failure: BootFailure): void => {
-    const path = join(historyRoot, bootFailureDocument.path);
-    writeFileSync(`${path}.tmp`, `${JSON.stringify(failure, undefined, 2)}\n`);
-    renameSync(`${path}.tmp`, path);
+    writeFileAtomicSync(join(historyRoot, bootFailureDocument.path), `${JSON.stringify(failure, undefined, 2)}\n`);
 };
 
 // Never throws: the boot this follows has already succeeded, and a record left behind is only stale news.

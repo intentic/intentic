@@ -5,6 +5,7 @@ import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
 import { pointerFrame, type PointerAction } from "./pointerFrame";
 import { canDecodeVideo, videoSink } from "./videoSink";
+import { useSandbox } from "../sandbox/client/useSandbox";
 import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
@@ -29,6 +30,8 @@ const MOVE_THROTTLE_MS = 16;
 const SELECTION_TIMEOUT_MS = 1500;
 // A size is asked once the box has held still this long: every step of a drag would otherwise restart the encoder.
 const RESIZE_DEBOUNCE_MS = 250;
+
+const { reachable } = useSandbox();
 
 // Mirrors the daemon's SelectMenu (screencast.ts); the browser package can't import that contract, so it's
 // re-declared here.
@@ -293,6 +296,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
 
     const connect = async (): Promise<void> => {
         window.clearTimeout(reconnect);
+        reconnect = undefined;
         const session = name.value;
         if (closing || session === undefined) {
             return;
@@ -371,6 +375,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
 
     const teardown = (): void => {
         window.clearTimeout(reconnect);
+        reconnect = undefined;
         window.clearTimeout(resizeTimer);
         // A copy waiting on a socket that's going away resolves empty rather than hanging until its timeout.
         pendingSelection?.(``);
@@ -378,6 +383,16 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         socket.value?.close();
         socket.value = undefined;
     };
+
+    // The sandbox's event stream answering again is the news a view waiting out a rung of its ladder is waiting for:
+    // without it, one whose ladder had climbed to MAX_RETRY_MS stayed dark that long after the rest of the page was
+    // back. `reconnect` is set only while a retry is pending.
+    watch(reachable, (up) => {
+        if (up && reconnect !== undefined) {
+            ladder.reset();
+            void connect();
+        }
+    });
 
     watch(
         name,

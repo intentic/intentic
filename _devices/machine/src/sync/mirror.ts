@@ -29,6 +29,7 @@ import {
     forwardedPorts,
     forwardSessionName,
     healDerivedConflicts,
+    MUTAGEN_CALL_TIMEOUT_MS,
     mutagenForwardArgs,
     ourForwardSessions,
     pauseRunningSync,
@@ -137,7 +138,11 @@ export interface ForwardExecutor {
 // and one pairing's teardown can't reach another's. `terminate` stays blocking, a local call to the daemon.
 const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardExecutor => ({
     terminate: (port) =>
-        void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], { stdio: "ignore", windowsHide: true }),
+        void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        }),
     create: async (summary) =>
         await runMutagenAsync(
             mutagen,
@@ -302,7 +307,11 @@ export const strandedForwards = (held: readonly number[], mirrored: readonly Mir
 // record this would tear down live forwards.
 const sweepStrandedForwards = (mutagen: string, sandboxId: string, mirrored: readonly MirroredPort[], log: Log): void => {
     for (const port of strandedForwards(forwardedPorts(mutagen, sandboxId), mirrored)) {
-        spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], { stdio: "ignore", windowsHide: true });
+        spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        });
         log(`  localhost:${port}: stopped (this device was still holding a forward for it)`);
     }
 };
@@ -872,7 +881,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
 const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<number> => {
     const names = ourForwardSessions(mutagen, sandboxId);
     if (names.length > 0) {
-        spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore", windowsHide: true });
+        spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
     }
     // A stale baseline would make the next reconcile treat gone forwards as already mirrored. The skip set clears
     // too: mirroring-off isn't the same as losing a contest. `ignoredPorts` survives, being a choice rather than a
@@ -894,7 +903,11 @@ export const retirePairingMirror = async (mutagen: string, sandboxId: string): P
 // that way. Answers whether anything was actually taken down, which is the difference between "your localhost is
 // yours again" and "that port was never on it".
 export const retireMirroredPort = async (mutagen: string, sandboxId: string, port: number): Promise<boolean> => {
-    spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], { stdio: "ignore", windowsHide: true });
+    spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], {
+        stdio: "ignore",
+        windowsHide: true,
+        timeout: MUTAGEN_CALL_TIMEOUT_MS,
+    });
     let wasMirrored = false;
     await updateState((state) => ({
         pairings: state.pairings.map((held) => {

@@ -1,5 +1,5 @@
 import { type AcpAgentConfig, type AgentCommand, type AgentEvent, PI } from "@intentic/sandbox-contract";
-import { whenAborted } from "@intentic/base/async";
+import { whenAborted, withTimeout } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { imageBlock } from "../../agent/prompt/attachment-images.js";
 import {
@@ -13,7 +13,6 @@ import {
     watchedPull,
 } from "../decorators/turn-watchdog.js";
 import { withStderrTail } from "../decorators/vendor-errors.js";
-import { withTimeout } from "../acp/acp-connection.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { createPiEventMapper } from "./pi-events.js";
 import { answerExtensionUi, type PiDialog } from "./pi-extension-ui.js";

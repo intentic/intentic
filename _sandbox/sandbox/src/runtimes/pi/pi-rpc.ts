@@ -83,7 +83,8 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             {
                 cwd,
                 // Daemon-owned, like the ACP pool it mirrors: kept warm across turns on purpose, so only a previous
-                // daemon's copy is ever a leftover (platform/leftovers.ts).
+                // daemon's copy is ever a leftover, and intentic-front ends that one with the crashed daemon's process
+                // group (supervise.rs).
                 env: { ...process.env, ...parseEnvBlock(config.env), ...workloadStamp(DAEMON_OWNER) },
                 stdio: ["pipe", "pipe", "pipe"],
             },

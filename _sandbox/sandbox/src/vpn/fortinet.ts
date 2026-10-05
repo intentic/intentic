@@ -59,7 +59,9 @@ const dial = async (id: string, raw: FortinetVpnConfig, otp: string | undefined)
     const handle = await open(logPath(id), "w", 0o600);
     try {
         return await new Promise<number>((resolve, reject) => {
-            const child = spawn("openconnect", openconnectArgs(id, raw), { stdio: ["pipe", handle.fd, handle.fd] });
+            // In a process group of its own: openconnect backgrounds itself with a bare fork, so the tunnel would stay in
+            // the daemon's group, which intentic-front ends with a crashed daemon, and boot keeps a tunnel still up.
+            const child = spawn("openconnect", openconnectArgs(id, raw), { stdio: ["pipe", handle.fd, handle.fd], detached: true });
             const timer = setTimeout(() => child.kill("SIGTERM"), DIAL_TIMEOUT_MS);
             child.on("error", (error) => {
                 clearTimeout(timer);

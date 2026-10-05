@@ -147,7 +147,7 @@ export class Conversation {
     // The runs come first: every other unit reads whether one is live, and an edit sends through them.
     constructor(readonly conversationId: string = newConversationId()) {
         this.turn = new TurnClient(this);
-        this.transcript = new TranscriptView((entry, turn) => applyTurnEntry(this, entry, turn), this);
+        this.transcript = new TranscriptView((entry, turn, replay) => applyTurnEntry(this, entry, turn, replay), this);
         this.selection = new ComposerSelection(this);
         this.failures = new TurnFailures(this);
         this.requests = new CardReplies(this);

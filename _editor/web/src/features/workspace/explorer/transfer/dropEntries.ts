@@ -2,6 +2,7 @@
 // webkitGetAsEntry. Roots are captured synchronously before the drag-data store tears down, then walked concurrently to
 // finish inside that store's short validity window.
 
+import { withTimeout } from "@intentic/base/async";
 import { IGNORED_DIRS as WORKSPACE_IGNORED_DIRS } from "@intentic/workspace-ignore/constants";
 
 export interface DroppedFile {
@@ -9,23 +10,10 @@ export interface DroppedFile {
     readonly path: string;
 }
 
-// No isSymbolicLink flag (Chrome follows symlinks); timeout, visited set and depth cap guard stalls and cycles.
+// No isSymbolicLink flag (Chrome follows symlinks); timeout, visited set and depth cap guard stalls and cycles. The
+// timeout is per read, so one entry whose callback never comes cannot hang the whole walk.
 const READ_TIMEOUT_MS = 8000;
 const MAX_DEPTH = 64;
-
-// Rejects if the wrapped callback never settles, so one hung entry can't hang the whole walk. Timer clears once the
-// real promise settles, so a big drop doesn't leak one per read.
-const withTimeout = async <T>(promise: Promise<T>, label: string): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout>;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise<T>((_, reject) => (timer = setTimeout(() => reject(new Error(`Timed out reading ${label}`)), READ_TIMEOUT_MS))),
-        ]);
-    } finally {
-        clearTimeout(timer!);
-    }
-};
 
 // Daemon's IGNORED_DIRS minus `.git`/`.tmp`: a dropped repo keeps its `.git`, staying connected to its remote.
 const IGNORED_DIRS = new Set([...WORKSPACE_IGNORED_DIRS].filter((dir) => dir !== ".git" && dir !== ".tmp"));
@@ -41,14 +29,18 @@ export const isRootGitPath = (destination: string): boolean => destination === "
 
 // Promisify FileSystemFileEntry.file(cb, errCb).
 const fileOf = (entry: FileSystemFileEntry): Promise<File> =>
-    withTimeout(new Promise<File>((resolve, reject) => entry.file(resolve, reject)), entry.name);
+    withTimeout(new Promise<File>((resolve, reject) => entry.file(resolve, reject)), READ_TIMEOUT_MS, `Timed out reading ${entry.name}`);
 
 // readEntries batches children (≤100); call repeatedly until empty, or large folders silently truncate.
 const readAllChildren = async (dir: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> => {
     const reader = dir.createReader();
     const all: FileSystemEntry[] = [];
     for (;;) {
-        const batch = await withTimeout(new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject)), dir.name);
+        const batch = await withTimeout(
+            new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject)),
+            READ_TIMEOUT_MS,
+            `Timed out reading ${dir.name}`,
+        );
         if (batch.length === 0) {
             return all;
         }

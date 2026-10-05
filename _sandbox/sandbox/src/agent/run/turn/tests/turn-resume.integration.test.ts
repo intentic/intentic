@@ -643,6 +643,37 @@ test("a stranded turn nobody resumed within the hour is dropped rather than spru
     expect(abandoned).toEqual(["stale-1"]);
 });
 
+test("a pass that comes round while the last one still runs joins it, so a hold is given up once", async () => {
+    const abandoned: string[] = [];
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, abandoned);
+    recordHeldTurn(services, outage("overlap-1", "out-overlap"), OUT_NOW - 61 * 60_000);
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake([])));
+    // The second starts while the first awaits its abandon, before it has dropped the hold.
+    await Promise.all([scheduler.tick(OUT_NOW), scheduler.tick(OUT_NOW + 5_000)]);
+    expect(abandoned).toEqual(["overlap-1"]);
+    expect(heldTurn(services, "overlap-1")).toBeUndefined();
+});
+
+test("a held turn that throws leaves the rest of the pass to run", async () => {
+    const abandoned: string[] = [];
+    let broken = true;
+    const takes = (): boolean => {
+        if (broken) {
+            broken = false;
+            throw new Error("the first abandon fails");
+        }
+        return true;
+    };
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")), abandoned, takes);
+    recordHeldTurn(services, outage("throws-1", "out-throws"), OUT_NOW - 62 * 60_000);
+    recordHeldTurn(services, outage("throws-2", "out-throws"), OUT_NOW - 61 * 60_000);
+    await createTurnResumeScheduler(drivenBy(services, fakeWake([]))).tick(OUT_NOW);
+    expect(abandoned).toEqual(["throws-1", "throws-2"]);
+    expect(heldTurn(services, "throws-2")).toBeUndefined();
+    expect(heldTurn(services, "throws-1")).toEqual(expect.any(Object));
+    clearPendingResume(services, "throws-1");
+});
+
 test("once the attempt budget is spent the failure stands: the retrying is finite by design", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const prompts: string[] = [];

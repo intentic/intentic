@@ -21,6 +21,8 @@ const request: AgentRequest = {
 };
 const input: RoutedTurn & { conversationId: string } = { agent: "claude", harness: "native", prompt: "ship the parser", conversationId: "c-1" };
 const noCode = { state: "no-code", paths: [], check: undefined } as const;
+// When each turn here started its runtime, so a settlement handed a later instant has a wall clock to read.
+const STARTED = 1_000_000;
 
 // A turn that walked `stream`, held as classification left it; each case names what it is about.
 const ended = (stream: readonly AgentEvent[], change: Partial<Omit<TurnEnd, "frames">> = {}, held?: HeldTurn): TurnEnd => {
@@ -40,6 +42,7 @@ const ended = (stream: readonly AgentEvent[], change: Partial<Omit<TurnEnd, "fra
         isolation: undefined,
         experiments: { turnIndex: 3, mapArm: true },
         frames,
+        startedAt: STARTED,
         ...change,
     };
 };
@@ -83,12 +86,16 @@ describe("a finished turn", () => {
             { kind: "usage", costUsd: 0.5, outputTokens: 7, cacheCreationTokens: 3, durationMs: 40, numTurns: 1 },
         ]);
 
+        // Settled long after it started: the provider's own duration is what the row keeps, not the wall clock.
         expect(
-            settleTurn({
-                ...end,
-                request: { ...request, spec: { ...request.spec, model: "opus" } },
-                input: { ...input, model: "opus-4-6", autoPicked: true },
-            }).usage,
+            settleTurn(
+                {
+                    ...end,
+                    request: { ...request, spec: { ...request.spec, model: "opus" } },
+                    input: { ...input, model: "opus-4-6", autoPicked: true },
+                },
+                STARTED + 9_000,
+            ).usage,
         ).toStrictEqual({
             provider: "claude",
             account: "acct",
@@ -129,7 +136,8 @@ describe("a finished turn", () => {
         const end = ended([{ kind: "error", code: "claude-not-entitled", message: `not enabled ${"y".repeat(500)}` }], {
             input: { ...input, model: "" },
         });
-        expect(settleTurn(end).usage).toStrictEqual({
+        // No usage frame came, so the time it took is the turn's own clock rather than a zero.
+        expect(settleTurn(end, STARTED + 2_500).usage).toStrictEqual({
             provider: "claude",
             account: "acct",
             harness: "native",
@@ -143,7 +151,7 @@ describe("a finished turn", () => {
             cacheReadTokens: 0,
             cacheCreationTokens: 0,
             costUsd: 0,
-            durationMs: 0,
+            durationMs: 2_500,
             turnIndex: 3,
             mapArm: true,
             autoPicked: undefined,

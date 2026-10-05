@@ -2,6 +2,7 @@
 //! waits for Node: whether Node's link is up, how long its event loop takes to answer the front's ping, how often the
 //! front restarted it, how long the container has run, and the container's pressure stall. Node's own heartbeat on
 //! `/events` rides its event loop, so a sandbox busy enough to starve that loop would look exactly like a dead one.
+//! The same ping is how the front finds a Node that is stuck rather than busy, and has it restarted.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -12,6 +13,7 @@ use front_wire::Question;
 use http::header::{self, HeaderMap, HeaderValue};
 use http::{Method, Response, StatusCode};
 use relay::body::{self, Body};
+use tokio::sync::watch;
 use tokio::time::MissedTickBehavior;
 
 use crate::link::Link;
@@ -19,6 +21,12 @@ use crate::supervise::Restarts;
 
 // How often the front pings Node, each ping only once the one before it was answered.
 const PING_EVERY: Duration = Duration::from_secs(2);
+
+// How long a ping may go unanswered before Node is called stuck, killed and restarted. Node's link answers a ping the
+// moment its event loop turns, so a Node busy but alive answers within seconds however loaded it is; one silent this
+// long has a loop that is not turning at all, and would otherwise stay up for good as an outage the editor reads as
+// busy. Pings start only once Node said hello, which it does last in its start, so a long boot is never timed.
+const STUCK_AFTER: Duration = Duration::from_secs(5 * 60);
 
 // The container's own cgroup: its pressure covers everything in the box, the daemon and its workload alike.
 const CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -40,6 +48,9 @@ pub struct Vitals {
     started: Instant,
     cgroup: PathBuf,
     ping: Mutex<Ping>,
+    stuck: watch::Sender<()>,
+    // `STUCK_AFTER`, a field so a test runs the rule in a second rather than five minutes.
+    stuck_after: Duration,
 }
 
 impl Vitals {
@@ -50,12 +61,19 @@ impl Vitals {
             started: Instant::now(),
             cgroup: PathBuf::from(CGROUP_ROOT),
             ping: Mutex::default(),
+            stuck: watch::Sender::new(()),
+            stuck_after: STUCK_AFTER,
         }
+    }
+
+    /// Told each time a ping has gone unanswered for `STUCK_AFTER`: the Node on the link is stuck and is to be killed.
+    pub fn stuck(&self) -> watch::Receiver<()> {
+        self.stuck.subscribe()
     }
 
     /// Pings Node every `PING_EVERY` while it is up, each once the previous one was answered, for as long as the front
     /// runs. A ping has no patience of its own: a Node slow to answer is the lag it measures, and a connection that ends
-    /// fails it.
+    /// fails it. One unanswered for `STUCK_AFTER` tells `stuck`, and still waits for its connection to end.
     pub async fn keep_pinging(&self) {
         let mut state = self.link.state();
         let mut tick = tokio::time::interval(PING_EVERY);
@@ -72,7 +90,20 @@ impl Vitals {
                 .expect("ping poisoned")
                 .sent(generation, sent);
             // A refusal is an answer too: an older Node refuses a question it does not know, and does so at once.
-            let answered = self.link.asked(Question::Ping, None).await.is_ok();
+            let mut asking = std::pin::pin!(self.link.asked(Question::Ping, None));
+            let reply = match tokio::time::timeout(self.stuck_after, asking.as_mut()).await {
+                Ok(reply) => reply,
+                Err(_) => {
+                    tracing::error!(
+                        generation,
+                        "the daemon has not answered a ping for {:?}: its event loop is stuck",
+                        self.stuck_after
+                    );
+                    self.stuck.send_replace(());
+                    asking.await
+                }
+            };
+            let answered = reply.is_ok();
             self.ping
                 .lock()
                 .expect("ping poisoned")
@@ -230,7 +261,15 @@ fn some_avg10(psi: &str) -> Option<f32> {
 
 #[cfg(test)]
 mod tests {
+    use front_wire::{Answer, FromNode, ToNode, frame};
+    use tokio::io::{AsyncWriteExt, BufReader};
+    use tokio::net::UnixStream;
+    use tokio::net::unix::OwnedReadHalf;
+    use tokio::sync::mpsc;
+    use tokio::time::timeout;
+
     use super::*;
+    use crate::link::read_frame;
 
     const CPU: &str = "some avg10=12.34 avg60=5.00 avg300=1.25 total=5007643\nfull avg10=99.00 avg60=0.00 avg300=0.00 total=1097926\n";
 
@@ -357,5 +396,68 @@ mod tests {
                 .headers()
                 .contains_key(header::ACCESS_CONTROL_ALLOW_HEADERS)
         );
+    }
+
+    // The id of the ping the front asked, read off Node's side of the control socket.
+    async fn asked_ping(reader: &mut BufReader<OwnedReadHalf>) -> u32 {
+        let asked = read_frame(reader).await.unwrap().expect("the link is open");
+        match serde_json::from_slice::<ToNode>(&asked).unwrap() {
+            ToNode::Ask {
+                id,
+                question: Question::Ping,
+            } => id,
+            other => panic!("expected a ping, got {other:?}"),
+        }
+    }
+
+    // A booting Node, then a slow one, then a stuck one, against a limit of two seconds.
+    #[tokio::test]
+    async fn only_a_ping_unanswered_for_the_limit_calls_node_stuck() {
+        const LIMIT: Duration = Duration::from_secs(2);
+        let dir = std::env::temp_dir().join(format!("front-vitals-stuck-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("front.sock");
+        let (pushed, _received) = mpsc::unbounded_channel();
+        let link: &'static Link = Box::leak(Box::new(Link::new(pushed)));
+        let socket = path.clone();
+        tokio::spawn(async move { link.serve(&socket).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let mut vitals = Vitals::new(link, Arc::default());
+        vitals.stuck_after = LIMIT;
+        let vitals = Arc::new(vitals);
+        let mut stuck = vitals.stuck();
+        let pinging = vitals.clone();
+        tokio::spawn(async move { pinging.keep_pinging().await });
+        let (reader, mut writer) = UnixStream::connect(&path).await.unwrap().into_split();
+        let mut reader = BufReader::new(reader);
+
+        // Connected and still booting: it has not said hello, so nothing is asked and nothing is timed.
+        let unwatch = FromNode::Unwatch {
+            dir: "/workspace".into(),
+        };
+        writer.write_all(&frame(&unwatch).unwrap()).await.unwrap();
+        assert!(timeout(LIMIT + LIMIT / 4, stuck.changed()).await.is_err());
+
+        let hello = FromNode::Hello {
+            build: "test".into(),
+            pid: 7,
+        };
+        writer.write_all(&frame(&hello).unwrap()).await.unwrap();
+        // A quarter of the limit to answer is lag, not a hang.
+        let id = asked_ping(&mut reader).await;
+        assert!(timeout(LIMIT / 4, stuck.changed()).await.is_err());
+        let pong = FromNode::Answer {
+            id,
+            answer: Answer::Pong,
+        };
+        // The next ping is sent only once this answer is in, so its limit runs from no earlier than now.
+        let answered = Instant::now();
+        writer.write_all(&frame(&pong).unwrap()).await.unwrap();
+
+        // The next goes unanswered: the verdict comes once the limit has passed, not before.
+        asked_ping(&mut reader).await;
+        assert!(timeout(LIMIT * 3, stuck.changed()).await.is_ok());
+        assert!(answered.elapsed() >= LIMIT);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

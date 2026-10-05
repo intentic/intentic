@@ -1,7 +1,8 @@
-import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { statePath, stateRelPath } from "../state-paths.js";
 import { conversationUnit } from "../store/conversation-units.js";
 
@@ -18,7 +19,8 @@ const RETENTION_DAYS = 3650;
 
 // Merges one key into settings.json rather than replacing it, since the user's own settings load from the same file.
 // Unreadable or unparseable content propagates rather than being clobbered; losing user settings costs more than the
-// sweep this key prevents.
+// sweep this key prevents. For the same reason the merged file is written durably beside the old one and renamed over
+// it, so a crash or a power cut mid-write leaves the user's settings whole; it is written once, when the key changes.
 const persistRetention = async (claudeHome: string): Promise<void> => {
     const path = join(claudeHome, "settings.json");
     const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
@@ -26,7 +28,7 @@ const persistRetention = async (claudeHome: string): Promise<void> => {
     if (settings.cleanupPeriodDays === RETENTION_DAYS) {
         return;
     }
-    await writeFile(path, `${JSON.stringify({ ...settings, cleanupPeriodDays: RETENTION_DAYS }, undefined, 2)}\n`);
+    await writeFileAtomic(path, `${JSON.stringify({ ...settings, cleanupPeriodDays: RETENTION_DAYS }, undefined, 2)}\n`, undefined, { durable: true });
 };
 
 // Which conversations keep their own store rather than the shared one. Equivalent to a resolved fence (areas-store.ts's

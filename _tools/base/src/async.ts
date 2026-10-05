@@ -2,8 +2,8 @@ import { errorMessage } from "./errors.js";
 import type { IDisposable } from "./lifecycle.js";
 
 // Delayer restarts on every call (a search box); Coalescer opens on the first call and holds the window (a watcher that
-// never goes quiet); SingleFlight shares one run per key; keyedLock queues them; retry loops with a delay. Plus sleep,
-// pollUntil and createBackoff below. All are disposables: a pending timer is a live handle.
+// never goes quiet); SingleFlight shares one run per key; keyedLock queues them. Plus sleep, withTimeout, pollUntil
+// and createBackoff below. All are disposables: a pending timer is a live handle.
 
 // Trailing debounce: `trigger` restarts the wait, so the task runs once, `delay` after the last call; every caller in
 // the window shares that result. Superseded callers are not rejected, only the effect was requested.
@@ -170,25 +170,6 @@ export const serialLock = (): (<T>(task: () => Promise<T>) => Promise<T>) => {
     return (task) => lock(undefined, task);
 };
 
-// Attempts, waits, attempts again; when attempts run out, throws the last attempt's own error, since that is what a
-// caller can act on.
-export const retry = async <T>(task: () => Promise<T>, delay: number, attempts: number): Promise<T> => {
-    let last: unknown;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-        try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential by definition; the whole point is to wait between attempts
-            return await task();
-        } catch (error) {
-            last = error;
-            if (attempt < attempts - 1) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- the delay between attempts
-                await sleep(delay);
-            }
-        }
-    }
-    throw last;
-};
-
 // Runs `task` over every item with at most `limit` in flight, in item order. Rejects with the first rejection, after
 // the workers already started have settled; a task that must not lose its siblings' results catches its own.
 export const mapPool = async <T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> => {
@@ -222,6 +203,23 @@ export const sleep = (ms: number, options?: { readonly signal?: AbortSignal | un
         }
         signal?.addEventListener("abort", done, { once: true });
     });
+
+// Rejects with `message` when `promise` has not settled within `ms`. The timer is cleared however the race ends, so a
+// walk wrapping thousands of reads leaks none; the promise itself keeps running, since giving up on an answer cancels
+// nothing.
+export const withTimeout = async <T>(promise: Promise<T>, ms: number, message = `timed out after ${ms}ms`): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<never>((_resolve, reject) => {
+                timer = setTimeout(() => reject(new Error(message)), ms);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+};
 
 export interface PollOptions {
     readonly intervalMs: number;
@@ -259,20 +257,24 @@ export interface BackoffOptions {
     readonly capMs: number;
     // A run at least this long resets the ladder to the floor on failure; a short run keeps climbing.
     readonly stableMs?: number;
-    // Full jitter: each wait lands randomly between floor and next rung; injectable so a test can fix the schedule.
+    // Full jitter: each wait lands randomly between floor and next rung. Defaults to Math.random; injectable so a test
+    // can fix the schedule.
     readonly random?: () => number;
 }
 
 export interface Backoff {
-    // Next wait; the ladder climbs a rung after (floor, 2x, 4x... capped), unless `uptimeMs` is past `stableMs`.
+    // Next wait, drawn between the floor and this rung's ceiling (2x, 4x... capped); the ceiling climbs after each call
+    // unless `uptimeMs` is past `stableMs`.
     readonly next: (uptimeMs?: number) => number;
     // Back to the floor: the attempt succeeded outright (a health check passed, a poll answered).
     readonly reset: () => void;
 }
 
 // Exponential backoff ladder: a session that worked (past `stableMs`) earns the floor back on failure; one that dies
-// immediately keeps climbing. Jitter is optional.
-export const createBackoff = ({ floorMs, capMs, stableMs, random }: BackoffOptions): Backoff => {
+// immediately keeps climbing. Always jittered, like the relay's Rust twin (`_shared/relay/src/backoff.rs`): every
+// client of one daemon drops at the same instant when it restarts, and a fixed schedule would bring them all back on
+// the same tick.
+export const createBackoff = ({ floorMs, capMs, stableMs, random = Math.random }: BackoffOptions): Backoff => {
     let rung = floorMs;
     return {
         next: (uptimeMs) => {
@@ -280,9 +282,8 @@ export const createBackoff = ({ floorMs, capMs, stableMs, random }: BackoffOptio
                 rung = floorMs;
             }
             const ceiling = Math.min(rung * 2, capMs);
-            const wait = random === undefined ? rung : Math.round(floorMs + random() * (ceiling - floorMs));
             rung = ceiling;
-            return wait;
+            return Math.round(floorMs + random() * (ceiling - floorMs));
         },
         reset: () => {
             rung = floorMs;

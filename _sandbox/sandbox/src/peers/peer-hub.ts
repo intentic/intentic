@@ -135,9 +135,11 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 client: connection.client,
                 close: connection.close,
                 // Dropped on heartbeat failure, not left looking online; the dot must mean reachable now, not
-                // remembered.
+                // remembered. A ping unanswered by the next beat counts as a failure: a half-open socket neither
+                // answers nor closes, so without a deadline it would read as online until TCP gave up, with one more
+                // unanswered ping piling up on every beat.
                 heartbeat: setInterval(() => {
-                    void connection.client.ping().catch((err: unknown) => {
+                    void connection.client.ping(undefined, { signal: AbortSignal.timeout(spec.heartbeatMs) }).catch((err: unknown) => {
                         logger.warn({ err, id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
                         connection.close(1001, "no answer");
                         const current = live.get(peer.key);

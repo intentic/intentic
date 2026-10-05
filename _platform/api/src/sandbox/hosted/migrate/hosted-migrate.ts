@@ -441,7 +441,8 @@ export const migrateHosted = async (
             // The swap, and only now: the new machine has said it is up on the new disk.
             await commitMigration(prisma, machine.id, row.id, plan, built);
             // Best effort, and logged rather than thrown: the sandbox is already living on the new pair, and litter
-            // inside a live app is the orphan sweep's to notice, not a reason to fail a migration that worked.
+            // is not a reason to fail a migration that worked. Nothing collects it later (the orphan sweep never
+            // looks inside a live app, and the row is done), so the error line is the only record of what is left.
             await destroyMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, { force: true }).catch((error: unknown) =>
                 logger.error({ err: error, app: machine.appName, machineId: machine.machineId }, `hosted migrate: the old machine would not go away`),
             );
@@ -498,6 +499,10 @@ export const lastHostedBackupAt = async (config: Config, machine: { appName: str
  * Frees a machine a dead run left locked, and takes away what that run had built. A half-finished move holds a new
  * machine and a new volume that nothing will ever swap to, and both cost money inside an app the orphan sweep will
  * never touch, because the app itself is somebody's. Never finishes the work: this cannot know where it got to.
+ *
+ * The row is closed only once both are gone (Fly's 404 counts, fly.ts), because it is the only record of where they
+ * are. If Fly would not take one away, the row stays in flight and the machine locked, so the next pass asks again and
+ * no new move builds beside a leftover that still holds the `-next` name.
  */
 export const sweepHostedMigrations = async (prisma: PrismaClient, config: Config, logger: Logger, now: Date = new Date()): Promise<number> => {
     if (!hostedEnabled(config)) {
@@ -512,17 +517,28 @@ export const sweepHostedMigrations = async (prisma: PrismaClient, config: Config
             { migration: row.id, app: row.machine.appName, state: row.state, startedAt: row.startedAt },
             `hosted migrate: a run stopped without finishing; freeing the machine and collecting what it built`,
         );
-        if (row.newMachineId !== null) {
+        const machineGone =
+            row.newMachineId === null ||
             // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown, gentle on a rate-limited API
-            await destroyMachine(config.hosted.flyApiToken, row.machine.appName, row.newMachineId, { force: true }).catch((error: unknown) =>
-                logger.error({ err: error, machineId: row.newMachineId }, `hosted migrate: collecting an abandoned machine failed`),
-            );
-        }
-        if (row.newVolumeId !== null) {
+            (await destroyMachine(config.hosted.flyApiToken, row.machine.appName, row.newMachineId, { force: true }).then(
+                () => true,
+                (error: unknown) => {
+                    logger.error({ err: error, machineId: row.newMachineId }, `hosted migrate: collecting an abandoned machine failed; the next sweep tries again`);
+                    return false;
+                },
+            ));
+        const volumeGone =
+            row.newVolumeId === null ||
             // oxlint-disable-next-line eslint/no-await-in-loop
-            await destroyVolume(config.hosted.flyApiToken, row.machine.appName, row.newVolumeId).catch((error: unknown) =>
-                logger.error({ err: error, volumeId: row.newVolumeId }, `hosted migrate: collecting an abandoned volume failed`),
-            );
+            (await destroyVolume(config.hosted.flyApiToken, row.machine.appName, row.newVolumeId).then(
+                () => true,
+                (error: unknown) => {
+                    logger.error({ err: error, volumeId: row.newVolumeId }, `hosted migrate: collecting an abandoned volume failed; the next sweep tries again`);
+                    return false;
+                },
+            ));
+        if (!machineGone || !volumeGone) {
+            continue;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop
         await closeFailed(prisma, row.machine.id, row.id, `failed`, new Error(`the run stopped in "${row.state}" and was collected`));

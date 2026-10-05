@@ -161,6 +161,62 @@ test("a one-time wake fires when its moment arrives and switches itself off, so 
     expect((await services.automations.get("dentist"))?.runs).toHaveLength(1);
 });
 
+test("a poll that comes round while the last one still runs joins it rather than reading the manifest again", async () => {
+    const plain = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    const store = plain.automations;
+    const at = inMinutes(1);
+    await store.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
+    // Each pass reads the manifest once, so the reads count the passes that ran.
+    let reads = 0;
+    const services = unstubbed<Services>("services", {
+        ...plain,
+        automations: {
+            ...store,
+            list: async () => {
+                reads += 1;
+                return store.list();
+            },
+        },
+    });
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
+    await Promise.all([scheduler.tick(at), scheduler.tick(at + 30_000)]);
+    expect(reads).toBe(1);
+    await waitFor(async () => expect((await store.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    await automationIdle("dentist");
+    expect(prompts).toEqual(["wake:dentist"]);
+    // Once the joined pass is over, the next poll runs a pass of its own.
+    await scheduler.tick(at + 60_000);
+    expect(reads).toBe(2);
+});
+
+test("an automation that throws leaves the rest of the poll to run", async () => {
+    const plain = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    const store = plain.automations;
+    const at = inMinutes(1);
+    await store.upsert(automationConfig("broken", { trigger: { kind: "once", at } }));
+    await store.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
+    // The first wake cannot be switched off, which is where a one-time wake's poll fails.
+    const services = unstubbed<Services>("services", {
+        ...plain,
+        automations: {
+            ...store,
+            setEnabled: async (id, enabled) => {
+                if (id === "broken") {
+                    throw new Error("the manifest refused the write");
+                }
+                return store.setEnabled(id, enabled);
+            },
+        },
+    });
+    const prompts: string[] = [];
+    await createAutomationsScheduler(drivenBy(services, fakeWake(prompts))).tick(at);
+    await waitFor(async () => expect((await store.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    await automationIdle("dentist");
+    expect(prompts).toEqual(["wake:dentist"]);
+    expect((await store.get("broken"))?.enabled).toBe(true);
+});
+
 test("a moment that passed while the sandbox was down still fires, and the wake is told how late it is", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     // Six hours ago: no poll window covers it, so it is the poll that fires it rather than the start's catch-up.

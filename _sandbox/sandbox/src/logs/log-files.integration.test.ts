@@ -62,6 +62,20 @@ test("pruneLogFiles leaves a JSONL file every line of which still parses", async
     expect(lines.every((text) => typeof (JSON.parse(text) as { message?: unknown }).message === "string")).toBe(true);
 });
 
+// Read from where the kept tail begins rather than whole, so a log storm cannot put the whole file in the daemon's heap;
+// what is kept is the same: a cut that already falls on a line boundary keeps the line it opens, to the byte.
+test("pruneLogFiles keeps exactly the newest whole lines of a file grown far past its cap", async () => {
+    const root = await tempRoot();
+    // Lines of a hundred bytes, so the cut a megabyte from the end falls right after a line break.
+    const line = (index: number): string => `${String(index).padStart(9, "0")} ${"x".repeat(89)}\n`;
+    await writeFile(join(root, "daemon.log"), Array.from({ length: 200_000 }, (_, index) => line(index)).join(""));
+    await pruneLogFiles(root);
+
+    const kept = await readFile(join(root, "daemon.log"), "utf8");
+    expect(Buffer.byteLength(kept)).toBe(1_000_000);
+    expect(kept).toBe(Array.from({ length: 10_000 }, (_, index) => line(190_000 + index)).join(""));
+});
+
 test("pruneLogFiles truncates oversized files to their tail and drops stale ones", async () => {
     const root = await tempRoot();
     await writeFile(join(root, "big.log"), Buffer.alloc(5_000_001, 120));

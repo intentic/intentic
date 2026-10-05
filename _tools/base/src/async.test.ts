@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, retry, serialLock, sleep, SingleFlight, whenAborted } from "./async.js";
+import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, serialLock, sleep, SingleFlight, whenAborted, withTimeout } from "./async.js";
 
 beforeEach(() => {
     jest.useFakeTimers();
@@ -234,29 +234,6 @@ describe(`serialLock`, () => {
     });
 });
 
-describe(`retry`, () => {
-    it(`returns the first success without waiting again`, async () => {
-        const task = jest.fn().mockRejectedValueOnce(new Error(`once`)).mockResolvedValueOnce(`ok`);
-
-        const pending = retry(task, 10, 3);
-        await advanceTimersByTimeAsync(10);
-
-        await expect(pending).resolves.toBe(`ok`);
-        expect(task).toHaveBeenCalledTimes(2);
-    });
-
-    it(`throws what the final attempt threw`, async () => {
-        const task = jest.fn().mockRejectedValue(new Error(`still failing`));
-
-        // Caught before the clock advances, or the runner reports the rejection as unhandled during the tick.
-        const settled = retry(task, 10, 3).catch((error: unknown) => error);
-        await advanceTimersByTimeAsync(30);
-
-        expect(await settled).toMatchObject({ message: `still failing` });
-        expect(task).toHaveBeenCalledTimes(3);
-    });
-});
-
 describe(`sleep`, () => {
     it(`resolves after the delay`, async () => {
         let done = false;
@@ -296,6 +273,37 @@ describe(`sleep`, () => {
 
         expect(added).toHaveBeenCalledTimes(1);
         expect(removed).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe(`withTimeout`, () => {
+    it(`answers with the promise when it settles in time, and leaves no timer behind`, async () => {
+        const cleared = jest.spyOn(globalThis, `clearTimeout`);
+        try {
+            await expect(withTimeout(Promise.resolve(`ok`), 1_000, `slow`)).resolves.toBe(`ok`);
+            await expect(withTimeout(Promise.reject(new Error(`own`)), 1_000, `slow`)).rejects.toThrow(`own`);
+            expect(cleared).toHaveBeenCalledTimes(2);
+        } finally {
+            cleared.mockRestore();
+        }
+    });
+
+    it(`rejects with the message at the deadline and not a tick before`, async () => {
+        const settled = withTimeout(new Promise<never>(() => undefined), 100, `Timed out reading notes`).catch((error: unknown) => error);
+        let done = false;
+        void settled.then(() => {
+            done = true;
+        });
+        await advanceTimersByTimeAsync(99);
+        expect(done).toBe(false);
+        await advanceTimersByTimeAsync(1);
+        expect(await settled).toMatchObject({ message: `Timed out reading notes` });
+    });
+
+    it(`names the wait when no message is given`, async () => {
+        const settled = withTimeout(new Promise<never>(() => undefined), 50).catch((error: unknown) => error);
+        await advanceTimersByTimeAsync(50);
+        expect(await settled).toMatchObject({ message: `timed out after 50ms` });
     });
 });
 
@@ -366,19 +374,32 @@ describe(`pollUntil`, () => {
 });
 
 describe(`createBackoff`, () => {
-    it(`climbs from the floor by doubling and holds at the cap`, () => {
-        const ladder = createBackoff({ floorMs: 1_000, capMs: 5_000 });
-        expect([ladder.next(), ladder.next(), ladder.next(), ladder.next(), ladder.next()]).toEqual([1_000, 2_000, 4_000, 5_000, 5_000]);
+    // random()=1 reads each rung's ceiling, the top of its draw, so these two read the ladder itself.
+    it(`doubles the ceiling from the floor and holds it at the cap`, () => {
+        const ladder = createBackoff({ floorMs: 1_000, capMs: 5_000, random: () => 1 });
+        expect([ladder.next(), ladder.next(), ladder.next(), ladder.next(), ladder.next()]).toEqual([2_000, 4_000, 5_000, 5_000, 5_000]);
         ladder.reset();
-        expect(ladder.next()).toBe(1_000);
+        expect(ladder.next()).toBe(2_000);
     });
 
     it(`a run that stayed up past stableMs earns the floor back; a short one keeps climbing`, () => {
-        const ladder = createBackoff({ floorMs: 1_000, capMs: 30_000, stableMs: 60_000 });
-        expect([ladder.next(100), ladder.next(100), ladder.next(100)]).toEqual([1_000, 2_000, 4_000]);
-        expect(ladder.next(60_000)).toBe(1_000);
-        expect(ladder.next(59_999)).toBe(2_000);
-        expect(ladder.next()).toBe(4_000);
+        const ladder = createBackoff({ floorMs: 1_000, capMs: 30_000, stableMs: 60_000, random: () => 1 });
+        expect([ladder.next(100), ladder.next(100), ladder.next(100)]).toEqual([2_000, 4_000, 8_000]);
+        expect(ladder.next(60_000)).toBe(2_000);
+        expect(ladder.next(59_999)).toBe(4_000);
+        expect(ladder.next()).toBe(8_000);
+    });
+
+    // Every client of a restarted daemon drops on the same tick; a ladder nobody gave a `random` must still spread them.
+    it(`jitters by default, drawing from Math.random`, () => {
+        const draw = jest.spyOn(Math, `random`).mockReturnValue(0.25);
+        try {
+            const ladder = createBackoff({ floorMs: 1_000, capMs: 30_000 });
+            expect([ladder.next(), ladder.next()]).toEqual([1_250, 1_750]);
+            expect(draw).toHaveBeenCalledTimes(2);
+        } finally {
+            draw.mockRestore();
+        }
     });
 
     // random()=1 lands on the next rung, random()=0 on the floor: full jitter, not a fixed schedule.

@@ -1,4 +1,4 @@
-import { type AgentSessionState, parseAgentSessions, reapableAgentSessionNames, type TerminalPolicy } from "./reaper.js";
+import { type AgentSessionState, parseAgentSessions, reapableAgentSessionNames, type TerminalPolicy, tmpSweepAgeOf } from "./reaper.js";
 
 /* The terminal half of the reaper's policy: which agent sessions go, decided purely from what tmux lists and the owner stop clock. */
 
@@ -77,4 +77,18 @@ test("an empty owner field parses as unowned, and a blank activity stamp reads a
 
 test("no tmux server (empty output) yields nothing", () => {
     expect(parseAgentSessions("", NOW)).toEqual([]);
+});
+
+// bin/offload-run's scratch leaked whenever a run was killed: nothing swept it.
+test("an offloaded command's scratch in /tmp ages out after a day, whichever side of the run left it", () => {
+    for (const entry of ["offload-snapshot-a1B2c3", "offload-patch-a1B2c3", "offload-a1B2c3"]) {
+        expect(tmpSweepAgeOf(entry)).toBe(24 * 60 * MINUTE);
+    }
+});
+
+test("the /tmp sweep keeps its own ages, and touches no name it does not know", () => {
+    expect(tmpSweepAgeOf("intentic-run-x")).toBe(24 * 60 * MINUTE);
+    expect(tmpSweepAgeOf("intentic-land-x")).toBe(6 * 60 * MINUTE);
+    expect(tmpSweepAgeOf("tsx-0")).toBeUndefined();
+    expect(tmpSweepAgeOf("my-offload-x")).toBeUndefined();
 });

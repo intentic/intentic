@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileS
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { freePort, pathExists, pathPresence, queueOnFile, writeFileAtomic } from "./fs.js";
+import { freePort, pathExists, pathPresence, queueOnFile, writeFileAtomic, writeFileAtomicSync } from "./fs.js";
 
 const dir = (): string => mkdtempSync(join(tmpdir(), "fs-"));
 
@@ -95,6 +95,37 @@ describe("writeFileAtomic", () => {
 
             expect(statSync(path).mode & 0o777).toBe(0o640);
         });
+    });
+});
+
+describe("writeFileAtomicSync", () => {
+    it("replaces the file whole and leaves no staging file beside it", () => {
+        const at = dir();
+        const path = join(at, "daemon-exit.json");
+        writeFileSync(path, `{"state":"running"}`);
+
+        writeFileAtomicSync(path, `{"state":"exited"}`);
+
+        expect(readFileSync(path, "utf8")).toBe(`{"state":"exited"}`);
+        expect(readdirSync(at)).toEqual(["daemon-exit.json"]);
+    });
+
+    // A missing directory is the caller's news (a volume not mounted), never quietly made.
+    it("makes no directory it was not given, and leaves nothing behind when it cannot write", () => {
+        const at = dir();
+
+        expect(() => writeFileAtomicSync(join(at, "absent", "boot-failure.json"), "{}")).toThrow(/ENOENT/);
+
+        expect(readdirSync(at)).toEqual([]);
+    });
+
+    it("removes its staging file when the rename fails, and says why", () => {
+        const at = dir();
+        mkdirSync(join(at, "taken", "inside"), { recursive: true });
+
+        expect(() => writeFileAtomicSync(join(at, "taken"), "text")).toThrow(/EISDIR|ENOTEMPTY|EEXIST|EPERM/);
+
+        expect(readdirSync(at)).toEqual(["taken"]);
     });
 });
 

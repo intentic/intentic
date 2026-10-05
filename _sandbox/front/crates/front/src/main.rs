@@ -95,6 +95,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
 
     let restarts = Arc::new(Restarts::default());
     let vitals = Arc::new(Vitals::new(link, restarts.clone()));
+    let stuck = vitals.stuck();
     let pinging = vitals.clone();
     tokio::spawn(async move { pinging.keep_pinging().await });
 
@@ -198,7 +199,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
             (NODE_SOCKET_ENV.into(), http.into_os_string()),
         ],
     };
-    let code = supervise::supervise(command, node_pid, stopping, &restarts).await;
+    let code = supervise::supervise(command, node_pid, stopping, stuck, &restarts).await;
     tunnel.lock().await.shut().await;
     code
 }

@@ -1,3 +1,4 @@
+import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { access, chmod, mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
@@ -68,6 +69,13 @@ const renameOver = async (from: string, to: string): Promise<void> => {
 // Per write, not per process: two writes of one path in flight at once must not share a staging file.
 let writes = 0;
 
+// Beside the target, so the rename stays on one filesystem; the leading dot keeps a watcher's path table from
+// prefix-matching the target.
+const stagingOf = (path: string): string => {
+    writes += 1;
+    return join(dirname(path), `.${basename(path)}.${process.pid}.${writes}.tmp`);
+};
+
 // The bytes on the disk before the rename publishes them, and the rename itself flushed with its directory: for a file
 // whose loss locks someone out or loses the only way back (an owner file, a conversion journal), where a power cut
 // right after an ordinary write can leave a name pointing at nothing. A directory cannot be opened for this on Windows,
@@ -105,9 +113,7 @@ export interface WriteOptions {
 
 // A reader sees the old file or the new one whole. `mode` is exact, the umask not applied; without one, the umask decides.
 export const writeFileAtomic = async (path: string, content: string | Uint8Array, mode?: number, options: WriteOptions = {}): Promise<void> => {
-    writes += 1;
-    // The leading dot keeps a watcher's path table from prefix-matching the target.
-    const staging = join(dirname(path), `.${basename(path)}.${process.pid}.${writes}.tmp`);
+    const staging = stagingOf(path);
     await mkdir(dirname(path), { recursive: true });
     try {
         if (options.durable === true) {
@@ -125,6 +131,20 @@ export const writeFileAtomic = async (path: string, content: string | Uint8Array
     } finally {
         // Already gone after the rename; after a failure, a partial file no later write would ever reuse.
         await rm(staging, { force: true });
+    }
+};
+
+// writeFileAtomic for a write that must land before the process exits (an exit hook, a failure recorded on the way
+// out), where nothing can be awaited. Into a directory that already exists: a caller for whom a missing one means
+// something (a volume not mounted) learns it from the throw instead of being handed a new one. It neither flushes to
+// the disk nor waits out Windows' brief refusal of a rename: both take time such a caller does not have.
+export const writeFileAtomicSync = (path: string, content: string | Uint8Array): void => {
+    const staging = stagingOf(path);
+    try {
+        writeFileSync(staging, content);
+        renameSync(staging, path);
+    } finally {
+        rmSync(staging, { force: true });
     }
 };
 

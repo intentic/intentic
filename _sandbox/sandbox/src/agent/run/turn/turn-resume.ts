@@ -18,6 +18,7 @@ import {
     withResumeNote,
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
+import { SingleFlight } from "@intentic/base/async";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
 import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
@@ -327,7 +328,7 @@ export const startConversationTurn = async (
 export interface TurnResumeScheduler {
     readonly start: () => void;
     readonly stop: () => void;
-    // One poll pass; `start` runs it on an interval. Exposed for tests.
+    // One poll pass; `start` runs it on an interval. A call while a pass still runs joins that pass. Exposed for tests.
     readonly tick: (now?: number) => Promise<void>;
 }
 
@@ -552,18 +553,16 @@ const letGo = async (services: Services, { conversationId, booking }: Booked, no
 
 // A person's scheduled sends whose time has come (turn-admission.ts, bookingFor): the hold is let go and what waits goes
 // out as the ordinary turn it would have been. Should the allowance still be spent, that turn is refused like any other,
-// and the conversation's limit answer (which the composer arms to resend) takes it from there. `releasing` keeps a pass
-// that overlaps one still waiting on a version commit from letting the same send go twice.
-const releaseBooked = async (services: Services, now: number, releasing: Set<string>): Promise<void> => {
+// and the conversation's limit answer (which the composer arms to resend) takes it from there.
+const releaseBooked = async (services: Services, now: number): Promise<void> => {
     for (const booked of services.conversations.booked()) {
-        if (releasing.has(booked.conversationId) || !bookingDue(services, booked.booking, now)) {
+        if (!bookingDue(services, booked.booking, now)) {
             continue;
         }
-        releasing.add(booked.conversationId);
         try {
             await letGo(services, booked, now);
-        } finally {
-            releasing.delete(booked.conversationId);
+        } catch (error) {
+            services.logger.error({ err: error, conversationId: booked.conversationId }, "resume pass: a scheduled send could not be let go, the pass goes on to the next");
         }
     }
 };
@@ -577,18 +576,27 @@ export const nextBookedSendAt = (services: Pick<Services, "conversations">): num
 // One pass over every held turn, oldest first; snapshotted, since every rung stamps or drops the records it walks.
 export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
-    const releasing = new Set<string>();
+    // One pass at a time: an interval that comes round while the last pass still runs joins it instead of walking the
+    // same records underneath it. A rung reads a policy before it stamps its record, and a second pass walking a stale
+    // snapshot could fire the same hold twice; a send let go waits on a version commit, and must not be let go again.
+    const passes = new SingleFlight<"pass", void>();
 
-    const tick = async (now: number = Date.now()): Promise<void> => {
+    const pass = async (now: number): Promise<void> => {
         for (const { conversationId, record } of services.conversations.stranded()) {
-            await runRung(services, conversationId, record, now);
-            // After the rung, so a resend it just fired goes first and hears them as it runs.
-            if (wakesReopened(services, conversationId, record, now)) {
-                await services.turns.drain(conversationId);
+            // Per conversation, so one record that throws leaves the rest of the pass to run.
+            try {
+                await runRung(services, conversationId, record, now);
+                // After the rung, so a resend it just fired goes first and hears them as it runs.
+                if (wakesReopened(services, conversationId, record, now)) {
+                    await services.turns.drain(conversationId);
+                }
+            } catch (error) {
+                services.logger.error({ err: error, conversationId, reason: record.reason }, "resume pass: a held turn could not be resumed, the pass goes on to the next");
             }
         }
-        await releaseBooked(services, now, releasing);
+        await releaseBooked(services, now);
     };
+    const tick = (now: number = Date.now()): Promise<void> => passes.run("pass", () => pass(now));
 
     return {
         tick,

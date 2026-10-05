@@ -8,7 +8,8 @@ import { withAgentStatus } from "./turnClient";
 
 // What a run's entries mean to the conversation beyond its rows, which the transcript has already drawn: the session
 // the turn minted, the worktree it runs in, its live posture and model, the terminal and browser it drives, and how it
-// failed. Every fact is a state statement, not an increment, so a replayed one applies again harmlessly.
+// failed. Every fact is a state statement, not an increment, so a replayed one applies again harmlessly, except where
+// it is a reading of something outside the turn (`account_usage`), whose age a replay must not hide.
 
 // Chats already told the sandbox can't isolate their turns; said once per chat, ever.
 const warnedUnenforced = new WeakSet<Conversation>();
@@ -44,7 +45,13 @@ const surfaceSession = (conversation: Conversation, session: string): void => {
 
 // Each fact kind's consequence, one entry per kind of the contract's union, so a kind added there is a compile error
 // here until it is given one.
-const FACTS: { readonly [K in TurnFact["kind"]]: (conversation: Conversation, fact: Extract<TurnFact, { kind: K }>, turn: TurnContext) => void } = {
+type FactConsequence<K extends TurnFact["kind"]> = (
+    conversation: Conversation,
+    fact: Extract<TurnFact, { kind: K }>,
+    turn: TurnContext,
+    replay: boolean,
+) => void;
+const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
     // Account comes off the fact when the daemon named one, else falls back to what this turn asked for. A session other
     // than the one held is a new segment, whoever decided it (the daemon's routing): the terminal and browser the old one
     // drove are not this one's.
@@ -83,10 +90,13 @@ const FACTS: { readonly [K in TurnFact["kind"]]: (conversation: Conversation, fa
     },
     // The turn's cost lives on the bubble it ended in; nothing to keep here.
     usage: () => undefined,
-    // Account-wide headroom, keyed by the serving account and stamped with read time so newest-wins.
-    account_usage: (conversation, fact) => {
-        if (fact.account !== undefined) {
-            setAccountUsage(conversation.selection.provider.value, fact.account, { windows: [...fact.windows], measuredAt: Date.now() });
+    // Account-wide headroom, keyed by the serving account and stamped with read time so newest-wins. A replayed one
+    // (every attach replays the turn's facts) was read some time since the turn began, not now: stamped with the turn's
+    // start, it fills a gap for a window joining late but never beats a reading taken since.
+    account_usage: (conversation, fact, _turn, replay) => {
+        const measuredAt = replay ? conversation.turn.turnStartedAt.value : Date.now();
+        if (fact.account !== undefined && measuredAt !== undefined) {
+            setAccountUsage(conversation.selection.provider.value, fact.account, { windows: [...fact.windows], measuredAt });
         }
     },
     // The agent started running Bash in its tmux terminal; remembered so Bash cards can offer to watch it.
@@ -116,15 +126,16 @@ const FACTS: { readonly [K in TurnFact["kind"]]: (conversation: Conversation, fa
     rate_limit_info: () => undefined,
 };
 
-const applyFact = <K extends TurnFact["kind"]>(conversation: Conversation, fact: Extract<TurnFact, { kind: K }>, turn: TurnContext): void =>
-    (FACTS[fact.kind as K] as (conversation: Conversation, fact: Extract<TurnFact, { kind: K }>, turn: TurnContext) => void)(
-        conversation,
-        fact,
-        turn,
-    );
+const applyFact = <K extends TurnFact["kind"]>(
+    conversation: Conversation,
+    fact: Extract<TurnFact, { kind: K }>,
+    turn: TurnContext,
+    replay: boolean,
+): void => (FACTS[fact.kind as K] as FactConsequence<K>)(conversation, fact, turn, replay);
 
 // One entry's consequences beyond its rows, in arrival order: `providerRetry` clears on anything, sets on its fact.
-export const applyTurnEntry = (conversation: Conversation, entry: AttachEntry, turn: TurnContext): void => {
+// `replay` marks a fact an attach is repeating from earlier in the turn (turnStream.ts).
+export const applyTurnEntry = (conversation: Conversation, entry: AttachEntry, turn: TurnContext, replay: boolean): void => {
     // Any other entry means the wait a provider_retry described is over, whatever happens next.
     if (entry.kind !== `fact` || entry.fact.kind !== `provider_retry`) {
         conversation.turn.providerRetry.value = undefined;
@@ -133,5 +144,5 @@ export const applyTurnEntry = (conversation: Conversation, entry: AttachEntry, t
         applyPatchConsequence(conversation, entry.patch);
         return;
     }
-    applyFact(conversation, entry.fact, turn);
+    applyFact(conversation, entry.fact, turn, replay);
 };

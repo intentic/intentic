@@ -44,7 +44,15 @@ jest.mock("./main-fixer.js", () => ({
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
 // Repair off unless a test says otherwise: with it on, main's failures are its fix agent's and reach no automation (the
 // test that says so below), and these tests are about what an automation hears.
-const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}, autoRepair = false) => {
+// The failed-jobs enrichment call is the only vendor fetch the receiver makes; `fetchFn` answers it, at once by default.
+const failedLint: FetchFn = (async () => new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }), { status: 200 })) as FetchFn;
+
+const harness = async (
+    automationId: string,
+    narrow: { eventType?: string; branch?: string; channelId?: string } = {},
+    autoRepair = false,
+    fetchFn: FetchFn = failedLint,
+) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -76,9 +84,6 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         prompts.push(input.prompt);
         yield { kind: "done" } as never;
     };
-    // The failed-jobs enrichment call is the only vendor fetch the receiver makes.
-    const fetchFn: FetchFn = (async () =>
-        new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }), { status: 200 })) as FetchFn;
     const app = new Hono();
     app.post("/ci/webhook/:host", createCiWebhookRoute(drivenBy(services, wake), fetchFn));
     return { app, services, prompts, root };
@@ -129,7 +134,7 @@ test("a delivery announces the ci domain, so an open board re-reads without wait
     const { app, services } = await harness("wh-push");
     published.length = 0;
     expect((await deliver(app, await services.ciStore.secret(), workflowRun("success"))).status).toBe(200);
-    expect(published).toContain("ci");
+    await waitFor(() => expect(published).toContain("ci"), SETTLES);
 });
 
 test("a failed run freshens the cache with failed jobs and wakes the ci automation", async () => {
@@ -138,9 +143,9 @@ test("a failed run freshens the cache with failed jobs and wakes the ci automati
     services.ciRuns.replace([]);
     const response = await deliver(app, await services.ciStore.secret(), workflowRun("failure"));
     expect(response.status).toBe(200);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(services.ciRuns.sweep()).toMatchObject([{ repo: "web", runId: 7, status: "failed", failedJobs: ["lint"] }]);
     expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed");
-    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_failed");
     expect(prompts[0]).toContain(`"lint"`);
     expect(prompts[0]).toContain(`"channelId":"web"`);
@@ -151,8 +156,8 @@ test("a success after a failure dispatches pipeline_succeeded AND pipeline_fixed
     await services.ciStore.recordConclusion("web", "main", "failed", 1);
     const response = await deliver(app, await services.ciStore.secret(), workflowRun("success"));
     expect(response.status).toBe(200);
-    expect(await services.ciStore.lastConclusion("web", "main")).toBe("success");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(await services.ciStore.lastConclusion("web", "main")).toBe("success");
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("pipeline_fixed");
 });
@@ -174,12 +179,52 @@ test("a failure after a recorded success dispatches pipeline_failed AND pipeline
     expect(prompts[1]).not.toContain("pipeline_broken");
 });
 
+// GitHub calls a delivery failed that takes ten seconds to answer: a forge slow to list the failed jobs must not be.
+test("a finished run is answered before its failed jobs are read, and lands once they are", async () => {
+    const { promise: listed, resolve: list } = Promise.withResolvers<void>();
+    // SAFETY: the receiver calls its transport with (url, init) only, which this answers as the default one does.
+    const slow: FetchFn = (async (...args: Parameters<FetchFn>) => {
+        await listed;
+        return failedLint(...args);
+    }) as FetchFn;
+    const { app, services, prompts } = await harness("wh-slow", {}, false, slow);
+    services.ciRuns.replace([]);
+    expect(await (await deliver(app, await services.ciStore.secret(), workflowRun("failure"))).json()).toEqual({ ok: true });
+    expect(services.ciRuns.sweep()).toEqual([]);
+    expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();
+    list();
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(services.ciRuns.sweep()).toMatchObject([{ repo: "web", runId: 7, status: "failed", failedJobs: ["lint"] }]);
+    expect(prompts[0]).toContain("pipeline_failed");
+    expect(prompts[0]).toContain(`"lint"`);
+});
+
+// Answered at once, two runs of one repository still go in the order they came: a pass that overtook the failure
+// before it would read that failure as the branch's last word.
+test("a run delivered while the one before it is still being read waits for it", async () => {
+    const { promise: listed, resolve: list } = Promise.withResolvers<void>();
+    // SAFETY: the receiver calls its transport with (url, init) only, which this answers as the default one does.
+    const slow: FetchFn = (async (...args: Parameters<FetchFn>) => {
+        await listed;
+        return failedLint(...args);
+    }) as FetchFn;
+    const { app, services } = await harness("wh-order", {}, false, slow);
+    const recorded = jest.spyOn(services.ciStore, "recordConclusion");
+    const secret = await services.ciStore.secret();
+    expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
+    const pass = workflowRun("success");
+    expect((await deliver(app, secret, { ...pass, workflow_run: { ...pass.workflow_run, id: 8 } })).status).toBe(200);
+    list();
+    await waitFor(() => expect(recorded.mock.calls.map(([, , status]) => status)).toEqual(["failed", "success"]), SETTLES);
+    expect(await services.ciStore.lastConclusion("web", "main")).toBe("success");
+});
+
 // A workspace where every agent pushes its own branch is exactly where an unnarrowed CI trigger is useless.
 test("a branch-narrowed trigger ignores a run on another branch", async () => {
     const { app, services, prompts } = await harness("wh-branch", { branch: "release" });
     expect((await deliver(app, await services.ciStore.secret(), workflowRun("failure"))).status).toBe(200);
     // The conclusion is still recorded: the memory is about the repo's branches, not about who was listening.
-    expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed");
+    await waitFor(async () => expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed"), SETTLES);
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(prompts).toEqual([]);
 });
@@ -251,8 +296,8 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         body: JSON.stringify(payload),
     });
     expect(accepted.status).toBe(200);
-    expect(await services.ciStore.lastConclusion("app", "main")).toBe("success");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(await services.ciStore.lastConclusion("app", "main")).toBe("success");
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("gitlab.example.com/group/app/-/pipelines/42");
 });

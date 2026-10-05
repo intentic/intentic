@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checks that github.sh's helpers answer a question with text or nothing (exit 0), and fail loudly (nonzero) on a
-// write. Drills each helper through bash against a curl stub that refuses, under the same `set -euo pipefail` its
+// write, and on gh_latest_tag's question whenever the refusal is not a 404. Drills each helper through bash against a curl stub that refuses, under the same `set -euo pipefail` its
 // callers use, so a masked failure is caught here rather than on a tag nobody can take back.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -19,6 +19,8 @@ const CASES = [
     { name: "asset-by-name-404", about: "gh_asset_by_name when the asset list cannot be read", status: 0, answer: "" },
     { name: "release-id-ok", about: "gh_release_id reading an id back off a real body", status: 0, answer: "42" },
     { name: "latest-tag-ok", about: "gh_latest_tag reading a tag back off a real body", status: 0, answer: "v1.2.3" },
+    // The rollback withdraws the release this names, so "GitHub did not answer" must never read as "none is latest".
+    { name: "latest-tag-unanswered", about: "gh_latest_tag when GitHub answers 503", status: 22, answer: "" },
     // A row GitHub has not marked `uploaded` is a refused upload holding the name, not an attached asset: naming it
     // here is what makes the re-run ship it again instead of skipping it.
     { name: "asset-names-finished-only", about: "gh_asset_names leaving out a half-written asset", status: 0, answer: "ic-linux-amd64" },
@@ -36,10 +38,15 @@ export GH_API_TOKEN=stub
 # only so a helper that started retrying anyway fails this check in a second rather than in a minute.
 export GH_UPLOAD_DELAY=0
 
-# The stub curl: MODE=refuse exits the way --fail does on a 4xx (22), MODE=answer prints $BODY. It replaces the
-# binary for every gh_api call, which is the whole surface these helpers have.
+# The stub curl: MODE=refuse exits the way --fail does on an HTTP verdict (22), naming the status on stderr the way
+# --show-error does when REFUSAL is set; MODE=answer prints $BODY. It replaces the binary for every gh_api call,
+# which is the whole surface these helpers have.
+REFUSAL=
 curl() {
-    if [ "$MODE" = refuse ]; then return 22; fi
+    if [ "$MODE" = refuse ]; then
+        if [ -n "$REFUSAL" ]; then echo "curl: (22) The requested URL returned error: $REFUSAL" >&2; fi
+        return 22
+    fi
     printf '%s' "$BODY"
 }
 
@@ -52,7 +59,8 @@ run() {
 }
 
 MODE=refuse run release-id-404   gh_release_id  intentic/intentic v1.246.0
-MODE=refuse run latest-tag-404   gh_latest_tag  intentic/intentic
+MODE=refuse REFUSAL=404 run latest-tag-404 gh_latest_tag intentic/intentic
+MODE=refuse REFUSAL=503 run latest-tag-unanswered gh_latest_tag intentic/intentic
 MODE=refuse run asset-names-404  gh_asset_names intentic/intentic 42
 MODE=refuse run asset-by-name-404 gh_asset_by_name intentic/intentic 42 ic-linux-amd64
 MODE=answer BODY='{"id":42}'          run release-id-ok gh_release_id intentic/intentic v1.2.3

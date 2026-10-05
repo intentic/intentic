@@ -50,6 +50,8 @@ interface Ready {
     readonly phase: BootPhase;
     readonly runnerEnv: RunnerModeEnv | undefined;
     readonly prewarm: boolean;
+    // The one deliberate stop, registered on SIGTERM and SIGINT as soon as there is anything to tear down.
+    readonly stop: () => void;
 }
 
 // Everything up to and including the gate opening. Throws whatever stops the boot short of it.
@@ -74,6 +76,24 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Every subsystem registers its own teardown at creation; nothing here enumerates what to stop.
     const shutdown = new DisposableStore();
     attempt.shutdown = shutdown;
+    // Nothing to enumerate: every subsystem registered its own teardown. Keeps going past a throwing member and reports
+    // failures together. `finally`, since the exit must happen whatever the teardown did.
+    const stop = (): void => {
+        logger.info("shutting down intentic sandbox daemon…");
+        try {
+            shutdown.dispose();
+        } catch (error) {
+            logger.error({ err: error }, "shutdown: one or more subsystems failed to stop");
+        } finally {
+            // Fires the exit hook in daemon-env.ts, stamping the marker exited so the next boot reads a deliberate stop.
+            process.exit(0);
+        }
+    };
+    // Registered while boot is still under way, not once it is over: a stop that arrives mid-boot (the host's, the
+    // front closing its socket, idle-stop) would otherwise take Node's default exit, tearing nothing down and leaving
+    // the marker unstamped, so the next boot would report a kill nobody made.
+    process.on("SIGTERM", stop);
+    process.on("SIGINT", stop);
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
@@ -152,12 +172,12 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     wireDependencyCoordinator(services);
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     services.boot.finish();
-    return { phase, runnerEnv, prewarm };
+    return { phase, runnerEnv, prewarm, stop };
 };
 
 // Everything past the gate: none of it is a boot failure, and a throw here is only logged.
-const pastGate = async ({ phase, runnerEnv, prewarm }: Ready, fault: BootFault | undefined): Promise<void> => {
-    const { config, logger, role, services, shutdown } = phase;
+const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootFault | undefined): Promise<void> => {
+    const { config, logger, role, services } = phase;
     // This boot got all the way, so the last one's failure is no longer the news: the host reads the record's absence.
     if (role.container) {
         void clearBootFailure(config.historyRoot, logger);
@@ -188,24 +208,8 @@ const pastGate = async ({ phase, runnerEnv, prewarm }: Ready, fault: BootFault |
     startVersionWatches(phase);
     startChangeReactions(phase);
 
-    // Nothing to enumerate: every subsystem registered its own teardown. Keeps going past a throwing member and reports
-    // failures together. `finally`, since the exit must happen whatever the teardown did.
-    const stop = (): void => {
-        logger.info("shutting down intentic sandbox daemon…");
-        try {
-            shutdown.dispose();
-        } catch (error) {
-            logger.error({ err: error }, "shutdown: one or more subsystems failed to stop");
-        } finally {
-            // Fires the exit hook in daemon-env.ts, stamping the marker exited so the next boot reads a deliberate stop.
-            process.exit(0);
-        }
-    };
-    process.on("SIGTERM", stop);
-    process.on("SIGINT", stop);
-
     // A pool machine's boot ends here: the volume is prepared and the starter running, so it warms once, stamps the
-    // volume, and takes the same exit SIGTERM would. Placed after every handler above, so the exit is the ordinary one.
+    // volume, and takes the same exit SIGTERM would.
     if (prewarm) {
         void finishPrewarm({
             historyRoot: config.historyRoot,

@@ -508,6 +508,21 @@ describe("watchers", () => {
             expect(await harness.journal.list()).toHaveLength(0);
         });
 
+        // The other side of at-least-once: the wake landed, and the daemon died before its entry dropped. It is said
+        // again under the id it was first said under, which admission answers with the first delivery's receipt.
+        it("says a wake delivered again after a restart under the id it was first delivered under", async () => {
+            const journal = memoryWatchJournal();
+            harness.stop();
+            harness = harnessOf({ journal: { ...journal, drop: async () => undefined } });
+            const outcome = await armWatcher(specOf({ timeoutSeconds: 600 }));
+            harness.check = { exitCode: 0, output: "conclusion: success" };
+            await advanceTimersByTimeAsync(10_000);
+            const first = harness.doors.started[0]?.messageId;
+            expect(first).toMatch(new RegExp(`^${outcome.kind === "armed" ? outcome.id : "unarmed"}-\\d+-met$`));
+            await restart();
+            expect(harness.doors.started.map((wake) => wake.messageId)).toEqual([first]);
+        });
+
         // The overwhelmingly common boot: nothing was armed, so the pass reads an empty journal and does nothing.
         it("does nothing when nothing was armed", async () => {
             await restart();

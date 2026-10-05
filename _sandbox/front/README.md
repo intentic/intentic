@@ -15,8 +15,14 @@ flowchart LR
 - Relays with the edge's own code: the [relay](../../_shared/relay) crate (one exchange over any stream, one reading
   of a host, one list of hop-by-hop headers) and the tunnel crate are built by both.
 - Runs as the container's main process. `docker-entrypoint.sh` execs `intentic-front -- node … main.js`, and the
-  front starts Node as its child. A crash restarts Node with backoff while every listener and connection stays open;
-  a clean exit or a refused config ends the front, and with it the container.
+  front starts Node as its child, in a process group of its own. A crash restarts Node with backoff while every
+  listener and connection stays open, once the group is ended too: SIGTERM, then SIGKILL a second later, so a pooled
+  agent, the translator or a turn's runtime the dead daemon started never runs on beside its replacement. Whatever is
+  meant to outlive a restart starts in a group of its own (services, X displays, tmux panes). A Node that leaves a
+  `ping` unanswered for 5 minutes has an event loop that is not turning at all, since a busy one answers within
+  seconds: the front SIGKILLs it (its SIGTERM handler would need that loop) and restarts it as after a crash. A clean
+  exit or a refused config ends the front, and with it the container. `docker run` gives the container a 30 s
+  `--stop-timeout`, past the 25 s the front gives Node to stop.
 - Daemon replies expose Resource Timing to the origin their CORS response already permits, so the editor can read the
   negotiated HTTP protocol and reserve browser connections when multiplexing is unavailable.
 - `route.rs` picks the target from the listener a request arrived on and the leftmost DNS label of its Host. On the
@@ -66,7 +72,7 @@ flowchart LR
 ## Key files
 
 - [crates/front/src/route.rs](crates/front/src/route.rs) — which side answers a request.
-- [crates/front/src/supervise.rs](crates/front/src/supervise.rs) — runs Node, restarts it, reaps orphans as PID 1.
+- [crates/front/src/supervise.rs](crates/front/src/supervise.rs) — runs Node, restarts it and ends what it left, reaps orphans as PID 1.
 - [crates/front/src/tunnel.rs](crates/front/src/tunnel.rs) — the ingress tunnel: grant, then a stream per request.
 - [crates/front/src/term/mod.rs](crates/front/src/term/mod.rs) — a terminal socket from Node's plan to its close.
 - [crates/front-wire/src/lib.rs](crates/front-wire/src/lib.rs) — the control socket's frames, their only definition.

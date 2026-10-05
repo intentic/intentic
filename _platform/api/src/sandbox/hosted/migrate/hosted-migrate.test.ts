@@ -459,8 +459,10 @@ describe(`what a migration refuses before spending anything`, () => {
 });
 
 describe(`the sweep over runs that stopped`, () => {
-    it(`frees the machine and collects what a dead run had built`, async () => {
-        const fly = stubFly();
+    const SWEPT_AT = new Date(`2026-09-20T10:00:00Z`);
+
+    // A move that died in `verifying` an hour and more ago, holding the machine's lock and naming the pair it built.
+    const deadRun = () => {
         const stuck = {
             id: `mig9`,
             state: `verifying`,
@@ -478,8 +480,14 @@ describe(`the sweep over runs that stopped`, () => {
             },
             hostedMachine: { update: async ({ data }: { data: Record<string, unknown> }) => Object.assign(state, data) },
         } as unknown as PrismaClient;
+        return { stuck, state, prisma };
+    };
 
-        expect(await sweepHostedMigrations(prisma, config(), logger, new Date(`2026-09-20T10:00:00Z`))).toBe(1);
+    it(`frees the machine and collects what a dead run had built`, async () => {
+        const fly = stubFly();
+        const { stuck, state, prisma } = deadRun();
+
+        expect(await sweepHostedMigrations(prisma, config(), logger, SWEPT_AT)).toBe(1);
         // Both halves of the half-built pair go: they sit inside a live app, which the orphan reaper never touches.
         expect(fly.called(`DELETE`, `/machines/m2`)).toHaveLength(1);
         expect(fly.called(`DELETE`, `/volumes/vol_2`)).toHaveLength(1);
@@ -487,9 +495,33 @@ describe(`the sweep over runs that stopped`, () => {
         expect(stuck).toMatchObject({ state: `failed` });
     });
 
+    it(`keeps the run open while Fly will not take away what it built, and closes it on the pass that does`, async () => {
+        const fly = stubFly();
+        const now = new Date().toISOString();
+        fly.machines.set(`m2`, { id: `m2`, app: `intentic-sbx-abc`, region: `iad`, state: `started`, config: { image: RUNNING_TAG }, createdAt: now, updatedAt: now });
+        fly.volumes.set(`vol_2`, { id: `vol_2`, app: `intentic-sbx-abc`, region: `iad`, sizeGb: STANDARD.volumeGb, state: `created`, usedBytes: 0 });
+        const { stuck, state, prisma } = deadRun();
+
+        fly.fail({ status: 503 });
+        expect(await sweepHostedMigrations(prisma, config(), logger, SWEPT_AT)).toBe(1);
+        // Closed now, the row would be forgotten with a machine and a disk still billing that nothing else knows of.
+        expect(stuck).toMatchObject({ state: `verifying` });
+        expect(stuck).not.toHaveProperty(`finishedAt`);
+        expect(state[`migratingId`]).toBe(`mig9`);
+        expect(fly.machines.has(`m2`)).toBe(true);
+        expect(fly.volumes.has(`vol_2`)).toBe(true);
+
+        fly.fail({});
+        expect(await sweepHostedMigrations(prisma, config(), logger, SWEPT_AT)).toBe(1);
+        expect(fly.machines.has(`m2`)).toBe(false);
+        expect(fly.volumes.has(`vol_2`)).toBe(false);
+        expect(state[`migratingId`]).toBeNull();
+        expect(stuck).toMatchObject({ state: `failed` });
+    });
+
     it(`leaves a run that is merely young alone`, async () => {
         const prisma = { hostedMigration: { findMany: async () => [] } } as unknown as PrismaClient;
-        expect(await sweepHostedMigrations(prisma, config(), logger, new Date(`2026-09-20T10:00:00Z`))).toBe(0);
+        expect(await sweepHostedMigrations(prisma, config(), logger, SWEPT_AT)).toBe(0);
     });
 });
 

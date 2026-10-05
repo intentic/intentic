@@ -8,6 +8,7 @@ import {
     type RequestPermissionResponse,
     type SessionNotification,
 } from "@agentclientprotocol/sdk";
+import { withTimeout } from "@intentic/base/async";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
@@ -22,20 +23,6 @@ import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
 // A dead connection respawns on next acquire; its sessions die with it and recover via session/load.
 const INIT_TIMEOUT_MS = 15_000;
 const IDLE_REAP_MS = 15 * 60_000;
-
-export const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise<never>((_resolve, reject) => {
-                timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
-            }),
-        ]);
-    } finally {
-        clearTimeout(timer);
-    }
-};
 
 export interface TurnHooks {
     readonly onUpdate: (notification: SessionNotification) => void;

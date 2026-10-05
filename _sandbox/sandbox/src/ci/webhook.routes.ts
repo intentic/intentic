@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { keyedLock } from "@intentic/base/async";
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
@@ -23,7 +24,9 @@ import { ciProjects, type CiProject } from "./projects.js";
 // Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
 // route for both vendors. An unmapped project's delivery is acknowledged and dropped, not an error. Verifies the sender
 // and normalizes into a PipelineRun, or a failed job; what a finished run means is ci/events.ts, shared with the poller,
-// and a failed job goes to main's fix agent (main-fixer.ts).
+// and a failed job goes to main's fix agent (main-fixer.ts). Either is answered as soon as it is understood, and what
+// it sets going runs off the delivery's clock: GitHub calls a delivery failed that takes ten seconds to answer, and one
+// run's failed jobs read and dispatched inline took a minute.
 
 interface GithubDelivery {
     readonly action?: string;
@@ -134,9 +137,35 @@ const gitlabFailedJob = (hook: GitlabJobHook): FailedJob | undefined =>
               reason: hook.build_failure_reason,
           };
 
-export const createCiWebhookRoute =
-    (services: Services, fetchFn: FetchFn = fetch) =>
-    async (c: Context<AppEnv, "/ci/webhook/:host">): Promise<Response> => {
+// A finished run as the board and the automations hear of it: what failed in it read first, so the wake payload and
+// the view name what broke (a failure of that read degrades to names-less), then cached, announced and dispatched.
+const announceRun = async (
+    services: Services,
+    host: "github" | "gitlab",
+    project: CiProject,
+    finished: PipelineRun,
+    author: { id: string; name: string },
+    fetchFn: FetchFn,
+): Promise<void> => {
+    let run = finished;
+    if (run.status === "failed") {
+        const failedJobs = await ciClientFor(host, fetchFn)
+            .failedJobs(project, run.runId)
+            .catch(() => []);
+        run = failedJobs.length > 0 ? { ...run, failedJobs } : run;
+    }
+    services.ciRuns.upsert(run);
+    // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
+    publishRuntimeChange("ci");
+    // Main's fix agent reads the run on its own clock: `fixed` is left to settle by itself.
+    await dispatchCiRun(services, project, run, author, fetchFn);
+};
+
+export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetch) => {
+    // One repository's runs are announced in the order their deliveries arrived, each after the last has finished:
+    // whether a run broke or fixed its branch is read against the conclusion the run before it recorded.
+    const inOrder = keyedLock<string>();
+    return async (c: Context<AppEnv, "/ci/webhook/:host">): Promise<Response> => {
         const host = c.req.param("host");
         if (host !== "github" && host !== "gitlab") {
             return c.json({ error: "unknown host" }, 404);
@@ -225,19 +254,15 @@ export const createCiWebhookRoute =
         if (toRun === undefined) {
             return c.json({ ok: true, ignored: true });
         }
-
-        let run = toRun(project);
-        if (run.status === "failed") {
-            // One extra call so the wake payload and the view name what broke; a failure here degrades to names-less.
-            const failedJobs = await ciClientFor(host, fetchFn)
-                .failedJobs(project, run.runId)
-                .catch(() => []);
-            run = failedJobs.length > 0 ? { ...run, failedJobs } : run;
-        }
-        services.ciRuns.upsert(run);
-        // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
-        publishRuntimeChange("ci");
-        // Main's fix agent reads the run off the delivery's clock: `fixed` is left to settle by itself.
-        await dispatchCiRun(services, project, run, author, fetchFn);
+        // Off the delivery's clock, like a failed job.
+        const run = toRun(project);
+        void inOrder(project.repo, async () => {
+            try {
+                await announceRun(services, host, project, run, author, fetchFn);
+            } catch (error) {
+                services.logger.error({ err: error, repo: project.repo, runId: run.runId }, "ci: the finished run could not be announced");
+            }
+        });
         return c.json({ ok: true });
     };
+};

@@ -6,12 +6,15 @@
 # every release two days and caught nothing, so it is gone (ship-stable.sh). What replaces it is this: the
 # ability to put stable back where it was, deliberately, in the seconds after a bad release is noticed.
 #
-# It moves the SAME four pointers ship-stable.sh and release-images.sh move, in the reverse of the order they
-# were set — the "latest" flag FIRST, because it is the one every download link and every sandbox's update
-# check follows, and the point of a rollback is to stop serving the bad version before anything else:
-#   1. the GitHub Release's make_latest flag  (releases/latest/download/* and the update check)
-#   2. ghcr.io/intentic/sandbox:stable + :core-stable + dind-host:stable  (what `ic sandbox update` pulls)
-#   3. the git `stable` tag                   (the browsable stable source pointer)
+# It moves the SAME four pointers ship-stable.sh and release-images.sh move, in the order they set them, the
+# "latest" flag LAST. The flag is what this script reads to tell whether a rollback already happened (the guard
+# below), so it moves only once everything it vouches for has: moved first, a run that died on the images would leave
+# a re-run finding stable "already" on the version with the images and the tag still on the bad one, and exiting 0.
+# The images and the tag take seconds and every step is safe to repeat, so a run that stops anywhere is finished by
+# running it again; the bad version is served those seconds longer, which is the price:
+#   1. ghcr.io/intentic/sandbox:stable + :core-stable + dind-host:stable  (what `ic sandbox update` pulls)
+#   2. the git `stable` tag                   (the browsable stable source pointer)
+#   3. the GitHub Release's make_latest flag  (releases/latest/download/* and the update check)
 # and then tells the sandboxes still running the release it left:
 #   4. that release is WITHDRAWN on GitHub: a pre-release, so nothing offers it again, whose notes open with the
 #      line `Withdrawn: <reason>`. The sandbox daemon reads that line off the release body to tell a sandbox
@@ -47,15 +50,21 @@ if [ -z "$release_id" ]; then
   exit 1
 fi
 
-# The release being LEFT, read before anything moves: step 1 takes the flag off it, and step 4 withdraws it.
-current="$(gh_latest_tag "$REPO")"
+# The release being LEFT, read before anything moves: step 3 takes the flag off it, and step 4 withdraws it. A question
+# GitHub did not answer stops the rollback here, since read as "none was latest" it would move every pointer and
+# withdraw nothing, leaving the bad release offered to every sandbox still running it.
+if ! current="$(gh_latest_tag "$REPO")"; then
+  echo "could not ask GitHub which release ${REPO} serves as latest, so the one to withdraw is unknown; nothing has moved, re-run once the API answers" >&2
+  exit 1
+fi
+# The flag moves after the images and the tag, so a flag already on ${TAG} means they were moved before it.
 if [ "$TAG" = "$current" ]; then
   echo "stable is already ${TAG} — nothing to roll back"
   exit 0
 fi
 
 # NOT ONTO A WITHDRAWN RELEASE. Step 4 leaves every release a rollback moves off as a pre-release, and GitHub will not
-# flag a pre-release latest, so step 1 would be refused or ignored with the images and the tag still to move. Asked
+# flag a pre-release latest, so step 3 would be refused or ignored with the images and the tag already moved. Asked
 # before any pointer moves; an answer that cannot be read is no answer, and the rollback goes ahead as it always did.
 target="$(gh_api "https://api.github.com/repos/$REPO/releases/$release_id" 2>/dev/null || true)"
 if [ "$(printf '%s' "$target" | gh_field prerelease)" = "true" ]; then
@@ -83,10 +92,7 @@ EDGE_DOOR_WAIT=0 bash "$DIR/../image/require-edge-door.sh" "$door"
 
 echo "==> rolling stable back to ${TAG} (from ${current:-none})"
 
-# 1. The flag, FIRST — stop serving the bad version before anything else.
-gh_make_latest "$REPO" "$release_id"
-
-# 2. Images. promote-image-tag.sh copies the version's manifest (list or single) under the stable name without
+# 1. Images. promote-image-tag.sh copies the version's manifest (list or single) under the stable name without
 # pulling a layer — the same digests that version shipped with, through the same registry fan-out and the same
 # retry the release's own publish uses. Three manifest writes back to back is the shape GHCR throttles, and a
 # rollback refused halfway leaves the stable lane pointing at two versions at once; the retry lives in that
@@ -96,8 +102,11 @@ bash "$DIR/../image/promote-image-tag.sh" sandbox "$VERSION" stable
 bash "$DIR/../image/promote-image-tag.sh" sandbox "core-$VERSION" core-stable
 bash "$DIR/../image/promote-image-tag.sh" dind-host "$VERSION" stable
 
-# 3. The git pointer, back onto the released commit.
+# 2. The git pointer, back onto the released commit.
 gh_move_stable_tag "$TAG"
+
+# 3. The flag, last of the three: the guard above reads it, so it must not say ${TAG} before the images and the tag do.
+gh_make_latest "$REPO" "$release_id"
 
 # 4. The release it left, WITHDRAWN. Last, because it is the one step that asks something of the sandboxes running
 # that release, and by now everything they could be sent to (the flag, the images, the tag) already names ${TAG}.

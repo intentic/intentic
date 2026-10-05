@@ -790,6 +790,7 @@ async function* runTurn(
     const aborted = (): boolean => signal?.aborted === true;
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
+    const startedAt = Date.now();
     const release = holdTurn(account, isolation);
     // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
     let fingerprint: PromptFingerprint | undefined;
@@ -829,6 +830,7 @@ async function* runTurn(
             spawnedChild: spawned,
             isolation,
             experiments: plan.experiments,
+            startedAt,
         });
         performSettlement(services, settlement, { record, flush: sniffer.flush });
     }

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { sleep } from "@intentic/base/async";
 import {
     COST_BYTES,
     costBytesOf,
@@ -118,17 +119,6 @@ export const readMemoryReading = async (
     const texts = new Map(await Promise.all(READING_FILES.map(async (path) => [path, await readText(path)] as const)));
     return readingFrom((path) => texts.get(path));
 };
-
-const sleep = (ms: number, signal: AbortSignal | undefined): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(done, ms);
-        function done(): void {
-            clearTimeout(timer);
-            signal?.removeEventListener("abort", done);
-            resolve();
-        }
-        signal?.addEventListener("abort", done, { once: true });
-    });
 
 // Whether a process is still running here; one this daemon may not signal still counts as running.
 const processAlive = (pid: number): boolean => {
@@ -292,7 +282,7 @@ export const createResourceBudget = ({
         wait.onShort?.(diagnosis);
         const deadlineMs = wait.deadlineMs ?? waitDeadlineMs;
         while (judged.verdict !== "run" && now() - startedAt < deadlineMs && wait.signal?.aborted !== true) {
-            await sleep(wait.intervalMs ?? waitIntervalMs, wait.signal);
+            await sleep(wait.intervalMs ?? waitIntervalMs, { signal: wait.signal });
             taken = await reading();
             judged = decide(request, taken);
         }

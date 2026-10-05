@@ -229,6 +229,12 @@ const report = (record: WatcherRecord, outcome: WatchOutcome): string =>
         output: checkSays(record.last, record.spec.outside),
     });
 
+// The id a firing's wake is said under, the same on the daemon that fired it and on one that restored the firing from
+// the journal: a daemon that dies after the wake landed but before its entry dropped delivers it again at boot, and
+// admission meets the second delivery with the first one's receipt. The arm time is in it because a watch's id is short
+// and minted afresh by every daemon, so a later watch can carry an earlier one's.
+const wakeIdOf = (record: WatcherRecord, outcome: WatchOutcome): string => `${record.id}-${record.armedAt}-${outcome}`;
+
 // A wake continues the arming turn on its own routing, not a new one; a conversation busy with a turn that cannot take
 // it queues it, where every window sees it until it goes.
 const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): Promise<void> => {
@@ -237,6 +243,7 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: Wat
         conversationId: record.spec.conversationId,
         prompt,
         voice: "sandbox",
+        messageId: wakeIdOf(record, outcome),
         ...(record.spec.outside === undefined ? {} : { outside: record.spec.outside }),
         profile: record.spec.profile,
     });

@@ -21,7 +21,7 @@
 # exist, an asset list that could not be read and a token that cannot see the repo are all "no answer", and the
 # caller decides which of those is fatal. The ones that CHANGE something (upload, make_latest, the tag move)
 # fail loudly instead, because a write that silently did not happen is the half-published release this whole
-# directory exists to prevent.
+# directory exists to prevent. gh_latest_tag is the one question that also fails, and says why below.
 
 # One authenticated call. Extra curl arguments pass straight through, which is what lets an upload point at
 # uploads.github.com and a PATCH carry a body without a second wrapper.
@@ -70,11 +70,22 @@ gh_release_id() {
 }
 
 # The tag a repository currently serves as `latest` (the flag every download link and update check follows), or
-# empty. Same shape as gh_release_id, and for the same reason: a repository with no released version answers
-# 404 here, and that is an answer rather than a failure.
+# empty when it serves none: a repository with no released version answers 404 here, and that is an answer.
+#
+# ANY OTHER REFUSAL FAILS, with curl's words on stderr. Its caller withdraws the release this names
+# (rollback-stable.sh), so a 5xx or a token that cannot see the repo read as "none is latest" would roll stable
+# back and leave the bad release offered to every sandbox running it. The 404 is told apart on curl's own message,
+# as the upload retry below does, since curl's status is 22 for every HTTP verdict alike.
 gh_latest_tag() {
-    local body
-    body="$(gh_api "https://api.github.com/repos/$1/releases/latest" 2>/dev/null || true)"
+    local body log status=0
+    log="$(mktemp)"
+    body="$(gh_api "https://api.github.com/repos/$1/releases/latest" 2>"$log")" || status=$?
+    if [ "$status" -ne 0 ] && ! grep -q 'returned error: 404' "$log"; then
+        cat "$log" >&2
+        rm -f "$log"
+        return "$status"
+    fi
+    rm -f "$log"
     [ -n "$body" ] || return 0
     printf '%s' "$body" | gh_field tag_name
 }

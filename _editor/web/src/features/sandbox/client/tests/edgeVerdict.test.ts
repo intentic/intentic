@@ -17,6 +17,15 @@ describe(`the edge's last word`, () => {
         expect(lastEdgeVerdict(`box-2`)).toBeUndefined();
     });
 
+    // Every other box in the fleet is polled in the background through the same fetch, so the active box's verdict has
+    // to survive their answers landing after it.
+    it(`keeps each sandbox's verdict apart from what other sandboxes' responses carried`, () => {
+        noteEdgeVerdict(`box-1`, answer(`no-tunnel`));
+        noteEdgeVerdict(`box-2`, answer());
+        expect(lastEdgeVerdict(`box-1`)).toBe(`no-tunnel`);
+        expect(lastEdgeVerdict(`box-2`)).toBeUndefined();
+    });
+
     it(`refuses a verdict it never wrote`, () => {
         // A 502 from a corporate proxy or a CDN says nothing about the sandbox, and must not be read as if it did.
         noteEdgeVerdict(`box-1`, new Response(`nope`, { status: 502, headers: { [EDGE_VERDICT_HEADER]: `whatever` } }));

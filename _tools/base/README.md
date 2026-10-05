@@ -49,12 +49,12 @@ flowchart LR
 ## Key files
 
 - [src/when.ts](src/when.ts) — `parseWhen` and `evaluateWhen`, the condition language manifests carry.
-- [src/async.ts](src/async.ts) — `Delayer`, `Coalescer`, `SingleFlight`, `keyedLock`, `retry`, `pollUntil`, `createBackoff`.
+- [src/async.ts](src/async.ts) — `Delayer`, `Coalescer`, `SingleFlight`, `keyedLock`, `withTimeout`, `pollUntil`, `createBackoff`.
 - [src/lifecycle.ts](src/lifecycle.ts) — `IDisposable`, `DisposableStore` and `MutableDisposable`.
 - [src/outside-text.ts](src/outside-text.ts) — `wrapOutsideContent`, the envelope for outside text.
 - [src/held.ts](src/held.ts) — `freshness` and `held`: a change feed and a time bound for anything kept.
 - [src/fuzzy.ts](src/fuzzy.ts) — `fuzzyScore`, `rankByFuzzy` and the per-keystroke `fuzzyRanker` both quick-open ends share.
-- [src/node/fs.ts](src/node/fs.ts) — `writeFileAtomic`, `queueOnFile`, `pathExists` and `freePort`, the file primitives of every Node tier.
+- [src/node/fs.ts](src/node/fs.ts) — `writeFileAtomic` (and its synchronous twin for a write on the way out), `queueOnFile`, `pathExists` and `freePort`, the file primitives of every Node tier.
 
 ## Commands
 

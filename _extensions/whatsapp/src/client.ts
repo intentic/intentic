@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type Backoff, createBackoff, serialLock } from "@intentic/base/async";
+import { type Backoff, createBackoff, serialLock, withTimeout } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 // oxlint-disable-next-line import/no-named-as-default -- Baileys exports the factory in both forms.
 import makeWASocket, {
@@ -165,21 +165,6 @@ const withoutThumbnail = (key: string, value: Parameters<typeof BufferJSON.repla
 const serialize = (raw: WaRawMessage, own: boolean): string => JSON.stringify(raw, own ? BufferJSON.replacer : withoutThumbnail);
 // SAFETY: the store only ever holds what serialize() wrote, and serialize() only ever receives baileys' WAMessages.
 const deserialize = (text: string): WAMessage => JSON.parse(text, BufferJSON.reviver) as WAMessage;
-
-// Rejects with `message` when `promise` has not settled within `ms`; the promise itself keeps running.
-const withTimeout = async <T>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
-    let timer: NodeJS.Timeout | undefined;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise<never>((_resolve, reject) => {
-                timer = setTimeout(() => reject(new Error(message)), ms);
-            }),
-        ]);
-    } finally {
-        clearTimeout(timer);
-    }
-};
 
 // The WhatsApp Web version to advertise. WhatsApp refuses to finish linking a device that advertises a stale one
 // (Baileys #2679), and the default baked into baileys ages with every month no release ships; undefined keeps that

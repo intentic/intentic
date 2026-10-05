@@ -3,6 +3,7 @@ const socketAddress = jest.fn<() => Promise<{ base: string; query: string } | un
 jest.mock("../sandbox/session/wsTicket", () => ({ socketAddress }));
 
 const { createTerminalSession, disposeTerminalSession } = await import("./terminalSession");
+const { signalConnection } = await import("../sandbox/client/useSandbox");
 
 const settled = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -18,6 +19,24 @@ it(`schedules a reconnect when minting the socket's session throws, instead of g
         retrying: true,
         down: true,
     });
+    disposeTerminalSession(session);
+    warn.mockRestore();
+});
+
+// The ladder climbs to half a minute; a terminal still waiting out a rung when the sandbox answers again must not stay
+// dark for the rest of it.
+it(`reconnects at once when the sandbox becomes reachable again, rather than waiting out its rung`, async () => {
+    socketAddress.mockRejectedValueOnce(new Error(`The sandbox is restarting.`));
+    const warn = jest.spyOn(console, `warn`).mockImplementation(() => undefined);
+    const session = createTerminalSession(`web-2`, () => undefined);
+    await settled();
+    const asked = socketAddress.mock.calls.length;
+
+    // A frame on the events stream: the sandbox is online again.
+    signalConnection({ kind: `frame`, at: Date.now() });
+    await settled();
+
+    expect(socketAddress.mock.calls.length).toBe(asked + 1);
     disposeTerminalSession(session);
     warn.mockRestore();
 });

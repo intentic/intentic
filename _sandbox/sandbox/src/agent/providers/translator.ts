@@ -187,7 +187,8 @@ export const startTranslator = (services: Services): void => {
                 }),
             );
             await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token, compat }), { mode: 0o600 });
-            // Daemon-owned and stamped, so a later daemon can recognize this as its own leftover.
+            // Daemon-owned and stamped, so the in-life sweep never reads it as abandoned. A plain child in the daemon's
+            // own process group, so a crashed daemon's copy is reclaimed with it by the front (supervise.rs).
             return spawnAs({ class: "service" }, binary, ["--config", configPath], {
                 stdio: ["ignore", "pipe", "pipe"],
                 env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },

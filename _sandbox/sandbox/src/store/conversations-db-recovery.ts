@@ -7,7 +7,14 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import { isConversationId } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { conversationsRoot } from "./conversation-units.js";
-import { type ConversationsDb, conversationsDbPath, damageIn, openCheckedConversationsDb, openConversationsDb } from "./conversations-db.js";
+import {
+    type ConversationsDb,
+    conversationsDbPath,
+    ConversationsUpgradeError,
+    damageIn,
+    openCheckedConversationsDb,
+    openConversationsDb,
+} from "./conversations-db.js";
 import { type ManifestProblem, recordStandingProblem } from "./manifest/manifest-problems.js";
 
 // How the daemon opens its conversation database at boot, where a file that is missing or damaged must never keep it
@@ -15,6 +22,11 @@ import { type ManifestProblem, recordStandingProblem } from "./manifest/manifest
 // works around without deleting anything, logs, and reports to the owner as a problem with the whole file
 // (manifest-problems.ts). The orphan sweep holds off for the boot after any of it (conversation-units.ts), since a
 // database made again does not name the conversations whose directories are on the volume.
+//
+// The one failure it does not work around is a sound file this build could not upgrade (ConversationsUpgradeError):
+// setting it aside would tell the owner a healthy database was damaged and run this build without it, when the fault is
+// the build's. That boot fails instead (system/boot/boot-failure.ts): the front restarts it with backoff, the host reads
+// why, and an update on probation is put back on the version before it, which reads the file as it was.
 
 // What opening found and did, when the file was not simply there and sound.
 export type ConversationsDbRecovery =
@@ -138,6 +150,9 @@ const openOnDisk = (path: string, historyRoot: string, check: boolean, now: () =
     try {
         return { db: openCheckedConversationsDb(path, check), recovery: undefined };
     } catch (error) {
+        if (error instanceof ConversationsUpgradeError) {
+            throw error;
+        }
         reason = errorMessage(error);
     }
     const aside = setAside(path, now());
@@ -185,13 +200,17 @@ const problemOf = (recovery: ConversationsDbRecovery): ManifestProblem => {
     }
 };
 
-// Never throws: the last resort is a database in memory, which serves this run and keeps nothing.
+// Throws only ConversationsUpgradeError, for a sound file this build could not upgrade; for anything else the last resort
+// is a database in memory, which serves this run and keeps nothing.
 export const openConversationsDbAtBoot = ({ historyRoot, check, logger, now = Date.now }: BootOpen): OpenedConversationsDb => {
     const path = conversationsDbPath(historyRoot);
     let opened: OpenedConversationsDb;
     try {
         opened = openOnDisk(path, historyRoot, check, now);
     } catch (error) {
+        if (error instanceof ConversationsUpgradeError) {
+            throw error;
+        }
         opened = { db: openConversationsDb(IN_MEMORY), recovery: { kind: "memory", reason: errorMessage(error) } };
     }
     if (opened.recovery !== undefined) {
