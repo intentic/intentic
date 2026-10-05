@@ -160,6 +160,28 @@ describe(`a panel nobody floats`, () => {
         expect(open.mock.calls[0]?.[0]).toBe(`/floating/preview`);
         expect(open.mock.calls[0]?.[2]).toContain(`popup=1`);
     });
+
+    // A drop names where the window goes; the size is still the one it was left at.
+    it(`opens where a drop asks, at the size the window was left at`, () => {
+        localStorage.setItem(`intentic.floating.frame.chat`, `10,20,1100,700`);
+        const surface = createFloatingSurface(`chat`, size);
+        const open = jest.fn((_url: string, _target: string, _features: string) => ({ focus: jest.fn() }));
+        stubGlobal(`open`, open);
+
+        expect(surface.openingSize()).toEqual({ width: 1100, height: 700 });
+        expect(surface.open({ left: 400, top: 300 })).toBe(true);
+
+        expect(open.mock.calls[0]?.[2]).toBe(`popup=1,width=1100,height=700,left=400,top=300`);
+    });
+
+    // Null outside the desktop app is the popup blocker's answer, which the caller has to hear to ask for a press.
+    it(`says so when the browser refuses the window`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        stubGlobal(`open`, jest.fn(() => null));
+
+        expect(surface.open({ left: 0, top: 0 })).toBe(false);
+        expect(surface.floats.value).toBe(false);
+    });
 });
 
 describe(`a panel floating in another window`, () => {

@@ -66,6 +66,8 @@ import { besideChat, besideFills } from "./side/sideLayout";
 import { shownSideTabs } from "./side/sideViews";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
+import { popChatOutAt, useChatTileDrag } from "./rail/chatTileDrag";
+import ChatTileDragLayer from "./rail/ChatTileDragLayer.vue";
 import RailIcon from "./rail/RailIcon.vue";
 import TileMark from "./rail/TileMark.vue";
 import { RUNNING_MARK_CLASS } from "../core-views/viewBadge";
@@ -360,7 +362,21 @@ const moreTiles = computed<readonly SectionTile[]>(() =>
 const visitingNote = (tile: SectionTile): string | undefined =>
     onRailOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) }) ? t(`shell.shellDesktop.rightClickKeep`) : undefined;
 const railTileLabel = (tile: SectionTile): string => [tileLabel(tile), visitingNote(tile)].filter((part) => part !== undefined).join(` · `);
-const railTileTip = (tile: SectionTile): TooltipValue => tileTip(tile, visitingNote(tile));
+// The chat tile's hover also says it can be carried off (chatTileDrag.ts), the one thing a pointer can't otherwise find.
+// Hover only: the accessible name keeps to what a keyboard can do, which is the tile's menu and F9.
+const railTileTip = (tile: SectionTile): TooltipValue =>
+    tileTip(tile, chatCarriable(tile) ? t(`shell.shellDesktop.dragChatOut`) : visitingNote(tile));
+
+// The chat tile, carried off the rail, opens the chat in a window of its own where it is let go: a drag for what F9 and
+// the tile's menu already do. Not while it floats, when the tile is only passing through (chatTileSeated).
+const railNav = ref<HTMLElement | null>(null);
+const chatDrag = useChatTileDrag({ rail: () => railNav.value?.getBoundingClientRect(), drop: popChatOutAt });
+const chatCarriable = (tile: RailTile): boolean => tile.id === `chat` && !chatFloats.value;
+const pressTile = (tile: RailTile, event: PointerEvent): void => {
+    if (chatCarriable(tile)) {
+        chatDrag.press(event);
+    }
+};
 
 // Only the permanent tiles and this reader's pins — the tiles that will still be there tomorrow.
 const stableTiles = computed<readonly SectionTile[]>(() =>
@@ -588,7 +604,7 @@ const wallpapered = useWallpaperedRoute();
 
 <template>
     <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
-        <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
+        <nav ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <!-- Top of the rail: switch between sandboxes, add one, or manage access. -->
             <SandboxSwitcher />
             <!-- Other members connected right now, live from the daemon's /events roster. -->
@@ -620,10 +636,15 @@ const wallpapered = useWallpaperedRoute();
                             v-else
                             :to="tile.to"
                             class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                            :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
+                            :class="{
+                                'bg-primary-600/15 text-link': isNavActive(tile.to),
+                                'opacity-40 outline-1 -outline-offset-1 outline-dashed outline-primary-500': tile.id === `chat` && chatDrag.dragging.value,
+                            }"
+                            :draggable="chatCarriable(tile) ? `false` : undefined"
                             :aria-label="railTileLabel(tile)"
                             v-tooltip.right="railTileTip(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
+                            @pointerdown="pressTile(tile, $event)"
                         >
                             <RailIcon
                                 :section="tile.id"
@@ -824,6 +845,14 @@ const wallpapered = useWallpaperedRoute();
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />
+
+        <!-- The chat tile carried off the rail: where it can go, and what letting go there does. -->
+        <ChatTileDragLayer
+            v-if="chatDrag.dragging.value"
+            :phase="chatDrag.phase.value"
+            :pointer="chatDrag.pointer.value"
+            :rail-right="chatDrag.railBox.value?.right ?? 0"
+        />
 
         <!-- A tile's right-click menu (tileMenuItems): the chat's homes, or the pin. -->
         <ContextMenu ref="tileMenu" :model="tileMenuItems" :min-width="15" />

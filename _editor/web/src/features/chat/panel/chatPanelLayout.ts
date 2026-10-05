@@ -1,6 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import type { Router } from "vue-router";
+import type { ScreenPoint } from "../../../shell/window/floating";
 import { chatFullSlot } from "../../../shell/window/panelSlots";
 import { useChatFloating } from "./chatFloating";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -69,3 +70,7 @@ export const toggleChatHome = (router: Router): void => {
 export const toggleChatFloating = (): void => {
     floating.toggle();
 };
+
+// The same pop-out, from the rail tile dragged off the rail (shell/rail/chatTileDrag.ts): the window opens with its
+// top-left at `at`, where the tile was let go. False when the browser's popup blocker refused the window.
+export const floatChatAt = (at: ScreenPoint): boolean => floating.open(at);

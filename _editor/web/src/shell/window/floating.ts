@@ -1,5 +1,5 @@
 import { computed, type ComputedRef, getCurrentScope, onScopeDispose, shallowRef } from "vue";
-import { raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
+import { desktopApp, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 
@@ -533,6 +533,12 @@ if (channel !== undefined) {
     post({ kind: `roll` });
 }
 
+/** Where a window's outer top-left goes, in screen pixels: what a drop asks for (shell/rail/chatTileDrag.ts). */
+export interface ScreenPoint {
+    readonly left: number;
+    readonly top: number;
+}
+
 /** One panel's arrangement, readable from any window; built once per panel (chat/chatFloating.ts and its siblings). */
 export interface FloatingSurface {
     readonly panel: FloatingPanel;
@@ -542,8 +548,12 @@ export interface FloatingSurface {
     readonly here: ComputedRef<boolean>;
     // Whether this window draws the panel now: the floating window, or nobody else is floating it.
     readonly shows: ComputedRef<boolean>;
-    // Floats the panel, or raises the window that already holds it; never opens a second one.
-    readonly open: () => void;
+    // Floats the panel, or raises the window that already holds it; never opens a second one. `at` puts the new window's
+    // top-left there instead of where it was last (a drop), keeping the size it was left at. False only when the
+    // browser's popup blocker refused the window: the panel stays where it is, and the press is the caller's to ask for.
+    readonly open: (at?: ScreenPoint) => boolean;
+    // The size the panel's window opens at, in screen pixels: the one it was left at, else the panel's default.
+    readonly openingSize: () => { readonly width: number; readonly height: number };
     // Docks the panel, wherever the press came from.
     readonly dock: () => void;
     readonly toggle: () => void;
@@ -564,20 +574,27 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
     const floats = computed(() => here.value || elsewhere.value.has(panel));
     const shows = showsPanel(panel);
 
-    const open = (): void => {
+    const openingSize = (): { width: number; height: number } => {
+        const remembered = rememberedFrame(panel);
+        return remembered === undefined ? size() : { width: remembered.width, height: remembered.height };
+    };
+
+    const open = (at?: ScreenPoint): boolean => {
         if (floats.value) {
             if (here.value) {
                 raiseOwnWindow();
             } else {
                 post({ kind: `raise`, panel });
             }
-            return;
+            return true;
         }
+        const frame = rememberedFrame(panel) ?? centred(size());
         // Useful only within one browsing context group; oldest-claim is what actually caps duplicates across tabs.
         // Inside the desktop app the same call is answered with a window of the app's own (windows.rs) and returns
         // null, exactly like a refused popup: the panel stays here until that window announces itself.
-        const win = window.open(floatingPath(panel), `intentic-${panel}`, features(rememberedFrame(panel) ?? centred(size())));
+        const win = window.open(floatingPath(panel), `intentic-${panel}`, features(at === undefined ? frame : { ...frame, ...at }));
         win?.focus(); // null when the popup blocker refused; the panel stays where it is.
+        return win !== null || desktopApp() !== undefined;
     };
 
     const dock = (): void => {
@@ -612,7 +629,15 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
         }
     };
 
-    return { panel, floats, here, shows, open, dock, toggle: () => (floats.value ? dock() : open()), fit, onDocked };
+    const toggle = (): void => {
+        if (floats.value) {
+            dock();
+            return;
+        }
+        open();
+    };
+
+    return { panel, floats, here, shows, open, openingSize, dock, toggle, fit, onDocked };
 };
 
 // One claim, sighting set and channel per window: a hot update must not leave stale state behind.
