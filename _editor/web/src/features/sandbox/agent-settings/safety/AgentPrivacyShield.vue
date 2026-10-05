@@ -310,7 +310,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                                 @update:model-value="(next: PrivacyImages) => write(`shield`, (current) => ({ ...current, images: next }))"
                             />
                         </template>
-                        <template #below>
+                        <template v-if="imagesNote || ocrMissing" #below>
                             <div class="flex flex-col gap-1.5 text-2xs">
                                 <p v-if="imagesNote" :class="images === `allow` ? `text-warning` : `text-muted`">{{ imagesNote }}</p>
                                 <p v-if="ocrMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noImageReader`) }}</p>
@@ -327,7 +327,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                                 @update:model-value="(next: PrivacyNames) => write(`shield`, (current) => ({ ...current, names: next }))"
                             />
                         </template>
-                        <template #below>
+                        <template v-if="namesNote || nameModelMissing" #below>
                             <div class="flex flex-col gap-1.5 text-2xs text-muted">
                                 <p v-if="namesNote">{{ namesNote }}</p>
                                 <p v-if="nameModelMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noNameModel`) }}</p>
