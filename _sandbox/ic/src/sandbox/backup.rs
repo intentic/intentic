@@ -363,6 +363,13 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
             );
         }
     };
+    // The daily backup of a sandbox is its own side's: the other side's machine agent backs it up into its own repo.
+    if auto {
+        if let Some(side) = super::side::kept_elsewhere(&slug) {
+            say("elsewhere", None, Some(&super::side::sentence(&side)));
+            return Ok(());
+        }
+    }
     let Some(_held) = lock::hold(&slug, if auto { Wait::Skip } else { Wait::Block })? else {
         say("skipped", None, Some("another ic run is working on it"));
         return Ok(());

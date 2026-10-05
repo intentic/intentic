@@ -261,38 +261,13 @@ fn discover(engine_up: bool) -> Vec<String> {
     slugs
 }
 
-/// The side to leave a sandbox to: the one that created it, when that is not this one. A container from before
-/// HOST_PLATFORM is anyone's. Pure.
-fn elsewhere(created: Option<&str>, here: &str) -> Option<String> {
-    created
-        .filter(|created| !created.eq_ignore_ascii_case(here))
-        .map(str::to_string)
-}
-
-/// How a side is called where a person reads it.
-fn side_name(side: &str) -> &str {
-    match side {
-        "windows" => "Windows",
-        "linux" => "WSL or Linux",
-        other => other,
-    }
-}
-
-/// Said for a sandbox an unattended run left to the side that created it. Pure.
-fn elsewhere_sentence(side: &str) -> String {
-    format!(
-        "left alone: ic on {} created it, and the machine agent there keeps it.",
-        side_name(side)
-    )
-}
-
-/// The `--json` answer for such a sandbox: settled as far as this side goes, with nothing checked. Never posted: the
-/// side that keeps it reports for it. Pure.
+/// The `--json` answer for a sandbox an unattended run left to the side that created it (side.rs): settled as far as
+/// this side goes, with nothing checked. Never posted: the side that keeps it reports for it. Pure.
 fn elsewhere_report(side: &str) -> serde_json::Value {
     serde_json::json!({
         "stage": Stage::Done.wire(),
         "outcome": "elsewhere",
-        "doing": elsewhere_sentence(side),
+        "doing": crate::sandbox::side::sentence(side),
         "checks": [],
     })
 }
@@ -451,17 +426,13 @@ impl Engine {
         }
     }
 
-    /// The other side of this computer that created this sandbox, when an unattended run should leave it there. On
-    /// Windows, ic on Windows and ic in WSL both drive Docker Desktop's one engine, and each side's machine agent runs
-    /// its own keeper over every container that engine holds: two keepers, two unasked restarts of one sandbox, each
-    /// side's own record of what it already tried. A container carries the side that created it (HOST_PLATFORM);
-    /// that side's keeper is the one that keeps it. A person's own run still reaches every sandbox.
+    /// The other side of this computer that keeps this sandbox, when an unattended run should leave it there
+    /// (side.rs): otherwise two keepers restart one sandbox, each with its own record of what it already tried.
     fn side_of(&mut self, slug: &str) -> Option<String> {
         if let Some(side) = self.sides.get(slug) {
             return side.clone();
         }
-        let created = chain::created_on(slug);
-        let side = elsewhere(created.as_deref(), crate::sandbox::connect::host_platform());
+        let side = crate::sandbox::side::kept_elsewhere(slug);
         self.sides.insert(slug.to_string(), side.clone());
         side
     }
@@ -789,7 +760,7 @@ impl Engine {
         left_elsewhere: &[(&String, &String)],
     ) {
         for (slug, side) in left_elsewhere {
-            ui::note(&format!("{slug}: {}", elsewhere_sentence(side)));
+            ui::note(&format!("{slug}: {}", crate::sandbox::side::sentence(side)));
         }
         if snapshot.sandboxes.is_empty() && !left_elsewhere.is_empty() && left.is_empty() {
             return;
@@ -966,25 +937,11 @@ mod tests {
     }
 
     #[test]
-    fn an_unattended_run_leaves_a_sandbox_to_the_side_of_this_computer_that_created_it() {
-        assert_eq!(
-            elsewhere(Some("linux"), "windows").as_deref(),
-            Some("linux")
-        );
-        assert_eq!(
-            elsewhere(Some("windows"), "linux").as_deref(),
-            Some("windows")
-        );
-        assert_eq!(elsewhere(Some("linux"), "linux"), None);
-        assert_eq!(elsewhere(Some("Windows"), "windows"), None);
-        assert_eq!(
-            elsewhere(None, "windows"),
-            None,
-            "a container from before HOST_PLATFORM is anyone's"
-        );
+    fn a_sandbox_left_to_the_other_side_is_answered_as_settled_and_never_checked() {
         let report = elsewhere_report("linux");
         assert_eq!(report["outcome"], "elsewhere");
         assert_eq!(report["stage"], "done");
+        assert_eq!(report["checks"], serde_json::json!([]));
         assert!(report["doing"]
             .as_str()
             .is_some_and(|said| said.contains("ic on WSL or Linux created it")));

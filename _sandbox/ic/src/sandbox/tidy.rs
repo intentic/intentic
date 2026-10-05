@@ -54,6 +54,8 @@ pub fn run(dry_run: bool, as_json: bool) -> Result<()> {
     let listing = docker::try_capture(&["images", "--format", "{{.Repository}}:{{.Tag}} {{.ID}}"])
         .unwrap_or_default();
     let mut removable: Vec<String> = Vec::new();
+    let mut elsewhere_checked: std::collections::HashMap<String, Option<String>> =
+        std::collections::HashMap::new();
     for line in listing.lines() {
         let Some((reference, short_id)) = line.split_once(' ') else {
             continue;
@@ -63,6 +65,15 @@ pub fn run(dry_run: bool, as_json: bool) -> Result<()> {
         };
         if !known(&slug) {
             removable.push(reference.to_string());
+            continue;
+        }
+        // Which of the other side's images are still of use is in that side's record, not this one's: its own tidy
+        // decides (side.rs). Without this, each side deleted the rollback images only the other side's record named.
+        if !elsewhere_checked.contains_key(&slug) {
+            let side = super::side::kept_elsewhere(&slug);
+            elsewhere_checked.insert(slug.clone(), side);
+        }
+        if elsewhere_checked.get(&slug).is_some_and(Option::is_some) {
             continue;
         }
         let used_ids: Vec<String> = [container_of(&slug), parked_of(&slug)]

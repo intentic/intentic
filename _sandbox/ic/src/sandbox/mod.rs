@@ -18,6 +18,7 @@ pub mod project_dir;
 pub mod recreate;
 pub mod remove;
 pub mod restore;
+pub mod side;
 pub mod staged;
 pub mod storage;
 pub mod tidy;

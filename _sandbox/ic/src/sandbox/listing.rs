@@ -212,6 +212,14 @@ fn listing(
             {
                 sandbox.insert("tunnelRunning".into(), json!(tunnel.state == "running"));
             }
+            // The other side of this computer keeps it (side.rs): its background rounds are that side's to run.
+            if let Some(side) = inspected
+                .get(&row.name)
+                .and_then(super::side::created_on_inspected)
+                .and_then(|created| super::side::elsewhere(Some(&created), super::side::here()))
+            {
+                sandbox.insert("keptElsewhere".into(), json!(side));
+            }
             if let Some(inspected) = inspected.get(&row.name) {
                 sandbox.insert(
                     "resources".into(),
@@ -398,6 +406,38 @@ mod tests {
                     "image": "intentic-sandbox-env-lab:abc",
                 },
             ])
+        );
+    }
+
+    #[test]
+    fn a_sandbox_the_other_side_of_this_computer_created_is_marked_as_kept_there() {
+        let rows = rows_from("intentic-sandbox-mine\trunning\timg:1\nintentic-sandbox-theirs\trunning\timg:1\nintentic-sandbox-old\trunning\timg:1\n");
+        let other = if super::super::side::here() == "windows" {
+            "linux"
+        } else {
+            "windows"
+        };
+        let inspected: HashMap<String, Value> = [
+            ("intentic-sandbox-mine", json!({ "Config": { "Env": [format!("HOST_PLATFORM={}", super::super::side::here())] } })),
+            ("intentic-sandbox-theirs", json!({ "Config": { "Env": [format!("HOST_PLATFORM={other}")] } })),
+            ("intentic-sandbox-old", json!({ "Config": { "Env": ["PATH=/bin"] } })),
+        ]
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
+        .collect();
+        let listed = listing(&rows, &inspected, &HashMap::new());
+        let kept = |slug: &str| {
+            listed
+                .as_array()
+                .and_then(|all| all.iter().find(|row| row["slug"] == slug))
+                .and_then(|row| row.get("keptElsewhere").cloned())
+        };
+        assert_eq!(kept("mine"), None);
+        assert_eq!(kept("theirs"), Some(json!(other)));
+        assert_eq!(
+            kept("old"),
+            None,
+            "a container from before HOST_PLATFORM is everyone's"
         );
     }
 

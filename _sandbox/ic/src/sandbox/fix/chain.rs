@@ -258,22 +258,6 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
     facts
 }
 
-/// The side of this computer whose ic created the sandbox (`HOST_PLATFORM`), when its container says. One cheap read,
-/// ahead of everything [`gather`] asks.
-pub fn created_on(slug: &str) -> Option<String> {
-    docker::ask(
-        &[
-            "inspect",
-            "--format",
-            "{{range .Config.Env}}{{.}}{{printf \"\\x00\"}}{{end}}",
-            &container_of(slug),
-        ],
-        docker::READ_LIMIT,
-    )
-    .said()
-    .and_then(|env| Env::parse(&env).host_platform)
-}
-
 fn ask_health(container: &str) -> Health {
     match docker::ask(
         &[

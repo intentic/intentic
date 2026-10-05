@@ -24,6 +24,11 @@ test("only running, person-owned sandboxes are prepared: stopped ones wait for t
     expect(prepareTargets([box("work"), box("asleep", false), box("runner-abc123"), box("runner-abc123", false)])).toEqual(["work"]);
 });
 
+// On Windows, ic on Windows and ic in WSL list every sandbox on their one Docker engine; each side updates its own.
+test("a sandbox the other side of this computer keeps is left to that side's agent", () => {
+    expect(prepareTargets([box("mine"), { ...box("theirs"), keptElsewhere: "linux" }])).toEqual(["mine"]);
+});
+
 test("the exact command line carries --auto: without it, ic would run the attended flow's judgement calls unattended", () => {
     expect(autoPrepareArgs("work")).toEqual(["sandbox", "prepare", "work", "--auto"]);
 });

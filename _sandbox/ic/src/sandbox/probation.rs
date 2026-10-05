@@ -357,6 +357,7 @@ impl Report {
                 "the new version kept failing, so the previous version is back".to_string()
             }
             "busy" => "another ic run is working on it; looked again next time".to_string(),
+            "elsewhere" => "the other side of this computer watches it".to_string(),
             other => other.to_string(),
         };
         match &self.reason {
@@ -375,9 +376,17 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
         None => live_slugs().unwrap_or_default(),
     };
     for slug in slugs {
-        let report = match lock::hold(&slug, Wait::Skip)? {
-            None => Report::new(&slug, "busy", None),
-            Some(_held) => watch_one(&slug)?,
+        // Unattended (the machine agent's round has no terminal), the other side's swap is that side's to judge: two
+        // watches on one swap each hold only their own side's lock, and could both roll it back (side.rs).
+        let elsewhere = (!crate::tty::have_tty())
+            .then(|| super::side::kept_elsewhere(&slug))
+            .flatten();
+        let report = match elsewhere {
+            Some(side) => Report::new(&slug, "elsewhere", Some(super::side::sentence(&side))),
+            None => match lock::hold(&slug, Wait::Skip)? {
+                None => Report::new(&slug, "busy", None),
+                Some(_held) => watch_one(&slug)?,
+            },
         };
         if as_json {
             println!("{}", report.json());

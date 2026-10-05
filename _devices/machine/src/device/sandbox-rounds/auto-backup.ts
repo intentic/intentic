@@ -21,8 +21,11 @@ const JITTER_MS = 60 * 60_000;
 
 // Running sandboxes only (a stopped one has not changed since its last copy) and never a runner, whose /work is a
 // mirror of its parent's git and comes back from there. A parked one is down mid-swap: ic would skip it anyway.
+// The other side of this computer's sandboxes are backed up by its own agent, into its own repos (ic: sandbox/side.rs).
 export const backupTargets = (boxes: readonly DeviceSandbox[]): string[] =>
-    boxes.filter((box) => box.running && box.parked !== true && !box.slug.startsWith("runner-")).map((box) => box.slug);
+    boxes
+        .filter((box) => box.running && box.parked !== true && !box.slug.startsWith("runner-") && box.keptElsewhere === undefined)
+        .map((box) => box.slug);
 
 // `--auto` is what lets ic say "not now"; `--json` is the one line this reads back.
 export const autoBackupArgs = (slug: string): string[] => ["sandbox", "backup", slug, "--auto", "--json"];

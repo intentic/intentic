@@ -128,6 +128,14 @@ fn recreate(
         Reach::Checked | Reach::Applied => mode.name(),
     };
     let slug = resolve_slug(slug, &format!("ic sandbox {verb}"))?;
+    // A background run updates only the sandboxes this side created: the other side's machine agent prepares and
+    // swaps its own, against its own records (side.rs).
+    if auto {
+        if let Some(side) = super::side::kept_elsewhere(&slug) {
+            println!("intentic: {slug}: {}", super::side::sentence(&side));
+            return Ok(());
+        }
+    }
     // One ic at a time on a sandbox; a background run comes back on its next tick rather than queueing behind a person.
     let Some(_held) = lock::hold(&slug, if auto { Wait::Skip } else { Wait::Block })? else {
         println!("intentic: another ic run is working on {slug} — skipping this background run.");

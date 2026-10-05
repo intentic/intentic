@@ -17,6 +17,11 @@ test("only running, person-owned sandboxes are backed up: a stopped one has not 
     ]);
 });
 
+// On Windows, ic on Windows and ic in WSL list every sandbox on their one Docker engine; each side backs up its own.
+test("a sandbox the other side of this computer keeps is backed up by that side's agent", () => {
+    expect(backupTargets([box("mine"), box("theirs", { keptElsewhere: "windows" })])).toEqual(["mine"]);
+});
+
 // `--auto` is what lets ic decide "not now" (a copy in the last day, a low disk, a swap in flight) instead of asking.
 test("the command line carries --auto and asks for the one JSON line this reads", () => {
     expect(autoBackupArgs("work")).toEqual(["sandbox", "backup", "work", "--auto", "--json"]);
