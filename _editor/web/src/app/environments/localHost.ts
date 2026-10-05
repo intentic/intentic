@@ -33,6 +33,47 @@ export interface LocalFacts {
     readonly homeFolder: string;
 }
 
+/**
+ * A subscription some AI tool on this computer is signed in to (the app's found.rs `FoundProvider`): named by who it is
+ * for, never by a token. The sandbox signs in to it on its own (Connect), so the tool here keeps its login.
+ */
+export interface LocalFoundProvider {
+    /** The sandbox's id for it (`claude`, `codex`, `gemini`, `grok`, `kimi`), as `PROVIDER_SPECS` names them. */
+    readonly provider: string;
+    /** The tools it was found signed in through: `claude-code`, `codex`, `gemini-cli`, `opencode`, `hermes`, `openclaw`. */
+    readonly tools: readonly string[];
+    readonly email: string | null;
+    /** The plan as the tool recorded it (`max`, `team`, `plus`…). */
+    readonly plan: string | null;
+    /** The WSL distro it was found in, when it was found nowhere else. */
+    readonly wsl: string | null;
+}
+
+/** A folder some AI tool or editor on this computer worked in, from that tool's own history (found.rs `FoundProject`). */
+export interface LocalFoundProject {
+    /** Where this computer opens it (`\\wsl.localhost\<distro>\…` for a distro's): what `point` takes. */
+    readonly path: string;
+    /** How the tools spelled it: the Linux path for a distro's, otherwise `path`. */
+    readonly shown: string;
+    readonly name: string;
+    /** The histories that named it: `claude-code`, `codex`, `vscode`, `cursor`, `vscodium`, `windsurf`, `jetbrains`. */
+    readonly sources: readonly string[];
+    /** Unix seconds of the newest use any of them recorded. */
+    readonly lastActive: number | null;
+    readonly wsl: string | null;
+    readonly git: boolean;
+    /** It has a sandbox of its own already (the app's projects.json). */
+    readonly sandbox: boolean;
+}
+
+/** What this computer's own tools say. Read on this computer and never sent anywhere. */
+export interface LocalFound {
+    readonly providers: readonly LocalFoundProvider[];
+    readonly projects: readonly LocalFoundProject[];
+}
+
+export const NOTHING_FOUND: LocalFound = { providers: [], projects: [] };
+
 /** A sandbox of the account, as the workspace's switcher last listed it (the app's setup_link.rs `RosterEntry`). */
 export interface LocalSandbox {
     readonly id: string;
@@ -175,6 +216,11 @@ export interface LocalHost {
     pickFile(): Promise<void>;
     /** Take one entry off the recents; the folder or document itself is not touched. */
     forget(path: string): Promise<void>;
+    /**
+     * What this computer's AI tools say (the app's found.rs): the subscriptions signed in here and the folders their
+     * histories name, newest first. Nothing where no app is behind the page.
+     */
+    found(): Promise<LocalFound>;
     /** Platform sign-in, in the default browser: the account comes back to the app, which opens the workspace. */
     signIn(): Promise<void>;
     /** The workspace (agents and sandboxes), in this window's place, at its root or a path under it. */
@@ -252,6 +298,7 @@ export const LINK_HOST: LocalHost = {
         return Promise.resolve();
     },
     forget: nothing,
+    found: () => Promise.resolve(NOTHING_FOUND),
     signIn: nothing,
     openWorkspace: nothing,
     account: () => Promise.resolve(null),

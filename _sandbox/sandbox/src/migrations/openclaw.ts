@@ -1,5 +1,6 @@
 import { parseEnv } from "node:util";
 import { asZone } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import {
     asArray,
     asRecord,
@@ -23,6 +24,69 @@ import { parseJson5ish } from "./json5ish.js";
 // a sibling folder.
 
 const WS = "workspace/";
+
+// Where each OpenClaw agent keeps its provider credentials, relative to `~/.openclaw`.
+export const AUTH_PROFILES_PATH = /^agents\/[^/]+\/agent\/auth-profiles\.json$/;
+
+// One API key an auth profile holds: the profile's own name, the provider it is for, and the key.
+export interface ProfileKey {
+    readonly profile: string;
+    readonly provider: string;
+    readonly key: string;
+}
+
+// One auth profile, as far as this reads it: a key, a login, or neither. A profile of another shape is skipped.
+const AuthProfileSchema = z.object({
+    type: z.string().optional(),
+    provider: z.string().optional(),
+    key: z.string().optional(),
+    apiKey: z.string().optional(),
+    api_key: z.string().optional(),
+    access_token: z.string().optional(),
+    refresh_token: z.string().optional(),
+    oauth: z.unknown().optional(),
+});
+type AuthProfile = z.infer<typeof AuthProfileSchema>;
+const ProfilesSchema = z.record(z.string(), z.unknown());
+
+// A profile's API key: only an `api_key` profile (or an untyped one) holds one to take, whatever its other fields say,
+// spelled `key`, `apiKey` or `api_key`.
+const profileKey = (profile: AuthProfile): string | undefined =>
+    profile.type === undefined || profile.type === "api_key" ? (asString(profile.key) ?? asString(profile.apiKey) ?? asString(profile.api_key)) : undefined;
+
+// Whether a profile is a login rather than a key: typed as one, or carrying its tokens.
+const holdsLogin = (profile: AuthProfile): boolean =>
+    profile.type === "oauth" ||
+    profile.type === "token" ||
+    asString(profile.access_token) !== undefined ||
+    asString(profile.refresh_token) !== undefined ||
+    profile.oauth !== undefined;
+
+// An auth-profiles.json read into its API keys and the profiles that hold OAuth instead, both sorted by profile; undefined
+// when it is not JSON. Accepts a nested `{profiles: {...}}` shape or a flat one. The provider is the profile's own
+// `provider`, else the name before its colon (`anthropic:default`).
+export const openclawProfileKeys = (raw: string): { readonly keys: readonly ProfileKey[]; readonly oauth: readonly string[] } | undefined => {
+    let file: z.infer<typeof ProfilesSchema>;
+    try {
+        file = ProfilesSchema.safeParse(JSON.parse(raw)).data ?? {};
+    } catch {
+        // allow(silent-catch): not JSON is the answer itself, which the plan words as a refused line.
+        return undefined;
+    }
+    const keys: ProfileKey[] = [];
+    const oauth: string[] = [];
+    for (const [name, entry] of Object.entries(ProfilesSchema.safeParse(file["profiles"]).data ?? file).toSorted(([left], [right]) => left.localeCompare(right))) {
+        const profile = AuthProfileSchema.safeParse(entry).data;
+        const key = profile === undefined ? undefined : profileKey(profile);
+        if (key !== undefined) {
+            keys.push({ profile: name, provider: asString(profile?.provider) ?? name.split(":")[0] ?? name, key });
+        }
+        if (profile !== undefined && holdsLogin(profile)) {
+            oauth.push(name);
+        }
+    }
+    return { keys, oauth };
+};
 
 export const detectOpenclaw = (files: Files): boolean =>
     files.has("openclaw.json") &&
@@ -188,31 +252,17 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             }
         }
     }
-    for (const path of [...files.keys()].filter((candidate) => /^agents\/[^/]+\/agent\/auth-profiles\.json$/.test(candidate)).toSorted()) {
-        const profiles = ((): Record<string, unknown> => {
-            try {
-                return asRecord(JSON.parse(text(files, path) ?? "")) ?? {};
-            } catch {
-                refused.push(`${path} (not readable as JSON)`);
-                return {};
-            }
-        })();
-        // Accepts a nested `{profiles: {...}}` shape or a flat one, and either `apiKey` or `api_key`.
-        for (const [profile, entry] of Object.entries(asRecord(profiles["profiles"]) ?? profiles).toSorted(([left], [right]) =>
-            left.localeCompare(right),
-        )) {
-            const record = asRecord(entry);
-            const apiKey = asString(record?.["apiKey"]) ?? asString(record?.["api_key"]);
-            if (apiKey !== undefined) {
-                secrets.plan(`${profile.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, apiKey, path);
-            }
-            if (
-                asString(record?.["access_token"]) !== undefined ||
-                asString(record?.["refresh_token"]) !== undefined ||
-                record?.["oauth"] !== undefined
-            ) {
-                refused.push(`${path}: ${profile} OAuth tokens (bound to that install, sign in fresh here)`);
-            }
+    for (const path of [...files.keys()].filter((candidate) => AUTH_PROFILES_PATH.test(candidate)).toSorted()) {
+        const profiles = openclawProfileKeys(text(files, path) ?? "");
+        if (profiles === undefined) {
+            refused.push(`${path} (not readable as JSON)`);
+            continue;
+        }
+        for (const entry of profiles.keys) {
+            secrets.plan(`${entry.profile.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, entry.key, path);
+        }
+        for (const profile of profiles.oauth) {
+            refused.push(`${path}: ${profile} OAuth tokens (bound to that install, sign in fresh here)`);
         }
     }
 

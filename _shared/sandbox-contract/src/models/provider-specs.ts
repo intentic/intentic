@@ -233,6 +233,22 @@ const BY_ID = new Map<string, ProviderSpec>(PROVIDER_SPECS.map((spec) => [spec.i
 // surface goes through.
 export const providerSpec = (provider: string): ProviderSpec | undefined => BY_ID.get(provider);
 
+// The native providers a list of ids names, in its order and once each; anything else in it (an endpoint, a typo, a
+// provider a newer build knows) is dropped rather than refusing the list. Takes a comma-separated string or an array of
+// them, the way a query string hands it over: the desktop app's `?found=claude,codex` names the providers it found
+// signed in on the computer it runs on.
+export const nativeProvidersIn = (value: string | readonly (string | null)[] | null | undefined): NativeProvider[] => {
+    const raw = [value].flat().filter((entry) => entry !== null && entry !== undefined);
+    const found: NativeProvider[] = [];
+    for (const id of raw.flatMap((entry) => entry.split(",")).map((entry) => entry.trim())) {
+        const provider = NATIVE_PROVIDERS.find((candidate) => candidate === id);
+        if (provider !== undefined && !found.includes(provider)) {
+            found.push(provider);
+        }
+    }
+    return found;
+};
+
 // Providers whose model runs under Claude Code through the bundled translator (CLIProxyAPI); claude is absent, native
 // Anthropic OAuth serves it directly. Narrowed off the auth kind so tables built on this move with it.
 export type TranslatorProvider = Extract<Spec, { auth: { kind: "translator" } }>["id"];

@@ -69,4 +69,5 @@ const COMMANDS: &[&str] = &[
     "account_relay",
     "project_preview",
     "project_create",
+    "found_on_machine",
 ];

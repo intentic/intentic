@@ -18,7 +18,7 @@ const MAX_FILES = 600;
 const MAX_DEPTH = 6;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
-interface DirEntry {
+export interface DirEntry {
     readonly name: string;
     readonly kind: "directory" | "file" | "other";
     readonly size?: number;
@@ -31,11 +31,11 @@ export interface HostScan {
 }
 
 // Separator is read off `home` itself (Windows answers backslash paths), not guessed from a platform string.
-const separatorOf = (home: string): string => (home.includes("\\") && !home.startsWith("/") ? "\\" : "/");
+export const separatorOf = (home: string): string => (home.includes("\\") && !home.startsWith("/") ? "\\" : "/");
 
 // One unwrapped tool call; the hub already throws a readable sentence for offline. An `isError` result (a path outside
 // roots, a missing folder) is thrown with the machine's own words, better than anything invented here.
-const callTool = async (hub: HostHub, id: string, name: string, args: Record<string, unknown>, seq: number): Promise<string> => {
+export const callTool = async (hub: Pick<HostHub, "mcp">, id: string, name: string, args: Record<string, unknown>, seq: number): Promise<string> => {
     const answer = (await hub.mcp(id, { jsonrpc: "2.0", id: seq, method: "tools/call", params: { name, arguments: args } })) as {
         result?: { content?: { type?: string; text?: string }[]; isError?: boolean };
         error?: { message?: string };
@@ -60,7 +60,7 @@ const queueDirectory = (next: { abs: string; rel: string }[], skipped: Set<strin
     next.push({ abs, rel });
 };
 
-const listDir = async (hub: HostHub, id: string, path: string, seq: number): Promise<DirEntry[]> => {
+export const listDir = async (hub: Pick<HostHub, "mcp">, id: string, path: string, seq: number): Promise<DirEntry[]> => {
     const parsed: unknown = JSON.parse(await callTool(hub, id, "list_dir", { path }, seq));
     return Array.isArray(parsed) ? (parsed as DirEntry[]) : [];
 };

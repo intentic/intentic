@@ -111,3 +111,43 @@ export const ArrivalHostsSchema = z.object({ hosts: z.array(ArrivalHostSchema) }
 // Reads a setup off a connected device instead of an upload; answers with a plan exactly like the upload door does.
 export const ArrivalScanSchema = z.object({ host: z.string().min(1) });
 export type ArrivalScan = z.infer<typeof ArrivalScanSchema>;
+
+// A model provider's API key found on one of the owner's devices, offered as a model endpoint. Only plain API keys are
+// read: an OAuth login is bound to the install that holds it, and copying one signs either side out. The key itself
+// never crosses this wire, only its last four characters.
+export const ProviderKeySourceSchema = z.enum(["hermes", "openclaw", "opencode", "gemini", "codex"]);
+export type ProviderKeySource = z.infer<typeof ProviderKeySourceSchema>;
+export const ProviderKeySchema = z.object({
+    // A digest of the key, never the key: the same key reads as the same row from any device, and on every read.
+    id: z.string(),
+    // The provider as this sandbox names it (`openrouter`, `anthropic`), or the source's own name for one it does not
+    // know.
+    provider: z.string(),
+    // What to call it ("OpenRouter").
+    label: z.string(),
+    // The tool whose files held it; a key held by several is attributed to the first in this enum's order.
+    source: ProviderKeySourceSchema,
+    // The device it was read from.
+    host: z.string(),
+    // The key's last four characters.
+    hint: z.string(),
+    // This sandbox knows where the provider serves models; false is a key reported and not offered.
+    applicable: z.boolean(),
+    // A model endpoint here already holds this key.
+    added: z.boolean(),
+});
+export type ProviderKey = z.infer<typeof ProviderKeySchema>;
+// No connected device is an empty list, not an error.
+export const ProviderKeysSchema = z.object({ keys: z.array(ProviderKeySchema) });
+export type ProviderKeys = z.infer<typeof ProviderKeysSchema>;
+
+// The rows to add, by id. The daemon reads the devices again rather than trusting a value the browser never held.
+export const ProviderKeysApplySchema = z.object({ ids: z.array(z.string().min(1)).min(1) });
+export type ProviderKeysApply = z.infer<typeof ProviderKeysApplySchema>;
+export const ProviderKeysAppliedSchema = z.object({
+    // Each row that now has an endpoint, with that endpoint's capability id; one already added is listed, not added twice.
+    added: z.array(z.object({ id: z.string(), capability: z.string() })),
+    // Each row that did not land, in its own words: gone from the device since it was listed, or refused by the apply.
+    failed: z.array(z.object({ id: z.string(), error: z.string() })),
+});
+export type ProviderKeysApplied = z.infer<typeof ProviderKeysAppliedSchema>;

@@ -1,6 +1,7 @@
 import type { DeviceAgentState, DeviceFolderRow, DevicePortRow, DeviceSandboxResources, ResourcesForm } from "@intentic/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { LocalFound } from "@intentic/web/local-host";
 import type { FixEnd } from "./fixReport";
 
 // Typed surface over the Rust commands in src-tauri/src/commands.rs. The native side just runs the shipped scripts
@@ -267,6 +268,9 @@ export const localOpenPath = (path: string): Promise<void> => invoke(`local_open
 export const localRecents = (): Promise<LocalRecent[]> => invoke(`local_recents`);
 /** Takes one entry off the recents, wherever it is in them; the folder or file itself is not touched. */
 export const localForgetRecent = (path: string): Promise<void> => invoke(`local_forget_recent`, { path });
+// What this computer's AI tools say: the subscriptions signed in here, by who they are for, and the folders their
+// histories name (src-tauri/src/found.rs), in the shape the shell reads (the web's localHost.ts `LocalFound`).
+export const foundOnMachine = (): Promise<LocalFound> => invoke(`found_on_machine`);
 // Who is signed in to the workspace and the sandboxes it last listed (src-tauri/src/setup_link.rs `Roster`), in the
 // shape the shell reads (the web's localHost.ts `LocalRoster`): empty before the workspace has said, and after a sign-out.
 export interface LocalSandbox {

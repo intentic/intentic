@@ -4,6 +4,7 @@ import type { LocalHost, LocalProjectHost, LocalProjectStart, LocalView } from "
 import { computed } from "vue";
 import { readAccount, signOutAccount, updateAccount } from "./account";
 import {
+    foundOnMachine,
     homeFacts,
     localForgetRecent,
     localOpenPath,
@@ -118,6 +119,7 @@ export const nativeHost = (): LocalHost => ({
     pickFolder: () => localPick(true),
     pickFile: () => localPick(false),
     forget: (path) => localForgetRecent(path),
+    found: () => foundOnMachine(),
     signIn: () => signIn(),
     openWorkspace: (path) => workspaceOpen(path),
     account: () => readAccount(),

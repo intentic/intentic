@@ -15,9 +15,9 @@
 #   bash _tools/scripts/image/prepare-image-trees.sh
 #   node _tools/scripts/image/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard
 #   docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t ghcr.io/intentic/sandbox .
-# (or build this file directly for the bare core profile). At run time connect.sh / the workspace provider
-# inject agent credentials (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at
-# /work — neither is baked into the image.
+# (or build this file directly for the bare core profile). At run time `ic sandbox connect` (which connect.sh
+# hands to) mounts the workspace volume at /work. No agent credential comes in from outside: a provider is
+# signed in from inside the running sandbox, and its tokens live there, never in the image.
 
 FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).

@@ -402,6 +402,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("GET /arrivals/hosts", arrivals.hosts);
     serve("POST /arrivals/scan", arrivals.scan);
     serve("POST /arrivals/apply", arrivals.apply);
+    serve("GET /arrivals/keys", arrivals.keys);
+    serve("POST /arrivals/keys/apply", arrivals.applyKeys);
     serve("DELETE /arrivals", arrivals.abandon);
 
     // An extension's prebuilt ESM bundle, and the backend namespace /x/<id>/* proxied verbatim to the backend host.

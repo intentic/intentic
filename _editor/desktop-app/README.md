@@ -40,13 +40,31 @@ flowchart LR
   workspace has said, the row is the workspace itself; the account menu shows the named account at once and then
   what the platform answers (below). It opens on the folder it was last
   pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
-  first screen. A folder picked in the system's dialog from an empty folder's page takes the window's place
+  first screen. A folder picked in the system's dialog from an empty folder's page, or one of the folders that page
+  offers (below), takes the window's place
   (`local_pick`, then `point`: a grant of its own, the old one revoked, the page reloaded onto the new face at
   `#/workspace`); a folder another window already shows raises that window instead. Other folders and documents open
   from the tray, each in a window of its own. The main window's ×, like the workspace's, is a question and a hide (`request_close`), so nothing it holds
   is lost and the tray brings it back as it was. The shell's routes ride the page's hash (`files/local#/device`),
   since the asset protocol answers `files/local` with the local page and an address below it with the bundle's other
   page.
+- **What this computer already uses.** `found_on_machine` (`src-tauri/src/found.rs`) reads what the AI tools and
+  editors on this computer say about it, so a first launch can offer that instead of an empty folder and a blank
+  sign-in. It reads this computer's home and, on Windows, the home of every WSL distro that is running (through
+  `\\wsl.localhost`; a stopped distro is never started for it). Two things come back. The subscriptions signed in here
+  (Claude Code, Codex in ChatGPT mode, Gemini CLI, and the logins opencode, Hermes and OpenClaw hold), each named by its
+  account's email and plan and never by a token: the sandbox signs in to each on its own from Connect, because these
+  logins renew with single-use refresh tokens and a copy would log one side out. And the folders the tools' histories
+  name (Claude Code's sessions and trusted folders, Codex's trusted projects and sessions, the VS Code family's last
+  windows, JetBrains' recent projects), newest first, at most twelve. Folders that are gone, someone's whole home, the
+  system's, Intentic's own (`~/intentic`) and a folder that only holds other found ones (unless it is a repository
+  itself) are dropped. The reading is kept for two
+  minutes. The main window's empty folder offers those folders under its own recents (the web's
+  `local/LocalEmptyFolder.vue`, opened with `point`), the rail's sign-in tile names the subscriptions, and the addresses a sandbox is first met
+  at (a `/setup` page the app opens, and a folder's own sandbox opened on its folder) carry their ids as
+  `found=claude,codex` (`with_found`, read from the last reading so a window is never kept waiting on the disk), so the
+  new sandbox's Connect offers them. Nothing found leaves the computer
+  except those ids.
 - **This device.** A view this app adds to the local shell (`src/host.ts`, the web's
   `app/environments/localHost.ts`), titled This computer on screen, the name the workspace's switcher, the tray and the
   place chip give this machine (this page and the code keep This device as the view's name), where the launcher's card
@@ -350,6 +368,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
+- [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder's own sandbox: what its dialog draws, the row and setup code the app makes for it, and the project verbs its window runs.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.

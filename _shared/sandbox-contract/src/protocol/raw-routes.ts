@@ -90,6 +90,9 @@ export const RAW_ROUTES = {
     "GET /arrivals/hosts": {},
     "POST /arrivals/scan": {},
     "POST /arrivals/apply": {},
+    // Model API keys on the owner's devices, and turning the picked ones into model endpoints.
+    "GET /arrivals/keys": {},
+    "POST /arrivals/keys/apply": {},
     "DELETE /arrivals": {},
     "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.

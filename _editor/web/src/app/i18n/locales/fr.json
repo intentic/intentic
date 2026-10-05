@@ -1833,6 +1833,14 @@
         }
     },
     "connect": {
+        "connect": {
+            "foundKeyAdded": "Ajoutée",
+            "foundKeyFailed": "Impossible d'ajouter cette clé.",
+            "foundKeyFrom": "De {source}, se termine par {hint}. L'ajouter copie la clé dans ce sandbox.",
+            "foundKeyTitle": "Clé API {provider}",
+            "foundSignedIn": "Connecté sur cet ordinateur. Connectez-le ici en un clic dans votre navigateur ; vous y restez connecté.",
+            "foundTitle": "Trouvé sur cet ordinateur"
+        },
         "localModelLane": {
             "gpuOffered": "CPU seulement pour l'instant ; l'entrée de catalogue du modèle peut demander un GPU NVIDIA.",
             "needsRebuild": "Cette image n'embarque pas encore llama-server. Reconstruisez le sandbox depuis Environnement sur la page Sandbox, puis revenez.",

@@ -16,6 +16,7 @@ import {
     type OauthAccount,
     type PresenceUser,
     PROVIDER_SPECS,
+    ProviderKeysApplySchema,
     type RawRouteKey,
     REPO_CHECKS_FILE,
     type RepoChecksList,
@@ -1073,6 +1074,12 @@ const knowledge: Readonly<Record<string, (context: RawContext) => Response | Pro
     [`POST ${KNOWLEDGE_BASE}/seed`]: () => json({ written: [] }),
 };
 
+// The API keys the visitor's laptop holds, for GET /arrivals/keys: the hint and digest only, as the daemon answers.
+const DEMO_KEYS = [
+    { id: `key-3f9a2c41d07e8b55`, provider: `openrouter`, label: `OpenRouter`, source: `hermes`, host: `laptop`, hint: `9c2e`, applicable: true },
+] as const;
+const demoKeysAdded = new Set<string>();
+
 // The routes the daemon serves outside oRPC that the app reaches here, keyed as the contract declares them.
 export const raw = {
     // No loopback shortcut here; the demo daemon is only ever at its own origin.
@@ -1133,6 +1140,20 @@ export const raw = {
     "GET /definition/workspace": () => json({ remote: `https://github.com/acme/intentic-sandbox-ada.git`, branch: `main`, hosts: [`github.com`] }),
     "GET /bundles": () => json({ exports: [] }),
     "GET /arrivals/hosts": () => json({ hosts: [] }),
+    // A model key on the visitor's laptop, offered by the connect view's "Found on this computer"; adding it is
+    // remembered for the tab, though no endpoint joins the picker, since the demo serves no models of its own.
+    "GET /arrivals/keys": () => json({ keys: DEMO_KEYS.map((key) => ({ ...key, added: demoKeysAdded.has(key.id) })) }),
+    "POST /arrivals/keys/apply": async ({ request }) => {
+        const ids = ProviderKeysApplySchema.safeParse(await request.json()).data?.ids ?? [];
+        const known = ids.filter((id) => DEMO_KEYS.some((key) => key.id === id));
+        for (const id of known) {
+            demoKeysAdded.add(id);
+        }
+        return json({
+            added: known.map((id) => ({ id, capability: DEMO_KEYS.find((key) => key.id === id)?.provider ?? `endpoint` })),
+            failed: ids.filter((id) => !known.includes(id)).map((id) => ({ id, error: `that key is no longer on a connected device` })),
+        });
+    },
     // The checklist an upload produces: one row per repo, one for workspace files, one for history, plus two
     // steps the arrival can't do for the owner.
     "POST /arrivals/plan": () =>

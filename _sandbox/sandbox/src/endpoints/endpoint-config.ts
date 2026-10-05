@@ -6,12 +6,15 @@ import type { EndpointConfig } from "@intentic/sandbox-contract";
 
 // OpenAI bases include /v1, Anthropic's excludes it; the field takes free text so either pasted form works.
 const VERSION_SUFFIX = /\/v\d+$/;
+// Versioned already, VERSION_SUFFIX's /v1 and also a pre-release version (`/v1beta`) or Google's OpenAI-compatible
+// surface below one (`/v1beta/openai`), where an appended /v1 is a 404.
+const VERSIONED_PATH = /\/v\d+(?:(?:alpha|beta)\d*)?(?:\/openai)?$/;
 const trimmed = (baseUrl: string): string => baseUrl.trim().replace(/\/+$/, "");
 
 // API root with its version segment, what an OpenAI-compatible client (and CLIProxyAPI's base-url) wants.
 export const versionedBase = (baseUrl: string): string => {
     const base = trimmed(baseUrl);
-    return VERSION_SUFFIX.test(base) ? base : `${base}/v1`;
+    return VERSIONED_PATH.test(base) ? base : `${base}/v1`;
 };
 
 // API root without it, what ANTHROPIC_BASE_URL wants, since the harness appends /v1/messages itself.

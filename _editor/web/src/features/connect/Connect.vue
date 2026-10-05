@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import {
     type AgentProvider,
+    endpointProvider,
     type KeyedProvider,
     mintedVariants,
     type NativeProvider,
+    type ProviderKey,
+    ProviderKeysAppliedSchema,
+    ProviderKeysSchema,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, Icon, Page, PageHeader, ui } from "@intentic/ui";
+import { Button, Icon, Notice, Page, PageHeader, ui } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { defaultModelFor, endpointProviders } from "../chat/accounts/providerCatalog";
@@ -14,7 +19,11 @@ import { refreshConnections } from "../chat/accounts/useChat-accounts";
 import { accessKnown, accessStateFor, providerReady } from "../chat/session/access";
 import { rememberPick } from "../chat/run/turnDefaults";
 import { useChat } from "../chat/run/useChat";
+import ProviderLogo from "../chat/accounts/ProviderLogo.vue";
+import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { useRole } from "../sandbox/secrets/useRole";
+import { foundToOffer } from "../../lib/foundOnComputer";
 import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
 import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
 import { localPrefetchStopped } from "./localPrefetch";
@@ -22,11 +31,14 @@ import {
     arrivalLane,
     connectLane,
     type ConnectLaneKey,
+    foundSignIns,
     justLanded,
+    KEY_SOURCE_LABELS,
     landedLine,
     laneOfProvider,
     laneProviders,
     linkArrival,
+    offeredKeys,
     type PickedStanding,
 } from "./connectLanes";
 import ConnectLane from "./ConnectLane.vue";
@@ -117,7 +129,8 @@ const settleLane = (): void => {
         }
         return;
     }
-    openLane.value = arrivalLane((key) => laneHolds(key) !== undefined);
+    // What this computer is already signed in to is the thing to do here: nothing below opens over it.
+    openLane.value = foundRows.value.length > 0 ? undefined : arrivalLane((key) => laneHolds(key) !== undefined);
 };
 
 // The live handshake, wherever it was started: read from the store so a sign-in begun here and finished after a reload
@@ -166,9 +179,69 @@ const connectChosen = (): void => {
 const landed = ref<AgentProvider | undefined>(undefined);
 // Named with the sandbox it went to: a connection lives in that sandbox alone (landedLine).
 const { active: activeSandbox } = useSandbox();
-const landedText = computed(() =>
-    landed.value === undefined ? `` : landedLine(providerSpec(landed.value)?.accountLabel ?? landed.value, activeSandbox.value?.name),
-);
+// An endpoint made from a found key is named for its provider ("OpenRouter"); any other as the picker names it.
+const keyEndpointLabels = new Map<AgentProvider, string>();
+const landedLabel = (provider: AgentProvider): string =>
+    providerSpec(provider)?.accountLabel ??
+    keyEndpointLabels.get(provider) ??
+    endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
+    provider;
+const landedText = computed(() => (landed.value === undefined ? `` : landedLine(landedLabel(landed.value), activeSandbox.value?.name)));
+
+// FOUND ON THIS COMPUTER (`?found=`, lib/foundOnComputer.ts): the providers the desktop app found signed in here, each one
+// press. The press is the tile's own: its sign-in opens in the provider's lane below, where every sign-in on this view
+// runs, and the browser that is already signed in answers it.
+// What the address names, else what the desktop app said on an earlier address (a folder's own sandbox opens with no
+// setup page in its way, and the reader may arrive here later, from the chat).
+const found = computed(() => foundToOffer(route.query[`found`]));
+const foundRows = computed(() => foundSignIns(found.value, providerReady));
+const connectFound = (provider: NativeProvider): void => {
+    openLane.value = laneOfProvider(provider);
+    void connect(provider);
+};
+
+// And the API keys the owner's devices hold (the daemon's GET /arrivals/keys, migrations/provider-keys.ts): copied,
+// unlike a sign-in, since a key is not bound to the install that holds it. Read once on open, and only by a tier that
+// may connect things; a device asleep, or none at all, is an empty list.
+const { canShip } = useRole();
+const keys = ref<readonly ProviderKey[]>([]);
+const addedHere = ref<ReadonlySet<string>>(new Set());
+const keyRows = computed(() => offeredKeys(keys.value, addedHere.value));
+const readKeys = async (): Promise<void> => {
+    // allow(silent-catch): a list that could not be read offers nothing, which is what the section shows for none.
+    keys.value = ProviderKeysSchema.parse(await sandboxJson(`/arrivals/keys`).catch(() => ({ keys: [] }))).keys;
+};
+const adding = ref<string | undefined>(undefined);
+const { notice: keyNotice, run: runAddKey } = useAsyncAction();
+const addKey = (key: ProviderKey): Promise<void> =>
+    runAddKey(async () => {
+        adding.value = key.id;
+        try {
+            const applied = ProviderKeysAppliedSchema.parse(
+                await sandboxJson(`/arrivals/keys/apply`, {
+                    method: `POST`,
+                    headers: { "content-type": `application/json` },
+                    body: JSON.stringify({ ids: [key.id] }),
+                }),
+            );
+            const failure = applied.failed[0];
+            if (failure !== undefined) {
+                throw new Error(failure.error);
+            }
+            addedHere.value = new Set([...addedHere.value, key.id]);
+            keys.value = keys.value.map((entry) => (entry.id === key.id ? { ...entry, added: true } : entry));
+            // The picker reads endpoints off the connection list, which has never heard of this one.
+            await refreshConnections();
+            const capability = applied.added[0]?.capability;
+            if (capability !== undefined) {
+                keyEndpointLabels.set(endpointProvider(capability), key.label);
+                landed.value = endpointProvider(capability);
+            }
+        } finally {
+            adding.value = undefined;
+        }
+    }, t(`connect.connect.foundKeyFailed`));
+
 // A provider that became ready while this view was open is the thing that just happened, whichever lane did it; one
 // picked while already connected is a sign-in starting, and "Connected" above it would contradict it (justLanded).
 watch(
@@ -226,6 +299,9 @@ onMounted(() => {
     // Fetched on open rather than waiting for the reachable seam, which lags a probe plus a tunnel round-trip.
     void refreshConnections();
     settleLane();
+    if (canShip.value) {
+        void readKeys();
+    }
 });
 watch([accessKnown, () => route.query[`provider`]], settleLane);
 </script>
@@ -240,6 +316,46 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
             <span class="min-w-0 flex-1 text-sm text-content">{{ landedText }}</span>
             <Button :label="t(`connect.connect.startChatting`)" @click="startChatting" />
         </div>
+
+        <!-- What this computer already holds, above the ways in: the first thing to do when there is any of it. -->
+        <section v-if="foundRows.length > 0 || keyRows.length > 0" class="ui-card mb-3 flex flex-col gap-3 p-4 sm:p-5">
+            <h2 class="font-medium leading-tight">{{ t(`connect.connect.foundTitle`) }}</h2>
+            <div v-for="provider in foundRows" :key="provider" class="flex items-center gap-3 rounded-xl border border-line bg-card p-3">
+                <ProviderLogo :provider="provider" class="shrink-0 text-base text-muted" />
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span class="truncate text-sm font-medium text-content">{{ providerSpec(provider)?.accountLabel }}</span>
+                    <span class="text-2xs text-muted">{{ t(`connect.connect.foundSignedIn`) }}</span>
+                </span>
+                <Button
+                    size="small"
+                    class="shrink-0"
+                    :label="t(`ui.action.connect`)"
+                    :loading="live?.provider === provider"
+                    :disabled="live !== undefined"
+                    @click="connectFound(provider)"
+                />
+            </div>
+            <div v-for="key in keyRows" :key="key.id" class="flex items-center gap-3 rounded-xl border border-line bg-card p-3">
+                <Icon name="key" class="shrink-0 text-base text-muted" />
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span class="truncate text-sm font-medium text-content">{{ t(`connect.connect.foundKeyTitle`, { provider: key.label }) }}</span>
+                    <span class="text-2xs text-muted">{{ t(`connect.connect.foundKeyFrom`, { source: KEY_SOURCE_LABELS[key.source], hint: key.hint }) }}</span>
+                </span>
+                <span v-if="key.added" class="flex shrink-0 items-center gap-1 text-2xs text-success">
+                    <Icon name="check" class="text-2xs" />{{ t(`connect.connect.foundKeyAdded`) }}
+                </span>
+                <Button
+                    v-else
+                    size="small"
+                    class="shrink-0"
+                    :label="t(`ui.action.add`)"
+                    :loading="adding === key.id"
+                    :disabled="adding !== undefined"
+                    @click="addKey(key)"
+                />
+            </div>
+            <Notice v-if="keyNotice" :of="keyNotice" />
+        </section>
 
         <div class="flex flex-col gap-3">
             <ConnectLane

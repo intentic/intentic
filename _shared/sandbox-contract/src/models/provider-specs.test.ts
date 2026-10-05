@@ -7,6 +7,7 @@ import {
     mintedVariant,
     mintedVariants,
     NATIVE_PROVIDERS,
+    nativeProvidersIn,
     PROVIDER_SPECS,
     providerSpec,
 } from "./provider-specs.js";
@@ -123,4 +124,15 @@ test("an id that is not a provider resolves to nothing", () => {
         expect(mintedVariants(id), id).toBeUndefined();
         expect(mintedVariant(id), id).toBeUndefined();
     }
+});
+
+// The desktop app's `?found=claude,codex`: what it found signed in on the computer, read back as providers.
+test("a list of ids names known providers once each, in its own order", () => {
+    expect(nativeProvidersIn("codex,claude")).toEqual(["codex", "claude"]);
+    // Unknown ids, blanks and repeats are dropped rather than refusing the whole list.
+    expect(nativeProvidersIn(" claude , ,nope,endpoint/x,claude,gemini")).toEqual(["claude", "gemini"]);
+    // A repeated query key, as a router hands it back, and a bare `?found`.
+    expect(nativeProvidersIn(["codex", null, "cursor"])).toEqual(["codex", "cursor"]);
+    expect(nativeProvidersIn(null)).toEqual([]);
+    expect(nativeProvidersIn(undefined)).toEqual([]);
 });

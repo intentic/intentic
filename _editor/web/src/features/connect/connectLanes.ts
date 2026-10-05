@@ -1,4 +1,4 @@
-import { type AgentProvider, type NativeProvider, PROVIDER_SPECS } from "@intentic/sandbox-contract";
+import { type AgentProvider, type NativeProvider, PROVIDER_SPECS, type ProviderKey, type ProviderKeySource } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Which way in a reader is choosing between, and which providers sit behind each. Pure: the view reads readiness and
@@ -75,3 +75,24 @@ export const landedLine = (label: string, sandboxName: string | undefined): stri
     sandboxName === undefined || sandboxName === ``
         ? t(`connect.connect.landed`)
         : t(`connect.connect.landedIn`, { provider: label, sandbox: sandboxName });
+
+// "Found on this computer", above the lanes: the providers the desktop app found signed in here (`?found=`) that this
+// sandbox does not hold yet, in lane order, so the same rule (cost leads) orders them as orders everything below. One
+// that becomes ready leaves the list, and the banner over the lanes says so instead.
+export const foundSignIns = (found: readonly AgentProvider[], ready: (provider: AgentProvider) => boolean): readonly NativeProvider[] =>
+    CONNECT_LANES.flatMap((lane) => lane.providers).filter((provider) => found.includes(provider) && !ready(provider));
+
+// The API keys from the owner's devices offered beside them: only ones this sandbox can reach, and not ones an endpoint
+// already held when the view opened. A key added during this visit keeps its row, marked as added, rather than
+// vanishing under the press that added it.
+export const offeredKeys = (keys: readonly ProviderKey[], addedHere: ReadonlySet<string>): readonly ProviderKey[] =>
+    keys.filter((key) => key.applicable && (!key.added || addedHere.has(key.id)));
+
+// The tool a found API key was read from, by its own name: product names, the same in every language.
+export const KEY_SOURCE_LABELS = {
+    hermes: `Hermes`,
+    openclaw: `OpenClaw`,
+    opencode: `opencode`,
+    gemini: `Gemini CLI`,
+    codex: `Codex`,
+} as const satisfies Record<ProviderKeySource, string>;

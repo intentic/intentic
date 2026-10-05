@@ -2480,6 +2480,12 @@
             "allAccounts": "Zarządzaj kontami, które ten sandbox już ma",
             "connecting": "Podłączanie: {provider}",
             "description": "Dane logowania są przechowywane w Twoim sandboxie, nigdy na platformie. Wybierz to, co już masz.",
+            "foundKeyAdded": "Dodano",
+            "foundKeyFailed": "Nie udało się dodać tego klucza.",
+            "foundKeyFrom": "Z {source}, kończy się na {hint}. Dodanie kopiuje klucz do tego sandboxa.",
+            "foundKeyTitle": "Klucz API {provider}",
+            "foundSignedIn": "Zalogowano na tym komputerze. Połącz tutaj jednym kliknięciem w przeglądarce; tam też logowanie pozostaje bez zmian.",
+            "foundTitle": "Znalezione na tym komputerze",
             "free": "Za darmo",
             "freeSubtitle": "Wystarczy się zalogować: bez karty, bez subskrypcji",
             "freeTitle": "Za darmo, z kontem Google",
@@ -7263,13 +7269,26 @@
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",
             "agentsLead": "Agenci pracują w sandboxie: na tym komputerze w Dockerze albo na maszynie, którą utrzymujemy my. Zaloguj się, żeby go utworzyć.",
             "finishInBrowser": "Dokończ logowanie w przeglądarce. Twoja przestrzeń robocza otworzy się tutaj, gdy skończysz.",
-            "filesStayHere": "Twoje pliki zostają na tym komputerze. Nic tutaj nie wymaga konta."
+            "filesStayHere": "Twoje pliki zostają na tym komputerze. Nic tutaj nie wymaga konta.",
+            "foundLead": "Zalogowane już na tym komputerze: {subscriptions}. Zaloguj się tutaj, a podłączenie każdej z nich do sandboxa zajmie jedno kliknięcie."
         },
         "emptyFolder": {
             "title": "Ten folder jest pusty",
             "lead": "Wszystko, co włożysz do folderu {name}, pojawi się tutaj. Zapisz lub skopiuj do niego pliki, przeciągnij je na listę po lewej albo otwórz folder, który już masz.",
             "openFolder": "Otwórz folder…",
             "showInFileManager": "Pokaż w menedżerze plików"
+        },
+        "foundProjects": {
+            "title": "Wróć do swoich projektów",
+            "lead": "Foldery, w których pracujesz na tym komputerze: z Claude Code, z Codexem albo w swoim edytorze. Otwórz jeden, żeby zobaczyć tutaj jego pliki.",
+            "openedHere": "Otwierany tu wcześniej",
+            "inWsl": "WSL · {distro}",
+            "hasSandbox": "Ma sandbox",
+            "open": "Otwórz",
+            "privacy": "Znalezione w historii tego komputera. Nic stąd nie wychodzi.",
+            "hide": "Nie pokazuj ich",
+            "show": "Pokaż foldery znalezione na tym komputerze",
+            "orThisFolder": "Folder {name} jest pusty. Otwórz inny folder albo włóż pliki do tego."
         },
         "project": {
             "dialogTitle": "Popracuj nad {name} z agentem",

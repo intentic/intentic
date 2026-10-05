@@ -35,6 +35,7 @@ import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
+import { noteFound } from "../lib/foundOnComputer";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { useNotifications } from "../shell/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
@@ -514,6 +515,10 @@ router.beforeResolve(() => overlayBackSettled());
 // The desktop app's "Ask an agent about this" arrives as `?handoff=` on whatever route it lands: kept for the chat that
 // takes the file, and out of the address before any other guard reads it (features/chat/drafts/localHandoff.ts).
 router.beforeEach((to) => receiveHandoff(to, () => useAuth().user.value !== null));
+
+// The desktop app's `/setup?found=…` (the AI tools signed in on this computer) is kept before the sign-in gate can send
+// the reader away from it, for the landing once setup finishes (lib/foundOnComputer.ts).
+router.beforeEach((to) => noteFound(to));
 
 // A link naming a conversation opens it wherever it lands: the daemon's push notifications point at
 // `/?conversation=<id>`, and a shell that rewrites its entry path before the router runs (the demo does) must not

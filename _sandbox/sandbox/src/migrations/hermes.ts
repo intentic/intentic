@@ -38,6 +38,51 @@ export const detectHermes = (files: Files): boolean =>
         files.has("memory/MEMORY.md") ||
         [...files.keys()].some((path) => path.startsWith("skills/")));
 
+// auth.json read into its plain API keys and the providers that hold OAuth instead, both sorted by provider; undefined
+// when it is not JSON. Providers sit at the top level or under `providers`.
+export const hermesAuthKeys = (
+    raw: string,
+): { readonly keys: readonly { readonly provider: string; readonly key: string }[]; readonly oauth: readonly string[] } | undefined => {
+    let parsed: Record<string, unknown>;
+    try {
+        parsed = asRecord(JSON.parse(raw)) ?? {};
+    } catch {
+        // allow(silent-catch): not JSON is the answer itself, which the plan words as a refused line.
+        return undefined;
+    }
+    const keys: { provider: string; key: string }[] = [];
+    const oauth: string[] = [];
+    for (const [provider, entry] of Object.entries(asRecord(parsed["providers"]) ?? parsed).toSorted(([left], [right]) => left.localeCompare(right))) {
+        const record = asRecord(entry);
+        const key = asString(record?.["api_key"]);
+        if (key !== undefined) {
+            keys.push({ provider, key });
+        }
+        if (asString(record?.["access_token"]) !== undefined || asString(record?.["refresh_token"]) !== undefined) {
+            oauth.push(provider);
+        }
+    }
+    return { keys, oauth };
+};
+
+// auth.json's plain keys become secrets beside the .env's; its OAuth logins are refused by name.
+const planAuthKeys = (raw: string | undefined, secrets: ReturnType<typeof secretPlanner>, refused: string[]): void => {
+    if (raw === undefined) {
+        return;
+    }
+    const auth = hermesAuthKeys(raw);
+    if (auth === undefined) {
+        refused.push("auth.json (not readable as JSON)");
+        return;
+    }
+    for (const entry of auth.keys) {
+        secrets.plan(`${entry.provider.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, entry.key, "auth.json");
+    }
+    for (const provider of auth.oauth) {
+        refused.push(`auth.json: ${provider} OAuth tokens (bound to that install, sign in fresh here)`);
+    }
+};
+
 export const planHermes = (files: Files): SourcePlan => {
     const planned: PlannedItem[] = [];
     const refused: string[] = [];
@@ -118,27 +163,7 @@ export const planHermes = (files: Files): SourcePlan => {
     for (const [key, value] of Object.entries(env).toSorted(([left], [right]) => left.localeCompare(right))) {
         secrets.plan(key, value, ".env");
     }
-    const authRaw = text(files, "auth.json");
-    if (authRaw !== undefined) {
-        const auth = ((): Record<string, unknown> => {
-            try {
-                return asRecord(JSON.parse(authRaw)) ?? {};
-            } catch {
-                refused.push("auth.json (not readable as JSON)");
-                return {};
-            }
-        })();
-        for (const [provider, entry] of Object.entries(auth).toSorted(([left], [right]) => left.localeCompare(right))) {
-            const record = asRecord(entry);
-            const apiKey = asString(record?.["api_key"]);
-            if (apiKey !== undefined) {
-                secrets.plan(`${provider.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, apiKey, "auth.json");
-            }
-            if (asString(record?.["access_token"]) !== undefined || asString(record?.["refresh_token"]) !== undefined) {
-                refused.push(`auth.json: ${provider} OAuth tokens (bound to that install, sign in fresh here)`);
-            }
-        }
-    }
+    planAuthKeys(text(files, "auth.json"), secrets, refused);
 
     // MCP servers: URL-served ones become mcp capabilities; command-run ones cannot cross.
     const capabilityId = idPool();

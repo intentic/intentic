@@ -2480,6 +2480,12 @@
             "allAccounts": "Manage the accounts this sandbox already holds",
             "connecting": "Connecting {provider}",
             "description": "It is stored in your sandbox and never on the platform. Pick whichever of these you already have.",
+            "foundKeyAdded": "Added",
+            "foundKeyFailed": "Could not add that key.",
+            "foundKeyFrom": "From {source}, ending in {hint}. Adding it copies the key into this sandbox.",
+            "foundKeyTitle": "{provider} API key",
+            "foundSignedIn": "Signed in on this computer. Connect it here with one click in your browser; it stays signed in there too.",
+            "foundTitle": "Found on this computer",
             "free": "Free",
             "freeSubtitle": "A sign-in, no card, no subscription",
             "freeTitle": "Free, with a Google account",
@@ -2641,13 +2647,26 @@
             "putAgentsToWork": "Put agents to work",
             "agentsLead": "Agents work in a sandbox: on this computer, in Docker, or on a machine we host. Sign in to set one up.",
             "finishInBrowser": "Finish signing in in your browser. Your workspace opens here when you're done.",
-            "filesStayHere": "Your files stay on this computer. Nothing here needs an account."
+            "filesStayHere": "Your files stay on this computer. Nothing here needs an account.",
+            "foundLead": "Already signed in on this computer: {subscriptions}. Sign in here, and connecting them to a sandbox is one click each."
         },
         "emptyFolder": {
             "title": "This folder is empty",
             "lead": "Anything you put in {name} shows up here. Save or copy files into it, drag them onto the list on the left, or open a folder you already have.",
             "openFolder": "Open a folder…",
             "showInFileManager": "Show in file manager"
+        },
+        "foundProjects": {
+            "title": "Pick up where you left off",
+            "lead": "Folders you have worked in on this computer, with Claude Code, Codex or your editor. Open one to see its files here.",
+            "openedHere": "Opened here before",
+            "inWsl": "WSL · {distro}",
+            "hasSandbox": "Has a sandbox",
+            "open": "Open",
+            "privacy": "Found in this computer's own history. Nothing leaves it.",
+            "hide": "Don't show these",
+            "show": "Show the folders found on this computer",
+            "orThisFolder": "{name} is empty. Open another folder, or put files in this one."
         },
         "project": {
             "dialogTitle": "Work on {name} with an agent",

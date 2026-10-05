@@ -1,16 +1,37 @@
 <script setup lang="ts">
 import { AnchoredOverlay, Button, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { ref, watch } from "vue";
-import { localHost } from "../app/environments/localHost";
+import { computed, onMounted, ref, watch } from "vue";
+import { type LocalFoundProvider, localHost } from "../app/environments/localHost";
+import { foundSubscriptions, subscriptionName } from "./foundProjects";
 
 // THE FOOT OF A LOCAL WINDOW'S RAIL BEFORE THERE IS AN ACCOUNT, where the sandbox shell keeps the account. Once there is
 // one, the foot is the sandbox shell's own account control (shell/AccountPanel.vue, LocalShell.vue chooses). Until then,
 // what agents need, and the sign-in that brings them: it runs in the default browser and comes back as the workspace.
-// Nothing on this computer needs either.
+// Nothing on this computer needs either. The subscriptions this computer's AI tools are signed in to (the app's found.rs)
+// are named here, since they are what an account would put to work: the sandbox signs in to each on its own, from
+// Connect, so the tools here keep their logins.
 
 const t = useT();
 const host = localHost();
+
+const found = ref<readonly LocalFoundProvider[]>([]);
+onMounted(async () => {
+    if (!host.native) {
+        return;
+    }
+    try {
+        found.value = foundSubscriptions((await host.found()).providers);
+    } catch (error) {
+        // Naming them is a nicety: a computer that cannot be read leaves the tile as it was, and says why on the console.
+        console.warn(`[local] what this computer's tools found could not be read`, error);
+    }
+});
+const lead = computed(() =>
+    found.value.length === 0
+        ? t(`local.agentsTile.agentsLead`)
+        : t(`local.agentsTile.foundLead`, { subscriptions: found.value.map(subscriptionName).join(`, `) }),
+);
 
 const trigger = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
@@ -67,7 +88,7 @@ const signIn = async (): Promise<void> => {
                 <div class="min-w-0 flex-1">
                     <p class="text-sm font-semibold text-content">{{ label }}</p>
                     <p class="mt-0.5 text-xs text-muted">
-                        {{ handedOver ? t(`local.agentsTile.finishInBrowser`) : t(`local.agentsTile.agentsLead`) }}
+                        {{ handedOver ? t(`local.agentsTile.finishInBrowser`) : lead }}
                     </p>
                 </div>
             </div>

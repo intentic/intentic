@@ -83,7 +83,7 @@ export const readAssistantArchive = async (body: ReadableStream<Uint8Array>, lim
     return { source: recognized.source, files: recognized.files, skipped: archive.skipped };
 };
 
-const hostCapabilities = async (services: Services): Promise<Extract<Capability, { kind: "device" }>[]> =>
+export const hostCapabilities = async (services: Services): Promise<Extract<Capability, { kind: "device" }>[]> =>
     (await services.capabilities.list()).filter((capability): capability is Extract<Capability, { kind: "device" }> => capability.kind === "device");
 
 // Probes every enrolled machine concurrently; a sleeping laptop costs the render nothing but a row saying so.

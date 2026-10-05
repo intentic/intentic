@@ -1841,6 +1841,14 @@
         }
     },
     "connect": {
+        "connect": {
+            "foundKeyAdded": "Añadida",
+            "foundKeyFailed": "No se pudo añadir esa clave.",
+            "foundKeyFrom": "De {source}, termina en {hint}. Al añadirla, la clave se copia en este sandbox.",
+            "foundKeyTitle": "Clave de API de {provider}",
+            "foundSignedIn": "Con sesión iniciada en este ordenador. Conéctalo aquí con un clic en tu navegador; allí también sigues con la sesión iniciada.",
+            "foundTitle": "Encontrado en este ordenador"
+        },
         "localModelLane": {
             "gpuOffered": "Solo CPU por ahora; la entrada del catálogo del modelo puede pedir una GPU NVIDIA.",
             "needsRebuild": "Esta imagen aún no incluye llama-server. Reconstruye el sandbox desde Entorno en la página Sandbox y vuelve después.",

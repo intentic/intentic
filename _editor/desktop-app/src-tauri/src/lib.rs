@@ -4,6 +4,7 @@ mod auth;
 mod badge;
 mod commands;
 mod fix;
+mod found;
 mod local;
 mod notice;
 mod project;
@@ -180,12 +181,14 @@ pub fn run() {
             account::account_relay,
             project::project_preview,
             project::project_create,
+            found::found_on_machine,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);
             app.manage(auth::PendingAuth::default());
             app.manage(update::UpdateState::default());
             app.manage(local::LocalFiles::default());
+            app.manage(found::FoundCache::default());
             app.manage(sidecar::Sidecar::default());
             app.manage(badge::Badge::default());
             app.manage(notice::Notices::default());

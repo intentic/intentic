@@ -24,6 +24,11 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   registry reading tries again. Outside the app nothing is handed over.
 - **What the page says** about a project, on either machine: the folder is copied into the sandbox, agents work on the
   copy, and their changes come back when the owner presses "Bring back changes" in the folder's window.
+- **What this computer is already signed in to.** The desktop app opens the page as `/setup?found=claude,codex`, the
+  providers it found signed in on the computer. `lib/foundOnComputer.ts` keeps the list in the tab's session storage as the
+  router first sees it, since a signed-out app's sign-in comes back at `/` without the query, and the finished setup
+  opens `/connect?found=…` instead of `/`, which offers each one as a single press. No login is copied: the sandbox signs
+  in afresh, and the browser already signed in answers it.
 
 ## Key files
 

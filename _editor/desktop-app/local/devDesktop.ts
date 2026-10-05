@@ -2,6 +2,7 @@ import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { ApiToken, HostedPlanState, User } from "@intentic/api-contract";
+import type { LocalFound } from "@intentic/web/local-host";
 import type {
     AccountAnswer,
     AccountAsk,
@@ -60,6 +61,57 @@ const recents: LocalRecent[] = [
     { path: `${HOME}\\code\\shop`, folder: true, openedAt: NOW_S - 26 * 3600, exists: true, sandbox: true },
     { path: `${HOME}\\Desktop\\old-notes`, folder: true, openedAt: NOW_S - 9 * 86_400, exists: false, sandbox: false },
 ];
+
+// What this computer's AI tools say (src-tauri/src/found.rs): on a first launch, Claude Code and Codex signed in, and
+// the folders their histories and the editors name, one of them in a WSL distro and one with a sandbox already.
+const FOUND: LocalFound = {
+    providers: [
+        { provider: `claude`, tools: [`claude-code`], email: `ada@example.com`, plan: `max`, wsl: null },
+        { provider: `codex`, tools: [`codex`, `hermes`], email: `ada@example.com`, plan: `plus`, wsl: `Ubuntu` },
+    ],
+    projects: [
+        {
+            path: `${HOME}\\code\\shop`,
+            shown: `${HOME}\\code\\shop`,
+            name: `shop`,
+            sources: [`claude-code`, `vscode`],
+            lastActive: NOW_S - 2 * 3600,
+            wsl: null,
+            git: true,
+            sandbox: true,
+        },
+        {
+            path: `\\\\wsl.localhost\\Ubuntu\\home\\ada\\api`,
+            shown: `/home/ada/api`,
+            name: `api`,
+            sources: [`codex`, `claude-code`],
+            lastActive: NOW_S - 5 * 3600,
+            wsl: `Ubuntu`,
+            git: true,
+            sandbox: false,
+        },
+        {
+            path: `${HOME}\\Documents\\thesis`,
+            shown: `${HOME}\\Documents\\thesis`,
+            name: `thesis`,
+            sources: [`claude-code`],
+            lastActive: NOW_S - 3 * 86_400,
+            wsl: null,
+            git: false,
+            sandbox: false,
+        },
+        {
+            path: `${HOME}\\IdeaProjects\\inventory`,
+            shown: `${HOME}\\IdeaProjects\\inventory`,
+            name: `inventory`,
+            sources: [`jetbrains`],
+            lastActive: NOW_S - 40 * 86_400,
+            wsl: null,
+            git: true,
+            sandbox: false,
+        },
+    ],
+};
 
 // The account's sandboxes as the workspace last listed them: one here, one in the cloud, one somebody shared.
 const SANDBOXES: LocalSandbox[] = [
@@ -215,6 +267,7 @@ type Answer =
     | DesktopInfo
     | HomeFacts
     | LocalRecent[]
+    | LocalFound
     | LocalRoster
     | UpdateStage
     | SandboxStatus[]
@@ -277,6 +330,8 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`desktop_info`, () => DESKTOP_INFO],
     [`home_facts`, (machine) => ({ accountSeen: signedIn(machine), lastFace: `home`, hostsSandboxes: signedIn(machine), homeFolder: `${HOME}\\intentic\\local` })],
     [`local_recents`, () => recents],
+    // A first launch finds what is offered; a machine set up long ago is offered the same, under its recents.
+    [`found_on_machine`, () => FOUND],
     [
         `local_roster`,
         (machine) => (signedIn(machine) ? { account: { email: `ada@example.com`, name: `Ada Lovelace` }, sandboxes: SANDBOXES } : { account: null, sandboxes: [] }),

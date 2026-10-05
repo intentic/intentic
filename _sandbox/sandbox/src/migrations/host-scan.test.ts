@@ -1,49 +1,9 @@
-import type { HostHub } from "../hosts/host-peer.js";
 import { detectOpenclaw } from "./openclaw.js";
 import { probeHost, scanHost } from "./host-scan.js";
 import { planHermes, detectHermes } from "./hermes.js";
+import { machine } from "./host-machine.testing.js";
 
 /* The direct read, against a fake machine that answers the two tools it needs. */
-
-// A pretend home directory, keyed by absolute path the way the machine's own tools are addressed.
-const machine = (tree: Record<string, string | null>, separator = "/"): { hub: HostHub; calls: string[] } => {
-    const calls: string[] = [];
-    const hub = {
-        mcp: async (_id: string, payload: unknown) => {
-            const { params } = payload as { params: { name: string; arguments: Record<string, string> } };
-            const path = params.arguments["path"] ?? "";
-            calls.push(`${params.name} ${path}`);
-            if (params.name === "list_dir") {
-                if (tree[path] !== null) {
-                    return { result: { content: [{ type: "text", text: `"${path}" is not a directory` }], isError: true } };
-                }
-                const prefix = `${path}${separator}`;
-                const names = new Set<string>();
-                for (const key of Object.keys(tree)) {
-                    if (!key.startsWith(prefix)) {
-                        continue;
-                    }
-                    const rest = key.slice(prefix.length).split(separator);
-                    const name = rest[0] ?? "";
-                    if (name !== "") {
-                        names.add(name);
-                    }
-                }
-                const entries = [...names].map((name) => {
-                    const child = tree[`${prefix}${name}`];
-                    return child === null ? { name, kind: "directory" } : { name, kind: "file", size: Buffer.byteLength(child ?? "", "utf8") };
-                });
-                return { result: { content: [{ type: "text", text: JSON.stringify(entries) }] } };
-            }
-            const body = tree[path];
-            if (typeof body !== "string") {
-                return { result: { content: [{ type: "text", text: `no such file` }], isError: true } };
-            }
-            return { result: { content: [{ type: "text", text: body }] } };
-        },
-    } as unknown as HostHub;
-    return { hub, calls };
-};
 
 const HERMES_TREE: Record<string, string | null> = {
     "/home/me": null,

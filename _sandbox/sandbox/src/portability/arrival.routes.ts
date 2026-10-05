@@ -1,15 +1,17 @@
-import { ArrivalApplySchema, ArrivalScanSchema } from "@intentic/sandbox-contract";
+import { ArrivalApplySchema, ArrivalScanSchema, ProviderKeysApplySchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
+import { applyProviderKeys, listProviderKeys, providerKeyDeps } from "../migrations/provider-keys.js";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "../workspace/files/workspace-files-upload.js";
 import { createArrivals } from "./arrival.js";
 
 // Everything arriving at this sandbox (sandbox.toml, an environment bundle, a packed foreign home) through one
 // preview-first pipeline, not three routes. Raw Hono handles the arbitrary-size upload stream; owner-only throughout.
 // Four calls — plan, scan, apply, delete — and the format is never one of them: the daemon sniffs it from the bytes.
+// Beside them, the two for model API keys alone (migrations/provider-keys.ts), which hold nothing between calls.
 
 // Two ways a caller can be wrong, told apart: a file that isn't what it claims is 400 with the reader's own message; a
 // token that no longer matches is 409, since the file was fine and the preview went stale.
@@ -94,6 +96,28 @@ export const createArrivalRoutes = (services: Services) => {
                 }
                 return c.json({ error: failed.error }, failed.status);
             }
+        },
+        // Model API keys on the owner's devices; a device asleep or holding none is simply not in the list.
+        /** GET /arrivals/keys */
+        keys: async (c: Context<AppEnv>): Promise<Response> => {
+            const denied = await ownerDenied(services, c);
+            if (denied !== undefined) {
+                return denied;
+            }
+            return c.json({ keys: await listProviderKeys(providerKeyDeps(services)) });
+        },
+        /** POST /arrivals/keys/apply */
+        applyKeys: async (c: Context<AppEnv>): Promise<Response> => {
+            const denied = await ownerDenied(services, c);
+            if (denied !== undefined) {
+                return denied;
+            }
+            // allow(silent-catch): a body that is not JSON fails the parse below, which answers 400 in its own words.
+            const parsed = ProviderKeysApplySchema.safeParse(await c.req.json().catch(() => undefined));
+            if (!parsed.success) {
+                return c.json({ error: "expected { ids }" }, 400);
+            }
+            return c.json(await applyProviderKeys(providerKeyDeps(services), parsed.data.ids));
         },
         /** DELETE /arrivals */
         abandon: async (c: Context<AppEnv>): Promise<Response> => {

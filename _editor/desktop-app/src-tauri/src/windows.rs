@@ -428,6 +428,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     let origin = url::Url::parse(&base)
         .map(|url| url.origin().ascii_serialization())
         .unwrap_or_default();
+    // A setup started here offers, once its sandbox is up, the subscriptions this computer is signed in to (found.rs).
+    let found_path = path.map(|path| crate::found::with_found(app, path));
+    let path = found_path.as_deref();
     let target = match path {
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
         None => base,
