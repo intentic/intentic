@@ -3292,13 +3292,13 @@
             "found": "{count} found",
             "images": "Images to untrusted providers",
             "imagesCount": "{count} image | {count} images",
-            "imagesDescription": "What an image becomes before an untrusted provider sees it.",
+            "imagesDescription": "Read on this machine; personal data in the image is painted over with tokens—the model still sees the picture.",
             "learnedValues": "Learned values",
             "localNote": "Runs on this machine, so it is always trusted.",
             "lookFor": "What it looks for",
             "lookForNote": "A value taught from a dataset counts as the kind it was taught as, so switching a kind off stops masking those values too.",
             "mask": "Mask",
-            "maskNote": "Each image is read on this machine, and every stretch of its text that holds personal data is painted over with its token before it is sent. The model still sees the picture.",
+            "maskNote": "Personal data found in the image is covered with its token on the picture.",
             "masked": "Masked",
             "model": "Model",
             "modelNote": "The lists plus a named-entity model that runs on this machine.",
@@ -3317,7 +3317,7 @@
             "off": "Off",
             "offNote": "Nothing is routed or read: every model request goes to its provider exactly as before.",
             "on": "On",
-            "onNote": "Untrusted providers get tokens like ⟦PERSON_3⟧ in place of personal data, and the real values are put back in their answers. Runtimes the gateway cannot cover (Cursor, ACP agents, Pi) are refused unless their provider is trusted.",
+            "onNote": "Every shieldable request is routed through the gateway before it reaches the provider.",
             "ownerOnly": "Only the sandbox's owner can change the privacy shield.",
             "ownerOnlyForget": "Only the sandbox's owner can forget a dataset.",
             "passed": "Passed",
@@ -3348,7 +3348,7 @@
             "watch": "Watch",
             "watchNote": "Every request the gateway can cover goes through it: it records what it would mask and sends everything unchanged.",
             "watched": "Watched",
-            "whatItKeeps": "Names, ID numbers, accounts and contacts, kept from model providers you don't trust."
+            "whatItKeeps": "Untrusted providers get tokens like ⟦PERSON_3⟧ instead of personal data; real values are restored in answers. Runtimes the gateway can't cover (Cursor, ACP agents, Pi) are refused unless trusted."
         },
         "agentProjectInstalls": {
             "ask": "Ask first",
