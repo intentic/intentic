@@ -1,10 +1,24 @@
 import { t } from "@intentic/ui/i18n";
 import type { LocalFace } from "@intentic/web/local";
-import type { LocalHost, LocalView } from "@intentic/web/local-host";
+import type { LocalHost, LocalProjectHost, LocalProjectStart, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
 import { readAccount, signOutAccount, updateAccount } from "./account";
-import { homeFacts, localForgetRecent, localOpenPath, localPick, localPoint, localRecents, localRoster, signIn, workspaceOpen } from "./desktop";
+import {
+    homeFacts,
+    localForgetRecent,
+    localOpenPath,
+    localPick,
+    localPoint,
+    localRecents,
+    localRoster,
+    projectCreate,
+    projectPreview,
+    signIn,
+    workspaceOpen,
+    type ProjectCreated,
+} from "./desktop";
 import { deviceBadge } from "./device/badge";
+import { projectBuildOf, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
@@ -38,6 +52,58 @@ const DEVICE_VIEW: LocalView = {
     badge,
 };
 
+/* A FOLDER'S OWN SANDBOX, made from its window (the app's project.rs) and built in it: this window's setup store runs the
+   setup (device/setup.ts `adoptSetup`), and the card over the folder draws it (the web's local/LocalProject.vue). */
+
+// Whether the sandbox image was on this computer when the dialog was drawn: the build's plan weighs no download then.
+let imageWasReady = false;
+
+// What a press came to, the setup started here when there is one to run.
+const started = (created: ProjectCreated): LocalProjectStart => {
+    if (created.kind === `setup`) {
+        // Not awaited: the build runs for its minutes while the page goes on, and its card follows the store.
+        void useDevice().adoptSetup(created.setup, { imageReady: imageWasReady });
+        return `building`;
+    }
+    return created.kind === `signIn` ? `signIn` : `opened`;
+};
+
+const PROJECT: LocalProjectHost = {
+    preview: async () => {
+        const preview = await projectPreview();
+        if (preview.kind === `new`) {
+            imageWasReady = preview.imageReady;
+        }
+        return preview;
+    },
+    create: async (names) => started(await projectCreate(names)),
+    build: computed(() => {
+        const device = useDevice();
+        return projectBuildOf({
+            adopted: device.adopted.value,
+            state: device.setupState.value,
+            view: device.progressShown.value,
+            error: device.setupError.value,
+        });
+    }),
+    open: async () => {
+        const adopted = useDevice().adopted.value;
+        await workspaceOpen(adopted === undefined ? undefined : projectPathOf(adopted));
+    },
+    // The same sandbox, set up again: the app mints its code afresh, or hands back the one still good.
+    retry: async () => {
+        const adopted = useDevice().adopted.value;
+        if (adopted === undefined || adopted.name === undefined || adopted.project === undefined) {
+            return;
+        }
+        started(await projectCreate({ name: adopted.name, project: adopted.project, ...(adopted.sandboxId === undefined ? {} : { sandboxId: adopted.sandboxId }) }));
+    },
+    stop: () => useDevice().stopSetup(),
+    dismiss: () => useDevice().forgetAdopted(),
+    // This device, where the build's every step, its log and anything it asks of the reader are drawn.
+    detailsPath: `/${DEVICE_VIEW.path}`,
+};
+
 export const nativeHost = (): LocalHost => ({
     native: true,
     views: [DEVICE_VIEW],
@@ -57,6 +123,7 @@ export const nativeHost = (): LocalHost => ({
     account: () => readAccount(),
     updateAccount: (change) => updateAccount(change),
     signOut: () => signOutAccount(),
+    project: PROJECT,
 });
 
 /**

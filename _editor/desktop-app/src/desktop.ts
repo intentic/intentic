@@ -16,6 +16,8 @@ export interface SetupArgs {
     platformUrl?: string;
     // A folder of this computer becoming the sandbox's project: its name inside /work (src-tauri/src/project.rs).
     project?: string;
+    // The slug its container is named by, where the app knew it before the run (a setup it made itself).
+    slug?: string;
 }
 
 export interface RecreateArgs {
@@ -303,6 +305,50 @@ export interface AccountAnswer {
     contentType: string | null;
 }
 export const accountRelay = (ask: AccountAsk): Promise<AccountAnswer> => invoke(`account_relay`, { ask });
+
+/* A FOLDER'S OWN SANDBOX, asked for in its window's own dialog (src-tauri/src/project.rs), never naming a folder: the
+   app always means the window's own. */
+
+/** Why a folder cannot have a sandbox (project.rs `Refusal`), drawn in the reader's words by its `kind`. */
+export type ProjectRefusal =
+    | { readonly kind: `disk` | `home` | `holdsHome` | `homes` | `aHome` | `system` }
+    | { readonly kind: `inside` | `around`; readonly other: string };
+
+/** What to beware of before a folder becomes a project (project.rs `Caution`). */
+export type ProjectCaution = { readonly kind: `synced`; readonly service: string } | { readonly kind: `away` };
+
+/** What the folder's dialog draws (project.rs `Preview`). */
+export type ProjectPreview =
+    | { readonly kind: `existing` }
+    | { readonly kind: `document` }
+    | { readonly kind: `refused`; readonly refusal: ProjectRefusal }
+    | {
+          readonly kind: `new`;
+          readonly name: string;
+          readonly path: string;
+          readonly files: number;
+          readonly bytes: number;
+          readonly more: boolean;
+          readonly large: boolean;
+          readonly cautions: readonly ProjectCaution[];
+          readonly signedIn: boolean;
+          readonly imageReady: boolean;
+          readonly busy: boolean;
+      };
+
+/** The names the page derived from the folder's, and the row an earlier attempt made (project.rs `CreateAsk`). */
+export interface ProjectAsk {
+    readonly name: string;
+    readonly project: string;
+    readonly sandboxId?: string;
+}
+
+/** What came of "Create sandbox" (project.rs `Created`). */
+export type ProjectCreated = { readonly kind: `setup`; readonly setup: SetupArgs } | { readonly kind: `signIn` } | { readonly kind: `opened` };
+
+export const projectPreview = (): Promise<ProjectPreview> => invoke(`project_preview`);
+// Rejects with a sentence for the reader: the platform out of reach, a refusal of its own, a setup already running here.
+export const projectCreate = (ask: ProjectAsk): Promise<ProjectCreated> => invoke(`project_create`, { ask });
 
 /* WHAT THE SHELL AND THIS DEVICE ARE DRAWN FROM: facts the app keeps across launches (src-tauri/src/state.rs). */
 

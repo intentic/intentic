@@ -3,9 +3,10 @@ import { projectDirNameFor } from "@intentic/sandbox-contract";
 import type { LocationQueryValue } from "vue-router";
 
 // Decides, in one place, what arriving on /setup does by itself: the desktop app hands the setup code to itself;
-// a browser starts a hosted machine, and so does a project wherever the platform's machines can hold one. The picker
-// survives only when a surface's own answer is unavailable or refused. `Arrival` is the action taken on arrival, not
-// what the page renders.
+// a browser starts a hosted machine, and so does a project opened in a browser wherever the platform's machines can
+// hold one. A project the desktop app asks for runs on this computer, beside its folder. The picker survives only
+// when a surface's own answer is unavailable or refused. `Arrival` is the action taken on arrival, not what the page
+// renders.
 
 // A PROJECT SETUP: the desktop app opens this page as `/setup?project=<folder name>` for a folder the reader picked on
 // their computer, and keeps the folder's path to itself. The page only ever needs its name.
@@ -72,16 +73,23 @@ export interface ArrivalInput {
 // so the explicit ask and the browser default never disagree.
 const hostedTakeable = (input: ArrivalInput): boolean => input.hostedOffered && !input.hostedSpent && !input.hostedFull;
 
-// A project's rung, where the platform's machines can hold one: a machine of ours, which the app copies the folder into
-// once it runs, whenever one can be started for this row and the reader did not ask for this computer. The picker
-// preselects it even where the arrival starts nothing (a row found rather than made).
-export const projectPrefersHosted = (input: ArrivalInput): boolean =>
-    input.project && input.hostedProjects && input.requestedMachine !== `mine` && !input.hostedIdle && hostedTakeable(input);
+// Whether a project is meant for a machine of ours at all. Outside the app, unless this computer was asked for. Inside
+// it, only when a machine of ours was asked for by name: the folder's window asked for a sandbox beside the folder, and
+// a machine three to five minutes away, which the folder then had to reach over the internet, was the wrong answer to
+// that (2026-10-05).
+const projectWantsHosted = (input: ArrivalInput): boolean => (input.inApp ? input.requestedMachine === `hosted` : input.requestedMachine !== `mine`);
 
-// A project's arrival. A machine of ours when the platform can give it one: started for a row this visit made or a
-// rung asked for by name, preselected otherwise. A machine already on the row is this folder's, still coming up, and
-// is resumed rather than handed back. Anything else goes to this computer, as every project did before the platform's
-// machines could hold one, wherever a code can be minted for the app to redeem.
+// A project's rung, where the platform's machines can hold one and the project wants one: a machine of ours, which the
+// app copies the folder into once it runs, whenever one can be started for this row. The picker preselects it even
+// where the arrival starts nothing (a row found rather than made).
+export const projectPrefersHosted = (input: ArrivalInput): boolean =>
+    input.project && projectWantsHosted(input) && input.hostedProjects && !input.hostedIdle && hostedTakeable(input);
+
+// A project's arrival. A machine of ours when it wants one and the platform can give it one: started for a row this
+// visit made or a rung asked for by name, preselected otherwise. A machine already on the row is this folder's, still
+// coming up, and the reader's to resume or drop in the picker rather than handed back. Anything else goes to this
+// computer, wherever a code can be minted for the app to redeem: every project the app asks for, and every project
+// before the platform's machines could hold one.
 const projectArrival = (input: ArrivalInput): Arrival => {
     if (projectPrefersHosted(input)) {
         return input.fresh || input.requestedMachine === `hosted` ? `hosted` : `choose`;

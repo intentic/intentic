@@ -298,9 +298,25 @@ pub fn check_disk() -> Outcome {
 // Windows — the prerequisites Docker itself has, which on no other platform are a tree.
 //
 
+/// Set by the shim that ran `ic docker prepare` and saw it pass a moment before this run (connect.ps1).
+#[cfg(any(windows, test))]
+pub const PREPARED: &str = "INTENTIC_PREPARED";
+
+/// Whether the shim already examined this PC: `ic docker prepare` reads exactly the facts [`check_windows`] reads, so
+/// the reading it passed on seconds ago answers for this one.
+#[cfg(any(windows, test))]
+pub fn just_prepared(marker: Option<&str>) -> bool {
+    marker == Some("1")
+}
+
 /* `ic docker prepare` runs before this and fixes what it can, so on the ordinary path this check passes and costs a second. */
 #[cfg(windows)]
 pub fn check_windows() -> Outcome {
+    // A second `powershell.exe` probe for facts the shim's own prepare passed on seconds ago is a second or two of
+    // nothing on every setup. A run without that shim (`ic sandbox connect` typed by hand) still probes.
+    if just_prepared(std::env::var(PREPARED).ok().as_deref()) {
+        return Outcome::Pass;
+    }
     let facts = match crate::prepare::facts::probe() {
         Ok(facts) => facts,
         // A machine that would not describe itself has not failed anything: docker_outcome above still has to
@@ -392,6 +408,16 @@ mod tests {
                 remedy: format!("fix {name}"),
             },
         }
+    }
+
+    #[test]
+    fn only_the_shims_own_marker_stands_in_for_the_windows_probe() {
+        assert_eq!(PREPARED, "INTENTIC_PREPARED");
+        assert!(just_prepared(Some("1")));
+        // Unset, or anything but the shim's own spelling: the probe runs, as it did before the marker existed.
+        assert!(!just_prepared(None));
+        assert!(!just_prepared(Some("")));
+        assert!(!just_prepared(Some("true")));
     }
 
     #[test]

@@ -1,8 +1,22 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { mockIPC } from "@tauri-apps/api/mocks";
+import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { ApiToken, HostedPlanState, User } from "@intentic/api-contract";
-import type { AccountAnswer, AccountAsk, DesktopInfo, HomeFacts, LocalRecent, LocalRoster, LocalSandbox, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
+import type {
+    AccountAnswer,
+    AccountAsk,
+    DesktopInfo,
+    HomeFacts,
+    LocalRecent,
+    LocalRoster,
+    LocalSandbox,
+    ProjectAsk,
+    ProjectCreated,
+    ProjectPreview,
+    SandboxStatus,
+    SetupArgs,
+    UpdateStage,
+} from "../src/desktop";
 
 // THE APP, STOOD IN FOR ON A DEV SERVER. The local face in a plain browser (`pnpm dev:local`) has no Tauri behind it, so
 // every command the shell and This device call would throw. This answers them from a few fixed machines, through Tauri's
@@ -13,6 +27,10 @@ import type { AccountAnswer, AccountAsk, DesktopInfo, HomeFacts, LocalRecent, Lo
 // - `fresh` (the default): a first launch. No account, no sandbox, no agent, no Docker.
 // - `host`: signed in, two sandboxes here (one running, with a folder synced) of the account's three, the machine agent up.
 // - `setup`: signed in, a setup handed over from the workspace, running its steps.
+//
+// "Work on this with an agent" answers as `?project=` says, kept with the machine: `new` (the default) a folder that can
+// have one, `cautions` one that a sync service already holds and that is large, `busy` one asked for while another
+// sandbox is being set up, `refused` one inside a folder that has one, `fail` one whose build stops at the start.
 
 type Machine = `fresh` | `host` | `setup`;
 const MACHINES: readonly Machine[] = [`fresh`, `host`, `setup`];
@@ -106,8 +124,108 @@ const runSetup = async (): Promise<void> => {
     await new Promise(() => undefined);
 };
 
+/* A FOLDER'S OWN SANDBOX (src-tauri/src/project.rs): the dialog's answer, and a build that runs to its end. */
+
+type ProjectCase = `new` | `cautions` | `busy` | `refused` | `fail`;
+const PROJECT_CASES: readonly ProjectCase[] = [`new`, `cautions`, `busy`, `refused`, `fail`];
+const PROJECT_KEY = `intentic.local.devProject`;
+
+const projectCaseOf = (): ProjectCase => {
+    const asked = new URL(window.location.href).searchParams.get(`project`);
+    const known = PROJECT_CASES.find((kind) => kind === asked);
+    if (known !== undefined) {
+        sessionStorage.setItem(PROJECT_KEY, known);
+        return known;
+    }
+    return PROJECT_CASES.find((kind) => kind === sessionStorage.getItem(PROJECT_KEY)) ?? `new`;
+};
+
+const projectPreview = (machine: Machine): ProjectPreview => {
+    const face = window.__INTENTIC_LOCAL__;
+    const name = face?.name ?? `shop`;
+    const path = face?.path ?? `${HOME}\\code\\${name}`;
+    const kind = projectCaseOf();
+    if (kind === `refused`) {
+        return { kind: `refused`, refusal: { kind: `inside`, other: `${HOME}\\code` } };
+    }
+    return {
+        kind: `new`,
+        name,
+        path,
+        files: kind === `cautions` ? 60_000 : 128,
+        bytes: kind === `cautions` ? 3.4 * 1024 ** 3 : 3_276_800,
+        more: kind === `cautions`,
+        large: kind === `cautions`,
+        cautions: kind === `cautions` ? [{ kind: `synced`, service: `OneDrive` }] : [],
+        signedIn: signedIn(machine),
+        imageReady: kind !== `cautions`,
+        busy: kind === `busy`,
+    };
+};
+
+const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const projectCreate = async (ask: ProjectAsk): Promise<ProjectCreated> => {
+    await pause(900);
+    const face = window.__INTENTIC_LOCAL__;
+    return {
+        kind: `setup`,
+        setup: { code: `dev`, sandboxId: ask.sandboxId ?? `cm4dev`, name: ask.name, project: ask.project, syncDir: face?.path ?? `${HOME}\\code\\${ask.project}` },
+    };
+};
+
+const say = (text: string, stream: `stdout` | `stderr` = `stdout`): Promise<void> => emit(`desktop://run`, { kind: `line`, run: `setup`, stream, text });
+
+// A folder's build as the scripts print it, start to end, a little faster than a real one so it can be watched whole.
+const runProjectSetup = async (): Promise<void> => {
+    await emit(`desktop://run`, { kind: `started`, run: `setup`, log: `${HOME}\\.intentic\\logs\\desktop-setup.log` });
+    const steps: readonly (readonly [string, string, number])[] = [
+        [`checking-docker`, `checking this PC for Docker...`, 1800],
+        [`preflight`, `preflight - checking this machine.`, 1500],
+        [`claiming-code`, `redeeming the setup code.`, 1200],
+    ];
+    for (const [phase, said, ms] of steps) {
+        await say(`intentic: [${phase}] ${said}`);
+        await pause(ms);
+    }
+    if (projectCaseOf() === `fail`) {
+        await say(`Command failed, the platform refused the setup code (it was already used).`, `stderr`);
+        await emit(`desktop://run`, { kind: `exit`, run: `setup`, code: 1, ok: false });
+        throw new Error(`connect.ps1 exited with status 1`);
+    }
+    await say(`intentic: [pulling-image] using the sandbox image already on this machine (ghcr.io/intentic/sandbox:stable).`);
+    await pause(1500);
+    const rest: readonly (readonly [string, string, number])[] = [
+        [`starting-sandbox`, `starting sandbox.`, 3500],
+        [`waiting-health`, `waiting for the sandbox daemon to come up.`, 5000],
+        [`verifying`, `verifying the sandbox is reachable end to end.`, 4000],
+        [`desktop-sync`, `waiting for your sandbox to come online to set up desktop sync.`, 6000],
+        [`connecting-machine`, `connecting this device so you can manage its sandboxes from your browser.`, 4000],
+    ];
+    for (const [phase, said, ms] of rest) {
+        await say(`intentic: [${phase}] ${said}`);
+        await pause(ms);
+    }
+    await emit(`desktop://run`, { kind: `exit`, run: `setup`, code: 0, ok: true });
+};
+
 /** What a command answers: the app's own types, or nothing for a verb whose effect is elsewhere. */
-type Answer = AccountAnswer | DesktopInfo | HomeFacts | LocalRecent[] | LocalRoster | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
+type Answer =
+    | AccountAnswer
+    | DesktopInfo
+    | HomeFacts
+    | LocalRecent[]
+    | LocalRoster
+    | UpdateStage
+    | SandboxStatus[]
+    | SetupArgs
+    | ProjectPreview
+    | Promise<ProjectCreated>
+    | string
+    | boolean
+    | null
+    | Promise<void>
+    | { memoryBytes: number; cpus: number };
 
 const DESKTOP_INFO: DesktopInfo = {
     version: `1.318.0`,
@@ -176,7 +294,7 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`take_pending_sync`, () => null],
     [`take_pending_fix`, () => null],
     [`resumable_setup`, () => null],
-    [`setup_run`, () => runSetup()],
+    [`project_preview`, projectPreview],
     [`sandbox_logs`, () => `intentic: sandbox up\nlistening on :7777\n`],
     [`machine_restart`, () => `restarted`],
     [`plugin:dialog|confirm`, () => true],
@@ -193,6 +311,16 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
         // SAFETY: the page's own src/account.ts and local/platform.ts send it, as `accountRelay` types it.
         return accountAnswer(machine, args[`ask`] as AccountAsk);
     }
+    if (command === `project_create` && args !== undefined && `ask` in args) {
+        // SAFETY: the page's own host.ts sends it, as `projectCreate` types it.
+        return projectCreate(args[`ask`] as ProjectAsk);
+    }
+    if (command === `setup_run`) {
+        // A folder's own build runs to its end; a setup handed over from the workspace holds mid-run, to be looked at.
+        // SAFETY: the page's own device/setup.ts sends it, as `setupRun` types it.
+        const run = args !== undefined && `args` in args ? (args[`args`] as SetupArgs) : undefined;
+        return run?.project === undefined ? runSetup() : runProjectSetup();
+    }
     // Every verb the page sends and does not read back (point, open, sign in, the workspace, a sandbox's power…): said on
     // the console, which is where a dev server's reader looks for it.
     console.warn(`[dev desktop] ${command}`, args ?? {});
@@ -201,6 +329,11 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
 
 export const installDevDesktop = (): void => {
     const machine = machineOf();
+    // Read now, while the address still carries it: the page rewrites its address before anything asks (local/main.ts).
+    projectCaseOf();
     mockIPC((command, args) => answer(machine, command, args), { shouldMockEvents: true });
+    // The window this page is, as the app labels it (windows.rs `HOME`, local.rs `files-<n>`): the main window's setup
+    // titles its own window (src/device/title.ts), which asks which window it is.
+    mockWindows(window.__INTENTIC_LOCAL__?.home === true ? `home` : `files-1`);
     console.warn(`[dev desktop] the app is stood in for as the "${machine}" machine; ?machine=${MACHINES.join(`|`)} picks another`);
 };

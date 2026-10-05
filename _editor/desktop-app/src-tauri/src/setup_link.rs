@@ -86,7 +86,7 @@ fn is_point_id(point: &str) -> bool {
 }
 
 /// A platform sandbox id, the value a hostname carries (`<label>-<sandboxId>.<zone>`): letters, digits, `-` and `_`.
-fn is_sandbox_id(id: &str) -> bool {
+pub(crate) fn is_sandbox_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
         && id
             .bytes()
@@ -401,6 +401,11 @@ pub struct SetupArgs {
     /// user asked (`project::bind`), so a `syncDir` riding beside it is dropped.
     #[serde(default)]
     pub project: Option<String>,
+    /// The slug `ic` names this sandbox's container by, where the app knows it before the run: a setup the app made
+    /// itself (project.rs `project_create`) reads it off the address its code was minted for. Never from a link: a
+    /// finished setup without one finds its container as the newest (commands.rs `newest_slug`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
 }
 
 /// `intentic://recreate?slug=…[&hash=…][&rollback=1]` — swap the sandbox onto a different image. This is what
@@ -606,6 +611,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 sync_dir: get("syncDir").filter(|_| project.is_none()),
                 platform_url: get("platform").filter(|_| from_app),
                 project,
+                slug: None,
             })))
         }
         "signin" => Some(Link::SignIn {

@@ -81,7 +81,10 @@ flowchart LR
   `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files, the views the app adds, and at
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
   before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits
-  (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`). The place chip names the
+  (`useUnsavedGuard.ts`), a project folder's Bring back section (`LocalBringBack.vue`), and the way to a folder's own
+  sandbox (`LocalProject.vue`): the window's dialog for "Work on this with an agent" (`LocalProjectDialog.vue`), and the
+  card the sandbox's build stands on in the notification lane while the reader keeps working (`LocalProjectBuild.vue`),
+  drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). The place chip names the
   window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
   lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
   this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an
@@ -210,7 +213,7 @@ every reader's open panel.
 | `skins/` | Whole-app looks; see [skins](src/skins/README.md) |
 | `styles/` | Self-hosted font faces |
 | `design-system/` | Suites for `@intentic/ui` components and composables, run in this app |
-| `local/` | The desktop app's local window on a folder or document of this computer: its shell, place chip and Files |
+| `local/` | The desktop app's local window on a folder or document of this computer: its shell, place chip, Files, and the folder's own sandbox |
 | `testing/` | Fakes for suites: daemon client, router, workers |
 
 ## Key files

@@ -4,25 +4,34 @@
 //! `public/` and its starter at that root), but a project inside it, `/work/<name>`. COPY-FIRST: the folder is
 //! copied into the sandbox and the copy is kept up to date from here by the machine agent (`_devices/machine/src/sync`);
 //! agents change the copy, and nothing in the folder changes until the window's "Bring back changes" brings what
-//! they did back, keeping a restore point first ([`work`]). The setup is the ordinary one: the workspace's `/setup`
-//! page mints the code and hands it back as `intentic://setup?…&project=<name>` (a sandbox on this machine), or
-//! enrolls the folder with a hosted one as `intentic://sync?…&project=<name>` ([`sync_project`]), and only then does
-//! this module attach the folder, which it parked itself. The path never rides a link, so no page can point a
-//! sandbox at a folder the user did not pick.
+//! they did back, keeping a restore point first ([`work`]).
+//!
+//! The window asks in its own page: [`project_preview`] says what its dialog draws (the folder's size, what to beware
+//! of, why it cannot have one), and [`project_create`] makes the sandbox ON THIS COMPUTER without leaving the window.
+//! The app makes the platform row and mints its setup code itself, with the session the workspace signed in with
+//! (account.rs `platform_post`), and hands the window the setup to run, which its own This device store runs and its
+//! build card draws (the web's local/LocalProjectBuild.vue). Nobody signed in is the one case that leaves the window:
+//! the folder is parked and the workspace's `/setup` page signs in first and runs it on this computer
+//! (`machine=mine`), handing the code back as `intentic://setup?…&project=<name>` ([`bind`]). A hosted sandbox's
+//! project is enrolled as `intentic://sync?…&project=<name>` ([`sync_project`]). The path never rides a link or a
+//! command, so no page can point a sandbox at a folder the user did not pick: it is always the folder of the window
+//! that asked.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
+use crate::account::Answered;
 use crate::scripts::AgentSilence;
-use crate::setup_link::{LocalVerb, SetupArgs, SyncArgs};
+use crate::setup_link::{LocalVerb, Roster, RosterEntry, SetupArgs, SyncArgs};
 use crate::state::{AppState, Project};
 
-/// Past this many files the first sync is a long upload, and the confirmation says so.
+/// Past this many files the first sync is a long upload, and the folder's dialog says so.
 const MANY_FILES: u64 = 20_000;
 /// And past this many bytes.
 const MANY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
@@ -117,23 +126,70 @@ pub fn is_project_dir_name(name: &str) -> bool {
         && !RESERVED.contains(&name)
 }
 
+/// Why a folder cannot become a project: drawn by the folder's dialog in the reader's language (the web's
+/// local/projectWords.ts, by `kind`), and said as [`Refusal::sentence`] where the app speaks for itself (a folder picked
+/// in the system's dialog for a hosted sandbox's project).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Refusal {
+    /// A whole disk.
+    Disk,
+    /// The user's whole home folder.
+    Home,
+    /// A folder that holds the user's home folder.
+    HoldsHome,
+    /// Fedora Atomic's `/var/home`, which holds everyone's.
+    Homes,
+    /// A whole home folder under `/var/home`, the user's or another's.
+    AHome,
+    /// A folder of the system's own.
+    System,
+    /// Inside `other`, a folder that already has a sandbox.
+    Inside { other: String },
+    /// Around `other`, a folder that already has a sandbox of its own.
+    Around { other: String },
+}
+
+impl Refusal {
+    pub fn sentence(&self, path: &Path) -> String {
+        let shown = path.display();
+        match self {
+            Refusal::Disk => {
+                format!("{shown} is a whole disk. Pick the folder of one project in it.")
+            }
+            Refusal::Home => {
+                format!("{shown} is your whole home folder. Pick the folder of one project in it.")
+            }
+            Refusal::HoldsHome => {
+                format!("{shown} holds your home folder. Pick the folder of one project in it.")
+            }
+            Refusal::Homes => format!(
+                "{shown} holds everyone's home folders. Pick the folder of one project in yours."
+            ),
+            Refusal::AHome => {
+                format!("{shown} is a whole home folder. Pick the folder of one project in it.")
+            }
+            Refusal::System => format!("{shown} belongs to the system. Pick a folder of your own."),
+            Refusal::Inside { other } => {
+                format!("{shown} is inside {other}, which already has a sandbox. Open that folder instead.")
+            }
+            Refusal::Around { other } => {
+                format!("{shown} holds {other}, which already has a sandbox of its own.")
+            }
+        }
+    }
+}
+
 /// Why `path` cannot become a project, or nothing when it can. `taken` are the folders that already have one.
-pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<String> {
-    let shown = path.display();
+pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<Refusal> {
     if path.parent().is_none() {
-        return Some(format!(
-            "{shown} is a whole disk. Pick the folder of one project in it."
-        ));
+        return Some(Refusal::Disk);
     }
     if home == Some(path) {
-        return Some(format!(
-            "{shown} is your whole home folder. Pick the folder of one project in it."
-        ));
+        return Some(Refusal::Home);
     }
     if home.is_some_and(|home| home.starts_with(path)) {
-        return Some(format!(
-            "{shown} holds your home folder. Pick the folder of one project in it."
-        ));
+        return Some(Refusal::HoldsHome);
     }
     // Fedora Atomic (Silverblue, Kinoite, Bazzite…) keeps the homes under `/var/home`, `/home` being a link to it:
     // a folder in somebody's home there is theirs, not the system's, whatever the rule for `/var` below says. The
@@ -143,16 +199,8 @@ pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<St
         .ok()
         .map(|rest| rest.components().count())
     {
-        Some(0) => {
-            return Some(format!(
-                "{shown} holds everyone's home folders. Pick the folder of one project in yours."
-            ))
-        }
-        Some(1) => {
-            return Some(format!(
-                "{shown} is a whole home folder. Pick the folder of one project in it."
-            ))
-        }
+        Some(0) => return Some(Refusal::Homes),
+        Some(1) => return Some(Refusal::AHome),
         Some(_) => return nested(path, taken),
         None => {}
     }
@@ -181,36 +229,42 @@ pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<St
         ]
     };
     if system.iter().any(|root| path.starts_with(root)) {
-        return Some(format!(
-            "{shown} belongs to the system. Pick a folder of your own."
-        ));
+        return Some(Refusal::System);
     }
     nested(path, taken)
 }
 
 /// Why `path` cannot become a project for being inside or around one that already is.
-fn nested(path: &Path, taken: &[PathBuf]) -> Option<String> {
-    let shown = path.display();
+fn nested(path: &Path, taken: &[PathBuf]) -> Option<Refusal> {
     for other in taken {
         if path != other && path.starts_with(other) {
-            return Some(format!(
-                "{shown} is inside {}, which already has a sandbox. Open that folder instead.",
-                other.display()
-            ));
+            return Some(Refusal::Inside {
+                other: other.display().to_string(),
+            });
         }
         if path != other && other.starts_with(path) {
-            return Some(format!(
-                "{shown} holds {}, which already has a sandbox of its own.",
-                other.display()
-            ));
+            return Some(Refusal::Around {
+                other: other.display().to_string(),
+            });
         }
     }
     None
 }
 
+/// What to say before a folder becomes a project. None of these refuse; each is a way the sync can disappoint, drawn by
+/// the folder's dialog by `kind` (the web's local/projectWords.ts).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Caution {
+    /// Another service already syncs the folder: two syncs on one folder can undo each other's changes.
+    Synced { service: String },
+    /// A network or removable drive: the sync is slower there and pauses while it is away.
+    Away,
+}
+
 /// What to say before `path` becomes a project: a folder another service already syncs, one on a network or a
-/// removable drive. None of these refuse; each is a way the sync can disappoint.
-pub fn cautions(path: &Path) -> Vec<String> {
+/// removable drive.
+pub fn cautions(path: &Path) -> Vec<Caution> {
     let text = path.display().to_string();
     let mut said = Vec::new();
     for (marker, service) in [
@@ -221,7 +275,9 @@ pub fn cautions(path: &Path) -> Vec<String> {
         ("Mobile Documents", "iCloud"),
     ] {
         if text.contains(marker) {
-            said.push(format!("{service} already syncs this folder. Two syncs on one folder can undo each other's changes."));
+            said.push(Caution::Synced {
+                service: service.to_string(),
+            });
             break;
         }
     }
@@ -230,7 +286,7 @@ pub fn cautions(path: &Path) -> Vec<String> {
         || text.starts_with("/media/")
         || text.starts_with("/run/media/")
     {
-        said.push("This folder is on a network or removable drive: the sync is slower there and pauses while it is away.".to_string());
+        said.push(Caution::Away);
     }
     said
 }
@@ -274,14 +330,24 @@ fn folder_name(path: &Path) -> String {
         .unwrap_or_else(|| "project".to_string())
 }
 
-/// The workspace, at the sandbox a project already has.
+/// The workspace, at the sandbox a project already has, looking at the project: the folder is the scope the workspace
+/// opens on (the web's router/sandboxArrival.ts reads `project`), so the reader lands in the folder they asked about
+/// rather than in the `/work` around it, where a project's sandbox keeps its own state. The owner's first project
+/// opened on that `/work`, which read as "a sandbox in the parent of the folder I was viewing" (2026-10-05).
 fn show_project(app: &AppHandle, project: &Project) {
     match &project.sandbox_id {
-        Some(id) => {
-            crate::windows::show_workspace_at(app, Some(&format!("/?sandbox={}", urlencode(id))))
-        }
+        Some(id) => crate::windows::show_workspace_at(app, Some(&project_path(id, &project.dir))),
         None => crate::windows::show_workspace(app),
     }
+}
+
+/// The workspace's address for a project's sandbox: the sandbox, and its folder to open on.
+pub fn project_path(sandbox_id: &str, dir: &str) -> String {
+    format!(
+        "/?sandbox={}&project={}",
+        urlencode(sandbox_id),
+        urlencode(dir)
+    )
 }
 
 /// Whether `rows` (`ic sandbox list --json`, the contract's `DeviceSandbox`) have `slug` here and stopped. A sandbox
@@ -320,79 +386,79 @@ fn urlencode(value: &str) -> String {
     url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }
 
-/// Why `root` cannot become a project on this machine, against the projects it already has and the user's home.
-fn refusal_here(app: &AppHandle, root: &Path) -> Option<String> {
+/// The project `root` is, if it is one of this machine's, live or not.
+fn project_of(app: &AppHandle, root: &Path) -> Option<Project> {
+    app.state::<AppState>()
+        .projects()
+        .into_iter()
+        .find(|project| Path::new(&project.path) == root)
+}
+
+/// Whether a remembered project's sandbox is still the account's, as the workspace last listed them: one whose sandbox
+/// was removed is a folder with none, asked about again rather than opened onto nothing. The owner's first project was
+/// remembered against a machine of ours removed a minute later, and its folder's button kept opening that (2026-10-05).
+/// Undecided (no account known, a record with no sandbox id) reads as live.
+fn is_live(roster: &Roster, project: &Project) -> bool {
+    match (&roster.account, &project.sandbox_id) {
+        (Some(_), Some(id)) => roster.sandboxes.iter().any(|entry| &entry.id == id),
+        _ => true,
+    }
+}
+
+/// The project `root` is, while its sandbox is still there.
+fn live_project_of(app: &AppHandle, root: &Path) -> Option<Project> {
+    let roster = app.state::<AppState>().roster();
+    project_of(app, root).filter(|project| is_live(&roster, project))
+}
+
+/// Whether the folder at `root` has a sandbox of its own to open: what a window on it is told (local.rs `face_of`).
+pub fn has_live_project(app: &AppHandle, root: &Path) -> bool {
+    live_project_of(app, root).is_some()
+}
+
+/// Why `root` cannot become a project on this machine, against the projects it still has and the user's home.
+fn refusal_here(app: &AppHandle, root: &Path) -> Option<Refusal> {
+    let roster = app.state::<AppState>().roster();
     let taken: Vec<PathBuf> = app
         .state::<AppState>()
         .projects()
         .iter()
+        .filter(|project| is_live(&roster, project))
         .map(|project| PathBuf::from(&project.path))
         .collect();
     let home = app.path().home_dir().ok();
     refusal(root, home.as_deref(), &taken)
 }
 
-fn refuse(app: &AppHandle, why: String) {
+/// A refusal in a native dialog: only where the app asked in one of its own (a folder picked in the system's dialog for
+/// a hosted sandbox's project). A folder's window says it in its own dialog.
+fn refuse(app: &AppHandle, root: &Path, why: &Refusal) {
     app.dialog()
-        .message(why)
+        .message(why.sentence(root))
         .title("This folder can't have a sandbox")
         .kind(MessageDialogKind::Warning)
         .show(|_| {});
 }
 
-/// "Work on this with an agent", from the local window showing `root`: the sandbox it already has, or the question
-/// that makes one.
-pub fn start(app: &AppHandle, root: PathBuf) {
-    let projects = app.state::<AppState>().projects();
-    if let Some(project) = projects
-        .iter()
-        .find(|project| Path::new(&project.path) == root)
-    {
-        open_existing(app, project);
+/// "Work on this with an agent" asked by link (`intentic://local?do=sandbox`, the window's "Open this folder's
+/// sandbox"): the sandbox the folder already has, opened. A folder with none is its window's to ask about, in its own
+/// dialog, which the page is told to open (`intentic:project-ask`): the question used to be a native box, which said
+/// too much in the system's own look, and then took the reader to a page of the workspace to wait on (2026-10-05).
+pub fn start(app: &AppHandle, label: &str, root: PathBuf) {
+    if let Some(project) = live_project_of(app, &root) {
+        open_existing(app, &project);
         return;
     }
-    if let Some(why) = refusal_here(app, &root) {
-        refuse(app, why);
-        return;
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.eval(ASK_EVENT);
     }
-    let (files, bytes) = weigh(&root);
-    let mut cautions = cautions(&root);
-    if files >= MANY_FILES || bytes >= MANY_BYTES {
-        cautions.push(format!(
-            "It holds {}{files} files ({} MB). The first sync uploads them all, which can take a while.",
-            if files >= COUNT_LIMIT { "more than " } else { "" },
-            bytes / (1024 * 1024)
-        ));
-    }
-    let caution_text = if cautions.is_empty() {
-        String::new()
-    } else {
-        format!("\n\n{}", cautions.join("\n\n"))
-    };
-    let handle = app.clone();
-    let name = folder_name(&root);
-    app.dialog()
-        .message(copy_first(&root, &caution_text))
-        .title(format!("Work on {name} with an agent?"))
-        .kind(MessageDialogKind::Info)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Create sandbox".into(),
-            "Cancel".into(),
-        ))
-        .show(move |confirmed| {
-            if !confirmed {
-                return;
-            }
-            *handle.state::<AppState>().pending_project.lock().unwrap() = Some(root);
-            crate::windows::show_workspace_at(
-                &handle,
-                Some(&format!("/setup?project={}", urlencode(&name))),
-            );
-        });
 }
 
+/// What the page hears when its folder's dialog is asked for by the app rather than by its own button.
+const ASK_EVENT: &str = "window.dispatchEvent(new CustomEvent('intentic:project-ask'));";
+
 /// A setup link for a project, bound to the folder this app parked for it: the one place a project's folder
-/// enters a setup. A project link with nothing parked is an ordinary setup with nothing synced.
+/// enters a setup through a link. A project link with nothing parked is an ordinary setup with nothing synced.
 pub fn bind(app: &AppHandle, mut args: SetupArgs) -> SetupArgs {
     if args.project.is_none() {
         return args;
@@ -410,30 +476,427 @@ pub fn bind(app: &AppHandle, mut args: SetupArgs) -> SetupArgs {
     args
 }
 
-/// A project's setup finished: the folder has its sandbox, and opening it again reaches that one.
+/// A project's setup finished: the folder has its sandbox, opening it again reaches that one, and every window on the
+/// folder hears so (its button becomes the way to the sandbox, its bring-back appears).
 pub fn remember(app: &AppHandle, args: &SetupArgs, slug: Option<String>) {
     let (Some(dir), Some(folder)) = (args.project.clone(), args.sync_dir.clone()) else {
         return;
     };
     app.state::<AppState>().remember_project(Project {
-        path: folder,
+        path: folder.clone(),
         dir,
         sandbox_id: args.sandbox_id.clone(),
         slug,
     });
+    crate::local::mark_sandbox(app, Path::new(&folder));
 }
 
-/// What "Work on this with an agent" says before anything is made: copy-first, in the order it happens. The folder
-/// is copied and kept up to date from here; agents change the copy; this folder changes only when the window's
-/// "Bring back changes" is pressed, and each of those keeps a restore point.
-fn copy_first(root: &Path, cautions: &str) -> String {
-    format!(
-        "Intentic will copy {} into a sandbox and keep the copy up to date from here as you work.\n\n\
-         Agents change the copy, never this folder. Nothing here changes until you press \"Bring back changes\" \
-         in this window, and every bring-back keeps a restore point you can go back to. Your .git, node_modules, \
-         build output and .env and .env.local files stay on this computer only.{cautions}",
-        root.display()
+/* THE FOLDER'S OWN DIALOG — what it draws, and the sandbox it makes (the web's local/LocalProjectDialog.vue). */
+
+/// What the folder's dialog draws when "Work on this with an agent" is pressed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Preview {
+    /// The folder has its sandbox already: the press opens it.
+    Existing,
+    /// A document opened on its own: a sandbox works on a whole folder, which this window does not show.
+    Document,
+    /// The folder cannot have a sandbox, and why.
+    Refused { refusal: Refusal },
+    /// A sandbox can be made for it, on this computer.
+    #[serde(rename_all = "camelCase")]
+    New {
+        /// The folder's own name, which the sandbox is called after.
+        name: String,
+        /// Where the folder is, as the reader knows it.
+        path: String,
+        /// What the first copy carries, counted as the sync counts it, up to [`COUNT_LIMIT`] files.
+        files: u64,
+        bytes: u64,
+        /// The count stopped short: there are more than `files`.
+        more: bool,
+        /// Enough that the first copy is a long upload.
+        large: bool,
+        cautions: Vec<Caution>,
+        /// The workspace's session is here to make the sandbox with; without one the press signs in first.
+        signed_in: bool,
+        /// The sandbox image is on this computer already, so its setup downloads nothing.
+        image_ready: bool,
+        /// A sandbox is being set up on this computer right now, and they are set up one at a time.
+        busy: bool,
+    },
+}
+
+/// What the folder's dialog asks for when its button is pressed: the sandbox's name and the folder's name inside
+/// `/work`, which the page derived from the folder's own (setupName.ts `autoSandboxName`, sandbox-contract's
+/// `projectDirNameFor`) and which are held to their rules here; and the row an earlier attempt made, for "Try again".
+/// Never a folder: that is always the window's own.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAsk {
+    pub name: String,
+    pub project: String,
+    #[serde(default)]
+    pub sandbox_id: Option<String>,
+}
+
+/// What came of the press.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Created {
+    /// The setup to run now, in the window that asked: its This device store runs it, and its build card draws it.
+    Setup { setup: SetupArgs },
+    /// Nobody is signed in: the workspace's setup page has the folder, and signs in before it makes the sandbox here.
+    SignIn,
+    /// The folder had its sandbox by the time the press arrived, and it was opened.
+    Opened,
+}
+
+/// A sandbox's name as the platform takes one (`sandbox.create`: one to sixty characters), and nothing a line can't hold.
+fn is_sandbox_name(name: &str) -> bool {
+    (1..=60).contains(&name.chars().count())
+        && !name.trim().is_empty()
+        && !name.chars().any(char::is_control)
+}
+
+/// Folders a sandbox is being made for right now: between the press and its setup's start.
+static CREATING: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(Mutex::default);
+
+/// A folder's claim on the one sandbox being made for it, given back however the making ends.
+struct Creating(PathBuf);
+
+impl Creating {
+    fn claim(root: &Path) -> Option<Creating> {
+        CREATING
+            .lock()
+            .unwrap()
+            .insert(root.to_path_buf())
+            .then(|| Creating(root.to_path_buf()))
+    }
+}
+
+impl Drop for Creating {
+    fn drop(&mut self) {
+        if let Ok(mut creating) = CREATING.lock() {
+            creating.remove(&self.0);
+        }
+    }
+}
+
+/// Whether a sandbox is being set up on this computer: one being made, or a setup's run going. They go one at a time,
+/// since each drives the same docker and reports under the same run id.
+fn setting_up() -> bool {
+    crate::scripts::is_running("setup")
+        || CREATING
+            .lock()
+            .map(|creating| !creating.is_empty())
+            .unwrap_or(true)
+}
+
+const BUSY: &str =
+    "Intentic is already setting up a sandbox on this computer. Try again when it's done.";
+
+/// What the folder's dialog draws: the sandbox the folder has, why it cannot have one, or what making one involves.
+#[tauri::command]
+pub async fn project_preview(app: AppHandle, window: WebviewWindow) -> Result<Preview, String> {
+    let Some(root) = crate::local::folder_of(&app, window.label()) else {
+        return Ok(Preview::Document);
+    };
+    if live_project_of(&app, &root).is_some() {
+        return Ok(Preview::Existing);
+    }
+    if let Some(refusal) = refusal_here(&app, &root) {
+        return Ok(Preview::Refused { refusal });
+    }
+    // Both off the calling thread and side by side: a large folder's count and docker's answer each take their time.
+    let counted = root.clone();
+    let weighing = tauri::async_runtime::spawn_blocking(move || weigh(&counted));
+    let imaged = tauri::async_runtime::spawn_blocking(crate::commands::sandbox_image_ready);
+    let signed_in = crate::account::has_session(&app, &window).await;
+    let (files, bytes) = weighing.await.map_err(|error| error.to_string())?;
+    let image_ready = imaged.await.unwrap_or(false);
+    Ok(Preview::New {
+        name: folder_name(&root),
+        path: root.display().to_string(),
+        files,
+        bytes,
+        more: files >= COUNT_LIMIT,
+        large: files >= MANY_FILES || bytes >= MANY_BYTES,
+        cautions: cautions(&root),
+        signed_in,
+        image_ready,
+        busy: setting_up(),
+    })
+}
+
+/// "Create sandbox" in the folder's dialog: the platform row and its setup code, made by the app with the workspace's
+/// session, and the setup handed back to the window to run here. No `/setup` page and no This device in its way: the
+/// window shows the build as a card over the folder, and the reader keeps working (2026-10-05).
+#[tauri::command]
+pub async fn project_create(
+    app: AppHandle,
+    window: WebviewWindow,
+    ask: CreateAsk,
+) -> Result<Created, String> {
+    let Some(root) = crate::local::folder_of(&app, window.label()) else {
+        return Err("A sandbox works on a whole folder. Open the folder this document is in, then ask again from there.".to_string());
+    };
+    if let Some(project) = live_project_of(&app, &root) {
+        open_existing(&app, &project);
+        return Ok(Created::Opened);
+    }
+    // Remembered against a sandbox that is gone: its folder is made a new one, once the old one lets go of it below.
+    let stale = project_of(&app, &root).is_some();
+    if let Some(why) = refusal_here(&app, &root) {
+        return Err(why.sentence(&root));
+    }
+    let retried = ask.sandbox_id.clone();
+    if !is_sandbox_name(&ask.name)
+        || !is_project_dir_name(&ask.project)
+        || retried
+            .as_deref()
+            .is_some_and(|id| !crate::setup_link::is_sandbox_id(id))
+    {
+        return Err(format!(
+            "{} can't be used to name a sandbox. Rename the folder and try again.",
+            ask.name
+        ));
+    }
+    if setting_up() {
+        return Err(BUSY.to_string());
+    }
+    let Some(_making) = Creating::claim(&root) else {
+        return Err(BUSY.to_string());
+    };
+    let sandbox_id = match retried {
+        Some(id) => id,
+        None => {
+            let made = crate::account::platform_post(
+                &app,
+                &window,
+                "/rpc/sandbox/create",
+                &serde_json::json!({ "name": ask.name }),
+            )
+            .await?;
+            match made_row(made) {
+                Made::Row(id) => {
+                    // Listed at once, so the folder's sandbox is live before the workspace next lists the account's
+                    // (and the place chip names it): the workspace's own list replaces this the next time it says.
+                    let state = app.state::<AppState>();
+                    state.remember_roster(with_row(state.roster(), &id, &ask.name));
+                    id
+                }
+                Made::SignedOut => {
+                    sign_in_first(&app, root);
+                    return Ok(Created::SignIn);
+                }
+                Made::Refused(why) => return Err(why),
+            }
+        }
+    };
+    let minted = crate::account::platform_post(
+        &app,
+        &window,
+        "/rpc/sandbox/setup-code",
+        &serde_json::json!({ "sandboxId": sandbox_id }),
     )
+    .await;
+    let (code, slug) = match minted.map(minted_code) {
+        Ok(Minted::Code { code, slug }) => (code, slug),
+        failed => {
+            // A row this press made and nothing will ever set up would wait in the switcher as an unfinished sandbox.
+            if ask.sandbox_id.is_none() {
+                discard(&app, &window, &sandbox_id).await;
+            }
+            return match failed {
+                Ok(Minted::SignedOut) => {
+                    sign_in_first(&app, root);
+                    Ok(Created::SignIn)
+                }
+                Ok(Minted::Refused(why)) | Err(why) => Err(why),
+                Ok(Minted::Code { .. }) => unreachable!("matched above"),
+            };
+        }
+    };
+    if stale {
+        let folder = root.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || release_folder(&folder)).await;
+    }
+    Ok(Created::Setup {
+        setup: SetupArgs {
+            code,
+            sandbox_id: Some(sandbox_id),
+            name: Some(ask.name),
+            cf_token: None,
+            sync_dir: Some(root.display().to_string()),
+            platform_url: None,
+            project: Some(ask.project),
+            slug,
+        },
+    })
+}
+
+/// The account's sandboxes with one just made added, as the workspace's switcher would list it: where it runs is this
+/// computer's own (`own`, placement.ts), until the workspace says better.
+fn with_row(mut roster: Roster, id: &str, name: &str) -> Roster {
+    if !roster.sandboxes.iter().any(|entry| entry.id == id) {
+        roster.sandboxes.push(RosterEntry {
+            id: id.to_string(),
+            name: name.to_string(),
+            place: "own".to_string(),
+            shared: false,
+        });
+    }
+    roster
+}
+
+/// The machine agent's pairings syncing the folder at `folder` (`intentic-machine status --json`, `sync.pairings`): the
+/// same folder, spelled as the platform compares one (case folded, either slash, on Windows).
+fn pairings_on(status: &serde_json::Value, folder: &Path, windows: bool) -> Vec<String> {
+    let fold = |path: &str| -> String {
+        let trimmed = path.trim_end_matches(['/', '\\']);
+        if windows {
+            trimmed.replace('/', "\\").to_lowercase()
+        } else {
+            trimmed.to_string()
+        }
+    };
+    let wanted = fold(&folder.display().to_string());
+    status["sync"]["pairings"]
+        .as_array()
+        .map(|pairings| {
+            pairings
+                .iter()
+                .filter(|pairing| {
+                    pairing["localDir"]
+                        .as_str()
+                        .is_some_and(|dir| fold(dir) == wanted)
+                })
+                .filter_map(|pairing| pairing["sandboxId"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A folder whose sandbox was removed, let go by this machine's sync: the agent keeps one sync per folder, so the dead
+/// sandbox's pairing would turn the new one's away and leave its copy of the folder empty. Best effort: a folder this
+/// fails for is said by the setup's own folder-sync step, as before.
+fn release_folder(folder: &Path) {
+    let status = match crate::scripts::sync_report() {
+        Ok(Some(report)) => serde_json::from_str::<serde_json::Value>(&report).unwrap_or_default(),
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("intentic: {error}");
+            return;
+        }
+    };
+    for sandbox in pairings_on(&status, folder, cfg!(windows)) {
+        match crate::scripts::agent_unpair(&sandbox) {
+            Ok(said) => eprintln!(
+                "intentic: {} let go of {}: {said}",
+                sandbox,
+                folder.display()
+            ),
+            Err(error) => eprintln!(
+                "intentic: {sandbox} could not let go of {}: {error}",
+                folder.display()
+            ),
+        }
+    }
+}
+
+/// What `sandbox/create` came back with.
+#[derive(Debug, PartialEq, Eq)]
+enum Made {
+    Row(String),
+    SignedOut,
+    Refused(String),
+}
+
+fn made_row(answered: Answered) -> Made {
+    match answered {
+        Answered::SignedOut => Made::SignedOut,
+        Answered::Json { status, body } if (200..300).contains(&status) => {
+            match body["id"].as_str().filter(|id| crate::setup_link::is_sandbox_id(id)) {
+                Some(id) => Made::Row(id.to_string()),
+                None => Made::Refused(
+                    "The platform's answer didn't name the new sandbox. Updating Intentic may fix this.".to_string(),
+                ),
+            }
+        }
+        Answered::Json { status, body } => Made::Refused(refused_by(status, &body)),
+    }
+}
+
+/// What `sandbox/setup-code` came back with: the code, and the slug its address gives the container (`ic` names it
+/// after the hostname's first label), so the finished setup knows its own sandbox rather than guessing the newest.
+#[derive(Debug, PartialEq, Eq)]
+enum Minted {
+    Code { code: String, slug: Option<String> },
+    SignedOut,
+    Refused(String),
+}
+
+fn minted_code(answered: Answered) -> Minted {
+    match answered {
+        Answered::SignedOut => Minted::SignedOut,
+        Answered::Json { status, body } if (200..300).contains(&status) => {
+            let slug = body["hostname"]
+                .as_str()
+                .and_then(|hostname| hostname.split('.').next())
+                .filter(|slug| crate::setup_link::is_slug(slug))
+                .map(str::to_string);
+            match body["code"].as_str().filter(|code| !code.is_empty()) {
+                Some(code) => Minted::Code {
+                    code: code.to_string(),
+                    slug,
+                },
+                None => Minted::Refused(
+                    "The platform's answer carried no setup code. Updating Intentic may fix this."
+                        .to_string(),
+                ),
+            }
+        }
+        Answered::Json { status, body } => Minted::Refused(refused_by(status, &body)),
+    }
+}
+
+/// The platform's own reason for a refusal, as its errors say it (`message`), or its status where it gave none.
+fn refused_by(status: u16, body: &serde_json::Value) -> String {
+    match body["message"]
+        .as_str()
+        .map(str::trim)
+        .filter(|said| !said.is_empty())
+    {
+        Some(said) => format!("The platform couldn't make the sandbox: {said}"),
+        None => format!(
+            "The platform couldn't make the sandbox (it answered {status}). Try again in a moment."
+        ),
+    }
+}
+
+/// A row this press made and could not set up, taken off the account again. Best effort: the reader is already being
+/// told why the press failed, and a row left behind shows in the switcher as a sandbox to finish or remove.
+async fn discard(app: &AppHandle, window: &WebviewWindow, sandbox_id: &str) {
+    let body = serde_json::json!({ "sandboxId": sandbox_id });
+    if let Err(error) =
+        crate::account::platform_post(app, window, "/rpc/sandbox/delete", &body).await
+    {
+        eprintln!("intentic: the unfinished sandbox {sandbox_id} could not be removed: {error}");
+    }
+}
+
+/// Nobody signed in: the folder is parked and the workspace's setup page takes it, signing in first and making the
+/// sandbox on this computer (`machine=mine`), as the full-screen first run does for a reader with no account here.
+fn sign_in_first(app: &AppHandle, root: PathBuf) {
+    let name = folder_name(&root);
+    *app.state::<AppState>().pending_project.lock().unwrap() = Some(root);
+    crate::windows::show_workspace_at(app, Some(&setup_page(&name)));
+}
+
+/// The workspace's setup page for a folder named `name`, on this computer.
+fn setup_page(name: &str) -> String {
+    format!("/setup?project={}&machine=mine", urlencode(name))
 }
 
 /* WHAT A PROJECT'S WINDOW ASKS OF ITS SYNC — each one run of the machine agent, answered into that window. */
@@ -699,7 +1162,7 @@ pub fn sync_project(app: &AppHandle, args: SyncArgs) {
                 }
             };
             if let Some(why) = refusal_here(&handle, &folder) {
-                refuse(&handle, why);
+                refuse(&handle, &folder, &why);
                 return;
             }
             run_project_sync(&handle, args, folder);
@@ -781,7 +1244,7 @@ mod tests {
         }
     }
 
-    /// What the confirmation counts without is what the machine agent's sync leaves behind, entry for entry.
+    /// What the dialog counts without is what the machine agent's sync leaves behind, entry for entry.
     #[test]
     fn the_count_leaves_out_exactly_what_a_project_folder_s_sync_ignores() {
         let fixture: Ignores = serde_json::from_str(include_str!(
@@ -883,22 +1346,274 @@ mod tests {
         assert!(refusal(Path::new("/var/home/me/code"), None, &taken).is_some());
     }
 
-    /// The question says what copy-first is, in the order it happens: a copy, kept up to date from here, changed by
-    /// agents, and nothing here changing until "Bring back changes", which keeps a restore point.
+    /// Every refusal is said, natively, as it always was, and drawn by the dialog by its kind.
     #[test]
-    fn the_question_before_a_sandbox_is_made_says_copy_first() {
-        let text = copy_first(Path::new("/home/me/app"), "");
-        for said in [
-            "copy /home/me/app into a sandbox",
-            "keep the copy up to date from here",
-            "Agents change the copy, never this folder.",
-            "Nothing here changes until you press \"Bring back changes\" in this window",
-            "restore point",
-        ] {
-            assert!(text.contains(said), "{said:?} missing from {text:?}");
+    fn a_refusal_is_said_as_a_sentence_and_drawn_by_its_kind() {
+        let path = Path::new("/home/me/code");
+        assert_eq!(
+            Refusal::Inside {
+                other: "/home/me".into()
+            }
+            .sentence(path),
+            "/home/me/code is inside /home/me, which already has a sandbox. Open that folder instead."
+        );
+        assert_eq!(
+            Refusal::System.sentence(path),
+            "/home/me/code belongs to the system. Pick a folder of your own."
+        );
+        assert_eq!(
+            serde_json::to_value(Refusal::Around {
+                other: "/home/me/code/app".into()
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "around", "other": "/home/me/code/app" })
+        );
+        assert_eq!(
+            serde_json::to_value(Refusal::HoldsHome).unwrap(),
+            serde_json::json!({ "kind": "holdsHome" })
+        );
+    }
+
+    /// What the dialog is handed, in the shape the page reads (desktop-app's src/desktop.ts `ProjectPreview`).
+    #[test]
+    fn the_dialog_reads_the_preview_in_its_own_shape() {
+        let preview = Preview::New {
+            name: "test-remove-me".into(),
+            path: r"C:\Users\me\Documents\test-remove-me".into(),
+            files: 3,
+            bytes: 355,
+            more: false,
+            large: false,
+            cautions: vec![Caution::Synced {
+                service: "OneDrive".into(),
+            }],
+            signed_in: true,
+            image_ready: true,
+            busy: false,
+        };
+        assert_eq!(
+            serde_json::to_value(preview).unwrap(),
+            serde_json::json!({
+                "kind": "new",
+                "name": "test-remove-me",
+                "path": r"C:\Users\me\Documents\test-remove-me",
+                "files": 3,
+                "bytes": 355,
+                "more": false,
+                "large": false,
+                "cautions": [{ "kind": "synced", "service": "OneDrive" }],
+                "signedIn": true,
+                "imageReady": true,
+                "busy": false,
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Preview::Refused {
+                refusal: Refusal::Disk
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "refused", "refusal": { "kind": "disk" } })
+        );
+        assert_eq!(
+            serde_json::to_value(Preview::Existing).unwrap(),
+            serde_json::json!({ "kind": "existing" })
+        );
+    }
+
+    /// A project's sandbox opens on the project, never on the `/work` around it.
+    #[test]
+    fn a_projects_sandbox_opens_on_its_folder() {
+        assert_eq!(
+            project_path("cmuudvkwr001b01r822aawr1l", "test-remove-me"),
+            "/?sandbox=cmuudvkwr001b01r822aawr1l&project=test-remove-me"
+        );
+        assert_eq!(project_path("a b", "x&y"), "/?sandbox=a+b&project=x%26y");
+    }
+
+    /// Signed out, the folder goes to the workspace's setup page, and that page makes it on THIS computer.
+    #[test]
+    fn signing_in_first_still_makes_the_sandbox_on_this_computer() {
+        assert_eq!(
+            setup_page("test-remove-me"),
+            "/setup?project=test-remove-me&machine=mine"
+        );
+        assert_eq!(setup_page("My App"), "/setup?project=My+App&machine=mine");
+    }
+
+    /// The press's two platform calls, read: a row's id, a code and the slug its address gives the container, nobody
+    /// signed in, or the platform's own reason for a refusal.
+    #[test]
+    fn the_platforms_answers_are_read_into_a_row_and_a_code() {
+        let ok = |body: serde_json::Value| Answered::Json { status: 200, body };
+        assert_eq!(
+            made_row(ok(
+                serde_json::json!({ "id": "cmuudvkwr001b01r822aawr1l", "name": "app" })
+            )),
+            Made::Row("cmuudvkwr001b01r822aawr1l".into())
+        );
+        assert_eq!(made_row(Answered::SignedOut), Made::SignedOut);
+        assert!(matches!(
+            made_row(ok(serde_json::json!({ "id": "../x" }))),
+            Made::Refused(_)
+        ));
+        assert_eq!(
+            made_row(Answered::Json {
+                status: 400,
+                body: serde_json::json!({ "message": "Input validation failed" })
+            }),
+            Made::Refused("The platform couldn't make the sandbox: Input validation failed".into())
+        );
+        assert_eq!(
+            minted_code(ok(serde_json::json!({
+                "code": "c0de",
+                "hostname": "sandbox-2c8eb2c5b3a5.sbx.intentic.dev",
+                "expiresAt": "2026-10-05T00:00:00Z"
+            }))),
+            Minted::Code {
+                code: "c0de".into(),
+                slug: Some("sandbox-2c8eb2c5b3a5".into())
+            }
+        );
+        // A hostname that names no slug `ic` would use leaves the finished setup to find its container itself.
+        assert_eq!(
+            minted_code(ok(
+                serde_json::json!({ "code": "c0de", "hostname": "-x.example" })
+            )),
+            Minted::Code {
+                code: "c0de".into(),
+                slug: None
+            }
+        );
+        assert!(matches!(
+            minted_code(ok(serde_json::json!({ "code": "" }))),
+            Minted::Refused(_)
+        ));
+        assert_eq!(
+            minted_code(Answered::Json {
+                status: 404,
+                body: serde_json::Value::Null
+            }),
+            Minted::Refused(
+                "The platform couldn't make the sandbox (it answered 404). Try again in a moment."
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn a_sandbox_name_is_one_the_platform_takes() {
+        assert!(is_sandbox_name("test-remove-me"));
+        assert!(is_sandbox_name("Café 2"));
+        assert!(is_sandbox_name(&"a".repeat(60)));
+        assert!(!is_sandbox_name(&"a".repeat(61)));
+        assert!(!is_sandbox_name(""));
+        assert!(!is_sandbox_name("   "));
+        assert!(!is_sandbox_name("a\nb"));
+    }
+
+    /// One sandbox made per folder at a time, and the claim is given back however the making ends.
+    #[test]
+    fn a_folder_has_one_sandbox_being_made_at_a_time() {
+        let root = std::env::temp_dir().join(format!("intentic-creating-{}", uuid::Uuid::new_v4()));
+        let claim = Creating::claim(&root).expect("the first press claims the folder");
+        assert!(Creating::claim(&root).is_none(), "a second is turned away");
+        assert!(setting_up());
+        drop(claim);
+        assert!(Creating::claim(&root).is_some(), "the folder is free again");
+    }
+
+    fn roster_of(ids: &[&str], signed_in: bool) -> Roster {
+        Roster {
+            account: signed_in.then(|| crate::setup_link::RosterAccount {
+                email: "me@example.com".into(),
+                name: None,
+                image: None,
+            }),
+            sandboxes: ids
+                .iter()
+                .map(|id| RosterEntry {
+                    id: (*id).to_string(),
+                    name: (*id).to_string(),
+                    place: "own".into(),
+                    shared: false,
+                })
+                .collect(),
         }
-        assert!(!text.contains("both ways"));
-        assert!(copy_first(Path::new("/a"), "\n\nCAUTION").ends_with("\n\nCAUTION"));
+    }
+
+    fn project(sandbox_id: Option<&str>) -> Project {
+        Project {
+            path: r"C:\Users\me\Documents\test-remove-me".into(),
+            dir: "test-remove-me".into(),
+            sandbox_id: sandbox_id.map(str::to_string),
+            slug: None,
+        }
+    }
+
+    /// The owner's first project was remembered against a machine of ours removed a minute later: a folder whose
+    /// sandbox the account no longer lists has none, and is asked about again rather than opened onto nothing.
+    #[test]
+    fn a_project_whose_sandbox_the_account_no_longer_lists_is_none() {
+        let listed = roster_of(&["cm-horus", "cm-new"], true);
+        assert!(is_live(&listed, &project(Some("cm-new"))));
+        assert!(!is_live(
+            &listed,
+            &project(Some("cmuudvkwr001b01r822aawr1l"))
+        ));
+        // Nothing to judge by: no account known (signed out, or never told), or a record that kept no sandbox id.
+        assert!(is_live(&roster_of(&[], false), &project(Some("cm-gone"))));
+        assert!(is_live(&listed, &project(None)));
+    }
+
+    /// A row just made is listed at once, as the workspace will list it, and never twice.
+    #[test]
+    fn a_new_sandbox_is_listed_at_once_and_only_once() {
+        let listed = with_row(roster_of(&["cm-horus"], true), "cm-new", "test-remove-me");
+        assert_eq!(listed.sandboxes.len(), 2);
+        assert_eq!(
+            listed.sandboxes[1],
+            RosterEntry {
+                id: "cm-new".into(),
+                name: "test-remove-me".into(),
+                place: "own".into(),
+                shared: false
+            }
+        );
+        assert_eq!(
+            with_row(listed.clone(), "cm-new", "again").sandboxes,
+            listed.sandboxes
+        );
+        assert!(is_live(&listed, &project(Some("cm-new"))));
+    }
+
+    /// The pairings that sync the folder itself, and no other, as the agent reports them.
+    #[test]
+    fn the_folders_own_pairings_are_found_as_the_platform_compares_folders() {
+        let status = serde_json::json!({
+            "sync": { "pairings": [
+                { "sandboxId": "sandbox-2c8eb2c5b3a5-sbx-intentic-dev", "localDir": r"C:\Users\radar\Documents\test-remove-me" },
+                { "sandboxId": "sandbox-574ea8038415-sbx-intentic-dev", "localDir": r"C:\Users\radar\intentic\workspace-574ea8038415" },
+                { "sandboxId": "sandbox-mirror", "mode": "mirror" }
+            ] }
+        });
+        let folder = Path::new(r"c:\users\radar\documents\TEST-REMOVE-ME\");
+        assert_eq!(
+            pairings_on(&status, folder, true),
+            vec!["sandbox-2c8eb2c5b3a5-sbx-intentic-dev"]
+        );
+        // Elsewhere names keep their case, and a folder inside another is not that folder.
+        assert!(pairings_on(&status, folder, false).is_empty());
+        assert!(pairings_on(&status, Path::new(r"C:\Users\radar\Documents"), true).is_empty());
+        assert!(pairings_on(&serde_json::json!({}), folder, true).is_empty());
+    }
+
+    /// The app's own ask for the folder's dialog, as the page listens for it.
+    #[test]
+    fn the_window_is_asked_to_open_its_dialog_by_an_event() {
+        assert_eq!(
+            ASK_EVENT,
+            "window.dispatchEvent(new CustomEvent('intentic:project-ask'));"
+        );
     }
 
     /// Each project verb is the machine agent's own command, with the folder and only the values the link carried.
@@ -1097,9 +1812,18 @@ mod tests {
 
     #[test]
     fn another_sync_service_or_a_network_drive_is_said_before_anything_is_made() {
-        assert_eq!(cautions(Path::new("/home/me/Dropbox/app")).len(), 1);
-        assert_eq!(cautions(Path::new("/mnt/nas/app")).len(), 1);
+        assert_eq!(
+            cautions(Path::new("/home/me/Dropbox/app")),
+            vec![Caution::Synced {
+                service: "Dropbox".into()
+            }]
+        );
+        assert_eq!(cautions(Path::new("/mnt/nas/app")), vec![Caution::Away]);
         assert!(cautions(Path::new("/home/me/code/app")).is_empty());
+        assert_eq!(
+            serde_json::to_value(cautions(Path::new("/mnt/OneDrive/app"))).unwrap(),
+            serde_json::json!([{ "kind": "synced", "service": "OneDrive" }, { "kind": "away" }])
+        );
     }
 
     #[test]

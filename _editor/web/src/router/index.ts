@@ -26,6 +26,7 @@ import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
+import { openOnProject } from "../app/projectScope";
 import { setupRedirect } from "./setupGate";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { ownsMissingSandboxes } from "../features/sandbox/recovery/deviceDirectory";
@@ -150,10 +151,10 @@ const openAddressed = async (to: RouteLocationNormalized): Promise<RouteLocation
 // A link naming a sandbox (`/?sandbox=<id>`) opens the shell on it; sandboxArrival.ts owns the rule. After the gate, so
 // the list it reads is the one the gate just fetched.
 const openNamedSandbox = (to: SandboxArrivalRoute): Promise<true | RouteLocationRaw> => {
-    const { list, select } = useSandbox();
+    const { list, refresh, select } = useSandbox();
     const missing = (): void =>
         useNotifications().report({ tone: `info`, title: t(`sandbox.sandboxSwitcher.notOnAccount`), detail: t(`sandbox.sandboxSwitcher.notOnAccountDetail`) });
-    return arriveOnSandbox(to, { list, select, missing });
+    return arriveOnSandbox(to, { list, refresh, select, missing, scope: openOnProject });
 };
 
 // THE DESKTOP APP TAKING THIS PAGE TO A PATH WITHOUT A RELOAD (app/environments/desktop.ts `installDesktopOpener`): a

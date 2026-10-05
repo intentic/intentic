@@ -16,9 +16,14 @@ flowchart LR
 ```
 
 - Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
-  The bootstrap shims download a fresh static binary on every run; the desktop app and the machine agent call the
+  The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
+  (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own); the desktop app and the machine agent call the
   installed one. An agent reaches it through a connected device's sandbox tools.
-- `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. `update`, `prepare`,
+- `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. It pulls the published
+  image even when it is cached, so the moving `stable` tag runs the newest release, unless its caller would rather
+  start now on the image the machine already holds (`INTENTIC_REUSE_IMAGE=1`, the desktop app's setups; never with
+  `SELF_HOST`). On Windows its preflight takes the shim's word for the facts `ic docker prepare` passed on a moment
+  before (`INTENTIC_PREPARED=1`, connect.ps1) rather than probing the PC a second time. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
   moves the data to a trash that `restore` brings back and `purge` empties early.
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)

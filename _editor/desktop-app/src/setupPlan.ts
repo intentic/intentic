@@ -21,6 +21,12 @@ export interface PlanInput {
     readonly syncing: boolean;
     /** `windows` swaps the first two steps and renames them. */
     readonly os: string;
+    /**
+     * The sandbox image is on this machine already, so the setup starts on it with nothing to download
+     * (commands.rs `INTENTIC_REUSE_IMAGE`). Unknown reads as absent: the pull's share then waits on the bar for a download
+     * that may never come, which is the honest side to be wrong on.
+     */
+    readonly imageReady?: boolean;
 }
 
 // Steps in the order the flow actually runs them; Windows checks Docker before fetching the installer since that
@@ -41,8 +47,11 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
         { phase: `preflight`, label: t(`desktop.setupPlan.checkDevice`), weight: 10 },
         { phase: `claiming-code`, label: t(`desktop.setupPlan.redeemSetupCode`), weight: 5 },
-        // Reports real progress via docker's layer names, so this weight only needs to be right about its share.
-        { phase: `pulling-image`, label: t(`desktop.setupPlan.downloadSandboxImage`), weight: 240 },
+        // Reports real progress via docker's layer names, so this weight only needs to be right about its share. An image
+        // already here is a docker answer away, and weighted so: at 240 it held half the bar for a step that takes none.
+        input.imageReady === true
+            ? { phase: `pulling-image`, label: t(`desktop.setupPlan.useSandboxImage`), weight: 2 }
+            : { phase: `pulling-image`, label: t(`desktop.setupPlan.downloadSandboxImage`), weight: 240 },
         { phase: `starting-sandbox`, label: t(`desktop.setupPlan.startSandbox`), weight: 25 },
         { phase: `waiting-health`, label: t(`desktop.setupPlan.waitToComeUp`), weight: 40 },
         { phase: `verifying`, label: t(`desktop.setupPlan.checkAnswers`), weight: 20 },
@@ -190,6 +199,10 @@ export interface ProgressView {
     readonly position: string | undefined;
     /** "about 3 min left", or undefined when there is nothing honest to say yet. */
     readonly remaining: string | undefined;
+    /** The same estimate in milliseconds, for a page that words it in its own language (the web's local/projectWords.ts). */
+    readonly remainingMs: number | undefined;
+    /** How far through the running step (0..1): docker's layers during the pull, elapsed time against its weight else. */
+    readonly stepProgress: number;
 }
 
 // Pace is this machine's actual seconds-per-weight-unit so far; the estimate is remaining weight at that pace.
@@ -204,12 +217,20 @@ const paceOf = (state: Progress, now: number): number => {
     return Math.min(Math.max(measured, NOMINAL_MS * 0.4), NOMINAL_MS * 4);
 };
 
-const remainingOf = (state: Progress, now: number): string | undefined => {
+// Milliseconds left at this machine's pace so far.
+const remainingMsOf = (state: Progress, now: number): number | undefined => {
     // Nothing has started, or everything has: both are states where a countdown would be inventing a number.
     if (state.index < 0 || state.ended !== undefined) {
         return undefined;
     }
-    const left = total(state.plan) * (1 - ownShare(state)) * paceOf(state, now);
+    return total(state.plan) * (1 - ownShare(state)) * paceOf(state, now);
+};
+
+const remainingOf = (state: Progress, now: number): string | undefined => {
+    const left = remainingMsOf(state, now);
+    if (left === undefined) {
+        return undefined;
+    }
     if (left < 60_000) {
         return `less than a minute`;
     }
@@ -239,4 +260,6 @@ export const progressView = (state: Progress, now: number): ProgressView => ({
     percent: Math.round(state.percent),
     position: state.index < 0 || state.ended !== undefined ? undefined : `Step ${state.index + 1} of ${state.plan.length}`,
     remaining: remainingOf(state, now),
+    remainingMs: remainingMsOf(state, now),
+    stepProgress: state.index < 0 ? 0 : state.ended === `ok` ? 1 : stepFraction(state, now),
 });

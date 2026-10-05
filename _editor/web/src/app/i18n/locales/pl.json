@@ -7270,6 +7270,65 @@
             "lead": "Wszystko, co włożysz do folderu {name}, pojawi się tutaj. Zapisz lub skopiuj do niego pliki, przeciągnij je na listę po lewej albo otwórz folder, który już masz.",
             "openFolder": "Otwórz folder…",
             "showInFileManager": "Pokaż w menedżerze plików"
+        },
+        "project": {
+            "dialogTitle": "Popracuj nad {name} z agentem",
+            "lede": "Sandbox dla tego folderu, na tym komputerze. Agenty pracują na kopii, a tutaj nic się nie zmieni, dopóki nie przeniesiesz ich pracy z powrotem.",
+            "files": "{count} plik do skopiowania | {count} pliki do skopiowania | {count} plików do skopiowania",
+            "moreFiles": "Ponad {count} plików do skopiowania",
+            "weight": "{files}, {size}",
+            "staysHere": "Bez kopiowania: .git, node_modules, wyniki budowania i pliki .env. Zostają na tym komputerze.",
+            "large": "To dużo do skopiowania, więc pierwsza kopia trochę potrwa.",
+            "create": "Utwórz sandbox",
+            "signInCreate": "Zaloguj się i utwórz",
+            "signInNote": "Najpierw się zalogujesz. Sandbox i tak powstanie na tym komputerze.",
+            "busy": "Na tym komputerze powstaje już inny sandbox. Spróbuj ponownie, gdy będzie gotowy.",
+            "createFailed": "Nie udało się utworzyć sandboxa",
+            "refusedTitle": "Ten folder nie może mieć sandboxa",
+            "documentTitle": "Najpierw otwórz folder",
+            "document": "Sandbox działa na całym folderze. Otwórz folder, w którym jest ten dokument, i poproś stamtąd jeszcze raz.",
+            "refusal": {
+                "disk": "{path} to cały dysk. Otwórz w nim folder jednego projektu.",
+                "home": "{path} to cały Twój folder domowy. Otwórz w nim folder jednego projektu.",
+                "holdsHome": "{path} zawiera Twój folder domowy. Otwórz w nim folder jednego projektu.",
+                "homes": "{path} zawiera foldery domowe wszystkich użytkowników. Otwórz folder jednego projektu w swoim.",
+                "aHome": "{path} to cały folder domowy. Otwórz w nim folder jednego projektu.",
+                "system": "{path} należy do systemu. Otwórz własny folder.",
+                "inside": "Ten folder jest wewnątrz {other}, który ma już sandbox. Otwórz tamten folder.",
+                "around": "Ten folder zawiera {other}, który ma już własny sandbox."
+            },
+            "caution": {
+                "synced": "{service} już synchronizuje ten folder. Dwie synchronizacje jednego folderu mogą cofać sobie nawzajem zmiany.",
+                "away": "Ten folder jest na dysku sieciowym lub wymiennym, więc kopiowanie jest wolniejsze i wstrzymuje się, gdy dysku nie ma."
+            },
+            "stage": {
+                "plan": "Rysujemy plany",
+                "ground": "Kładziemy fundamenty",
+                "walls": "Stawiamy ściany",
+                "roof": "Kładziemy dach",
+                "lit": "Zapalamy światła",
+                "moving": "Wnosimy Twoje pliki",
+                "home": "Wprowadzone"
+            },
+            "building": "Budujemy sandbox dla {name}",
+            "waiting": "Sandbox dla {name} czeka na Twoją zgodę",
+            "waitingDetail": "Ten komputer potrzebuje kilku rzeczy, zanim uruchomi sandbox.",
+            "ready": "{name} jest gotowy na agentów",
+            "readyDetail": "Kopia jest już w sandboxie. Gdy agenty skończą, przenieś zmiany z powrotem z tego okna.",
+            "readyShort": "{name} jest gotowy",
+            "failed": "Nie udało się zbudować sandboxa dla {name}",
+            "stopped": "Budowanie sandboxa dla {name} zatrzymane",
+            "percent": "{percent}%",
+            "lessThanAMinute": "zostało mniej niż minuta",
+            "minutesLeft": "została około {count} minuta | zostały około {count} minuty | zostało około {count} minut",
+            "open": "Otwórz sandbox",
+            "review": "Przejrzyj",
+            "details": "Szczegóły",
+            "retry": "Spróbuj ponownie",
+            "hide": "Ukryj",
+            "show": "Pokaż budowę",
+            "buildingButton": "Budowanie sandboxa… {percent}%",
+            "houseLabel": "Dom agenta: {stage}"
         }
     }
 }

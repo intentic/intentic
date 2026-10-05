@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { type App, createApp, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import { hold, useNotifications } from "./notifications";
 import NotificationHost from "./NotificationHost.vue";
 
@@ -107,4 +107,20 @@ it(`updates a network-backed condition without inserting a probe card`, async ()
 
     expect(root.textContent).toContain(`Connected`);
     expect(inserted).toEqual([]);
+});
+
+// A card that draws its own box (a folder's sandbox being built) takes the lane's place and order and nothing else of
+// it: no glyph, no title row, no dismiss of the lane's own, and it names itself to assistive technology by its title.
+it(`draws a card that brings its own box in place of the lane's`, async () => {
+    const Card = { render: () => h(`div`, { class: `own-card` }, `the house goes up`) };
+    release = hold(`card`, () => ({ kind: `condition`, title: `Building a sandbox for app`, card: Card }));
+    const root = await mountHost();
+    const card = root.querySelector(`.own-card`);
+    expect({
+        drawn: card?.textContent,
+        reachable: card?.classList.contains(`pointer-events-auto`),
+        named: card?.getAttribute(`aria-label`),
+        role: card?.getAttribute(`role`),
+        laneBoxes: root.querySelectorAll(`.grid.rounded-lg`).length,
+    }).toEqual({ drawn: `the house goes up`, reachable: true, named: `Building a sandbox for app`, role: `status`, laneBoxes: 0 });
 });

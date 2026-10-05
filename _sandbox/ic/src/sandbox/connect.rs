@@ -291,7 +291,16 @@ fn connect(
     // Resolve the image up front (a slow first pull shouldn't look like a hang) — and the tunnel step below,
     // which runs this same image via `--entrypoint intentic`, must never execute a stale locally-cached tag.
     reporter.stage("pulling-image");
-    ensure_image(&sandbox_image, &log)?;
+    if reuses_local_image(env("INTENTIC_REUSE_IMAGE").as_deref(), self_host)
+        && docker::image_exists(&sandbox_image)
+    {
+        step(
+            "pulling-image",
+            &format!("using the sandbox image already on this machine ({sandbox_image})."),
+        );
+    } else {
+        ensure_image(&sandbox_image, &log)?;
+    }
 
     /* The address is the platform's answer, not something this flow provisions: the box enables against the hub itself and serves its own share. */
     let sandbox_public_url = if sandbox_hostname.is_empty() {
@@ -607,6 +616,15 @@ fn is_registryless(image: &str) -> bool {
         }
         _ => true,
     }
+}
+
+/// Whether this setup runs the image this machine already holds rather than asking the registry for a newer one:
+/// only when its caller asked (`INTENTIC_REUSE_IMAGE=1`, which the desktop app sets on a setup), and never for a
+/// self-host setup, whose tunnel step runs the image too. A second sandbox on a machine then skips a registry round
+/// trip, and one whose `:stable` moved since the last pull skips gigabytes; the machine agent's update loop keeps
+/// that tag current, and the sandbox's own update check offers anything newer, as it does every sandbox running.
+fn reuses_local_image(asked: Option<&str>, self_host: bool) -> bool {
+    !self_host && asked == Some("1")
 }
 
 /// Make the image runnable. A registry-less reference (a dev tag like intentic-sandbox:dev) can only resolve
@@ -935,6 +953,18 @@ mod tests {
         assert!(is_registryless("alpine"));
         // A bare namespaced name is still Docker Hub's — `library/alpine` has no registry host.
         assert!(is_registryless("library/alpine:3"));
+    }
+
+    #[test]
+    fn the_local_image_is_reused_only_when_the_caller_asked_and_nothing_else_runs_it() {
+        // The desktop app's setup: the copy this machine holds starts the sandbox, with no registry in the loop.
+        assert!(reuses_local_image(Some("1"), false));
+        // Anyone else (the one-liner, a script that set nothing) keeps asking the registry for the newest release.
+        assert!(!reuses_local_image(None, false));
+        assert!(!reuses_local_image(Some("0"), false));
+        assert!(!reuses_local_image(Some("yes"), false));
+        // A self-host setup's tunnel step runs this image too, and must never run a stale copy of it.
+        assert!(!reuses_local_image(Some("1"), true));
     }
 
     #[test]

@@ -216,22 +216,47 @@ flowchart LR
   they are saved or closed, asked again just before the installer runs and before the restart onto it (a restart
   held that way is what the update's offer means from then on), since the Windows installer ends the process where
   nothing can ask.
-- **A folder's own sandbox, copy-first.** "Work on this with an agent" in a folder's window
-  (`src-tauri/src/project.rs`) refuses a disk, a home folder (a Fedora Atomic home under `/var/home` included), a
-  system folder and one inside or around a folder that already has a sandbox, says what copy-first means, then parks
-  the folder and opens the workspace's `/setup?project=<name>`. The folder is copied into the sandbox's
-  `/work/<name>` and kept up to date from here; agents change the copy, and nothing in the folder changes until the
-  window's "Bring back changes", which keeps a restore point first. The setup page answers with
-  `intentic://setup?…&project=<name>` for a sandbox on this machine, run with `SYNC_DIR`, `SYNC_REMOTE_DIR=/work/<name>`
-  and `SYNC_PROJECT=1`, or with `intentic://sync?…&project=<name>&sandbox=<id>` for a hosted one, whose sync script
-  runs here on the parked folder with the same three values (a folder is asked for in a system dialog when none is
-  parked). Either way the folder is bound to the one this app parked (never to a path on a link), and
-  `projects.json` remembers it so opening the folder again reaches the same sandbox. The window's project verbs
-  (`changes`, `bring-back`, `restore`, `direction`) each run the machine agent, `intentic-machine sync <verb> --dir
-  <folder> … --json`, and hand its JSON object back to the window as `intentic:project`. The paths a bring-back is
-  limited to go in a JSON file (`--paths-file`, in the app's cache, removed after the run), never on the command
-  line, which Windows caps at 32,767 characters. One bring-back, restore or direction change runs per folder at a
-  time, and an update waits for it.
+- **A folder's own sandbox, copy-first.** "Work on this with an agent" in a folder's window asks in the window's own
+  dialog (the web's `local/LocalProject.vue`), drawn from `project_preview` (`src-tauri/src/project.rs`): the folder's
+  name and path, what its first copy carries, and anything to beware of (another sync service, a network drive, a large
+  first copy), or why it cannot have one (a disk, a home folder, a system folder, one inside or around a folder that
+  already has a sandbox), each by kind for the page to word. Its picture is the folder's copy carried into the agent's
+  house (`local/AgentHouse.vue`). "Create sandbox" is `project_create`: the app makes the platform row and mints its
+  setup code itself, with the session the workspace signed in with (`account.rs` `platform_post`, fixed paths, never a
+  page's), and hands the window the setup, which its own This device store runs (`device/setup.ts` `adoptSetup`) ON
+  THIS COMPUTER, with nothing swapped in over the window. The build is a card in the window's corner
+  (`local/LocalProjectBuild.vue`, in the notification lane): the house goes up stage by stage as the setup's real phases
+  arrive (the plans, the ground and its materials as the image arrives, the walls as the container starts, the roof as
+  the daemon comes up, the lights as it answers, the folder's copy carried in through the door), with the step, the
+  bar and the time left. It folds to a line, the folder's button says how far it is, and it is ready, with "Open
+  sandbox", once the folder's copy is in, while the device's own connection finishes behind it
+  (`device/projectBuild.ts`). A failure stays on the card with "Try again" on the same row; anything the machine needs
+  first (Docker, a restart) is answered on This device. The sandbox opens on the folder
+  (`/?sandbox=<id>&project=<name>`, the web's `router/sandboxArrival.ts`), never on the `/work` around it. Nobody signed
+  in is the one case that leaves the window: the folder is parked and the workspace's `/setup?project=<name>&machine=mine`
+  signs in first and makes the sandbox on this computer, handing it back as `intentic://setup?…&project=<name>`.
+  The folder is copied into the sandbox's `/work/<name>` and kept up to date from here; agents change the copy, and
+  nothing in the folder changes until the window's "Bring back changes", which keeps a restore point first. A hosted
+  sandbox's project, asked for by name, is enrolled with `intentic://sync?…&project=<name>&sandbox=<id>`, whose sync
+  script runs here on the parked folder with the same three values (a folder is asked for in a system dialog when none
+  is parked). Either way the folder is the window's own or the one this app parked (never a path on a link or a
+  command), and `projects.json` remembers it so opening the folder again reaches the same sandbox; every window on the
+  folder hears so at once (`intentic:sandbox`). A project whose sandbox the account no longer lists (the workspace's
+  last roster, which a new row joins the moment it is made) is a folder with none: its button asks again, and making
+  the new one first has the machine agent let go of the dead one's sync of the folder (`intentic-machine sync
+  uninstall --sandbox <id>`), since the agent keeps one sync per folder. The window's project verbs (`changes`, `bring-back`, `restore`,
+  `direction`) each run the machine agent, `intentic-machine sync <verb> --dir <folder> … --json`, and hand its JSON
+  object back to the window as `intentic:project`. The paths a bring-back is limited to go in a JSON file
+  (`--paths-file`, in the app's cache, removed after the run), never on the command line, which Windows caps at 32,767
+  characters. One bring-back, restore or direction change runs per folder at a time, and an update waits for it.
+
+  (2026-10-05) The question used to be the system's own message box, two paragraphs in its look, and the press took the
+  reader to the workspace's full-screen `/setup`, which started a machine of ours three to five minutes away, then to
+  This device's page. The sandbox now goes up on this computer in the window that asked, and its setup is lighter: the
+  shims skip an `ic` already at this app's version (`IC_VERSION`), `ic` reuses the sandbox image already here
+  (`INTENTIC_REUSE_IMAGE`) and takes `ic docker prepare`'s word for the Windows prerequisites (`INTENTIC_PREPARED`).
+  A pane beside the folder for the build was rejected (it takes the reader's width for a minute of watching), as was a
+  bare toast (no room to show what is happening): the card in the lane keeps both the picture and the folder in view.
 - **"Ask about this".** A local window can hand one of its files to the workspace: the app grants it to the sidecar
   read-only, for the workspace's origin alone and for fifteen minutes (a handoff grant, never a window), and opens
   the workspace at `/?handoff=<base64url of { url, token, name }>`, where `url` is the sidecar's
@@ -265,7 +290,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `notice?do=open&token=…` | anywhere | A press on one of the app's notifications, as Windows delivers it through the OS: the workspace at that notification's route. A token this run did not issue, letters and digits only, opens the workspace as it is. |
 | `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the place chip and the rail's foot; `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
-| `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox`, `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
+| `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox` (the folder's sandbox opened, or the window asked to put up its dialog), `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 
 A local window is heard on those two links and nothing else: never a setup, a sync, a recreate, a fix or a sign-in,
 since it draws documents nobody vouched for (`Source::Files` in `setup_link.rs`). Every value a local verb carries is
@@ -292,6 +317,8 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic:close-requested` | local window | none: a close is held for unsaved changes. |
 | `intentic:project` | local folder window | `{ kind: "changes" \| "brought-back" \| "restored" \| "direction", result }`, `result` being the machine agent's own `{ ok, … }`; or `{ kind: "error", verb, error }` when the agent is missing, would not start, timed out or printed no JSON, or the folder has a run under way already. |
 | `intentic:navigate` | main window | `{ path }`, a route of the local shell (`/device`): the screen the app raised the window for. |
+| `intentic:sandbox` | local folder windows | `{ sandbox: true }`: the window's folder has its own sandbox now (`project.rs` `remember`), kept in its face for its reloads. |
+| `intentic:project-ask` | local folder window | none: put up the folder's sandbox dialog (`sandbox` asked by link for a folder with none). |
 
 A local window also hears the app's Tauri events, which This device listens on: `desktop://run` (a script run's
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://pending-recreate`, `desktop://pending-sync` and
@@ -323,6 +350,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
+- [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder's own sandbox: what its dialog draws, the row and setup code the app makes for it, and the project verbs its window runs.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 

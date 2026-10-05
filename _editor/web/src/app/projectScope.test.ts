@@ -124,3 +124,34 @@ describe(`a project sandbox's own folder`, () => {
         expect({ refused, taken: projectScope.value }).toEqual({ refused: undefined, taken: `my-app` });
     });
 });
+
+// The desktop app opening a project's sandbox from the folder's own window (`/?sandbox=<id>&project=<folder>`): the reader
+// asked to see that folder, so it is the scope even over a choice stored before, and it is kept as the choice.
+describe(`a project sandbox opened from its folder's window`, () => {
+    it(`opens on the folder over a scope chosen before, and keeps it`, async () => {
+        activeSandboxId.value = `sb-a`;
+        const { projectScope, setProjectScope, openOnProject, adoptProjectScope } = await load();
+        setProjectScope(undefined);
+        openOnProject(`sb-a`, `test-remove-me`);
+        adoptProjectScope(`sb-a`, `test-remove-me`);
+        expect({ scope: projectScope.value, stored: stored() }).toEqual({ scope: `test-remove-me`, stored: [`test-remove-me`] });
+    });
+
+    it(`is kept for the sandbox it names when another is in view`, async () => {
+        activeSandboxId.value = `sb-b`;
+        const { projectScope, openOnProject } = await load();
+        openOnProject(`sb-a`, `test-remove-me`);
+        const inView = projectScope.value;
+        activeSandboxId.value = `sb-a`;
+        resetSandboxScope();
+        expect({ inView, afterSwitch: projectScope.value }).toEqual({ inView: undefined, afterSwitch: `test-remove-me` });
+    });
+
+    it(`is refused when it names no folder a project could be`, async () => {
+        activeSandboxId.value = `sb-a`;
+        const { projectScope, openOnProject } = await load();
+        openOnProject(`sb-a`, `../elsewhere`);
+        openOnProject(`sb-a`, RESERVED_PROJECT_DIR_NAMES[0]!);
+        expect({ scope: projectScope.value, stored: stored() }).toEqual({ scope: undefined, stored: [] });
+    });
+});

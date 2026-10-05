@@ -108,8 +108,9 @@ function Add-IntenticPath {
 
 # ---- fetch the ic CLI (the same block recreate.ps1 and connect-host.ps1 carry, apart from its one narration
 #      line - these are standalone irm|iex files and cannot share code, so a test holds them to it instead) ----
-# Downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a failed download
-# falls back to what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
+# Downloaded on every run that pins no release, so re-running the one-liner upgrades an existing install; a
+# run pinned to the release already installed (IC_VERSION) skips it, and only a failed download falls back to
+# what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
 # executable fails, and a half-downloaded binary must never be what runs.
 $Ic = $env:IC_BIN
 if (-not $Ic) {
@@ -118,25 +119,38 @@ if (-not $Ic) {
     New-Item -ItemType Directory -Force -Path $IcDir | Out-Null
     $IcDest = "$IcDir\ic.exe"
     $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
-    Write-Step 'fetching-ic' 'fetching the ic CLI...'
-    try {
-        Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
-        Move-Item -Force "$IcDest.tmp" $IcDest
+    # A caller that pins its release (IC_VERSION beside IC_URL, which the desktop app sets to its own) and finds
+    # exactly that release installed has nothing to fetch: asking the binary costs milliseconds, the download
+    # seconds. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
+    $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
+    if ($IcHave -and $IcHave -eq "ic $env:IC_VERSION") {
+        Write-Host "note: $IcHave is already installed - not downloading it again."
         $Ic = $IcDest
         Add-IntenticPath -Folder $IcDir -Command 'ic'
-    } catch {
-        Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
-        if (Test-Path $IcDest) {
-            Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+    } else {
+        Write-Step 'fetching-ic' 'fetching the ic CLI...'
+        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+        # five-megabyte download take several seconds instead of a fraction of one.
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+            Move-Item -Force "$IcDest.tmp" $IcDest
             $Ic = $IcDest
-        } else {
-            $installed = Get-Command ic -ErrorAction SilentlyContinue
-            if ($installed) {
-                Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
-                $Ic = $installed.Source
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } catch {
+            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            if (Test-Path $IcDest) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                $Ic = $IcDest
             } else {
-                Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
-                exit 1
+                $installed = Get-Command ic -ErrorAction SilentlyContinue
+                if ($installed) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                    $Ic = $installed.Source
+                } else {
+                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                    exit 1
+                }
             }
         }
     }
@@ -159,6 +173,9 @@ if (-not $Ic) {
 # it), and otherwise ic asks on the terminal. Nothing below this line is reached until Docker answers.
 & $Ic docker prepare
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Said to the connect below, whose preflight would otherwise examine this PC a second time for the facts prepare
+# passed on a moment ago (ic's checks.rs `PREPARED`).
+$env:INTENTIC_PREPARED = '1'
 
 # Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
 # carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.

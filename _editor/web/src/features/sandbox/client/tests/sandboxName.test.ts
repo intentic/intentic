@@ -1,4 +1,4 @@
-import { autoSandboxName } from "../setupName";
+import { autoSandboxName } from "../sandboxName";
 
 test("the first sandbox is named without a suffix: there is nothing to tell it apart from", () => {
     expect(autoSandboxName([])).toBe(`workspace`);

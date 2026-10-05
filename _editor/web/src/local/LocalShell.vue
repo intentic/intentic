@@ -13,6 +13,7 @@ import { useIconRailSize } from "../shell/rail/useIconRailSize";
 import { navigatedPath } from "./appEvents";
 import LocalAccountTile from "./LocalAccountTile.vue";
 import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
+import LocalProject from "./LocalProject.vue";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
 // sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
@@ -94,6 +95,8 @@ onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
                 <RouterView />
             </div>
         </main>
+        <!-- The folder's own sandbox: its dialog, and its build's card, in sight from every screen of this window. -->
+        <LocalProject v-if="host.project !== undefined" />
     </div>
 </template>
 

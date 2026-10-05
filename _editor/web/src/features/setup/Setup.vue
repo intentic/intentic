@@ -25,6 +25,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { desktopTakesProjects, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { environment } from "../../app/environments/environment";
+import { openOnProject } from "../../app/projectScope";
 import { apiClient } from "../../lib/useApi";
 import { revealConversation } from "../agents/fleet/agentActions";
 import { useAuth } from "../auth/useAuth";
@@ -33,6 +34,7 @@ import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.v
 import { composingConversation } from "../chat/panel/useChat-reveal";
 import { useCloudflareZones } from "../extensions/useCloudflareZones";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { activeSandboxId } from "../sandbox/overview/activeSandbox";
 import { mintSyncPairing } from "../sandbox/devices/sync/useDesktopSync";
 import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
@@ -96,8 +98,13 @@ const project = setupProjectOf(route.query[`project`]);
 const installer = computed(() => (desktop.value || mobile.value || project !== undefined ? undefined : desktopInstaller()));
 const reader = { mobile, inApp: desktop, installer };
 
-// Lands on `/`, which differs by form factor (a phone has no docked chat, so it opens straight into one).
+// Lands on `/`, which differs by form factor (a phone has no docked chat, so it opens straight into one). A project's
+// sandbox opens on its folder, the one the reader asked about, rather than on the `/work` around it (projectScope.ts).
 const enterWorkspace = async (): Promise<void> => {
+    const entered = activeSandboxId.value;
+    if (project !== undefined && entered !== undefined) {
+        openOnProject(entered, project.dirName);
+    }
     await router.push(`/`);
     revealConversation(composingConversation());
 };

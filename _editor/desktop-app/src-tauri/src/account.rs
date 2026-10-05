@@ -12,6 +12,9 @@
 //! sign out), the plan and its checkout, API tokens, and the data export. Deleting the account is not on it: that has
 //! to take this account's access off every sandbox's daemon first, and a local window knows only its own folder, so
 //! the page sends that one to the workspace. The cookie never reaches the page.
+//!
+//! The app makes calls of its own with the same session ([`platform_post`]): the sandbox a folder's window asks for
+//! (project.rs), its row and its setup code, each a fixed path written there, never one a page names.
 
 use std::time::Duration;
 
@@ -323,6 +326,43 @@ async fn signed_off(app: &AppHandle, window: &WebviewWindow, held: Vec<Cookie<'s
     }
 }
 
+/// One call with the session the store holds, its answer's cookies written back, as the page's own fetch would have; none
+/// when the store holds no session, since nothing this app asks answers anyone else.
+async fn with_session(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    method: Method,
+    path: &str,
+    body: Option<String>,
+) -> Result<Option<(RelayAnswer, Vec<Cookie<'static>>)>, String> {
+    let (platform, app_url) = {
+        let state = app.state::<AppState>();
+        (state.platform_url(), state.app_url())
+    };
+    let base = url::Url::parse(&platform)
+        .map_err(|error| format!("the platform's address is not one: {platform} ({error})"))?;
+    let host = base.host_str().unwrap_or_default().to_ascii_lowercase();
+    let held = cookies_for(window, base).await?;
+    let Some(cookie) = cookie_header(&held) else {
+        return Ok(None);
+    };
+    let url = format!("{}{path}", platform.trim_end_matches('/'));
+    let wait = if path.starts_with(GET_SESSION) {
+        SESSION_WAIT
+    } else {
+        CALL_WAIT
+    };
+    let sent = send(method, &url, &cookie, &origin_of(&app_url), body, wait).await?;
+    let now = now_unix();
+    let changes = sent
+        .set_cookies
+        .iter()
+        .filter_map(|header| cookie_change(header, &host, now))
+        .collect();
+    apply(window, changes).await;
+    Ok(Some((sent.answer, held)))
+}
+
 /// One platform call for a local window's account menu or Settings, with the workspace's session.
 #[tauri::command]
 pub async fn account_relay(
@@ -331,35 +371,64 @@ pub async fn account_relay(
     ask: RelayAsk,
 ) -> Result<RelayAnswer, String> {
     let (method, path) = checked(&ask)?;
-    let (platform, app_url) = {
-        let state = app.state::<AppState>();
-        (state.platform_url(), state.app_url())
-    };
-    let base = url::Url::parse(&platform)
-        .map_err(|error| format!("the platform's address is not one: {platform} ({error})"))?;
-    let host = base.host_str().unwrap_or_default().to_ascii_lowercase();
-    let held = cookies_for(&window, base).await?;
-    let Some(cookie) = cookie_header(&held) else {
+    let Some((answer, held)) = with_session(&app, &window, method, &path, ask.body).await? else {
         return Ok(signed_out(&path));
     };
-    let url = format!("{}{path}", platform.trim_end_matches('/'));
-    let wait = if path.starts_with(GET_SESSION) {
-        SESSION_WAIT
-    } else {
-        CALL_WAIT
-    };
-    let sent = send(method, &url, &cookie, &origin_of(&app_url), ask.body, wait).await?;
-    let now = now_unix();
-    let changes = sent
-        .set_cookies
-        .iter()
-        .filter_map(|header| cookie_change(header, &host, now))
-        .collect();
-    apply(&window, changes).await;
-    if path == SIGN_OUT && (200..300).contains(&sent.answer.status) {
+    if path == SIGN_OUT && (200..300).contains(&answer.status) {
         signed_off(&app, &window, held).await;
     }
-    Ok(sent.answer)
+    Ok(answer)
+}
+
+/// What a call the app makes for itself came back with: the platform's answer, or nobody signed in to ask with (no
+/// session in the store, or one the platform no longer takes).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Answered {
+    SignedOut,
+    Json {
+        status: u16,
+        body: serde_json::Value,
+    },
+}
+
+/// What a platform answer with `status` and `text` means to the app: a 401 is nobody signed in, whatever the store
+/// held; anything else is the platform's JSON, or `null` where it sent none.
+fn answered(status: u16, text: &str) -> Answered {
+    if status == 401 {
+        return Answered::SignedOut;
+    }
+    Answered::Json {
+        status,
+        body: serde_json::from_str(text).unwrap_or(serde_json::Value::Null),
+    }
+}
+
+/// A call the app makes for itself (project.rs), with the session the workspace signed in with: `path` is the app's own,
+/// written where it is called, never one a page names, so it is not held to [`ROUTES`].
+pub async fn platform_post(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    path: &str,
+    body: &serde_json::Value,
+) -> Result<Answered, String> {
+    let sent = with_session(app, window, Method::Post, path, Some(body.to_string())).await?;
+    Ok(match sent {
+        None => Answered::SignedOut,
+        Some((answer, _)) => answered(answer.status, &answer.body),
+    })
+}
+
+/// Whether the store holds a session to make a sandbox with, read without asking the platform: what the folder's
+/// dialog says its button does (project.rs). A session the platform no longer takes still reads as one, and is found
+/// out at the press, which then signs in as a missing one would.
+pub async fn has_session(app: &AppHandle, window: &WebviewWindow) -> bool {
+    let platform = app.state::<AppState>().platform_url();
+    let Ok(base) = url::Url::parse(&platform) else {
+        return false;
+    };
+    cookies_for(window, base)
+        .await
+        .is_ok_and(|held| cookie_header(&held).is_some())
 }
 
 #[cfg(test)]
@@ -408,6 +477,42 @@ mod tests {
                 "{method} {path}"
             );
         }
+    }
+
+    /// A sandbox a folder's window asks for is made with fixed paths the app writes, never a page's: a page still cannot
+    /// name them through the relay.
+    #[test]
+    fn the_calls_the_app_makes_for_itself_are_not_a_pages_to_ask() {
+        for path in [
+            "/rpc/sandbox/create",
+            "/rpc/sandbox/setup-code",
+            "/rpc/sandbox/delete",
+        ] {
+            assert_eq!(checked(&ask("POST", path, Some("{}"))), Err(refused(path)));
+        }
+    }
+
+    #[test]
+    fn an_answer_is_the_platforms_json_or_nobody_signed_in() {
+        assert_eq!(
+            answered(401, r#"{"message":"Unauthorized"}"#),
+            Answered::SignedOut
+        );
+        assert_eq!(
+            answered(200, r#"{"id":"cm1","name":"app"}"#),
+            Answered::Json {
+                status: 200,
+                body: serde_json::json!({ "id": "cm1", "name": "app" })
+            }
+        );
+        // A proxy's error page is not JSON: the status still says what happened.
+        assert_eq!(
+            answered(502, "<html>Bad gateway</html>"),
+            Answered::Json {
+                status: 502,
+                body: serde_json::Value::Null
+            }
+        );
     }
 
     #[test]

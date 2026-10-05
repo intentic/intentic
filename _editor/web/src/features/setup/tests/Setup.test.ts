@@ -695,9 +695,10 @@ it(`hands a folder the app picked straight to the app, offering no machine and n
     expect(el.textContent).toContain(FOLDER_COPIED);
 });
 
-/* WHERE THE PLATFORM'S MACHINES CAN HOLD A PROJECT (`hostedOffer.projects`), the folder the app picked goes to one of
- * them, asked for with the folder's name; once it answers, the app is handed a pairing to copy the folder in with, and
- * only then does the workspace open. This computer stays one pick away. */
+/* WHERE THE PLATFORM'S MACHINES CAN HOLD A PROJECT (`hostedOffer.projects`), the folder the app picked still runs on
+ * this computer, beside it; a machine of ours is one pick away. Asked for by name, it goes to one of them, asked for with
+ * the folder's name; once it answers, the app is handed a pairing to copy the folder in with, and only then does the
+ * workspace open. */
 describe(`a folder the app picked, where the platform's machines can hold it`, () => {
     // The row the registry lists once the machine has checked in and answers.
     const answering = (): SandboxSummary =>
@@ -709,9 +710,10 @@ describe(`a folder the app picked, where the platform's machines can hold it`, (
             lastSeenAt: new Date().toISOString(),
             bootReport: { reach: `reachable`, at: new Date().toISOString() },
         });
-    const arriveWithFolder = (): void => {
+    // `machine` is a rung asked for by name (`?machine=`): the only way a folder the app picked reaches a machine of ours.
+    const arriveWithFolder = (machine?: `hosted`): void => {
         desktopApp.value = `1.275.0`;
-        query.value = { project: `My App` };
+        query.value = machine === undefined ? { project: `My App` } : { project: `My App`, machine };
         hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, projects: true });
     };
     // The poll's read, which the hand-over also finds the sandbox's address in.
@@ -722,8 +724,23 @@ describe(`a folder the app picked, where the platform's machines can hold it`, (
         });
     };
 
-    it(`starts a machine of ours for it, asked for with its name, and says what happens to the folder`, async () => {
+    // The owner's "Work on test-remove-me with an agent" landed on a machine of ours booting for minutes (2026-10-05).
+    it(`hands the folder to this computer when the app asks, starting no machine of ours`, async () => {
         arriveWithFolder();
+        setupCode.mockResolvedValue(MINTED);
+        const el = await mount();
+        jest.useFakeTimers();
+        await advanceTimersByTimeAsync(500);
+        await waitFor(() => expect(el.textContent).toContain(`Handed to the app`));
+        expect({ platform: platformProvision.mock.calls.length, store: hostedProvision.mock.calls.length, opened: openDesktopLink.mock.calls }).toEqual({
+            platform: 0,
+            store: 0,
+            opened: [[``]],
+        });
+    });
+
+    it(`starts a machine of ours for it when one is asked for by name, and says what happens to the folder`, async () => {
+        arriveWithFolder(`hosted`);
         const el = await mount();
         await waitFor(() => expect(platformProvision.mock.calls).toEqual([[{ sandboxId: `new`, token: `tok`, project: `My-App` }]]));
         expect(hostedProvision).not.toHaveBeenCalled();
@@ -732,7 +749,7 @@ describe(`a folder the app picked, where the platform's machines can hold it`, (
     });
 
     it(`hands the app a pairing to copy the folder in with once the machine answers, then opens the workspace`, async () => {
-        arriveWithFolder();
+        arriveWithFolder(`hosted`);
         registryLists(answering());
         jest.useFakeTimers();
         await mount();
@@ -768,7 +785,7 @@ describe(`a folder the app picked, where the platform's machines can hold it`, (
     });
 
     it(`stays, saying so, while the folder cannot be handed to the app`, async () => {
-        arriveWithFolder();
+        arriveWithFolder(`hosted`);
         registryLists(answering());
         mintSyncPairing.mockRejectedValue(new Error(`Couldn't start desktop sync (503).`));
         jest.useFakeTimers();

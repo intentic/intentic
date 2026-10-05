@@ -38,6 +38,19 @@ export const adoptProjectScope = (sandboxId: string, projectDir: string): void =
     }
 };
 
+// A project sandbox opened from its folder's own window (`/?sandbox=<id>&project=<folder>`, router/sandboxArrival.ts):
+// the folder is what the reader asked to see, so it is the scope, whatever was stored before. Kept like any choice, so
+// the next hello leaves it be.
+export const openOnProject = (sandboxId: string, projectDir: string): void => {
+    if (!isProjectDirName(projectDir)) {
+        return;
+    }
+    storeValue(storageKey(sandboxId), projectDir);
+    if (sandboxId === activeSandboxId.value) {
+        projectScope.value = projectDir;
+    }
+};
+
 // Whether a workspace-relative path (a repository id, a folder, a file) is the project or inside it. Segment-wise, so
 // `apps/web2` is not inside `apps/web`.
 export const inProject = (path: string, project: string): boolean => path === project || path.startsWith(`${project}/`);

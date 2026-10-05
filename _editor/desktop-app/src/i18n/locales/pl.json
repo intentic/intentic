@@ -123,6 +123,7 @@
         "redeemSetupCode": "Zrealizuj kod instalacyjny",
         "setUpFolderSync": "Skonfiguruj synchronizację folderu",
         "startSandbox": "Uruchom swój sandbox",
+        "useSandboxImage": "Użyj obrazu sandboxa, który już tu jest",
         "waitToComeUp": "Poczekaj, aż wstanie"
     },
     "setupProgress": {

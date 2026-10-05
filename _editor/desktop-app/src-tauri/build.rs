@@ -67,4 +67,6 @@ const COMMANDS: &[&str] = &[
     "local_forget_recent",
     "local_roster",
     "account_relay",
+    "project_preview",
+    "project_create",
 ];

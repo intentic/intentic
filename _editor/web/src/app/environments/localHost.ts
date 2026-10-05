@@ -71,6 +71,86 @@ export interface LocalView {
     readonly badge?: Readonly<Ref<ViewBadge | undefined>>;
 }
 
+/* A FOLDER'S OWN SANDBOX: "Work on this with an agent" asks the app in the window's own dialog (local/LocalProject.vue),
+   and the sandbox is built on this computer while the reader keeps working, drawn as a card over the folder. The folder
+   is never named here: the app always means the window's own (its project.rs). */
+
+/** Why a folder cannot have a sandbox, by kind, drawn in the reader's words (local/projectWords.ts). */
+export type LocalProjectRefusal =
+    | { readonly kind: `disk` | `home` | `holdsHome` | `homes` | `aHome` | `system` }
+    | { readonly kind: `inside` | `around`; readonly other: string };
+
+/** What to beware of before a folder gets its sandbox. */
+export type LocalProjectCaution = { readonly kind: `synced`; readonly service: string } | { readonly kind: `away` };
+
+/** What the folder's dialog draws. */
+export type LocalProjectPreview =
+    // The folder has its sandbox already: the press opens it.
+    | { readonly kind: `existing` }
+    // A document opened on its own: a sandbox works on a whole folder.
+    | { readonly kind: `document` }
+    | { readonly kind: `refused`; readonly refusal: LocalProjectRefusal }
+    | {
+          readonly kind: `new`;
+          // The folder's own name, which the sandbox is named after.
+          readonly name: string;
+          readonly path: string;
+          // What the first copy carries, counted as the sync counts it; `more` when the count stopped short.
+          readonly files: number;
+          readonly bytes: number;
+          readonly more: boolean;
+          // Enough that the first copy is a long upload.
+          readonly large: boolean;
+          readonly cautions: readonly LocalProjectCaution[];
+          // The workspace's session is here; without it the press signs in first, in the workspace.
+          readonly signedIn: boolean;
+          // A sandbox is being set up on this computer already, and they go one at a time.
+          readonly busy: boolean;
+      };
+
+/** A folder's sandbox being built in this window, as its card draws it. */
+export interface LocalProjectBuild {
+    /** The sandbox's name. */
+    readonly name: string;
+    /**
+     * `building` while it runs; `waiting` on the reader (something this computer needs, answered on This computer);
+     * `ready` once the folder's copy is in its sandbox; `failed` or `stopped` as it ended.
+     */
+    readonly state: `building` | `waiting` | `ready` | `failed` | `stopped`;
+    /** The setup's running phase (the app's setupPlan.ts ids), which the house is drawn by. */
+    readonly phase: string | undefined;
+    /** How far into the running phase it is (0..1), where the phase measures it (the image's download). */
+    readonly phaseProgress: number;
+    /** The running step in the setup's own words, for the reader who wants what is actually happening. */
+    readonly step: string | undefined;
+    readonly percent: number;
+    /** Milliseconds left at this machine's pace so far; undefined while there is nothing honest to say. */
+    readonly remainingMs: number | undefined;
+    /** Why it stopped, in the setup's own words. */
+    readonly error: string | undefined;
+}
+
+/** What a press of "Create sandbox" came to. */
+export type LocalProjectStart = `building` | `signIn` | `opened`;
+
+export interface LocalProjectHost {
+    preview(): Promise<LocalProjectPreview>;
+    /** The sandbox made, named as the page derived from the folder's name, and its build started in this window. */
+    create(names: { readonly name: string; readonly project: string }): Promise<LocalProjectStart>;
+    /** The build in this window, while there is one to draw. */
+    readonly build: Readonly<Ref<LocalProjectBuild | undefined>>;
+    /** The built sandbox, opened on the folder. */
+    open(): Promise<void>;
+    /** The build again, from the start, on the same sandbox. */
+    retry(): Promise<void>;
+    /** Stops the build and everything it started. */
+    stop(): Promise<void>;
+    /** Puts a finished or failed build's card away. */
+    dismiss(): void;
+    /** The route of this shell where the build's every step, its log and anything it asks of the reader are drawn. */
+    readonly detailsPath: string;
+}
+
 /** Every verb rejects with a sentence written for the reader, shown where the press was. */
 export interface LocalHost {
     /** Whether this host reaches the app itself; the link-only host cannot read anything the app keeps. */
@@ -108,6 +188,8 @@ export interface LocalHost {
     updateAccount(change: { readonly name?: string; readonly image?: string }): Promise<void>;
     /** Signs the account out on the platform, for the workspace too: the app forgets the session and the sandboxes. */
     signOut(): Promise<void>;
+    /** A sandbox for this window's folder, made here; absent where the app cannot (a page with no app behind it). */
+    readonly project?: LocalProjectHost;
 }
 
 /* THE ACCOUNT'S ANSWERS, as the app hands their text over (its src/account.ts): Better Auth's, read as useAuth.ts reads

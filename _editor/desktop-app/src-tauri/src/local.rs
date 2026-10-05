@@ -274,6 +274,22 @@ impl LocalFiles {
             .map(|(label, grant)| (label.clone(), grant.face.clone()))
             .collect()
     }
+
+    /// Every folder window on `folder` told it has its sandbox now, in the face kept for its reloads and a sidecar's
+    /// move: the windows to tell, each with its face as it now reads.
+    fn mark_sandbox(&self, folder: &Path) -> Vec<(String, serde_json::Value)> {
+        let mut windows = self.windows.lock().unwrap();
+        windows
+            .iter_mut()
+            .filter(|(_, grant)| grant.folder && grant.root == folder)
+            .map(|(label, grant)| {
+                if let Some(face) = grant.face.as_object_mut() {
+                    face.insert("sandbox".to_string(), serde_json::Value::Bool(true));
+                }
+                (label.clone(), grant.face.clone())
+            })
+            .collect()
+    }
 }
 
 /// Every grant the app still holds, for a sidecar that has just (re)started (sidecar.rs `ensure`).
@@ -360,6 +376,14 @@ fn face_moved(face: &serde_json::Value) -> String {
 fn face_pointed(face: &serde_json::Value) -> String {
     format!(
         "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.history.replaceState(null, \"\", window.location.pathname + \"#/workspace\"); window.location.reload(); }})();"
+    )
+}
+
+/// A running page whose folder has its own sandbox now (project.rs `remember`): its face is kept with the news, for its
+/// reloads, and the page hears it as `intentic:sandbox` rather than reloading over whatever the reader is doing.
+fn face_sandboxed(face: &serde_json::Value) -> String {
+    format!(
+        "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.dispatchEvent(new CustomEvent('intentic:sandbox', {{ detail: {{ sandbox: true }} }})); }})();"
     )
 }
 
@@ -558,13 +582,8 @@ fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> 
         })?;
     grant.root = PathBuf::from(&granted.root);
     grant.file.clone_from(&granted.file);
-    // Whether the way to an agent is a new sandbox or this folder's own (project.rs).
-    let has_sandbox = folder
-        && app
-            .state::<AppState>()
-            .projects()
-            .iter()
-            .any(|project| Path::new(&project.path) == grant.root);
+    // Whether the way to an agent is a new sandbox or this folder's own (project.rs), whose sandbox is still there.
+    let has_sandbox = folder && crate::project::has_live_project(app, &grant.root);
     grant.face = face_of(port, &grant, &granted, has_sandbox, false);
     let title = format!("{} · Intentic", granted.name);
     match take_spare(app) {
@@ -731,11 +750,7 @@ fn granted_folder(
             }
         })?;
     grant.root = PathBuf::from(&granted.root);
-    let has_sandbox = app
-        .state::<AppState>()
-        .projects()
-        .iter()
-        .any(|project| Path::new(&project.path) == grant.root);
+    let has_sandbox = crate::project::has_live_project(app, &grant.root);
     grant.face = face_of(port, &grant, &granted, has_sandbox, home);
     Ok((grant, granted.name))
 }
@@ -999,14 +1014,34 @@ fn grant_of(app: &AppHandle, label: &str) -> Option<Grant> {
         .cloned()
 }
 
-/// "Work on this with an agent", for the folder a window shows (project.rs); a document opened alone has no
-/// folder of its own to hand over, so the window is told to open its folder first.
+/// What the window `label` shows: its folder, or none for a document opened on its own and for a window that is not a
+/// local one. The only place a project's folder comes from (project.rs): the page asks about "this folder" and never
+/// names one.
+pub fn folder_of(app: &AppHandle, label: &str) -> Option<PathBuf> {
+    grant_of(app, label)
+        .filter(|grant| grant.folder)
+        .map(|grant| grant.root)
+}
+
+/// Every window on `folder` hears that it has its own sandbox now: its "Work on this with an agent" becomes the way to
+/// that sandbox, and its bring-back appears, without a reload (the web's local/folderSandbox.ts).
+pub fn mark_sandbox(app: &AppHandle, folder: &Path) {
+    for (label, face) in app.state::<LocalFiles>().mark_sandbox(folder) {
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.eval(face_sandboxed(&face));
+        }
+    }
+}
+
+/// "Work on this with an agent", for the folder a window shows (project.rs): its sandbox opened, or its own dialog
+/// asked for. A document opened alone has no folder of its own to hand over, so the window is told to open its folder
+/// first.
 fn sandbox(app: &AppHandle, label: &str) {
     let Some(grant) = grant_of(app, label) else {
         return;
     };
     if grant.folder {
-        crate::project::start(app, grant.root);
+        crate::project::start(app, label, grant.root);
     } else {
         app.dialog()
             .message("A sandbox works on a whole folder. Open the folder this document is in, then ask again from there.")
@@ -1524,6 +1559,53 @@ mod tests {
         );
         let moved = face_moved(&face);
         assert!(moved.contains("window.location.reload()"), "{moved}");
+        // A folder that has its sandbox now keeps that for its reloads, and its page hears it without one.
+        let sandboxed = face_sandboxed(&face);
+        assert!(
+            sandboxed.contains(r#"sessionStorage.setItem("intentic.local.face""#),
+            "{sandboxed}"
+        );
+        assert!(
+            sandboxed.contains(
+                "window.dispatchEvent(new CustomEvent('intentic:sandbox', { detail: { sandbox: true } }))"
+            ),
+            "{sandboxed}"
+        );
+        assert!(!sandboxed.contains("reload"), "{sandboxed}");
+    }
+
+    /// Only the windows on that very folder are told it has a sandbox: not a document opened from inside it, and not a
+    /// window on another folder.
+    #[test]
+    fn only_the_folder_s_own_windows_hear_it_has_a_sandbox() {
+        let files = LocalFiles::default();
+        let grant = |root: &str, folder: bool| Grant {
+            token: "t".into(),
+            id: "i".into(),
+            asked: PathBuf::from(root),
+            folder,
+            root: PathBuf::from(root),
+            file: None,
+            face: serde_json::json!({ "path": root, "sandbox": false }),
+        };
+        {
+            let mut windows = files.windows.lock().unwrap();
+            windows.insert("home".into(), grant("/home/me/app", true));
+            windows.insert("files-1".into(), grant("/home/me/app", false));
+            windows.insert("files-2".into(), grant("/home/me/other", true));
+        }
+        let told = files.mark_sandbox(Path::new("/home/me/app"));
+        assert_eq!(
+            told,
+            vec![(
+                "home".to_string(),
+                serde_json::json!({ "path": "/home/me/app", "sandbox": true })
+            )]
+        );
+        let windows = files.windows.lock().unwrap();
+        assert_eq!(windows["home"].face["sandbox"], true);
+        assert_eq!(windows["files-1"].face["sandbox"], false);
+        assert_eq!(windows["files-2"].face["sandbox"], false);
     }
 
     /// The handoff grant: one file, read-only, for the workspace's origin alone, for a quarter of an hour, never a

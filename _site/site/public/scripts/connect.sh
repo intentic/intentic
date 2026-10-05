@@ -275,25 +275,32 @@ if [ -z "$IC" ]; then
         dest="$HOME/.intentic/ic/bin/ic"
         mkdir -p "$(dirname "$dest")"
     fi
-    step fetching-ic "fetching the ic CLI…"
-    # Download beside the target and rename into place: overwriting a running executable fails outright
-    # ("Text file busy"), and a half-downloaded binary must never be what runs.
-    if curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then
-        chmod +x "${dest}.tmp"
-        mv -f "${dest}.tmp" "$dest"
+    # A run pinned to the release already installed (IC_VERSION beside IC_URL, which the desktop app sets to its
+    # own) has nothing to fetch: asking the binary costs milliseconds. An unpinned run still downloads.
+    if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && [ "$("$dest" --version 2>/dev/null)" = "ic ${IC_VERSION}" ]; then
         IC="$dest"
-        if [ "$(id -u)" != 0 ]; then
-            mkdir -p "$HOME/.local/bin"
-            ln -sf "$dest" "$HOME/.local/bin/ic"
-        fi
+        echo "note: ic ${IC_VERSION} is already installed — not downloading it again."
     else
-        rm -f "${dest}.tmp"
-        IC="$(command -v ic || true)"
-        if [ -n "$IC" ]; then
-            echo "note: could not download the latest ic CLI — continuing with the installed $IC." >&2
+        step fetching-ic "fetching the ic CLI…"
+        # Download beside the target and rename into place: overwriting a running executable fails outright
+        # ("Text file busy"), and a half-downloaded binary must never be what runs.
+        if curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then
+            chmod +x "${dest}.tmp"
+            mv -f "${dest}.tmp" "$dest"
+            IC="$dest"
+            if [ "$(id -u)" != 0 ]; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$dest" "$HOME/.local/bin/ic"
+            fi
         else
-            echo "error: could not download the ic CLI and none is installed — check your network and re-run." >&2
-            exit 1
+            rm -f "${dest}.tmp"
+            IC="$(command -v ic || true)"
+            if [ -n "$IC" ]; then
+                echo "note: could not download the latest ic CLI — continuing with the installed $IC." >&2
+            else
+                echo "error: could not download the ic CLI and none is installed — check your network and re-run." >&2
+                exit 1
+            fi
         fi
     fi
 fi

@@ -178,6 +178,8 @@ pub fn run() {
             local::local_forget_recent,
             local::local_roster,
             account::account_relay,
+            project::project_preview,
+            project::project_create,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);

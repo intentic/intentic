@@ -10,7 +10,7 @@ import { editorChunk, FACE_EVENT, faceArrives, warmModule } from "./warm";
 // window's credentials are written where the editor already reads them, never faked past it.
 
 // A dev server has no app to inject the window's facts, so it takes them from the address instead
-// (`/files/local?daemon=…&token=…&id=…&name=…&path=…[&file=…][&home=1]`), and keeps them for the tab's reloads, since
+// (`/files/local?daemon=…&token=…&id=…&name=…&path=…[&file=…][&home=1][&sandbox=1]`), and keeps them for the tab's reloads, since
 // the address is rewritten below; a build only ever reads the app's.
 const DEV_FACE_KEY = `intentic.local.devFace`;
 const devFace = (): LocalFace | undefined => {
@@ -24,7 +24,17 @@ const devFace = (): LocalFace | undefined => {
         // SAFETY: the tab's own storage, written below from a face this function built; a dev server's tab only.
         return kept === null ? undefined : (JSON.parse(kept) as LocalFace);
     }
-    const face: LocalFace = { daemonUrl, token, id, name, path, file: query.get(`file`) ?? undefined, home: query.get(`home`) === `1` };
+    const face: LocalFace = {
+        daemonUrl,
+        token,
+        id,
+        name,
+        path,
+        file: query.get(`file`) ?? undefined,
+        home: query.get(`home`) === `1`,
+        // A folder that already has its own sandbox, for the way to it and its bring-back.
+        sandbox: query.get(`sandbox`) === `1`,
+    };
     sessionStorage.setItem(DEV_FACE_KEY, JSON.stringify(face));
     return face;
 };

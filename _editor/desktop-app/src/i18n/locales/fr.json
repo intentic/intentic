@@ -97,6 +97,7 @@
         "redeemSetupCode": "Utiliser votre code d'installation",
         "setUpFolderSync": "Mettre en place la synchronisation de dossier",
         "startSandbox": "Démarrer votre sandbox",
+        "useSandboxImage": "Utiliser l'image du sandbox déjà présente",
         "waitToComeUp": "Attendre qu'il soit prêt"
     },
     "setupProgress": {

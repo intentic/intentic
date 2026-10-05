@@ -114,6 +114,15 @@ pub fn busy() -> bool {
         .unwrap_or(true)
 }
 
+/// Whether the run `id` is going right now: a second setup asked for while one runs is refused before it makes anything
+/// (project.rs), since both would drive the same docker and report under the same id.
+pub fn is_running(id: &str) -> bool {
+    running()
+        .lock()
+        .map(|live| live.contains_key(id))
+        .unwrap_or(true)
+}
+
 /// End a run and everything it started. The tree matters more than the process: the shim is `powershell.exe`
 /// or `sh`, and the thing actually doing the work — `ic`, `docker`, an installer — is its child. Killing only
 /// what we spawned would leave a 600 MB download running behind a window that says it stopped.
@@ -1051,6 +1060,36 @@ pub fn sync_report() -> Result<Option<String>, String> {
             "the sync agent on this device could not be read: {error}"
         )),
     }
+}
+
+/// How long an unpair may take: it tells the sandbox to forget this machine first, which a sandbox that is gone answers
+/// at once (the edge's 502) and an unreachable one only after its own timeout.
+const AGENT_UNPAIR_LIMIT: Duration = Duration::from_secs(60);
+
+/// Stop syncing one sandbox's folder on this machine, `intentic-machine sync uninstall --sandbox <id>`, every other
+/// pairing left as it is: what a folder whose sandbox was removed needs before a new one may sync it (project.rs), since
+/// the agent keeps one sync per folder. Answers what the agent said.
+pub fn agent_unpair(sandbox_id: &str) -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
+        match ask_agent(
+            &candidate,
+            &["sync", "uninstall", "--sandbox", sandbox_id],
+            AGENT_UNPAIR_LIMIT,
+        ) {
+            None => continue,
+            Some(Ok(answer)) if answer.success => return Ok(answer.stdout.trim().to_string()),
+            Some(Ok(answer)) => {
+                return Err(format!("{}{}", answer.stdout, answer.stderr)
+                    .trim()
+                    .to_string())
+            }
+            Some(Err(silence)) => return Err(silence.to_string()),
+        }
+    }
+    Err("no intentic-machine on this device".to_string())
 }
 
 /// Restart this machine's agent loop — `intentic-machine run --stop`, then `intentic-machine run` — the two

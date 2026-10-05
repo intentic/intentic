@@ -40,6 +40,12 @@ export interface NotificationInput {
     readonly body?: Component;
     /** A card that needs room for its body; widens the lane and stays right-aligned. */
     readonly wide?: boolean;
+    /**
+     * A card that draws its own box, taking the lane's place and order (a folder's sandbox being built, with its house,
+     * local/LocalProjectBuild.vue): rendered instead of the lane's own box, so nothing else here applies to it but `title`,
+     * which still names it to assistive technology. A condition, so it stays exactly as long as its source says.
+     */
+    readonly card?: Component;
     /** At most two; three buttons on a floating card is an unblocked dialog. */
     readonly actions?: readonly NotificationAction[];
     /** Presence puts a close button on the card; the owner records the dismissal, not the host. */

@@ -52,10 +52,15 @@ pub fn ic_url(version: &str) -> Option<String> {
 /// spawning a child with no window, no console and closed stdin, and a question asked on that run is a run
 /// that never ends. The flag says so outright, and every prompt in `ic` then reads as "no answer" — which is
 /// what each of them already treats as a refusal.
+///
+/// `IC_VERSION` rides beside the pinned `IC_URL` so a script that finds exactly that `ic` installed skips the
+/// download (every shim's fetch block): the same binary fetched again on every setup, recreate and fix was seconds
+/// of nothing, most of them Windows PowerShell 5.1 redrawing its progress bar.
 pub(crate) fn app_env(version: &str) -> Vec<(String, String)> {
     let mut env: Vec<(String, String)> = vec![("INTENTIC_NO_PROMPT".into(), "1".into())];
     if let Some(url) = ic_url(version) {
         env.push(("IC_URL".into(), url));
+        env.push(("IC_VERSION".into(), version.to_string()));
     }
     env
 }
@@ -222,6 +227,25 @@ impl SetupContext {
     }
 }
 
+/// The image a setup here runs: `INTENTIC_SANDBOX_IMAGE` in a build pointed at a local one, else `ic`'s own default.
+fn setup_image() -> String {
+    std::env::var("INTENTIC_SANDBOX_IMAGE")
+        .ok()
+        .filter(|image| !image.is_empty())
+        .unwrap_or_else(|| "ghcr.io/intentic/sandbox:stable".to_string())
+}
+
+/// Whether this machine holds the image a setup runs, so the setup starts on it with no download (`INTENTIC_REUSE_IMAGE`
+/// below): what a folder's dialog and its progress are drawn by (project.rs). Asked briefly, since a stopped engine
+/// makes this a "no" rather than a reason to wait.
+pub(crate) fn sandbox_image_ready() -> bool {
+    scripts::docker_output(
+        &["image", "inspect", "--format", "{{.Id}}", &setup_image()],
+        std::time::Duration::from_secs(5),
+    )
+    .is_ok()
+}
+
 /// Whether this setup needs the Docker probe before it can select its launch shape.
 ///
 /// Windows always delegates the decision to `ic docker prepare`, which can report requirements and raise only
@@ -259,6 +283,10 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     if let Some(image) = ctx.sandbox_image.clone() {
         env.push(("SANDBOX_IMAGE".into(), image));
     }
+    // A sandbox image this machine already holds starts this one, instead of a registry pull on every setup: seconds
+    // when nothing moved, minutes of download when `:stable` did (ic's connect.rs `reuses_local_image`). The machine
+    // agent's update loop keeps that tag current, and the new sandbox offers anything newer as every sandbox does.
+    env.push(("INTENTIC_REUSE_IMAGE".into(), "1".into()));
 
     /* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I already have Docker" checkbox makes. */
     let elevate = ctx.host == Host::Unix && !ctx.docker_ready;
@@ -335,8 +363,13 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
 
     // The script names the container after the slug it derived, so the row it just created is the one slug we
     // did not have a moment ago. Remembering the display name here is why the manager can show "work" instead
-    // of a twelve-hex id — docker knows only the container name.
-    let slug = newest_slug();
+    // of a twelve-hex id — docker knows only the container name. A setup the app made itself knows its slug already,
+    // read off the address its code was minted for (project.rs), which no other container can be mistaken for.
+    let slug = project
+        .slug
+        .clone()
+        .filter(|slug| crate::setup_link::is_slug(slug))
+        .or_else(newest_slug);
     if let (Some(name), Some(slug)) = (name.filter(|name| !name.is_empty()), slug.as_ref()) {
         app.state::<AppState>().remember_name(slug, Some(&name));
     }
@@ -504,10 +537,16 @@ fn newest_slug() -> Option<String> {
         scripts::DOCKER_READ_LIMIT,
     )
     .ok()?;
+    newest_in(&listing)
+}
+
+/// The first sandbox's slug in a `docker ps` listing, newest first: never a tunnel sidecar's, and never a container an
+/// update parked aside (`<slug>.previous`, ic's `PARKED_SUFFIX`), which is an older sandbox's, not a new one.
+fn newest_in(listing: &str) -> Option<String> {
     listing
         .lines()
         .filter_map(|name| name.strip_prefix(CONTAINER_PREFIX))
-        .find(|slug| !slug.starts_with("tunnel-"))
+        .find(|slug| !slug.starts_with("tunnel-") && crate::setup_link::is_slug(slug))
         .map(str::to_string)
 }
 
@@ -1016,6 +1055,7 @@ mod tests {
             sync_dir: None,
             platform_url: None,
             project: None,
+            slug: None,
         }
     }
 
@@ -1049,6 +1089,24 @@ mod tests {
         assert_eq!(windows.args, vec!["-SetupCode", "abc123", "-Yes"]);
         // The footgun stated as an assertion: a bare leading positional binds to connect.ps1's -PlatformUrl.
         assert_ne!(windows.args.first().map(String::as_str), Some("abc123"));
+    }
+
+    #[test]
+    fn the_newest_sandbox_is_never_a_sidecar_or_a_container_an_update_parked() {
+        let listing = "intentic-sandbox-tunnel-abc\nintentic-sandbox-work.previous\nintentic-sandbox-sandbox-2c8eb2c5b3a5\nintentic-sandbox-old\n";
+        assert_eq!(newest_in(listing).as_deref(), Some("sandbox-2c8eb2c5b3a5"));
+        assert_eq!(newest_in(""), None);
+    }
+
+    #[test]
+    fn a_setup_starts_on_the_image_this_machine_holds_and_an_update_still_pulls() {
+        for host in [Host::Windows, Host::Unix] {
+            let setup = setup_script(&setup_args("c"), &context(host, true));
+            assert_eq!(env_of(&setup, "INTENTIC_REUSE_IMAGE"), Some("1"));
+            // An update is asked for to GET the newer image: reusing the old one there would be no update at all.
+            let update = recreate_script("work", None, false, host, RELEASE);
+            assert_eq!(env_of(&update, "INTENTIC_REUSE_IMAGE"), None);
+        }
     }
 
     #[test]
@@ -1101,6 +1159,8 @@ mod tests {
                 "{} must not fetch a different release's CLI",
                 run.file
             );
+            // The version the pin names, so a shim that finds exactly that `ic` installed fetches nothing.
+            assert_eq!(env_of(&run, "IC_VERSION"), Some(RELEASE), "{}", run.file);
         }
     }
 
@@ -1114,6 +1174,11 @@ mod tests {
         dev.version = "0.0.0".into();
         assert_eq!(
             env_of(&setup_script(&setup_args("c"), &dev), "IC_URL"),
+            None
+        );
+        // Nor a version to skip the download by: a checkout's `ic` and a release's both say a number.
+        assert_eq!(
+            env_of(&setup_script(&setup_args("c"), &dev), "IC_VERSION"),
             None
         );
     }

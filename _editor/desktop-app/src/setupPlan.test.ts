@@ -26,4 +26,28 @@ describe(`a re-run's bar`, () => {
         // The same position in the plan, the same estimate: a floor moves the bar, not the clock.
         expect(progressView(carried, 0).remaining).toBe(progressView(fresh, 0).remaining);
     });
+
+    it(`carries the bar without shortening the card's millisecond estimate or changing phase progress`, () => {
+        const plan = [
+            { phase: `first`, label: `First`, weight: 100 },
+            { phase: `last`, label: `Last`, weight: 100 },
+        ];
+        const measure = (floor: number) => {
+            const running = advance(startProgress(plan, 0, floor), line(`intentic: [first] starting`), 0);
+            const view = progressView(tick(running, 40_000), 40_000);
+            return { percent: view.percent, remaining: view.remaining, remainingMs: view.remainingMs, stepProgress: view.stepProgress };
+        };
+        // Forty seconds of a 200-second plan leaves 160 seconds, whether its bar began at 0% or at 60%.
+        expect([measure(0), measure(60)]).toEqual([
+            { percent: 20, remaining: `about 3 minutes`, remainingMs: 160_000, stepProgress: 0.4 },
+            { percent: 68, remaining: `about 3 minutes`, remainingMs: 160_000, stepProgress: 0.4 },
+        ]);
+    });
+});
+
+it(`weighs a cached sandbox image as reuse, and an absent or unknown one as a download`, () => {
+    const weights = [undefined, false, true].map(
+        (imageReady) => setupPlan({ dockerReady: true, syncing: true, os: `windows`, imageReady }).find((step) => step.phase === `pulling-image`)?.weight,
+    );
+    expect(weights).toEqual([240, 240, 2]);
 });

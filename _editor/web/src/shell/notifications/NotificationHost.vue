@@ -89,8 +89,11 @@ const press = (entry: Notification, action: NotificationAction): void => {
         <!-- `appear`, because each card is born inside its own <Transition>, which otherwise plays only a later toggle:
              without it a new card popped in and only a leaving one moved. -->
         <Transition v-for="entry in notifications" :key="entry.id" name="lane" appear>
+            <!-- A card that draws its own box takes the lane's place and order, and nothing else of it. -->
+            <component :is="entry.card" v-if="entry.card" class="pointer-events-auto max-w-full" :role="roleOf(entry)" :aria-label="entry.title" />
             <!-- Two columns, not an icon beside a stack: the glyph is a grid item in the title's row (`self-center`). -->
             <div
+                v-else
                 class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"
                 :role="roleOf(entry)"

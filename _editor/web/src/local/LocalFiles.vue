@@ -18,9 +18,12 @@ import { isApplePlatform } from "../shell/commands/keybindings";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../shell/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
+import { localHost } from "../app/environments/localHost";
+import { useFolderSandbox } from "./folderSandbox";
 import LocalBringBack from "./LocalBringBack.vue";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import { type LocalChord, localChord } from "./localKeys";
+import { useLocalProject } from "./useLocalProject";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 
 // A desktop window on a folder of the user's own disk: the workspace's own explorer and editor pane, reading through the
@@ -65,6 +68,28 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
     targetDir: () => ``,
     accepts: () => face !== undefined && face.file === undefined && supportsRoute(`POST /workspace/upload`),
 });
+
+// THE WAY FROM THIS FOLDER TO AN AGENT: its own sandbox, opened once it has one; otherwise asked for in this window's own
+// dialog and built here while the reader keeps working (LocalProject.vue), the button saying how far the build is.
+const hasSandbox = useFolderSandbox();
+const { build, ask: askForSandbox } = useLocalProject();
+const building = computed(() => build.value?.state === `building` || build.value?.state === `waiting`);
+const sandboxLabel = computed(() => {
+    if (hasSandbox.value || build.value?.state === `ready`) {
+        return t(`local.localFiles.openSandbox`);
+    }
+    return building.value ? t(`local.project.buildingButton`, { percent: build.value?.percent ?? 0 }) : t(`local.localFiles.withAgent`);
+});
+const toSandbox = (): void => {
+    if (hasSandbox.value) {
+        askLocalApp(`sandbox`);
+    } else if (build.value?.state === `ready`) {
+        void localHost().project?.open();
+    } else {
+        // A build on its card is unfolded rather than asked about again (useLocalProject.ts `ask`).
+        void askForSandbox();
+    }
+};
 
 // The way from a file to an agent: a conversation about it, which the app starts (the tree's menu offers the same).
 const activePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
@@ -269,7 +294,7 @@ onUnmounted(() => {
                 />
             </div>
             <!-- What agents changed in the folder's own sandbox, brought back on request (LocalBringBack.vue). -->
-            <LocalBringBack v-if="face !== undefined && face.file === undefined && face.sandbox === true" />
+            <LocalBringBack v-if="face !== undefined && face.file === undefined && hasSandbox" />
             <!-- The way from this folder to an agent: a sandbox of its own, kept in sync with it (the app's project.rs). Not for
                  a folder with nothing in it yet, which would hand an agent nothing to work on. -->
             <div v-if="face !== undefined && face.file === undefined && !folderEmpty" class="shrink-0 border-t border-line p-2">
@@ -277,13 +302,15 @@ onUnmounted(() => {
                     class="w-full"
                     size="small"
                     severity="secondary"
-                    :label="face.sandbox === true ? t(`local.localFiles.openSandbox`) : t(`local.localFiles.withAgent`)"
+                    :label="sandboxLabel"
                     v-tooltip.top="
-                        face.sandbox === true
+                        hasSandbox
                             ? { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) }
-                            : { title: t(`local.localFiles.newSandbox`), note: t(`local.localFiles.keepsFolderSynced`) }
+                            : building
+                              ? undefined
+                              : { title: t(`local.localFiles.newSandbox`), note: t(`local.localFiles.keepsFolderSynced`) }
                     "
-                    @click="askLocalApp(`sandbox`)"
+                    @click="toSandbox"
                 />
             </div>
             <!-- The folder taking a drop, drawn over its tree as the workspace draws it; a folder row lights its own ring. -->

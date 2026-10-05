@@ -123,6 +123,7 @@
         "redeemSetupCode": "Redeem your setup code",
         "setUpFolderSync": "Set up folder sync",
         "startSandbox": "Start your sandbox",
+        "useSandboxImage": "Use the sandbox image already here",
         "waitToComeUp": "Wait for it to come up"
     },
     "setupProgress": {

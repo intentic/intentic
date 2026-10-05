@@ -232,12 +232,30 @@ describe(`a project's arrival`, () => {
         expect({ machine: hosted.machine.value, handedOff: runHere.mock.calls.length }).toEqual({ machine: `mine`, handedOff: 1 });
     });
 
-    // On a platform whose machines can hold a project: the folder goes to one of them, asked for with its name.
+    // On a platform whose machines can hold a project: the app's own ask still runs on this computer, beside the folder,
+    // and a machine of ours goes to the folder only when it is asked for by name.
     describe(`where the platform's machines can hold one`, () => {
         const HOLDS_PROJECTS: HostedOffer = { enabled: true, remaining: 1, projects: true };
 
-        it(`starts a machine of ours for the folder, asked for with its name, and hands nothing to this computer`, async () => {
-            const { platform, hostedProvision, runHere, hosted, arrival } = stage({ inApp: true, project: `My App`, hosted: HOLDS_PROJECTS });
+        it(`hands the folder to this computer when the app asks, starting no machine of ours`, async () => {
+            const { platform, runHere, hosted, arrival } = stage({ inApp: true, project: `My App`, hosted: HOLDS_PROJECTS });
+            await arrival.readArrival();
+            await advanceTimersByTimeAsync(500);
+            expect({ machine: hosted.machine.value, arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({
+                machine: `mine`,
+                arrival: `local`,
+                handedOff: 1,
+            });
+            expect(platform.hostedProvision).not.toHaveBeenCalled();
+        });
+
+        it(`starts a machine of ours for the folder when one is asked for by name, and hands nothing to this computer`, async () => {
+            const { platform, hostedProvision, runHere, hosted, arrival } = stage({
+                inApp: true,
+                project: `My App`,
+                query: { machine: `hosted` },
+                hosted: HOLDS_PROJECTS,
+            });
             await arrival.readArrival();
             await advanceTimersByTimeAsync(500);
             expect(platform.hostedProvision.mock.calls).toEqual([[{ sandboxId: `new`, token: `tok`, project: `My-App` }]]);
@@ -270,16 +288,16 @@ describe(`a project's arrival`, () => {
             expect(platform.hostedProvision).not.toHaveBeenCalled();
         });
 
-        // A row found rather than made spends nothing unasked, as a browser's reload does: the picker opens on the machine.
-        it(`opens the picker on the machine for a row it found, starting nothing`, async () => {
+        // A row found rather than made, the app's own ask: this computer, as for a row made fresh. Nothing of ours starts.
+        it(`hands a row it found to this computer, starting no machine of ours`, async () => {
             const found = sandboxSummary({ id: `s1`, name: `My App`, token: `tok` });
             const { platform, runHere, hosted, arrival } = stage({ rows: [found], query: { sandbox: `s1` }, inApp: true, project: `My App`, hosted: HOLDS_PROJECTS });
             await arrival.readArrival();
             await advanceTimersByTimeAsync(500);
             expect({ machine: hosted.machine.value, arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({
-                machine: `hosted`,
-                arrival: `choose`,
-                handedOff: 0,
+                machine: `mine`,
+                arrival: `local`,
+                handedOff: 1,
             });
             expect(platform.hostedProvision).not.toHaveBeenCalled();
         });

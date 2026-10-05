@@ -97,6 +97,7 @@
         "redeemSetupCode": "Einrichtungscode einlösen",
         "setUpFolderSync": "Ordner-Synchronisierung einrichten",
         "startSandbox": "Ihre Sandbox starten",
+        "useSandboxImage": "Sandbox-Image von diesem Computer verwenden",
         "waitToComeUp": "Warten, bis sie hochkommt"
     },
     "setupProgress": {

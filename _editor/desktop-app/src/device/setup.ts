@@ -33,6 +33,11 @@ import { activeRun, eventsOf, running, runOutcome, start } from "./runs";
 // app for the main window, windows.rs `park_setup`). It runs on arrival, unasked: installing and signing in to run a
 // sandbox here already is the consent; administrator is still asked, on the requirements card. It leads This device
 // while it is here, and reports its progress back to the workspace's page (`setup_progress`), which shows the same bar.
+//
+// Or ADOPTED by a folder's window, which asked the app for a sandbox of its own (`adoptSetup`, the web's
+// local/LocalProject.vue): the same run in the window that asked, drawn there as a card over the folder rather than
+// as a page. It stays where it is: a failure is said on the card rather than by raising the main window, and a finished
+// one waits for the reader's "Open sandbox" rather than swapping the workspace in over whatever they are doing.
 
 // Setup codes last 30 minutes; 25 leaves room for the restart and the setup itself to finish.
 const RESUME_WINDOW_SECONDS = 25 * 60;
@@ -41,6 +46,12 @@ const COMMAND_FAILURE_GRACE_MS = 2_000;
 
 /** The setup handed over, and the one resumed after a restart. */
 export const pending = ref<SetupArgs | undefined>(undefined);
+/** The setup is a folder window's own (`adoptSetup`): it stays in that window, and nothing else is brought forward. */
+export const inPlace = ref(false);
+/** The folder build the window adopted, kept past the run's end for the card's "Open sandbox" and its "Try again". */
+export const adopted = ref<SetupArgs | undefined>(undefined);
+/** The sandbox image is on this machine, so the plan weighs no download (setupPlan.ts); unknown until someone asks. */
+export const imageReady = ref<boolean | undefined>(undefined);
 export const setupError = ref<string | undefined>(undefined);
 // Held rather than derived: a setup is a setup from arrival until it finishes or is closed.
 const setupOpen = ref(false);
@@ -132,7 +143,12 @@ const nameOf = (args: SetupArgs | undefined): { name?: string } => (args?.name =
 // Built from two directions (the run's start, and the Docker probe landing later), since its one conditional step
 // depends on that answer. Optimistic while unknown: a missing Docker step corrects itself when the probe answers.
 const planFor = (args: SetupArgs): readonly PlanStep[] =>
-    setupPlan({ dockerReady: dockerReady.value ?? true, syncing: (args.syncDir ?? ``) !== ``, os: info.value?.os ?? `` });
+    setupPlan({
+        dockerReady: dockerReady.value ?? true,
+        syncing: (args.syncDir ?? ``) !== ``,
+        os: info.value?.os ?? ``,
+        imageReady: imageReady.value,
+    });
 
 /** The Docker probe answered: a plan nobody has started following yet is drawn again with the answer. */
 export const replanForDocker = (): void => {
@@ -232,8 +248,11 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
     reportFinished(ok, startedAt);
     if (!ok) {
         // The main window is never topmost, so a run that stops while it is hidden would otherwise go unnoticed;
-        // `setupAlert` brings it back to the front, in the workspace's place rather than beside it.
-        await setupAlert();
+        // `setupAlert` brings it back to the front, in the workspace's place rather than beside it. A folder's own build
+        // says so on its card instead, in the window that asked.
+        if (!inPlace.value) {
+            await setupAlert();
+        }
         return;
     }
     // The last word the workspace page hears about this run, sent while there is still a setup to report on: the page
@@ -242,6 +261,10 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
     void setupProgress({ ...nameOf(args), state: `done`, percent: 100 });
     pending.value = undefined;
     setupOpen.value = false;
+    // A folder's own build waits on its card for the reader's "Open sandbox": nothing is swapped in over their work.
+    if (inPlace.value) {
+        return;
+    }
     // Brings the workspace back without navigating it: the page waiting on `/setup` opens the workspace by itself the
     // moment the sandbox reports in (useRegistryWatch.ts), usually before this run's last checks end.
     await workspaceOpen();
@@ -295,7 +318,7 @@ export const closeSetup = (): void => {
     if (running.value) {
         return;
     }
-    track(`desktop_install_closed`, { state: reportState.value, ...whereLeft(), ...requirementFacts() });
+    track(`desktop_install_closed`, { state: setupState.value, ...whereLeft(), ...requirementFacts() });
     putAway();
 };
 
@@ -333,8 +356,8 @@ export const backToWorkspace = async (): Promise<void> => {
     await workspaceOpen();
 };
 
-/* THE WORKSPACE PAGE HEARS THE SETUP'S PROGRESS after every change. */
-const reportState = computed<SetupReport[`state`]>(() => {
+/* THE WORKSPACE PAGE HEARS THE SETUP'S PROGRESS after every change, and a folder's build card draws it (host.ts). */
+export const setupState = computed<SetupReport[`state`]>(() => {
     if (running.value) {
         return `running`;
     }
@@ -354,7 +377,7 @@ const report = computed((): SetupReport | undefined => {
     if (!setupMode.value || view === undefined || state === undefined) {
         return undefined;
     }
-    const told: SetupReport = { ...nameOf(pending.value), state: reportState.value, percent: Math.round(view.percent) };
+    const told: SetupReport = { ...nameOf(pending.value), state: setupState.value, percent: Math.round(view.percent) };
     if (view.position !== undefined) {
         told.position = view.position;
     }
@@ -470,12 +493,47 @@ export const freshCode = async (): Promise<void> => {
     await workspaceOpen(`/setup`);
 };
 
+/**
+ * A folder window's own sandbox (the app's project.rs `project_create`): its setup, run here, now. The window draws it
+ * as a card over its folder; the reader keeps working. Refused while another setup runs in this window, which the app
+ * refuses too, before it makes anything.
+ */
+export const adoptSetup = async (args: SetupArgs, facts: { readonly imageReady: boolean }): Promise<void> => {
+    if (running.value) {
+        return;
+    }
+    pending.value = args;
+    adopted.value = args;
+    inPlace.value = true;
+    imageReady.value = facts.imageReady;
+    setupOpen.value = true;
+    resumedHow.value = undefined;
+    expired.value = false;
+    // A new folder build is a new question: the last one's list of requirements is not this one's answer.
+    requirements.value = [];
+    carried.value = false;
+    consented.value = false;
+    await runSetup();
+};
+
+/** The folder build's card put away: what it was for is forgotten, and This device stops leading with it. */
+export const forgetAdopted = (): void => {
+    if (running.value) {
+        return;
+    }
+    adopted.value = undefined;
+    inPlace.value = false;
+    closeSetup();
+};
+
 /** The setup the app parked for this window, taken (never read: two callers race for it) and run on arrival. */
 export const loadPending = async (): Promise<void> => {
     const taken = await takePendingSetup();
     if (taken === null) {
         return;
     }
+    // A link's setup is the workspace's, run as This device has always run one.
+    inPlace.value = false;
     pending.value = taken;
     setupOpen.value = true;
     // A fresh link is a fresh conversation: nothing about an earlier session's ending applies to it.
@@ -525,6 +583,11 @@ const boundaryHeard = (event: RunEvent): void => {
  * (scripts.rs) still records every byte.
  */
 export const takeSetupEvent = (event: RunEvent): boolean => {
+    // Another window's setup (every window hears every run): its lines are kept as any run's, and its requirements are
+    // that window's question, never a card here for a setup this window cannot answer for.
+    if (pending.value === undefined && progress.value === undefined) {
+        return false;
+    }
     const failure = parseCommandFailure(event);
     if (failure !== undefined) {
         reportCommandFailure(failure);

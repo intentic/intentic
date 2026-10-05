@@ -89,3 +89,8 @@ export const LOCAL_PROJECT_EVENT = `intentic:project`;
 // The app showing this window for a reason of its own (a setup handed over from the workspace, the tray's agent row): the
 // screen it is for, as `detail.path`, a route of the local shell (`/device`). local/LocalShell.vue takes it there.
 export const LOCAL_NAVIGATE_EVENT = `intentic:navigate`;
+// This window's folder has its own sandbox now (the app's project.rs `remember`): the way to an agent becomes the way to
+// that sandbox, without a reload (local/folderSandbox.ts).
+export const LOCAL_SANDBOX_EVENT = `intentic:sandbox`;
+// The app asking this window to put up its folder's sandbox dialog (`sandbox` asked by link for a folder with none).
+export const LOCAL_PROJECT_ASK_EVENT = `intentic:project-ask`;

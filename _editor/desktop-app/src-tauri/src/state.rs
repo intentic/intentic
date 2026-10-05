@@ -694,6 +694,7 @@ mod tests {
             sync_dir: None,
             platform_url: None,
             project: None,
+            slug: None,
         };
         state_in(&dir).park_setup(&args, SessionEnd::SignOut);
         let parked = state_in(&dir).parked_setup().expect("parked");
