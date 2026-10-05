@@ -3188,7 +3188,7 @@
             "renameArea": "Renommer la zone",
             "seesTheseFolders": "Quiconque a accès à cette zone voit ces dossiers et rien d'autre.",
             "useLettersOrDigits": "Utilisez des lettres ou des chiffres.",
-            "whatAnAreaIs": "Une zone en est une section nommée. Attribuez-en une et cette personne voit ces dossiers et rien d’autre — dans l’arborescence, dans la recherche et dans les conversations qu’elle ouvre. Elle décide aussi à qui elle peut parler : un assistant appartient à la zone où se trouve son dossier de départ.",
+            "whatAnAreaIs": "Une zone est une partie nommée de l’espace de travail. L’attribuer à quelqu’un limite sa vue à ces dossiers — arborescence, recherche, conversations — et à parler uniquement aux personnes et assistants de cette zone. Un assistant appartient à la zone de son dossier de départ.",
             "whatItIs": "Ce que c'est"
         },
         "sandboxAttention": {

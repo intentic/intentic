@@ -4177,7 +4177,7 @@
             "renameArea": "Zmień nazwę obszaru",
             "seesTheseFolders": "Kto ma dostęp do tego obszaru, widzi te foldery i nic więcej.",
             "useLettersOrDigits": "Użyj liter lub cyfr.",
-            "whatAnAreaIs": "Obszar to nazwany fragment tej przestrzeni roboczej. Kto go dostanie, widzi te foldery i nic więcej — w drzewie plików, w wyszukiwaniu i w rozmowach, które otwiera. Decyduje on też, z kim można rozmawiać: asystent należy do obszaru, w którym leży jego folder startowy.",
+            "whatAnAreaIs": "Obszar to nazwany fragment przestrzeni roboczej. Kto go dostanie, widzi tylko te foldery — w drzewie, w wyszukiwaniu i w rozmowach — i może rozmawiać tylko z osobami i asystentami z tego obszaru. Asystent należy do obszaru swojego folderu startowego.",
             "whatItIs": "Czym jest"
         },
         "sandboxAttention": {

@@ -3199,7 +3199,7 @@
             "renameArea": "Renombrar área",
             "seesTheseFolders": "Quien tenga acceso a esta área ve estas carpetas y nada más.",
             "useLettersOrDigits": "Usa letras o dígitos.",
-            "whatAnAreaIs": "Un área es una sección con nombre de él. Concede una y esa persona ve esas carpetas y nada más: en el árbol de archivos, en la búsqueda y en las conversaciones que abre. También decide con quién puede hablar: un asistente pertenece al área donde está su carpeta de inicio.",
+            "whatAnAreaIs": "Un área es un segmento con nombre del espacio de trabajo. Al conceder una, alguien ve solo esas carpetas — en el árbol, la búsqueda y las conversaciones — y solo puede hablar con personas y asistentes de esa área. Un asistente pertenece al área de su carpeta de inicio.",
             "whatItIs": "Qué es"
         },
         "sandboxAttention": {

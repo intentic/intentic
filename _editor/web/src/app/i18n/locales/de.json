@@ -3186,7 +3186,7 @@
             "renameArea": "Bereich umbenennen",
             "seesTheseFolders": "Wer Zugang zu diesem Bereich hat, sieht diese Ordner und sonst nichts.",
             "useLettersOrDigits": "Verwenden Sie Buchstaben oder Ziffern.",
-            "whatAnAreaIs": "Ein Bereich ist ein benannter Teil davon. Wer einen erhält, sieht diese Ordner und sonst nichts — im Dateibaum, in der Suche und in den Unterhaltungen, die er eröffnet. Er entscheidet auch, mit wem jemand sprechen kann: Ein Assistent gehört zu dem Bereich, in dem sein Startordner liegt.",
+            "whatAnAreaIs": "Ein Bereich ist ein benannter Ausschnitt des Arbeitsbereichs. Wer einen erhält, sieht nur diese Ordner — im Baum, in der Suche und in Unterhaltungen — und kann nur mit Personen und Assistenten in diesem Bereich sprechen. Ein Assistent gehört zu dem Bereich seines Startordners.",
             "whatItIs": "Was es ist"
         },
         "sandboxAttention": {
