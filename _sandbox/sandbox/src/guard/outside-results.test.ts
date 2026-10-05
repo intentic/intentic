@@ -183,7 +183,7 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
         return keys;
     };
 
-    // The browser router's two names (mounted on the turn's lease) and the JS backend's name are constants, not literal
+    // The browser router's two names and the desktop's (mounted on the turn's lease) and the JS backend's name are constants, not literal
     // keys in a mount block, so they are discovered from their defining modules as text: a rename there fails this scan too.
     const constantValue = (file: string, name: string): string => {
         const match = new RegExp(String.raw`export const ${name}\s*=\s*"([^"]+)"`).exec(readFileSync(join(SRC, file), "utf8"));
@@ -197,6 +197,7 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
             ...mountedIn("agent/run/harness/harness-servers.ts", /(?<=export const harnessServers[\s\S]*?)\n {4}return \{\n[\s\S]*?\n {4}\};/),
             constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
             constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),
+            constantValue("desktop/desktop-tools.ts", "DESKTOP_SERVER"),
             constantValue("execution/js-tool.ts", "JS_SERVER_NAME"),
         ]);
         // Sanity: the scans found the blocks at all, so a moved block fails loudly here instead of passing vacuously.

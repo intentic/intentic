@@ -1,8 +1,18 @@
 import { errorMessage } from "@intentic/base/errors";
 import { browser } from "@intentic/browser";
-import { desktop, pngSize } from "@intentic/desktop-automation";
+import {
+    describeDisplays,
+    describeShot,
+    desktop,
+    pointingFor,
+    regionFor,
+    reshoot,
+    type ScreenshotTarget,
+    shoot,
+    type Shot,
+} from "@intentic/desktop-automation";
 import { type DeviceScopes, SandboxResourcesAskFieldsSchema, SandboxShapeWhenSchema } from "@intentic/sandbox-contract";
-import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
+import { createMcpServer, type McpAuditEntry, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
@@ -11,6 +21,8 @@ import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } f
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
 import { act, describeAction, settle } from "./tools/device.js";
+import { actOnElement, listElements } from "./tools/elements.js";
+import { elementRefs, frames } from "./tools/view.js";
 import {
     DEFAULT_LOG_LINES,
     diagnoseSandbox,
@@ -34,20 +46,44 @@ import { MACHINE_VERSION } from "../version.js";
 
 const NO_ARGS = z.object({});
 
-// The screen plus its size: the frame every coordinate the agent sends back is in. A click outside the bounds
-// is refused rather than clamped (tools/device.ts).
-const screenshotResult = async (scopes: DeviceScopes): Promise<Record<string, unknown>> => {
+// A screenshot as the agent receives it: what it shows and how to read it, then the image. A whole-desktop shot
+// also places each display in it, which is how an agent on a wide multi-monitor desk finds the one to look closer at.
+const shotContent = async (shot: Shot, what: string): Promise<unknown[]> => {
+    frames.sent();
+    const displays = what === "the whole desktop" ? await desktop().displays().catch(() => []) : [];
+    const placed = displays.length > 1 ? ` Displays: ${describeDisplays(displays, shot.frame)}.` : "";
+    return [
+        { type: "text", text: `${describeShot(shot, what)}${placed}` },
+        { type: "image", data: shot.png.toString("base64"), mimeType: "image/png" },
+    ];
+};
+
+const screenshotResult = async (scopes: DeviceScopes, target: ScreenshotTarget): Promise<Record<string, unknown>> => {
     assertScope(scopes, "screen");
     const screen = desktop();
-    const png = await screen.capture();
-    const { width, height } = pngSize(png);
-    return {
-        content: [
-            { type: "text", text: `Screen is ${width}×${height}. Coordinates for the device tool are pixels in this image.` },
-            { type: "image", data: png.toString("base64"), mimeType: "image/png" },
-        ],
-        isError: false,
-    };
+    const { region, what } = await regionFor(screen, frames, target);
+    return { content: await shotContent(await shoot(screen, frames, region), what), isError: false };
+};
+
+// How many identical confirming screenshots in a row are answered in words before the pixels are sent again: the
+// agent saw the image one call ago, but a run of "unchanged" should not leave it reasoning from memory for long.
+const MAX_UNCHANGED = 2;
+
+// The look an action answers with: the same part of the screen the newest screenshot showed, or a sentence instead
+// when not one pixel of it changed (which is itself the news: the click did nothing visible).
+const confirmingLook = async (said: string, scopes: DeviceScopes): Promise<Record<string, unknown>> => {
+    // The confirming frame needs the `screen` grant too; a device driven but not watched gets this sentence instead.
+    if (scopes.screen !== "on") {
+        return textResult(`${said} (No screenshot: "See the screen" is off for this device.)`);
+    }
+    await settle();
+    const shot = await reshoot(desktop(), frames);
+    if (shot.unchanged && frames.unchangedStreak() <= MAX_UNCHANGED) {
+        return textResult(
+            `${said} The screen did not change: screenshot ${shot.frame.id} is still exactly what it shows, so its coordinates still hold. If something should have happened, it did not.`,
+        );
+    }
+    return { content: [{ type: "text", text: said }, ...(await shotContent(shot, "the same part of the screen as before"))], isError: false };
 };
 
 // One browser handle for the process's life: cheap, holds no socket until used, but remembers which tab the
@@ -177,7 +213,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             "Every window open on this device: its app, title, size, position, and which one has focus. Call this before any GUI work, it is how you find the application you were asked about, and how you know where your typing will land. Requires the 'See the screen' permission.",
         effect: "read",
         input: NO_ARGS,
-        run: async (_args, scopes) => textResult(await listWindows(desktop(), scopes)),
+        run: async (_args, scopes) => textResult(await listWindows(desktop(), scopes, frames)),
     }),
     tool({
         name: "focus_window",
@@ -286,7 +322,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "device",
         description:
-            "Use this device's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT, take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
+            "Use this device's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LATEST SCREENSHOT, whatever it showed (the whole desktop, one display, a window or a zoomed region): take one first, read them off it, and pass its id as `frame`. Better still, point at an element ref from ui_elements, which needs no coordinate at all. Every action answers with a fresh screenshot of the same part of the screen, or says the screen did not change. Typing a command that would delete needs the 'Run destructive commands' switch, as running it would, and keys that lock or leave the desktop are refused. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
         // The owner's own mouse and keyboard: anything they could do at the desk, a terminal included.
         effect: "destructive",
         input: z.object({
@@ -302,7 +338,11 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 "scroll",
                 "wait",
             ]),
-            coordinate: point.optional().describe("[x, y] in screenshot pixels, required for every pointer action."),
+            coordinate: point.optional().describe("[x, y] in pixels of the latest screenshot; every pointer action needs this or `element`."),
+            element: required.optional().describe("An element ref from ui_elements, pointed at instead of a coordinate: exact, wherever the element now is."),
+            frame: required
+                .optional()
+                .describe("The id of the screenshot the coordinate was read off. Refused if a newer one was taken since, rather than clicking where the screen used to be."),
             to: point.optional().describe("[x, y] the drag ends at (left_click_drag)."),
             text: z.string().optional().describe('The text to type, or the key combination to press: "Return", "ctrl+c", "alt+Tab", "super+e".'),
             direction: z.enum(["up", "down", "left", "right"]).optional().describe("Scroll direction. Default down."),
@@ -311,25 +351,65 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         }),
         // Which coordinate an action needs, and whether it's on the screen, is act()'s to answer: it's the only caller
         // that knows the screen's size.
-        run: async (input, scopes) => {
-            await act(desktop(), input, scopes);
-            // The confirming frame needs the `screen` grant too; a device driven but not watched gets this sentence
-            // instead.
-            if (scopes.screen !== "on") {
-                return textResult(`${describeAction(input)} (No screenshot: "See the screen" is off for this device.)`);
-            }
-            await settle();
-            const shot = await screenshotResult(scopes);
-            return { content: [{ type: "text", text: describeAction(input) }, ...(shot["content"] as unknown[])], isError: false };
+        run: async ({ frame, ...input }, scopes) => {
+            const screen = desktop();
+            await act(screen, input, scopes, undefined, pointingFor(screen, frames, frame, elementRefs));
+            return await confirmingLook(describeAction(input), scopes);
         },
     }),
     tool({
         name: "screenshot",
         description:
-            "Capture what is on this device's screen right now, as an image. Use it to read a dialog, check on a window, or see what the user is describing. Requires the 'See the screen' permission.",
+            "Capture what is on this device's screen right now, as an image. Use it to read a dialog, check on a window, or see what the user is describing. A big or multi-monitor desktop is shrunk to fit what you can read whole, so small text may be unreadable: pass `display`, `window` or `region` to look closer at one part, at up to full resolution. Each screenshot has an id; coordinates you send to device are read in the latest one. Requires the 'See the screen' permission.",
         effect: "read",
-        input: NO_ARGS,
-        run: async (_args, scopes) => await screenshotResult(scopes),
+        input: z
+            .object({
+                display: z.int().positive().optional().describe("One monitor, numbered as a whole-desktop screenshot lists them (1 is the first)."),
+                window: required.optional().describe("One window, by its id from list_windows."),
+                region: z
+                    .tuple([z.number(), z.number(), z.number().positive(), z.number().positive()])
+                    .optional()
+                    .describe("[x, y, width, height] in pixels of the latest screenshot: zoom in on that part of it."),
+            })
+            .refine((args) => [args.display, args.window, args.region].filter((value) => value !== undefined).length <= 1, {
+                error: "Pass at most one of display, window and region: each names a different part of the screen.",
+            }),
+        run: async ({ display, window, region }, scopes) =>
+            await screenshotResult(
+                scopes,
+                display !== undefined
+                    ? { kind: "display", index: display }
+                    : window !== undefined
+                      ? { kind: "window", id: window }
+                      : region !== undefined
+                        ? { kind: "region", rect: { x: region[0], y: region[1], width: region[2], height: region[3] } }
+                        : { kind: "desktop" },
+            ),
+    }),
+    tool({
+        name: "ui_elements",
+        description:
+            "The controls of a window, read from its accessibility tree: each button, field, checkbox, menu item and link with its role, name, value and a ref like kd12. Clicking by ref is exact where a coordinate read off a shrunk screenshot is a guess, and ui_act works on a window in the background without moving the mouse. Defaults to the focused window. Big windows list their first controls; pass `query` to find one by name or value. On Windows through UI Automation; on Linux and macOS through cua-driver where the owner installed it, and otherwise refused with how to install it, so use screenshot coordinates there. Requires the 'See the screen' permission.",
+        effect: "read",
+        input: z.object({
+            window: required.optional().describe("The window's id from list_windows. Default: the one with the keyboard."),
+            query: required.optional().describe("Only elements whose role, name or value contains this (case-insensitive), labels included."),
+        }),
+        run: async ({ window, query }, scopes) => textResult(await listElements(desktop(), { window, query }, scopes, elementRefs, frames)),
+    }),
+    tool({
+        name: "ui_act",
+        description:
+            "Act on an element from ui_elements without the pointer: invoke (press a button, follow a link), set_value (replace a field's text), toggle (a checkbox), expand/collapse (a menu, tree item or combo box), select (a list or tab item), or focus. Works on a background window and leaves the mouse where the user has it. An element offers only the actions ui_elements lists beside it. Answers with a fresh screenshot. Requires the 'Use the mouse and keyboard' permission.",
+        // A press can send, buy or delete as surely as a click.
+        effect: "destructive",
+        input: z.object({
+            element: required.describe("The element's ref from the latest ui_elements, like kd12."),
+            action: z.enum(["invoke", "set_value", "toggle", "expand", "collapse", "select", "focus"]),
+            value: z.string().optional().describe("The text set_value writes; required for set_value."),
+        }),
+        run: async ({ element, action, value }, scopes) =>
+            await confirmingLook(await actOnElement(desktop(), { element, action, value }, scopes, elementRefs), scopes),
     }),
     tool({
         name: "list_sandboxes",
@@ -425,13 +505,17 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     }),
 ];
 
-// Arguments are logged verbatim except typed text, which is redacted to its length: a `device` "type" or
-// `clipboard` "write" call routinely carries a password. A key combination is not redacted; there is nothing
+// Arguments are logged verbatim except typed text, which is redacted to its length: a `device` "type",
+// `clipboard` "write" or `ui_act` set_value call routinely carries a password. A key combination is not redacted; there is nothing
 // in it to leak.
-const auditDetail = (name: string, args: Record<string, unknown>): string => {
+const auditDetail = (name: string, args: McpAuditEntry["args"]): string => {
     const redact =
         (name === "device" && args["action"] === "type") || (name === "clipboard" && args["action"] === "write") || name === "browser_fill";
-    const safe = redact ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` } : args;
+    const safe = redact
+        ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` }
+        : name === "ui_act" && args["value"] !== undefined
+          ? { ...args, value: `<${String(args["value"]).length} characters>` }
+          : args;
     return JSON.stringify(safe).slice(0, 500);
 };
 

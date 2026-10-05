@@ -36,6 +36,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/code-read": "workspace:*",
         "@intentic/constants": "workspace:*",
+        "@intentic/desktop-automation": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/fileq": "workspace:*",

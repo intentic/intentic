@@ -31,6 +31,7 @@ export interface LoopFacts {
     readonly unattended: boolean;
     readonly browserOutputDir: string | undefined;
     readonly browserAccounts: boolean;
+    readonly desktop: boolean;
     readonly diagnostics: boolean;
     readonly terminal: boolean;
     readonly hostDevices: HostDeviceReach | undefined;
@@ -470,6 +471,21 @@ const ENTRIES: readonly GuidanceEntry[] = [
         lean: browserLean,
     },
     {
+        id: "desktop",
+        reach: "loop",
+        when: ({ desktop }) => desktop,
+        full:
+            "This sandbox has a desktop of its own: a 1280×800 virtual screen for programs with a window and no other " +
+            "way in, an app you are building, a GUI tool, an installer. Load it with ToolSearch (`+mcp__desktop__`): " +
+            "`screenshot` to see it, `input` to click and type in that screenshot's pixels (pass its id as `frame`), " +
+            "`list_windows`, `focus_window`, `open` and `clipboard`. Start a program on it from your own shell with the " +
+            "`DISPLAY` a screenshot names. The owner can watch it and take it over; while they drive, your input is " +
+            "refused, so wait and look again. Web pages still belong to the browser tools, which act on named elements.",
+        lean:
+            "The sandbox has its own desktop for windowed programs: ToolSearch `+mcp__desktop__` (screenshot, input in " +
+            "that screenshot's pixels, list_windows, open). Web pages still go through the browser tools.",
+    },
+    {
         id: "diagnostics",
         reach: "loop",
         when: ({ diagnostics }) => diagnostics,
@@ -556,6 +572,7 @@ const EVERY_FACT: LoopFacts = {
     unattended: true,
     browserOutputDir: "/",
     browserAccounts: true,
+    desktop: true,
     diagnostics: true,
     terminal: true,
     hostDevices: {

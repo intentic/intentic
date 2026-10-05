@@ -17,8 +17,18 @@ flowchart LR
   entry from [local-agent](../local-agent) restarts it; inside a WSL distro the Windows side does.
 - **device** (`src/device/`): `device setup` redeems a one-time pairing token, then the agent keeps a WebSocket
   dialled out to the sandbox and answers MCP tools on it: `run_command`, files, windows and clipboard, `browser_*`
-  through [browser](../browser), `screenshot` and `device` through [desktop-automation](../desktop-automation), and
-  the intentic sandboxes on this machine through the `ic` CLI.
+  through [browser](../browser), `screenshot`, `device`, `ui_elements` and `ui_act` through
+  [desktop-automation](../desktop-automation), and the intentic sandboxes on this machine through the `ic` CLI.
+- What the agent has been shown of the screen is kept for the process's life
+  ([`tools/view.ts`](src/device/tools/view.ts)): each screenshot is a frame with an id, shrunk to what a model reads
+  whole, and a coordinate is read in the newest frame and mapped back to desktop pixels, so one naming an older frame
+  is refused. An action's confirming screenshot re-captures the same part of the screen, and up to two identical ones
+  in a row come back as a sentence instead of the image. Element refs from `ui_elements` hold until the next listing.
+- Input has two rules no switch lifts and one a switch decides ([`tools/device.ts`](src/device/tools/device.ts)):
+  keys that lock or leave the desktop (`super+l`, `ctrl+alt+Delete`, a console switch) are refused; text typed,
+  pasted or set into a field that the command classifier reads as destructive needs "Run destructive commands",
+  as running it would. The sandbox also judges that text with the owner's safety policy before it crosses
+  (`hosts/host-command-guard.ts`, `typedInCall`).
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). `diagnose_sandbox` is

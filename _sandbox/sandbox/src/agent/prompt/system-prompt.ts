@@ -163,6 +163,8 @@ export interface SdkSystemPromptInput {
     // Whether turn-plan mounted the diagnostics server (withheld from a persona whose files power is `none`); the
     // sentence rides only where it's loadable.
     readonly diagnostics?: boolean;
+    // Whether the turn mounted the sandbox's own desktop; its sentence rides only then.
+    readonly desktop?: boolean;
     // Whether agent.ts mounted the terminal hand-off server (attended, tmux wrapper on); the sentence rides only where
     // it's loadable.
     readonly terminal?: boolean;
@@ -184,7 +186,7 @@ export interface SdkSystemPromptInput {
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "guidance" | "search">;
     readonly policy: Pick<TurnPolicy, "unattended">;
-    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "diagnostics" | "hostDevices" | "ownBrowsers">;
+    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers">;
 }
 
 // Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
@@ -204,6 +206,7 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     unattended: policy.unattended === true,
     browserOutputDir: tools.browserOutputDir,
     browserAccounts: holdsBrowserAccounts(tools.browserAccounts),
+    desktop: tools.desktop === true,
     diagnostics: tools.diagnostics === true,
     terminal,
     hostDevices: tools.hostDevices,
@@ -223,6 +226,7 @@ export const harnessGuidance = ({
     unattended,
     browserOutputDir,
     browserAccounts,
+    desktop,
     diagnostics,
     terminal,
     hostDevices,
@@ -235,6 +239,7 @@ export const harnessGuidance = ({
                   unattended,
                   browserOutputDir,
                   browserAccounts: browserAccounts === true,
+                  desktop: desktop === true,
                   diagnostics: diagnostics === true,
                   terminal: terminal === true,
                   hostDevices,

@@ -63,6 +63,7 @@ import {
 import { createGatewayRoute } from "./privacy/gateway/gateway-route.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
 import { createBrowserViewRoute } from "./browser/cast/browser-view.js";
+import { createDesktopViewRoute } from "./desktop/desktop-view.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
 import { createWidgetRoute } from "./webchat/webchat-widget.js";
 import { createIntakeRoutes } from "./issues/intake.routes.js";
@@ -312,6 +313,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // Watch the browser the agent drives: the same screencast wire, attached to a live browser-* session.
     serve("GET /system/browser-view", createBrowserViewRoute(services));
+    serve("GET /system/desktop-view", createDesktopViewRoute(services));
 
     // Deploy-target enrollment (connect token) and the automation fire (own token).
     serve("POST /enroll", createEnrollRoute(services));

@@ -1,11 +1,12 @@
 import { focusRefusal, parseSessionJson, parseWindowsJson } from "./parse.js";
 import { run } from "./run.js";
 import { DesktopError, type SessionState, type WindowInfo } from "./types.js";
+import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
 
 // Windows window listing and focus, via PowerShell calls into user32.
 // EnumWindows is the source of truth, not Get-Process.MainWindowHandle: a process can own several visible windows.
 
-const SHIM = `
+const SHIM = `${WINDOWS_DPI_AWARE}
 Add-Type -TypeDefinition @"
 using System;
 using System.Text;
@@ -32,6 +33,7 @@ public class IntenticWin {
   [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool ReadSetting(uint action, uint param, ref uint value, uint notify);
   [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool WriteSetting(uint action, uint param, IntPtr value, uint notify);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
 }
 "@ -ErrorAction SilentlyContinue;
 `;
@@ -60,8 +62,11 @@ const FOCUS_ATTEMPTS = 3;
 const FOCUS_POLLS = 20;
 const FOCUS_POLL_MS = 50;
 
+// Bounds are moved by the virtual desktop's top-left (SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN), so they are in the
+// screenshot's pixels like every other coordinate: a monitor left of the primary puts that corner below zero.
 const LIST = `
 $fg = [IntenticWin]::GetForegroundWindow();
+$left = [IntenticWin]::GetSystemMetrics(76); $top = [IntenticWin]::GetSystemMetrics(77);
 $items = [System.Collections.Generic.List[object]]::new();
 $callback = [IntenticWin+EnumWindowsProc] {
   param([IntPtr]$h, [IntPtr]$unused)
@@ -77,7 +82,7 @@ $callback = [IntenticWin+EnumWindowsProc] {
   [void][IntenticWin]::GetWindowRect($h, [ref]$r);
   $items.Add([pscustomobject]@{
     id = [string]($h.ToInt64()); title = $text.ToString(); app = $app;
-    x = $r.Left; y = $r.Top; width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top);
+    x = ($r.Left - $left); y = ($r.Top - $top); width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top);
     focused = ($h -eq $fg)
   });
   return $true

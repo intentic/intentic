@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { looksLikeUrl, parseSwayTree, parseWmctrl } from "./parse.js";
-import { has, run } from "./run.js";
+import { looksLikeUrl, parseSwayTree, parseWmctrl, parseXwininfoTree, withAbsoluteBounds } from "./parse.js";
+import { environment, has, run } from "./run.js";
 import { isWayland } from "./screen.js";
 import { DesktopError, type WindowInfo } from "./types.js";
 import { XDOTOOL_INSTALL } from "./input-linux.js";
@@ -14,7 +14,7 @@ const WMCTRL_INSTALL = "sudo apt install wmctrl  (or your distro's package)";
 const CLIP_INSTALL_X11 = "sudo apt install xclip";
 const CLIP_INSTALL_WAYLAND = "sudo apt install wl-clipboard";
 
-const swayRunning = (): boolean => process.env["SWAYSOCK"] !== undefined || process.env["I3SOCK"] !== undefined;
+const swayRunning = (): boolean => environment()["SWAYSOCK"] !== undefined || environment()["I3SOCK"] !== undefined;
 
 export const linuxApps = {
     windows: async (): Promise<WindowInfo[]> => {
@@ -28,8 +28,9 @@ export const linuxApps = {
         }
         // The active window first, so `focused` can be filled in: wmctrl does not report it.
         const active = await run("xdotool", ["getactivewindow"], XDOTOOL_INSTALL).catch(() => "");
-        const listed = await run("wmctrl", ["-lGpx"], WMCTRL_INSTALL);
-        return parseWmctrl(listed, active.trim() === "" ? undefined : active.trim());
+        const listed = parseWmctrl(await run("wmctrl", ["-lGpx"], WMCTRL_INSTALL), active.trim() === "" ? undefined : active.trim());
+        const tree = (await has("xwininfo")) ? await run("xwininfo", ["-root", "-tree"]).catch(() => "") : "";
+        return withAbsoluteBounds(listed, parseXwininfoTree(tree));
     },
 
     focusWindow: async (id: string): Promise<void> => {
@@ -56,7 +57,7 @@ export const linuxApps = {
         const [command, args] = viaOpener
             ? (["xdg-open", [target]] as const)
             : ([target.split(/\s+/)[0] ?? target, target.split(/\s+/).slice(1)] as const);
-        const child = spawn(command, [...args], { detached: true, stdio: "ignore" });
+        const child = spawn(command, [...args], { detached: true, stdio: "ignore", env: environment() });
         child.unref();
         // Immediate spawn errors arrive asynchronously; wait one tick so they surface as a refusal, not silence.
         await new Promise<void>((resolvePromise, reject) => {
@@ -75,7 +76,7 @@ export const linuxApps = {
             ? (["wl-copy", [], CLIP_INSTALL_WAYLAND] as const)
             : (["xclip", ["-selection", "clipboard"], CLIP_INSTALL_X11] as const);
         await new Promise<void>((resolvePromise, reject) => {
-            const child = spawn(command, [...args], { stdio: ["pipe", "ignore", "ignore"] });
+            const child = spawn(command, [...args], { stdio: ["pipe", "ignore", "ignore"], env: environment() });
             child.once("error", (error) => reject(new DesktopError(`Could not set the clipboard with "${command}": ${error.message}`, install)));
             child.once("close", () => resolvePromise());
             child.stdin.end(text);

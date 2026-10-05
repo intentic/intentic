@@ -7,6 +7,7 @@ const NOTHING_MOUNTED: LoopFacts = {
     unattended: false,
     browserOutputDir: undefined,
     browserAccounts: false,
+    desktop: false,
     diagnostics: false,
     terminal: false,
     hostDevices: undefined,
@@ -17,6 +18,7 @@ const EVERYTHING_MOUNTED: LoopFacts = {
     unattended: false,
     browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
     browserAccounts: true,
+    desktop: true,
     diagnostics: true,
     terminal: true,
     hostDevices: {

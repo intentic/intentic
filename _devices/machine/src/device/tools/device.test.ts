@@ -1,9 +1,9 @@
-import { DesktopError } from "@intentic/desktop-automation";
+import { DesktopError,desktopPointing,ElementRefs,FrameLog,pointingFor,shoot } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type Caller, calling, createIndicator, type Indicator, PAUSE_HOTKEY } from "../indicator.js";
 import { ScopeError } from "../policy.js";
-import { fakeDesktop, fakeIndicatorDeps } from "../device-testing.js";
+import { fakeDesktop, fakeElement, fakeIndicatorDeps } from "../device-testing.js";
 import { act, type DeviceInput, describeAction } from "./device.js";
 
 /* The policy half of GUI control, driven against a fake desktop and an indicator over fakes, so no test here reads
@@ -68,8 +68,8 @@ test("each action reaches the matching desktop method", async () => {
 /* Refused, not clamped. */
 test("a coordinate outside the screen is refused, and says how big the screen is", async () => {
     const { desktop, calls } = fakeDesktop();
-    await expect(act(desktop, { action: "left_click", coordinate: [1920, 500] }, scopes(), indicator())).rejects.toThrow(
-        /outside the screen.*1920×1080/s,
+    await expect(act(desktop, { action: "left_click", coordinate: [3840, 500] }, scopes(), indicator())).rejects.toThrow(
+        /outside the screen.*3840×1080/s,
     );
     await expect(act(desktop, { action: "left_click", coordinate: [-1, 5] }, scopes(), indicator())).rejects.toThrow(DesktopError);
     expect(calls).toEqual([]);
@@ -159,4 +159,60 @@ test("wait is not input: it is neither shown nor refused while paused", async ()
     } finally {
         jest.useRealTimers();
     }
+});
+
+/* What no switch allows, and what the destructive switch decides. */
+
+test("keys that lock or leave the desktop are refused whatever the switches say, however they are spelled", async () => {
+    const { desktop, calls } = fakeDesktop();
+    for (const combo of ["super+l", "win+L", "cmd+l", "ctrl+alt+Delete", "alt+ctrl+del", "ctrl+alt+BackSpace", "ctrl+alt+F2"]) {
+        await expect(act(desktop, { action: "key", text: combo }, scopes(), indicator()), combo).rejects.toThrow(/^Refused: .*signs in/);
+    }
+    expect(calls).toEqual([]);
+    // The same keys in other company are ordinary work.
+    await act(desktop, { action: "key", text: "ctrl+l" }, scopes(), indicator());
+    await act(desktop, { action: "key", text: "super+e" }, scopes(), indicator());
+    expect(calls).toEqual(["key ctrl+l", "key super+e"]);
+});
+
+test("typing a command that deletes needs the destructive switch, as running it would; prose does not", async () => {
+    const { desktop, calls } = fakeDesktop();
+    await expect(act(desktop, { action: "type", text: "rm -rf ~/projects\n" }, scopes({ destructive: "off" }), indicator())).rejects.toThrow(
+        /Run destructive commands/,
+    );
+    expect(calls).toEqual([]);
+    await act(desktop, { action: "type", text: "Please remove the old projects folder." }, scopes({ destructive: "off" }), indicator());
+    await act(desktop, { action: "type", text: "rm -rf ~/projects\n" }, scopes(), indicator());
+    expect(calls).toEqual(["type Please remove the old projects folder.", "type rm -rf ~/projects\n"]);
+});
+
+test("a pointer action can name an element instead of a coordinate, and goes to where it is now", async () => {
+    const fake = fakeDesktop();
+    const refs = new ElementRefs();
+    fake.elements = [fakeElement({ id: "42.7", bounds: { x: 100, y: 200, width: 80, height: 30 } })];
+    const [ref] = refs.mint("9", fake.elements);
+    // It moved since the listing: the click follows it.
+    fake.elements = [fakeElement({ id: "42.7", bounds: { x: 1000, y: 500, width: 80, height: 30 } })];
+    await act(fake.desktop, { action: "left_click", element: ref }, scopes(), indicator(), desktopPointing(fake.desktop, refs));
+    expect(fake.calls).toEqual(["click left 1040,515"]);
+    expect(describeAction({ action: "left_click", element: ref })).toBe(`left click at element ${ref}.`);
+    fake.elements = [];
+    await expect(act(fake.desktop, { action: "left_click", element: ref }, scopes(), indicator(), desktopPointing(fake.desktop, refs))).rejects.toThrow(
+        /no longer in that window/,
+    );
+});
+
+test("coordinates are read in the latest screenshot and mapped back to the desktop; an older screenshot is refused", async () => {
+    const fake = fakeDesktop();
+    const log = new FrameLog();
+    const first = await shoot(fake.desktop, log);
+    // The fake desktop is 3840×1080, shown at 1456×409: one image pixel is about 2.64 desktop pixels.
+    expect([first.frame.width, first.frame.height]).toEqual([1456, 409]);
+    await act(fake.desktop, { action: "left_click", coordinate: [728, 204] }, scopes(), indicator(), pointingFor(fake.desktop, log, first.frame.id, new ElementRefs()));
+    expect(fake.calls.at(-1)).toBe("click left 1921,540");
+    fake.shade = 50;
+    await shoot(fake.desktop, log);
+    await expect(
+        act(fake.desktop, { action: "left_click", coordinate: [728, 204] }, scopes(), indicator(), pointingFor(fake.desktop, log, first.frame.id, new ElementRefs())),
+    ).rejects.toThrow(/out of date/);
 });

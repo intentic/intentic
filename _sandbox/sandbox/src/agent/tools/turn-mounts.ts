@@ -34,7 +34,8 @@ export interface InProcessServer {
 // What one mounted name reaches. The door answers for the target, never for the name: a bearer that names a server its
 // current lease does not hold is refused, whatever it names.
 export type MountTarget =
-    // A turn's own browser router, living in this daemon; closed with the lease that opened it.
+    // A server living in this daemon (a turn's own browser router, or the sandbox desktop's); closed with the lease
+    // that opened it.
     | { readonly kind: "browser"; readonly router: InProcessServer }
     // A connected machine (device card) or one of the owner's own browsers (webext card), through its peer socket.
     | { readonly kind: "device"; readonly id: string }

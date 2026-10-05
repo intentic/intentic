@@ -39,8 +39,8 @@ flowchart LR
   which the query cache does not, and a sign-out clears both. One `/events` stream per active sandbox
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
   in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
-  frames missed while disconnected. Terminals and the browser view use WebSockets opened with a short-lived ticket
-  (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
+  frames missed while disconnected. Terminals, the browser view and the desktop view (`/desktop`, the sandbox's own
+  screen, which a maintainer can take over) use WebSockets opened with a short-lived ticket (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
   edge serves one (`features/terminal/channel/`).
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
   bounded probes of the sandbox's address (the front's own `/system/vitals`, which answers whatever state Node is in,

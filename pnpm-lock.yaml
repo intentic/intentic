@@ -988,6 +988,9 @@ importers:
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@intentic/testing':
         specifier: workspace:*
@@ -2615,6 +2618,9 @@ importers:
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
+      '@intentic/desktop-automation':
+        specifier: workspace:*
+        version: link:../../_devices/desktop-automation
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_shared/extension-api

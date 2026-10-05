@@ -8,6 +8,7 @@ import {
     matchCommand,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { judgeCommand } from "../agent/tools/command-judge.js";
 import { cardDeps, raiseRequest } from "../conversations/actor/card-offers.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
@@ -17,6 +18,7 @@ import { commandRun } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
 import { conversationTaintSource, conversationUnattended } from "../guard/turn-taint.js";
+import type { DeviceToolCall } from "./host-restart-guard.js";
 
 // Applies the owner's safety policy to a command headed for their own device, before it crosses the tunnel. The daemon
 // triages, judges and cards here since the machine itself can only allow or refuse, with no card to raise; this can
@@ -31,7 +33,8 @@ const DEADLINE_MS = 10 * 60_000;
 // routed around. The card itself stays up for DEADLINE_MS; an answer given after this is kept for the same call.
 const CALL_BUDGET_MS = 45_000;
 
-// The only call shape this gate judges: file, screen and input tools carry no program to classify.
+// The call shape this gate was built for. File and screen tools carry no program to classify; the input tools that
+// carry text a terminal could run are read below, by typedInCall.
 const RUN_COMMAND = "run_command";
 
 // Every command here leaves the container, so locus is fixed (mirrors SANDBOX in guard/command-guard.ts).
@@ -55,15 +58,19 @@ const unanswered = (machine: string, turnEnded: boolean): string =>
 
 // What the agent reads when its card is still open as its call must answer: nothing ran, the answer is kept, and the
 // way to collect it is the same call again, never a different spelling of the same work.
-const stillWaiting = (machine: string): string =>
-    `Still waiting for the owner: a card asks them to approve running this on "${machine}", and it has not run yet. ` +
-    `Their answer is kept for this exact command: call run_command again with exactly the same command to wait for it. ` +
-    `Nothing is broken on the device. Do not run a different command to do the same thing.`;
+const stillWaiting = (machine: string, typed: boolean): string =>
+    typed
+        ? `Still waiting for the owner: a card asks them to approve typing this on "${machine}", and nothing has been typed yet. ` +
+          `Their answer is kept for this exact text: make the same call again with exactly the same text to wait for it. ` +
+          `Nothing is broken on the device. Do not type a different command to do the same thing.`
+        : `Still waiting for the owner: a card asks them to approve running this on "${machine}", and it has not run yet. ` +
+          `Their answer is kept for this exact command: call run_command again with exactly the same command to wait for it. ` +
+          `Nothing is broken on the device. Do not run a different command to do the same thing.`;
 
 // What the agent reads when the device's own "Run destructive commands" switch is off: the device would refuse the
 // command whatever the owner answered, so no card is raised for a yes that cannot work.
-const switchedOff = (machine: string, classes: readonly CommandClass[]): string =>
-    `Refused: this command would ${classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]).join(" and ")} on "${machine}", ` +
+const switchedOff = (machine: string, classes: readonly CommandClass[], typed: boolean): string =>
+    `Refused: ${typed ? "typed into a terminal, this" : "this command"} would ${classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]).join(" and ")} on "${machine}", ` +
     `and its "Run destructive commands" switch is off, so the device would refuse it even if the owner approved. ` +
     `Ask the owner to turn on "Run destructive commands" in ${machine}'s capability card, or run a command that does not delete. ` +
     `Do not look for another spelling that gets past it.`;
@@ -86,7 +93,13 @@ const askKey = (conversationId: string, machine: string, command: string): strin
 
 // Waits on an open card for what is left of this call's budget: its answer (collected, so it is used once), or the
 // still-waiting note with the card left up.
-const awaitAnswer = async (key: string, asking: Promise<HostGateRefusal | undefined>, machine: string, budgetMs: number): Promise<HostGateRefusal | undefined> => {
+const awaitAnswer = async (
+    key: string,
+    asking: Promise<HostGateRefusal | undefined>,
+    machine: string,
+    budgetMs: number,
+    typed: boolean,
+): Promise<HostGateRefusal | undefined> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const waited = new Promise<"waiting">((resolve) => {
         timer = setTimeout(() => resolve("waiting"), Math.max(0, budgetMs));
@@ -94,7 +107,7 @@ const awaitAnswer = async (key: string, asking: Promise<HostGateRefusal | undefi
     try {
         const outcome = await Promise.race([asking, waited]);
         if (outcome === "waiting") {
-            return refusal(stillWaiting(machine));
+            return refusal(stillWaiting(machine, typed));
         }
         if (openAsks.get(key) === asking) {
             openAsks.delete(key);
@@ -114,6 +127,27 @@ export const commandInCall = (payload: unknown): string | undefined => {
     }
     const command = (request.params.arguments as Record<string, unknown> | undefined)?.["command"];
     return typeof command === "string" && command.trim() !== "" ? command : undefined;
+};
+
+/* Text an input tool would put into whatever has the keyboard: typed (`device` type), pasted (`clipboard` write) or
+   set into a field (`ui_act` set_value). Typing into a terminal IS running a command, so this text is judged the same
+   way, by the same classifier: ordinary prose matches nothing and passes at no cost, and `rm -rf ~` typed into a
+   shell is asked about as if run_command had sent it. Read off a call the bridge already parsed (DeviceToolCallSchema). */
+const TypedArgumentsSchema = z.looseObject({ action: z.string().optional(), text: z.string().optional(), value: z.string().optional() });
+
+export const typedInCall = (call: DeviceToolCall): string | undefined => {
+    const parsed = TypedArgumentsSchema.safeParse(call.params.arguments ?? {});
+    if (!parsed.success) {
+        return undefined;
+    }
+    const { action, text, value } = parsed.data;
+    const typed =
+        (call.params.name === "device" && action === "type") || (call.params.name === "clipboard" && action === "write")
+            ? text
+            : call.params.name === "ui_act" && action === "set_value"
+              ? value
+              : undefined;
+    return typed === undefined || typed.trim() === "" ? undefined : typed;
 };
 
 // The judge's verdict and setting used, read live (no turn here to snapshot). Reads the same commandJudge switch as the
@@ -170,6 +204,8 @@ interface DeviceAsk {
     readonly at: number;
     // Asked because of the owner's hard rule, which asks every time whatever stands in the conversation.
     readonly hard: boolean;
+    // Typed into the device rather than run on it: the card says so, since nothing runs until something reads it.
+    readonly typed: boolean;
 }
 
 // Asks the owner on a card in the live turn and holds the call until it settles: undefined forwards the command, a
@@ -192,9 +228,9 @@ const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promi
             raised: (requestId) => ({
                 kind: "permission",
                 requestId,
-                toolName: `${ask.machine}__${RUN_COMMAND}`,
-                title: `Run this on ${ask.machine}?`,
-                displayName: `Run on ${ask.machine}`,
+                toolName: `${ask.machine}__${ask.typed ? "device" : RUN_COMMAND}`,
+                title: ask.typed ? `Type this on ${ask.machine}?` : `Run this on ${ask.machine}?`,
+                displayName: ask.typed ? `Type on ${ask.machine}` : `Run on ${ask.machine}`,
                 // No marked spans: the title already says what matters here, that it runs on the machine, not the
                 // container.
                 program: { text: excerptProgram(ask.command), language: "bash", truncated: false, spans: [] },
@@ -227,7 +263,7 @@ const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promi
 // machine's own scopes still hold.
 export const judgeHostCommand = async (
     services: Services,
-    input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined },
+    input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined; readonly typed?: boolean },
     budgetMs: number = CALL_BUDGET_MS,
 ): Promise<HostGateRefusal | undefined> => {
     const at = Date.now();
@@ -243,13 +279,13 @@ export const judgeHostCommand = async (
     const key = conversationId === undefined ? undefined : askKey(conversationId, input.machine, input.command);
     const open = key === undefined ? undefined : openAsks.get(key);
     if (key !== undefined && open !== undefined) {
-        return awaitAnswer(key, open, input.machine, budgetMs - (Date.now() - at));
+        return awaitAnswer(key, open, input.machine, budgetMs - (Date.now() - at), input.typed === true);
     }
     // What the device itself refuses without its destructive switch, the same live reading its own shell makes: asked
     // first, since a card here could only end in "Allow once" followed by the device refusing anyway.
     const gated = matches.filter((match) => match.live && hardRuleClasses(DEVICE).has(match.commandClass)).map((match) => match.commandClass);
     if (gated.length > 0 && (await deviceScopesOf(services, input.machine))?.destructive === "off") {
-        return refusal(switchedOff(input.machine, gated));
+        return refusal(switchedOff(input.machine, gated, input.typed === true));
     }
     const run = conversationId === undefined ? undefined : turnRunOf(services.conversations, conversationId);
     // Same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one.
@@ -310,6 +346,7 @@ export const judgeHostCommand = async (
         sentence: verdict.sentence,
         at,
         hard: hard !== undefined,
+        typed: input.typed === true,
     });
     const ownKey = askKey(conversationId, input.machine, input.command);
     openAsks.set(ownKey, asking);
@@ -319,5 +356,5 @@ export const judgeHostCommand = async (
             openAsks.delete(ownKey);
         }
     });
-    return awaitAnswer(ownKey, asking, input.machine, budgetMs - (Date.now() - at));
+    return awaitAnswer(ownKey, asking, input.machine, budgetMs - (Date.now() - at), input.typed === true);
 };

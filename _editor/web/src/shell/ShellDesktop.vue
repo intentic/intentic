@@ -27,6 +27,7 @@ import {
     railPolicy,
     onRailOnlyByVisit,
     DEVICES_VIEW_ID,
+    DESKTOP_VIEW_ID,
 } from "../core-views/registry";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { useVocabulary } from "../core-views/vocabulary";
@@ -240,6 +241,8 @@ const devicesTile = computed<SectionTile>(() => {
     const badge = devicesBadge(heldPorts.value.length, devicesWorking());
     return badge === undefined ? tile : { ...tile, badge };
 });
+// The sandbox's own desktop (features/desktop): a signal tile with nothing to badge, so it waits in More until pinned.
+const desktopTile = computed<SectionTile>(() => ({ id: DESKTOP_VIEW_ID, to: `/desktop`, label: t(`shared.desktop`), icon: `desktop` }));
 
 // The always-present tiles plus evidence-driven Preview; extension tiles are added separately below,
 // one per activation. The rest of sandbox management lives behind the switcher chip, not a rail tile.
@@ -273,7 +276,7 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
     ...(previewTile.value === undefined ? [] : [previewTile.value]),
-    ...(canShip.value ? [devicesTile.value] : []),
+    ...(canShip.value ? [devicesTile.value, desktopTile.value] : []),
 ]);
 /* The Browsers tile stays visible while the daemon lists an open browser. */
 const browserTile = computed<SectionTile | undefined>(() => {

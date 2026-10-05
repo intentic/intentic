@@ -37,7 +37,8 @@
         "test:watch": "suites --watch"
     },
     "dependencies": {
-        "tslib": "catalog:"
+        "tslib": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

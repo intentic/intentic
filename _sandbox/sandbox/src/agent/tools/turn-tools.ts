@@ -51,6 +51,7 @@ export const turnToolsOf = async (
                 ...peerToolsOf("webext", granted, lease),
                 ...extension,
                 ...browser.servers,
+                ...(browser.desktop === undefined ? [] : [browser.desktop]),
             ],
             browser,
             release: lease.release,

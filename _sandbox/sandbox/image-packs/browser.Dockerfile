@@ -30,9 +30,14 @@
 # emoji in it rendered tofu boxes, and a page set in Arial/Times fell back to DejaVu at different widths (the
 # metric-compatible Liberation family is what makes a layout screenshot trustworthy). Together ~12 MB. CJK is
 # deliberately NOT here — fonts-noto-cjk is ~100 MB and belongs in an owner's overlay fragment.
+# openbox, wmctrl, xclip and x11-utils make one more display a DESKTOP (desktop/agent-desktop.ts): the virtual screen an
+# agent drives for programs with a window and no other way in. openbox manages its windows (without a window manager
+# they open undecorated at 0,0 and nothing takes focus), wmctrl lists them, xwininfo (x11-utils) says where each really
+# is (wmctrl counts a window's frame twice under a reparenting manager), xclip is its clipboard. A few MB together, and
+# they belong here for the reason ffmpeg and xdotool do: they operate a display, which only this pack brings.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.npm \
     npx --yes playwright@1.63.0 install --with-deps chromium \
-    && apt-get update && apt-get install -y --no-install-recommends xvfb ffmpeg xdotool fonts-noto-color-emoji fonts-liberation \
+    && apt-get update && apt-get install -y --no-install-recommends xvfb ffmpeg xdotool openbox wmctrl xclip x11-utils fonts-noto-color-emoji fonts-liberation \
     && rm -rf /root/.cache/ms-playwright/chromium_headless_shell-*

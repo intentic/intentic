@@ -1847,6 +1847,28 @@
             "ready": "Prêt"
         }
     },
+    "desktop": {
+        "desktop": {
+            "agentWaits": "L'agent attend",
+            "authFailed": "Impossible d'autoriser la vue du bureau ({reason}). Nouvelle tentative.",
+            "connecting": "Démarrage du bureau…",
+            "connectingShort": "Connexion…",
+            "handBack": "Rendre la main",
+            "handBackNote": "Arrête vos saisies. L'agent peut de nouveau utiliser le bureau.",
+            "heldElsewhere": "Pris dans une autre fenêtre",
+            "heldNote": "Les outils de bureau de l'agent sont refusés tant que vous tenez le bureau, et 20 secondes après votre dernière saisie.",
+            "live": "En direct",
+            "reconnecting": "Reconnexion…",
+            "refused": "Seul un mainteneur de ce sandbox peut ouvrir son bureau.",
+            "stageLabel": "Le bureau du sandbox",
+            "takeOver": "Prendre la main",
+            "takeOverNote": "Envoie vos clics et vos touches au bureau. L'agent attend que vous rendiez la main.",
+            "unavailable": "Indisponible",
+            "unreachable": "Le sandbox est injoignable, ou vous n'êtes pas connecté.",
+            "unsupported": "Ce navigateur ne peut pas lire la vue en direct. Chrome, Edge, Safari 16.4+ ou Firefox 130+ le peuvent.",
+            "waiting": "En attente de la première image…"
+        }
+    },
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "déclare une interface mais cette version de l'application n'embarque aucun module pour elle : l'image du sandbox et l'application ne sont pas dans la même version",
@@ -4198,6 +4220,7 @@
         "changes": "Changements",
         "connected": "Connecté",
         "connections": "Vos connexions",
+        "desktop": "Bureau",
         "domain": "Domaine",
         "files": "Fichiers",
         "finished": "Terminés",

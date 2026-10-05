@@ -1846,6 +1846,28 @@
             "ready": "Bereit"
         }
     },
+    "desktop": {
+        "desktop": {
+            "agentWaits": "Agent wartet",
+            "authFailed": "Die Desktop-Ansicht konnte nicht autorisiert werden ({reason}). Neuer Versuch.",
+            "connecting": "Desktop wird gestartet…",
+            "connectingShort": "Verbinde…",
+            "handBack": "Zurückgeben",
+            "handBackNote": "Beendet Ihre Eingaben. Der Agent kann den Desktop wieder benutzen.",
+            "heldElsewhere": "In einem anderen Fenster übernommen",
+            "heldNote": "Die Desktop-Werkzeuge des Agenten sind gesperrt, solange Sie den Desktop halten, und noch 20 Sekunden nach Ihrer letzten Eingabe.",
+            "live": "Live",
+            "reconnecting": "Verbinde erneut…",
+            "refused": "Nur ein Maintainer dieser Sandbox kann ihren Desktop öffnen.",
+            "stageLabel": "Desktop der Sandbox",
+            "takeOver": "Übernehmen",
+            "takeOverNote": "Sendet Ihre Klicks und Tasten an den Desktop. Der Agent wartet, bis Sie zurückgeben.",
+            "unavailable": "Nicht verfügbar",
+            "unreachable": "Die Sandbox ist nicht erreichbar, oder Sie sind nicht angemeldet.",
+            "unsupported": "Dieser Browser kann die Live-Ansicht nicht abspielen. Chrome, Edge, Safari 16.4+ oder Firefox 130+ können es.",
+            "waiting": "Warte auf das erste Bild…"
+        }
+    },
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "deklariert UI, aber dieser App-Build hat kein Modul dafür einkompiliert — Sandbox-Image und App sind auf verschiedenen Versionen",
@@ -4224,6 +4246,7 @@
         "changes": "Änderungen",
         "connected": "Verbunden",
         "connections": "Ihre Verbindungen",
+        "desktop": "Desktop",
         "files": "Dateien",
         "finished": "Fertig",
         "folders": "Ordner",

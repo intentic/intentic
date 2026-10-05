@@ -1,12 +1,13 @@
 import { windowsChord } from "./keys.js";
 import { run } from "./run.js";
 import type { MouseButton, Point, ScrollDirection } from "./types.js";
+import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
 
 // Windows input via PowerShell P/Invoke into user32.dll, not nut.js: its native addon cannot load from a
 // single-file compiled binary. Mouse uses SetCursorPos + mouse_event, keys use keybd_event; only text goes through
 // SendKeys, since it alone handles unicode text and cannot press the Windows key.
 
-const SHIM = `
+const SHIM = `${WINDOWS_DPI_AWARE}
 Add-Type -Namespace IntenticDesktop -Name Native -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
 [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, System.IntPtr dwExtraInfo);

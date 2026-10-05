@@ -256,6 +256,7 @@ test("the lean variant replaces the full one in the loop's own composition", asy
         unattended: false,
         browserOutputDir: undefined,
         browserAccounts: false,
+        desktop: false,
         diagnostics: false,
         terminal: false,
         hostDevices: undefined,

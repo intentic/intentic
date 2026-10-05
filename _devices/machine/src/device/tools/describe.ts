@@ -134,7 +134,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Home: ${facts.home}`,
             `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
-            `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}, manage sandboxes ${scopes.sandboxes}`,
+            `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}`,
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined

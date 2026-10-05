@@ -80,8 +80,14 @@ flowchart LR
 - A plugin connection is pinned like an extension: its install resolves the branch or tag it names to a full commit,
   stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
   Adding it anew is the update.
+- The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
+  openbox on it, for programs with a window and no other way in. A turn whose persona may drive a browser mounts it as
+  the `desktop` server beside the browser routers (`browserServersOf`), and drives it through
+  [desktop-automation](../../_devices/desktop-automation)'s frames, the same code a connected machine's screenshots go
+  through. The owner watches and drives it at `GET /system/desktop-view` (video and XTEST, as the browser view);
+  driving it holds it, and the agent's input is refused until they hand it back or stop for 20 s.
 - Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
-  extension cards' endpoints) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). Each
+  extension cards' endpoints, the desktop) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). Each
   turn holds a bearer of its own, leased the names it mounted and forgotten when the turn ends, and the door refuses
   any name that turn's lease does not hold, so two turns of one conversation running at once never reach each other's
   mounts. An ACP agent's warm session keeps the MCP config it was opened with, so its turns share the conversation's
@@ -223,7 +229,7 @@ Main groups under `src/`:
 | Turns and agents | `agent/` `conversations/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
 | Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
 | Owner controls | `auth/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
-| Outside world | `capabilities/` `extensions/` `browser/` `hosts/` `peers/` `webext/` `runners/` `sandboxes/` `ci/` `automations/` |
+| Outside world | `capabilities/` `extensions/` `browser/` `desktop/` `hosts/` `peers/` `webext/` `runners/` `sandboxes/` `ci/` `automations/` |
 | Network | `front/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |

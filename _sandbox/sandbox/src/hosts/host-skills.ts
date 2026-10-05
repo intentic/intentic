@@ -21,7 +21,9 @@ the ones you need). Then:
 | \`mcp__\${id}__write_file\` | Create a file, or replace one given the revision from your read: a file that changed since is refused. |
 | \`mcp__\${id}__list_dir\` | List a directory under the allowed roots. |
 | \`mcp__\${id}__trash_file\` | Move a file to the recycle bin / trash: there is no delete tool, on purpose. |
-| \`mcp__\${id}__screenshot\` | Capture the screen as an image, with its pixel size. |
+| \`mcp__\${id}__screenshot\` | Capture the screen as an image with an id, shrunk to fit what you can read; \`display\`, \`window\` or \`region\` looks closer at one part. |
+| \`mcp__\${id}__ui_elements\` | A window's controls from its accessibility tree (Windows; Linux and macOS with cua-driver): role, name, value, and a ref like \`kd12\`. |
+| \`mcp__\${id}__ui_act\` | Act on an element ref without the pointer: invoke, set_value, toggle, expand, collapse, select, focus. |
 | \`mcp__\${id}__list_windows\` | Every open window: app, title, size, position, which has focus. |
 | \`mcp__\${id}__focus_window\` | Bring a window to the front and give it the keyboard. |
 | \`mcp__\${id}__open\` | Start an app, or open a URL or file with its default handler. |
@@ -31,7 +33,7 @@ the ones you need). Then:
 | \`mcp__\${id}__browser_read\` | The page as readable text: for answering questions about it. |
 | \`mcp__\${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
 | \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
-| \`mcp__\${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
+| \`mcp__\${id}__device\` | Use the mouse and keyboard: click (a coordinate or an element ref), type, press a chord, scroll, drag. |
 | \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
 | \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this device' permission, and stopping the sandbox you are running in severs your own connection. |
 | \`mcp__\${id}__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
@@ -124,20 +126,36 @@ The loop is always the same:
    is on screen. If what you need is not there, \`open\` it first and list again.
 2. \`focus_window\`: bring it to the front. **Typing goes to the focused window, never to where the pointer is**,
    so skipping this is the most common way a GUI sequence silently types into the wrong place.
-3. \`screenshot\`: it answers with the image AND its size ("Screen is 2560×1440").
-4. Read the coordinates you want off that image. **Coordinates are pixels in that screenshot**, top-left is (0,0).
-5. Call \`device\` with an action. Every action answers with a fresh screenshot, so you see the result without
-   asking for one.
-6. Look at what came back before the next action. A menu that did not open means the click missed.
+3. \`ui_elements\` next (Windows always; Linux and macOS when cua-driver is installed): the window's buttons,
+   fields and menus by name, each with a ref. Pointing at a ref (\`device\` with \`element\`) is exact, and
+   \`ui_act\` presses, fills or ticks it without the mouse at all, in a window that does not even need the focus.
+   Use \`query\` to find one control in a big window.
+4. \`screenshot\` when there is no ref to use, or to see the result. It answers with an id (\`Screenshot qv-3\`)
+   and says how it was shrunk: a big or multi-monitor desktop is fitted to what you can read whole, so small text
+   may be a blur. Look closer with \`display\`, \`window\` or \`region\` (a rectangle of the latest screenshot).
+5. **Coordinates are pixels in the latest screenshot**, whatever it showed, top-left (0,0). Pass its id as
+   \`frame\`: a click read off an older screenshot is refused instead of landing where the screen used to be.
+6. Call \`device\` with an action. Every action answers with a fresh screenshot of the same part of the screen, or
+   says the screen did not change, which means the action did nothing visible.
+7. Look at what came back before the next action. A menu that did not open means the click missed.
 
 A worked example: "check my email and tell me if the invoice arrived":
 
 \`\`\`
 open           { target: "https://mail.google.com" }
-list_windows   → [12] chrome: Inbox (3), Gmail   (1920×1040 at 0,0)
+list_windows   → [12] chrome: Inbox (3), Gmail   (728×404 at 0,0)
 focus_window   { id: "12" }
-screenshot     → the inbox
-device       { action: "left_click", coordinate: [420, 318] }   // the message
+ui_elements    { window: "12", query: "invoice" }
+               → kd4 hyperlink "Invoice #2291 from Acme" at 210,160 300×18 [invoke focus]
+ui_act         { element: "kd4", action: "invoke" }
+\`\`\`
+
+And by pixels, where the app offers no tree:
+
+\`\`\`
+screenshot     → Screenshot qv-3: 1456×546, the whole desktop, shown at 1/3.96 …
+screenshot     { display: 2 }                         → Screenshot qv-4: 1456×819, display 2 …
+device         { action: "left_click", coordinate: [420, 318], frame: "qv-4" }
 \`\`\`
 
 Getting text OUT of an application is usually easier through the clipboard than by reading pixels: select it
@@ -160,8 +178,12 @@ Things that will bite you:
 
 - **Typing goes to whatever window has focus**, not to where the pointer is. \`focus_window\` first, then click the
   field you want, then type.
-- **A coordinate outside the screen is refused, not clamped.** If you get that error you misread the screenshot:
-  take another one rather than adjusting by feel.
+- **A coordinate outside the screenshot is refused, not clamped.** If you get that error you misread it: take
+  another one rather than adjusting by feel.
+- **Typing a command is running it.** Text that would delete if a terminal ran it needs the device's "Run
+  destructive commands" switch, and is judged by the owner's safety policy like \`run_command\`, whether it is
+  typed, pasted or set into a field. Keys that lock or leave the desktop (\`super+l\`, \`ctrl+alt+Delete\`) are
+  refused outright: nothing could drive the machine back from there.
 - **Nothing is undoable.** A click can confirm a dialog nobody read. Say what you are about to click and why
   before you click anything consequential, exactly as you would before deleting a file.
 - **If \`device\` says the permission is off**, that is the owner's decision. Ask for the switch on a card,

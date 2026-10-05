@@ -394,6 +394,13 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`shared.browsers`) },
                 component: asyncView(() => import(`../features/browsers/Browsers.vue`)),
             },
+            // The sandbox's own desktop, the one the agent's desktop tools drive; one per sandbox, so no parameter.
+            {
+                path: `desktop`,
+                name: `desktop`,
+                meta: { title: () => t(`shared.desktop`) },
+                component: asyncView(() => import(`../features/desktop/Desktop.vue`)),
+            },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
             {
                 path: `settings/:tab?`,

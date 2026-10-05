@@ -169,6 +169,8 @@ export interface TurnTools {
     readonly browserPasskeys?: Record<string, string>;
     // Routed browser server's account-to-owner map, so the observer resolves a call's `account` to its profile.
     readonly browserAccounts?: Record<string, string>;
+    // Whether the turn mounted the sandbox's own desktop (desktop/desktop-tools.ts), so the prompt names it only then.
+    readonly desktop?: boolean;
 }
 
 // Where the privacy shield's gateway stands in for the credential's own base URL: the harness sends every model request

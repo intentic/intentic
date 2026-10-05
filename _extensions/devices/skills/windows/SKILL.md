@@ -63,8 +63,12 @@ $inbox.Items | Select-Object -First 5 Subject, SenderName, ReceivedTime
 COM objects hold the app open: finish with `[System.Runtime.InteropServices.Marshal]::ReleaseComObject($x)`.
 
 ### Driving the Windows GUI
-Input goes through user32 (`SendInput`-class calls), so it behaves like a real keyboard and mouse: including
-that it lands on **whatever window has focus**. `Start-Process` then a click on the new window is more reliable
+Input goes through user32 (`SetCursorPos` and `mouse_event` for the pointer, `keybd_event` for key chords,
+`SendKeys` for text), so it behaves like a real keyboard and mouse: including that it lands on **whatever window
+has focus**. Every capture and every click runs per-monitor DPI-aware, so a 4K monitor at 150% is captured and
+clicked in its real pixels. Before reaching for the pointer, `ui_elements` reads the window's controls through UI
+Automation: Win32, WPF, WinForms, UWP and Chromium/Electron apps all answer it, and `ui_act` invokes, fills or
+toggles a control there without moving the mouse. `Start-Process` then a click on the new window is more reliable
 than assuming focus followed. `super+e` opens Explorer, `super+r` the Run box; both work here even though
 Windows' own SendKeys cannot press that key.
 

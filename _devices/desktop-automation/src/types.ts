@@ -7,6 +7,14 @@ export interface Point {
     readonly y: number;
 }
 
+// A rectangle in the same space as Point: pixels of the whole virtual desktop, its top-left at (0,0).
+export interface Rect {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+}
+
 export type MouseButton = "left" | "right" | "middle";
 export type ScrollDirection = "up" | "down" | "left" | "right";
 
@@ -25,8 +33,46 @@ export interface WindowInfo {
     readonly title: string;
     // The program as the OS names it ("chrome", "Code", "slack"), not what a person calls it.
     readonly app: string;
-    readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+    readonly bounds: Rect;
     readonly focused: boolean;
+}
+
+// One monitor, in the same pixels as everything else. On a multi-monitor desktop these tile the frame, with gaps
+// where monitors differ in size.
+export interface DisplayInfo {
+    readonly bounds: Rect;
+    readonly primary: boolean;
+    // What the OS calls it ("\\.\DISPLAY1", "DP-1"), for a person to recognise; never needed to address it.
+    readonly name: string;
+}
+
+// What an element offers to do without the pointer, through the platform's accessibility API. Each works on a
+// window in the background: nothing moves the mouse or takes the keyboard from whoever has it.
+export type ElementAction = "invoke" | "set_value" | "toggle" | "expand" | "collapse" | "select" | "focus";
+
+// One control inside a window, as the platform's accessibility tree reports it.
+export interface UiElement {
+    // Opaque and platform-shaped (a UI Automation runtime id); handed back verbatim to act on it.
+    readonly id: string;
+    // A role in lower case: "button", "edit", "check box", "menu item", "hyperlink"…
+    readonly role: string;
+    readonly name: string;
+    // An edit's text, a slider's position, a check box's state; undefined where the control has none.
+    readonly value: string | undefined;
+    readonly bounds: Rect;
+    readonly enabled: boolean;
+    readonly focused: boolean;
+    readonly actions: readonly ElementAction[];
+    // How many levels below the window; a reader uses it to indent, nothing else.
+    readonly depth: number;
+}
+
+// The elements of one window, and which window that turned out to be when none was named.
+export interface ElementTree {
+    readonly window: { readonly id: string; readonly title: string; readonly app: string };
+    readonly elements: readonly UiElement[];
+    // More elements existed than were read; the list is the first ones in reading order.
+    readonly truncated: boolean;
 }
 
 // Whatever holds the keyboard right now, read from the OS rather than looked up in `windows()`: the foreground
@@ -52,8 +98,11 @@ export interface SessionState {
 export interface Desktop {
     // Cheap where the OS answers it directly; a screenshot's own dimensions where it will not (Wayland).
     readonly frame: () => Promise<ScreenFrame>;
-    // The screen as a PNG.
-    readonly capture: () => Promise<Buffer>;
+    // The screen as a PNG, or only `region` of it. A backend whose tools cannot cut a region out hands back the
+    // whole screen instead; `shoot` (frames.ts) tells the two apart by size and cuts it there.
+    readonly capture: (region?: Rect) => Promise<Buffer>;
+    // Every monitor, primary first.
+    readonly displays: () => Promise<DisplayInfo[]>;
     readonly move: (to: Point) => Promise<void>;
     readonly click: (at: Point, button: MouseButton) => Promise<void>;
     readonly doubleClick: (at: Point) => Promise<void>;
@@ -71,6 +120,12 @@ export interface Desktop {
     readonly launch: (target: string) => Promise<void>;
     readonly readClipboard: () => Promise<string>;
     readonly writeClipboard: (text: string) => Promise<void>;
+    // The controls of a window (the foreground one when `window` is undefined), read from the accessibility tree.
+    readonly elements: (window?: string) => Promise<ElementTree>;
+    // One element as it stands now, or undefined once it is gone: how a caller gets fresh bounds to point at.
+    readonly element: (window: string, id: string) => Promise<UiElement | undefined>;
+    // Acts on an element without the pointer. `value` is what set_value writes.
+    readonly elementAct: (window: string, id: string, action: ElementAction, value?: string) => Promise<void>;
 }
 
 // A line of text pinned to the top of the screen for the person sitting at it, which nothing driving the machine can

@@ -1855,6 +1855,28 @@
             "ready": "Listo"
         }
     },
+    "desktop": {
+        "desktop": {
+            "agentWaits": "El agente espera",
+            "authFailed": "No se pudo autorizar la vista del escritorio ({reason}). Reintentando.",
+            "connecting": "Iniciando el escritorio…",
+            "connectingShort": "Conectando…",
+            "handBack": "Devolver",
+            "handBackNote": "Deja de enviar tu entrada. El agente puede volver a usar el escritorio.",
+            "heldElsewhere": "Tomado en otra ventana",
+            "heldNote": "Las herramientas de escritorio del agente se rechazan mientras tienes el escritorio, y durante 20 segundos después de tu última entrada.",
+            "live": "En vivo",
+            "reconnecting": "Reconectando…",
+            "refused": "Solo un mantenedor de este sandbox puede abrir su escritorio.",
+            "stageLabel": "El escritorio del sandbox",
+            "takeOver": "Tomar el control",
+            "takeOverNote": "Envía tus clics y teclas al escritorio. El agente espera hasta que lo devuelvas.",
+            "unavailable": "No disponible",
+            "unreachable": "El sandbox no está accesible, o no has iniciado sesión.",
+            "unsupported": "Este navegador no puede reproducir la vista en vivo. Chrome, Edge, Safari 16.4+ o Firefox 130+ pueden.",
+            "waiting": "Esperando el primer fotograma…"
+        }
+    },
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "declara interfaz pero esta compilación de la aplicación no lleva ningún módulo para ella: la imagen del sandbox y la aplicación están en versiones distintas",
@@ -4243,6 +4265,7 @@
         "changes": "Cambios",
         "connected": "Conectado",
         "connections": "Tus conexiones",
+        "desktop": "Escritorio",
         "domain": "Dominio",
         "files": "Archivos",
         "finished": "Terminados",

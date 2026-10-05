@@ -61,12 +61,28 @@ const XVFB_BINARY = "/usr/bin/Xvfb";
 // all) instead of leaking one per restart; an exit handler can't cover a SIGKILL or a container stop.
 const claimPath = (number: number): string => `/tmp/.intentic-display-${number}`;
 
-const claimedBy = (number: number): string | undefined => {
+// The claim's first line is the key; its second the screen's size, for a display started at a size of its own (the
+// agent desktop's), so the one adopted after a restart is described at the size it really has.
+const claimLines = (number: number): string[] => {
     try {
-        return readFileSync(claimPath(number), "utf8").trim() || undefined;
+        return readFileSync(claimPath(number), "utf8").split("\n").map((line) => line.trim());
     } catch {
-        return undefined;
+        return [];
     }
+};
+
+const claimedBy = (number: number): string | undefined => claimLines(number)[0] || undefined;
+
+export interface DisplaySize {
+    readonly width: number;
+    readonly height: number;
+}
+
+const BROWSER_SIZE: DisplaySize = { width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
+
+const claimedSize = (number: number): DisplaySize => {
+    const [width, height] = (claimLines(number)[1] ?? "").split("x").map(Number);
+    return width !== undefined && height !== undefined && width > 0 && height > 0 ? { width, height } : BROWSER_SIZE;
 };
 
 // "usable": a client can connect. "free": safe to claim. "held": neither — nothing to launch against, nothing to clobber.
@@ -115,7 +131,7 @@ const waitForDisplay = async (number: number): Promise<void> => {
     );
 };
 
-const displayAt = (number: number): Display => ({ name: `:${number}`, width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT });
+const displayAt = (number: number, size: DisplaySize): Display => ({ name: `:${number}`, ...size });
 
 // Two passes: a live server this key already claimed (the restart case, cheaper to adopt), else the lowest number
 // nothing answers on. Probed rather than counted, since a server can outlive the process that started it.
@@ -143,11 +159,11 @@ const placeFor = async (key: string): Promise<{ readonly number: number; readonl
     return { number, adopt: false };
 };
 
-const start = async (key: string): Promise<Display> => {
+const start = async (key: string, size: DisplaySize): Promise<Display> => {
     const { number, adopt } = await placeFor(key);
     if (adopt) {
         // A previous life started this, still serving this key's browsers; nothing to spawn, and not ours to kill.
-        const display = displayAt(number);
+        const display = displayAt(number, claimedSize(number));
         running.set(key, { display, child: undefined });
         return display;
     }
@@ -155,9 +171,9 @@ const start = async (key: string): Promise<Display> => {
     rmSync(socketPath(number), { force: true });
     rmSync(lockPath(number), { force: true });
     // Written before the spawn, so a claimed server is claimed from its first breath.
-    writeFileSync(claimPath(number), key, { mode: 0o600 });
+    writeFileSync(claimPath(number), `${key}\n${size.width}x${size.height}`, { mode: 0o600 });
     // -nolisten tcp: local socket only. -ac: no X access control (single-tenant sandbox).
-    const child = spawn("Xvfb", [`:${number}`, "-screen", "0", `${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}x24`, "-nolisten", "tcp", "-ac"], {
+    const child = spawn("Xvfb", [`:${number}`, "-screen", "0", `${size.width}x${size.height}x24`, "-nolisten", "tcp", "-ac"], {
         stdio: "ignore",
     });
     // Swallow ENOENT (Xvfb not installed until the owner rebuilds); it surfaces via the display-wait timeout.
@@ -165,14 +181,15 @@ const start = async (key: string): Promise<Display> => {
     // Unref'd so an idle display never keeps the daemon alive.
     child.unref();
     await waitForDisplay(number);
-    const display = displayAt(number);
+    const display = displayAt(number, size);
     running.set(key, { display, child });
     return display;
 };
 
 // Ensures a display answers for `key`, idempotent and concurrency-safe: concurrent callers share one spawn, nothing
-// dead stays remembered as up. Same key always lands on the same display, login window and later tools alike.
-export const ensureDisplay = async (key: string): Promise<Display> => {
+// dead stays remembered as up. Same key always lands on the same display, login window and later tools alike. `size`
+// applies when a server is started; one already running keeps the size it has.
+export const ensureDisplay = async (key: string, size: DisplaySize = BROWSER_SIZE): Promise<Display> => {
     const existing = running.get(key);
     if (existing !== undefined && (await answers(Number(existing.display.name.slice(1))))) {
         return existing.display;
@@ -183,7 +200,7 @@ export const ensureDisplay = async (key: string): Promise<Display> => {
         return pending;
     }
     // Queued behind every other allocation: probe-and-claim is two steps; interleaving can collide on one number.
-    const attempt = allocating.then(() => start(key)).finally(() => starting.delete(key));
+    const attempt = allocating.then(() => start(key, size)).finally(() => starting.delete(key));
     starting.set(key, attempt);
     // Chain must not break on failure: a display that won't start is this caller's problem, not the next one's.
     allocating = attempt.catch(() => undefined);

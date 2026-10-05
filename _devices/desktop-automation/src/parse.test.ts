@@ -1,4 +1,18 @@
-import { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
+import {
+    focusRefusal,
+    looksLikeUrl,
+    parseDisplaysJson,
+    parseElementTreeJson,
+    parseSessionJson,
+    parseSwayOutputs,
+    parseSwayTree,
+    parseWindowsJson,
+    parseWmctrl,
+    parseXrandrMonitors,
+    parseXwininfoTree,
+    roleOf,
+    withAbsoluteBounds,
+} from "./parse.js";
 import { DesktopError } from "./types.js";
 
 /* Reading a platform's window list. */
@@ -166,4 +180,63 @@ test("nothing in the foreground reads as a window that is gone, not as a machine
 // The only branch allowed to be vague, and it says so instead of dressing a failed read as a diagnosis.
 test("a session that could not be read admits it", () => {
     expect(focusRefusal("4242", 3, undefined)).toContain("nothing here could read which window has it");
+});
+
+test("monitors are read from every lister, primary marked, geometry kept as given", () => {
+    const xrandr = "Monitors: 2\n 0: +*DP-1 2560/597x1440/336+0+0  DP-1\n 1: +HDMI-1 1920/527x1080/296+2560+0  HDMI-1\n";
+    expect(parseXrandrMonitors(xrandr)).toEqual([
+        { name: "DP-1", primary: true, bounds: { x: 0, y: 0, width: 2560, height: 1440 } },
+        { name: "HDMI-1", primary: false, bounds: { x: 2560, y: 0, width: 1920, height: 1080 } },
+    ]);
+    // What rog's two monitors answered, a single object when only one is plugged in.
+    const windows = '[{"name":"\\\\\\\\.\\\\DISPLAY5","primary":false,"x":0,"y":0,"width":1920,"height":1200},{"name":"\\\\\\\\.\\\\DISPLAY6","primary":true,"x":1920,"y":0,"width":3840,"height":2160}]';
+    expect(parseDisplaysJson(windows).map((display) => [display.primary, display.bounds.x, display.bounds.width])).toEqual([
+        [false, 0, 1920],
+        [true, 1920, 3840],
+    ]);
+    expect(parseDisplaysJson('{"name":"one","primary":true,"x":0,"y":0,"width":800,"height":600}')).toHaveLength(1);
+    const sway = '[{"name":"eDP-1","active":true,"rect":{"x":0,"y":0,"width":1920,"height":1080}},{"name":"HDMI-A-1","active":false,"rect":{"x":0,"y":0,"width":0,"height":0}}]';
+    expect(parseSwayOutputs(sway)).toEqual([{ name: "eDP-1", primary: true, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }]);
+});
+
+test("UI Automation's element rows become roles in English, actions from the patterns each offers, and no unaddressable row", () => {
+    const tree = parseElementTreeJson(
+        JSON.stringify({
+            window: { id: "11273660", title: "mig", app: "Code", class: "Chrome_WidgetWin_1" },
+            elements: [
+                { id: "42.1", type: "ControlType.Button", name: "Close", x: 5691, y: 0, width: 69, height: 51, enabled: true, invoke: true, focusable: true, depth: 2 },
+                { id: "42.2", type: "ControlType.CheckBox", name: "Wrap", value: "On", toggle: true, offscreen: true, x: 0, y: 0, width: 10, height: 10 },
+                { id: "42.3", type: "ControlType.Edit", name: "Search", value: "", settable: true, enabled: false },
+                { id: "", type: "ControlType.Pane", name: "nothing to find it by" },
+            ],
+            truncated: true,
+        }),
+    );
+    expect(tree.window).toEqual({ id: "11273660", title: "mig", app: "Code" });
+    expect(tree.truncated).toBe(true);
+    expect(tree.elements.map((element) => [element.role, element.actions])).toEqual([
+        ["button", ["invoke", "focus"]],
+        ["check box", ["toggle"]],
+        ["edit", ["set_value"]],
+    ]);
+    // Off screen keeps its id and actions, at no size: it can be acted on, not pointed at.
+    expect(tree.elements[1]?.bounds).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+    expect(tree.elements[2]?.enabled).toBe(false);
+    expect(roleOf("ControlType.SplitButton")).toBe("split button");
+    expect(() => parseElementTreeJson("Add-Type : cannot compile")).toThrow(DesktopError);
+});
+
+test("a window's exact place comes from xwininfo where wmctrl counted the frame twice", () => {
+    // Under openbox (2026-10-05): wmctrl said 606,407; the client really starts at 605,389, below an 18 px title bar.
+    const tree = parseXwininfoTree(
+        [
+            "  Root window id: 0x3c1 (the root window) (has no name)",
+            '        0x400024 "xmessage": ("xmessage" "Xmessage")  71x68+1+18  +605+389',
+            "                 0x40002a (has no name): ()  14x26+-1+-1  +-9+393",
+        ].join("\n"),
+    );
+    expect(tree.get(0x400024)).toEqual({ x: 605, y: 389, width: 71, height: 68 });
+    expect(tree.get(0x40002a)).toEqual({ x: -9, y: 393, width: 14, height: 26 });
+    const [listed] = parseWmctrl("0x00400024  0 0      606  407  71   68   xmessage.Xmessage     host xmessage");
+    expect(listed === undefined ? undefined : withAbsoluteBounds([listed], tree)[0]?.bounds).toEqual({ x: 605, y: 389, width: 71, height: 68 });
 });

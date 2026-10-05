@@ -27,6 +27,7 @@ describe(`guestAllowedPath`, () => {
             `/preview`,
             `/capabilities`,
             `/browsers`,
+            `/desktop`,
             `/terminal`,
             `/sandbox`,
             `/sandbox/secrets`,

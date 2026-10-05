@@ -10,8 +10,8 @@ import { contributedServerMintingKinds } from "@intentic/extension-manifest";
 export type ServerProvenance = "control" | "outside";
 
 // Every server agent/run/agent.ts and agent/run/harness/harness-servers.ts mount themselves, plus the browser router's two
-// names (web, browser), which every turn mounts on its lease at the daemon's MCP door (browser-tools.ts) and which the
-// text scan reads from their constants. A server added anywhere else without a row here fails the conformance test in the sandbox guard package.
+// names (web, browser) and the virtual desktop's (desktop), which a turn mounts on its lease at the daemon's MCP door
+// (browser-tools.ts, desktop/desktop-tools.ts) and which the text scan reads from their constants. A server added anywhere else without a row here fails the conformance test in the sandbox guard package.
 export const DAEMON_MCP_SERVERS: Readonly<Record<string, ServerProvenance>> = {
     ui: "control", // agent.ts: AskUserQuestion
     accounts: "control", // agent.ts: the account roster and the credential typists
@@ -25,6 +25,7 @@ export const DAEMON_MCP_SERVERS: Readonly<Record<string, ServerProvenance>> = {
     diagnostics: "outside", // harness: two tools relay a provider's own sentence verbatim
     web: "outside", // the turn's mounts: the anonymous browser router; the page is the internet
     browser: "outside", // the turn's mounts: the signed-in browser router; the page is the internet
+    desktop: "outside", // the turn's mounts: the sandbox's own virtual desktop; whatever its windows show is outside content
 };
 
 // Every daemon-mounted server name, the set a capability id may not collide with.

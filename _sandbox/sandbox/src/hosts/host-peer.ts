@@ -25,7 +25,7 @@ import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
-import { commandInCall, judgeHostCommand } from "./host-command-guard.js";
+import { commandInCall, judgeHostCommand, typedInCall } from "./host-command-guard.js";
 import { DeviceToolCallSchema, judgeHostRestart, restartInCall } from "./host-restart-guard.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
@@ -217,9 +217,13 @@ export const hostPeerRoutes = (services: Services) =>
                 return judgeHostRestart(services, { machine: call.id, call: restart, conversationId: call.conversationId });
             }
             const command = commandInCall(payload);
-            if (command === undefined) {
+            if (command !== undefined) {
+                return judgeHostCommand(services, { machine: call.id, command, conversationId: call.conversationId });
+            }
+            const typed = toolCall.success ? typedInCall(toolCall.data) : undefined;
+            if (typed === undefined) {
                 return undefined;
             }
-            return judgeHostCommand(services, { machine: call.id, command, conversationId: call.conversationId });
+            return judgeHostCommand(services, { machine: call.id, command: typed, conversationId: call.conversationId, typed: true });
         },
     });

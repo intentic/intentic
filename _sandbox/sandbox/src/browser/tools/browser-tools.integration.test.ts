@@ -366,5 +366,6 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root, BRIDGE())).toEqual({ servers: [], accounts: {}, ports: {}, passkeys: {} });
+    // The desktop rides the same call but needs only the display tools, so it is not asked about here.
+    expect(await browserServersOf([reddit], root, BRIDGE())).toMatchObject({ servers: [], accounts: {}, ports: {}, passkeys: {} });
 });

@@ -92,6 +92,7 @@ test("the guidance shown is the form the turn was sent", () => {
             unattended: true,
             browserOutputDir: undefined,
             browserAccounts: false,
+            desktop: false,
             diagnostics: false,
             // The hand-off is mounted wherever tmux-run is, attended or not: read off the machine, as the turn was.
             terminal: tmuxRunEnabled(),

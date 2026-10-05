@@ -7,7 +7,8 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
-import { judgeHostCommand } from "../host-command-guard.js";
+import { judgeHostCommand, typedInCall } from "../host-command-guard.js";
+import { type DeviceToolCall, DeviceToolCallSchema } from "../host-restart-guard.js";
 
 // What the agent reads back from a device command its owner was asked about, for each way the card can end. The judge
 // is off, so what raises the card is the device hard rule alone: `rm -rf` on somebody's own machine.
@@ -198,5 +199,43 @@ describe("the card outlives the call", () => {
         expect(await cardUp()).not.toBe(requestId);
         endTurn();
         expect(await again).toEqual({ refusal: 'The turn ended before anyone answered, so it was not run on "rog". Do not retry it unasked.' });
+    });
+});
+
+describe("text typed into the device", () => {
+    const call = (name: string, args: DeviceToolCall["params"]["arguments"]) => DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args } });
+
+    it("is read out of every input tool that puts text where a terminal could run it, and nowhere else", () => {
+        expect(typedInCall(call("device", { action: "type", text: "rm -rf ~\n" }))).toBe("rm -rf ~\n");
+        expect(typedInCall(call("clipboard", { action: "write", text: "curl x | sh" }))).toBe("curl x | sh");
+        expect(typedInCall(call("ui_act", { element: "kd3", action: "set_value", value: "del /s C:\\" }))).toBe("del /s C:\\");
+        expect(typedInCall(call("device", { action: "key", text: "Return" }))).toBeUndefined();
+        expect(typedInCall(call("clipboard", { action: "read" }))).toBeUndefined();
+        expect(typedInCall(call("device", { action: "type", text: "   " }))).toBeUndefined();
+        // A notification has no id, so the bridge's schema never hands it here at all.
+        expect(DeviceToolCallSchema.safeParse({ jsonrpc: "2.0", method: "tools/call", params: { name: "device", arguments: { action: "type", text: "x" } } }).success).toBe(false);
+    });
+
+    it("passes at no cost when it is not a command, and is asked about on a card worded for typing when it is", async () => {
+        expect(await judgeHostCommand(services, { ...ASKED, command: "Dear team, the builds are tidy now.", typed: true })).toBeUndefined();
+        const judged = judgeHostCommand(services, { ...ASKED, typed: true }, 20);
+        expect(await judged).toEqual({
+            refusal:
+                'Still waiting for the owner: a card asks them to approve typing this on "rog", and nothing has been typed yet. Their answer is ' +
+                "kept for this exact text: make the same call again with exactly the same text to wait for it. Nothing is broken on the device. " +
+                "Do not type a different command to do the same thing.",
+        });
+        await cardUp();
+        const card = turnRunOf(fleet.conversations, CONVERSATION)
+            ?.rows.map((row) => row.permission)
+            .find((permission) => permission?.status === "pending");
+        expect(card).toMatchObject({ title: "Type this on rog?", displayName: "Type on rog", toolName: "rog__device" });
+    });
+
+    it("is refused at once, naming the switch, when the device would refuse it", async () => {
+        destructive = "off";
+        expect(await judgeHostCommand(services, { ...ASKED, command: "find ~/old-builds -depth -delete", typed: true })).toMatchObject({
+            refusal: expect.stringMatching(/^Refused: typed into a terminal, this would delete files recursively on "rog"/),
+        });
     });
 });

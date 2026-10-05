@@ -2539,6 +2539,28 @@
             "runs": "Uruchamia: {runs}"
         }
     },
+    "desktop": {
+        "desktop": {
+            "agentWaits": "Agent czeka",
+            "authFailed": "Nie udało się autoryzować widoku pulpitu ({reason}). Ponawiam.",
+            "connecting": "Uruchamianie pulpitu…",
+            "connectingShort": "Łączenie…",
+            "handBack": "Oddaj",
+            "handBackNote": "Przestaje wysyłać Twoje wejście. Agent może znowu korzystać z pulpitu.",
+            "heldElsewhere": "Przejęty w innym oknie",
+            "heldNote": "Narzędzia pulpitu agenta są blokowane, dopóki trzymasz pulpit, i przez 20 sekund po Twoim ostatnim ruchu.",
+            "live": "Na żywo",
+            "reconnecting": "Ponowne łączenie…",
+            "refused": "Tylko opiekun tego sandboksa może otworzyć jego pulpit.",
+            "stageLabel": "Pulpit sandboksa",
+            "takeOver": "Przejmij",
+            "takeOverNote": "Wysyła Twoje kliknięcia i klawisze na pulpit. Agent czeka, aż go oddasz.",
+            "unavailable": "Niedostępny",
+            "unreachable": "Sandbox jest nieosiągalny albo nie jesteś zalogowany.",
+            "unsupported": "Ta przeglądarka nie odtworzy podglądu na żywo. Chrome, Edge, Safari 16.4+ i Firefox 130+ to potrafią.",
+            "waiting": "Czekam na pierwszą klatkę…"
+        }
+    },
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "deklaruje interfejs, ale ten build aplikacji nie ma wkompilowanego modułu dla niego — obraz sandboxa i aplikacja są w różnych wersjach",
@@ -5667,6 +5689,7 @@
         }
     },
     "shared": {
+        "desktop": "Pulpit",
         "effort": "Wysiłek",
         "model": "Model",
         "account": "Konto",

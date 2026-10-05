@@ -57,6 +57,8 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "browser_tabs",
         "device",
         "screenshot",
+        "ui_elements",
+        "ui_act",
         "list_sandboxes",
         "manage_sandbox",
         "swap_sandbox",
@@ -195,6 +197,7 @@ test("every tool says what a call can do to the device", async () => {
         "browser_snapshot",
         "browser_read",
         "screenshot",
+        "ui_elements",
         "list_sandboxes",
         "sandbox_logs",
         "diagnose_sandbox",
@@ -208,6 +211,7 @@ test("every tool says what a call can do to the device", async () => {
         "browser_fill",
         "browser_key",
         "device",
+        "ui_act",
         "remove_sandbox",
     ]);
 });

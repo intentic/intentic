@@ -77,6 +77,8 @@ it(`offers the areas whose rail tiles come and go with what is running`, () => {
 
     // Browsers leaves the rail when nothing is running; the palette is the way back to a finished one.
     expect(ids()).toEqual(expect.arrayContaining([`view.browsers`, `view.chat`, `view.preview`, `view.capabilities`]));
+    // The desktop has no evidence to tile it by, so its tile waits in More; the palette names it for a maintainer.
+    expect(ids()).toContain(`view.desktop`);
     expect(ids()).not.toContain(`view.subagents`);
     app.unmount();
 });
@@ -90,6 +92,8 @@ it(`withholds what this reader's grant and plan would bounce them off`, () => {
     // land on a section that redirects away.
     expect(ids()).not.toContain(`view.sandbox.secrets`);
     expect(ids()).not.toContain(`view.sandbox.devices`);
+    // The daemon opens the sandbox's desktop to a maintainer only.
+    expect(ids()).not.toContain(`view.desktop`);
     expect(ids()).not.toContain(`view.settings.billing`);
     // Everything ungated is still there.
     expect(ids()).toContain(`view.sandbox.overview`);

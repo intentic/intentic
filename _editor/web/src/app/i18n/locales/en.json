@@ -2539,6 +2539,28 @@
             "runs": "Runs {runs}"
         }
     },
+    "desktop": {
+        "desktop": {
+            "agentWaits": "Agent waiting",
+            "authFailed": "Couldn't authorize the desktop view ({reason}). Retrying.",
+            "connecting": "Starting the desktop…",
+            "connectingShort": "Connecting…",
+            "handBack": "Hand back",
+            "handBackNote": "Stops sending your input. The agent can use the desktop again.",
+            "heldElsewhere": "Held in another window",
+            "heldNote": "The agent's desktop tools are refused while you hold the desktop, and for 20 seconds after your last input.",
+            "live": "Live",
+            "reconnecting": "Reconnecting…",
+            "refused": "Only a maintainer of this sandbox can open its desktop.",
+            "stageLabel": "The sandbox's desktop",
+            "takeOver": "Take over",
+            "takeOverNote": "Sends your clicks and keys to the desktop. The agent waits until you hand back.",
+            "unavailable": "Not available",
+            "unreachable": "The sandbox isn't reachable, or you're not signed in.",
+            "unsupported": "This browser can't play the live view. Chrome, Edge, Safari 16.4+ or Firefox 130+ can.",
+            "waiting": "Waiting for the first frame…"
+        }
+    },
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "declares UI but this app build has no module compiled in for it, the sandbox image and the app are on different versions",
@@ -5982,6 +6004,7 @@
         "claudeCode": "Claude Code",
         "connected": "Connected",
         "connections": "Your connections",
+        "desktop": "Desktop",
         "domain": "Domain",
         "files": "Files",
         "finished": "Finished",

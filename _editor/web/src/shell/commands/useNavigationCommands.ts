@@ -57,6 +57,8 @@ export function useNavigationCommands(): void {
         { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
         // A rail view of its own since it left the sandbox hub; maintainer and up, as its tile is.
         ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: DEVICES_PATH }] : []),
+        // The daemon lets only a maintainer open the sandbox's desktop, since driving it is operating the sandbox.
+        ...(canShip.value ? [{ command: `view.desktop`, title: t(`shared.desktop`), category: GO_TO, icon: `desktop`, to: `/desktop` }] : []),
     ]);
 
     // One command per rail-surface activation (not per view); the id carries the activation key unless it is a

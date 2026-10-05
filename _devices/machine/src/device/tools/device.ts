@@ -1,115 +1,94 @@
+import {
+    DesktopError,
+    describeInput,
+    type Desktop,
+    desktopPointing,
+    type InputAction,
+    type InputCall,
+    keyboardText,
+    MAX_WAIT_MS,
+    parseChord,
+    perform,
+    type Pointing,
+    SETTLE_MS,
+} from "@intentic/desktop-automation";
 import { sleep } from "@intentic/base/async";
-import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop-automation";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS, type DeviceScopes } from "@intentic/sandbox-contract";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
-import { assertScope } from "../policy.js";
+import { assertScope, ScopeError } from "../policy.js";
+import { destructiveClasses } from "./shell.js";
 
-// GUI work for what has no command-line way in. The mechanics live in @intentic/desktop-automation; this file
-// decides whether an action is allowed, whether coordinates make sense, and what to log. `screenshot` needs
-// `screen`, every action here needs `control`, and neither implies the other. Coordinates are screenshot
-// pixels; out-of-frame ones are refused rather than clamped.
+// GUI work for what has no command-line way in. The mechanics live in @intentic/desktop-automation (`perform`
+// carries an action out, view.ts reads its coordinates); this file decides whether an action is allowed: `screenshot`
+// needs `screen`, every action here needs `control`, and neither implies the other. Coordinates are pixels of the
+// screenshot they were read off; out-of-frame ones are refused rather than clamped.
 
-export type DeviceAction =
-    "mouse_move" | "left_click" | "right_click" | "middle_click" | "double_click" | "left_click_drag" | "type" | "key" | "scroll" | "wait";
+export type DeviceAction = InputAction;
+export type DeviceInput = InputCall;
 
-export interface DeviceInput {
-    readonly action: DeviceAction;
-    readonly coordinate?: readonly [number, number] | undefined;
-    readonly to?: readonly [number, number] | undefined;
-    readonly text?: string | undefined;
-    readonly direction?: ScrollDirection | undefined;
-    readonly amount?: number | undefined;
-    readonly ms?: number | undefined;
-}
+export const describeAction = describeInput;
+/* What no agent may press, whatever its switches: each leaves the desktop for one nothing here can reach again until
+   a person signs back in (the lock screen, the secure attention screen, a text console), so the agent that pressed
+   it can neither see nor undo what it did. Matched on the parsed chord, so "win+l", "super+L" and "cmd+l" are one. */
+const LOCKOUT_CHORDS: readonly { readonly modifiers: readonly string[]; readonly key: RegExp; readonly why: string }[] = [
+    { modifiers: ["super"], key: /^l$/i, why: "locks the screen" },
+    { modifiers: ["ctrl", "alt"], key: /^(Delete|End)$/, why: "opens the secure sign-in screen" },
+    { modifiers: ["ctrl", "alt"], key: /^BackSpace$/, why: "ends the graphical session" },
+    { modifiers: ["ctrl", "alt"], key: /^F([1-9]|1[0-2])$/, why: "switches to a text console" },
+];
 
-// How long the screen is given to catch up before the confirming screenshot. A click that opens a menu needs a
-// beat; without it the agent sees the frame before its own action.
-const SETTLE_MS = 400;
-// A cap on `wait`, so a mis-typed 600000 cannot hold the machine (and the call) for ten minutes.
-const MAX_WAIT_MS = 10_000;
-
-const point = (value: readonly [number, number] | undefined, name: string): Point => {
-    if (value === undefined || value.length !== 2 || !Number.isFinite(value[0]) || !Number.isFinite(value[1])) {
-        throw new DesktopError(`"${name}" must be [x, y] in screenshot pixels.`);
-    }
-    return { x: value[0], y: value[1] };
-};
-
-const within = (at: Point, frame: { width: number; height: number }, name: string): Point => {
-    if (at.x < 0 || at.y < 0 || at.x >= frame.width || at.y >= frame.height) {
+export const assertNotLockout = (combo: string): void => {
+    const chord = parseChord(combo);
+    const held = [...chord.modifiers].sort().join("+");
+    const blocked = LOCKOUT_CHORDS.find((rule) => [...rule.modifiers].sort().join("+") === held && rule.key.test(chord.key));
+    if (blocked !== undefined) {
         throw new DesktopError(
-            `${name} (${at.x}, ${at.y}) is outside the screen, which is ${frame.width}×${frame.height}. Take a screenshot and read the coordinates off it.`,
+            `Refused: ${combo} ${blocked.why}, and nothing driving this device can get back from there until a person signs in. Ask the user to do it themselves.`,
         );
     }
-    return at;
 };
 
-const CLICK_BUTTON: Partial<Record<DeviceAction, MouseButton>> = { left_click: "left", right_click: "right", middle_click: "middle" };
-
-// What the machine did, in the words the agent reports back to the user. Text is described by length, never
-// echoed: it routinely carries whatever the user asked to be typed.
-export const describeAction = (input: DeviceInput): string => {
-    switch (input.action) {
-        case "type":
-            return `Typed ${input.text?.length ?? 0} characters.`;
-        case "key":
-            return `Pressed ${input.text ?? ""}.`;
-        case "wait":
-            return `Waited ${Math.min(input.ms ?? SETTLE_MS, MAX_WAIT_MS)}ms.`;
-        case "scroll":
-            return `Scrolled ${input.direction ?? "down"} at (${input.coordinate?.join(", ") ?? ""}).`;
-        case "left_click_drag":
-            return `Dragged from (${input.coordinate?.join(", ") ?? ""}) to (${input.to?.join(", ") ?? ""}).`;
-        default:
-            return `${input.action.replace(/_/g, " ")} at (${input.coordinate?.join(", ") ?? ""}).`;
+/* Text that would delete if a terminal ran it. Typing into a shell IS running a command, so text the command
+   classifier reads as destructive needs the same "Run destructive commands" switch run_command does: without this,
+   `device type "rm -rf ~\n"` is the spelling that gets past it. Ordinary prose matches nothing and costs nothing. */
+export const assertTypable = (text: string, scopes: DeviceScopes): void => {
+    if (scopes.destructive === "on") {
+        return;
     }
-};
-
-// The two keyboard actions: text or a chord, and the sentence that says which a call left out.
-const keyboard = async (screen: Desktop, action: "type" | "key", text: string | undefined): Promise<void> => {
-    if (text === undefined || text === "") {
-        throw new DesktopError(
-            action === "type" ? `"text" is required to type.` : `"text" is required to press a key: for example "Return", "ctrl+c", "alt+Tab".`,
+    const classes = destructiveClasses(text);
+    if (classes.length > 0) {
+        throw new ScopeError(
+            `Refused: typed into a terminal, this would ${classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]).join(" and ")} on this device, ` +
+                `and "Run destructive commands" is switched off for it. Typing a command is running it, so the same switch decides. ` +
+                `Turn it on in its capability card to allow this, or type something that does not delete.`,
         );
     }
-    await (action === "type" ? screen.type(text) : screen.key(text));
 };
-
-// Everything else is pointer work, so the frame is read once and every coordinate judged against it.
-const pointer = async (screen: Desktop, input: DeviceInput): Promise<void> => {
-    const frame = await screen.frame();
-    const at = within(point(input.coordinate, "coordinate"), frame, "The coordinate");
-    switch (input.action) {
-        case "mouse_move":
-            return await screen.move(at);
-        case "double_click":
-            return await screen.doubleClick(at);
-        case "left_click_drag":
-            return await screen.drag(at, within(point(input.to, "to"), frame, "The drag target"));
-        case "scroll":
-            return await screen.scroll(at, input.direction ?? "down", input.amount ?? 3);
-        default: {
-            const button = CLICK_BUTTON[input.action];
-            if (button === undefined) {
-                throw new DesktopError(`"${input.action}" is not something this device can do.`);
-            }
-            return await screen.click(at, button);
-        }
-    }
-};
-
 // Perform one action. Returns nothing; the caller reports describeAction plus, when it may look, a fresh
-// screenshot. Every action but `wait` is put on the machine's own screen first, and refused while its person pauses.
-export const act = async (screen: Desktop, input: DeviceInput, scopes: DeviceScopes, indicator: Indicator = machineIndicator()): Promise<void> => {
+// screenshot. Every action but `wait` is judged, then put on the machine's own screen, and refused while its person
+// pauses. `pointing` reads the agent's coordinates; without one they are desktop pixels, which is what a test means.
+export const act = async (
+    screen: Desktop,
+    input: DeviceInput,
+    scopes: DeviceScopes,
+    indicator: Indicator = machineIndicator(),
+    pointing: Pointing = desktopPointing(screen),
+): Promise<void> => {
     assertScope(scopes, "control");
     if (input.action === "wait") {
         await sleep(Math.min(Math.max(0, input.ms ?? SETTLE_MS), MAX_WAIT_MS));
         return;
     }
+    if (input.action === "key") {
+        assertNotLockout(keyboardText("key", input.text));
+    }
+    if (input.action === "type") {
+        assertTypable(keyboardText("type", input.text), scopes);
+    }
     await indicator.control(calling.getStore());
-    await (input.action === "type" || input.action === "key" ? keyboard(screen, input.action, input.text) : pointer(screen, input));
+    await perform(screen, input, pointing);
 };
 
 // The settle the confirming screenshot needs. Separate from `act` so a caller that does not want the frame (a
 // test, a batch of moves) does not pay for it.
-export const settle = async (): Promise<void> => await sleep(SETTLE_MS);
+export { settle } from "@intentic/desktop-automation";

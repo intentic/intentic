@@ -29,7 +29,8 @@ export const RAW_ROUTES = {
     "POST /workspace/upload-archive": { lane: "bulk" },
     // Minting is cheap: each WebSocket upgrade floors its own redemption.
     "POST /system/ws-ticket": { beforeBoot: true, floor: "collaborator", control: "never" },
-    // A WebSocket upgrade carries no Authorization header; the terminal and both browser wires check a query ticket.
+    // A WebSocket upgrade carries no Authorization header; the terminal, both browser wires and the desktop's check a
+    // query ticket.
     "GET /system/terminal": { auth: "door", beforeBoot: true, control: "never", front: true },
     // The front's proof of life (vitals.ts): no credential and nothing of the workspace, readable by any origin, answered
     // whatever state the daemon is in.
@@ -38,6 +39,8 @@ export const RAW_ROUTES = {
     "GET /system/sync/ssh": { sync: "pipe", control: "never", lane: "bulk" },
     "GET /system/browser-profile": { auth: "door", beforeBoot: true, control: "never" },
     "GET /system/browser-view": { auth: "door", beforeBoot: true, control: "never" },
+    // The sandbox's own desktop, watched and driven by the owner (desktop/desktop-view.ts); the same query ticket.
+    "GET /system/desktop-view": { auth: "door", beforeBoot: true, control: "never" },
     // Deploy-target enrollment, gated by the connect token.
     "POST /enroll": { auth: "door", control: "never" },
     // An event automation's webhook, gated by the automation's own token.
