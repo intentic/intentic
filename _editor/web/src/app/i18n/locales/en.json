@@ -358,7 +358,7 @@
             "diskNote": "Workspace volume",
             "eventLoop": "Event loop",
             "loadNote": "Whole machine",
-            "memoryNote": "Excludes file cache",
+            "memoryNote": "Excludes cache; full swap counts",
             "minutes": "{count} min",
             "pressToOpen": "Press to open",
             "pressureNote": "Above zero: queuing",
@@ -406,6 +406,7 @@
             "sessionsLabel": "By session",
             "smallSessions": "{count} more session · {size} | {count} more sessions · {size}",
             "smallSessionsHide": "Hide the lighter sessions",
+            "swapFullNote": "Full: counts as used",
             "swapNote": "Growing means low memory",
             "tintAt": "≥ {percent} memory",
             "tinted": "Tinted"

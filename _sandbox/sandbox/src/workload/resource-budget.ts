@@ -14,12 +14,13 @@ import {
     type RoomSize,
     type ShortMemory,
     STALL_PERCENT,
+    STALL_SUSTAINED_PERCENT,
 } from "@intentic/constants/memory-room";
 import type { WorkloadClass } from "./workload-class.js";
 
 // The one place this daemon decides whether there is room for more work. One sampler reads the sandbox's memory by the
-// formula in @intentic/constants/memory-room (limit memory.high → memory.max → the machine; used = working set + swap;
-// stall = PSI full), and every consumer reads that one snapshot: the turn door, a child waiting for room, the
+// formula in @intentic/constants/memory-room (limit memory.high → memory.max → the machine; used = working set + swap,
+// counted against the limit by its resident part until swap is full; stall = PSI full over ten seconds and a minute), and every consumer reads that one snapshot: the turn door, a child waiting for room, the
 // heavy-command queue through the room socket (room-socket.ts), the editor's gauge (live-metrics.ts), and a child's
 // death certificate (child-death.ts). What admitted work holds before the reading shows it is kept in one ledger, keyed
 // by where the work runs, so work sent to a runner holds nothing here.
@@ -47,9 +48,11 @@ export interface BudgetSnapshot {
     readonly reservedBytes: number;
     // limit − used (never more than the machine has available) − reserved; undefined where nothing measures it.
     readonly freeBytes: number | undefined;
-    // What a person's turn needs free, and the stall past which nothing is admitted unasked: the gauge warns on these.
+    // What a person's turn needs free, and the stalls (ten seconds, a minute) past which nothing is admitted unasked:
+    // the gauge warns on these.
     readonly personNeedBytes: number;
     readonly stallLimitPercent: number;
+    readonly stallSustainedLimitPercent: number;
 }
 
 export interface AdmitRequest {
@@ -203,6 +206,7 @@ export const createResourceBudget = ({
             freeBytes: free === undefined ? undefined : Math.max(0, free - reservedBytes),
             personNeedBytes: PERSON_RESERVE_BYTES,
             stallLimitPercent: STALL_PERCENT,
+            stallSustainedLimitPercent: STALL_SUSTAINED_PERCENT,
         };
     };
 

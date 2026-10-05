@@ -363,7 +363,7 @@
             },
             "loop": "Schleife {percent}",
             "memoryLabel": "Arbeitsspeicher",
-            "memoryNote": "Ohne Dateicache",
+            "memoryNote": "Ohne Cache; voller Swap zählt",
             "minutes": "{count} Min.",
             "pressToOpen": "Zum Öffnen drücken",
             "pressureLabel": "Druck",
@@ -391,6 +391,7 @@
             "sessionUsage": "Session-Nutzung",
             "smallRoles": "{count} kleinere Art · {size} | {count} kleinere Arten · {size}",
             "smallRolesHide": "Kleinere Arten ausblenden",
+            "swapFullNote": "Voll: zählt als belegt",
             "swapNote": "Wächst: Speicher knapp",
             "tintAt": "≥ {percent} Speicher",
             "tinted": "Markiert"

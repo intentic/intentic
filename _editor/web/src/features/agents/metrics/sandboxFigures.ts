@@ -128,7 +128,12 @@ export const sessionTip = (
 export const memoryShort = (sandbox: SandboxMetrics[`sandbox`]): boolean => {
     const room = sandbox.memoryRoom;
     return (
-        room !== undefined && ((room.freeBytes !== undefined && room.freeBytes < room.personNeedBytes) || room.stallPercent >= room.stallLimitPercent)
+        room !== undefined &&
+        ((room.freeBytes !== undefined && room.freeBytes < room.personNeedBytes) ||
+            room.stallPercent >= room.stallLimitPercent ||
+            (room.stallSustainedPercent !== undefined &&
+                room.stallSustainedLimitPercent !== undefined &&
+                room.stallSustainedPercent >= room.stallSustainedLimitPercent))
     );
 };
 
@@ -210,9 +215,16 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                       {
                           key: `swap`,
                           label: t(`agents.liveMetrics.swapLabel`),
-                          value: formatBytes(sandbox.swapBytes),
-                          hint: { title: t(`agents.liveMetrics.swapLabel`), note: t(`agents.liveMetrics.swapNote`) },
-                          warn: false,
+                          // Against what swap can hold where the daemon says, since a full swap is what makes it count.
+                          value:
+                              sandbox.swapLimitBytes === undefined
+                                  ? formatBytes(sandbox.swapBytes)
+                                  : usedOf(sandbox.swapBytes, sandbox.swapLimitBytes),
+                          hint: {
+                              title: t(`agents.liveMetrics.swapLabel`),
+                              note: t(sandbox.swapFull === true ? `agents.liveMetrics.swapFullNote` : `agents.liveMetrics.swapNote`),
+                          },
+                          warn: sandbox.swapFull === true,
                       },
                   ]),
             loadOf(sandbox),

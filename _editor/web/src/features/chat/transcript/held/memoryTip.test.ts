@@ -66,3 +66,12 @@ it(`says in use against the limit in a few characters, and nothing where no ceil
     expect(memoryShare(sentence({ usedBytes: 2 * GIB, stallPercent: 45 }))).toBeUndefined();
     expect(memoryShare(undefined)).toBeUndefined();
 });
+
+// Once swap is full the swapped part counts against the limit, so the notice counts it too: "12.0/20.0 GiB" would read
+// as a refusal with room to spare.
+it(`counts the swapped part in use once the sentence says swap is full`, () => {
+    const full = sentence({ limitBytes: 20 * GIB, usedBytes: 22 * GIB, swapBytes: 10 * GIB, swapLimitBytes: 10 * GIB });
+    expect(full).toContain(`with swap full`);
+    expect(memoryShare(full)).toBe(`22.0/20.0 GiB`);
+    expect(figures(full)).toMatchObject({ [`In RAM`]: `12.0 GiB`, [`Swapped`]: `10.0 GiB` });
+});

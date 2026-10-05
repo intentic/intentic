@@ -367,7 +367,7 @@
             },
             "loop": "bucle {percent}",
             "memoryLabel": "Memoria",
-            "memoryNote": "Sin caché de archivos",
+            "memoryNote": "Sin caché; el swap lleno cuenta",
             "minutes": "{count} min",
             "pressToOpen": "Pulsa para abrir",
             "pressureLabel": "Presión",
@@ -394,6 +394,7 @@
             "sessionUsage": "Uso de la sesión",
             "smallRoles": "{count} tipo menor · {size} | {count} tipos menores · {size}",
             "smallRolesHide": "Ocultar los tipos menores",
+            "swapFullNote": "Lleno: cuenta como usada",
             "swapNote": "Si crece, falta memoria",
             "tintAt": "≥ {percent} de memoria",
             "tinted": "Resaltado"

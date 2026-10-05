@@ -15,7 +15,14 @@
 //          free. Counting them held every heavy command for minutes on a sandbox with 8 GB available (measured
 //          2026-09-26..10-02: 4.2 GiB of idle swap, 17 h of gate waits a week). Swap that is being paged back in shows
 //          as stall, below, which holds work whatever the bytes say.
-//   stall  memory PSI `full avg10`: the share of the last ten seconds in which everything waited on memory
+//          Once swap is nearly full (SWAP_FULL_SHARE of memory.swap.max, or of what the machine's swap can still take)
+//          that stops being true: nothing more can be parked there, so a page the work touches comes back only by
+//          pushing out another, and the swapped pages count against the limit with the resident ones. Measured
+//          2026-10-05: 12 GiB resident + 10 of 10 GiB swapped against a 20 GiB limit, load 38, a third of the time
+//          waiting on disk, and the formula still read 2.4 GiB free and started every turn.
+//   stall  memory PSI `full`: avg10, the share of the last ten seconds in which everything waited on memory, and avg60,
+//          the last minute's. A sandbox paging hard flickers around any avg10 threshold (19, 11, 15, 4, 18% in five
+//          minutes of the reading above, never 20), so a lower bar on the minute catches what the spikes miss.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";
@@ -64,6 +71,10 @@ export const TEST_PROCESS_BYTES = Object.freeze({
 export const PERSON_RESERVE_BYTES = COST_BYTES.agentRuntime;
 // Percent of full avg10 at which the sandbox counts as grinding, whatever its byte count says.
 export const STALL_PERCENT = 20;
+// Percent of full avg60 at which it does: lower than STALL_PERCENT, since a minute's average has smoothed the spikes.
+export const STALL_SUSTAINED_PERCENT = 10;
+// The share of its swap limit past which swap counts as full, and the swapped pages count as used.
+export const SWAP_FULL_SHARE = 0.9;
 export const RESERVATION_MS = 90_000;
 // Where the daemon answers `GET /room`; never the daemon's own socket, which the front relays to the internet.
 export const ROOM_SOCKET = process.env.INTENTIC_ROOM_SOCKET ?? "/run/intentic/room.sock";
@@ -76,6 +87,7 @@ export const READING_FILES = Object.freeze([
     `${CGROUP}/memory.current`,
     `${CGROUP}/memory.stat`,
     `${CGROUP}/memory.swap.current`,
+    `${CGROUP}/memory.swap.max`,
     `${CGROUP}/memory.pressure`,
     `${CGROUP}/memory.events`,
     "/proc/meminfo",
@@ -97,9 +109,10 @@ const keyed = (text) =>
             .map(([key, value]) => [key.replace(/:$/u, ""), Number(value)]),
     );
 
-const fullAvg10 = (text) => {
+// One average off a PSI file's `full` line: `avg10` or `avg60`.
+const fullAvg = (text, window) => {
     const line = (text ?? "").split("\n").find((entry) => entry.startsWith("full"));
-    const value = line?.match(/avg10=([0-9.]+)/u)?.[1];
+    const value = line?.match(new RegExp(`${window}=([0-9.]+)`, "u"))?.[1];
     return value === undefined ? undefined : Number(value);
 };
 
@@ -117,23 +130,39 @@ export const readingFrom = (read) => {
     const current = numeric(read(`${CGROUP}/memory.current`));
     let usedBytes;
     let swapBytes = 0;
+    let swapLimit = Number.POSITIVE_INFINITY;
     if (current !== undefined) {
         // Unaccounted swap (swapaccount off) is none, never unknown: it must not blank a measurable ceiling.
         swapBytes = numeric(read(`${CGROUP}/memory.swap.current`)) ?? 0;
         usedBytes = Math.max(0, current - (keyed(read(`${CGROUP}/memory.stat`)).inactive_file ?? 0)) + swapBytes;
+        // The cgroup's own swap ceiling, and never more than what it holds plus what the machine's swap can still take.
+        swapLimit = Math.min(numeric(read(`${CGROUP}/memory.swap.max`)) ?? Number.POSITIVE_INFINITY, swapBytes + (kib(meminfo, "SwapFree") ?? Number.POSITIVE_INFINITY));
     } else if (machine !== undefined && kib(meminfo, "MemAvailable") !== undefined) {
         swapBytes = Math.max(0, (kib(meminfo, "SwapTotal") ?? 0) - (kib(meminfo, "SwapFree") ?? 0));
         usedBytes = Math.max(0, machine - (kib(meminfo, "MemAvailable") ?? 0)) + swapBytes;
+        swapLimit = kib(meminfo, "SwapTotal") ?? Number.POSITIVE_INFINITY;
     }
+    // The cgroup's pressure where it keeps one, else the machine's; avg60 from the same file avg10 came from.
+    const pressure = [read(`${CGROUP}/memory.pressure`), read("/proc/pressure/memory")].find((text) => fullAvg(text, "avg10") !== undefined);
     return {
         limitBytes: Number.isFinite(bound) ? bound : undefined,
         usedBytes,
         swapBytes,
+        swapLimitBytes: Number.isFinite(swapLimit) ? swapLimit : undefined,
         availableBytes: kib(meminfo, "MemAvailable"),
-        stallPercent: fullAvg10(read(`${CGROUP}/memory.pressure`)) ?? fullAvg10(read("/proc/pressure/memory")) ?? 0,
+        stallPercent: fullAvg(pressure, "avg10") ?? 0,
+        stallSustainedPercent: fullAvg(pressure, "avg60") ?? 0,
         oomKills: keyed(read(`${CGROUP}/memory.events`)).oom_kill,
     };
 };
+
+/** Whether swap is nearly full: then the swapped pages count against the limit with the resident ones. */
+export const swapFullOf = (reading) =>
+    reading.swapLimitBytes !== undefined && (reading.swapBytes ?? 0) > 0 && reading.swapBytes >= SWAP_FULL_SHARE * reading.swapLimitBytes;
+
+/** What counts against the limit: the resident part of used, and the swapped part too once swap is full. */
+export const countedBytesOf = (reading) =>
+    reading.usedBytes === undefined ? undefined : swapFullOf(reading) ? reading.usedBytes : reading.usedBytes - (reading.swapBytes ?? 0);
 
 const readSync = (path) => {
     try {
@@ -163,8 +192,10 @@ export const needBytes = (workload, attended, size) => costBytesOf(workload, siz
 export const judge = (reading, { workload, attended, reservedBytes = 0, size }) => {
     const need = needBytes(workload, attended, size);
     const { limitBytes, usedBytes, swapBytes, stallPercent, availableBytes } = reading;
+    const stallSustainedPercent = reading.stallSustainedPercent ?? 0;
     const unreserved = freeBytesOf(reading);
-    if (limitBytes === undefined || usedBytes === undefined || unreserved === undefined) {
+    const counted = countedBytesOf(reading);
+    if (limitBytes === undefined || usedBytes === undefined || counted === undefined || unreserved === undefined) {
         return { verdict: "run", needBytes: need, freeBytes: undefined, reservedBytes };
     }
     const freeBytes = Math.max(0, unreserved - reservedBytes);
@@ -180,33 +211,39 @@ export const judge = (reading, { workload, attended, reservedBytes = 0, size }) 
     if (stallPercent >= STALL_PERCENT) {
         return shortOf(`The sandbox is short of memory: for ${Math.round(stallPercent)}% of the last ten seconds, everything in it was waiting on memory`);
     }
+    if (stallSustainedPercent >= STALL_SUSTAINED_PERCENT) {
+        return shortOf(`The sandbox is short of memory: for ${Math.round(stallSustainedPercent)}% of the last minute, everything in it was waiting on memory`);
+    }
     if (freeBytes >= need) {
         return { verdict: "run", needBytes: need, freeBytes, reservedBytes };
     }
     // The machine, not the sandbox's own limit, is what ran out: saying "9 of 16 GiB used" would read as a wrong refusal.
-    if (availableBytes !== undefined && availableBytes < limitBytes - (usedBytes - swapBytes)) {
+    if (availableBytes !== undefined && availableBytes < limitBytes - counted) {
         const held = reservedBytes > 0 ? `, and ${gib(reservedBytes)} held for work that just started` : "";
         return shortOf(`Sandbox memory is low: the machine it runs on has ${gib(availableBytes)} available${held}`);
     }
     // Resident and swapped are named apart once paging starts: the limit bounds resident pages only, so their sum can
-    // exceed it, and "19.2 GiB of 16.0 GiB used" reads as a bug. Free is counted against the resident part alone.
+    // exceed it, and "19.2 GiB of 16.0 GiB used" reads as a bug. Free is counted against the resident part alone, until
+    // swap is full and the sentence says so, since that is what made the swapped part count.
     const used =
         swapBytes > 0
-            ? `${gib(usedBytes - swapBytes)} resident + ${gib(swapBytes)} swapped, against ${gib(limitBytes)}`
+            ? `${gib(usedBytes - swapBytes)} resident + ${gib(swapBytes)} swapped, against ${gib(limitBytes)}${swapFullOf(reading) ? ", with swap full" : ""}`
             : `${gib(usedBytes)} of ${gib(limitBytes)} used`;
     // Named, or a sandbox reading 3 GiB free would seem to refuse work that needs 2.
     const held = reservedBytes > 0 ? `, and ${gib(reservedBytes)} held for work that just started` : "";
     return shortOf(`Sandbox memory is low: ${used}${held}`, { limitBytes, residentBytes: usedBytes - swapBytes, swapBytes });
 };
 
-/** Free memory as the formula counts it (the limit less what is resident), or undefined where nothing bounds or measures it. */
-export const freeBytesOf = (reading) =>
-    reading.limitBytes === undefined || reading.usedBytes === undefined
+/**
+ * Free memory as the formula counts it (the limit less what counts against it: the resident part, and swap too once swap
+ * is full), or undefined where nothing bounds or measures it.
+ */
+export const freeBytesOf = (reading) => {
+    const counted = countedBytesOf(reading);
+    return reading.limitBytes === undefined || counted === undefined
         ? undefined
-        : Math.max(
-              0,
-              Math.min(reading.limitBytes - (reading.usedBytes - (reading.swapBytes ?? 0)), reading.availableBytes ?? Number.POSITIVE_INFINITY),
-          );
+        : Math.max(0, Math.min(reading.limitBytes - counted, reading.availableBytes ?? Number.POSITIVE_INFINITY));
+};
 
 // ---- asking the daemon, with the formula itself as the fallback ----
 

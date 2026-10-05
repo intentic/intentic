@@ -245,6 +245,13 @@ describe("the sandbox panel", () => {
         expect(termsOf(el)).toContain(`Pressure: CPU 2.0% · memory 13% · I/O 0.0%`);
     });
 
+    it("names swap against what it can hold where the daemon says", () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: reading({ sandbox: { swapBytes: 9.5 * GIB, swapLimitBytes: 10 * GIB, swapFull: true } }),
+        });
+        expect(termsOf(el)).toContain(`Swap: 9.5 / 10 GB`);
+    });
+
     it("lists where the memory went by session, heaviest first, each as its card names it, and opens one on a press", async () => {
         const el = mount(SandboxMetricsDetails, {
             metrics: {

@@ -59,6 +59,16 @@ test("swap that sits idle takes no room from new work; a box paging it back in i
     expect((await budgetOf(() => box(16, 10, 40, 8)).admit({ workload: "toolchain", attended: false })).verdict).toBe("wait");
 });
 
+// Swap with no room left parks nothing more: a page touched comes back only by pushing another out, so it all counts.
+test("swap that has filled its limit counts against the limit with the resident pages", async () => {
+    const full = (): MemoryReading => ({ ...box(20, 12, 0, 10), swapLimitBytes: 10 * GIB });
+    expect(await budgetOf(full).admit(person("ada"))).toMatchObject({
+        verdict: "refuse",
+        memory: { limitBytes: 20 * GIB, residentBytes: 12 * GIB, swapBytes: 10 * GIB },
+    });
+    expect((await budgetOf(full).snapshot()).freeBytes).toBe(0);
+});
+
 test("a reservation that names its process is handed back the moment that process exits", async () => {
     const running = new Set([4242]);
     let now = 0;

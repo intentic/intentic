@@ -64,6 +64,14 @@ export const MemoryRoomSchema = z.object({
     personNeedBytes: z.number().describe("What a person's turn needs free to start without a warning: below it, the sandbox is short."),
     stallPercent: z.number().describe("Percent of the last ten seconds in which everything in the sandbox waited on memory (pressure `full`)."),
     stallLimitPercent: z.number().describe("The stall at or past which the sandbox counts as short of memory, whatever `freeBytes` says."),
+    stallSustainedPercent: z
+        .number()
+        .optional()
+        .describe("Percent of the last minute in which everything in the sandbox waited on memory. Absent from a daemon that predates it."),
+    stallSustainedLimitPercent: z
+        .number()
+        .optional()
+        .describe("The minute's stall at or past which the sandbox counts as short of memory. Absent from a daemon that predates it."),
 });
 export type MemoryRoom = z.infer<typeof MemoryRoomSchema>;
 
@@ -76,14 +84,24 @@ export const SandboxUsageSchema = z.object({
     memoryBytes: z
         .number()
         .describe(
-            "Memory in use as the daemon admits work by it: resident memory less the file cache the kernel takes back on demand, plus what was pushed to swap.",
+            "Memory counted against the limit, as the daemon admits work by it: resident memory less the file cache the kernel takes back on demand, and once swap is full (`swapFull`) what was pushed to swap as well.",
         ),
     memoryLimitBytes: z
         .number()
         .describe(
             "The memory limit work is admitted against: where the kernel starts throttling the container (memory.high), else its hard limit, else the machine's memory.",
         ),
-    swapBytes: z.number().optional().describe("Of `memoryBytes`, what was pushed out to swap. Absent where the sandbox cannot see its own memory."),
+    swapBytes: z
+        .number()
+        .optional()
+        .describe(
+            "What was pushed out to swap, counted in `memoryBytes` only once swap is full. Absent where the sandbox cannot see its own memory.",
+        ),
+    swapLimitBytes: z.number().optional().describe("What swap can hold. Absent where nothing bounds it, and from a daemon that predates it."),
+    swapFull: z
+        .boolean()
+        .optional()
+        .describe("Swap is nearly at `swapLimitBytes`: nothing more can be parked there, so what is swapped counts against the limit too."),
     memoryRoom: MemoryRoomSchema.optional().describe("What admission reads off the same reading. Absent from a daemon that predates it."),
     diskBytes: z.number().optional().describe("Space used on the volume the workspace lives on. Absent when the volume would not say."),
     diskTotalBytes: z.number().optional().describe("That volume's size. Absent when the volume would not say."),

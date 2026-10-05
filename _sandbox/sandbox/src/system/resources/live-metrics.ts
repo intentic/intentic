@@ -1,6 +1,7 @@
 import { statfs } from "node:fs/promises";
 import { availableParallelism, freemem, loadavg, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
+import { countedBytesOf, swapFullOf } from "@intentic/constants/memory-room";
 import type { DaemonUsage, ProcessGroupMetrics, ProcessRole, SandboxMetrics, SandboxUsage, SessionMetrics } from "@intentic/sandbox-contract";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../seams/workload-stamp.js";
 import { type CgroupReading, readCgroup, readText } from "./cgroup.js";
@@ -160,8 +161,9 @@ export interface SandboxUsageInput {
 }
 
 // Capacity is the quota where there is one, and never more than the cores the sandbox can be given. Memory is the
-// budget's own figures (resource-budget.ts), so the gauge and the gate that holds a turn never disagree; the machine's
-// stand in only where the budget can measure nothing.
+// budget's own figures (resource-budget.ts), so the gauge and the gate that holds a turn never disagree: the gauge's
+// used is what the gate counts against the limit (resident, and swap only once swap is full), and swap is its own
+// figure. The machine's stand in only where the budget can measure nothing.
 export const sandboxUsageOf = ({ cgroup, room, machine, disk, processes, coresUsed }: SandboxUsageInput): SandboxUsage => {
     const cores = Math.min(cgroup.cpuQuotaCores ?? Number.POSITIVE_INFINITY, machine.cores);
     const { cpu, memory, io } = cgroup.pressure;
@@ -169,15 +171,23 @@ export const sandboxUsageOf = ({ cgroup, room, machine, disk, processes, coresUs
     return {
         ...(coresUsed === undefined ? {} : { cpuPercent: roundTenth((coresUsed / cores) * 100) }),
         cores,
-        memoryBytes: reading.usedBytes ?? Math.max(0, machine.totalMemoryBytes - machine.freeMemoryBytes),
+        memoryBytes: countedBytesOf(reading) ?? Math.max(0, machine.totalMemoryBytes - machine.freeMemoryBytes),
         memoryLimitBytes: reading.limitBytes ?? machine.totalMemoryBytes,
-        ...(reading.usedBytes === undefined ? {} : { swapBytes: reading.swapBytes }),
+        ...(reading.usedBytes === undefined
+            ? {}
+            : {
+                  swapBytes: reading.swapBytes,
+                  ...(reading.swapLimitBytes === undefined ? {} : { swapLimitBytes: reading.swapLimitBytes }),
+                  swapFull: swapFullOf(reading),
+              }),
         memoryRoom: {
             ...(room.freeBytes === undefined ? {} : { freeBytes: room.freeBytes }),
             reservedBytes: room.reservedBytes,
             personNeedBytes: room.personNeedBytes,
             stallPercent: reading.stallPercent,
             stallLimitPercent: room.stallLimitPercent,
+            stallSustainedPercent: reading.stallSustainedPercent ?? 0,
+            stallSustainedLimitPercent: room.stallSustainedLimitPercent,
         },
         ...(disk === undefined ? {} : { diskBytes: disk.usedBytes, diskTotalBytes: disk.totalBytes }),
         loadAverage: [...machine.loadAverage],

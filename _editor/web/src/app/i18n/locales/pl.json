@@ -434,7 +434,7 @@
             },
             "loop": "pętla {percent}",
             "memoryLabel": "Pamięć",
-            "memoryNote": "Bez cache plików",
+            "memoryNote": "Bez cache; pełny swap się liczy",
             "minutes": "{count} min",
             "pressToOpen": "Naciśnij, by otworzyć",
             "pressureLabel": "Presja",
@@ -468,6 +468,7 @@
             "swapLabel": "Swap",
             "smallRoles": "{count} mniejszy rodzaj · {size} | {count} mniejsze rodzaje · {size} | {count} mniejszych rodzajów · {size}",
             "smallRolesHide": "Ukryj mniejsze rodzaje",
+            "swapFullNote": "Pełny: liczy się jako zajęta",
             "swapNote": "Rośnie: brakuje pamięci",
             "tintAt": "≥ {percent} pamięci",
             "tinted": "Wyróżnione"

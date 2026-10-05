@@ -364,7 +364,7 @@
             },
             "loop": "boucle {percent}",
             "memoryLabel": "Mémoire",
-            "memoryNote": "Hors cache de fichiers",
+            "memoryNote": "Hors cache ; swap plein compté",
             "minutes": "{count} min",
             "pressToOpen": "Appuyer pour ouvrir",
             "pressureLabel": "Pression",
@@ -390,6 +390,7 @@
             "sessionUsage": "Utilisation de la session",
             "smallRoles": "{count} type plus petit · {size} | {count} types plus petits · {size}",
             "smallRolesHide": "Masquer les types plus petits",
+            "swapFullNote": "Plein : compté comme utilisé",
             "swapNote": "S'il grossit, mémoire courte",
             "tintAt": "≥ {percent} de mémoire",
             "tinted": "Teinté"

@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { countedBytesOf } from "@intentic/constants/memory-room";
 import { DAEMON_OWNER, ONE_SHOT_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { createResourceBudget, readMemoryReading, type ResourceBudget } from "../../workload/resource-budget.js";
 import { readCgroup } from "./cgroup.js";
@@ -196,15 +197,24 @@ describe("the sandbox and the daemon", () => {
             coresUsed: rest.coresUsed,
         });
 
-    // Free is the limit less the resident part alone (16 − 7 GiB): the 1 GiB in swap leaves that room free.
-    test("memory is the budget's working set and swap against its limit, and CPU is against the quota", async () => {
+    // Used and free are the resident part alone (16 − 7 GiB): the 1 GiB in swap leaves that room free, and is its own figure.
+    test("memory is what the budget counts against its limit, swap apart, and CPU is against the quota", async () => {
         expect(await usageOf(files, { disk: { usedBytes: 5, totalBytes: 9 }, processes: 42, coresUsed: 0.5 })).toEqual({
             cpuPercent: 25,
             cores: 2,
-            memoryBytes: 8 * 2 ** 30,
+            memoryBytes: 7 * 2 ** 30,
             memoryLimitBytes: 16 * 2 ** 30,
             swapBytes: 2 ** 30,
-            memoryRoom: { freeBytes: 9 * 2 ** 30, reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 3, stallLimitPercent: 20 },
+            swapFull: false,
+            memoryRoom: {
+                freeBytes: 9 * 2 ** 30,
+                reservedBytes: 0,
+                personNeedBytes: 2 ** 30,
+                stallPercent: 3,
+                stallLimitPercent: 20,
+                stallSustainedPercent: 0,
+                stallSustainedLimitPercent: 10,
+            },
             diskBytes: 5,
             diskTotalBytes: 9,
             loadAverage: [1.5, 1.25, 1],
@@ -219,10 +229,29 @@ describe("the sandbox and the daemon", () => {
             cores: 8,
             memoryBytes: 12 * 2 ** 30,
             memoryLimitBytes: 32 * 2 ** 30,
-            memoryRoom: { reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 0, stallLimitPercent: 20 },
+            memoryRoom: {
+                reservedBytes: 0,
+                personNeedBytes: 2 ** 30,
+                stallPercent: 0,
+                stallLimitPercent: 20,
+                stallSustainedPercent: 0,
+                stallSustainedLimitPercent: 10,
+            },
             loadAverage: [1.5, 1.25, 1],
             machineCores: 8,
             processes: 3,
+        });
+    });
+
+    // 7 GiB resident + 9.5 of 10 GiB swapped: swap is full, so the gauge reads 16.5 of 16 GiB, as the gate counts it.
+    test("once swap is full the gauge counts it in used, and says swap is full against its limit", async () => {
+        const full = { ...files, "/sys/fs/cgroup/memory.swap.current": `${9.5 * 2 ** 30}\n`, "/sys/fs/cgroup/memory.swap.max": `${10 * 2 ** 30}\n` };
+        expect(await usageOf(full, { processes: 1 })).toMatchObject({
+            memoryBytes: 16.5 * 2 ** 30,
+            swapBytes: 9.5 * 2 ** 30,
+            swapLimitBytes: 10 * 2 ** 30,
+            swapFull: true,
+            memoryRoom: { freeBytes: 0 },
         });
     });
 
@@ -234,16 +263,34 @@ describe("the sandbox and the daemon", () => {
     // The promise the gauge makes: when it turns amber, a person's turn is held, and when it does not, it is not.
     test("the gauge and the gate read one snapshot: the same limit, used, free and stall, and the same verdict", async () => {
         // 18.5 GiB less 3 GiB of reclaimable cache leaves 15.5 GiB resident against 16: 0.5 GiB free, short of a turn.
-        for (const current of [10, 18.5]) {
-            const texts = { ...files, "/sys/fs/cgroup/memory.current": `${current * 2 ** 30}\n` };
+        // A full swap makes 10 GiB short as well (7 resident + 9.5 swapped), and so does a minute of stall at 10%.
+        const cases = [
+            { name: "roomy", texts: files, short: false },
+            { name: "resident", texts: { ...files, "/sys/fs/cgroup/memory.current": `${18.5 * 2 ** 30}\n` }, short: true },
+            {
+                name: "swap full",
+                texts: { ...files, "/sys/fs/cgroup/memory.swap.current": `${9.5 * 2 ** 30}\n`, "/sys/fs/cgroup/memory.swap.max": `${10 * 2 ** 30}\n` },
+                short: true,
+            },
+            {
+                name: "sustained stall",
+                texts: { ...files, "/sys/fs/cgroup/memory.pressure": "some avg10=30.00 avg60=20.00\nfull avg10=15.00 avg60=12.00 avg300=1.00 total=0\n" },
+                short: true,
+            },
+        ];
+        for (const { name, texts, short } of cases) {
             const budget = budgetOver(texts);
             const shown = sandboxUsageOf({ cgroup: await cgroupOf(texts), room: await budget.snapshot(), machine, disk: undefined, processes: 1, coresUsed: undefined });
             const { reading } = await budget.snapshot();
-            expect([shown.memoryBytes, shown.memoryLimitBytes, shown.memoryRoom?.stallPercent]).toEqual([reading.usedBytes, reading.limitBytes, reading.stallPercent]);
+            expect([shown.memoryBytes, shown.memoryLimitBytes, shown.memoryRoom?.stallPercent]).toEqual([countedBytesOf(reading), reading.limitBytes, reading.stallPercent]);
             const room = shown.memoryRoom;
-            const warns = room !== undefined && ((room.freeBytes ?? Number.POSITIVE_INFINITY) < room.personNeedBytes || room.stallPercent >= room.stallLimitPercent);
+            const warns =
+                room !== undefined &&
+                ((room.freeBytes ?? Number.POSITIVE_INFINITY) < room.personNeedBytes ||
+                    room.stallPercent >= room.stallLimitPercent ||
+                    (room.stallSustainedPercent ?? 0) >= (room.stallSustainedLimitPercent ?? Number.POSITIVE_INFINITY));
             const verdict = (await budget.admit({ workload: "agentRuntime", attended: true, actor: "ada" })).verdict;
-            expect({ current, warns, verdict }).toEqual({ current, warns: current === 18.5, verdict: current === 18.5 ? "refuse" : "run" });
+            expect({ name, warns, verdict }).toEqual({ name, warns: short, verdict: short ? "refuse" : "run" });
         }
     });
 
