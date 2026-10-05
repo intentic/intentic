@@ -10,6 +10,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     panels: 250,
     ports: 250,
     browsers: 1000,
+    // A window opening or closing is one change, and a program that opens three at once is still one piece of news.
+    desktop: 250,
     subagents: 2000,
     // An executor pass writes a batch in a burst; one frame at the end of it is the whole news.
     approvals: 250,

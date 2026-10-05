@@ -2574,12 +2574,16 @@
             "authFailed": "Couldn't authorize the desktop view ({reason}). Retrying.",
             "connecting": "Starting the desktop…",
             "connectingShort": "Connecting…",
+            "emptyNote": "When an agent opens a program with its desktop tools, its window shows up here, and you can take over to use it yourself.",
+            "emptyTitle": "Nothing is open on this desktop",
+            "emptyYourself": "To open one yourself, set this in a terminal, then start the program there:",
             "handBack": "Hand back",
             "handBackNote": "The agent can continue.",
             "heldElsewhere": "Held in another window",
             "heldNote": "Until 20 seconds after input",
             "heldTitle": "Agent's tools paused",
             "live": "Live",
+            "openTerminal": "Open terminal",
             "reconnecting": "Reconnecting…",
             "refused": "Only a maintainer of this sandbox can open its desktop.",
             "stageLabel": "The sandbox's desktop",
@@ -6264,7 +6268,8 @@
             "rightClickKeep": "Right-click to keep",
             "running": "{healthy} running",
             "tunnels": "Tunnel | Tunnels",
-            "vpnConnected": "VPN connected"
+            "vpnConnected": "VPN connected",
+            "windowsOpen": "{count} window open | {count} windows open"
         },
         "sidePanel": {
             "closeAll": "Close All",

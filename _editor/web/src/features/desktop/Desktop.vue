@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
+import { CopyButton, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, watch } from "vue";
 import { type DesktopStatus, useDesktopView } from "./useDesktopView";
 import type { DesktopPointerAction } from "./desktopInput";
+import { useDesktopQuery } from "./desktopQuery";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { useRole } from "../sandbox/secrets/useRole";
+import { useAudience } from "../../app/useAudience";
+import { useTerminalPanel } from "../terminal/useTerminalPanel";
 
 // The sandbox's own desktop (the one the agent's `desktop` tools drive), live, with a way to take it over. A plain
 // desktop: no tabs or address bar of ours, so every key and click the owner makes while driving is the desktop's.
@@ -56,6 +60,17 @@ const state = computed<{ readonly label: string; readonly dot: string }>(() => {
     return { label: t(`desktop.desktop.unavailable`), dot: `bg-line-strong` };
 });
 
+// An empty desktop is one black screen, the same picture as a stream that never came: once frames flow and the daemon
+// counts no window on it, the view says so, and says how a window gets there. Never on an unknown count (a daemon too
+// old to say, or a desktop with no window manager), since "nothing is open" would then be a guess.
+const desk = useDesktopQuery();
+const empty = computed(() => view.status.value === undefined && desk.windows.value === 0);
+// The do-it-yourself half is a shell's, so it goes to whoever has the rail's terminal (ShellDesktop.vue).
+const { canShip } = useRole();
+const { maker } = useAudience();
+const terminal = useTerminalPanel();
+const exportLine = computed(() => (desk.state.value?.display === undefined ? undefined : `export DISPLAY=${desk.state.value.display}`));
+
 const toggle = async (): Promise<void> => {
     if (view.driving.value) {
         view.handBack();
@@ -97,7 +112,7 @@ const wheel = (event: WheelEvent): void => {
                 :class="view.driving.value ? 'border-primary-600 ring-1 ring-primary-600' : 'border-line'"
             >
                 <div class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
-                    <Icon name="desktop" class="shrink-0 text-muted" />
+                    <Icon name="screen" class="shrink-0 text-muted" />
                     <span class="shrink-0 text-sm font-medium text-content">{{ t(`shared.desktop`) }}</span>
                     <span class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-muted" role="status">
                         <span class="size-1.5 shrink-0 rounded-full" :class="state.dot"></span>
@@ -147,6 +162,25 @@ const wheel = (event: WheelEvent): void => {
                         <canvas ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
                         <div v-if="message" class="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
                             <span class="max-w-md rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ message }}</span>
+                        </div>
+                    </div>
+                    <!-- Beside the stage, not in it: a press on this card is the page's, never a click sent to the desktop. -->
+                    <div v-if="empty" class="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+                        <div class="pointer-events-auto flex max-w-sm flex-col items-center gap-2 rounded-lg border border-line bg-card px-5 py-4 text-center shadow-lg">
+                            <Icon name="screen" class="text-2xl text-subtle" />
+                            <p class="text-sm font-medium text-content">{{ t(`desktop.desktop.emptyTitle`) }}</p>
+                            <p class="text-xs text-muted">{{ t(`desktop.desktop.emptyNote`) }}</p>
+                            <template v-if="canShip && !maker && exportLine !== undefined">
+                                <p class="mt-1 text-xs text-muted">{{ t(`desktop.desktop.emptyYourself`) }}</p>
+                                <div class="flex max-w-full items-center gap-1 rounded-md bg-overlay py-0.5 pl-2 pr-0.5">
+                                    <code class="truncate font-mono text-xs text-content">{{ exportLine }}</code>
+                                    <CopyButton :text="exportLine" />
+                                </div>
+                                <button type="button" class="ui-chip mt-1 px-2 py-1 font-medium" @click="terminal.setOpen(true)">
+                                    <Icon name="terminal" />
+                                    {{ t(`desktop.desktop.openTerminal`) }}
+                                </button>
+                            </template>
                         </div>
                     </div>
                 </div>

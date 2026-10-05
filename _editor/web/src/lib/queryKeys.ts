@@ -36,6 +36,7 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     areas: [`areas.list`],
     browsers: [`system.browsers`],
     capabilities: [`capabilities.list`],
+    desktop: [`system.desktop`],
     devices: [`system.devices`],
     extensions: [`extensions.list`],
     "git/changes": WORKING_REVIEW,

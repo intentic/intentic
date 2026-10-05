@@ -27,6 +27,9 @@ const RUNTIME_DOMAINS = [
     // The agent's Chromiums and open pages, daemon-held, minted from its own browser tool-call hooks.
     { domain: "browsers", invalidates: [["browsers"]] },
 
+    // The sandbox's own desktop: up, and how many windows are open on it, watched off its window manager's client list.
+    { domain: "desktop", invalidates: [["desktop"]] },
+
     // A connection's status as its last probe found it: pushed when a probe behind a served answer finds another one, and
     // when a browser sign-in is saved or cleared, which is what moves an account's card off "log in".
     { domain: "capabilities", invalidates: [["capabilities"]] },

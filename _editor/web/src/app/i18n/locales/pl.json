@@ -2574,12 +2574,16 @@
             "authFailed": "Nie udało się autoryzować widoku pulpitu ({reason}). Ponawiam.",
             "connecting": "Uruchamianie pulpitu…",
             "connectingShort": "Łączenie…",
+            "emptyNote": "Gdy agent otworzy program narzędziami pulpitu, jego okno pojawi się tutaj, a Ty możesz przejąć sterowanie i z niego skorzystać.",
+            "emptyTitle": "Na tym pulpicie nic nie jest otwarte",
+            "emptyYourself": "Aby otworzyć program samodzielnie, ustaw to w terminalu, a potem uruchom w nim program:",
             "handBack": "Oddaj",
             "handBackNote": "Agent może kontynuować.",
             "heldElsewhere": "Przejęty w innym oknie",
             "heldNote": "Do 20 sekund po Twoim ruchu",
             "heldTitle": "Narzędzia agenta wstrzymane",
             "live": "Na żywo",
+            "openTerminal": "Otwórz terminal",
             "reconnecting": "Ponowne łączenie…",
             "refused": "Tylko opiekun tego sandboksa może otworzyć jego pulpit.",
             "stageLabel": "Pulpit sandboksa",
@@ -5915,7 +5919,8 @@
             "rightClickKeep": "Prawy klik, by zostawić",
             "running": "{healthy} działa",
             "tunnels": "Tunel | Tunele",
-            "vpnConnected": "VPN połączony"
+            "vpnConnected": "VPN połączony",
+            "windowsOpen": "{count} otwarte okno | {count} otwarte okna | {count} otwartych okien"
         },
         "sidePanel": {
             "closeAll": "Zamknij wszystko",

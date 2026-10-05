@@ -18,6 +18,7 @@ import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
+    DesktopStateSchema,
     SubagentsListSchema,
     TerminalNameParamSchema,
     TerminalScrollbackQuerySchema,
@@ -239,6 +240,17 @@ export const systemContract = {
         })
         .input(BrowserNameParamSchema)
         .output(OkSchema),
+    // The picture and the hands come over /system/desktop-view; this is whether there is anything on it. Pushed through
+    // the `desktop` runtime domain as windows open and close, never polled.
+    desktop: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/desktop",
+            summary: "The sandbox's own desktop",
+            description:
+                "Whether the sandbox's desktop is up, which display it is, and how many windows are open on it. The live picture of it comes over a separate socket; this says whether there is anything to see.",
+        })
+        .output(DesktopStateSchema),
     // In-process and spawned alike: the board draws each under the card of the conversation that started it, and a chat
     // draws it on the card of the call that started it. Pushed through the `subagents` runtime domain, never polled. A
     // subagent's work is read where it lives: an in-process one's on its delegation's card in its parent's record, a

@@ -85,7 +85,10 @@ flowchart LR
   the `desktop` server beside the browser routers (`browserServersOf`), and drives it through
   [desktop-automation](../../_devices/desktop-automation)'s frames, the same code a connected machine's screenshots go
   through. The owner watches and drives it at `GET /system/desktop-view` (video and XTEST, as the browser view);
-  driving it holds it, and the agent's input is refused until they hand it back or stop for 20 s.
+  driving it holds it, and the agent's input is refused until they hand it back or stop for 20 s. `GET /system/desktop`
+  says whether it is up and how many windows are open on it, counted off openbox's client list by one `xprop -spy` and
+  pushed as the `desktop` runtime domain: the editor tiles it while a window is open, and says an empty desktop is empty
+  rather than showing a black screen that looks like a broken stream.
 - Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
   extension cards' endpoints, the desktop) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). Each
   turn holds a bearer of its own, leased the names it mounted and forgotten when the turn ends, and the door refuses

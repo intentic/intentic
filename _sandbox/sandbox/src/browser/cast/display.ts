@@ -213,6 +213,22 @@ export const ensureDisplay = async (key: string, size: DisplaySize = BROWSER_SIZ
 // someone else launched.
 export const displayOf = (key: string): Display | undefined => running.get(key)?.display;
 
+// The display a previous daemon life started for `key` and left serving, adopted without starting one; undefined when
+// there is none. For a reader that must not start a display but should see one that is already up: the agent desktop's
+// state after a restart, before anything in this process has asked ensureDisplay for it.
+export const adoptDisplay = async (key: string): Promise<Display | undefined> => {
+    const known = displayOf(key);
+    if (known !== undefined) {
+        return known;
+    }
+    for (let number = FIRST; number <= LAST; number++) {
+        if (claimedBy(number) === key && (await answers(number))) {
+            return ensureDisplay(key, claimedSize(number));
+        }
+    }
+    return undefined;
+};
+
 // Stops the display for `key` once its browser is gone. Best-effort, never awaited on a path that matters; an adopted
 // display is only forgotten, since killing a server this process didn't start could take down whatever else is on it.
 export const releaseDisplay = (key: string): void => {

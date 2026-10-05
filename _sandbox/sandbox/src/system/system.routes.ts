@@ -14,6 +14,7 @@ import { forkedExec } from "@intentic/scaffold";
 import type { Caller } from "../auth/auth.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
+import { desktopState } from "../desktop/agent-desktop.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
 import type { Services } from "../composition.js";
@@ -488,6 +489,8 @@ export const createSystemRoutes = (services: Services) => {
             await closeBrowserSession(input.name);
             return { ok: true };
         }),
+        // The sandbox's own desktop: whether it is up and how many windows it has, which never starts it.
+        desktop: i.desktop.handler(() => desktopState()),
         // Subagents this sandbox's conversations started, from the roster, each caller told only of the ones started by
         // conversations it may see. Paired against meta files first: the only model source for a child the daemon never
         // watched spawn.

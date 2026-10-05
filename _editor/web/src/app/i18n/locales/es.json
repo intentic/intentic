@@ -1873,12 +1873,16 @@
             "authFailed": "No se pudo autorizar la vista del escritorio ({reason}). Reintentando.",
             "connecting": "Iniciando el escritorio…",
             "connectingShort": "Conectando…",
+            "emptyNote": "Cuando un agente abre un programa con sus herramientas de escritorio, su ventana aparece aquí y puedes tomar el control para usarlo tú.",
+            "emptyTitle": "No hay nada abierto en este escritorio",
+            "emptyYourself": "Para abrir uno tú mismo, define esto en una terminal y luego inicia el programa ahí:",
             "handBack": "Devolver",
             "handBackNote": "El agente puede continuar.",
             "heldElsewhere": "Tomado en otra ventana",
             "heldNote": "Hasta 20 segundos después de tu entrada",
             "heldTitle": "Herramientas del agente en pausa",
             "live": "En vivo",
+            "openTerminal": "Abrir terminal",
             "reconnecting": "Reconectando…",
             "refused": "Solo un mantenedor de este sandbox puede abrir su escritorio.",
             "stageLabel": "El escritorio del sandbox",
@@ -4410,7 +4414,8 @@
             "rightClickKeep": "Clic derecho para fijar",
             "running": "{healthy} en marcha",
             "tunnels": "Túnel | Túneles",
-            "vpnConnected": "VPN conectada"
+            "vpnConnected": "VPN conectada",
+            "windowsOpen": "{count} ventana abierta | {count} ventanas abiertas"
         },
         "sidePanel": {
             "closeAll": "Cerrar todo",

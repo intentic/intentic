@@ -1864,12 +1864,16 @@
             "authFailed": "Die Desktop-Ansicht konnte nicht autorisiert werden ({reason}). Neuer Versuch.",
             "connecting": "Desktop wird gestartet…",
             "connectingShort": "Verbinde…",
+            "emptyNote": "Wenn ein Agent mit seinen Desktop-Werkzeugen ein Programm öffnet, erscheint dessen Fenster hier, und du kannst übernehmen, um es selbst zu bedienen.",
+            "emptyTitle": "Auf diesem Desktop ist nichts geöffnet",
+            "emptyYourself": "Um selbst eines zu öffnen, setze dies in einem Terminal und starte das Programm dort:",
             "handBack": "Zurückgeben",
             "handBackNote": "Der Agent kann weitermachen.",
             "heldElsewhere": "In einem anderen Fenster übernommen",
             "heldNote": "Bis 20 Sekunden nach Ihrer Eingabe",
             "heldTitle": "Agent-Werkzeuge pausiert",
             "live": "Live",
+            "openTerminal": "Terminal öffnen",
             "reconnecting": "Verbinde erneut…",
             "refused": "Nur ein Maintainer dieser Sandbox kann ihren Desktop öffnen.",
             "stageLabel": "Desktop der Sandbox",
@@ -4387,7 +4391,8 @@
             "rightClickKeep": "Rechtsklick zum Behalten",
             "running": "{healthy} laufen",
             "tunnels": "Tunnel | Tunnel",
-            "vpnConnected": "VPN verbunden"
+            "vpnConnected": "VPN verbunden",
+            "windowsOpen": "{count} Fenster offen | {count} Fenster offen"
         },
         "sidePanel": {
             "closeAll": "Alle schließen",

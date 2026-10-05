@@ -168,6 +168,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
             manageDeviceSandbox: { id: host, slug: `docs-site`, op: `logs` },
             runDeviceCommand: { id: host, command: `sync-pause`, sandboxId: `billing-api` },
             closeBrowser: { name: `smoke` },
+            desktop: undefined,
             subagents: undefined,
             storage: undefined,
             scanStorage: undefined,

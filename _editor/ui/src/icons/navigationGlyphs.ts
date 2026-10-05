@@ -63,6 +63,11 @@ export const NAVIGATION_GLYPHS = {
         outline: `M10 20H5l-2-2V6l2-2h14l2 2v5 M3 9h18 M13 12v10l3-3h5Z`,
         solid: `M6 5.5 7.5 7 6 8.5 4.5 7Z`,
     },
+    // The sandbox's own desktop: one bevelled screen on its stand with a window open on it. Not the `desktop` object
+    // glyph, which is a machine (a screen and a tower), and which Devices draws.
+    screen: {
+        outline: `M4 3h16l2 2v10l-2 2H4l-2-2V5Z M12 17v4 M7 21h10 M6 7h8v6H6Z`,
+    },
     // Two staggered guardian faces: helpers share the Agents tile's face and pointed crown.
     subagents: {
         outline: `M3 10h3l2-3 2 3h3l2 2v6l-3 3H5l-3-3v-6Z M6 15h1 M10 15h1 M12 6h2l2-3 2 3h2l2 2v6l-3 3h-1 M18 11h1`,

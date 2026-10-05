@@ -8,6 +8,7 @@ import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRo
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useBrowsersQuery } from "../features/browsers/browsersQuery";
+import { useDesktopQuery } from "../features/desktop/desktopQuery";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
@@ -243,8 +244,6 @@ const devicesTile = computed<SectionTile>(() => {
     const badge = devicesBadge(heldPorts.value.length, devicesWorking());
     return badge === undefined ? tile : { ...tile, badge };
 });
-// The sandbox's own desktop (features/desktop): a signal tile with nothing to badge, so it waits in More until pinned.
-const desktopTile = computed<SectionTile>(() => ({ id: DESKTOP_VIEW_ID, to: `/desktop`, label: t(`shared.desktop`), icon: `desktop` }));
 
 // The always-present tiles plus evidence-driven Preview; extension tiles are added separately below,
 // one per activation. The rest of sandbox management lives behind the switcher chip, not a rail tile.
@@ -278,7 +277,7 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
     ...(previewTile.value === undefined ? [] : [previewTile.value]),
-    ...(canShip.value ? [devicesTile.value, desktopTile.value] : []),
+    ...(canShip.value ? [devicesTile.value] : []),
 ]);
 /* The Browsers tile stays visible while the daemon lists an open browser. */
 const browserTile = computed<SectionTile | undefined>(() => {
@@ -300,6 +299,19 @@ const browserTile = computed<SectionTile | undefined>(() => {
               : {}),
     };
 });
+// THE SANDBOX'S OWN DESKTOP (features/desktop), a live screen like a browser, so it sits in the runtime cluster beside
+// Browsers and the terminal. On the rail while a window is open on it, which is when there is something to watch, and
+// while it is the page in front; an empty desktop is reached from the palette, as a finished browser is. Maintainers
+// only, as the daemon lets nobody else drive it. Neutral count: open windows are inventory, not a debt.
+const { windows: desktopWindows } = useDesktopQuery();
+const desktopTile = computed<SectionTile | undefined>(() => {
+    const open = desktopWindows.value ?? 0;
+    if (!canShip.value || (open === 0 && !isNavActive(`/desktop`))) {
+        return undefined;
+    }
+    const tile: SectionTile = { id: DESKTOP_VIEW_ID, to: `/desktop`, label: t(`shared.desktop`), icon: `screen` };
+    return open === 0 ? tile : { ...tile, badge: { count: open, tone: `neutral`, tooltip: t(`shell.shellDesktop.windowsOpen`, { count: open }, open) } };
+});
 // Everything waiting on a person (docs/architecture/needs.md, the Needs you inbox): what agents asked for, turns parked
 // on an answer, held wakes, extensions and every view's asks, in one count. On the rail only while something is.
 const { badge: inboxBadge } = useInbox();
@@ -316,7 +328,7 @@ const needsTile = computed<SectionTile | undefined>(() =>
 );
 // Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
 const runtimeTiles = computed<readonly SectionTile[]>(() =>
-    [needsTile.value, browserTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
+    [needsTile.value, browserTile.value, desktopTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
 );
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): SectionTile => {

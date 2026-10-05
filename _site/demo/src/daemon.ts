@@ -720,6 +720,9 @@ export const procedures = {
             return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
         },
         closeBrowser: () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
+        // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no rail tile for it,
+        // and no claim that it is empty.
+        desktop: () => ({ running: false }),
         subagents: () => ({ sessions: deskEdition ? [] : inProcessSubagents(STARTED_AT) }),
     },
     agents: {

@@ -1865,12 +1865,16 @@
             "authFailed": "Impossible d'autoriser la vue du bureau ({reason}). Nouvelle tentative.",
             "connecting": "Démarrage du bureau…",
             "connectingShort": "Connexion…",
+            "emptyNote": "Quand un agent ouvre un programme avec ses outils de bureau, sa fenêtre apparaît ici, et vous pouvez prendre la main pour l'utiliser vous-même.",
+            "emptyTitle": "Rien n'est ouvert sur ce bureau",
+            "emptyYourself": "Pour en ouvrir un vous-même, définissez ceci dans un terminal, puis lancez-y le programme :",
             "handBack": "Rendre la main",
             "handBackNote": "L'agent peut reprendre.",
             "heldElsewhere": "Pris dans une autre fenêtre",
             "heldNote": "Jusqu'à 20 secondes après votre saisie",
             "heldTitle": "Outils de l'agent en pause",
             "live": "En direct",
+            "openTerminal": "Ouvrir le terminal",
             "reconnecting": "Reconnexion…",
             "refused": "Seul un mainteneur de ce sandbox peut ouvrir son bureau.",
             "stageLabel": "Le bureau du sandbox",
@@ -4341,7 +4345,8 @@
             "rightClickKeep": "Clic droit pour garder",
             "running": "{healthy} en marche",
             "tunnels": "Tunnel | Tunnels",
-            "vpnConnected": "VPN connecté"
+            "vpnConnected": "VPN connecté",
+            "windowsOpen": "{count} fenêtre ouverte | {count} fenêtres ouvertes"
         },
         "sidePanel": {
             "closeAll": "Tout fermer",

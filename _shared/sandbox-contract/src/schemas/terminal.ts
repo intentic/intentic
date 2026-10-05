@@ -128,6 +128,21 @@ export const BrowsersListSchema = z.object({
 });
 export type BrowsersList = z.infer<typeof BrowsersListSchema>;
 export const BrowserNameParamSchema = z.object({ name: z.string().describe("Which browser.") });
+// The sandbox's own desktop (desktop/agent-desktop.ts): one screen, so a state rather than a roster. `windows` is what
+// tells an empty desktop from a broken picture of one, and what puts its tile on the rail.
+export const DesktopStateSchema = z.object({
+    running: z
+        .boolean()
+        .describe("Whether the desktop is up. It starts the first time anyone looks at it, you or an agent, and stays up until the sandbox restarts."),
+    display: z.string().optional().describe("The X display it is, present while it runs: a program started with DISPLAY set to this opens its window there."),
+    windows: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("How many windows are open on it. None is an empty desktop. Absent while it is not running, or when it has no window manager to ask."),
+});
+export type DesktopState = z.infer<typeof DesktopStateSchema>;
 // A subagent is any agent another agent started, and every surface shows one the same way whichever mechanism started
 // it. The kind names the mechanism, never a second sort of thing:
 // subagent: in-process, the runtime's own Agent/Task tool, tracked via SubagentStart/Stop hooks and task_* messages

@@ -1,7 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { Socket } from "node:net";
+import { createInterface } from "node:readline";
 import { type Desktop, DesktopError, desktop } from "@intentic/desktop-automation";
-import { type Display, displayOf, ensureDisplay } from "../browser/cast/display.js";
+import type { DesktopState } from "@intentic/sandbox-contract";
+import { adoptDisplay, type Display, displayOf, ensureDisplay } from "../browser/cast/display.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 /* The sandbox's own desktop: one virtual X display beside the browsers' (display.ts), with a window manager on it, that
    an agent drives through the `desktop` tools and the owner can watch and take over. For whatever has a window and no
@@ -40,6 +44,52 @@ const startWindowManager = (display: Display): void => {
     managers.set(display.name, child);
 };
 
+/* What is on the desktop: how many windows, off the window manager's client list (_NET_CLIENT_LIST on the root, the list
+   wmctrl reads). Watched rather than polled: `xprop -spy` prints the list once when it starts and again each time it
+   changes, so the rail tile and the view hear of a window as it opens or closes, and an idle desktop costs one sleeping
+   process. It is what tells an empty desktop, which is all black, from a picture that never arrived. */
+
+// The count in one line of the spy, one id per window ("…: window id # 0x400024, 0x400031"), none on an empty desktop.
+// Undefined for anything else, "not found" included: a display with no window manager on it has no list to count.
+export const clientCount = (line: string): number | undefined => {
+    const list = /^_NET_CLIENT_LIST\(WINDOW\): window id #(.*)$/.exec(line.trim());
+    return list === null ? undefined : (list[1]?.match(/0x[0-9a-f]+/gi) ?? []).length;
+};
+
+const XPROP = "/usr/bin/xprop";
+
+let windows: number | undefined;
+let watcher: ChildProcess | undefined;
+
+const watchWindows = (display: Display): void => {
+    if (watcher !== undefined || !existsSync(XPROP)) {
+        return;
+    }
+    const child = spawn(XPROP, ["-root", "-spy", "_NET_CLIENT_LIST"], { env: { ...process.env, DISPLAY: display.name }, stdio: ["ignore", "pipe", "ignore"] });
+    watcher = child;
+    createInterface({ input: child.stdout }).on("line", (line) => {
+        const count = clientCount(line);
+        if (count !== undefined && count !== windows) {
+            windows = count;
+            publishRuntimeChange("desktop");
+        }
+    });
+    // Its display gone (or the spy itself), the count is nobody's: the next start of the desktop watches afresh.
+    child.on("error", () => undefined);
+    child.on("exit", () => {
+        if (watcher === child) {
+            watcher = undefined;
+            windows = undefined;
+            publishRuntimeChange("desktop");
+        }
+    });
+    // A watcher never keeps the daemon, or a test that started the desktop, alive.
+    child.unref();
+    if (child.stdout instanceof Socket) {
+        child.stdout.unref();
+    }
+};
+
 export interface AgentDesktop {
     readonly display: Display;
     readonly screen: Desktop;
@@ -47,15 +97,32 @@ export interface AgentDesktop {
 
 // The desktop, started on first use: a turn that never calls a desktop tool never pays for a display.
 export const agentDesktop = async (): Promise<AgentDesktop> => {
+    const before = displayOf(DESKTOP_KEY);
     const display = await ensureDisplay(DESKTOP_KEY, DESKTOP_SIZE);
     startWindowManager(display);
+    watchWindows(display);
+    if (before?.name !== display.name) {
+        publishRuntimeChange("desktop");
+    }
     return { display, screen: desktop({ env: { ...process.env, DISPLAY: display.name } }) };
 };
 
-// The desktop only if it is already up: what the owner's view asks, since watching should not start one.
-export const runningDesktop = (): AgentDesktop | undefined => {
-    const display = displayOf(DESKTOP_KEY);
-    return display === undefined ? undefined : { display, screen: desktop({ env: { ...process.env, DISPLAY: display.name } }) };
+// Asked once per daemon life: after that a desktop this process does not know of is one nobody has started.
+let adoptionAsked = false;
+
+// Whether the desktop is up and what is on it (system.desktop). Never starts one, since a look at the rail is not a use
+// of it; a desktop a previous daemon life left running is adopted on the first ask, its windows still there to be seen.
+export const desktopState = async (): Promise<DesktopState> => {
+    let display = displayOf(DESKTOP_KEY);
+    if (display === undefined && !adoptionAsked) {
+        adoptionAsked = true;
+        display = await adoptDisplay(DESKTOP_KEY);
+    }
+    if (display === undefined) {
+        return { running: false };
+    }
+    watchWindows(display);
+    return { running: true, display: display.name, ...(windows === undefined ? {} : { windows }) };
 };
 
 /* Who holds the desktop. The owner takes it by driving it from their view, and holds it until they hand it back or
