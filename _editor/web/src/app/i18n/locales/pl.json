@@ -5451,11 +5451,16 @@
             "installingOnDeviceNo": "Instalowanie {what} na tym urządzeniu: od dłuższej chwili brak sygnału od aplikacji",
             "openSetup": "Otwórz konfigurację",
             "reportsEverySecondWhile": "Melduje się co sekundę, dopóki działa. Jeśli okna Intentic już nie ma, uruchom aplikację ponownie: instalacja podejmie od miejsca, w którym była.",
+            "restartBeforeDocker": "Windows musi zostać uruchomiony ponownie, zanim Docker zadziała. Uruchom ponownie z poziomu konfiguracji, a po powrocie komputera będzie ona kontynuowana sama.",
             "seeWhy": "Zobacz dlaczego",
             "settingUpOnDevice": "Konfiguracja {what} na tym urządzeniu zatrzymała się. Okno Intentic ma powód i sposób, żeby spróbować ponownie.",
             "showSetup": "Pokaż konfigurację",
+            "signOutBeforeDocker": "Windows nadaje uprawnienia Dockera dopiero przy następnym logowaniu. Wyloguj się z poziomu konfiguracji, a po powrocie będzie ona kontynuowana sama.",
             "stoppedSettingUpOn": "Zatrzymałeś konfigurację {what} na tym urządzeniu. Nic więcej tam nie działa.",
-            "waitingInIntenticWindow": "Czeka na Ciebie w oknie Intentic",
+            "useHostedInstead": "To nie najlepszy moment? Użyj maszyny, którą hostujemy",
+            "waitingForAnswer": "Czeka na Twoją odpowiedź",
+            "waitingForRestart": "Czeka na ponowne uruchomienie tego komputera",
+            "waitingForSignOut": "Czeka, aż wylogujesz się z Windows",
             "yourSandbox": "twojego sandboxa"
         },
         "hostedWait": {

@@ -2272,12 +2272,46 @@ mod frame_tests {
             position: Some("Step 4 of 10".into()),
             remaining: Some("about 3 min left".into()),
             step: Some("pulling-image".into()),
+            waiting_for: None,
+            requirements: None,
         });
         assert!(script.starts_with("window.dispatchEvent(new CustomEvent('intentic-desktop-setup'"));
         assert!(script.contains("\"percent\":42.5"), "{script}");
         assert!(script.contains("\"state\":\"running\""), "{script}");
         // The quotes inside the name are escaped, so the script is still one statement.
         assert!(script.contains("my \\\"site\\\" </script>"), "{script}");
+    }
+
+    /// A setup stopped on a question says which one, so the page can word a restart as a restart; a running one
+    /// carries neither field rather than two nulls.
+    #[test]
+    fn a_waiting_setup_says_what_it_waits_for() {
+        let waiting = setup_announcement(&SetupReport {
+            name: None,
+            state: "waiting".into(),
+            percent: 10.0,
+            position: None,
+            remaining: None,
+            step: None,
+            waiting_for: Some("restart".into()),
+            requirements: Some(vec!["pending-restart".into()]),
+        });
+        assert!(waiting.contains("\"waitingFor\":\"restart\""), "{waiting}");
+        assert!(
+            waiting.contains("\"requirements\":[\"pending-restart\"]"),
+            "{waiting}"
+        );
+        let running = setup_announcement(&SetupReport {
+            name: None,
+            state: "running".into(),
+            percent: 10.0,
+            position: None,
+            remaining: None,
+            step: None,
+            waiting_for: None,
+            requirements: None,
+        });
+        assert!(!running.contains("waitingFor"), "{running}");
     }
 
     /// A loaded workspace is told the path through its own opener, and falls back to loading the address; the path

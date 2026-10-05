@@ -138,6 +138,16 @@ describe(`where it sits`, () => {
         expect(maskText(`the network broke, see C:\\Users\\grace\\log.txt`, report)).toBe(`the network broke, see ${blank(`C:\\Users\\grace\\log.txt`)}`);
     });
 
+    // The desktop install's bar on /setup (DesktopSetupProgress.vue): its position and estimate are the app's own report,
+    // and a replay of a stuck install that starred them (2026-10-04) could not say which step it sat on, or for how long.
+    it(`keeps the desktop install's position, estimate and percentage`, () => {
+        const reported = element(`<div><span data-replay="diagnostic">x</span></div>`, `span`);
+        expect(maskText(`Step 4 of 10`, reported)).toBe(`Step 4 of 10`);
+        expect(maskText(`· about 12 minutes`, reported)).toBe(`· about 12 minutes`);
+        expect(maskText(`· less than a minute`, reported)).toBe(`· less than a minute`);
+        expect(maskText(`10%`, element(`<p><span>x</span></p>`, `span`))).toBe(`10%`);
+    });
+
     it(`masks as before anywhere else`, () => {
         expect(maskText(`the network broke`, element(`<p><span>x</span></p>`, `span`))).toBe(`*** ******* *****`);
     });

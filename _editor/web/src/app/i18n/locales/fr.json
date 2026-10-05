@@ -3982,11 +3982,16 @@
             "installingOnDeviceNo": "Installation de {what} sur cet appareil : aucune nouvelle de l'application depuis un moment",
             "openSetup": "Ouvrir l'installation",
             "reportsEverySecondWhile": "Elle donne des nouvelles chaque seconde tant qu'elle tourne. Si la fenêtre Intentic a disparu, relancez l'application : l'installation reprend là où elle en était.",
+            "restartBeforeDocker": "Windows doit redémarrer avant que Docker puisse tourner. Redémarrez depuis l'installation : elle reprend d'elle-même au retour du PC.",
             "seeWhy": "Voir pourquoi",
             "settingUpOnDevice": "L'installation de {what} sur cet appareil s'est arrêtée. La fenêtre Intentic en donne la raison, et un moyen de réessayer.",
             "showSetup": "Afficher l'installation",
+            "signOutBeforeDocker": "Windows n'applique l'autorisation Docker qu'à la prochaine connexion. Déconnectez-vous depuis l'installation : elle reprend d'elle-même à votre retour.",
             "stoppedSettingUpOn": "Vous avez arrêté l'installation de {what} sur cet appareil. Rien d'autre n'y tourne.",
-            "waitingInIntenticWindow": "Vous attend dans la fenêtre Intentic",
+            "useHostedInstead": "Pas le bon moment ? Utilisez plutôt une machine hébergée par nous",
+            "waitingForAnswer": "En attente de votre réponse",
+            "waitingForRestart": "En attente du redémarrage de ce PC",
+            "waitingForSignOut": "En attente de votre déconnexion de Windows",
             "yourSandbox": "votre sandbox"
         },
         "hostedWait": {

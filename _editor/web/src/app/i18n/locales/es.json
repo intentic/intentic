@@ -4024,11 +4024,16 @@
             "installingOnDeviceNo": "Instalando {what} en este dispositivo: hace un rato que la aplicación no dice nada",
             "openSetup": "Abrir la instalación",
             "reportsEverySecondWhile": "Informa cada segundo mientras se ejecuta. Si la ventana de Intentic ha desaparecido, vuelve a abrir la aplicación: la instalación continúa donde estaba.",
+            "restartBeforeDocker": "Windows tiene que reiniciarse antes de que Docker pueda ejecutarse. Reinicia desde la configuración y seguirá sola cuando el PC vuelva.",
             "seeWhy": "Ver por qué",
             "settingUpOnDevice": "La instalación de {what} en este dispositivo se detuvo. La ventana de Intentic tiene el motivo, y una forma de volver a intentarlo.",
             "showSetup": "Mostrar la instalación",
+            "signOutBeforeDocker": "Windows solo aplica el permiso de Docker en el siguiente inicio de sesión. Cierra sesión desde la configuración y seguirá sola cuando vuelvas.",
             "stoppedSettingUpOn": "Has detenido la instalación de {what} en este dispositivo. Allí no hay nada más en marcha.",
-            "waitingInIntenticWindow": "Te espera en la ventana de Intentic",
+            "useHostedInstead": "¿No es buen momento? Usa una máquina alojada por nosotros",
+            "waitingForAnswer": "Esperando tu respuesta",
+            "waitingForRestart": "Esperando a que este PC se reinicie",
+            "waitingForSignOut": "Esperando a que cierres sesión en Windows",
             "yourSandbox": "tu sandbox"
         },
         "hostedWait": {

@@ -79,20 +79,30 @@ export interface Progress {
     readonly stepStartedAt: number;
     /** Never allowed to fall, since docker's reported totals can grow mid-pull. */
     readonly percent: number;
+    /**
+     * Where an earlier attempt of the same setup left the bar: this attempt draws the rest of the way from there. A run
+     * that stops on a question and is started again re-examines the machine from the top, and a bar that dropped from
+     * 10% back to nothing read as the work just done being thrown away.
+     */
+    readonly floor: number;
     /** Set once the run ends, so the bar stops moving and the estimate disappears. */
     readonly ended: `ok` | `failed` | undefined;
 }
 
-export const startProgress = (plan: readonly PlanStep[], now: number): Progress => ({
+export const startProgress = (plan: readonly PlanStep[], now: number, floor = 0): Progress => ({
     plan,
     index: -1,
     detail: ``,
     layers: {},
     startedAt: now,
     stepStartedAt: now,
-    percent: 0,
+    percent: floor,
+    floor,
     ended: undefined,
 });
+
+// How much of THIS attempt's share of the bar (from its floor up) is behind it, 0..1: what pace and estimate measure.
+const ownShare = (state: Progress): number => Math.max(0, (state.percent - state.floor) / Math.max(100 - state.floor, 1));
 
 const total = (plan: readonly PlanStep[]): number => plan.reduce((sum, step) => sum + step.weight, 0);
 
@@ -112,16 +122,16 @@ const stepFraction = (state: Progress, now: number): number => {
 
 const percentOf = (state: Progress, now: number): number => {
     if (state.index < 0) {
-        return 0;
+        return state.floor;
     }
     const whole = total(state.plan);
     if (whole <= 0) {
-        return 0;
+        return state.floor;
     }
     const behind = state.plan.slice(0, state.index).reduce((sum, step) => sum + step.weight, 0);
     const inside = (state.plan[state.index]?.weight ?? 0) * stepFraction(state, now);
     // Capped below 100: only the exit event says a run is actually finished.
-    return Math.min(99, ((behind + inside) / whole) * 100);
+    return Math.min(99, state.floor + (100 - state.floor) * ((behind + inside) / whole));
 };
 
 /** Fold one line of the run into the progress. Pure given `now`, so the whole model is testable. */
@@ -186,7 +196,7 @@ export interface ProgressView {
 // Clamped near the nominal rate, since the first seconds of a run barely measure anything.
 const NOMINAL_MS = 1000;
 const paceOf = (state: Progress, now: number): number => {
-    const consumed = (state.percent / 100) * total(state.plan);
+    const consumed = ownShare(state) * total(state.plan);
     if (consumed <= 0) {
         return NOMINAL_MS;
     }
@@ -199,7 +209,7 @@ const remainingOf = (state: Progress, now: number): string | undefined => {
     if (state.index < 0 || state.ended !== undefined) {
         return undefined;
     }
-    const left = total(state.plan) * (1 - state.percent / 100) * paceOf(state, now);
+    const left = total(state.plan) * (1 - ownShare(state)) * paceOf(state, now);
     if (left < 60_000) {
         return `less than a minute`;
     }

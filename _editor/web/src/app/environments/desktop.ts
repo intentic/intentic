@@ -57,6 +57,8 @@ export const DESKTOP_UPDATE_LINK = `intentic://update`;
 export const DESKTOP_SETUP_EVENT = `intentic-desktop-setup`;
 
 export type DesktopSetupState = `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
+/** What a waiting setup waits for: the reader's go-ahead on the app's card, or Windows ending the session. */
+export type DesktopSetupWaitingFor = `consent` | `restart` | `signOut`;
 
 export interface DesktopSetupReport {
     /// The sandbox's name, as the user typed it.
@@ -70,7 +72,13 @@ export interface DesktopSetupReport {
     readonly remaining?: string;
     /// The running step's phase id, for analytics rather than the screen.
     readonly step?: string;
+    /// On `waiting`: what the app's card asks (commands.rs `SetupReport`). Absent from an older app.
+    readonly waitingFor?: DesktopSetupWaitingFor;
+    /// On `waiting`: the requirement ids on the card, for analytics rather than the screen.
+    readonly requirements?: readonly string[];
 }
+
+const WAITING_FOR: readonly DesktopSetupWaitingFor[] = [`consent`, `restart`, `signOut`];
 
 const SETUP_STATES: readonly DesktopSetupState[] = [`running`, `waiting`, `failed`, `stopped`, `done`, `closed`];
 
@@ -89,6 +97,10 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
     const position = text(`position`);
     const remaining = text(`remaining`);
     const step = text(`step`);
+    const waitingFor = WAITING_FOR.find((known) => known === raw[`waitingFor`]);
+    const requirements = Array.isArray(raw[`requirements`])
+        ? (raw[`requirements`] as unknown[]).filter((id): id is string => typeof id === `string` && /^[a-z0-9-]{1,40}$/.test(id))
+        : undefined;
     return {
         state,
         percent: Math.min(100, Math.max(0, raw[`percent`])),
@@ -96,6 +108,8 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
         ...(position === undefined ? {} : { position }),
         ...(remaining === undefined ? {} : { remaining }),
         ...(step === undefined ? {} : { step }),
+        ...(waitingFor === undefined ? {} : { waitingFor }),
+        ...(requirements === undefined ? {} : { requirements }),
     };
 };
 

@@ -904,6 +904,13 @@ pub struct SetupReport {
     pub remaining: Option<String>,
     /// The running step's phase id, for the page's analytics rather than its screen.
     pub step: Option<String>,
+    /// On `waiting`, what the question asks: `consent`, `restart` or `signOut`. The page words a restart as a
+    /// restart, and keeps saying so after the card is put away, since the PC is still waiting for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_for: Option<String>,
+    /// On `waiting`, the requirement ids on the card, for the page's analytics: never their sentences.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requirements: Option<Vec<String>>,
 }
 
 /// This device reporting a setup's progress, on every change, for the workspace page (windows.rs `announce_setup`).

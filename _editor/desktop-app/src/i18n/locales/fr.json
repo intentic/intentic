@@ -8,6 +8,8 @@
         "copy": "Le copier",
         "dockerDidntAnswer": "Docker n'a pas répondu",
         "dockerDidntDescribeSandboxs": "Docker n'a pas décrit la part de cet ordinateur revenant à ce sandbox. Rechargez et réessayez.",
+        "dockerWaitsForRestart": "Docker ne peut pas tourner tant que ce PC n'a pas redémarré. Redémarrez depuis ici et votre installation reprend d'elle-même à votre retour.",
+        "dockerWaitsForSignOut": "Docker ne peut pas tourner tant que vous ne vous êtes pas déconnecté puis reconnecté à Windows. Déconnectez-vous depuis ici et votre installation reprend d'elle-même à votre retour.",
         "downloadingIntentic": "Téléchargement d'Intentic {version}… {percent} %",
         "getFreshCode": "Obtenir un nouveau code",
         "getLatestVersion": "Obtenir la dernière version",

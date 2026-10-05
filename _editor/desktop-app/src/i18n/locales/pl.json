@@ -8,6 +8,8 @@
         "copy": "Kopiuj",
         "dockerDidntAnswer": "Docker nie odpowiedział",
         "dockerDidntDescribeSandboxs": "Docker nie opisał przydziału tego komputera dla tego sandboxa. Odśwież i spróbuj ponownie.",
+        "dockerWaitsForRestart": "Docker nie uruchomi się, dopóki ten komputer nie zostanie uruchomiony ponownie. Uruchom go ponownie stąd, a konfiguracja sama będzie kontynuowana po powrocie.",
+        "dockerWaitsForSignOut": "Docker nie uruchomi się, dopóki nie wylogujesz się z Windows i nie zalogujesz ponownie. Wyloguj się stąd, a konfiguracja sama będzie kontynuowana po powrocie.",
         "downloadingIntentic": "Pobieranie Intentic {version}… {percent} %",
         "getFreshCode": "Weź nowy kod",
         "getLatestVersion": "Weź najnowszą wersję",

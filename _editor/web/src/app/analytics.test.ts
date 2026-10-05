@@ -7,7 +7,7 @@ import { nextTick, ref } from "vue";
 const user = ref<User | null>(null);
 jest.mock("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
 jest.mock("posthog-js", () => ({
-    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn() },
+    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn(), alias: jest.fn() },
 }));
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
@@ -114,6 +114,23 @@ describe(`initAnalytics`, () => {
 
         const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
         expect(app.register).toHaveBeenCalledWith({ client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` });
+    });
+
+    // The app's own screens report under its install id: folded into the account signed in here, its events land on the
+    // same person. A browser tab has no install to fold in.
+    it(`folds the desktop app's install into the account that signs in inside it, and only there`, async () => {
+        const { posthog: browser } = await bootAnalytics(`phc_test`);
+        user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
+        await nextTick();
+        expect(browser.alias).not.toHaveBeenCalled();
+
+        user.value = null;
+        await nextTick();
+        jest.clearAllMocks();
+        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
+        user.value = { id: `u2`, email: `a@b.c`, name: `A`, image: null };
+        await nextTick();
+        expect(app.alias).toHaveBeenCalledWith(`install-abc`);
     });
 
     // `reset()` empties the store super properties live in, so without re-registering, every event after a sign-out

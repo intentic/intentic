@@ -226,7 +226,14 @@ pub fn run(args: Args) -> Result<()> {
             if requirement.action == Action::SignOut {
                 announce(requirement);
                 announce_state(requirement.id, "done", Some("waiting for the next sign-in"));
-                return sign_out(std::slice::from_ref(requirement), &facts.user);
+                return sign_out_or_restart(requirement, &facts.user, args.yes);
+            }
+            // A fix in the last pass left Windows waiting for a restart (the Docker Desktop installer does): the
+            // same parking as the examination's, not the wall below, which would report a machine one restart
+            // from ready as a failure.
+            if requirement.action == Action::Restart {
+                announce(requirement);
+                return restart(std::slice::from_ref(requirement), args.yes);
             }
             if !requirement.action.ours() {
                 // Reached only when a fix uncovered something new that is not ours (a full disk, say). Report
@@ -261,7 +268,7 @@ pub fn run(args: Args) -> Result<()> {
                     announce_state(requirement.id, "done", None);
                     announce(&pending);
                     announce_state(pending.id, "done", Some("waiting for the next sign-in"));
-                    return sign_out(std::slice::from_ref(&pending), &facts.user);
+                    return sign_out_or_restart(&pending, &facts.user, args.yes);
                 }
             }
         }
@@ -386,6 +393,22 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
             "this PC has to restart before Docker can run - restart it, then run the command above."
         },
     )
+}
+
+/// A FIX THAT ENDS ON A SIGN-OUT, on a PC that is also waiting for a restart: the restart is a new sign-in too.
+/// Asking for the sign-out first sent a reader through it, back into the setup, and on to the restart it found
+/// next — or, more often, away. Installing Docker Desktop is what leaves both behind, in the same minute.
+#[cfg(windows)]
+fn sign_out_or_restart(pending: &plan::Requirement, user: &str, pre_consented: bool) -> Result<()> {
+    let restart_waiting = facts::probe()
+        .map(|now| now.reboot_pending)
+        .unwrap_or(false);
+    if restart_waiting {
+        let both = plan::restart_requirement();
+        announce(&both);
+        return restart(std::slice::from_ref(&both), pre_consented);
+    }
+    sign_out(std::slice::from_ref(pending), user)
 }
 
 /* THE SAME PARKING, ONE SESSION SMALLER — and the outcome that used to leave through `bail!`. */

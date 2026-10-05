@@ -8,6 +8,8 @@
         "copy": "Kopieren",
         "dockerDidntAnswer": "Docker hat nicht geantwortet",
         "dockerDidntDescribeSandboxs": "Docker hat den Anteil dieser Sandbox an diesem Computer nicht beschrieben. Laden Sie neu und versuchen Sie es erneut.",
+        "dockerWaitsForRestart": "Docker kann erst nach einem Neustart dieses PCs laufen. Starte ihn von hier aus neu, dann geht deine Einrichtung danach von selbst weiter.",
+        "dockerWaitsForSignOut": "Docker kann erst laufen, wenn du dich bei Windows ab- und wieder anmeldest. Melde dich von hier aus ab, dann geht deine Einrichtung danach von selbst weiter.",
         "downloadingIntentic": "Intentic {version} wird heruntergeladen… {percent} %",
         "getFreshCode": "Neuen Code holen",
         "getLatestVersion": "Neueste Version holen",

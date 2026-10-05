@@ -8,6 +8,8 @@
         "copy": "Copy it",
         "dockerDidntAnswer": "Docker didn't answer",
         "dockerDidntDescribeSandboxs": "Docker didn't describe this sandbox's share of this computer. Refresh and try again.",
+        "dockerWaitsForRestart": "Docker can't run until this PC restarts. Restart from here and your setup carries on by itself once you're back.",
+        "dockerWaitsForSignOut": "Docker can't run until you sign out of Windows and back in. Sign out from here and your setup carries on by itself once you're back.",
         "downloadingIntentic": "Downloading Intentic {version}… {percent}%",
         "getFreshCode": "Get a fresh code",
         "getLatestVersion": "Get the latest version",

@@ -79,6 +79,16 @@ test("a setup report is read back with its figures and without anything unexpect
     expect(readDesktopSetupReport({ state: `running`, percent: 140 })?.percent).toBe(100);
 });
 
+/* A setup stopped on a question says which: a restart and a sign-out are worded as themselves, and ids only ride as ids. */
+test("a waiting report keeps what it waits for and its requirement ids", async () => {
+    const { readDesktopSetupReport } = await load();
+    expect(
+        readDesktopSetupReport({ state: `waiting`, percent: 10, waitingFor: `restart`, requirements: [`pending-restart`, `Not An Id!`, 3] }),
+    ).toEqual({ state: `waiting`, percent: 10, waitingFor: `restart`, requirements: [`pending-restart`] });
+    // An app too old to say, or one saying something this page has no words for, is a plain wait.
+    expect(readDesktopSetupReport({ state: `waiting`, percent: 10, waitingFor: `reboot-twice` })).toEqual({ state: `waiting`, percent: 10 });
+});
+
 test("a report in a shape this page has no screen for is nothing", async () => {
     const { readDesktopSetupReport } = await load();
     expect(readDesktopSetupReport(undefined)).toBeUndefined();

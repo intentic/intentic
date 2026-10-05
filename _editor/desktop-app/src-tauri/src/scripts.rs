@@ -259,7 +259,7 @@ pub const DOCKER_READ_LIMIT: Duration = Duration::from_secs(20);
 /// Can this user reach a Docker daemon right now? Decides elevation on Linux, and on Windows it is what tells
 /// "Docker Desktop isn't installed" (connect.ps1 offers the winget install) from "it is, but not started".
 pub fn docker_ready() -> bool {
-    let mut command = quiet(Command::new("docker"));
+    let mut command = docker();
     command.args(["info", "--format", "{{.ServerVersion}}"]);
     capture("docker info", command, DOCKER_PROBE_LIMIT).is_ok_and(|answer| answer.success)
 }
@@ -430,6 +430,47 @@ pub fn start_docker_desktop(foreground: bool) -> Result<(), StartTrouble> {
         .map_err(|error| StartTrouble::Failed(format!("{exe} would not start: {error}")))
 }
 
+/// The CLI Docker Desktop ships inside itself, beside its launcher: `<app>\resources\bin\docker.exe`, the inverse
+/// of [`docker_app_beside`]. Cut by separator for the same reason.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn docker_cli_beside(app: &str) -> Option<String> {
+    let (dir, leaf) = app.rsplit_once('\\')?;
+    leaf.eq_ignore_ascii_case("Docker Desktop.exe")
+        .then(|| format!("{dir}\\resources\\bin\\docker.exe"))
+}
+
+/// Docker Desktop's own CLI, when this process's PATH cannot find one. A PATH is copied into a process when it
+/// starts, so the minutes after this app's own setup installs Docker Desktop are exactly the minutes its PATH
+/// predates the install: every `docker` this app spawned then failed to start, and the card read "Docker wouldn't
+/// start" over an engine that was up. ic adopts the same folder for its own process (`docker::adopt_program_folder`).
+#[cfg(windows)]
+fn docker_cli_fallback() -> Option<String> {
+    if docker_cli_path().is_some() {
+        return None;
+    }
+    let program_files = std::env::var("ProgramFiles").ok();
+    let local_app_data = std::env::var("LOCALAPPDATA").ok();
+    docker_app_candidates(program_files.as_deref(), local_app_data.as_deref())
+        .iter()
+        .filter_map(|app| docker_cli_beside(app))
+        .find(|cli| Path::new(cli).exists())
+}
+
+/// `docker`, as this app spawns it: the one on PATH, or [`docker_cli_fallback`] with its folder on the child's PATH,
+/// since the helpers the CLI calls (credentials, plugins) live beside it.
+fn docker() -> Command {
+    #[cfg(windows)]
+    if let Some(cli) = docker_cli_fallback() {
+        let mut command = quiet(Command::new(&cli));
+        if let Some((dir, _)) = cli.rsplit_once('\\') {
+            let existing = std::env::var("PATH").unwrap_or_default();
+            command.env("PATH", format!("{existing};{dir}"));
+        }
+        return command;
+    }
+    quiet(Command::new("docker"))
+}
+
 /// The docker CLI on this PATH, which names its own installation (see [`docker_app_beside`]).
 #[cfg(windows)]
 fn docker_cli_path() -> Option<String> {
@@ -489,7 +530,7 @@ const CLI_MISSING: &str = "the docker command would not run";
 /// The daemon's own answer: None when it answered, its last words when it did not. Only ever asked of a
 /// socket that is already listening — against a stopped daemon this same call spends tens of seconds.
 pub fn daemon_refusal() -> Option<String> {
-    let mut command = quiet(Command::new("docker"));
+    let mut command = docker();
     command.args(["info", "--format", "{{.ServerVersion}}"]);
     match capture("docker info", command, DOCKER_PROBE_LIMIT) {
         Ok(answer) if answer.success => None,
@@ -797,7 +838,7 @@ fn follow(
 /// script: these are the two places the app talks to docker directly, because there is no script that lists
 /// or tails, and inventing one to avoid a `docker ps` would be the tail wagging the dog.
 pub fn docker_output(args: &[&str], limit: Duration) -> Result<String, String> {
-    let mut command = quiet(Command::new("docker"));
+    let mut command = docker();
     command.args(args);
     let what = format!("docker {}", args.first().copied().unwrap_or_default());
     let answer = capture(&what, command, limit).map_err(|silence| silence.to_string())?;
@@ -1118,7 +1159,7 @@ pub fn json_object_in(stdout: &str) -> Option<serde_json::Value> {
 /// not come up is nearly always in the second one — so unlike [`docker_output`], a non-zero exit here still
 /// returns what was captured rather than throwing it away.
 pub fn logs_tail(container: &str, tail: u32) -> Result<String, String> {
-    let mut command = quiet(Command::new("docker"));
+    let mut command = docker();
     command.args(["logs", "--tail", &tail.to_string(), container]);
     let answer = capture("docker logs", command, DOCKER_READ_LIMIT)
         .map_err(|silence| silence.to_string())?;
@@ -1393,6 +1434,12 @@ mod tests {
         );
         // A docker.exe that is not the one inside Docker Desktop names no app at all.
         assert_eq!(docker_app_beside("C:\\bin\\docker.exe"), None);
+        assert_eq!(
+            docker_cli_beside("C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe").as_deref(),
+            Some("C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe")
+        );
+        assert_eq!(docker_cli_beside("C:\\Tools\\docker.exe"), None);
+        assert_eq!(docker_cli_beside("Docker Desktop.exe"), None);
         assert_eq!(
             docker_app_beside("C:\\Docker\\resources\\bin\\compose.exe"),
             None

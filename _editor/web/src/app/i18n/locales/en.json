@@ -5676,11 +5676,16 @@
             "installingOnDeviceNo": "Installing {what} on this device: no word from the app for a while",
             "openSetup": "Open the setup",
             "reportsEverySecondWhile": "It reports every second while it runs. If the Intentic window is gone, start the app again: the install picks up from where it was.",
+            "restartBeforeDocker": "Windows has to restart before Docker can run. Restart from the setup and it carries on by itself once the PC is back.",
             "seeWhy": "See why",
             "settingUpOnDevice": "Setting up {what} on this device stopped. The Intentic window has the reason, and a way to try again.",
             "showSetup": "Show the setup",
+            "signOutBeforeDocker": "Windows only applies Docker's permission at the next sign-in. Sign out from the setup and it carries on by itself once you're back.",
             "stoppedSettingUpOn": "You stopped setting up {what} on this device. Nothing else is running there.",
-            "waitingInIntenticWindow": "Waiting for you in the Intentic window",
+            "useHostedInstead": "Not a good moment? Use a machine we host instead",
+            "waitingForAnswer": "Waiting for your answer",
+            "waitingForRestart": "Waiting for this PC to restart",
+            "waitingForSignOut": "Waiting for you to sign out of Windows",
             "yourSandbox": "your sandbox"
         },
         "hostedWait": {

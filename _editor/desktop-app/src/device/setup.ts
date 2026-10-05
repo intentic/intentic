@@ -23,6 +23,7 @@ import {
     type SessionEnd,
     type SetupArgs,
     type SetupReport,
+    type SetupWaitingFor,
 } from "../desktop";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "../setupPlan";
 import { dockerReady, info } from "./machine";
@@ -136,8 +137,19 @@ const planFor = (args: SetupArgs): readonly PlanStep[] =>
 /** The Docker probe answered: a plan nobody has started following yet is drawn again with the answer. */
 export const replanForDocker = (): void => {
     if (pending.value !== undefined && progress.value !== undefined && progress.value.index === -1) {
-        progress.value = startProgress(planFor(pending.value), progress.value.startedAt);
+        progress.value = startProgress(planFor(pending.value), progress.value.startedAt, progress.value.floor);
     }
+};
+
+// The highest a re-run's bar starts from: an attempt that got far and then stopped still has its last steps to do.
+const HIGHEST_FLOOR = 90;
+// Which setup the bar on screen belongs to, by its code: a re-run of the same one starts where the last attempt left
+// the bar, and a new link starts from nothing.
+let barFor: string | undefined;
+const floorFor = (args: SetupArgs): number => {
+    const carried = barFor === args.code && progress.value !== undefined ? Math.min(progress.value.percent, HIGHEST_FLOOR) : 0;
+    barFor = args.code;
+    return carried;
 };
 
 // A fresh attempt: the previous list stays on screen through a re-run rather than being cleared, so items the reader
@@ -151,11 +163,18 @@ const beginAttempt = (args: SetupArgs, startedAt: number): void => {
     clearCommandFailureTimer();
     stopping.value = false;
     expired.value = false;
-    progress.value = startProgress(planFor(args), startedAt);
+    progress.value = startProgress(planFor(args), startedAt, floorFor(args));
     now.value = startedAt;
 };
 
-export const runSetup = async (): Promise<void> => {
+/**
+ * What started a run, for the funnel: the app on a link's arrival or after a restart, or which of the reader's presses
+ * (the requirements card's go-ahead or its "Check again", a stopped run's "Try again"). A run that stops on a question
+ * and a reader who presses again look the same from the outcome alone.
+ */
+export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `retry`;
+
+export const runSetup = async (trigger: InstallTrigger = `retry`): Promise<void> => {
     const args = pending.value;
     if (args === undefined || running.value) {
         return;
@@ -163,20 +182,35 @@ export const runSetup = async (): Promise<void> => {
     const startedAt = Date.now();
     beginAttempt(args, startedAt);
     track(`desktop_install_started`, {
+        trigger,
         dockerReady: dockerReady.value ?? null,
         sync: (args.syncDir ?? ``) !== ``,
         consented: consented.value,
         resumed: resuming.value,
+        // Where the bar starts: a re-run picks up from the last attempt's position rather than from nothing.
+        fromPercent: Math.round(progress.value?.percent ?? 0),
     });
     const failure = await start(`setup`, () => setupRun(args, consented.value));
     await settleSetup(args, failure, startedAt);
 };
 
-// What the funnel hears of a finished run: its outcome, and the requirement ids it stopped on, never reworded.
+// The requirements as the funnel hears them: ids, what each asks of the reader, and how far each row got, never their
+// words (a requirement's sentences name the Windows account).
+const requirementFacts = (): Record<string, unknown> => {
+    const listed = requirements.value;
+    if (listed.length === 0) {
+        return {};
+    }
+    return {
+        requirements: listed.map((requirement) => requirement.id),
+        requirementActions: Object.fromEntries(listed.map((requirement) => [requirement.id, requirement.action])),
+        requirementStates: Object.fromEntries(listed.map((requirement) => [requirement.id, requirementState.value[requirement.id]?.state ?? `pending`])),
+    };
+};
+
+// What the funnel hears of a finished run: its outcome, and the requirements it stopped on.
 const reportFinished = (ok: boolean, startedAt: number): void => {
-    const outcome = { ...runOutcome(`setup`, ok, startedAt) };
-    const ids = requirements.value.map((requirement) => requirement.id);
-    track(`desktop_install_finished`, ids.length === 0 ? outcome : { ...outcome, requirements: ids });
+    track(`desktop_install_finished`, { ...runOutcome(`setup`, ok, startedAt), ...requirementFacts() });
 };
 
 // A designed stop (desktop.ts) carries no error text, since the requirements list is the message; a stop nobody asked
@@ -231,6 +265,7 @@ export const stopSetup = async (): Promise<void> => {
 /** Puts the transcript on the clipboard: what someone stuck actually needs to hand over. */
 export const logCopied = ref(false);
 export const copyLog = async (): Promise<void> => {
+    track(`desktop_install_log`, { action: `copied`, ...whereLeft() });
     const text = eventsOf(`setup`)
         .flatMap((event) => (event.kind === `line` ? [`${event.stream === `stderr` ? `! ` : ``}${event.text}`] : []))
         .join(`\n`);
@@ -241,17 +276,35 @@ export const copyLog = async (): Promise<void> => {
 
 export const openLogFolder = async (): Promise<void> => {
     if (setupLog.value !== undefined) {
+        track(`desktop_install_log`, { action: `folder`, ...whereLeft() });
         await revealLog(setupLog.value);
     }
 };
 
-/** A finished or failed setup's card taken off the page, and the workspace's strip told so. */
-export const closeSetup = (): void => {
+// The card off the page, and the workspace's strip told so.
+const putAway = (): void => {
     if (running.value) {
         return;
     }
     setupOpen.value = false;
     void setupProgress({ ...nameOf(pending.value), state: `closed`, percent: 0 });
+};
+
+/** A finished or failed setup's card dismissed by the reader: on a question still open, the likeliest place to leave. */
+export const closeSetup = (): void => {
+    if (running.value) {
+        return;
+    }
+    track(`desktop_install_closed`, { state: reportState.value, ...whereLeft(), ...requirementFacts() });
+    putAway();
+};
+
+/** The transcript shown or hidden: someone stuck reading what the setup said. */
+export const toggleSetupLog = (): void => {
+    setupLogOpen.value = !setupLogOpen.value;
+    if (setupLogOpen.value) {
+        track(`desktop_install_log`, { action: `shown`, running: running.value, ...whereLeft() });
+    }
 };
 
 /** Where the reader left a run when they went back: its phase and the bar's position; nothing about the machine. */
@@ -276,7 +329,7 @@ export const backToWorkspace = async (): Promise<void> => {
     // A dismissal after the run ended is just closing a finished or failed card, not the same event.
     track(`desktop_install_dismissed`, { running: running.value, ...whereLeft() });
     /* A live run keeps its card so a later failure can come back to it. */
-    closeSetup();
+    putAway();
     await workspaceOpen();
 };
 
@@ -312,8 +365,35 @@ const report = computed((): SetupReport | undefined => {
     if (step !== undefined) {
         told.step = step;
     }
+    if (told.state === `waiting`) {
+        told.waitingFor = waitingFor.value;
+        told.requirements = requirements.value.map((requirement) => requirement.id);
+    }
     return told;
 });
+
+// What the card's question asks, in the terms the workspace page words it in: a restart (or a sign-out the last
+// sign-out did not settle, which the card answers with a restart too, Requirements.vue), a sign-out, or a go-ahead.
+export const waitingFor = computed((): SetupWaitingFor => {
+    const actions = new Set(requirements.value.map((requirement) => requirement.action));
+    if (actions.has(`restart`) || (actions.has(`signOut`) && resumedHow.value === `signout`)) {
+        return `restart`;
+    }
+    return actions.has(`signOut`) ? `signOut` : `consent`;
+});
+
+/** Whether this PC is waiting for Windows to end the session (a restart or a sign-out) before Docker can run. */
+export const sessionEndAwaited = computed(() => waitingFor.value !== `consent` && requirements.value.length > 0 && !running.value);
+
+// The card's question as the funnel sees it, once per distinct list: which rows, what each asks, how far each got.
+watch(
+    () => (requirementsShown.value ? requirements.value.map((requirement) => `${requirement.id}:${requirement.action}`).join(`,`) : ``),
+    (shown) => {
+        if (shown !== ``) {
+            track(`desktop_requirements_shown`, { waitingFor: waitingFor.value, resumedFrom: resumedHow.value ?? null, ...requirementFacts() });
+        }
+    },
+);
 watch(
     () => JSON.stringify(report.value),
     () => {
@@ -328,6 +408,8 @@ watch(
 export const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<void> => {
     track(`desktop_install_elsewhere`, { from, requirements: requirements.value.map((requirement) => requirement.id) });
     setupOpen.value = false;
+    // The sandbox runs elsewhere now: the restart or sign-out this PC was waiting for is nobody's next step any more.
+    requirements.value = [];
     // `elsewhere=1` is what stops /setup acting on arrival: the hosted rung is preselected, and it is the reader's click
     // on it that spends their allowance, never this handover. `sandbox` names the row this install was for.
     const query = new URLSearchParams({ elsewhere: `1`, machine: `hosted` });
@@ -341,7 +423,7 @@ export const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<
 /** The reader's go-ahead after the first pass reported what it would change: the terminal path's typed "y". */
 export const installRequirements = async (): Promise<void> => {
     consented.value = true;
-    await runSetup();
+    await runSetup(`consent`);
 };
 
 /** Restart and sign-out are one verb, both applied by Windows between sessions; the setup is saved to disk first. */
@@ -379,7 +461,7 @@ export const loadResumable = async (): Promise<void> => {
     // Already agreed to before the restart this app performed on that answer; not asked again.
     consented.value = true;
     track(`desktop_install_resumed`, { agedSeconds: parked.agedSeconds });
-    await runSetup();
+    await runSetup(`resume`);
 };
 
 /** The way on from a code that ran out: the setup page mints a fresh one and, inside this app, hands it straight back. */
@@ -399,7 +481,7 @@ export const loadPending = async (): Promise<void> => {
     // A fresh link is a fresh conversation: nothing about an earlier session's ending applies to it.
     resumedHow.value = undefined;
     expired.value = false;
-    await runSetup();
+    await runSetup(`arrival`);
 };
 
 /* THE SETUP'S OWN RUN, as its events arrive (useDevice.ts hands every event of `setup` here first). */

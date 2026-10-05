@@ -219,6 +219,8 @@ export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace
 // the frame back rather than opening beside it).
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
 /* Setup progress is shared with the workspace bar. */
+/** What a setup stopped on a question is waiting for: the reader's go-ahead, or a session Windows has to end. */
+export type SetupWaitingFor = `consent` | `restart` | `signOut`;
 export interface SetupReport {
     name?: string;
     state: `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
@@ -226,6 +228,10 @@ export interface SetupReport {
     position?: string;
     remaining?: string;
     step?: string;
+    /** On `waiting`: what the question asks (commands.rs `SetupReport`). */
+    waitingFor?: SetupWaitingFor;
+    /** On `waiting`: the requirement ids on the card, for the page's analytics. */
+    requirements?: string[];
 }
 export const setupProgress = (report: SetupReport): Promise<void> => invoke(`setup_progress`, { report });
 /* This page's content is `height` tall: size the window to it (fitWindow.ts is the caller). */

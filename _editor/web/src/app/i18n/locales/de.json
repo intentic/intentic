@@ -4005,11 +4005,16 @@
             "installingOnDeviceNo": "{what} wird auf diesem Gerät installiert: seit einer Weile kein Wort von der App",
             "openSetup": "Einrichtung öffnen",
             "reportsEverySecondWhile": "Es meldet sich jede Sekunde, solange es läuft. Wenn das Intentic-Fenster weg ist, starten Sie die App erneut: die Installation macht dort weiter, wo sie war.",
+            "restartBeforeDocker": "Windows muss neu starten, bevor Docker laufen kann. Starte über die Einrichtung neu, dann geht sie von selbst weiter, sobald der PC wieder da ist.",
             "seeWhy": "Nachsehen, warum",
             "settingUpOnDevice": "Die Einrichtung von {what} auf diesem Gerät ist gestoppt. Das Intentic-Fenster nennt den Grund und einen Weg, es erneut zu versuchen.",
             "showSetup": "Einrichtung anzeigen",
+            "signOutBeforeDocker": "Windows übernimmt die Docker-Berechtigung erst bei der nächsten Anmeldung. Melde dich über die Einrichtung ab, dann geht sie von selbst weiter, sobald du zurück bist.",
             "stoppedSettingUpOn": "Sie haben die Einrichtung von {what} auf diesem Gerät gestoppt. Dort läuft sonst nichts.",
-            "waitingInIntenticWindow": "Wartet im Intentic-Fenster auf Sie",
+            "useHostedInstead": "Gerade ungünstig? Nimm stattdessen eine Maschine von uns",
+            "waitingForAnswer": "Wartet auf deine Antwort",
+            "waitingForRestart": "Wartet auf den Neustart dieses PCs",
+            "waitingForSignOut": "Wartet darauf, dass du dich bei Windows abmeldest",
             "yourSandbox": "Ihre Sandbox"
         },
         "hostedWait": {

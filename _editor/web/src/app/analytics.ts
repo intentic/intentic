@@ -89,6 +89,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf): Promise<voi
         (current, previous) => {
             if (current) {
                 posthog.identify(current.id, { email: current.email, name: current.name });
+                linkInstall(posthog, current.id);
                 return;
             }
             if (previous) {
@@ -109,6 +110,21 @@ const registerClient = (posthog: PostHog): void => {
     posthog.register(
         app === undefined ? { client: `browser` } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId },
     );
+};
+
+// THE APP'S OWN EVENTS ON THIS PERSON. The desktop app's screens report under its install id (desktop-app's
+// analytics.ts), which on its own is a nameless person beside this one: its install, Docker and requirement events never
+// showed on the account's timeline. An alias folds that id into the account signed in here. Nothing new leaves: every
+// event from the app's window already carries the install id (`registerClient`). PostHog only merges an id that belongs
+// to no identified person yet, so a second account signed in on the same install keeps its own, and the first the app's.
+let linked: string | undefined;
+const linkInstall = (posthog: PostHog, userId: string): void => {
+    const installId = desktopApp()?.installId;
+    if (installId === undefined || installId === `` || installId === userId || linked === `${userId}|${installId}`) {
+        return;
+    }
+    linked = `${userId}|${installId}`;
+    posthog.alias(installId);
 };
 
 // Funnel milestone events from call sites. No-op until `initAnalytics` has run (no key in dev); otherwise

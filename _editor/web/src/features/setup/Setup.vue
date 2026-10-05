@@ -72,7 +72,7 @@ const { user } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 // The preferred shell, a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
-const { report: desktopReport, heardAt: desktopHeardAt, ended: desktopEnded } = useDesktopSetup();
+const { report: desktopReport, heardAt: desktopHeardAt, ended: desktopEnded, parked: desktopParked } = useDesktopSetup();
 // Token and zone discovery shared with useCloudflareZones; it feeds only the command, never .env.
 const cf = useCloudflareZones();
 const { cfToken, cfTokenValid, selectedZone, zonesLoading, zonesError } = cf;
@@ -1106,7 +1106,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                         {{ t(`setup.setup.startingDockerFirstRun`) }}
                                     </template>
                                     <!-- Copied commands require a paste; the app path opens its own window. -->
-                                    <template v-else-if="handoff === `handed` && launched && desktopReport">
+                                    <template v-else-if="handoff === `handed` && launched && (desktopReport || desktopParked)">
                                         <span class="font-medium text-content">{{ t(`setup.setup.appSettingUp`) }}</span>
                                         {{ t(`setup.setup.pageOpensWorkspaceMoment`) }}
                                     </template>
@@ -1143,6 +1143,17 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 v-if="launched && desktopReport && !(desktopReport.state === `failed` && reportFailures !== null)"
                                 :report="desktopReport"
                                 :heard-at="desktopHeardAt"
+                                @elsewhere="showOtherMachines"
+                            />
+                            <!-- The app's card was put away on a restart or a sign-out the PC still waits for: still the next thing
+                                 to do, and "Still nothing" under it read as a setup that had died. -->
+                            <DesktopSetupProgress
+                                v-else-if="launched && desktopParked"
+                                :report="{ state: `waiting`, waitingFor: desktopParked, percent: 0 }"
+                                :heard-at="desktopHeardAt"
+                                :put-away="true"
+                                @reopen="runHere"
+                                @elsewhere="showOtherMachines"
                             />
 
                             <!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true.
@@ -1165,7 +1176,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
 
                             <!-- Wide screens move this explanation into the reference column. -->
                             <SetupNudge
-                                v-if="nudging"
+                                v-if="nudging && !desktopParked"
                                 class="xl:hidden"
                                 :variant="nudgeVariant"
                                 :stalled="stalled"
@@ -1202,7 +1213,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                     </div>
                     <!-- Correction as this column's second card, once the wait reads as a misunderstanding, beside the command. -->
                     <SetupNudge
-                        v-if="nudging"
+                        v-if="nudging && !desktopParked"
                         :variant="nudgeVariant"
                         :stalled="stalled"
                         :command="selectedCommand"

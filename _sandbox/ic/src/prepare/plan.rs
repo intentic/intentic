@@ -285,6 +285,19 @@ pub fn sign_out_requirement(facts: &Facts) -> Requirement {
     )
 }
 
+/// A RESTART WINDOWS IS ALREADY WAITING FOR. Built in one place because two moments produce it: the examination
+/// before anything is changed, and a fix that would otherwise end on a sign-out (mod.rs) while Windows also waits
+/// for a restart, since a restart is a new sign-in too and asking for both sent a reader through each in turn.
+pub fn restart_requirement() -> Requirement {
+    req(
+        "pending-restart",
+        "A restart Windows is waiting for",
+        "Windows has updates that only a restart finishes, and the features Docker needs cannot be set up until then.",
+        "Restart this PC; the setup continues once you are back.",
+        Action::Restart,
+    )
+}
+
 /* Read top to bottom: the early returns are not shortcuts, they are the DEPENDENCY ORDER. */
 pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     let mut found = Vec::new();
@@ -378,13 +391,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     // Enabling optional features on top of a staged servicing operation is how a machine ends up with a
     // half-installed WSL and a `wsl --install` that reports success and changes nothing.
     if facts.reboot_pending {
-        found.push(req(
-            "pending-restart",
-            "A restart Windows is waiting for",
-            "Windows has updates that only a restart finishes, and the features Docker needs cannot be set up until then.",
-            "Restart this PC; the setup continues once you are back.",
-            Action::Restart,
-        ));
+        found.push(restart_requirement());
         found.extend(disk(facts));
         return found;
     }

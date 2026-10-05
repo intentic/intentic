@@ -8,6 +8,8 @@
         "copy": "Copiarlo",
         "dockerDidntAnswer": "Docker no respondió",
         "dockerDidntDescribeSandboxs": "Docker no ha descrito el reparto que este sandbox tiene de este ordenador. Recarga e inténtalo de nuevo.",
+        "dockerWaitsForRestart": "Docker no puede ejecutarse hasta que reinicies este PC. Reinícialo desde aquí y tu configuración seguirá sola cuando vuelvas.",
+        "dockerWaitsForSignOut": "Docker no puede ejecutarse hasta que cierres sesión en Windows y vuelvas a entrar. Cierra sesión desde aquí y tu configuración seguirá sola cuando vuelvas.",
         "downloadingIntentic": "Descargando Intentic {version}… {percent} %",
         "getFreshCode": "Conseguir un código nuevo",
         "getLatestVersion": "Conseguir la última versión",

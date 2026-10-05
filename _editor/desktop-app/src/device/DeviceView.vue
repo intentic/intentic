@@ -96,6 +96,9 @@ const {
     openLogFolder,
     backToWorkspace,
     closeSetup,
+    toggleSetupLog,
+    sessionEndAwaited,
+    waitingFor,
     setUpElsewhere,
     installRequirements,
     endSession,
@@ -120,11 +123,6 @@ const dockerMatters = computed(() => facts.value?.hostsSandboxes === true || gro
 const signedIn = computed(() => facts.value?.accountSeen === true);
 const toSetup = async (): Promise<void> => {
     await (signedIn.value ? workspaceOpen(`/setup`) : signIn());
-};
-
-// The log's own toggle: the store holds whether it is open, since the run behind it outlives the page.
-const toggleSetupLog = (): void => {
-    setupLogOpen.value = !setupLogOpen.value;
 };
 
 /* The way back says where it goes, and that leaving this page does not stop a live setup. */
@@ -252,7 +250,7 @@ onUnmounted(() => {
                     @install="installRequirements"
                     @restart="endSession(`restart`)"
                     @signout="endSession(`signout`)"
-                    @recheck="runSetup"
+                    @recheck="runSetup(`recheck`)"
                     @elsewhere="setUpElsewhere(`requirements`)"
                 />
                 <!-- Only where the progress card cannot say it: with a plan on screen, the failure is told once, there. -->
@@ -277,7 +275,7 @@ onUnmounted(() => {
 
                 <!-- Only on failure: the hosted alternative rides the same row, as it does on the requirements card. -->
                 <div v-if="(setupError || wasStopped) && !expired && requirements.length === 0" class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <Button :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup">
+                    <Button :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup(`retry`)">
                         <template #icon><Icon name="bolt" /></template>
                     </Button>
                     <button type="button" :class="ui.textAction()" :disabled="running" @click="setUpElsewhere(`stopped`)">
@@ -346,9 +344,31 @@ onUnmounted(() => {
                 </div>
             </section>
 
+            <!-- A PC WAITING FOR WINDOWS TO END THE SESSION, with the setup card put away: Docker cannot run until then, and
+                 a "Docker wouldn't start" card here sent a reader pressing its "Check again" instead of restarting. -->
+            <Notice v-if="!setupMode && sessionEndAwaited" tone="warning" icon="refresh" class="items-center">
+                <span class="min-w-0 flex-1">{{
+                    waitingFor === `restart`
+                        ? t(`desktop.app.dockerWaitsForRestart`)
+                        : t(`desktop.app.dockerWaitsForSignOut`)
+                }}</span>
+                <Button
+                    v-if="waitingFor === `restart`"
+                    class="ml-2 shrink-0"
+                    size="small"
+                    :label="t(`desktop.requirements.restartNow`)"
+                    @click="endSession(`restart`)"
+                />
+                <Button v-else class="ml-2 shrink-0" size="small" :label="t(`desktop.requirements.signOutNow`)" @click="endSession(`signout`)" />
+                <button type="button" :class="ui.textAction(`ml-3 shrink-0`)" @click="setUpElsewhere(`requirements`)">
+                    <Icon name="server" class="shrink-0" />
+                    <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
+                </button>
+            </Notice>
             <!-- THE ENGINE, while the app is starting it and after a start that did not work out. It leads the sandboxes
-                 because a list drawn above a dead Docker is a list of things that are not there. -->
-            <template v-if="dockerMatters">
+                 because a list drawn above a dead Docker is a list of things that are not there. A setup on screen owns
+                 the engine (`ic docker prepare` starts it as one of its steps), so the card stands down beside one. -->
+            <template v-else-if="dockerMatters && !setupMode">
                 <DockerCard
                     v-if="dockerCardShown"
                     :starting="dockerStarting"
@@ -356,7 +376,7 @@ onUnmounted(() => {
                     :limit-seconds="info?.engineLimitSeconds"
                     :report="dockerReport"
                     :os="info?.os"
-                    @start="startDocker"
+                    @start="startDocker(`card`)"
                     @open="openDocker"
                     @install="openUrl(DOCKER_DOCS)"
                 />
@@ -369,7 +389,7 @@ onUnmounted(() => {
                 <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. -->
                 <Notice v-else-if="engineListening === false" tone="warning" icon="box" class="items-center">
                     <span class="min-w-0 flex-1">{{ t(`desktop.device.dockerIsntRunning`) }}</span>
-                    <Button class="ml-2 shrink-0" size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker" />
+                    <Button class="ml-2 shrink-0" size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker(`notice`)" />
                 </Notice>
             </template>
 
