@@ -105,7 +105,7 @@ public static class IntenticUia {
     AutomationElement root = AutomationElement.FromHandle(h);
     AutomationElement cached = root.GetUpdatedCache(Request(TreeScope.Subtree, AutomationElementMode.None));
     string app = "";
-    try { app = Process.GetProcessById(root.Current.ProcessId).ProcessName; } catch (Exception) { }
+    try { app = Process.GetProcessById(root.Current.ProcessId).ProcessName; } catch (Exception) { } // allow(silent-catch): a process gone since its window was read leaves the app unnamed, not the tree unread
     StringBuilder b = new StringBuilder("{\\"window\\":{");
     b.Append("\\"id\\":").Append(Esc(h.ToInt64().ToString())).Append(",\\"title\\":").Append(Esc(root.Current.Name)).Append(",\\"app\\":").Append(Esc(app));
     b.Append(",\\"class\\":").Append(Esc(root.Current.ClassName));

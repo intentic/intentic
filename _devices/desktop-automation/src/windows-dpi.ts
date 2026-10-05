@@ -10,5 +10,5 @@
 // 10 1703 has no per-monitor v2, and keeps the unaware behaviour it had before this line existed.
 export const WINDOWS_DPI_AWARE = `
 Add-Type -Namespace IntenticDpi -Name Native -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(System.IntPtr value);';
-try { [void][IntenticDpi.Native]::SetProcessDpiAwarenessContext([System.IntPtr]::new(-4)) } catch { };
+try { [void][IntenticDpi.Native]::SetProcessDpiAwarenessContext([System.IntPtr]::new(-4)) } catch { }; # // allow(silent-catch): a Windows older than 10 1703 keeps the unaware behaviour, as the note above says
 `;

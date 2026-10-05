@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, shallowRef } from "vue";
-import { askLocalApp, LOCAL_PROJECT_EVENT, type SyncDirection } from "../app/environments/local";
+import { askLocalApp, LOCAL_PROJECT_EVENT, type SyncDirection } from "../../app/environments/local";
 import { answered, BRING_BACK_CAP, type BringBackState, chosenPaths, IDLE, projectAnswer, type SandboxChange } from "./bringBack";
 
 // The Bring back section's state and its four asks (bringBack.ts). Each ask moves the section to its waiting step and

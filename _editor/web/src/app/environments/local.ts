@@ -40,7 +40,7 @@ export const LOCAL_EXTENSIONS: ReadonlySet<string> = new Set([`intentic.viewers`
 
 // What the window asks of the app, by link as every desktop page does (desktop.ts): the app accepts only these from a
 // local window, and does the rest itself. `ask` starts an agent's conversation about one entry; the last four are about
-// the folder's own sandbox, and each is answered with `LOCAL_PROJECT_EVENT` (local/bringBack.ts).
+// the folder's own sandbox, and each is answered with `LOCAL_PROJECT_EVENT` (local/bring-back/bringBack.ts).
 export type LocalVerb = `open-folder` | `open-file` | `reveal` | `sandbox` | `ask` | `changes` | `bring-back` | `restore` | `direction`;
 
 // Which way a folder and its sandbox sync: `to-sandbox` carries the folder's edits over and an agent's back only when
@@ -84,7 +84,7 @@ export const LOCAL_CLOSE_REQUESTED_EVENT = `intentic:close-requested`;
 // An entry of this window's folder opened from outside the window (a double-click in the file manager), as
 // `detail.path`, relative to the folder (local/appEvents.ts).
 export const LOCAL_OPEN_EVENT = `intentic:open`;
-// The answer to `changes`, `bring-back`, `restore` or `direction`, or the error that stopped one (local/bringBack.ts).
+// The answer to `changes`, `bring-back`, `restore` or `direction`, or the error that stopped one (local/bring-back/bringBack.ts).
 export const LOCAL_PROJECT_EVENT = `intentic:project`;
 // The app showing this window for a reason of its own (a setup handed over from the workspace, the tray's agent row): the
 // screen it is for, as `detail.path`, a route of the local shell (`/device`). local/LocalShell.vue takes it there.

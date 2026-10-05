@@ -20,7 +20,7 @@ import { useQuickOpen } from "../shell/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
 import { localHost } from "../app/environments/localHost";
 import { useFolderSandbox } from "./folderSandbox";
-import LocalBringBack from "./LocalBringBack.vue";
+import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import { type LocalChord, localChord } from "./localKeys";
 import { useLocalProject } from "./useLocalProject";
@@ -293,7 +293,7 @@ onUnmounted(() => {
                     @ask="ask"
                 />
             </div>
-            <!-- What agents changed in the folder's own sandbox, brought back on request (LocalBringBack.vue). -->
+            <!-- What agents changed in the folder's own sandbox, brought back on request (bring-back/LocalBringBack.vue). -->
             <LocalBringBack v-if="face !== undefined && face.file === undefined && hasSandbox" />
             <!-- The way from this folder to an agent: a sandbox of its own, kept in sync with it (the app's project.rs). Not for
                  a folder with nothing in it yet, which would hand an agent nothing to work on. -->

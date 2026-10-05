@@ -8,7 +8,9 @@ import { desktopRouter } from "./desktop-tools.js";
 /* The sandbox's own desktop through its MCP router, the way the daemon's door calls it: a real Xvfb, a real capture
    and real input. Needs the browser pack's Xvfb, ffmpeg and xdotool. */
 
-const x11 = requires(desktopAvailable(), "the browser pack's Xvfb, ffmpeg and xdotool");
+const x11 = requires(desktopAvailable(), "the browser pack's Xvfb, ffmpeg and xdotool", {
+    absentOnCi: "no CI job that runs the daemon's suites installs the browser pack; the sandbox image carries it",
+});
 
 // What a tool call answers, read the way a runtime reads it.
 const CallResultSchema = z.object({

@@ -26,6 +26,7 @@ import { deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
+import { desktopServersOf } from "./desktop/desktop-tools.js";
 
 import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usage.js";
 import { claudeHeadroomSource } from "./usage/claude-usage.js";
@@ -171,6 +172,9 @@ export interface Services
     readonly reach: ReachReporter;
     // Makes a turn's browser router, which the turn then mounts.
     readonly browserRouters: BrowserRouterFactory;
+    // The sandbox's own desktop as a turn mounts it, beside its browsers; a seam here rather than an import in
+    // agent/tools/turn-tools.ts, since the desktop builds on the browser stack's display and the browser reaches the agent.
+    readonly desktopServers: typeof desktopServersOf;
     // Every live turn's MCP mounts (its browser routers, peers and extension cards), reached at /mcp/<name> with the
     // turn's own bearer, which opens only what that turn mounted.
     readonly turnMounts: TurnMounts;
@@ -429,6 +433,7 @@ const createDaemonMembers = (
         announcer: createAnnouncer(config, logger),
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace })),
+        desktopServers: desktopServersOf,
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         info: infoOf(config),
         presentation: () => fetchPresentation(config),

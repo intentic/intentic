@@ -8,7 +8,8 @@ import type { BrowserTurnTools } from "./browser-tools.js";
 // Its own module, not browser-tools.ts, so an arm can compose a request without pulling the Chromium bring-up in.
 type BrowserFields = Pick<TurnTools, "browserOutputDir" | "browserPorts" | "browserPasskeys" | "browserAccounts" | "desktop">;
 
-export const browserFields = (root: string, browser: BrowserTurnTools): BrowserFields => {
+// `desktop` rides beside the browsers (agent/tools/turn-tools.ts), so its one fact is read off the same mounts.
+export const browserFields = (root: string, { browser, desktop }: { readonly browser: BrowserTurnTools; readonly desktop: boolean }): BrowserFields => {
     const fields: { -readonly [Field in keyof BrowserFields]: BrowserFields[Field] } = {};
     if (browser.servers.length > 0) {
         fields.browserOutputDir = browserOutputDir(root);
@@ -22,7 +23,7 @@ export const browserFields = (root: string, browser: BrowserTurnTools): BrowserF
             fields.browserAccounts = browser.accounts;
         }
     }
-    if (browser.desktop !== undefined) {
+    if (desktop) {
         fields.desktop = true;
     }
     return fields;

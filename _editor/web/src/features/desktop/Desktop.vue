@@ -107,7 +107,7 @@ const wheel = (event: WheelEvent): void => {
                     <span
                         v-if="view.held.value"
                         class="shrink-0 whitespace-nowrap rounded-md bg-warning/15 px-1.5 py-0.5 text-2xs font-medium text-warning"
-                        v-tooltip.bottom="t(`desktop.desktop.heldNote`)"
+                        v-tooltip.bottom="{ title: t(`desktop.desktop.heldTitle`), note: t(`desktop.desktop.heldNote`) }"
                         >{{ view.driving.value ? t(`desktop.desktop.agentWaits`) : t(`desktop.desktop.heldElsewhere`) }}</span
                     >
                     <button

@@ -301,9 +301,11 @@ export const memoryNeedsStore = (now: () => number = Date.now): NeedsStore => {
 // A turn's MCP mounts as the daemon composes them, over routers that never start a browser: every planned turn leases
 // its mounts, and no suite built on this calls a browser tool. The real hub, so a suite reads what a turn mounted the
 // way the door would.
-export const testTurnMounts = (): Pick<Services, "turnMounts" | "browserRouters"> => ({
+export const testTurnMounts = (): Pick<Services, "turnMounts" | "browserRouters" | "desktopServers"> => ({
     turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${testConfig.sandbox.port}${TURN_MOUNT_BASE}` }),
     browserRouters: () => unstubbed<BrowserRouter>("browserRouter", { close: () => undefined }),
+    // No display in a suite: the desktop is never mounted.
+    desktopServers: () => [],
 });
 
 // An in-memory stdio child: protocol tests exercise the connector without starting Codex.

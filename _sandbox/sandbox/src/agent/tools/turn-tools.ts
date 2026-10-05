@@ -12,10 +12,12 @@ import type { AgentTool } from "./agent-tools.js";
 export interface TurnRemoteTools {
     readonly tools: AgentTool[];
     readonly browser: BrowserTurnTools;
+    // Whether the sandbox's own desktop (desktop/desktop-tools.ts) is mounted, so the prompt names it only then.
+    readonly desktop: boolean;
     readonly release: () => void;
 }
 
-export type TurnToolsDeps = Pick<Services, "tools" | "turnMounts" | "browserRouters"> & ExtensionHost;
+export type TurnToolsDeps = Pick<Services, "tools" | "turnMounts" | "browserRouters" | "desktopServers"> & ExtensionHost;
 
 // Every MCP server a turn may reach, as one list every runtime projects the same way: the daemon's own internal tools,
 // the workspace's mcp-kind capabilities, and, through the daemon's one MCP door on a lease of this turn's own, the
@@ -43,6 +45,9 @@ export const turnToolsOf = async (
             extensionMcpToolsOf(services, granted, lease, turn.extensions),
             browserServersOf(granted, services.workspace.root, { routers: services.browserRouters, lease }, turn.anonymousBrowser, turn.conversationId),
         ]);
+        // Mounted beside the browsers rather than by browser-tools.ts, since the desktop builds on the browser stack's
+        // display: the same pack brings it, and the same persona power lets the agent put a program on a screen.
+        const desktop = services.desktopServers(lease, turn.anonymousBrowser);
         return {
             tools: [
                 ...services.tools,
@@ -51,9 +56,10 @@ export const turnToolsOf = async (
                 ...peerToolsOf("webext", granted, lease),
                 ...extension,
                 ...browser.servers,
-                ...(browser.desktop === undefined ? [] : [browser.desktop]),
+                ...desktop,
             ],
             browser,
+            desktop: desktop.length > 0,
             release: lease.release,
         };
     } catch (error) {

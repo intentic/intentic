@@ -50,6 +50,7 @@ const NO_ARGS = z.object({});
 // also places each display in it, which is how an agent on a wide multi-monitor desk finds the one to look closer at.
 const shotContent = async (shot: Shot, what: string): Promise<unknown[]> => {
     frames.sent();
+    // allow(silent-catch): the display layout only annotates the shot; a desktop that cannot list it still sends the picture
     const displays = what === "the whole desktop" ? await desktop().displays().catch(() => []) : [];
     const placed = displays.length > 1 ? ` Displays: ${describeDisplays(displays, shot.frame)}.` : "";
     return [

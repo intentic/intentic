@@ -137,6 +137,7 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
         try {
             parsed = JSON.parse(raw);
         } catch {
+            // allow(silent-catch): a frame that is not JSON is none of the view's messages; the next one is read as usual.
             return;
         }
         const read = Incoming.safeParse(parsed);

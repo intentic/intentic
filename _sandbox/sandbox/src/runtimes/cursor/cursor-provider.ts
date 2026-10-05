@@ -101,7 +101,7 @@ export const planCursorTurn = async (
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
-        tools: { ...context.base.tools, ...(tools.length > 0 ? { remote: tools } : {}), ...browserFields(services.workspace.root, mounted.browser) },
+        tools: { ...context.base.tools, ...(tools.length > 0 ? { remote: tools } : {}), ...browserFields(services.workspace.root, mounted) },
         credential: { kind: "cursor-key", apiKey: account.apiKey },
         hooks: {
             ...context.base.hooks,

@@ -96,8 +96,9 @@ const keyValue = (value: string | undefined): string | undefined => {
     return trimmed === undefined || trimmed.length < 12 || /\s/.test(trimmed) || /^\$\{[^}]+\}$/.test(trimmed) ? undefined : trimmed;
 };
 
-// A file's text read as JSON into `schema`; undefined for text that is not JSON, or JSON of another shape.
-const jsonFile = <Schema extends z.ZodType>(schema: Schema, raw: string | undefined): z.infer<Schema> | undefined => {
+// A file's text, already read off the device, as JSON into `schema`; undefined for text that is not JSON, or JSON of
+// another shape. Opens nothing: the device's own read did.
+const parsedJson = <Schema extends z.ZodType>(schema: Schema, raw: string | undefined): z.infer<Schema> | undefined => {
     if (raw === undefined) {
         return undefined;
     }
@@ -129,7 +130,7 @@ const envKeys = (raw: string | undefined, source: ProviderKeySource): FoundKey[]
 const OpencodeAuthSchema = z.record(z.string(), z.unknown());
 const OpencodeKeySchema = z.object({ type: z.literal("api"), key: z.string() });
 const opencodeKeys = (raw: string | undefined): FoundKey[] =>
-    Object.entries(jsonFile(OpencodeAuthSchema, raw) ?? {}).flatMap(([provider, entry]) => {
+    Object.entries(parsedJson(OpencodeAuthSchema, raw) ?? {}).flatMap(([provider, entry]) => {
         const key = keyValue(OpencodeKeySchema.safeParse(entry).data?.key);
         return key === undefined ? [] : [{ provider, source: "opencode" as const, key }];
     });
@@ -137,7 +138,7 @@ const opencodeKeys = (raw: string | undefined): FoundKey[] =>
 // Codex's auth.json holds an API key only when the CLI was logged in with one; `tokens` beside it is the ChatGPT login.
 const CodexAuthSchema = z.object({ OPENAI_API_KEY: z.string().nullish() });
 const codexKeys = (raw: string | undefined): FoundKey[] => {
-    const key = keyValue(jsonFile(CodexAuthSchema, raw)?.OPENAI_API_KEY ?? undefined);
+    const key = keyValue(parsedJson(CodexAuthSchema, raw)?.OPENAI_API_KEY ?? undefined);
     return key === undefined ? [] : [{ provider: "openai", source: "codex", key }];
 };
 

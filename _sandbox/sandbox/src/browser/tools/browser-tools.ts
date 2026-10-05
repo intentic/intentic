@@ -18,7 +18,6 @@ import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
 import { isProfileOpen, launchSessionDir, passkeyPath, profileOwner } from "../sessions/session-store.js";
 import { ensureStealthScript } from "../sessions/stealth.js";
-import { desktopServersOf } from "../../desktop/desktop-tools.js";
 
 // Pure wiring over Microsoft's @playwright/mcp; no browser tools of our own.
 // `web` is always available, credential-free, in-memory profile (--isolated), for ordinary page reads.
@@ -251,9 +250,6 @@ export interface BrowserTurnTools {
     readonly ports: Record<string, number>;
     // Owner to passkey store path; absent for `web`, which holds no identity.
     readonly passkeys: Record<string, string>;
-    // The sandbox's own desktop (desktop/desktop-tools.ts), mounted beside the browsers: the same pack brings its
-    // display and the same persona power lets the agent put a program on a screen. Undefined where either is missing.
-    readonly desktop: AgentTool | undefined;
 }
 
 const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refusal: string } =>
@@ -261,7 +257,7 @@ const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refus
         ? { command: spec.command, args: spec.args ?? [], env: spec.env ?? {} }
         : { refusal: "the browser server came back with a transport nothing here can spawn" };
 
-export const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: [], accounts: {}, ports: {}, passkeys: {}, desktop: undefined };
+export const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: [], accounts: {}, ports: {}, passkeys: {} };
 
 const schemaCache = createSchemaCache();
 
@@ -359,11 +355,9 @@ export const browserServersOf = async (
     // Stamped onto the backends a router spawns, so the process scan attributes a browser to its conversation.
     conversationId?: string,
 ): Promise<BrowserTurnTools> => {
-    // Before Chromium is looked for: the desktop needs the pack's display tools, not its browser.
-    const [desktop] = desktopServersOf(mounts.lease, anonymous);
     const runtime = await browserRuntime();
     if (runtime === undefined) {
-        return { ...NO_BROWSER_TOOLS, desktop };
+        return NO_BROWSER_TOOLS;
     }
     await sweepConfigs(Date.now());
     const ports: Record<string, number> = {};
@@ -387,7 +381,7 @@ export const browserServersOf = async (
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
     const owners = new Set(granted.map((capability) => profileOwner(capability)).filter((owner) => !isProfileOpen(owner)));
     if (owners.size === 0) {
-        return { ...NO_BROWSER_TOOLS, servers, ports, desktop };
+        return { ...NO_BROWSER_TOOLS, servers, ports };
     }
     // Router's manifest: every granted id resolves to its profile owner; one held by the login window is left out.
     const accounts: Record<string, string> = {};
@@ -407,5 +401,5 @@ export const browserServersOf = async (
         backends[owner] = { port: ports[owner] };
     }
     mount(ROUTED_BROWSER_SERVER, { accounts, owners: backends });
-    return { servers, accounts, ports, passkeys, desktop };
+    return { servers, accounts, ports, passkeys };
 };

@@ -228,6 +228,8 @@ export const UNSERVED = {
     "GET /workspace/media": UNFILLED_VIEW,
     "GET /workspace/download": UNSIMULATED_WRITE,
     "GET /webchat/{id}/installs": UNFILLED_VIEW,
+    // The Desktop page's live picture: the demo simulates the browser view's socket (daemon.ts `sockets`), not this one.
+    "GET /system/desktop-view": UNFILLED_VIEW,
     "accounts.cancel": UNSIMULATED_WRITE,
     "accounts.complete": UNSIMULATED_WRITE,
     "accounts.disconnect": UNSIMULATED_WRITE,

@@ -112,7 +112,7 @@ export const planCodexTurn = async (
         tools: {
             ...context.base.tools,
             ...(mounted.tools.length > 0 ? { remote: mounted.tools } : {}),
-            ...browserFields(services.workspace.root, mounted.browser),
+            ...browserFields(services.workspace.root, mounted),
         },
         // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.
         credential: subscribed

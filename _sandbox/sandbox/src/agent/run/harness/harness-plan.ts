@@ -177,7 +177,7 @@ export const planHarnessTurn = async (
         ...(plugins.length > 0 ? { plugins } : {}),
         ...(remote.length > 0 ? { remote } : {}),
         sdkServers,
-        ...browserFields(deps.workspace.root, browser),
+        ...browserFields(deps.workspace.root, mounted),
         // Named in the prompt only where its tools can actually be called.
         ...(sdkServers["diagnostics"] === undefined ? {} : { diagnostics: true }),
         hostDevices,

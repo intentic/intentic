@@ -99,6 +99,7 @@ export const capture = async (region?: Rect): Promise<Buffer> => {
                 failures.push(`${grabber.command}: ${failed}`);
                 continue;
             }
+            // allow(silent-catch): a grabber that wrote nothing is reported just below, with the others, in its own words
             const png = await readFile(out).catch(() => undefined);
             if (png !== undefined && png.length > 0) {
                 return png;
@@ -116,6 +117,7 @@ export const capture = async (region?: Rect): Promise<Buffer> => {
             installs.length === 0 ? undefined : installs.join(", or — "),
         );
     } finally {
+        // allow(silent-catch): removing the scratch file is tidying; the capture has already answered or thrown
         await rm(out, { force: true }).catch(() => undefined);
     }
 };
@@ -188,6 +190,7 @@ export const displays = async (): Promise<DisplayInfo[]> => {
         return listed.length === 0 ? await single() : primaryFirst(listed);
     }
     if (!isWayland() && (await has("xrandr"))) {
+        // allow(silent-catch): monitors xrandr cannot list fall back to the one screen single() reads
         const listed = parseXrandrMonitors(await run("xrandr", ["--listactivemonitors"]).catch(() => ""));
         return listed.length === 0 ? await single() : primaryFirst(listed);
     }

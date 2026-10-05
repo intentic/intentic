@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import {
     DesktopError,
     describeInput,
@@ -147,6 +148,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             assertAgentMayDrive();
             const desk = await agentDesktop();
             await desk.screen.focusWindow(id);
+            // allow(silent-catch): a listing that fails after the focus landed leaves the answer naming the window by its id
             const focused = (await desk.screen.windows().catch(() => [])).find((window) => window.focused);
             return textResult(focused === undefined ? `Asked the desktop to focus window ${id}.` : `Focused: ${focused.app}, ${focused.title}. Typing now goes here.`);
         },
@@ -156,7 +158,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         description:
             "Start a program on the sandbox's desktop: a command and its arguments, not a shell line (no pipes, no &&). For anything more, run it from your own shell with the DISPLAY a screenshot names. Give it a moment, then list the windows or take a screenshot.",
         effect: "write",
-        input: z.object({ command: required.describe('The program and its arguments, e.g. "xterm" or "/work/app/dist/app --dev".') }),
+        input: z.object({ command: required.describe(`The program and its arguments, e.g. "xterm" or "${WORKSPACE_ROOT}/app/dist/app --dev".`) }),
         run: async ({ command }) => {
             assertAgentMayDrive();
             const desk = await agentDesktop();

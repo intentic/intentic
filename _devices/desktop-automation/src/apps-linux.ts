@@ -27,8 +27,10 @@ export const linuxApps = {
             );
         }
         // The active window first, so `focused` can be filled in: wmctrl does not report it.
+        // allow(silent-catch): no window holding the focus (an empty desktop) leaves `focused` unset, not the list unread
         const active = await run("xdotool", ["getactivewindow"], XDOTOOL_INSTALL).catch(() => "");
         const listed = parseWmctrl(await run("wmctrl", ["-lGpx"], WMCTRL_INSTALL), active.trim() === "" ? undefined : active.trim());
+        // allow(silent-catch): xwininfo's tree only corrects the bounds; without it wmctrl's own stand
         const tree = (await has("xwininfo")) ? await run("xwininfo", ["-root", "-tree"]).catch(() => "") : "";
         return withAbsoluteBounds(listed, parseXwininfoTree(tree));
     },

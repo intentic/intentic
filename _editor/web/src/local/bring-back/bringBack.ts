@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SyncDirection } from "../app/environments/local";
+import type { SyncDirection } from "../../app/environments/local";
 
 // Bringing an agent's work back from a folder's own sandbox (the desktop app keeps the two in sync, copy-first by
 // default): what the app answers each sandbox verb with, read off the `intentic:project` event, and the state the
