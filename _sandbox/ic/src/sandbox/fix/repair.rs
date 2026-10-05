@@ -58,7 +58,7 @@ fn on_sandbox(repair: &Repair, slug: &str) -> Done {
     let slug_owned = slug.to_string();
     let done = match repair {
         Repair::Start | Repair::StartHeld => power::run(Power::Start, Some(slug_owned)),
-        Repair::Restart => power::run(Power::Restart, Some(slug_owned)),
+        Repair::Restart | Repair::RestartBusy => power::run(Power::Restart, Some(slug_owned)),
         Repair::Watch => crate::sandbox::probation::watch_one(slug).map(|report| {
             crate::ui::note(&report.sentence());
         }),
@@ -80,7 +80,7 @@ fn on_sandbox(repair: &Repair, slug: &str) -> Done {
     done.map_err(|fail| fail.0)?;
     if matches!(
         repair,
-        Repair::Start | Repair::StartHeld | Repair::Restart | Repair::Watch
+        Repair::Start | Repair::StartHeld | Repair::Restart | Repair::RestartBusy | Repair::Watch
     ) {
         wait_answering(slug);
     }

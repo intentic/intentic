@@ -131,6 +131,9 @@ struct Engine {
     /// PLATFORM_URL was set: it wins over what a container says.
     platform_forced: bool,
     machine: String,
+    /// Per sandbox, whether an unattended run leaves it to the other side of this computer, and which side that is:
+    /// read once per run, off the container's env.
+    sides: HashMap<String, Option<String>>,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -192,6 +195,7 @@ pub fn run(args: Args) -> Result<()> {
         default_platform,
         platform_forced: forced.is_some(),
         machine: crate::sandbox::connect::machine_label(),
+        sides: HashMap::new(),
     };
     engine.go()
 }
@@ -256,6 +260,67 @@ fn discover(engine_up: bool) -> Vec<String> {
     slugs.sort();
     slugs
 }
+
+/// The side to leave a sandbox to: the one that created it, when that is not this one. A container from before
+/// HOST_PLATFORM is anyone's. Pure.
+fn elsewhere(created: Option<&str>, here: &str) -> Option<String> {
+    created
+        .filter(|created| !created.eq_ignore_ascii_case(here))
+        .map(str::to_string)
+}
+
+/// How a side is called where a person reads it.
+fn side_name(side: &str) -> &str {
+    match side {
+        "windows" => "Windows",
+        "linux" => "WSL or Linux",
+        other => other,
+    }
+}
+
+/// Said for a sandbox an unattended run left to the side that created it. Pure.
+fn elsewhere_sentence(side: &str) -> String {
+    format!(
+        "left alone: ic on {} created it, and the machine agent there keeps it.",
+        side_name(side)
+    )
+}
+
+/// The `--json` answer for such a sandbox: settled as far as this side goes, with nothing checked. Never posted: the
+/// side that keeps it reports for it. Pure.
+fn elsewhere_report(side: &str) -> serde_json::Value {
+    serde_json::json!({
+        "stage": Stage::Done.wire(),
+        "outcome": "elsewhere",
+        "doing": elsewhere_sentence(side),
+        "checks": [],
+    })
+}
+
+/// What a repair is doing, and the finding that made it: an unasked restart that cuts every running turn has to say
+/// why in the log the machine agent keeps. Bounded by what the platform stores for `doing`. Pure.
+fn doing_because(repair: &Repair, check: Option<&Check>) -> String {
+    let doing = repair.doing();
+    let Some(problem) =
+        check.and_then(|check| check.problem.as_deref().map(|problem| (check.id, problem)))
+    else {
+        return doing;
+    };
+    let said = format!(
+        "{doing}, because {}: {}",
+        model::label(problem.0),
+        problem.1
+    );
+    if said.chars().count() <= DOING_MAX {
+        return said;
+    }
+    let mut cut: String = said.chars().take(DOING_MAX - 1).collect();
+    cut.push('…');
+    cut
+}
+
+/// The platform's limit on `doing` (@intentic/api-contract's HostReportInputSchema).
+const DOING_MAX: usize = 300;
 
 /// The next repair to make, in check order: every automatic one before any that needs a yes. Pure.
 fn next(
@@ -359,7 +424,7 @@ impl Engine {
         repair: &Repair,
     ) -> bool {
         self.attempted = true;
-        let doing = repair.doing();
+        let doing = doing_because(repair, snapshot.check(scope, id));
         ui::note(&format!(
             "{doing}{}…",
             scope
@@ -386,6 +451,21 @@ impl Engine {
         }
     }
 
+    /// The other side of this computer that created this sandbox, when an unattended run should leave it there. On
+    /// Windows, ic on Windows and ic in WSL both drive Docker Desktop's one engine, and each side's machine agent runs
+    /// its own keeper over every container that engine holds: two keepers, two unasked restarts of one sandbox, each
+    /// side's own record of what it already tried. A container carries the side that created it (HOST_PLATFORM);
+    /// that side's keeper is the one that keeps it. A person's own run still reaches every sandbox.
+    fn side_of(&mut self, slug: &str) -> Option<String> {
+        if let Some(side) = self.sides.get(slug) {
+            return side.clone();
+        }
+        let created = chain::created_on(slug);
+        let side = elsewhere(created.as_deref(), crate::sandbox::connect::host_platform());
+        self.sides.insert(slug.to_string(), side.clone());
+        side
+    }
+
     fn examine(&mut self, first: bool) -> Snapshot {
         let patience = if self.doctor || !first {
             Duration::ZERO
@@ -396,6 +476,15 @@ impl Engine {
         let engine_up = host.engine.up();
         if self.explicit.is_none() && (first || engine_up) {
             self.slugs = discover(engine_up);
+        }
+        if self.auto && engine_up {
+            let mine: Vec<String> = self
+                .slugs
+                .clone()
+                .into_iter()
+                .filter(|slug| self.side_of(slug).is_none())
+                .collect();
+            self.slugs = mine;
         }
         let host_checks = {
             let tried = |repair: &Repair| self.tried.contains(&(None, repair.clone()));
@@ -636,6 +725,17 @@ impl Engine {
                 .collect();
             outcomes.push((Some(sandbox.slug.clone()), outcome, theirs));
         }
+        let mut left_elsewhere: Vec<(&String, &String)> = self
+            .sides
+            .iter()
+            .filter_map(|(slug, side)| side.as_ref().map(|side| (slug, side)))
+            .collect();
+        left_elsewhere.sort();
+        for (slug, side) in &left_elsewhere {
+            if self.json {
+                report::emit(&report::result_line(slug, &elsewhere_report(side)));
+            }
+        }
         if snapshot.sandboxes.is_empty() {
             let outcome = model::outcome(&snapshot.host_checks, self.fixed_for(""), self.attempted);
             if self.json {
@@ -661,7 +761,7 @@ impl Engine {
         if self.doctor {
             return self.doctor_ending(&snapshot, &left);
         }
-        self.fix_ending(&snapshot, &outcomes, &left);
+        self.fix_ending(&snapshot, &outcomes, &left, &left_elsewhere);
         let code = model::exit_code(
             &left
                 .iter()
@@ -670,7 +770,7 @@ impl Engine {
             session,
             !self.unasked,
         );
-        let code = if snapshot.sandboxes.is_empty() && code == 0 {
+        let code = if snapshot.sandboxes.is_empty() && left_elsewhere.is_empty() && code == 0 {
             1
         } else {
             code
@@ -686,7 +786,14 @@ impl Engine {
         snapshot: &Snapshot,
         outcomes: &[(Option<String>, Outcome, Vec<&Check>)],
         left: &[(Option<&str>, &Check)],
+        left_elsewhere: &[(&String, &String)],
     ) {
+        for (slug, side) in left_elsewhere {
+            ui::note(&format!("{slug}: {}", elsewhere_sentence(side)));
+        }
+        if snapshot.sandboxes.is_empty() && !left_elsewhere.is_empty() && left.is_empty() {
+            return;
+        }
         if snapshot.sandboxes.is_empty() && left.is_empty() {
             ui::note("there is no sandbox on this machine — run the setup command from your browser to set one up.");
             return;
@@ -808,6 +915,7 @@ mod tests {
             boot_failure: None,
             engine_memory: None,
             public: chain::Public::NotAsked,
+            live_turns: None,
             now_ms: 0,
         };
         Snapshot {
@@ -855,6 +963,58 @@ mod tests {
         let mut declined = HashSet::new();
         declined.insert((None, Repair::RestartDesktop));
         assert_eq!(next(&snapshot, &tried, &declined), None);
+    }
+
+    #[test]
+    fn an_unattended_run_leaves_a_sandbox_to_the_side_of_this_computer_that_created_it() {
+        assert_eq!(
+            elsewhere(Some("linux"), "windows").as_deref(),
+            Some("linux")
+        );
+        assert_eq!(
+            elsewhere(Some("windows"), "linux").as_deref(),
+            Some("windows")
+        );
+        assert_eq!(elsewhere(Some("linux"), "linux"), None);
+        assert_eq!(elsewhere(Some("Windows"), "windows"), None);
+        assert_eq!(
+            elsewhere(None, "windows"),
+            None,
+            "a container from before HOST_PLATFORM is anyone's"
+        );
+        let report = elsewhere_report("linux");
+        assert_eq!(report["outcome"], "elsewhere");
+        assert_eq!(report["stage"], "done");
+        assert!(report["doing"]
+            .as_str()
+            .is_some_and(|said| said.contains("ic on WSL or Linux created it")));
+    }
+
+    #[test]
+    fn a_repair_says_the_finding_that_made_it() {
+        let check = Check::fail(
+            model::DAEMON,
+            "the daemon inside the container does not answer /health.",
+            "restart it",
+            Fix::Do(Repair::Restart),
+        );
+        assert_eq!(
+            doing_because(&Repair::Restart, Some(&check)),
+            "Restarting the sandbox, because Daemon health: the daemon inside the container does not answer /health."
+        );
+        assert_eq!(
+            doing_because(&Repair::Restart, None),
+            "Restarting the sandbox"
+        );
+        let long = Check::fail(
+            model::TUNNEL,
+            "x".repeat(400),
+            "r",
+            Fix::Do(Repair::Restart),
+        );
+        let said = doing_because(&Repair::Restart, Some(&long));
+        assert_eq!(said.chars().count(), DOING_MAX);
+        assert!(said.ends_with('…'));
     }
 
     #[test]

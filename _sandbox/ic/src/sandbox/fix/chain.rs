@@ -21,6 +21,9 @@ pub struct Env {
     pub grant: Option<String>,
     pub ingress: Option<String>,
     pub host_label: Option<String>,
+    /// Which side of this computer created it: `windows` for ic on Windows, `linux` for ic in WSL or on Linux. One
+    /// Docker Desktop engine serves both sides, so both see every container.
+    pub host_platform: Option<String>,
 }
 
 impl Env {
@@ -39,6 +42,7 @@ impl Env {
             grant: value("SANDBOX_GRANT"),
             ingress: value("INGRESS_URL"),
             host_label: value("HOST_LABEL"),
+            host_platform: value("HOST_PLATFORM"),
         }
     }
 }
@@ -132,6 +136,9 @@ pub struct ChainFacts {
     /// The memory the engine has, in bytes (for a raise after an OOM kill).
     pub engine_memory: Option<u64>,
     pub public: Public,
+    /// How many agent turns run inside, from the daemon's work signal; None when it does not say, or said it too long
+    /// ago to be believed.
+    pub live_turns: Option<u32>,
     pub now_ms: u64,
 }
 
@@ -158,6 +165,7 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
         boot_failure: None,
         engine_memory: None,
         public: Public::NotAsked,
+        live_turns: None,
         now_ms: crate::sandbox::now_ms(),
     };
     if !engine_up {
@@ -217,23 +225,11 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
     };
     facts.oom_seen |= state.oom;
     if state.running() {
-        facts.health = match docker::ask(
-            &[
-                "exec",
-                &container,
-                "curl",
-                "-sf",
-                "-m",
-                HEALTH_CURL_SECS,
-                "http://localhost:8787/health",
-            ],
-            EXEC_LIMIT,
-        ) {
-            Asked::Said(body) => {
-                serde_json::from_str(&body).map_or(Health::Silent, Health::Answered)
-            }
-            _ => Health::Silent,
-        };
+        facts.health = ask_health(&container);
+        if health_worth_a_second_look(&facts) {
+            std::thread::sleep(SECOND_LOOK);
+            facts.health = ask_health(&container);
+        }
     }
     if !matches!(facts.health, Health::Answered(_)) {
         facts.boot_failure = crate::sandbox::probation::boot_failure_since(
@@ -247,10 +243,122 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
                 .said()
                 .and_then(|total| total.trim().parse().ok());
     }
+    if let Health::Answered(_) = &facts.health {
+        facts.live_turns = docker::ask(&["exec", &container, "cat", WORK_SIGNAL], EXEC_LIMIT)
+            .said()
+            .and_then(|body| live_turns(&body, facts.now_ms));
+    }
     if let (Health::Answered(_), Some(url)) = (&facts.health, facts.env.public_url.clone()) {
         facts.public = probe_public(&url);
+        if public_worth_a_second_look(&facts.public) {
+            std::thread::sleep(SECOND_LOOK);
+            facts.public = probe_public(&url);
+        }
     }
     facts
+}
+
+/// The side of this computer whose ic created the sandbox (`HOST_PLATFORM`), when its container says. One cheap read,
+/// ahead of everything [`gather`] asks.
+pub fn created_on(slug: &str) -> Option<String> {
+    docker::ask(
+        &[
+            "inspect",
+            "--format",
+            "{{range .Config.Env}}{{.}}{{printf \"\\x00\"}}{{end}}",
+            &container_of(slug),
+        ],
+        docker::READ_LIMIT,
+    )
+    .said()
+    .and_then(|env| Env::parse(&env).host_platform)
+}
+
+fn ask_health(container: &str) -> Health {
+    match docker::ask(
+        &[
+            "exec",
+            container,
+            "curl",
+            "-sf",
+            "-m",
+            HEALTH_CURL_SECS,
+            "http://localhost:8787/health",
+        ],
+        EXEC_LIMIT,
+    ) {
+        Asked::Said(body) => serde_json::from_str(&body).map_or(Health::Silent, Health::Answered),
+        _ => Health::Silent,
+    }
+}
+
+/* A SECOND LOOK BEFORE A RESTART. A daemon redials a dropped tunnel within seconds, and one busy for a moment answers
+again a moment later, so one probe that lands in that gap is no reason to cut every turn the sandbox runs. A reading
+that would lead to a restart is taken again after a pause, and the second one decides. */
+
+/// The pause between the two looks: longer than a daemon takes to redial its tunnel.
+const SECOND_LOOK: Duration = Duration::from_secs(20);
+
+/// A running daemon past its start that did not answer /health. Pure.
+pub fn health_worth_a_second_look(facts: &ChainFacts) -> bool {
+    matches!(facts.health, Health::Silent)
+        && matches!(&facts.container, Container::Present(state) if state.running())
+        && up_for(facts).is_some_and(|up| up >= STARTING_MS)
+}
+
+/// An edge that answers for the address with no tunnel behind it, which is what a redial in progress looks like
+/// too. Its other verdicts are not a restart's to fix. Pure.
+pub fn public_worth_a_second_look(public: &Public) -> bool {
+    matches!(public, Public::Answered { status: 502 | 503 | 530, edge }
+        if !matches!(edge.as_deref(), Some("unknown-sandbox" | "dropped")))
+}
+
+/* THE DAEMON'S WORK SIGNAL (the daemon's workload/work-signal.ts): how many turns run, rewritten at least every minute
+while it lives. A restart cuts them, so an unattended fix asks first. */
+
+const WORK_SIGNAL: &str = "/run/intentic/work.json";
+/// Older than this, the count is what a hung daemon left behind: nothing to protect, and nothing to believe.
+const WORK_SIGNAL_STALE_MS: u64 = 3 * 60_000;
+
+/// The live turns `body` says, when it says it recently enough. The container's clock is this machine's. Pure.
+pub fn live_turns(body: &str, now_ms: u64) -> Option<u32> {
+    let value: Value = serde_json::from_str(body.trim()).ok()?;
+    let at = value.get("at")?.as_u64()?;
+    if now_ms.saturating_sub(at) > WORK_SIGNAL_STALE_MS {
+        return None;
+    }
+    value
+        .get("liveTurns")?
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+}
+
+/// The restart a broken link gets: unasked while nothing runs inside, with a yes while agents are mid-turn. Pure.
+fn restart_for(facts: &ChainFacts) -> Repair {
+    if facts.live_turns.is_some_and(|n| n > 0) {
+        Repair::RestartBusy
+    } else {
+        Repair::Restart
+    }
+}
+
+/// Whether this run already restarted it, either way. Pure.
+fn restarted(tried: &dyn Fn(&Repair) -> bool) -> bool {
+    tried(&Repair::Restart) || tried(&Repair::RestartBusy)
+}
+
+/// The remedy that goes with [`restart_for`]: says what a restart would cut when it would cut something. Pure.
+fn restart_remedy(facts: &ChainFacts, what: &str) -> String {
+    let slug = &facts.slug;
+    match facts.live_turns {
+        Some(1) => format!(
+            "1 agent turn is running here, and a restart cuts it: {what} once it has finished, or now: ic sandbox restart {slug}"
+        ),
+        Some(n) if n > 1 => format!(
+            "{n} agent turns are running here, and a restart cuts them: {what} once they have finished, or now: ic sandbox restart {slug}"
+        ),
+        _ => format!("{what}: ic sandbox restart {slug}"),
+    }
 }
 
 /// The public URL's `/health` from this machine, with the edge's own verdict header when it answered for the box.
@@ -582,7 +690,6 @@ pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
 /// The `announce` block of /health: whether this daemon reached the platform to register — the one link nothing
 /// outside the container can probe.
 pub fn registration(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
-    let slug = &facts.slug;
     let Health::Answered(health) = &facts.health else {
         return Check::skip(REGISTRATION, "unknowable while the daemon does not answer");
     };
@@ -607,7 +714,7 @@ pub fn registration(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Chec
             "the daemon has not registered with the platform yet — it keeps trying.",
         ),
         "rejected" | "unreachable" if retrying == Some(false) => {
-            if tried(&Repair::Restart) {
+            if restarted(tried) {
                 Check::fail(
                     REGISTRATION,
                     format!("{detail} (it stopped retrying, and a restart did not help)"),
@@ -618,8 +725,8 @@ pub fn registration(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Chec
                 Check::fail(
                     REGISTRATION,
                     format!("{detail} (it stopped retrying)"),
-                    format!("restart it to retry: ic sandbox restart {slug}"),
-                    Fix::Do(Repair::Restart),
+                    restart_remedy(facts, "restart it to retry"),
+                    Fix::Do(restart_for(facts)),
                 )
             }
         }
@@ -701,12 +808,12 @@ pub fn tunnel(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
                         "the edge answers HTTP {status} for {host} — it is up, but no tunnel is registered for this sandbox."
                     );
                     let settled = up_for(facts).is_some_and(|up| up >= TUNNEL_GRACE_MS);
-                    if settled && !swap_on_record(&facts.record) && !tried(&Repair::Restart) {
+                    if settled && !swap_on_record(&facts.record) && !restarted(tried) {
                         Check::fail(
                             TUNNEL,
                             problem,
-                            format!("restart it so its daemon dials the edge again: ic sandbox restart {slug}"),
-                            Fix::Do(Repair::Restart),
+                            restart_remedy(facts, "restart it so its daemon dials the edge again"),
+                            Fix::Do(restart_for(facts)),
                         )
                     } else {
                         Check::fail(
@@ -776,6 +883,7 @@ mod tests {
             boot_failure: None,
             engine_memory: None,
             public: Public::NotAsked,
+            live_turns: None,
             now_ms: NOW,
         }
     }
@@ -1059,12 +1167,119 @@ mod tests {
     }
 
     #[test]
+    fn a_restart_that_would_cut_running_turns_waits_for_a_yes() {
+        let busy = |n| ChainFacts {
+            public: Public::Answered {
+                status: 502,
+                edge: Some("no-tunnel".to_string()),
+            },
+            live_turns: Some(n),
+            ..answering(serde_json::json!({ "ready": true }))
+        };
+        let idle = tunnel(&busy(0), &never);
+        assert_eq!(
+            idle.repair(),
+            Some(&Repair::Restart),
+            "nothing runs: unasked"
+        );
+        let one = tunnel(&busy(1), &never);
+        assert_eq!(one.repair(), Some(&Repair::RestartBusy));
+        assert_eq!(one.who(), Some(Who::Consent));
+        assert!(one
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.contains("1 agent turn is running here, and a restart cuts it")));
+        let three = tunnel(&busy(3), &never);
+        assert!(three
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.contains("3 agent turns are running here")));
+        // Restarted already this run, either way: not again.
+        let after = |repair: &Repair| *repair == Repair::RestartBusy;
+        assert_eq!(tunnel(&busy(3), &after).who(), Some(Who::You));
+        let gave_up = ChainFacts {
+            live_turns: Some(2),
+            ..answering(
+                serde_json::json!({ "announce": { "state": "unreachable", "detail": "x", "retrying": false } }),
+            )
+        };
+        assert_eq!(
+            registration(&gave_up, &never).repair(),
+            Some(&Repair::RestartBusy)
+        );
+        assert_eq!(registration(&gave_up, &after).who(), Some(Who::You));
+    }
+
+    #[test]
+    fn the_work_signal_is_believed_only_while_it_is_fresh() {
+        assert_eq!(
+            live_turns(r#"{"liveTurns":2,"at":1000}"#, 1_000 + 60_000),
+            Some(2)
+        );
+        assert_eq!(
+            live_turns("{\"liveTurns\":0,\"at\":1000}\n", 1_000),
+            Some(0)
+        );
+        assert_eq!(
+            live_turns(r#"{"liveTurns":2,"at":1000}"#, 1_000 + 4 * 60_000),
+            None,
+            "a count a hung daemon left behind"
+        );
+        assert_eq!(
+            live_turns("cat: /run/intentic/work.json: No such file", 0),
+            None
+        );
+        assert_eq!(live_turns(r#"{"at":1000}"#, 1_000), None);
+    }
+
+    #[test]
+    fn only_a_reading_that_would_restart_gets_a_second_look() {
+        let silent = ChainFacts {
+            health: Health::Silent,
+            ..facts(Container::Present(running_box()))
+        };
+        assert!(health_worth_a_second_look(&silent));
+        let young = ChainFacts {
+            container: Container::Present(Inspected {
+                started_ms: Some(NOW - 30_000),
+                ..running_box()
+            }),
+            ..silent
+        };
+        assert!(
+            !health_worth_a_second_look(&young),
+            "still starting: no restart to confirm"
+        );
+        assert!(!health_worth_a_second_look(&answering(
+            serde_json::json!({ "ready": true })
+        )));
+        let edge = |status, verdict: Option<&str>| Public::Answered {
+            status,
+            edge: verdict.map(str::to_string),
+        };
+        assert!(public_worth_a_second_look(&edge(502, Some("no-tunnel"))));
+        assert!(public_worth_a_second_look(&edge(530, None)));
+        assert!(!public_worth_a_second_look(&edge(200, None)));
+        assert!(!public_worth_a_second_look(&edge(
+            502,
+            Some("unknown-sandbox")
+        )));
+        assert!(!public_worth_a_second_look(&edge(502, Some("dropped"))));
+        assert!(!public_worth_a_second_look(&Public::Unreachable(
+            "timeout".to_string()
+        )));
+    }
+
+    #[test]
     fn env_is_read_off_the_nul_framed_listing_with_empties_absent() {
         let env = Env::parse("CONNECT_TOKEN=abc\0PLATFORM_URL=https://api.intentic.dev\0SANDBOX_GRANT=\0HOST_LABEL=ada\0");
         assert_eq!(env.token.as_deref(), Some("abc"));
         assert_eq!(env.platform.as_deref(), Some("https://api.intentic.dev"));
         assert_eq!(env.grant, None);
         assert_eq!(env.host_label.as_deref(), Some("ada"));
+        assert_eq!(env.host_platform, None);
+        let wsl = Env::parse("HOST_PLATFORM=linux\0HOST_LABEL=rog\0");
+        assert_eq!(wsl.host_platform.as_deref(), Some("linux"));
     }
 
     #[test]

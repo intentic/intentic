@@ -1,6 +1,7 @@
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
+import { startWorkSignal } from "./workload/work-signal.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { declareBootSteps, runBootSteps } from "./bootstrap/boot-chain.js";
@@ -126,6 +127,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     if (role.container) {
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => void room.close());
+        // How many turns run, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
+        const work = startWorkSignal({ conversations: services.conversations, events: services.events, logger });
+        shutdown.push(() => work.stop());
     }
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());

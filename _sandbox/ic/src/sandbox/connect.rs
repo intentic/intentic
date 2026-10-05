@@ -836,7 +836,7 @@ fn run_agent_script(url: &str, what: &str, vars: &[(&str, &str)]) -> bool {
 }
 
 /// The card this machine gets in the sandbox — one of the OS slugs the bundled devices extension declares.
-fn host_platform() -> &'static str {
+pub fn host_platform() -> &'static str {
     if cfg!(windows) {
         "windows"
     } else {

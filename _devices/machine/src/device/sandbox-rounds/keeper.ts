@@ -121,8 +121,14 @@ export const readFixRun = (run: IcRun): FixRunReading => {
     return { answers };
 };
 
+// ic left the sandbox to the other side of this computer: on Windows, ic on Windows and ic in WSL drive one Docker
+// engine, and only the side that created a sandbox keeps it (ic: sandbox/fix/mod.rs, side_of). This agent's run has
+// nothing to do about it, ever.
+const ELSEWHERE = "elsewhere";
+
 // Nothing left to do about it: the keeper waits only after anything else.
-export const settled = (answer: FixAnswer): boolean => answer.report.outcome === "healthy" || answer.report.outcome === "fixed";
+export const settled = (answer: FixAnswer): boolean =>
+    answer.report.outcome === "healthy" || answer.report.outcome === "fixed" || answer.report.outcome === ELSEWHERE;
 
 // ic's exit code for "a restart or a sign-out of this computer finishes it", which no fix can do by itself.
 const EXIT_RESTART = 4;
@@ -138,6 +144,9 @@ const leftLine = (slug: string, check: FixCheck): string => {
 
 // The line one sandbox's verdict is logged as. "fixed" says only that: what was done was said as it happened.
 export const verdictLine = (answer: FixAnswer): string => {
+    if (answer.report.outcome === ELSEWHERE) {
+        return `keeper ${answer.slug}: ${answer.report.doing ?? "left to the other side of this computer, whose machine agent keeps it."}`;
+    }
     const outcome = answer.report.outcome ?? answer.report.stage;
     const left = settled(answer) ? [] : answer.report.checks.filter((check) => check.state === "fail" || check.state === "warn");
     return `keeper ${answer.slug}: ${outcome}${left.length === 0 ? "" : ` — ${left.map((check) => leftLine(answer.slug, check)).join("; ")}`}`;

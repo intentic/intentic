@@ -132,6 +132,9 @@ pub enum Repair {
     Watch,
     /// `ic sandbox restart`.
     Restart,
+    /// The same, on a sandbox whose agents are mid-turn: the restart cuts them, so it waits for a yes, and the
+    /// machine agent's `--auto` leaves it for its next pass, when they may have finished.
+    RestartBusy,
     /// `ic sandbox rollback`: the version before the last update.
     Rollback,
     /// `ic sandbox reshape --memory <n>g`, after the kernel killed it for memory.
@@ -158,6 +161,7 @@ impl Repair {
                 | Repair::StartHeld
                 | Repair::Watch
                 | Repair::Restart
+                | Repair::RestartBusy
                 | Repair::Rollback
                 | Repair::RaiseMemory(_)
         )
@@ -180,7 +184,7 @@ impl Repair {
             Repair::PruneBuilder => "Clearing Docker's build cache".to_string(),
             Repair::Start | Repair::StartHeld => "Starting the sandbox".to_string(),
             Repair::Watch => "Finishing an interrupted update".to_string(),
-            Repair::Restart => "Restarting the sandbox".to_string(),
+            Repair::Restart | Repair::RestartBusy => "Restarting the sandbox".to_string(),
             Repair::Rollback => "Going back to the version before the last update".to_string(),
             Repair::RaiseMemory(gib) => format!("Giving the sandbox {gib} GiB of memory"),
         }
@@ -218,6 +222,9 @@ impl Repair {
             ),
             Repair::RaiseMemory(gib) => format!(
                 "Give sandbox{of} {gib} GiB of memory? It restarts for about a minute."
+            ),
+            Repair::RestartBusy => format!(
+                "Agents in sandbox{of} are mid-turn, and a restart cuts them. Restart it now?"
             ),
             other => format!("{}?", other.doing()),
         }
@@ -754,6 +761,7 @@ mod tests {
             Repair::Prerequisite("wsl-features"),
             Repair::PruneBuilder,
             Repair::StartHeld,
+            Repair::RestartBusy,
             Repair::Rollback,
             Repair::RaiseMemory(12),
         ] {
@@ -761,6 +769,10 @@ mod tests {
         }
         assert!(Repair::Tidy.host());
         assert!(!Repair::StartHeld.host());
+        assert!(!Repair::RestartBusy.host());
+        assert!(Repair::RestartBusy
+            .question(Some("sandbox-0123456789ab"))
+            .contains("mid-turn, and a restart cuts them"));
         assert_eq!(Check::fail(DISK, "p", "r", Fix::You).who(), Some(Who::You));
         assert_eq!(Check::ok(DISK).who(), None);
     }

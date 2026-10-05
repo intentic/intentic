@@ -101,6 +101,25 @@ test("a verdict is logged in ic's words: what is left, and who can close it", ()
     expect(verdictLine({ slug: "work", report: { stage: "done", outcome: "fixed", checks } })).toBe("keeper work: fixed");
 });
 
+// On Windows, ic on Windows and ic in WSL drive one Docker engine: each side's ic leaves the other side's sandboxes alone,
+// and this side's keeper takes that as settled, said once, never as something to come back for sooner.
+test("a sandbox ic left to the other side of this computer is settled, and said once", async () => {
+    const { fake, lines, round } = setup();
+    const doing = "left alone: ic on WSL or Linux created it, and the machine agent there keeps it.";
+    fake.answer = async () =>
+        await Promise.resolve({
+            code: 0,
+            output: [
+                JSON.stringify({ slug: "mine", report: { stage: "done", outcome: "healthy", checks: [] } }),
+                JSON.stringify({ slug: "theirs", report: { stage: "done", outcome: "elsewhere", doing, checks: [] } }),
+            ].join("\n"),
+        });
+    await round(NOW + 30_000);
+    await round(NOW + 30_000 + 5 * MIN);
+    expect(fake.asked).toEqual([undefined, undefined]);
+    expect(lines).toEqual(["keeper mine: healthy", `keeper theirs: ${doing}`]);
+});
+
 // After a reboot Docker Desktop is off: the first look comes half a minute after start, over every sandbox.
 test("the first sweep runs half a minute after start and then every five minutes, over every sandbox", async () => {
     const { fake, lines, round } = setup();
