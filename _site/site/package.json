@@ -12,7 +12,8 @@
         "test": "node scripts/check-desk-palette.mjs && node scripts/check-alignment.mjs",
         "test:compare": "bun --conditions=@intentic/src scripts/check-comparisons.mjs",
         "astro": "astro",
-        "sync:registry": "node scripts/sync-registry.mjs"
+        "sync:registry": "node scripts/sync-registry.mjs",
+        "readme": "node scripts/readme/build.mjs"
     },
     "dependencies": {
         "@astrojs/sitemap": "catalog:",

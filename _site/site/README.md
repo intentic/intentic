@@ -17,6 +17,7 @@ flowchart LR
 - Comparison detail routes share `src/pages/compare/[slug].astro`; their copy comes from `site-content/compare`. `ComparisonFaq.astro` renders the same FAQ entries passed to the layout's structured data. Source-review dates are page-specific, while git modification dates account for the shared copy and route template.
 - `worker.ts` runs before static assets (`run_worker_first`). It redirects http and moved paths, serves the install scripts at vanity paths (`INSTALL_SCRIPTS` in `@intentic/constants`) from `public/scripts/`, resolves `/desktop/*` to the latest GitHub release asset, falls back to the demo's shell under `/demo/`, and applies [content/live.json](content/live.json) to every HTML page outside `/demo/`.
 - The `/extensions/` gallery reads the registry repository at build and falls back to `src/lib/registry.fallback.json` when GitHub is unreachable.
+- `scripts/readme/` draws the repository README's pictures into `docs/marketing/readme/`: it photographs the demo build, frames each shot in the site's window, and renders the diagrams, once for GitHub's dark scheme and once for its light one.
 - The Worker name `intentic` in `wrangler.jsonc` is the Worker bound to intentic.dev, so a deploy under any other name never reaches the live site.
 
 ## Key files
@@ -38,4 +39,5 @@ pnpm -C _site/site test         # desk palette and mark alignment checks
 pnpm -C _site/site test:compare --content-only  # copy and research-map invariants
 pnpm -C _site/site test:compare  # after build: generated comparison HTML and FAQ parity
 pnpm -C _site/site run deploy   # wrangler deploy, then IndexNow submission
+pnpm -C _site/site readme       # README pictures, from the demo's dev server (DEMO_URL)
 ```
