@@ -258,7 +258,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                     </template>
                     <template #below>
                         <div class="flex flex-col gap-1.5 text-2xs text-muted">
-                            <p>{{ modeNote }}</p>
+                            <p v-if="modeNote">{{ modeNote }}</p>
                             <!-- What the shield has done so far, as plain counts; there is nothing to count while it is off. -->
                             <p v-if="running && status !== undefined" class="flex flex-wrap gap-x-4 gap-y-0.5">
                                 <span>
@@ -312,7 +312,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                         </template>
                         <template #below>
                             <div class="flex flex-col gap-1.5 text-2xs">
-                                <p :class="images === `allow` ? `text-warning` : `text-muted`">{{ imagesNote }}</p>
+                                <p v-if="imagesNote" :class="images === `allow` ? `text-warning` : `text-muted`">{{ imagesNote }}</p>
                                 <p v-if="ocrMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noImageReader`) }}</p>
                             </div>
                         </template>
@@ -329,7 +329,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                         </template>
                         <template #below>
                             <div class="flex flex-col gap-1.5 text-2xs text-muted">
-                                <p>{{ namesNote }}</p>
+                                <p v-if="namesNote">{{ namesNote }}</p>
                                 <p v-if="nameModelMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noNameModel`) }}</p>
                             </div>
                         </template>
