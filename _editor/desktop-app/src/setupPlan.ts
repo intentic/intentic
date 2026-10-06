@@ -36,13 +36,13 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
     const fetch: PlanStep = { phase: `fetching-ic`, label: t(`desktop.setupPlan.fetchInstaller`), weight: 15 };
     const check: PlanStep = {
         phase: `checking-docker`,
-        label: windows ? `Check what Docker needs` : `Check Docker`,
+        label: windows ? t(`desktop.setupPlan.checkDockerNeeds`) : t(`desktop.setupPlan.checkDocker`),
         weight: windows ? 12 : 5,
     };
     // Can dominate the whole install (download, installer, maybe WSL2); weighted heavily so the bar doesn't stall.
     const install: PlanStep[] = input.dockerReady
         ? []
-        : [{ phase: `installing-docker`, label: windows ? `Set up Docker` : `Install Docker`, weight: windows ? 600 : 420 }];
+        : [{ phase: `installing-docker`, label: windows ? t(`desktop.setupPlan.setUpDocker`) : t(`desktop.setupPlan.installDocker`), weight: windows ? 600 : 420 }];
     return [
         ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
         { phase: `preflight`, label: t(`desktop.setupPlan.checkDevice`), weight: 10 },
@@ -238,10 +238,10 @@ const remainingOf = (state: Progress, now: number): string | undefined => {
         return undefined;
     }
     if (left < 60_000) {
-        return `less than a minute`;
+        return t(`desktop.setupPlan.lessThanMinute`);
     }
     const minutes = Math.round(left / 60_000);
-    return `about ${minutes} minute${minutes === 1 ? `` : `s`}`;
+    return t(`desktop.setupPlan.aboutMinutes`, { count: minutes }, minutes);
 };
 
 export const progressView = (state: Progress, now: number): ProgressView => ({
@@ -264,7 +264,7 @@ export const progressView = (state: Progress, now: number): ProgressView => ({
         share: step.weight / Math.max(total(state.plan), 1),
     })),
     percent: Math.round(state.percent),
-    position: state.index < 0 || state.ended !== undefined ? undefined : `Step ${state.index + 1} of ${state.plan.length}`,
+    position: state.index < 0 || state.ended !== undefined ? undefined : t(`desktop.setupPlan.stepOf`, { index: state.index + 1, total: state.plan.length }),
     remaining: remainingOf(state, now),
     remainingMs: remainingMsOf(state, now),
     stepProgress: state.index < 0 ? 0 : state.ended === `ok` ? 1 : stepFraction(state, now),

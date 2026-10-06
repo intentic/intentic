@@ -154,14 +154,14 @@ export class TurnFailures {
             // newer engine, since the daemon's own message can't say that.
             const floor = error.engine?.floor;
             // Where to install is all this adds; that the message is held is the transcript notice's line to say.
-            this.host.error.value =
-                `${message} Install a newer engine under Sandbox ▸ Environment ▸ Agent engines` +
-                `${floor === undefined ? `` : ` (${floor} or newer)`}.`;
+            this.host.error.value = `${message} ${
+                floor === undefined ? t(`chat.turnFailures.installNewerEngine`) : t(`chat.turnFailures.installNewerEngineFloor`, { floor })
+            }`;
             return;
         }
         if (code === `acp-auth-required`) {
             // The agent refuses every turn until it is signed in, and only its own login command does that: say where.
-            this.host.error.value = `${message} Sign this agent in from its row under Capabilities (Sign in).`;
+            this.host.error.value = `${message} ${t(`chat.turnFailures.signAgentIn`)}`;
             return;
         }
         this.host.error.value = message;

@@ -58,12 +58,16 @@ export const setEngineChannel = async (engine: EngineRow, kind: "blessed" | "lat
     actionNotice.value = undefined;
     try {
         if (kind === "pinned" && engine.running.version === undefined) {
-            await postAction(`POST /engines/channel`, { id: engine.id, kind: "image" }, `Could not change ${engine.label} version source.`);
+            await postAction(
+                `POST /engines/channel`,
+                { id: engine.id, kind: "image" },
+                t(`sandbox.useEngines.couldNotChangeSource`, { label: engine.label }),
+            );
         } else {
             await postAction(
                 `POST /engines/channel`,
                 { id: engine.id, kind, ...(kind === "pinned" ? { version: engine.running.version } : {}) },
-                `Could not change ${engine.label} version source.`,
+                t(`sandbox.useEngines.couldNotChangeSource`, { label: engine.label }),
             );
         }
     } finally {
@@ -75,7 +79,7 @@ export const updateEngine = async (engine: EngineRow): Promise<void> => {
     setInFlight(engine.id, "update");
     actionNotice.value = undefined;
     try {
-        await postAction(`POST /engines/update`, { id: engine.id }, `Could not update ${engine.label}.`);
+        await postAction(`POST /engines/update`, { id: engine.id }, t(`sandbox.useEngines.couldNotUpdate`, { label: engine.label }));
     } finally {
         clearInFlight(engine.id);
     }
@@ -85,7 +89,7 @@ export const revertEngine = async (engine: EngineRow): Promise<void> => {
     setInFlight(engine.id, "revert");
     actionNotice.value = undefined;
     try {
-        await postAction(`POST /engines/revert`, { id: engine.id }, `Could not revert ${engine.label}.`);
+        await postAction(`POST /engines/revert`, { id: engine.id }, t(`sandbox.useEngines.couldNotRevert`, { label: engine.label }));
     } finally {
         clearInFlight(engine.id);
     }
@@ -108,7 +112,7 @@ export const updateAllEngines = async (): Promise<void> => {
     try {
         for (const engine of targets) {
             try {
-                await postAction(`POST /engines/update`, { id: engine.id }, `Could not update ${engine.label}.`);
+                await postAction(`POST /engines/update`, { id: engine.id }, t(`sandbox.useEngines.couldNotUpdate`, { label: engine.label }));
             } catch {
                 // Carry on with next engine so one failure doesn't halt the whole queue
             } finally {

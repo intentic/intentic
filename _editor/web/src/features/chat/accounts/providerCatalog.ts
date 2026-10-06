@@ -1,4 +1,5 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
+import { t } from "@intentic/ui/i18n";
 import {
     type AgentCommand,
     type AgentProvider,
@@ -14,6 +15,7 @@ import {
     type NativeProvider,
     PROVIDER_SPECS,
     providerLabel,
+    TRIAL_LABEL,
     type TrialHealth,
 } from "@intentic/sandbox-contract";
 
@@ -126,19 +128,21 @@ export const providerGlyph = (provider: AgentProvider): "gift" | "cpu" | "server
 // Whether the capability half (endpoints, trial allowance) has loaded, separately from `accountsLoaded`.
 export const endpointsLoaded = sandboxRef(() => false);
 
+// The daemon names the free trial's endpoint in English (TRIAL_LABEL); on screen it is said in the reader's language.
+const endpointLabel = (provider: AgentProvider): string | undefined => {
+    const label = endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label;
+    return label === TRIAL_LABEL && isTrialProvider(provider) ? t(`chat.providerCatalog.freeTrial`) : label;
+};
+
 // Display label for any provider, falling back through ACP/endpoint name, a gone endpoint's raw id,
 // then the static label. The raw-id rung exists for the spend ledger, which outlives a deleted card.
 export const providerDisplayLabel = (provider: AgentProvider): string =>
-    acpProviders.value.find((agent) => agent.id === provider)?.label ??
-    endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
-    endpointIdOf(provider) ??
-    providerLabel(provider);
+    acpProviders.value.find((agent) => agent.id === provider)?.label ?? endpointLabel(provider) ?? endpointIdOf(provider) ?? providerLabel(provider);
 
 // All locally-run weights read as one provider (used by the picker's rail and the Usage tab's
 // legend), including a card that's since been deleted. The trial is excluded: it's a
 // daemon-provisioned endpoint, not local weights.
 export const LOCAL_MODELS_GROUP = "local-models";
-const LOCAL_MODELS_LABEL = "Local models";
 
 export const isLocalModelProvider = (provider: AgentProvider): boolean =>
     isEndpointProvider(provider) &&
@@ -149,7 +153,8 @@ export const isLocalModelProvider = (provider: AgentProvider): boolean =>
 export const providerGroup = (provider: AgentProvider): string => (isLocalModelProvider(provider) ? LOCAL_MODELS_GROUP : provider);
 
 // What a group is called; takes a group key, not a provider, since the folded group has no single card.
-export const providerGroupLabel = (group: string): string => (group === LOCAL_MODELS_GROUP ? LOCAL_MODELS_LABEL : providerDisplayLabel(group));
+export const providerGroupLabel = (group: string): string =>
+    group === LOCAL_MODELS_GROUP ? t(`chat.providerCatalog.localModels`) : providerDisplayLabel(group);
 
 // A failed catalog read is asked again no sooner than this, however often a render names a model on it.
 const DEMAND_RETRY_MS = 30_000;

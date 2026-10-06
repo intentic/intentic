@@ -109,7 +109,8 @@ const probedAt = new Map<string, number>();
 // expectation carries it everywhere else, and through the swap that ends it — which is the part that reaches them
 // wherever they are, as a workspace that stops answering.
 const ENVIRONMENT_ROW = hubWorkKey(`sandbox`, `environment`);
-const WHAT = `Rebuilding from your checkout`;
+// A function, so the label is said in the language active when the build is marked.
+const what = (): string => t(`sandbox.useDevRebuild.rebuildingFromCheckout`);
 // The card's own `restarting` line, said to a reader who is no longer on the card. Hedged on WHEN, not on what: a
 // poll four seconds stale can't tell the swap from a machine the build has buried, and both are this rebuild's doing.
 const quiet = (): RestartQuiet => ({
@@ -126,8 +127,8 @@ const mark = (slug: string): void => {
     // would have no surface to appear on.
     const sandbox = useSandbox().activeSandboxId.value;
     const ends = [
-        beginHubWork(ENVIRONMENT_ROW, WHAT),
-        ...(sandbox === undefined ? [] : [expectRestart({ sandbox, id: `dev-rebuild`, what: WHAT, quiet: quiet() })]),
+        beginHubWork(ENVIRONMENT_ROW, what()),
+        ...(sandbox === undefined ? [] : [expectRestart({ sandbox, id: `dev-rebuild`, what: what(), quiet: quiet() })]),
     ];
     marks.set(slug, () => {
         for (const end of ends) {
@@ -364,7 +365,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
             run.phase = "building";
             follow(slug, hostId);
         } catch (error) {
-            settle(run, slug, "failed", error instanceof Error ? error.message : `Couldn't reach that device to rebuild this sandbox.`);
+            settle(run, slug, "failed", error instanceof Error ? error.message : t(`sandbox.useDevRebuild.couldntReachDevice`));
         }
     };
 

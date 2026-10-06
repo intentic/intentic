@@ -1,5 +1,6 @@
 import { computed, onUnmounted, ref } from "vue";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { devFillGet, devFillSet } from "../setup/devFill";
 import { apiClient } from "../../lib/useApi";
 
@@ -32,7 +33,7 @@ export function useCloudflareZones() {
             zones.value = found;
             selectedZone.value = found.length === 1 ? found[0] : undefined;
             if (found.length === 0) {
-                zonesError.value = `This token can't see any Cloudflare zones: add a domain to the account or broaden its Zone:Read scope.`;
+                zonesError.value = t(`extensions.useCloudflareZones.noZones`);
             }
         } catch (err) {
             if (token !== cfToken.value.trim()) {
@@ -40,7 +41,7 @@ export function useCloudflareZones() {
             }
             zones.value = [];
             selectedZone.value = undefined;
-            zonesError.value = messageOr(err, `Couldn't check this token's Cloudflare zones.`);
+            zonesError.value = messageOr(err, t(`extensions.useCloudflareZones.couldntCheck`));
         } finally {
             if (token === cfToken.value.trim()) {
                 zonesLoading.value = false;

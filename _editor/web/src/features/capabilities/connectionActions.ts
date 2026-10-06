@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type Ref, ref } from "vue";
@@ -41,7 +42,7 @@ export const useConnectionActions = ({ remove, rename, refetchFleet, error }: Ac
             try {
                 await remove.mutateAsync(id);
             } catch (err) {
-                error.value = noticeFrom(err, `Could not remove the capability.`);
+                error.value = noticeFrom(err, t(`capabilities.connectionActions.couldNotRemove`));
             }
             confirmRemoveId.value = undefined;
         },
@@ -58,7 +59,7 @@ export const useConnectionActions = ({ remove, rename, refetchFleet, error }: Ac
             try {
                 await rename.mutateAsync({ id, to });
             } catch (err) {
-                renameError.value = noticeFrom(err, `Could not rename that connection.`);
+                renameError.value = noticeFrom(err, t(`capabilities.connectionActions.couldNotRename`));
                 return;
             }
             renameId.value = undefined;
@@ -73,7 +74,7 @@ export const useConnectionActions = ({ remove, rename, refetchFleet, error }: Ac
             try {
                 await revokeSyncDevice(device.machine);
             } catch (err) {
-                error.value = noticeFrom(err, `Could not disconnect that machine.`);
+                error.value = noticeFrom(err, t(`capabilities.connectionActions.couldNotDisconnect`));
             } finally {
                 disconnectingDevice.value = false;
                 disconnecting.value = undefined;

@@ -5,14 +5,21 @@
     },
     "portRow": {
         "address": "Adres",
+        "command": "Polecenie",
+        "commandUnreadable": "nieczytelne: proces wyczyścił własne argv",
+        "folder": "Folder",
         "forwarded": "przekierowany",
         "loopbackAlias": "Alias loopback",
+        "noTerminal": "brak: nic tutaj nie pokaże jego wyjścia ani go nie zatrzyma",
         "notForwardable": "nie da się przekierować",
+        "notReadable": "nieczytelny",
         "openPortPreviewIn": "Otwórz podgląd portu {port} w nowej karcie",
         "openTerminal": "Otwórz terminal",
         "preview": "Podgląd",
+        "process": "proces {pid}",
         "proxyCantReach": "Proxy tam nie sięga",
-        "stop": "Zatrzymaj"
+        "stop": "Zatrzymaj",
+        "terminal": "Terminal"
     },
     "portsView": {
         "nothingYoursListeningYet": "Nic Twojego jeszcze nie nasłuchuje.",
@@ -29,7 +36,7 @@
         "notServed": "Niepodawane: {blocked}",
         "nothingPublished": "Nic nie jest opublikowane.",
         "openInNewTab": "Otwórz {path} w nowej karcie",
-        "public2": "{servedCount} publicznych",
+        "public2": "Publiczne: {servedCount}",
         "published": "Opublikowane",
         "readingPublishedFiles": "Odczytywanie Twoich opublikowanych plików…",
         "sandboxNoPublicAddress": "Ten sandbox nie ma publicznego adresu, więc nie da się z niego publikować plików.",
@@ -40,16 +47,19 @@
         "anyoneLinkOpen": "Każdy, kto ma ten link, może to otworzyć",
         "copyLink": "Kopiuj link",
         "openPreviewInNew": "Otwórz podgląd w nowej karcie",
+        "share": "Udostępnij",
         "shareLivePreview": "Udostępnij ten podgląd na żywo"
     },
     "sharedConversations": {
         "chatsYouvePublished": "Czaty, które opublikowałeś",
         "copyLink": "Kopiuj link",
         "eachReadOnlyPage": "Każdy z nich to strona tylko do odczytu, którą otworzy każdy, kto ma link: bez logowania. Pokazuje rozmowę taką, jaka była w chwili udostępnienia, więc wszystko powiedziane później zostaje prywatne, dopóki nie naciśniesz",
+        "hoursAgo": "{n} godz. temu",
         "linkStaysSame": "Ten sam link",
         "messagesOnly": "tylko wiadomości",
+        "minutesAgo": "{n} min temu",
         "openInNewTab": "Otwórz {title} w nowej karcie",
-        "public": "{count} publicznych",
+        "public": "Publiczne: {count}",
         "publishLatest": "Opublikuj nowe",
         "sandboxNoPublicAddress": "Ten sandbox nie ma publicznego adresu, więc do tej strony nie da się dotrzeć.",
         "sharedConversations": "Udostępnione rozmowy",
@@ -59,6 +69,7 @@
         "withAgentWork": "z pracą agenta"
     },
     "common": {
+        "actionFailed": "Akcja się nie powiodła.",
         "newTab": "Nowa karta"
     }
 }

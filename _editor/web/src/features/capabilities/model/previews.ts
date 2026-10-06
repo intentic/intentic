@@ -21,8 +21,8 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
         return undefined;
     }
     const asks =
-        auto <= 0 ? `Every payment asks you in chat first` : `Payments under ${formatMoney(auto)} go through on their own, the rest ask you first`;
-    return `${asks} · at most ${formatMoney(perPayment)} each · ${formatMoney(daily)} a day.`;
+        auto <= 0 ? t(`capabilities.previews.everyPaymentAsks`) : t(`capabilities.previews.paymentsUnder`, { amount: formatMoney(auto) });
+    return t(`capabilities.previews.walletSummary`, { asks, perPayment: formatMoney(perPayment), daily: formatMoney(daily) });
 };
 
 // A connected computer's grant: presets over the switches, and the sentence.
@@ -32,14 +32,15 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
 const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`] as const;
 type HostSwitch = (typeof HOST_SWITCHES)[number];
 
-const GRANT_WORDS: Readonly<Record<HostSwitch, string>> = {
-    shell: `run commands`,
-    write: `change files`,
-    screen: `see the screen`,
-    control: `use the mouse and keyboard`,
-    sandboxes: `manage and remove its sandboxes`,
-    destructive: `delete folders and wipe disks`,
-};
+// Built when read, so the sentence follows the language picked after boot.
+const grantWords = (): Readonly<Record<HostSwitch, string>> => ({
+    shell: t(`capabilities.previews.grantShell`),
+    write: t(`capabilities.previews.grantWrite`),
+    screen: t(`capabilities.previews.grantScreen`),
+    control: t(`capabilities.previews.grantControl`),
+    sandboxes: t(`capabilities.previews.grantSandboxes`),
+    destructive: t(`capabilities.previews.grantDestructive`),
+});
 
 export interface HostPreset {
     readonly key: string;
@@ -74,13 +75,14 @@ export const matchHostPreset = (values: Readonly<Record<string, string>>): strin
 // States only what is allowed, never what is blocked: listing every denied switch runs to several
 // lines and buries what's granted.
 export const hostGrantSummary = (values: Readonly<Record<string, string>>): string => {
-    const allowed = HOST_SWITCHES.filter((key) => values[key] === `on`).map((key) => GRANT_WORDS[key]);
+    const words = grantWords();
+    const allowed = HOST_SWITCHES.filter((key) => values[key] === `on`).map((key) => words[key]);
     if (allowed.length === 0) {
-        return `Read files only.`;
+        return t(`capabilities.previews.readFilesOnly`);
     }
-    const list = allowed.length === 1 ? allowed[0] : `${allowed.slice(0, -1).join(`, `)} and ${allowed.at(-1)}`;
+    const list = allowed.length === 1 ? (allowed[0] ?? ``) : t(`capabilities.previews.listAnd`, { rest: allowed.slice(0, -1).join(`, `), last: allowed.at(-1) ?? `` });
     const everything = allowed.length === HOST_SWITCHES.length;
-    return `May ${list}${everything ? `.` : `, and nothing else.`}`;
+    return everything ? t(`capabilities.previews.mayAll`, { list }) : t(`capabilities.previews.mayOnly`, { list });
 };
 
 /** The local model's RAM bill: weights plus context window. */
@@ -89,7 +91,7 @@ export const localModelMemorySummary = (values: Readonly<Record<string, string>>
     if (totalGb === undefined || weightsGb === undefined || windowGb === undefined) {
         return undefined;
     }
-    return `≈ ${weightsGb} GB weights + ${windowGb} GB window: needs ${totalGb} GB of free RAM.`;
+    return t(`capabilities.previews.localModelMemory`, { weights: weightsGb, window: windowGb, total: totalGb });
 };
 
 /** The sentence a tile's answers compose into under the form, for the kinds that have one. */

@@ -40,7 +40,7 @@ const cleanSlug = computed(() => name.value.trim());
 const ready = computed(() => SLUG.test(cleanPublisher.value) && SLUG.test(cleanSlug.value));
 // Which of the two boxes is wrong, said only once the box has something in it to be wrong about.
 const slugProblem = (value: string): string | undefined =>
-    value.length === 0 || SLUG.test(value) ? undefined : `Lower case letters, digits and hyphens, starting with a letter or digit.`;
+    value.length === 0 || SLUG.test(value) ? undefined : t(`sandbox.newExtensionDialog.slugRule`);
 const publisherProblem = computed(() => slugProblem(cleanPublisher.value));
 const nameProblem = computed(() => slugProblem(cleanSlug.value));
 
@@ -56,7 +56,7 @@ const submit = async (): Promise<void> => {
         open.value = false;
         emit(`created`, { ...created, wish: wish.value.trim() });
     } catch (error) {
-        failure.value = noticeFrom(error, `The extension could not be created.`);
+        failure.value = noticeFrom(error, t(`sandbox.newExtensionDialog.couldNotCreate`));
     } finally {
         busy.value = false;
     }

@@ -65,7 +65,7 @@ const { active } = useChat();
 const chatBadge = computed<ViewBadge | undefined>(() => {
     switch (active.value.status.value) {
         case `streaming`:
-            return { running: `Working on your last message` };
+            return { running: t(`shell.mobileTabBar.workingOnLast`) };
         case `awaiting`:
             return { count: 1, tooltip: t(`shell.mobileTabBar.waitingAnswer`) };
         default:

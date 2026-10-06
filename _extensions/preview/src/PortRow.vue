@@ -31,10 +31,10 @@ const openTerminal = (): void => {
 // The facts the headline no longer shows, in the order somebody debugging asks for them. Always four rows, so
 // an absent one reads as "we looked and there was nothing" rather than as a row that quietly went missing.
 const details = computed<string[][]>(() => [
-    [`Command`, entry.command ?? `not readable: the process cleared its own argv`],
-    [`Folder`, entry.cwd ?? `not readable`],
-    [`Terminal`, entry.session ?? `none: nothing here can show its output or stop it`],
-    [`Address`, `${entry.host}:${entry.port}${entry.pid === undefined ? `` : `  ·  process ${entry.pid}`}`],
+    [t(`portRow.command`), entry.command ?? t(`portRow.commandUnreadable`)],
+    [t(`portRow.folder`), entry.cwd ?? t(`portRow.notReadable`)],
+    [t(`portRow.terminal`), entry.session ?? t(`portRow.noTerminal`)],
+    [t(`portRow.address`), `${entry.host}:${entry.port}${entry.pid === undefined ? `` : `  ·  ${t(`portRow.process`, { pid: entry.pid })}`}`],
 ]);
 </script>
 

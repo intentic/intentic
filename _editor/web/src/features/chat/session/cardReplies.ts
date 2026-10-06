@@ -1,4 +1,5 @@
 import { type AgentReply, type RequestField, settledRequests, type TranscriptRequests } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { type AnsweredPark, cardAnswered } from "./cardAnswered";
 import { postTurnControl } from "../run/turnStream";
@@ -48,23 +49,21 @@ const FIELD_OF: Readonly<Record<CardAnswer["kind"], RequestField>> = {
 export const refusalOf = (answer: CardAnswer): string => {
     switch (answer.kind) {
         case `plan`:
-            return `Could not record your plan decision: the turn may have ended.`;
+            return t(`chat.cardReplies.planNotRecorded`);
         case `question`:
-            return answer.cancelled === true
-                ? `Could not dismiss the question: the turn may have ended.`
-                : `Could not submit your answers: the turn may have ended.`;
+            return answer.cancelled === true ? t(`chat.cardReplies.questionNotDismissed`) : t(`chat.cardReplies.answersNotSubmitted`);
         case `permission`:
-            return `Could not record your decision: the turn may have ended.`;
+            return t(`chat.cardReplies.decisionTurnEnded`);
         case `payment_offer`:
-            return `Could not record your decision: the offer may have expired.`;
+            return t(`chat.cardReplies.decisionOfferExpired`);
         // The one card whose answer can be refused on who is pressing: enforced server-side against the verified identity.
         case `credential_offer`:
-            return `Could not record your decision: the card may have expired, or it may not be yours to answer.`;
+            return t(`chat.cardReplies.decisionNotYours`);
         case `capability_offer`:
-            return `Could not record your decision: the ask may have expired.`;
+            return t(`chat.cardReplies.decisionAskExpired`);
         case `browser_help`:
         case `terminal_help`:
-            return `Could not send that: the turn may have ended.`;
+            return t(`chat.cardReplies.sendTurnEnded`);
     }
 };
 

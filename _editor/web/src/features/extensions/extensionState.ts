@@ -20,14 +20,34 @@ export interface ExtensionState {
 
 const states = (): Record<ExtensionHostStatus["state"], ExtensionState> => ({
     active: { variant: `success`, badge: false, attention: false },
-    "agent-only": { label: `agent-only`, variant: `neutral`, badge: false, attention: false },
+    "agent-only": { label: t(`extensions.extensionState.agentOnly`), variant: `neutral`, badge: false, attention: false },
     disabled: { variant: `neutral`, badge: false, attention: false },
-    incompatible: { label: `incompatible`, variant: `warning`, badge: true, attention: true },
+    incompatible: { label: t(`extensions.extensionState.incompatible`), variant: `warning`, badge: true, attention: true },
     // Drift: image and app build disagree about what exists; never render as if all were well.
     missing: { label: t(`extensions.extensionState.versionDrift`), variant: `warning`, badge: true, attention: true },
     unlisted: { label: t(`extensions.extensionState.versionDrift`), variant: `warning`, badge: true, attention: true },
     error: { label: t(`extensions.extensionState.failedToLoad`), variant: `danger`, badge: true, attention: true },
 });
+
+// The host's own state word, for a row with no other label to wear it: said in the reader's language.
+export const hostStateWord = (state: ExtensionHostStatus["state"]): string => {
+    switch (state) {
+        case `active`:
+            return t(`extensions.extensionState.word.active`);
+        case `agent-only`:
+            return t(`extensions.extensionState.agentOnly`);
+        case `disabled`:
+            return t(`extensions.extensionState.word.disabled`);
+        case `incompatible`:
+            return t(`extensions.extensionState.incompatible`);
+        case `missing`:
+            return t(`extensions.extensionState.word.missing`);
+        case `unlisted`:
+            return t(`extensions.extensionState.word.unlisted`);
+        case `error`:
+            return t(`extensions.extensionState.word.error`);
+    }
+};
 
 // No host status: installed after boot, or not booted yet; says what to do, not a state or attention case.
 const unloaded = (): ExtensionState => ({ label: t(`extensions.extensionState.reloadToLoad`), variant: `neutral`, badge: false, attention: false });
@@ -47,8 +67,19 @@ export const backendState = (backend: { state: string; detail?: string } | undef
         case `absent`:
             return { label: t(`extensions.extensionState.backendNotInImage`), variant: `warning`, badge: false, attention: false };
         case `starting`:
+            return {
+                label: t(`extensions.extensionState.backend`, { state: t(`extensions.extensionState.starting`) }),
+                variant: `neutral`,
+                badge: false,
+                attention: false,
+            };
         case `stopped`:
-            return { label: t(`extensions.extensionState.backend`, { state: backend.state }), variant: `neutral`, badge: false, attention: false };
+            return {
+                label: t(`extensions.extensionState.backend`, { state: t(`extensions.extensionState.stopped`) }),
+                variant: `neutral`,
+                badge: false,
+                attention: false,
+            };
         default:
             return undefined;
     }

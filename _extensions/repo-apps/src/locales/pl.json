@@ -7,9 +7,11 @@
         "pickOneMoreTemplates": "Wybierz jeden albo więcej szablonów do wygenerowania w tym monorepo. Nazwij każdą instancję, żeby uruchomić kilka tego samego rodzaju."
     },
     "appsView": {
+        "actionFailed": "Akcja się nie powiodła.",
         "addApp": "Dodaj aplikację",
         "addingAppsFollowProgress": "Dodawanie aplikacji: postęp śledź w terminalu.",
         "api": "API",
+        "healthy": "działa",
         "libraryTests": "Testy bibliotek",
         "noAppsYetUse": "Nie ma jeszcze aplikacji: użyj „Dodaj aplikację”, żeby wygenerować jedną i dostać podgląd na żywo.",
         "noVitestProjectsFound": "Nie znaleziono projektów testowych: nic tutaj nie ma pliku vitest.config.*, bunfig.toml ani *.test.*.",
@@ -23,9 +25,12 @@
         "runTests": "Uruchom testy",
         "start": "Uruchom",
         "startAll": "Uruchom wszystkie",
+        "starting": "uruchamia się",
         "stop": "Zatrzymaj",
         "stopAll": "Zatrzymaj wszystkie",
+        "stopped": "zatrzymana",
         "terminal": "Terminal",
+        "tests": "Testy",
         "web": "Web"
     },
     "dependenciesView": {

@@ -83,7 +83,7 @@ const usePasskey = (): Promise<void> => {
     if (current === undefined) {
         return Promise.resolve();
     }
-    return ceremony(`The passkey sign-in didn't complete.`, () => signInWithPasskey(current.target));
+    return ceremony(t(`sandbox.signInWall.passkeySignInIncomplete`), () => signInWithPasskey(current.target));
 };
 
 const addPasskey = (): Promise<void> => {
@@ -91,11 +91,11 @@ const addPasskey = (): Promise<void> => {
     if (current === undefined) {
         return Promise.resolve();
     }
-    return ceremony(`The passkey wasn't added.`, async () => {
+    return ceremony(t(`sandbox.signInWall.passkeyNotAdded`), async () => {
         const trimmed = label.value.trim();
         const registered = await registerPasskey(current.target, current.bearer, trimmed === `` ? undefined : trimmed);
         if (registered.session === undefined) {
-            throw new Error(`The sandbox registered the passkey but minted no session; sign in again.`);
+            throw new Error(t(`sandbox.signInWall.registeredNoSession`));
         }
         return registered.session;
     });
@@ -106,7 +106,7 @@ const recover = (): Promise<void> => {
     if (current === undefined || code.value.trim() === ``) {
         return Promise.resolve();
     }
-    return ceremony(`That recovery code didn't open the sandbox.`, () => recoverWithCode(current.target, current.bearer, code.value));
+    return ceremony(t(`sandbox.signInWall.recoveryCodeRefused`), () => recoverWithCode(current.target, current.bearer, code.value));
 };
 
 // Opens the platform's sign-in page in the default browser; the deep-link return reloads this SPA, abandoning the

@@ -44,7 +44,7 @@ const {
 const rename = createInlineRename(
     () => value,
     (name) => write(name),
-    failure ?? t(`ui.inlineRename.couldntSaveName`),
+    () => failure ?? t(`ui.inlineRename.couldntSaveName`),
 );
 
 const shown = computed(() => {

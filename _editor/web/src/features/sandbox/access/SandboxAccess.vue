@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
 import type { GrantedRole } from "@intentic/sandbox-contract";
-import { plural } from "@intentic/base/format";
 import {
     Avatar,
     Button,
@@ -109,6 +108,11 @@ const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
         hint: t(`sandbox.sandboxAccess.guestTalksToAssistants`),
     },
 ]);
+// The reader's own tier, in the words the picker uses for it; a role the picker does not grant reads as itself.
+const ownRole = computed((): string => {
+    const role = sandbox.active.value?.role ?? `viewer`;
+    return ROLE_OPTIONS.value.find((option) => option.value === role)?.label ?? (role === `owner` ? t(`sandbox.sandboxAccess.owner`) : role);
+});
 const inviteRole = ref<GrantedRole>(`collaborator`);
 // The areas an invite is fenced to; undefined is the whole workspace, which is what an invite means unnarrowed.
 const inviteAreas = ref<string[] | undefined>(undefined);
@@ -165,23 +169,23 @@ const { inventory, loading: inventoryLoading } = useAccessInventory();
 
 const webhooksLine = computed(() =>
     inventory.value.webhooks === undefined
-        ? `Not readable right now.`
-        : `${plural(inventory.value.webhooks, `event automation`, `event automations`)}, each with its own webhook URL and token. Rotate or remove one on its row in Automations.`,
+        ? t(`sandbox.sandboxAccess.notReadableRightNow`)
+        : t(`sandbox.sandboxAccess.webhooksLine`, { count: inventory.value.webhooks }, inventory.value.webhooks),
 );
 const gatesLine = computed(() =>
     inventory.value.gates === undefined
-        ? `Not readable right now.`
-        : `${plural(inventory.value.gates, `gated workflow`, `gated workflows`)}, each answering a pipeline at its own URL and token. Managed in the workflow designer's gate panel.`,
+        ? t(`sandbox.sandboxAccess.notReadableRightNow`)
+        : t(`sandbox.sandboxAccess.gatesLine`, { count: inventory.value.gates }, inventory.value.gates),
 );
 const ciLine = computed(() => {
     const repos = inventory.value.ciRepos;
     if (repos === undefined) {
-        return `Not readable right now.`;
+        return t(`sandbox.sandboxAccess.notReadableRightNow`);
     }
     if (repos.total === 0) {
-        return `No repository is wired to a forge. Connect GitHub or GitLab to receive pipeline results.`;
+        return t(`sandbox.sandboxAccess.ciLineNone`);
     }
-    return `${plural(repos.total, `repository`, `repositories`)} wired to a forge, ${repos.hooked} with a webhook the sandbox registered and signs with a per-sandbox secret. The rest are polled. Details on Pipelines.`;
+    return t(`sandbox.sandboxAccess.ciLine`, { count: repos.total, hooked: repos.hooked }, repos.total);
 });
 
 // Clears both together; a link with no sentence, or vice versa, is worse than neither.
@@ -195,11 +199,13 @@ const emailTouched = ref(false);
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 
 // Tone is a severity ramp, not a role palette: accepted stays quiet; only the waiting states get colour.
-const STATUS: Record<InviteRecord["status"], { label: string; variant: StatusVariant; dot: boolean }> = {
-    accepted: { label: `member`, variant: `neutral`, dot: false },
-    pending: { label: `pending`, variant: `info`, dot: true },
-    expired: { label: `expired`, variant: `danger`, dot: false },
-};
+// Built when read, so the labels follow a language switch.
+const statusOf = (status: InviteRecord["status"]): { label: string; variant: StatusVariant; dot: boolean } =>
+    ({
+        accepted: { label: t(`sandbox.sandboxAccess.statusMember`), variant: `neutral` as const, dot: false },
+        pending: { label: t(`sandbox.sandboxAccess.statusPending`), variant: `info` as const, dot: true },
+        expired: { label: t(`sandbox.sandboxAccess.statusExpired`), variant: `danger` as const, dot: false },
+    })[status];
 
 // True until the mount fetch lands; every later refresh rides a write's own response, never blank again.
 const listing = ref(true);
@@ -219,7 +225,7 @@ const load = async (): Promise<void> => {
             sandboxRaw(`GET /members`).catch((err: unknown): undefined => {
                 grantsUnread.value = noticeFrom(
                     err,
-                    `Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`,
+                    t(`sandbox.sandboxAccess.couldntReadMemberAreas`),
                     {
                         tone: `warning`,
                     },
@@ -233,7 +239,7 @@ const load = async (): Promise<void> => {
             grantsUnread.value = undefined;
         }
     } catch (err) {
-        notice.value = noticeFrom(err, `Couldn't load the access list.`);
+        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntLoadAccessList`));
     } finally {
         listing.value = false;
     }
@@ -253,11 +259,13 @@ onMounted(() => {
 });
 
 // Not an error: already invited, just unreachable by mail; `sent` needs no entry here.
-const DELIVERY_NOTE: Record<Exclude<InviteDelivery, "sent">, string> = {
-    unconfigured: `Invited. Email isn't set up on this platform, so send them this link yourself:`,
-    "local-link": `Invited. This platform only answers on your own machine, so an emailed link would go nowhere. Send them this one yourself:`,
-    refused: `Invited. The email was refused, so send them this link yourself:`,
-};
+// Built when read, so the note follows a language switch.
+const deliveryNote = (delivery: Exclude<InviteDelivery, "sent">): string =>
+    ({
+        unconfigured: t(`sandbox.sandboxAccess.deliveryUnconfigured`),
+        "local-link": t(`sandbox.sandboxAccess.deliveryLocalLink`),
+        refused: t(`sandbox.sandboxAccess.deliveryRefused`),
+    })[delivery];
 
 const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?: string }): void => {
     handover.value = result.delivery === `sent` ? undefined : result.link;
@@ -266,7 +274,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
             ? undefined
             : {
                   tone: `warning`,
-                  title: DELIVERY_NOTE[result.delivery],
+                  title: deliveryNote(result.delivery),
                   detail: result.reason,
                   action: {
                       label: t(`ui.action.copyLink`),
@@ -293,7 +301,7 @@ const invite = async (): Promise<void> => {
             // The answer is the whole roster, so every fence is known again.
             grantsUnread.value = undefined;
         } catch (err) {
-            notice.value = noticeFrom(err, `Couldn't grant access on the sandbox: is it online?`);
+            notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntGrantAccess`));
             return;
         }
         const result = await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value });
@@ -304,7 +312,7 @@ const invite = async (): Promise<void> => {
     } catch (err) {
         // Platform refused after the daemon granted; resync so the roster shows what's actually true.
         void load();
-        notice.value = noticeFrom(err, `The sandbox granted access, but recording the invite failed.`);
+        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.recordingInviteFailed`));
     } finally {
         busy.value = false;
     }
@@ -322,7 +330,7 @@ const resend = async (target: string): Promise<void> => {
         members.value = result.members;
         showDelivery(result);
     } catch (err) {
-        notice.value = noticeFrom(err, `Couldn't resend the invite.`);
+        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntResendInvite`));
     } finally {
         busy.value = false;
     }
@@ -337,9 +345,11 @@ const confirmingRevoke = ref(false);
 
 // A date, not a countdown: the expiry slides forward on renewal, so it reads as neglect risk, not a deadline.
 const thisBrowser = computed<string>(() => {
-    const who = user.value?.email ?? `You`;
+    const who = user.value?.email ?? t(`sandbox.sandboxAccess.youFallback`);
     const expires = sessionExpiresAt.value;
-    return expires === undefined ? `${who} · signed in` : `${who} · signed in until ${formatDate(expires)}, and renews whenever you use it`;
+    return expires === undefined
+        ? t(`sandbox.sandboxAccess.thisBrowserSignedIn`, { who })
+        : t(`sandbox.sandboxAccess.thisBrowserSignedInUntil`, { who, date: formatDate(expires) });
 });
 
 const revokeSessions = async (): Promise<void> => {
@@ -354,7 +364,7 @@ const revokeSessions = async (): Promise<void> => {
         sessionsRevoked.value = true;
         confirmingRevoke.value = false;
     } catch (err) {
-        notice.value = noticeFrom(err, `Couldn't sign other browsers out: is the sandbox online?`);
+        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntSignOthersOut`));
     } finally {
         revokingSessions.value = false;
     }
@@ -378,14 +388,14 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
         try {
             grants.value = (await sandboxRaw(`POST /members`, { input: grantBody(target, role, areas) })).members;
         } catch (err) {
-            notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
+            notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntChangeRole`));
             return false;
         }
         rosterChanged((await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members);
         return true;
     } catch (err) {
         void load();
-        notice.value = noticeFrom(err, `The sandbox took the new role, but recording it failed.`);
+        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.recordingRoleFailed`));
         return false;
     } finally {
         busy.value = false;
@@ -443,13 +453,13 @@ const revoke = async (target: string): Promise<void> => {
         try {
             await sandboxRaw(`DELETE /members`, { input: { email: target } });
         } catch (err) {
-            notice.value = noticeFrom(err, `Couldn't take access away on the sandbox: is it online?`);
+            notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntRevokeAccess`));
             return;
         }
         rosterChanged((await apiClient.invite.revoke({ sandboxId: id, email: target })).members);
     } catch (err) {
         void load();
-        notice.value = noticeFrom(err, `Access is gone on the sandbox, but clearing the record failed.`);
+        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.clearingRecordFailed`));
     } finally {
         busy.value = false;
     }
@@ -476,14 +486,14 @@ const revoke = async (target: string): Promise<void> => {
                     <Row icon="user" :title="member.email" :description="mobile ? undefined : guestLine(member)">
                         <!-- Status belongs in metadata, not the action slot. Which parts of the workspace they see rides with it; no badge at all is the whole of it. -->
                         <template v-if="!mobile" #meta>
-                            <AccessMemberBadges :status="STATUS[member.status]" :areas="areaNames(member.email)" />
+                            <AccessMemberBadges :status="statusOf(member.status)" :areas="areaNames(member.email)" />
                         </template>
                         <!-- On a phone the facts go under the address instead, so the row's trailing cluster holds the controls alone and they
                              fit one line: shared with the facts, they broke across two and left the remove press on a line by itself. -->
                         <template v-else #description>
                             <span v-if="guestLine(member) !== undefined" class="block">{{ guestLine(member) }}</span>
                             <span class="mt-1.5 flex flex-wrap gap-1.5">
-                                <AccessMemberBadges :status="STATUS[member.status]" :areas="areaNames(member.email)" />
+                                <AccessMemberBadges :status="statusOf(member.status)" :areas="areaNames(member.email)" />
                             </span>
                         </template>
                         <template #control>
@@ -618,7 +628,7 @@ const revoke = async (target: string): Promise<void> => {
             <template v-else>
                 <Row icon="user" :title="user?.email">
                     <template #meta>
-                        <StatusBadge variant="primary" :label="sandbox.active.value?.role ?? `viewer`" size="xs" />
+                        <StatusBadge variant="primary" :label="ownRole" size="xs" />
                         <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
                     </template>
                 </Row>

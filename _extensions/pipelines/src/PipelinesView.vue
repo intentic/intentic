@@ -87,7 +87,7 @@ const repoOptions = computed<PickerOptions>(() => {
     const reporting = standings.value.filter((standing) => !standing.silent);
     const silent = standings.value.filter((standing) => standing.silent);
     const failing = standings.value.reduce((sum, standing) => sum + standing.failing, 0);
-    const everywhere = failing === 0 ? `Nothing failing` : `${failing} branch${failing === 1 ? `` : `es`} failing`;
+    const everywhere = failing === 0 ? t(`extension.nothingFailing`) : t(`extension.branchCountFailing`, { count: failing }, failing);
     return [
         { options: [{ value: ALL_REPOS, label: t(`pipelinesView.allRepositories`), icon: `bolt`, description: everywhere }] },
         ...(reporting.length > 0 ? [{ options: reporting.map(repoOption) }] : []),

@@ -80,9 +80,11 @@ export const restartAgent = (): AgentAction<`restart`> => ({
 /** The badge's word for an agent that has reported; a caller states a device it hasn't heard from itself. */
 export const agentProcessState = (agent: DeviceAgentState): AgentPanel[`state`] => {
     if (!agent.running) {
-        return { word: `stopped`, variant: `warning` };
+        return { word: t(`ui.deviceAgent.stopped`), variant: `warning` };
     }
-    return agent.stalled === true ? { word: `stalled`, variant: `warning` } : { word: `running`, variant: `success` };
+    return agent.stalled === true
+        ? { word: t(`ui.deviceAgent.stalled`), variant: `warning` }
+        : { word: t(`ui.deviceAgent.running`), variant: `success` };
 };
 
 // A dead process and a stalled one are the same errand — bring the process back — so at most one of them is said.
@@ -91,11 +93,11 @@ export const agentStateNote = (agent: DeviceAgentState | undefined): AgentNote |
         return undefined;
     }
     if (!agent.running) {
-        return { text: `Agent stopped — nothing reaches its folders or ports.`, tone: `warning` };
+        return { text: t(`ui.deviceAgent.agentStopped`), tone: `warning` };
     }
     return agent.stalled === true
         ? {
-              text: `Agent stalled — what is below may be out of date.`,
+              text: t(`ui.deviceAgent.agentStalled`),
               tone: `warning`,
               hint: t(`ui.deviceAgent.roundsStopped`),
           }
@@ -110,7 +112,7 @@ export const agentSkewNote = (skew: DeviceAgentState[`staleBuild`]): AgentNote |
         : {
               text:
                   skew.running === undefined
-                      ? `Serving a build older than the ${skew.installed} installed — a restart picks it up.`
-                      : `Serving ${skew.running}, ${skew.installed} installed — a restart picks it up.`,
+                      ? t(`ui.deviceAgent.servingOlderBuild`, { installed: skew.installed })
+                      : t(`ui.deviceAgent.servingBuild`, { running: skew.running, installed: skew.installed }),
               tone: `warning`,
           };

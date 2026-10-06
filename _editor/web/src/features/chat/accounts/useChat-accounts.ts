@@ -10,6 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
@@ -268,16 +269,16 @@ export const renameAccount = async (id: string, label: string): Promise<void> =>
         renamed = await orRefusal(sandboxRpc.accounts.rename({ provider: target as NativeProvider, id, label: typed }));
     } catch (unanswered) {
         replaceAccount(target, current);
-        throw new Error(`Couldn't reach your sandbox to rename that account.`, { cause: unanswered });
+        throw new Error(t(`chat.chatAccounts.renameUnreachable`), { cause: unanswered });
     }
     if (renamed instanceof SandboxHttpError) {
         // A 404 means the row is gone elsewhere; re-read rather than restore a name onto a dead account.
         if (renamed.status === 404) {
             await refreshAccounts(target).catch(() => replaceAccount(target, current));
-            throw new Error(`That account is no longer connected.`);
+            throw new Error(t(`chat.chatAccounts.noLongerConnected`));
         }
         replaceAccount(target, current);
-        throw new Error(`Couldn't rename that account: ${renamed.message}`, { cause: renamed });
+        throw new Error(t(`chat.chatAccounts.renameFailed`, { reason: renamed.message }), { cause: renamed });
     }
     replaceAccount(target, renamed);
 };
@@ -294,7 +295,7 @@ export const disconnect = async (id: string): Promise<void> => {
         await sandboxRpc.accounts.disconnect({ provider: target as NativeProvider, id });
     } catch (caught) {
         if (current()) {
-            error.value = messageOr(caught, `Couldn't disconnect that account.`);
+            error.value = messageOr(caught, t(`chat.chatAccounts.disconnectFailed`));
         }
         return;
     } finally {

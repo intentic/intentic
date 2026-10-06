@@ -2,6 +2,7 @@
 import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
 import { Row, RowGroup } from "@intentic/ui";
 import RuleCommand from "./RuleCommand.vue";
+import { commandClassWords, qualifierWords } from "./ruleWords";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
@@ -73,11 +74,11 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                     <template #title>
                         <div>
                             <span class="inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
-                                <span>{{ rowTitle(rule.label) }}:</span>
+                                <span>{{ rowTitle(commandClassWords(rule.commandClass)) }}:</span>
                                 <span
                                     v-for="pattern in rule.patterns"
                                     :key="pattern.code"
-                                    v-tooltip.top="pattern.qualifier"
+                                    v-tooltip.top="pattern.qualifier === undefined ? undefined : qualifierWords(pattern.qualifier)"
                                     class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs"
                                     :class="pattern.qualifier !== undefined ? `cursor-help` : undefined"
                                 >

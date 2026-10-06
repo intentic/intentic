@@ -104,7 +104,7 @@ const emptyNote = computed<string | undefined>(() => {
     if (inventoryPending.value || matches.value.length > 0) {
         return undefined;
     }
-    return rows.value.length === 0 ? `Nothing in this sandbox holds a credential yet.` : `Nothing matches that filter.`;
+    return rows.value.length === 0 ? t(`sandbox.sandboxSecrets.noCredentialsYet`) : t(`sandbox.sandboxSecrets.nothingMatchesFilter`);
 });
 
 // Add-a-secret (any env key the user wants available at apply time); collapsed until invoked, or opened on arrival by
@@ -121,12 +121,12 @@ const newKeyProblem = computed<string | undefined>(() => {
         return undefined;
     }
     if (newKey.value.length > SECRET_KEY_MAX) {
-        return `A name stops at ${SECRET_KEY_MAX} characters; this one is ${newKey.value.length}.`;
+        return t(`sandbox.sandboxSecrets.nameTooLong`, { max: SECRET_KEY_MAX, length: newKey.value.length });
     }
     if (!newKeyValid.value) {
-        return `Letters, digits and underscores; must not start with a digit.`;
+        return t(`sandbox.sandboxSecrets.nameCharacters`);
     }
-    return newKeyTaken.value ? `${newKey.value} already exists here. Saving replaces its value.` : undefined;
+    return newKeyTaken.value ? t(`sandbox.sandboxSecrets.nameTaken`, { name: newKey.value }) : undefined;
 });
 const cancelAdd = (): void => {
     adding.value = false;
@@ -171,7 +171,7 @@ const pushToCi = async (): Promise<void> => {
         }
         refreshInventory();
     } catch (err) {
-        pushError.value = noticeFrom(err, `Could not push secrets to CI.`);
+        pushError.value = noticeFrom(err, t(`sandbox.sandboxSecrets.couldntPushToCi`));
     } finally {
         pushing.value = false;
     }

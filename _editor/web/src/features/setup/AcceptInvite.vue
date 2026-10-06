@@ -35,10 +35,10 @@ onMounted(async () => {
         preview.value = previewed.value;
     } else {
         previewFailed.value = true;
-        error.value = noticeFrom(previewed.reason, `Couldn't check this invite. Reload the page to try again.`);
+        error.value = noticeFrom(previewed.reason, t(`setup.acceptInvite.couldntCheckInvite`));
     }
     if (session.status === `rejected`) {
-        error.value ??= noticeFrom(session.reason, `Couldn't check who's signed in. Reload the page to try again.`);
+        error.value ??= noticeFrom(session.reason, t(`setup.acceptInvite.couldntCheckSession`));
     }
     loading.value = false;
 });
@@ -49,19 +49,19 @@ const sandboxName = computed(() => preview.value?.sandboxName);
 const grantSentence = computed<string>(() => {
     switch (preview.value?.role) {
         case `maintainer`: {
-            return `work in it and operate it, alongside its owner`;
+            return t(`setup.acceptInvite.grantMaintainer`);
         }
         case `collaborator`: {
-            return `read it and put its agents to work; landing and the box's own settings stay with its owner`;
+            return t(`setup.acceptInvite.grantCollaborator`);
         }
         case `viewer`: {
-            return `follow along: read the files and watch the agents work, without changing anything`;
+            return t(`setup.acceptInvite.grantViewer`);
         }
         case `guest`: {
-            return `talk to the assistants its owner picked for you; nothing else in it is shown`;
+            return t(`setup.acceptInvite.grantGuest`);
         }
         default: {
-            return `open it`;
+            return t(`setup.acceptInvite.grantDefault`);
         }
     }
 });
@@ -102,7 +102,7 @@ const accept = async (): Promise<void> => {
         sandbox.select(sandboxId);
         await router.push(`/`);
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't accept the invite.`);
+        error.value = noticeFrom(err, t(`setup.acceptInvite.couldntAccept`));
         busy.value = false;
     }
 };

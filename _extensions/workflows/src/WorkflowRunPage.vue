@@ -4,7 +4,7 @@ import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 import { host } from "./host";
-import { stepTone, workflowDag } from "./graph/workflowDag";
+import { runStateLabel, stepTone, workflowDag } from "./graph/workflowDag";
 import { useWorkflows } from "./useWorkflows";
 import { t } from "./i18n.js";
 
@@ -57,7 +57,7 @@ const stopRun = async (): Promise<void> => {
     try {
         await stop.mutateAsync(run.runId);
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : `The run could not be stopped.`;
+        failure.value = error instanceof Error ? error.message : t(`workflowRunPage.couldntStop`);
     }
 };
 
@@ -77,7 +77,7 @@ const chatLink = (conversationId: string) => {
             </button>
             <span class="text-sm font-medium text-content">{{ run.workflow.name }}</span>
             <span class="text-2xs font-medium" :class="run.state === `done` ? `text-success` : run.state === `running` ? `text-link` : `text-subtle`">
-                {{ run.state }}
+                {{ runStateLabel(run.state) }}
             </span>
             <span class="text-2xs text-subtle">{{ t(`workflowRunPage.steps`, { finished, count: run.steps.length }) }}</span>
             <span v-if="spent > 0" class="text-2xs text-subtle">${{ spent.toFixed(2) }}</span>

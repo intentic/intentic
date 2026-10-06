@@ -1,5 +1,4 @@
 import { computed, type ComputedRef } from "vue";
-import { plural } from "@intentic/base/format";
 import { isWork, KINDS } from "./terminalMeta";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { useTerminalsQuery } from "./terminalsQuery";
@@ -26,9 +25,9 @@ export function useTerminalActivity(): TerminalActivity {
 
     const summary = computed<string | undefined>(() => {
         const said = (Object.keys(KINDS) as (keyof typeof KINDS)[]).flatMap((kind) => {
-            const noun = KINDS[kind].noun;
+            const counted = KINDS[kind].counted;
             const count = live.value.filter((session) => session.kind === kind).length;
-            return noun === undefined || count === 0 ? [] : [plural(count, noun[0], noun[1])];
+            return counted === undefined || count === 0 ? [] : [counted(count)];
         });
         return said.length === 0 ? undefined : said.join(`, `);
     });

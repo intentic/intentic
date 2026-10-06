@@ -1,5 +1,6 @@
 import type { Unzipped } from "fflate";
 import { attr, child, childElements, descendants, parseXml, textOf, type XmlElement } from "../odf/xml-tree";
+import { t } from "../i18n.js";
 
 /* An EPUB's structure: what it is, what is in it, and in what order. Reading a chapter's markup is page.ts's job. */
 
@@ -134,7 +135,7 @@ export const openEpub = (zip: Unzipped): EpubBook => {
     const opfPath = container === undefined ? undefined : attr(descendants(container, `container:rootfile`)[0], `full-path`);
     const opf = opfPath === undefined ? undefined : part(opfPath);
     if (opf === undefined || opfPath === undefined) {
-        throw new Error(`This file has no EPUB package document in it.`);
+        throw new Error(t(`epubViewer.noPackageDocument`));
     }
 
     const { paths, tocPath } = spineOrder(opf, opfPath);

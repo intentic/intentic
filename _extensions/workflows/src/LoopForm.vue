@@ -62,18 +62,12 @@ const stopOptions = computed(() => [
 ]);
 
 // "Keep context" sounds strictly better but risks a loop agreeing with itself for many rounds.
-const contextNote = computed(() =>
-    context.value === `fresh`
-        ? `Every round starts a new session against the same working tree, and carries its notes in a progress file. Slower per round, and it does not drift.`
-        : `Each round continues the same session. Cheaper and it keeps the reasoning, but a long loop starts agreeing with itself.`,
-);
+const contextNote = computed(() => (context.value === `fresh` ? t(`loopForm.contextNote.fresh`) : t(`loopForm.contextNote.continue`)));
 const stopNote = computed(() => {
     if (stopKind.value === `command`) {
-        return `Run after every round. Exit 0 ends the loop. The only check here whose answer does not come from a model.`;
+        return t(`loopForm.stopNote.command`);
     }
-    return stopKind.value === `claim`
-        ? `The agent writes a verdict each round. Self-assessed, so it is advisory: pair it with a tight round ceiling.`
-        : `A separate model, which did none of the work, rules on the agent's own report against your rubric.`;
+    return stopKind.value === `claim` ? t(`loopForm.stopNote.claim`) : t(`loopForm.stopNote.judge`);
 });
 
 const clash = computed(() => name.value.trim() !== `` && taken.some((held) => held.toLowerCase() === name.value.trim().toLowerCase()));

@@ -42,8 +42,8 @@ describe(`a re-run's bar`, () => {
         };
         // Forty seconds of a 200-second plan leaves 160 seconds, whether its bar began at 0% or at 60%.
         expect([measure(0), measure(60)]).toEqual([
-            { percent: 20, remaining: `about 3 minutes`, remainingMs: 160_000, stepProgress: 0.4 },
-            { percent: 68, remaining: `about 3 minutes`, remainingMs: 160_000, stepProgress: 0.4 },
+            { percent: 20, remaining: `desktop.setupPlan.aboutMinutes`, remainingMs: 160_000, stepProgress: 0.4 },
+            { percent: 68, remaining: `desktop.setupPlan.aboutMinutes`, remainingMs: 160_000, stepProgress: 0.4 },
         ]);
     });
 });

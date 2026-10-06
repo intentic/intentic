@@ -42,9 +42,8 @@ export const isTrialProvider = (provider: AgentProvider): boolean => provider ==
 
 // A synthetic id, never changing; which real model answers is decided per message by the platform alone.
 export const TRIAL_MODEL_ID = "auto";
-// One wording for both the picker's label and the composer's notice, so they can't describe different bargains.
+// What the daemon and the trial endpoint call the free trial; the web says it in the reader's language.
 export const TRIAL_LABEL = "Free trial";
-export const TRIAL_NOTICE = "Trial messages pass through intentic. Connect an account to chat directly.";
 
 export const ENDPOINT_PROVIDER_PREFIX = "endpoint/";
 export const endpointProvider = (id: string): AgentProvider => `${ENDPOINT_PROVIDER_PREFIX}${id}`;

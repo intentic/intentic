@@ -1,5 +1,6 @@
 import { computed, ref, watch } from "vue";
 import { useCopied } from "@intentic/ui/clipboard";
+import { t } from "@intentic/ui/i18n";
 import { track, trackBeforeExit } from "../analytics";
 import {
     expectedStop,
@@ -119,7 +120,7 @@ const stopStuckInstaller = async (reason: string): Promise<void> => {
     try {
         await runStop(`setup`);
     } catch (error) {
-        setupError.value = `${reason}\nThe stuck installer could not be stopped: ${String(error)}`;
+        setupError.value = `${reason}\n${t(`desktop.setup.stuckInstallerNotStopped`, { error: String(error) })}`;
     }
 };
 const reportCommandFailure = (reason: string): void => {

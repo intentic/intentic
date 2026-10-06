@@ -164,7 +164,11 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         return accounts.value.map((entry) => {
             const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
             const subtitle =
-                identity.length > 0 ? identity.join(` · `) : ambiguousLabels.value.has(entry.label) ? `connected ${timeAgo(entry.connectedAt, { days: true })}` : undefined;
+                identity.length > 0
+                    ? identity.join(` · `)
+                    : ambiguousLabels.value.has(entry.label)
+                      ? t(`chat.pickerAccounts.connectedAgo`, { age: timeAgo(entry.connectedAt, { days: true }) })
+                      : undefined;
             const state = accountState(provider.value, accountFacts(entry), modelRef.value);
             const band = planLimitBand({ state, readable });
             return Object.assign({}, entry, {
@@ -203,7 +207,9 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     const measuring = ref(false);
     // Carries the age too, so a screen-reader user gets the same "worth pressing" signal as the visible label.
     const remeasureLabel = computed(() =>
-        measuredAt.value === undefined ? `Measure plan limits` : `Re-measure plan limits, measured ${formatAge(measuredAt.value)}`,
+        measuredAt.value === undefined
+            ? t(`chat.pickerAccounts.measurePlanLimits`)
+            : t(`chat.pickerAccounts.remeasurePlanLimits`, { age: formatAge(measuredAt.value) }),
     );
     const remeasure = async (): Promise<void> => {
         measuring.value = true;

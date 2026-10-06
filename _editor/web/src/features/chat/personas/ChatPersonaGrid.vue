@@ -1,7 +1,7 @@
 <!-- The chat list's scope: Anyone, then everyone this sandbox can speak as, in a grid that holds still. Picking a tile narrows the lanes below to that persona's chats (usePersonaScope). -->
 <script setup lang="ts">
-import { personaBounds } from "@intentic/sandbox-contract";
 import { ContextMenu, Icon, PersonaFace } from "@intentic/ui";
+import { personaBoundsWords } from "../../sandbox/personas/personaBounds";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, useId } from "vue";
@@ -77,7 +77,7 @@ const tiles = computed<Tile[]>(() => [
     tileOf(undefined, t(`chat.words.anyone`)),
     ...personas.value.map((persona) =>
         tileOf(
-            { id: persona.id, label: persona.label ?? persona.id, bounds: persona.powers === undefined ? undefined : personaBounds(persona) },
+            { id: persona.id, label: persona.label ?? persona.id, bounds: persona.powers === undefined ? undefined : personaBoundsWords(persona) },
             persona.label ?? persona.id,
         ),
     ),

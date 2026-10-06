@@ -51,7 +51,7 @@ const stop = async (port: number): Promise<void> => {
     try {
         await unforward(port);
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `The action failed.`;
+        actionError.value = err instanceof Error ? err.message : t(`common.actionFailed`);
     } finally {
         busy.value = undefined;
     }

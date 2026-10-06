@@ -61,7 +61,7 @@ const pairingCode = computed(() => props.instance.status.code);
 const primary = computed<{ label: string; icon: IconName; run: () => void } | undefined>(() => {
     if (pairs.value) {
         return {
-            label: paired.value ? `Reconnect` : `Connect`,
+            label: paired.value ? t(`ui.action.reconnect`) : t(`ui.action.connect`),
             icon: isBrowser.value ? `globe` : isPhone.value ? `mobile` : `desktop`,
             run: () => emit(`connect`),
         };

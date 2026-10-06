@@ -2,6 +2,7 @@ import { ref, shallowRef } from "vue";
 import { onRuntimeChanged } from "../live/runtimeEvents";
 import { sandboxRequest } from "../../../client/sandbox/sandboxClient";
 import { refusalText, SandboxHttpError, wordsOf } from "../../../client/sandbox/sandboxHttpError";
+import { t } from "@intentic/ui/i18n";
 
 // Drives Connect for a peer capability (host, browser or phone) sharing one door shape. Connect mints a single-use
 // token bound to this capability; the door pushes a runtime-change event on pairing, so the card updates
@@ -13,8 +14,16 @@ export interface PeerDoor {
     readonly domain: "hosts" | "webext" | "phones";
     // The key the roster answers under.
     readonly listKey: "hosts" | "browsers" | "phones";
-    readonly noun: string;
+    readonly noun: "device" | "browser" | "phone";
 }
+
+// Who may connect one, naming the kind of peer; one sentence per kind so each reads whole in every language.
+const ownerOnly = (noun: PeerDoor[`noun`]): string =>
+    noun === `device`
+        ? t(`sandbox.usePeerConnect.ownerOnlyDevice`)
+        : noun === `browser`
+          ? t(`sandbox.usePeerConnect.ownerOnlyBrowser`)
+          : t(`sandbox.usePeerConnect.ownerOnlyPhone`);
 
 export function usePeerConnect<Summary extends { readonly id: string; readonly online: boolean }>(door: PeerDoor) {
     // Shallow: the roster is replaced whole on each read; a deep ref would unwrap the generic Summary type.
@@ -46,9 +55,7 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
             const response = await sandboxRequest(`/system/${door.slug}/pair?id=${encodeURIComponent(id)}`, { method: `POST` });
             if (!response.ok) {
                 error.value =
-                    response.status === 403
-                        ? `Only the sandbox's owner or a maintainer can connect a ${door.noun}.`
-                        : `Couldn't start the connection (${response.status}).`;
+                    response.status === 403 ? ownerOnly(door.noun) : t(`sandbox.usePeerConnect.startFailed`, { status: String(response.status) });
                 return;
             }
             pairToken.value = ((await response.json()) as { token: string }).token;

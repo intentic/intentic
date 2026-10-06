@@ -1,6 +1,7 @@
 {
     "activityTimeline": {
         "activityFeed": "Strumień aktywności",
+        "entries": "{count} wpis | {count} wpisy | {count} wpisów",
         "idleNoEnabledListener": "Bezczynnie: dla {label} nie ma jeszcze włączonej automatyzacji nasłuchu, więc niczego nie nasłuchujemy.",
         "loadingActivity": "Wczytywanie aktywności",
         "nothingEntriesAppearMessage": "Nic {window}. Wpisy pojawiają się, gdy wiadomość budzi agenta, gdy wywołuje on podłączonego dostawcę i przy każdej turze, którą wykonuje.",
@@ -12,17 +13,63 @@
         "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
+        "durationMinutes": "{minutes} min {seconds} s",
+        "durationSeconds": "{seconds} s",
+        "error": "błąd",
         "failed": "nieudane",
+        "from": "od {author}",
         "openTranscript": "Otwórz zapis rozmowy",
+        "outboundCalls": "{count} wywołanie wychodzące | {count} wywołania wychodzące | {count} wywołań wychodzących",
         "session": "sesja {sessionId}",
         "source": "źródło {sourceKey}"
+    },
+    "episodes": {
+        "today": "Dziś",
+        "turn": "Tura",
+        "type": {
+            "apiCall": "Wywołanie API",
+            "automationPending": "Automatyzacja czeka na zatwierdzenie",
+            "automationRun": "Uruchomienie automatyzacji",
+            "depsFixUnarmed": "Poprawka dostępna, nic nie uzbrojono",
+            "depsInstallFailed": "Instalacja zależności nie powiodła się",
+            "depsInstallLost": "Instalacja zależności bez nadzoru",
+            "depsInstallStarted": "Instalowanie zależności",
+            "depsVerifyGreen": "Sprawdzenia przeszły",
+            "depsVerifyLost": "Sprawdzenia bez nadzoru",
+            "depsVerifyRed": "Sprawdzenia nie przeszły",
+            "depsVerifySkipped": "Brak sprawdzeń do uruchomienia",
+            "dispatchFailed": "Nie udało się przekazać",
+            "gatewayLoginFailed": "Nieudane logowanie do bramy",
+            "messageEdit": "Edytowano wiadomość",
+            "messageReceived": "Odebrano wiadomość",
+            "messageSend": "Wysłano wiadomość",
+            "messagesRead": "Odczytano wiadomości",
+            "reactionAdd": "Dodano reakcję",
+            "reactionRemove": "Usunięto reakcję",
+            "turnCompleted": "Tura zakończona",
+            "turnError": "Błąd tury",
+            "turnPlan": "Zaproponowano plan",
+            "turnStarted": "Tura rozpoczęta",
+            "voiceSessionEnded": "Zakończono sesję głosową",
+            "voiceSessionStarted": "Rozpoczęto sesję głosową",
+            "voiceTranscriptReceived": "Transkrypcja głosu",
+            "voiceUtteranceReceived": "Wypowiedź głosowa"
+        },
+        "yesterday": "Wczoraj"
     },
     "filter": "Filtruj po tekście, kanale, sesji…",
     "source": "Źródło",
     "sourceFilter": {
         "allSources": "Wszystkie źródła",
         "connections": "Połączenia",
-        "direct": "Bezpośrednio"
+        "direct": "Bezpośrednio",
+        "failed": "{count} nieudany | {count} nieudane | {count} nieudanych",
+        "gateway": {
+            "connecting": "łączenie…",
+            "disconnected": "niepołączone",
+            "idle": "bezczynne",
+            "pairing": "czeka na powiązanie"
+        }
     },
     "sourceLabel": "Źródło aktywności",
     "sources": {

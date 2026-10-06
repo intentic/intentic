@@ -16,13 +16,13 @@ export const cleanerOptions = () =>
         { id: `pnpm`, label: `pnpm` },
         { id: `apt`, label: `apt` },
         { id: `test`, label: t(`sandbox.savingsChart.testRunners`) },
-        { id: `diff`, label: `generated-file diffs` },
+        { id: `diff`, label: t(`sandbox.savingsChart.generatedFileDiffs`) },
         { id: `ls`, label: t(`sandbox.savingsChart.directoryListings`) },
         { id: `files`, label: t(`sandbox.savingsChart.fileLists`) },
         { id: `hits`, label: t(`sandbox.savingsChart.searchHits`) },
         { id: `dedup`, label: t(`sandbox.savingsChart.dedupeRepeats`) },
-        { id: `wide`, label: `machine-generated blobs` },
-        { id: `cap`, label: `head/tail cap` },
+        { id: `wide`, label: t(`sandbox.savingsChart.machineGeneratedBlobs`) },
+        { id: `cap`, label: t(`sandbox.savingsChart.headTailCap`) },
         { id: `redact`, label: t(`sandbox.savingsChart.redactSecrets`) },
         { id: `cache`, label: t(`sandbox.savingsChart.collapseRepeats`) },
     ] as const;
@@ -31,14 +31,15 @@ export const allCleanerIds = (): readonly string[] => cleanerOptions().map((clea
 
 // Stages with no settings switch (unconditional parts of the filter). Named rather than folded into "other" so a
 // reader can tell "not listed" from "not yours to turn off".
-const FIXED_STAGE_LABELS: Record<string, string> = {
-    ansi: `terminal escapes`,
-    failtail: `failure tail cap`,
-    footer: `retrieval footer`,
-    guard: `refused (output grew)`,
-};
+// Built when read, so the labels follow a language switch.
+const fixedStageLabels = (): Record<string, string> => ({
+    ansi: t(`sandbox.savingsChart.terminalEscapes`),
+    failtail: t(`sandbox.savingsChart.failureTailCap`),
+    footer: t(`sandbox.savingsChart.retrievalFooter`),
+    guard: t(`sandbox.savingsChart.refusedOutputGrew`),
+});
 
-export const stageLabel = (id: string): string => cleanerOptions().find((cleaner) => cleaner.id === id)?.label ?? FIXED_STAGE_LABELS[id] ?? id;
+export const stageLabel = (id: string): string => cleanerOptions().find((cleaner) => cleaner.id === id)?.label ?? fixedStageLabels()[id] ?? id;
 
 // the composition bar
 

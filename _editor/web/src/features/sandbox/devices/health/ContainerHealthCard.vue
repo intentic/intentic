@@ -55,7 +55,12 @@ const repair = async (): Promise<void> => {
     const endMark =
         machine === undefined
             ? (): void => {}
-            : beginDeviceWork({ machine, sandboxes: [sandboxId], doing: `Reconnecting this sandbox`, what: `Reconnecting this sandbox` });
+            : beginDeviceWork({
+                  machine,
+                  sandboxes: [sandboxId],
+                  doing: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+                  what: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+              });
     try {
         // Minted fresh per call so the code is always current; never cached or reused.
         const { code } = await apiClient.sandbox.setupCode({ sandboxId });

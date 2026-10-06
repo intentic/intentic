@@ -59,15 +59,17 @@ export interface DeviceConcern {
 
 // Each gap is a different errand and gets its own sentence; `scope-off` names the switch to flip, since
 // that's the only one closed in a single click.
-const GAP_TEXT: Record<NonNullable<Device[`gap`]>, string> = {
-    // The only gap with nothing on the other end to ask, so it names both ways back in: the machine's own agent
-    // command for one that is merely awake with its loop down, and, on the button, a fresh pairing.
-    offline: `A machine that wakes dials back in by itself.`,
-    // Its containers are listed regardless (they answer to "Manage sandboxes on this device"), so this names what is
-    // actually missing rather than claiming the machine is unreadable.
-    "scope-off": `Turn on "Run commands" in its capability card to see its folders, ports and agent.`,
-    unreported: `Its agent has never described this machine. Update it.`,
-};
+// Built when read, like the hints below, so the words follow the language on screen.
+const gapText = (gap: NonNullable<Device[`gap`]>): string =>
+    ({
+        // The only gap with nothing on the other end to ask, so it names both ways back in: the machine's own agent
+        // command for one that is merely awake with its loop down, and, on the button, a fresh pairing.
+        offline: t(`sandbox.deviceAttention.gapOffline`),
+        // Its containers are listed regardless (they answer to "Manage sandboxes on this device"), so this names what is
+        // actually missing rather than claiming the machine is unreadable.
+        "scope-off": t(`sandbox.deviceAttention.gapScopeOff`),
+        unreported: t(`sandbox.deviceAttention.gapUnreported`),
+    })[gap];
 
 // What each sentence above leaves out, on hover: what nobody has to read to act. A function, so the words are the
 // reader's locale at the moment they are drawn rather than whichever one was loaded when this module was.
@@ -93,13 +95,14 @@ const GAP_ICON: Record<NonNullable<Device[`gap`]>, IconName> = {
 };
 
 // Each block is a different errand, so each gets its own sentence.
-const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
-    connect: `Connect it as a device to start, update and remove its sandboxes from here.`,
-    // Every button on this page needs the device's own outbound socket; a machine can sync files flawlessly
-    // with that socket down.
-    offline: `Not reachable, so its sandboxes can't be started, updated or removed from here.`,
-    "sandboxes-off": `Turn on "Manage sandboxes on this device" in this device's capability card to use the buttons below.`,
-};
+const blockText = (kind: ManageBlock[`kind`]): string =>
+    ({
+        connect: t(`sandbox.deviceAttention.blockConnect`),
+        // Every button on this page needs the device's own outbound socket; a machine can sync files flawlessly
+        // with that socket down.
+        offline: t(`sandbox.deviceAttention.blockOffline`),
+        "sandboxes-off": t(`sandbox.deviceAttention.blockSandboxesOff`),
+    })[kind];
 
 const blockHint = (kind: ManageBlock[`kind`]): Tip =>
     ({
@@ -126,10 +129,12 @@ const BLOCK_COMMAND: Partial<Record<ManageBlock[`kind`], string>> = { offline: A
 
 // Only the kinds a capability card can close; an offline device's card holds no switch that would bring it back,
 // so its button mints a pairing instead (RECONNECT below).
-const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
-    connect: `Connect this device`,
-    "sandboxes-off": `Open its permissions`,
-};
+const blockAction = (kind: ManageBlock[`kind`]): string | undefined =>
+    kind === `connect`
+        ? t(`sandbox.deviceAttention.connectDevice`)
+        : kind === `sandboxes-off`
+          ? t(`sandbox.deviceAttention.openItsPermissions`)
+          : undefined;
 
 // The one remedy that works on a machine holding no connection: the same fresh, single-use command its capability
 // card hands out, which installs or re-enrolls the agent and registers it to come back after a reboot.
@@ -145,7 +150,7 @@ const blockFix = (block: ManageBlock, reconnectable: boolean): DeviceFix | undef
     if (block.kind === `offline`) {
         return reconnectable ? reconnect() : undefined;
     }
-    const label = BLOCK_ACTION[block.kind];
+    const label = blockAction(block.kind);
     // No card for this platform (a Mac, an unrecognised slug) means nowhere to send anyone: the sentence
     // runs alone rather than beside a dead control.
     if (label === undefined || block.card === undefined) {
@@ -172,7 +177,7 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
         key: `gap`,
         tone: GAP_TONE[device.gap],
         icon: GAP_ICON[device.gap],
-        text: GAP_TEXT[device.gap],
+        text: gapText(device.gap),
         hint: gapHint(device.gap),
         ...(command === undefined ? {} : { command }),
         ...(device.gap === `offline` && reconnectable ? { fix: reconnect() } : {}),
@@ -191,7 +196,7 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
         key: `block`,
         tone: `info`,
         icon: BLOCK_ICON[block.kind],
-        text: BLOCK_TEXT[block.kind],
+        text: blockText(block.kind),
         hint: blockHint(block.kind),
         ...(command === undefined ? {} : { command }),
         ...(fix === undefined ? {} : { fix }),
@@ -202,7 +207,7 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
 // panel (deviceAgent.ts), and belongs there whether or not anything is wrong.
 const forgetUnreachable = (): DeviceAgentFix => ({
     kind: `agent`,
-    label: `Forget them`,
+    label: t(`sandbox.deviceAttention.forgetThem`),
     hint: { title: t(`sandbox.deviceAttention.deadLinksOnly`), note: t(`sandbox.deviceAttention.restartsAgent`) },
     op: `forget-unreachable`,
 });
@@ -219,15 +224,21 @@ const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined
         return undefined;
     }
     const since = links.unreachableSince;
-    const count =
-        links.unreachable === 1 ? `One of its ${links.total} sandbox links has` : `${links.unreachable} of its ${links.total} sandbox links have`;
+    const counts = { count: links.unreachable, total: links.total };
     return {
         key: `links`,
         tone: `info`,
         icon: `link-broken`,
         // `days`, unlike every other age on this page: these outages are measured in weeks, and the default's absolute
         // date mid-sentence answers "when did it break" where the reader is asking "how long have I been dialling it".
-        text: `${count} stopped answering${since === undefined ? `` : `, the oldest ${timeAgo(since, { now: readAt, days: true })}`}.`,
+        text:
+            since === undefined
+                ? t(`sandbox.deviceAttention.linksStopped`, counts, links.unreachable)
+                : t(
+                      `sandbox.deviceAttention.linksStoppedSince`,
+                      { ...counts, since: timeAgo(since, { now: readAt, days: true }) },
+                      links.unreachable,
+                  ),
         hint: { title: t(`sandbox.deviceAttention.staleLinks`), note: t(`sandbox.deviceAttention.deletedOrMoved`) },
         fix: forgetUnreachable(),
     };
@@ -248,12 +259,16 @@ const upkeepConcern = (device: Device, readAt: number): DeviceConcern | undefine
     }
     const [first] = upkeep.skipped;
     const more = upkeep.skipped.length - 1;
-    const rest = more === 0 ? `` : more === 1 ? `, and one more` : `, and ${more} more`;
+    const words = { at: timeAgo(upkeep.at, { now: readAt }), what: first?.what ?? t(`sandbox.deviceAttention.something`) };
+    const left =
+        first === undefined
+            ? t(`sandbox.deviceAttention.upkeepLeft`, words)
+            : t(`sandbox.deviceAttention.upkeepLeftWhy`, { ...words, why: first.why });
     return {
         key: `upkeep`,
         tone: `info`,
         icon: `maintenance`,
-        text: `Its tidy-up ${timeAgo(upkeep.at, { now: readAt })} left ${first?.what ?? `something`} for you${first === undefined ? `` : ` (${first.why})`}${rest}.`,
+        text: more === 0 ? t(`sandbox.deviceAttention.upkeepOnly`, { left }) : t(`sandbox.deviceAttention.upkeepMore`, { left, count: more }, more),
         hint: { title: t(`sandbox.deviceAttention.leftovers`), note: t(`sandbox.deviceAttention.leftoversNote`) },
         command: UPKEEP_COMMAND,
     };
@@ -300,7 +315,7 @@ export const deviceAttention = (
             tone: `warning`,
             icon: `clock`,
             // `deviceQuiet` is false without a report, so the timestamp is there whenever this line is.
-            text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}.`,
+            text: t(`sandbox.deviceAttention.lastHeard`, { ago: timeAgo(device.report?.capturedAt ?? readAt, { now: readAt }) }),
             hint: { title: t(`sandbox.deviceAttention.snapshot`), note: t(`sandbox.deviceAttention.mayBeOutdated`) },
         });
     }

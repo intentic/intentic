@@ -87,7 +87,7 @@ const read = async (): Promise<void> => {
         refs.value = undefined;
         // A repository that cannot be read is not a dead end: the raw box is still there, and so is the reason.
         manual.value = true;
-        failure.value = messageOr(error, `Could not read that repository.`);
+        failure.value = messageOr(error, t(`capabilities.gitRefField.couldNotRead`));
     } finally {
         if (asked === asking) {
             reading.value = false;
@@ -117,8 +117,8 @@ onBeforeUnmount(() => clearTimeout(settling));
 const pinnedOnly = computed(() => selected.value === undefined && isCommitSha(values[field.key]));
 const pinnedNote = computed(() =>
     refs.value === undefined
-        ? `Pinned at ${shortSha(values[field.key] ?? ``)}.`
-        : `Pinned at ${shortSha(values[field.key] ?? ``)}, a commit this repository names no branch or release for.`,
+        ? t(`capabilities.gitRefField.pinnedAt`, { sha: shortSha(values[field.key] ?? ``) })
+        : t(`capabilities.gitRefField.pinnedAtUnnamed`, { sha: shortSha(values[field.key] ?? ``) }),
 );
 // Offered only once there is a list to go back to; on a repository that never resolved, the box is all there is.
 const pickable = computed(() => manual.value && refs.value !== undefined);

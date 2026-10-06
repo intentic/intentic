@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { accessStateFor, connectPitch } from "../chat/session/access";
 import { turnDefaults } from "../chat/run/turnDefaults";
 import ProviderLogo from "../chat/accounts/ProviderLogo.vue";
+import { requirementWords, runsWords } from "../chat/accounts/providerWords";
 import { useT } from "@intentic/ui/i18n";
 
 // One provider as a pressable tile in the connect view: its mark, what it is called, what it needs, and whether this
@@ -16,9 +17,9 @@ const { provider, selected = false } = defineProps<{ provider: AgentProvider; se
 
 const spec = computed(() => providerSpec(provider));
 const state = computed(() => accessStateFor(provider));
-// The vendor's own noun for what the reader has to have ("Claude subscription", "Google sign-in"); never our paraphrase.
-const requirement = computed(() => spec.value?.access.requirement ?? ``);
-const runs = computed(() => spec.value?.access.runs ?? ``);
+// The vendor's own noun for what the reader has to have ("Claude subscription", "Google sign-in"), in the reader's language.
+const requirement = computed(() => (spec.value === undefined ? `` : requirementWords(spec.value.access, `name`)));
+const runs = computed(() => (spec.value === undefined ? `` : runsWords(spec.value.access)));
 // What the press is, said in full for a reader who hears the tile rather than seeing it: the visible text is three
 // fragments in three places, which is legible to an eye and nothing to a screen reader. Asked against the harness a new
 // turn would actually run on, which is the only thing Grok's answer depends on.

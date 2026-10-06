@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { rawRouteUrl } from "@intentic/sandbox-contract";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 
@@ -59,7 +60,7 @@ export const probeDaemon = async (args: {
         return { kind: `no-origin`, status: health.status };
     }
     if (!health.ok) {
-        return { kind: `rejected`, message: await detailOf(health, `The address answered ${health.status} instead of a sandbox.`) };
+        return { kind: `rejected`, message: await detailOf(health, t(`setup.setupAttach.answeredInstead`, { status: health.status })) };
     }
     const headers = new Headers({ authorization: `Bearer ${args.idToken}` });
     if (args.connectToken !== undefined && args.connectToken !== ``) {
@@ -78,9 +79,9 @@ export const probeDaemon = async (args: {
         return { kind: `needs-token` };
     }
     if (authorized.status === 403) {
-        return { kind: `denied`, message: await detailOf(authorized, `This sandbox is registered to another account.`) };
+        return { kind: `denied`, message: await detailOf(authorized, t(`setup.setupAttach.otherAccount`)) };
     }
-    return { kind: `rejected`, message: await detailOf(authorized, `The sandbox answered ${authorized.status}.`) };
+    return { kind: `rejected`, message: await detailOf(authorized, t(`setup.setupAttach.sandboxAnswered`, { status: authorized.status })) };
 };
 
 // Why what the user typed isn't a sandbox address yet (undefined once it is): keeps two explainable mistakes
@@ -91,9 +92,9 @@ export const daemonUrlProblem = (raw: string): string | undefined => {
         return undefined; // nothing typed yet is not yet a mistake
     }
     if (/^http:\/\//i.test(trimmed)) {
-        return `Needs to be https. This app is served over HTTPS, so your browser would block calls to an http:// sandbox.`;
+        return t(`setup.setupAttach.needsHttps`);
     }
-    return normalizeDaemonUrl(trimmed) === undefined ? `That doesn't look like a domain. For example sandbox.example.com.` : undefined;
+    return normalizeDaemonUrl(trimmed) === undefined ? t(`setup.setupAttach.notADomain`) : undefined;
 };
 
 // This form attaches a sandbox the reader already serves, so the address minted for THIS row is a dead end in it:
@@ -107,7 +108,5 @@ export const ownAddressProblem = (raw: string, minted: string | undefined): stri
     if (url === undefined || minted === undefined) {
         return undefined;
     }
-    return new URL(url).hostname === minted.toLowerCase()
-        ? `That address is ours, and it answers only once your sandbox is running. Nothing to connect to yet: run the install command instead.`
-        : undefined;
+    return new URL(url).hostname === minted.toLowerCase() ? t(`setup.setupAttach.ownAddress`) : undefined;
 };

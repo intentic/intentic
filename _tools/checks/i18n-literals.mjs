@@ -92,7 +92,8 @@ if (parsers !== undefined) {
         visit(source);
     }
 }
-// Code that predates this rule is the standing backlog (baselines/i18n-code-literals.json); a file may only shed it.
+// Code that predated this rule was a backlog in baselines/i18n-code-literals.json; the 2026-10 sweep cleared it and the
+// ratchet deleted the empty file, so a finding now fails unless a reason is recorded with `--write-baseline`.
 const { grown } = ratchet("i18n-literals", "i18n-code-literals", spokenInCode);
 const grownPaths = new Set(grown.map(({ key }) => key));
 const spokenUntranslatable = codeFindings.filter(({ path }) => grownPaths.has(path)).map(({ path, line, text }) => `${path}:${line}: ${text.slice(0, 100)}`);

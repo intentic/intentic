@@ -1,5 +1,6 @@
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { runnerFallback } from "./deviceFallback";
 import { DeviceFlowLostError } from "../useDevices";
 
@@ -13,23 +14,25 @@ export interface RunnerFailure {
 
 // What didn't happen, naming the runner and the machine; the reason rides underneath in its giver's own words.
 const NOT_DONE: Record<RunnerOp, (name: string, machine: string) => string> = {
-    create: (name, machine) => `Runner "${name}" wasn't added to ${machine}.`,
-    remove: (name, machine) => `Runner "${name}" wasn't removed from ${machine}.`,
-    update: (name, machine) => `Runner "${name}" wasn't updated on ${machine}.`,
+    create: (name, machine) => t(`sandbox.runnerFailure.notAdded`, { name, machine }),
+    remove: (name, machine) => t(`sandbox.runnerFailure.notRemoved`, { name, machine }),
+    update: (name, machine) => t(`sandbox.runnerFailure.notUpdated`, { name, machine }),
 };
 
 // Adding and updating leave `ic`'s own log of the run on the machine; removing is a docker call with nothing to keep.
-const WHILE: Record<RunnerOp, { readonly doing: string; readonly after: (machine: string) => string }> = {
+const WHILE: Record<RunnerOp, { readonly lost: (name: string, machine: string) => string; readonly after: (machine: string) => string }> = {
     create: {
-        doing: `adding`,
-        after: (machine) =>
-            `It may still be running there: the runner joins this list once it enrolls, and ${machine} keeps a full log of the attempt in ~/.intentic/logs.`,
+        lost: (name, machine) => t(`sandbox.runnerFailure.lostAdding`, { name, machine }),
+        after: (machine) => t(`sandbox.runnerFailure.afterAdding`, { machine }),
     },
     update: {
-        doing: `updating`,
-        after: (machine) => `It may still be running there: this list catches up once it's done, and ${machine} keeps a full log of the attempt in ~/.intentic/logs.`,
+        lost: (name, machine) => t(`sandbox.runnerFailure.lostUpdating`, { name, machine }),
+        after: (machine) => t(`sandbox.runnerFailure.afterUpdating`, { machine }),
     },
-    remove: { doing: `removing`, after: () => `It may still be running there: this list catches up once it's done.` },
+    remove: {
+        lost: (name, machine) => t(`sandbox.runnerFailure.lostRemoving`, { name, machine }),
+        after: () => t(`sandbox.runnerFailure.afterRemoving`),
+    },
 };
 
 // A refusal quotes every line the machine streamed, and those stay on screen above it: only what they don't say is repeated.
@@ -49,12 +52,12 @@ const unstreamed = (said: string, streamed: readonly string[]): string | undefin
  */
 export const runnerFailure = (op: RunnerOp, name: string, machine: string, error: unknown, streamed: readonly string[]): RunnerFailure => {
     if (error instanceof DeviceFlowLostError) {
-        const browser = error.transport === undefined ? `` : ` The browser said: "${error.transport}".`;
+        const after = WHILE[op].after(machine);
         return {
             notice: {
                 tone: `warning`,
-                title: `Lost contact with ${machine} while ${WHILE[op].doing} runner "${name}".`,
-                detail: `${WHILE[op].after(machine)}${browser}`,
+                title: WHILE[op].lost(name, machine),
+                detail: error.transport === undefined ? after : `${after} ${t(`sandbox.runnerFailure.browserSaid`, { transport: error.transport })}`,
             },
         };
     }

@@ -30,7 +30,7 @@ const failed = computed(() => (current.value?.state === `failed` ? current.value
 const start = (): Promise<void> =>
     run(async () => {
         await rebuild(props.hash, props.content);
-    }, `Could not start the build.`);
+    }, t(`sandbox.hostedRebuild.couldNotStart`));
 </script>
 
 <template>

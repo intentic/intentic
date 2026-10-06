@@ -40,6 +40,17 @@ export const stepTone = (): Record<WorkflowStepState, StepTone> => ({
     stopped: { icon: `stop`, text: `text-subtle`, bar: `bg-line`, spin: false, label: t(`workflowDag.stopped`) },
 });
 
+// A whole run's state in words, for the badge on its row and the run page's header.
+export const runStateLabel = (state: WorkflowRun["state"]): string =>
+    ({
+        running: t(`workflowDag.runState.running`),
+        done: t(`workflowDag.runState.done`),
+        failed: t(`workflowDag.runState.failed`),
+        stopped: t(`workflowDag.runState.stopped`),
+        overspent: t(`workflowDag.runState.overspent`),
+        error: t(`workflowDag.runState.error`),
+    })[state];
+
 // Neutral, not `pending`: an unrun step in the designer has no state to lie about waiting on.
 const DESIGN_TONE: StepTone = { icon: `sitemap`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `` };
 
@@ -97,10 +108,10 @@ export const workflowLayers = (steps: readonly WorkflowStep[]): WorkflowStep[][]
 export const stepSubtitle = (step: WorkflowStep): string => {
     const output =
         step.output.kind === `json`
-            ? `${step.output.fields.length} field${step.output.fields.length === 1 ? `` : `s`}`
+            ? t(`workflowDag.subtitle.fields`, { count: step.output.fields.length }, step.output.fields.length)
             : step.output.kind === `claim`
-              ? `a claim`
-              : `no output`;
-    const checks = step.checks.map((check) => (check.kind === `command` ? `a command` : `a reviewer`));
+              ? t(`workflowDag.subtitle.claim`)
+              : t(`workflowDag.subtitle.noOutput`);
+    const checks = step.checks.map((check) => (check.kind === `command` ? t(`workflowDag.subtitle.command`) : t(`workflowDag.subtitle.reviewer`)));
     return [...(step.agent === undefined ? [] : [providerLabel(step.agent)]), output, ...checks].join(` · `);
 };

@@ -42,20 +42,21 @@ export interface WaitFailure {
 // decision, not a fault, so neither may be narrated as a machine that won't come up.
 export type WakeRefusal = "hours" | "suspended";
 
-const REFUSED: Record<WakeRefusal, WaitFailure> = {
+// Built when read, so the sentences follow the language picked after boot.
+const refused = (): Record<WakeRefusal, WaitFailure> => ({
     // The hours may be the account's free ones or the machine's own month on a paid slot; the refusal does not say
     // which, so the sentence names neither.
     hours: {
-        problem: `This sandbox's hosted hours for the month are used up, so we've left its machine stopped.`,
-        remedy: `They come back on the 1st. A slot on the hosted plan gives it a bigger machine with hours of its own, and on a computer of your own nothing is metered at all. Either way nothing on the machine is lost.`,
+        problem: t(`setup.hostedWait.hoursProblem`),
+        remedy: t(`setup.hostedWait.hoursRemedy`),
         action: `none`,
     },
     suspended: {
-        problem: `Hosted machines are switched off for this account.`,
-        remedy: `The email we sent says why and where to write. Your sandbox, its name and its address all stay; running it on a computer of your own is unaffected and works right now.`,
+        problem: t(`setup.hostedWait.suspendedProblem`),
+        remedy: t(`setup.hostedWait.suspendedRemedy`),
         action: `none`,
     },
-};
+});
 
 export interface HostedWaitView {
     readonly steps: readonly WaitStepView[];
@@ -110,7 +111,7 @@ const MACHINE_STUCK_MS = 10 * MINUTE_MS;
 /* WHAT THE SANDBOX ITSELF IS SAYING, while it is still saying it. */
 const stillTrying = (input: HostedWaitInput, inFor: string): string | undefined => {
     const detail = input.boot?.reach === `unreachable` ? input.boot.detail : undefined;
-    return detail === undefined || input.waitedMs < PROBE_LOUD_MS ? undefined : `${inFor}${detail} Still trying.`;
+    return detail === undefined || input.waitedMs < PROBE_LOUD_MS ? undefined : t(`setup.hostedWait.stillTrying`, { prefix: inFor, detail });
 };
 
 // Note under the step list. The estimate comes from the machine's origin, never the clock; the clock only tracks
@@ -118,20 +119,16 @@ const stillTrying = (input: HostedWaitInput, inFor: string): string | undefined 
 const noteFor = (input: HostedWaitInput): string => {
     const { warm, waitedMs } = input;
     const minutes = Math.floor(waitedMs / MINUTE_MS);
-    const inFor = minutes >= 1 ? `${minutes} min in, ` : ``;
+    const inFor = minutes >= 1 ? `${t(`setup.hostedWait.minutesIn`, { minutes })} ` : ``;
     const failing = stillTrying(input, inFor);
     if (failing !== undefined) {
         return failing;
     }
     if (warm === false) {
-        return waitedMs > COLD_SPENT_MS
-            ? `${inFor}longer than usual, but still going. You'll be taken in as soon as it's ready.`
-            : `${inFor}building a fresh machine: the first start downloads your sandbox, usually 3 to 5 minutes. You'll be taken in as soon as it's ready.`;
+        return waitedMs > COLD_SPENT_MS ? t(`setup.hostedWait.coldLong`, { prefix: inFor }) : t(`setup.hostedWait.coldBuilding`, { prefix: inFor });
     }
     // Warm and unknown share the same promise: a stamp not yet read behaves like the old, origin-less estimate.
-    return waitedMs > WARM_SPENT_MS
-        ? `${inFor}taking longer than usual, but still going. You'll be taken in as soon as it's ready.`
-        : `Usually under a minute. Nothing to install, nothing to paste, you'll be taken in as soon as it's ready.`;
+    return waitedMs > WARM_SPENT_MS ? t(`setup.hostedWait.warmLong`, { prefix: inFor }) : t(`setup.hostedWait.warmUsual`);
 };
 
 // States meaning the machine won't come up on its own: `failed` outright, or sitting `stopped`/`destroyed`.
@@ -172,8 +169,8 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
         return {
             step: `connecting`,
             failure: {
-                problem: `Your sandbox is running, but it's checking in from ${input.refusal.announced}, we expect it at ${input.refusal.expected}.`,
-                remedy: `We won't hand you an address we can't vouch for. Start it over below, a fresh machine comes up on the right one.`,
+                problem: t(`setup.hostedWait.wrongAddressProblem`, { announced: input.refusal.announced, expected: input.refusal.expected }),
+                remedy: t(`setup.hostedWait.wrongAddressRemedy`),
                 // The wrong address is baked into this machine; rebooting it would reproduce it.
                 action: `remake`,
             },
@@ -182,7 +179,7 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
     // A start the platform has refused is the one account of a stopped machine that outranks the provider's own
     // reading: the machine is down because somebody decided it stays down, and the reader can act on that.
     if (input.wakeRefusal !== undefined) {
-        return { step: `machine`, failure: REFUSED[input.wakeRefusal] };
+        return { step: `machine`, failure: refused()[input.wakeRefusal] };
     }
     // Both readings below are the provider's, and neither is final until it has settled: see machineIsDown. A
     // start already in flight answers a down machine, so nothing is said about one while that start is running.
@@ -194,8 +191,8 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
         return {
             step: `machine`,
             failure: {
-                problem: `The machine we were running for you isn't there any more.`,
-                remedy: `Start it over below and we'll build you a new one, on the same address. Anything that was on the old machine is gone with it, and that's ours to fix, nothing on your side causes this.`,
+                problem: t(`setup.hostedWait.goneProblem`),
+                remedy: t(`setup.hostedWait.goneRemedy`),
                 // `reboot`, not `remake`: restart replaces a gone machine; `remake` refuses anything that has ever
                 // connected.
                 action: `reboot`,
@@ -206,8 +203,8 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
     return {
         step: `machine`,
         failure: {
-            problem: `The machine we started for you isn't running.`,
-            remedy: `Start it over below. If it stops again, that's ours to fix, nothing on your side causes this.`,
+            problem: t(`setup.hostedWait.stoppedProblem`),
+            remedy: t(`setup.hostedWait.stoppedRemedy`),
             action: `reboot`,
         },
     };
@@ -225,9 +222,9 @@ const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
     return {
         step: `connecting`,
         failure: {
-            problem: input.boot?.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
+            problem: input.boot?.detail ?? t(`setup.hostedWait.unreachableProblem`),
             /* PROMISES NOTHING A RESTART CANNOT KEEP. */
-            remedy: `Nothing on your side causes this and nothing on the sandbox is lost: it's the connection in front of it that isn't routing. Starting it over is worth one try. If it comes back, it's ours to fix and we're already being told.`,
+            remedy: t(`setup.hostedWait.unreachableRemedy`),
             // Box and files are healthy; only the boot's networking half could need rerunning.
             action: `reboot`,
         },
@@ -250,8 +247,8 @@ const stalledFailure = (input: HostedWaitInput): Stall | undefined => {
         return {
             step: `booting`,
             failure: {
-                problem: `The machine is running, but your sandbox hasn't checked in yet.`,
-                remedy: `It keeps trying on its own, leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
+                problem: t(`setup.hostedWait.silentProblem`),
+                remedy: t(`setup.hostedWait.keepsTryingRemedy`),
                 action: `reboot`,
             },
         };
@@ -261,8 +258,8 @@ const stalledFailure = (input: HostedWaitInput): Stall | undefined => {
         return {
             step: `machine`,
             failure: {
-                problem: `The machine is taking far longer to come up than it should.`,
-                remedy: `It keeps trying on its own, leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
+                problem: t(`setup.hostedWait.stuckProblem`),
+                remedy: t(`setup.hostedWait.keepsTryingRemedy`),
                 action: `reboot`,
             },
         };

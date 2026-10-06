@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { describeProvisionError } from "./provisionError";
 
 // Pure reducer of the apply event stream into per-resource progress; kept separate from the composable (which
@@ -121,13 +122,18 @@ export const reduceApplyLine = (state: ApplyProgressState, line: Record<string, 
         return typeof line[`converged`] === `boolean` ? { ...state, converged: line[`converged`] as boolean } : state;
     }
     if (kind === `error`) {
-        return { ...state, error: describeProvisionError(str(line[`message`]) ?? `Apply failed.`) };
+        return { ...state, error: describeProvisionError(str(line[`message`]) ?? t(`views.applyProgress.applyFailedDot`)) };
     }
     if (kind === `exit`) {
         const command = str(line[`command`]);
         const code = line[`code`];
         const failed = typeof code === `number` && code !== 0;
-        const label = command === `adopt` ? `Adopt` : command === `resolve` ? `Resolve` : `Apply`;
+        const failedLine = (): string =>
+            command === `adopt`
+                ? t(`views.applyProgress.adoptFailedSeeLogs`)
+                : command === `resolve`
+                  ? t(`views.applyProgress.resolveFailedSeeLogs`)
+                  : t(`views.applyProgress.applyFailedSeeLogs`);
         return {
             ...state,
             // The chain may be `apply && adopt` or `resolve && apply && adopt`: resolve's clean exit is only a
@@ -135,7 +141,7 @@ export const reduceApplyLine = (state: ApplyProgressState, line: Record<string, 
             // and the phase/job end on adopt's exit, an untagged exit, or any command's failure.
             applyPhaseDone: state.applyPhaseDone || command !== `resolve` || failed,
             jobDone: state.jobDone || command === `adopt` || command === undefined || failed,
-            error: state.error ?? (failed ? `${label} failed, open the logs below for details.` : undefined),
+            error: state.error ?? (failed ? failedLine() : undefined),
         };
     }
     return state;

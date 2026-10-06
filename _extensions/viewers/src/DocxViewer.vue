@@ -2,6 +2,7 @@
 import { Icon, useLatest } from "@intentic/extension-ui";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { fitPages, keepFitted } from "./docxFit.js";
+import { t } from "./i18n.js";
 
 /* DOCX preview: renders a Word document into HTML via docx-preview (lazy-imported so its ~jszip payload stays out of the initial bundle). */
 
@@ -35,7 +36,7 @@ const render = async (source: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        error.value = err instanceof Error ? err.message : `Could not render this document.`;
+        error.value = err instanceof Error ? err.message : t(`common.couldNotRenderDocument`);
     } finally {
         if (isLatest()) {
             loading.value = false;

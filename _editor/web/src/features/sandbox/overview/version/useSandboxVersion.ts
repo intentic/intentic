@@ -6,6 +6,7 @@ import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useEnvironment } from "../../environment/useEnvironment";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
+import { t } from "@intentic/ui/i18n";
 
 // Sandbox daemon's self-report (`system.info`): running `version`, and once checked, `latest` and `updateAvailable`. One shared
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never
@@ -49,7 +50,7 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
     // problem; only an explicit `unavailable` is, with the daemon's own sentence.
     const runtimeIssue = (runtime: string): string | undefined => {
         const health = info.value?.runtimes?.[runtime];
-        return health?.state === `unavailable` ? (health.detail ?? `This runtime can't serve a turn right now.`) : undefined;
+        return health?.state === `unavailable` ? (health.detail ?? t(`sandbox.useSandboxVersion.runtimeCantServeTurn`)) : undefined;
     };
 
     // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command.

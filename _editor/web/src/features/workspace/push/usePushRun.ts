@@ -29,7 +29,11 @@ export const usePushRun = (repo: string, at?: string): RunWatcher<PushRun> => {
         // The terminal panel shows only the active sandbox's sessions, so a push on another box has no panel to open
         // here; its row reports the verdict instead.
         reveal: at === undefined ? (run) => ({ title: t(`workspace.usePushRun.pushing`, { repo }), detail: run.command }) : () => undefined,
-        subject: `push`,
+        says: {
+            startFailed: () => t(`workspace.usePushRun.startFailed`),
+            lostContact: () => t(`workspace.usePushRun.lostContact`),
+            stopFailed: () => t(`workspace.usePushRun.stopFailed`),
+        },
     });
     watchers.value.set(key, watcher);
     return watcher;

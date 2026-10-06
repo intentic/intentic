@@ -1,4 +1,5 @@
 import type { PhoneSummary } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // One phone as the Devices board lists it: whether the agent can reach it now, and what it is. A phone is asleep most
 // of the time, so asleep is a calm state when the sandbox can wake it, and a warning only when it cannot.
@@ -12,6 +13,16 @@ export interface PhoneRow {
     readonly tone: PhoneTone;
     readonly detail: string;
 }
+
+/** The badge's word for a state; the state itself stays a code the tone and tests read. */
+export const phoneStateWord = (state: PhoneRow[`state`]): string =>
+    ({
+        connected: t(`sandbox.phoneRows.connected`),
+        paused: t(`sandbox.phoneRows.paused`),
+        asleep: t(`sandbox.phoneRows.asleep`),
+        unreachable: t(`sandbox.phoneRows.unreachable`),
+        "never paired": t(`sandbox.phoneRows.neverPaired`),
+    })[state];
 
 export const phoneRowOf = (phone: PhoneSummary): PhoneRow => {
     const facts = phone.facts;
@@ -31,13 +42,13 @@ export const phoneRowOf = (phone: PhoneSummary): PhoneRow => {
     const tone: PhoneTone = state === `connected` ? `success` : state === `asleep` ? `neutral` : `warning`;
     const detail = [
         facts === undefined ? `` : `${facts.device} · Android ${facts.android}`,
-        facts?.battery === undefined ? `` : `battery ${Math.round(facts.battery.level)}%${facts.battery.charging ? ` charging` : ``}`,
-        state === `unreachable`
-            ? phone.wake === `register`
-                ? `open Capabilities to finish setting up waking`
-                : `answers only while its app is open`
-            : ``,
-        state === `never paired` ? `scan its code from Capabilities` : ``,
+        facts?.battery === undefined
+            ? ``
+            : facts.battery.charging
+              ? t(`sandbox.phoneRows.batteryCharging`, { level: Math.round(facts.battery.level) })
+              : t(`sandbox.phoneRows.battery`, { level: Math.round(facts.battery.level) }),
+        state === `unreachable` ? (phone.wake === `register` ? t(`sandbox.phoneRows.finishWaking`) : t(`sandbox.phoneRows.answersWhileOpen`)) : ``,
+        state === `never paired` ? t(`sandbox.phoneRows.scanCode`) : ``,
     ]
         .filter((part) => part !== ``)
         .join(` · `);

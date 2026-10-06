@@ -21,7 +21,7 @@ const WEEK = 7 * 24 * 3_600_000;
 const words = (ms: number): string => {
     const ahead = ms - Date.now();
     if (ahead < 0) {
-        return `Due now`;
+        return t(`scheduleControl.dueNow`);
     }
     return ahead < WEEK ? formatWeekdayTime(ms) : formatDateTime(ms);
 };

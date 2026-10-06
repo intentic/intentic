@@ -75,7 +75,7 @@ export function useShellCommands(): void {
             {
                 command: `chat.toggleFloating`,
                 get title(): string {
-                    return chat.floats.value ? `Dock Back` : `Move into New Window`;
+                    return chat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
                 },
                 category: CHAT,
                 icon: `external-link`,
@@ -88,7 +88,7 @@ export function useShellCommands(): void {
             {
                 command: `chat.toggleHome`,
                 get title(): string {
-                    return chatOnRail.value ? `Dock Back to the Side` : `Dock to Rail`;
+                    return chatOnRail.value ? t(`shell.useShellCommands.dockBackToSide`) : t(`shell.useShellCommands.dockToRail`);
                 },
                 category: CHAT,
                 // `layout-left`, not `expand`: the rail is a left-edge dock, not something this command maximises.
@@ -98,7 +98,7 @@ export function useShellCommands(): void {
             {
                 command: `terminal.toggleFloating`,
                 get title(): string {
-                    return terminalFloat.floats.value ? `Dock Back` : `Move into New Window`;
+                    return terminalFloat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
                 },
                 category: TERMINAL,
                 icon: `external-link`,
@@ -113,7 +113,7 @@ export function useShellCommands(): void {
             {
                 command: `preview.toggleFloating`,
                 get title(): string {
-                    return previewFloat.floats.value ? `Dock Back` : `Move into New Window`;
+                    return previewFloat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
                 },
                 category: PREVIEW,
                 icon: `external-link`,

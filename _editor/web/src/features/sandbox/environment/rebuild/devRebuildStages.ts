@@ -1,3 +1,5 @@
+import { t } from "@intentic/ui/i18n";
+
 // WHAT A REBUILD IS DOING, READ OFF A TAIL. `dev-rebuild-log` hands back the last 80 lines of a log that runs to
 // hundreds of thousands, so nothing here may depend on having seen the log's first line: each stage is recognised by
 // output that stage keeps producing. The caller holds the answer monotonic across polls, because a marker scrolling out
@@ -19,10 +21,38 @@ export interface DevRebuildStep {
 
 // Weights are this repo's own rebuild: a warm turbo compile and the prune are minutes, the image build is most of it,
 // and the container swap is the ~30s the sandbox is actually away.
+// Words are getters, so each read says them in the language active at that moment.
 export const DEV_REBUILD_STEPS: readonly DevRebuildStep[] = [
-    { key: `compile`, label: `Compiling your packages`, note: `Turbo builds what the image bakes in`, weight: 0.3 },
-    { key: `image`, label: `Building the image`, note: `Docker layers the compiled trees onto the base`, weight: 0.6 },
-    { key: `swap`, label: `Restarting onto it`, note: `Your sandbox comes back on the new image`, weight: 0.1 },
+    {
+        key: `compile`,
+        get label() {
+            return t(`sandbox.devRebuildStages.compileLabel`);
+        },
+        get note() {
+            return t(`sandbox.devRebuildStages.compileNote`);
+        },
+        weight: 0.3,
+    },
+    {
+        key: `image`,
+        get label() {
+            return t(`sandbox.devRebuildStages.imageLabel`);
+        },
+        get note() {
+            return t(`sandbox.devRebuildStages.imageNote`);
+        },
+        weight: 0.6,
+    },
+    {
+        key: `swap`,
+        get label() {
+            return t(`sandbox.devRebuildStages.swapLabel`);
+        },
+        get note() {
+            return t(`sandbox.devRebuildStages.swapNote`);
+        },
+        weight: 0.1,
+    },
 ];
 
 const rank = (stage: DevRebuildStage): number => DEV_REBUILD_STAGES.indexOf(stage);

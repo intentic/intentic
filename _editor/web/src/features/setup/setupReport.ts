@@ -1,20 +1,22 @@
 import type { SetupReport } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { scrubDiagnostic } from "../../app/replayText";
 
 /* The machine's setup report, read for step 3's card. */
 
 // The connect flow's real phases (SetupReportSchema.stage), said the way the wait reads them. The pull
-// carries its own expectation-setting because it is the one honest multi-minute stage.
-const STAGE_LABELS: Record<SetupReport[`stage`], string> = {
-    preflight: `checking the machine`,
-    "pulling-image": `pulling the sandbox image (the first time takes a few minutes)`,
-    "creating-tunnel": `creating its tunnel`,
-    "starting-sandbox": `starting the sandbox`,
-    "starting-connector": `starting the tunnel connector`,
-    "waiting-health": `waiting for it to come up`,
-    verifying: `verifying it is reachable end to end`,
-    done: `finishing up`,
-};
+// carries its own expectation-setting because it is the one honest multi-minute stage. Built when read, so the words
+// follow the language picked after boot.
+const stageLabels = (): Record<SetupReport[`stage`], string> => ({
+    preflight: t(`setup.setupReport.preflight`),
+    "pulling-image": t(`setup.setupReport.pullingImage`),
+    "creating-tunnel": t(`setup.setupReport.creatingTunnel`),
+    "starting-sandbox": t(`setup.setupReport.startingSandbox`),
+    "starting-connector": t(`setup.setupReport.startingConnector`),
+    "waiting-health": t(`setup.setupReport.waitingHealth`),
+    verifying: t(`setup.setupReport.verifying`),
+    done: t(`setup.setupReport.done`),
+});
 
 export interface SetupReportView {
     // The run stopped: every broken check, verbatim. Null while the run is healthy (or there is no report).
@@ -31,7 +33,7 @@ export const setupReportView = (report: SetupReport | null): SetupReportView => 
     if (report.failed.length > 0) {
         return { failures: report.failed, stage: undefined };
     }
-    return { failures: null, stage: STAGE_LABELS[report.stage] };
+    return { failures: null, stage: stageLabels()[report.stage] };
 };
 
 // Of the first failure's problem, what the failure event carries: the cause and docker's own last words fit in it.

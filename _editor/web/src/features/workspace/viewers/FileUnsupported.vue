@@ -15,13 +15,13 @@ const icon = computed<IconName>(() => (mode === `empty` ? `file` : mode === `too
 
 const message = computed(() => {
     if (mode === `empty`) {
-        return `This file is empty.`;
+        return t(`workspace.fileUnsupported.empty`);
     }
     if (mode === `too-large`) {
         const label = formatBytes(size);
-        return label ? `This file is ${label}, too large to preview here.` : `This file is too large to preview here.`;
+        return label ? t(`workspace.fileUnsupported.tooLargeSized`, { size: label }) : t(`workspace.fileUnsupported.tooLarge`);
     }
-    return `Preview isn't available for this file type.`;
+    return t(`workspace.fileUnsupported.noPreview`);
 });
 </script>
 

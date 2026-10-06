@@ -1,4 +1,5 @@
 import { personaModels } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, watch } from "vue";
 import { usePersonas } from "../../../sandbox/personas/usePersonas";
 import { roleSources } from "../../accounts/roleModel";
@@ -62,11 +63,11 @@ export const usePanePersona = (host: PanePersonaHost) => {
                 return undefined;
             }
             if (pickedPersona.value === undefined) {
-                return `This chat acts as "${pinned}", which no longer exists: it would reach no account and no tools. Pick another persona.`;
+                return t(`chat.panePersona.personaGone`, { name: pinned });
             }
             return pickedPersona.value.capabilities.length === 0 || pickedPersona.value.capabilities.some((held) => personaSignedIn(held))
                 ? undefined
-                : `${personaName.value} isn't signed in yet, so this chat can't act as it. Finish its login under Capabilities.`;
+                : t(`chat.panePersona.personaNotSignedIn`, { name: personaName.value });
         }),
     };
 };

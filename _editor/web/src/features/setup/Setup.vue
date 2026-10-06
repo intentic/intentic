@@ -504,7 +504,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         <!-- Each probe failure names the one thing the user can do about it. -->
                         <!-- Two checks anyone can make, then the one that needs a variable they may never have set: a
                              reader who has not heard of WEB_ORIGIN reads it as a fourth thing wrong with their setup. -->
-                        <Notice v-if="attachOutcome?.kind === `unreachable`" :of="{ tone: `danger`, title: `Nothing answered at that address.` }">
+                        <Notice v-if="attachOutcome?.kind === `unreachable`" :of="{ tone: `danger`, title: t(`setup.setup.nothingAnswered`) }">
                             <span class="mt-0.5 block text-2xs">{{ t(`setup.setup.checkSandboxRunningDomain`) }}</span>
                             <!-- A button rather than <details>: Notice's slot lives inside a <span>, which takes phrasing
                                  content only, and this page already folds by toggle everywhere else. -->
@@ -522,14 +522,14 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             v-else-if="attachOutcome?.kind === `timeout`"
                             :of="{
                                 tone: `danger`,
-                                title: `That address accepted the connection but never answered.`,
-                                detail: `Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give it a moment and try again.`,
+                                title: t(`setup.setup.acceptedNeverAnswered`),
+                                detail: t(`setup.setup.acceptedNeverAnsweredDetail`),
                             }"
                         />
                         <!-- A live tunnel without a sandbox reports the missing sandbox. -->
                         <Notice
                             v-else-if="attachOutcome?.kind === `no-origin`"
-                            :of="{ tone: `danger`, title: `That domain is live, but no sandbox is running behind it.` }"
+                            :of="{ tone: `danger`, title: t(`setup.setup.domainLiveNoSandbox`) }"
                         >
                             <span class="mt-0.5 block text-2xs">
                                 {{ t(`setup.setup.tunnelReverseProxyAnswered`) }} {{ attachOutcome.status }} {{ t(`setup.setup.nothingToForwardTo`)
@@ -538,7 +538,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             </span>
                         </Notice>
                         <template v-else-if="attachOutcome?.kind === `needs-token`">
-                            <Notice :of="{ tone: `warning`, title: `Your sandbox is up, but it wouldn't let us in yet.` }">
+                            <Notice :of="{ tone: `warning`, title: t(`setup.setup.sandboxUpNotLetIn`) }">
                                 <span class="mt-0.5 block text-2xs"
                                     >{{ t(`setup.setup.waitingToClaimedConnection`) }} <code>CONNECT_TOKEN</code>
                                     {{ t(`setup.setup.toClaimYours`) }}</span
@@ -566,12 +566,12 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             :of="{
                                 tone: `danger`,
                                 title: attachOutcome.message,
-                                detail: `Ask its owner to invite ${user?.email ?? `you`}, then connect it again.`,
+                                detail: user?.email ? t(`setup.setup.askOwnerToInvite`, { email: user.email }) : t(`setup.setup.askOwnerToInviteYou`),
                             }"
                         />
                         <Notice
                             v-else-if="attachOutcome?.kind === `rejected`"
-                            :of="{ tone: `danger`, title: `That sandbox refused the connection.`, detail: attachOutcome.message }"
+                            :of="{ tone: `danger`, title: t(`setup.setup.sandboxRefusedConnection`), detail: attachOutcome.message }"
                         />
 
                         <Notice v-if="error" :of="error" />
@@ -621,8 +621,8 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <Notice
                                 :of="{
                                     tone: `warning`,
-                                    title: `We couldn't reach the platform to see what it can start for you.`,
-                                    detail: `Nothing is wrong with your account — the check itself didn't get through.`,
+                                    title: t(`setup.setup.couldntReachPlatform`),
+                                    detail: t(`setup.setup.couldntReachPlatformDetail`),
                                 }"
                             />
                             <Button :label="t(`ui.action.tryAgain`)" class="w-full justify-center md:w-fit" @click="readArrival">
@@ -634,10 +634,8 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <Notice
                                 :of="{
                                     tone: `info`,
-                                    title: `Your free machine is already running another sandbox.`,
-                                    detail: otherWorkspace
-                                        ? `Open that one from the top of this page, or connect a sandbox you're running yourself.`
-                                        : `Connect a sandbox you're running yourself instead.`,
+                                    title: t(`setup.setup.freeMachineBusy`),
+                                    detail: otherWorkspace ? t(`setup.setup.freeMachineBusyOpenOther`) : t(`setup.setup.freeMachineBusyConnectOwn`),
                                 }"
                             />
                         </template>
@@ -646,8 +644,8 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <Notice
                                 :of="{
                                     tone: `info`,
-                                    title: `This platform doesn't start sandboxes or hand out addresses.`,
-                                    detail: `It connects to one you're already running.`,
+                                    title: t(`setup.setup.platformNoProvision`),
+                                    detail: t(`setup.setup.platformNoProvisionDetail`),
                                 }"
                             />
                         </template>

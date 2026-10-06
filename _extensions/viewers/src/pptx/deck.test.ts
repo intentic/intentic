@@ -2,9 +2,15 @@
 // layout, its master or the theme, and every one of those walks is asserted here against real OOXML rather than a
 // convenient shape of it. Fixtures are built part by part, because "what a .pptx actually contains" is the thing
 // under test.
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { strToU8, zipSync, unzipSync } from "fflate";
+import { messages } from "../i18n";
+import { manifest } from "../manifest";
 import { readDeck } from "./deck";
 import type { ImageBox, TableBox, TextBox, UnsupportedBox } from "./deck-model";
+
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 const NS = `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
 const REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

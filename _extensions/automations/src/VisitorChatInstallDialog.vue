@@ -49,7 +49,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
             trigger: { ...trigger, allowedOrigins: [...(trigger.allowedOrigins ?? []), origin] },
         });
     } catch (err) {
-        addError.value = err instanceof Error ? err.message : `Could not add that site.`;
+        addError.value = err instanceof Error ? err.message : t(`visitorChatInstallDialog.couldntAddSite`);
     } finally {
         adding.value = undefined;
     }
@@ -75,7 +75,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
                         {{ origin }}
                     </code>
                 </div>
-                <Notice v-else :of="noticeOf(`No sites are allowed yet, so every visitor is turned away. Add one below or edit the automation.`)" />
+                <Notice v-else :of="noticeOf(t(`visitorChatInstallDialog.noSitesAllowed`))" />
             </div>
 
             <div class="ui-field">
@@ -118,7 +118,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
                         <Icon name="check-circle" class="shrink-0 text-2xs text-success" />
                         <code class="min-w-0 flex-1 truncate font-mono text-2xs text-content">{{ probe.origin }}</code>
                         <span class="shrink-0 text-2xs text-subtle">
-                            {{ probe.loads }} {{ probe.loads === 1 ? `load` : `loads` }} · {{ since(probe.lastSeenAt) }}
+                            {{ t(`visitorChatInstallDialog.loadCount`, { count: probe.loads }, probe.loads) }} · {{ since(probe.lastSeenAt) }}
                         </span>
                     </div>
 

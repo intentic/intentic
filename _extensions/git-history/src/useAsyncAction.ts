@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { t } from "./i18n.js";
 
 /* The one shape every user-facing mutation in this extension reports through: a busy flag + a surfaced error line. */
 
@@ -12,7 +13,7 @@ const errorMessage = (error: unknown, fallback: string): string =>
 export function useAsyncAction() {
     const busy = ref(false);
     const error = ref<string | undefined>(undefined);
-    const run = async (task: () => Promise<void>, failMessage = `Action failed.`): Promise<void> => {
+    const run = async (task: () => Promise<void>, failMessage = t(`useAsyncAction.actionFailed`)): Promise<void> => {
         if (busy.value) {
             return;
         }

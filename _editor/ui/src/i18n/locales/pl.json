@@ -73,6 +73,8 @@
         "thisRunOnly": "Tylko ten przebieg"
     },
     "code": {
+        "copyCode": "Kopiuj kod",
+        "copyLangCode": "Kopiuj kod {lang}",
         "showAll": "Pokaż wszystko"
     },
     "colorPicker": {
@@ -95,6 +97,8 @@
         "more": "…i {count} więcej"
     },
     "deviceAgent": {
+        "agentStalled": "Agent się zawiesił — to, co poniżej, może być nieaktualne.",
+        "agentStopped": "Agent zatrzymany — nic nie dociera do jego folderów ani portów.",
         "commands": "Polecenia",
         "device": "Urządzenie",
         "folders": "Foldery",
@@ -103,7 +107,12 @@
         "oneProcess": "Jeden proces",
         "ports": "Porty",
         "restartAgent": "Uruchom agenta ponownie",
-        "roundsStopped": "Obiegi wstrzymane"
+        "roundsStopped": "Obiegi wstrzymane",
+        "running": "działa",
+        "servingBuild": "Działa {running}, zainstalowany jest {installed} — restart go wczyta.",
+        "servingOlderBuild": "Działa build starszy niż zainstalowany {installed} — restart go wczyta.",
+        "stalled": "zawieszony",
+        "stopped": "zatrzymany"
     },
     "deviceAgentGroup": {
         "agent": "Agent",
@@ -154,7 +163,38 @@
         "tunnelOff": "tunel wyłączony",
         "idle": "Nieaktywne na tym komputerze",
         "idleHint": "Piaskownice działające na innych komputerach albo już nieistniejące, których pliki i porty teraz tu nie docierają: synchronizacja jest wstrzymana lub zatrzymana. Odłącz je lub usuń z ich menu ⋯.",
-        "notSyncing": "nie synchronizuje"
+        "notSyncing": "nie synchronizuje",
+        "cpuCount": "{count} CPU | {count} CPU | {count} CPU",
+        "privileged": "uprzywilejowany",
+        "changesOnRestart": "zmiany po restarcie",
+        "notBackedUp": "brak kopii zapasowej",
+        "createdOnDevice": "utworzone na tym urządzeniu",
+        "changedOnDevice": "zmienione na tym urządzeniu",
+        "deletedOnDevice": "usunięte na tym urządzeniu",
+        "buildOutputOnDevice": "pozostałości builda na tym urządzeniu",
+        "createdInSandbox": "utworzone w sandboxie",
+        "changedInSandbox": "zmienione w sandboxie",
+        "deletedInSandbox": "usunięte w sandboxie",
+        "buildOutputInSandbox": "pozostałości builda w sandboxie",
+        "folderItself": "sam folder",
+        "derivedLead": "Jeden katalog usunięty w sandboxie wciąż tu jest, bo trzymają go pozostałości builda, których to urządzenie nigdy nie synchronizuje (node_modules, dist, cache builda). Nie ma w nim niczego Twojego: wyczyszczenie go pozwoli dokończyć to usunięcie. | {count} katalogi usunięte w sandboxie wciąż tu są, bo trzymają je pozostałości builda, których to urządzenie nigdy nie synchronizuje (node_modules, dist, cache builda). Nie ma w nich niczego Twojego: wyczyszczenie ich pozwoli dokończyć te usunięcia. | {count} katalogów usuniętych w sandboxie wciąż tu jest, bo trzymają je pozostałości builda, których to urządzenie nigdy nie synchronizuje (node_modules, dist, cache builda). Nie ma w nich niczego Twojego: wyczyszczenie ich pozwoli dokończyć te usunięcia.",
+        "disputedLead": "Jedna ścieżka zmieniła się zarówno na tym urządzeniu, jak i w sandboxie, odkąd ostatnio się zgadzały, więc żadna kopia nie została nadpisana, a jej synchronizacja stanęła. Doprowadź obie kopie do zgodności — ta sama zawartość albo brak po obu stronach — a synchronizacja wznowi się sama. | {count} ścieżki zmieniły się zarówno na tym urządzeniu, jak i w sandboxie, odkąd ostatnio się zgadzały, więc żadna kopia nie została nadpisana, a ich synchronizacja stanęła. Doprowadź obie kopie do zgodności — ta sama zawartość albo brak po obu stronach — a synchronizacja wznowi się sama. | {count} ścieżek zmieniło się zarówno na tym urządzeniu, jak i w sandboxie, odkąd ostatnio się zgadzały, więc żadna kopia nie została nadpisana, a ich synchronizacja stanęła. Doprowadź obie kopie do zgodności — ta sama zawartość albo brak po obu stronach — a synchronizacja wznowi się sama.",
+        "derivedAndDisputedLead": "{lead} Pozostała to prawdziwa rozbieżność: obie strony mają własną kopię. | {lead} Pozostałe {count} to prawdziwe rozbieżności: obie strony mają własne kopie. | {lead} Pozostałych {count} to prawdziwe rozbieżności: obie strony mają własne kopie.",
+        "portCount": "{count} port | {count} porty | {count} portów",
+        "portsBusyHere": "{count} port zajęty tutaj | {count} porty zajęte tutaj | {count} portów zajętych tutaj",
+        "portsLeftAlone": "{count} port pominięty | {count} porty pominięte | {count} portów pominiętych",
+        "portsTakenByOther": "{count} port zajęty przez inny sandbox | {count} porty zajęte przez inny sandbox | {count} portów zajętych przez inny sandbox",
+        "portsOnly": "tylko porty",
+        "off": "wył.",
+        "portsOnLocalhost": "{count} port na localhost: {numbers} | {count} porty na localhost: {numbers} | {count} portów na localhost: {numbers}",
+        "busyCount": "zajęte: {count}",
+        "fileSyncingPaused": "synchronizacja plików wstrzymana",
+        "filesSyncHere": "pliki synchronizują się tutaj",
+        "adoptedFrom": "zarządzany stąd: {side} przestał odpowiadać",
+        "keptBy": "utrzymywany przez {side} na tym komputerze",
+        "portLeftAlone": "nie na localhost: celowo pominięty",
+        "portBusy": "nie na localhost: używa go już inny program na tym komputerze",
+        "portHeldBy": "nie na localhost: zajmuje go {holder}"
     },
     "imageView": {
         "actualSize": "Rozmiar rzeczywisty",
@@ -171,6 +211,7 @@
         "zoomOut2": "Oddal"
     },
     "inlineRename": {
+        "couldntRename": "Nie udało się zmienić nazwy.",
         "couldntSaveName": "Nie udało się zapisać tej nazwy.",
         "unnamed": "Bez nazwy"
     },
@@ -179,7 +220,10 @@
     },
     "markdownDocument": {
         "document": "Dokument",
-        "overLimit": "{over} znak ponad limit {max} znaków | {over} znaki ponad limit {max} znaków | {over} znaków ponad limit {max} znaków"
+        "notSavedYet": "Jeszcze nie zapisano",
+        "overLimit": "{over} znak ponad limit {max} znaków | {over} znaki ponad limit {max} znaków | {over} znaków ponad limit {max} znaków",
+        "saved": "Zapisano",
+        "unsaved": "Niezapisane"
     },
     "markdownDocumentSurface": {
         "document": "Dokument",
@@ -201,11 +245,11 @@
     },
     "pickerPanel": {
         "noMatches": "Brak dopasowań.",
-        "options": "{count} opcji"
+        "options": "Opcje: {count}"
     },
     "projectChip": {
         "clickShowsAll": "Kliknij, by pokazać wszystko",
-        "hidden": "· {hidden} ukrytych",
+        "hidden": "· ukryte: {hidden}",
         "hiddenLabel": "Ukryte",
         "project": "Projekt",
         "projectFilter": "Filtr projektu"
@@ -226,16 +270,28 @@
         "cores": "rdzeni",
         "cpuCapInCores": "Limit CPU w rdzeniach",
         "cpus": "CPU",
+        "cpusAtLeast": "Co najmniej {min} CPU: sandbox potrzebuje rdzenia, żeby działać.",
+        "cpusAtMost": "Najwyżej {max} CPU na tym komputerze: to wszystkie rdzenie, jakie ma jego silnik.",
         "cpusWhole": "Całe rdzenie, {bounds} na tym komputerze. Puste oznacza brak limitu: każdy rdzeń, jaki ma.",
+        "cpusWholeOnly": "Tylko całe rdzenie.",
         "default": "domyślnie",
         "defaultIs": "domyślnie: {value}",
+        "defaultMemory": "domyślna pamięć",
+        "everyCpu": "wszystkie CPU",
         "fullAccessToComputers": "Pełny dostęp do urządzeń i jądra tego komputera, tak jak potrzebuje go zagnieżdżony silnik Dockera. Tylko dla narzędzia, które bez tego nie zadziała.",
         "gib": "GiB",
         "gpu": "GPU",
+        "locked": "Wymaga tego Twoje zatwierdzone środowisko, więc nie da się tego tutaj wyłączyć.",
         "memory": "Pamięć",
+        "memoryAtLeast": "Co najmniej {min} GiB: poniżej tego narzędzia samego sandboxa przestają się mieścić.",
+        "memoryAtMost": "Najwyżej {max} GiB na tym komputerze.",
         "memoryCapInGib": "Limit pamięci w GiB",
+        "memoryGib": "{count} GiB pamięci",
         "memoryWhole": "Całe GiB, co najmniej {min}. Puste to wartość domyślna: wszystko, co ten komputer ma ponad to, co zostawia sobie.",
         "memoryWholeOf": "Całe GiB, co najmniej {min}. Docker ma na tym komputerze {engine} GiB, więc wyższy limit niczego nie ogranicza. Puste to wartość domyślna: wszystko ponad to, co zostawia sobie.",
+        "memoryWholeOnly": "Tylko całe GiB.",
+        "noGpu": "bez GPU",
+        "notPrivileged": "bez uprawnień uprzywilejowanych",
         "passComputersNvidiaGpus": "Przekaż karty NVIDIA tego komputera do sandboxa: sterownik wjeżdża razem z nimi.",
         "passGpuThrough": "Przekaż GPU",
         "privileged": "Uprzywilejowany",
@@ -254,7 +310,14 @@
         "rollBackTo": "Cofnij do {version}",
         "versionBefore": "wersja sprzed tej",
         "rollBackToHeader": "Cofnąć {name} do {version}?",
-        "sandboxRestartsOntoVersion": "Sandbox restartuje się na {version}, starszej wersji, którą zachowała ta maszyna. Jego pliki zostają."
+        "sandboxRestartsOntoVersion": "Sandbox restartuje się na {version}, starszej wersji, którą zachowała ta maszyna. Jego pliki zostają.",
+        "rollBack": "Cofnij wersję",
+        "resources": "Zasoby…",
+        "removeHeader": "Usunąć {name}?",
+        "updateHeader": "Zaktualizować {name}?",
+        "rollBackHeader": "Cofnąć {name} do poprzedniej wersji?",
+        "hideLogs": "Ukryj logi",
+        "logs": "Logi"
     },
     "searchBar": {
         "aa": "Aa",
@@ -265,8 +328,15 @@
     },
     "timeWindow": {
         "all": "Wszystko",
+        "day": "24 godz.",
+        "hour": "1 godz.",
+        "inLastDay": "w ciągu ostatnich 24 godzin",
+        "inLastHour": "w ciągu ostatniej godziny",
+        "inLastWeek": "w ciągu ostatnich 7 dni",
+        "onRecord": "do tej pory",
         "todayAt": "dziś o {time}",
-        "tomorrowAt": "jutro o {time}"
+        "tomorrowAt": "jutro o {time}",
+        "week": "7 dni"
     },
     "useOsPreference": {
         "linuxMacos": "Linux / macOS",
@@ -280,7 +350,8 @@
         "loading": "Wczytywanie…",
         "working": "Pracuje…",
         "reading": "Odczytywanie…",
-        "sending": "Wysyłanie…"
+        "sending": "Wysyłanie…",
+        "saving": "Zapisywanie…"
     },
     "keys": {
         "enter": "Enter",
@@ -288,5 +359,59 @@
     },
     "dagEditor": {
         "fitGraph": "Dopasuj graf"
+    },
+    "fileFormat": {
+        "aacAudio": "Plik audio AAC",
+        "aiffAudio": "Plik audio AIFF",
+        "astroPage": "Strona Astro",
+        "audiobook": "Audiobook",
+        "avifPicture": "Obraz AVIF",
+        "cHeader": "Plik nagłówkowy C",
+        "excelSpreadsheet": "Arkusz Excel",
+        "flacAudio": "Plik audio FLAC",
+        "flashVideo": "Wideo Flash",
+        "gifPicture": "Obraz GIF",
+        "gzipArchive": "Archiwum Gzip",
+        "icon": "Ikona",
+        "jpegPicture": "Obraz JPEG",
+        "lockfile": "Plik lockfile",
+        "matroskaVideo": "Wideo Matroska",
+        "mp3Audio": "Plik audio MP3",
+        "mp4Video": "Wideo MP4",
+        "mpegVideo": "Wideo MPEG",
+        "oggAudio": "Plik audio Ogg",
+        "openTypeFont": "Czcionka OpenType",
+        "pdfDocument": "Dokument PDF",
+        "plainText": "Zwykły tekst",
+        "pngPicture": "Obraz PNG",
+        "powerPointDeck": "Prezentacja PowerPoint",
+        "powerShellScript": "Skrypt PowerShell",
+        "prismaSchema": "Schemat Prisma",
+        "quickTimeVideo": "Wideo QuickTime",
+        "rarArchive": "Archiwum RAR",
+        "sevenZipArchive": "Archiwum 7-Zip",
+        "shellScript": "Skrypt powłoki",
+        "styleSheet": "Arkusz stylów",
+        "svelteComponent": "Komponent Svelte",
+        "svgDrawing": "Rysunek SVG",
+        "tarArchive": "Archiwum Tar",
+        "trueTypeFont": "Czcionka TrueType",
+        "vueComponent": "Komponent Vue",
+        "wavAudio": "Plik audio WAV",
+        "webFont": "Czcionka internetowa",
+        "webPage": "Strona internetowa",
+        "webmVideo": "Wideo WebM",
+        "webpPicture": "Obraz WebP",
+        "windowsMediaAudio": "Plik audio Windows Media",
+        "wordDocument": "Dokument Word",
+        "zipArchive": "Archiwum ZIP"
+    },
+    "portPreview": {
+        "failed": "Nie udało się przekierować portu {port}.",
+        "forwarding": "Przekierowywanie portu {port} z Twojego sandboxa…",
+        "lapsed": "Przekierowanie portu {port} wygasło: otwórz podgląd ponownie z widoku Porty.",
+        "noPublicHostname": "Ten sandbox nie ma publicznej nazwy hosta podglądu, więc portów nie da się podejrzeć w przeglądarce.",
+        "unreachable": "{url} nie prowadzi do tego sandboxa: adres może się jeszcze propagować albo ten sandbox nie publikuje nazw hostów podglądu. Zamknij tę kartę i spróbuj ponownie.",
+        "waitingFor": "Czekamy, aż {url} zacznie odpowiadać…"
     }
 }

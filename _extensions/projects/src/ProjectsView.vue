@@ -69,7 +69,7 @@ const createProject = (): void => {
         naming.value = false;
         api.workspace.setProject(made);
         api.navigate(WORKSPACE_PATH);
-    }, `Could not start the project.`);
+    }, t(`projectsView.couldntStart`));
 };
 const cancelNaming = (): void => {
     naming.value = false;

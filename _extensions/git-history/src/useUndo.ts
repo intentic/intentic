@@ -2,6 +2,7 @@ import type { UndoableAction } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
+import { t } from "./i18n.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
@@ -9,18 +10,20 @@ import { useRefRefresh } from "./useRefRefresh.js";
 // restores the working tree; this moves the branch instead, so already-fixed files aren't dragged back. Refreshed off
 // the ref push, so a stale button can't misname the last action.
 
-// Button label per action kind; the longer reflog subject rides the tooltip instead.
-const VERBS: Record<UndoableAction["kind"], string> = {
-    commit: `commit`,
-    amend: `amend`,
-    merge: `merge`,
-    rebase: `rebase`,
-    "cherry-pick": `cherry-pick`,
-    revert: `revert`,
-    reset: `reset`,
-    pull: `pull`,
-    other: `last action`,
-};
+// Button label per action kind; the longer reflog subject rides the tooltip instead. Built when read, so the words
+// follow the language on screen.
+const undoLabel = (kind: UndoableAction["kind"]): string =>
+    ({
+        commit: t(`useUndo.commit`),
+        amend: t(`useUndo.amend`),
+        merge: t(`useUndo.merge`),
+        rebase: t(`useUndo.rebase`),
+        "cherry-pick": t(`useUndo.cherryPick`),
+        revert: t(`useUndo.revert`),
+        reset: t(`useUndo.reset`),
+        pull: t(`useUndo.pull`),
+        other: t(`useUndo.other`),
+    })[kind];
 
 export function useUndo(repo: Ref<string>) {
     const api = host();
@@ -53,14 +56,14 @@ export function useUndo(repo: Ref<string>) {
             ]);
             if (!result.ok) {
                 // A refusal is worth showing, usually meaning the repository moved since this undo was prepared.
-                throw new Error(result.reason ?? `Could not undo.`);
+                throw new Error(result.reason ?? t(`useUndo.couldntUndo`));
             }
-        }, `Could not undo.`);
+        }, t(`useUndo.couldntUndo`));
 
     return {
         action,
         // "Undo commit", "Undo rebase": the verb, so the button says what it does without a hover.
-        label: computed(() => (action.value === undefined ? undefined : `Undo ${VERBS[action.value.kind]}`)),
+        label: computed(() => (action.value === undefined ? undefined : undoLabel(action.value.kind))),
         busy,
         actionError,
         undo,

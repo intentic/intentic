@@ -2,7 +2,13 @@ import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract"
 import { ZoneSchema } from "@intentic/sandbox-contract/time";
 import { computed, nextTick } from "vue";
 import type { AvailableSource } from "./catalog";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
 import { useAutomationForm } from "./useAutomationForm";
+
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // The form's prompt must always match its trigger: a starter or template's text may be rewritten when the trigger
 // changes, but the owner's own text never is.

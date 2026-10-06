@@ -76,7 +76,7 @@ const isFirstProvision = computed(() => (state.value?.resources.length ?? 0) ===
 
 // The collapsed "What you have" one-liner: servers plus the connected accounts.
 const haveSummary = computed(() => {
-    const parts = [`${backends.value.length} ${backends.value.length === 1 ? `server` : `servers`}`];
+    const parts = [t(`views.infraDeclare.serverCount`, { count: backends.value.length }, backends.value.length)];
     if (hasCloudflare.value) {
         parts.push(`Cloudflare`);
     }
@@ -109,9 +109,9 @@ const entryLabel = (entry: InventoryEntry): string => {
         return INVENTORY_SERVICES.find((service) => service.service === entry.service)?.label ?? entry.service;
     }
     if (entry.kind === `app`) {
-        return `App`;
+        return t(`views.infraDeclare.entryApp`);
     }
-    return `Server`;
+    return t(`views.infraDeclare.entryServer`);
 };
 
 const summary = (entry: InventoryEntry): string =>
@@ -128,7 +128,7 @@ const removeEntry = async (entryName: string): Promise<void> => {
             void preview.run();
         }
     } catch (err) {
-        actionError.value = noticeFrom(err, `Could not remove the entry.`);
+        actionError.value = noticeFrom(err, t(`views.infraDeclare.couldNotRemoveEntry`));
     }
 };
 
@@ -162,7 +162,7 @@ const submitGithub = async (): Promise<void> => {
         showGithub.value = false;
         ghToken.value = ``;
     } catch (err) {
-        actionError.value = noticeFrom(err, `Could not link GitHub.`);
+        actionError.value = noticeFrom(err, t(`views.infraDeclare.couldNotLinkGithub`));
     } finally {
         ghSubmitting.value = false;
     }
@@ -187,7 +187,7 @@ const submitGitlab = async (): Promise<void> => {
         glToken.value = ``;
         glUrl.value = ``;
     } catch (err) {
-        actionError.value = noticeFrom(err, `Could not link GitLab.`);
+        actionError.value = noticeFrom(err, t(`views.infraDeclare.couldNotLinkGitlab`));
     } finally {
         glSubmitting.value = false;
     }
@@ -209,7 +209,7 @@ const submitStripe = async (): Promise<void> => {
         showStripe.value = false;
         stripeKey.value = ``;
     } catch (err) {
-        actionError.value = noticeFrom(err, `Could not connect Stripe.`);
+        actionError.value = noticeFrom(err, t(`views.infraDeclare.couldNotConnectStripe`));
     } finally {
         stripeSubmitting.value = false;
     }

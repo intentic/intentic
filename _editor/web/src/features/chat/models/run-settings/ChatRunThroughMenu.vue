@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
-import { type LoopDesign, type Workflow, loopDesignLine } from "@intentic/sandbox-contract";
+import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
+import { loopDesignWords } from "./loopDesignWords";
 import { computed } from "vue";
 import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
 import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
@@ -22,11 +23,11 @@ const { designs: workflows } = useWorkflowRuns();
 const shapeOf = (design: Workflow): string => {
     const roots = design.steps.filter((step) => step.needs.length === 0).length;
     const widest = Math.max(1, ...design.steps.map((step) => design.steps.filter((other) => other.needs.includes(step.id)).length));
-    const count = `${design.steps.length} step${design.steps.length === 1 ? `` : `s`}`;
+    const count = t(`chat.chatRunThroughMenu.stepCount`, { count: design.steps.length }, design.steps.length);
     if (design.steps.length === 1) {
         return count;
     }
-    return roots > 1 || widest > 1 ? `${count}, branching` : `${count} in a line`;
+    return roots > 1 || widest > 1 ? t(`chat.chatRunThroughMenu.branching`, { steps: count }) : t(`chat.chatRunThroughMenu.inLine`, { steps: count });
 };
 
 // Which providers a design pins, named once each: a workflow running several models is invisible in its name otherwise.
@@ -80,7 +81,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ design.name }}</span>
                     <!-- How it ends and how far it may go, computed from the loop; a control starting paid work must say what stops it up front. -->
-                    <span class="truncate text-2xs text-subtle">{{ loopDesignLine(design) }}</span>
+                    <span class="truncate text-2xs text-subtle">{{ loopDesignWords(design) }}</span>
                     <span v-if="design.description" class="line-clamp-2 text-2xs text-subtle">{{ design.description }}</span>
                 </span>
             </button>

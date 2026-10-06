@@ -1,3 +1,5 @@
+import { t } from "../i18n/index.js";
+
 // Preview hostnames may not resolve yet when minted, and both an iframe and a raw tab fail silently if used too
 // early. This polls a reserved, CORS-open endpoint (`/__intentic/preview-probe`) rather than plain-fetching the
 // page, since a cross-origin `no-cors` request can't tell a real answer from an edge error page.
@@ -133,24 +135,22 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
         show(message);
         onError?.(message);
     };
-    show(`Forwarding port ${port} from your sandbox…`);
+    show(t(`ui.portPreview.forwarding`, { port }));
     void (async () => {
         try {
             const previewUrl = await forward(port);
             if (previewUrl === undefined) {
-                fail(`This sandbox has no public preview hostname, so ports can't be previewed from the browser.`);
+                fail(t(`ui.portPreview.noPublicHostname`));
                 return;
             }
-            show(`Waiting for ${previewUrl} to come up…`);
+            show(t(`ui.portPreview.waitingFor`, { url: previewUrl }));
             const probe = await probePreview(previewUrl, { stillWanted: () => live() !== undefined });
             if (probe.outcome === "unreachable") {
-                fail(
-                    `${previewUrl} doesn't reach this sandbox: the address may still be propagating, or this sandbox publishes no preview hostnames. Close this tab and try again.`,
-                );
+                fail(t(`ui.portPreview.unreachable`, { url: previewUrl }));
                 return;
             }
             if (probe.outcome === "reached" && probe.state !== "serving") {
-                fail(`The forward for port ${port} has lapsed: re-open the preview from the Ports view.`);
+                fail(t(`ui.portPreview.lapsed`, { port }));
                 return;
             }
             const arrived = live();
@@ -158,7 +158,7 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
                 arrived.location.href = `${previewUrl}${path}`;
             }
         } catch (error) {
-            fail(error instanceof Error ? error.message : `Forwarding port ${port} failed.`);
+            fail(error instanceof Error ? error.message : t(`ui.portPreview.failed`, { port }));
         }
     })();
 };

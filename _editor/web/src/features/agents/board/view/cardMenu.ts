@@ -46,7 +46,13 @@ const watchRow = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem[
     if (!watching(agent) || !here) {
         return [];
     }
-    return [{ label: armed === 1 ? `Stop watching` : `Stop watching (${armed})`, icon: `eye`, command: () => void act.stopWatching(agent.id) }];
+    return [
+        {
+            label: armed === 1 ? t(`agents.words.stopWatching`) : t(`agents.cardMenu.stopWatchingCount`, { count: armed }),
+            icon: `eye`,
+            command: () => void act.stopWatching(agent.id),
+        },
+    ];
 };
 
 // Filing away and restoring write through the active box's fleet store, so only its cards get them; closing a
@@ -87,7 +93,14 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
         // The one press here costing the whole shell, so it names where it goes; it reaches what a remote card's menu drops.
         facts.here || sandboxId === undefined
             ? []
-            : [{ label: `Open in ${facts.boxName ?? `its sandbox`}`, icon: `arrow-right`, command: () => act.openInSandbox(sandboxId, agent.id) }],
+            : [
+                  {
+                      label:
+                          facts.boxName === undefined ? t(`agents.cardMenu.openInItsSandbox`) : t(`agents.cardMenu.openIn`, { name: facts.boxName }),
+                      icon: `arrow-right`,
+                      command: () => act.openInSandbox(sandboxId, agent.id),
+                  },
+              ],
         watchRow(agent, facts.here, act),
         filingRow(agent, facts.here, act),
     ];

@@ -38,10 +38,14 @@ const summary = computed(() => {
     const parts: string[] = [];
     const outgoing = outgoingAcross.value;
     if (outgoing !== undefined) {
-        parts.push(outgoing.commits > 0 ? `${outgoing.commits} unpushed` : `unpublished work`);
+        parts.push(
+            outgoing.commits > 0
+                ? t(`workspace.otherSandboxChanges.unpushed`, { count: outgoing.commits }, outgoing.commits)
+                : t(`workspace.otherSandboxChanges.unpublishedWork`),
+        );
     }
     if (uncommittedAcross.value > 0) {
-        parts.push(`${uncommittedAcross.value} uncommitted`);
+        parts.push(t(`workspace.otherSandboxChanges.uncommitted`, { count: uncommittedAcross.value }, uncommittedAcross.value));
     }
     return parts.join(`, `);
 });
@@ -51,7 +55,11 @@ const summary = computed(() => {
 const silentLine = computed(() =>
     silent.value.length === 0
         ? undefined
-        : `${silent.value.map((box) => box.sandbox.name).join(`, `)} ${silent.value.length === 1 ? `isn't` : `aren't`} answering`,
+        : t(
+              `workspace.otherSandboxChanges.notAnswering`,
+              { names: silent.value.map((box) => box.sandbox.name).join(`, `), count: silent.value.length },
+              silent.value.length,
+          ),
 );
 
 // Absent when there's nothing outstanding, rather than showing a permanent all-clear row.
@@ -66,21 +74,22 @@ const openWorkspaceIn = (sandboxId: string): void => {
 
 const sendable = (row: LedgerRow): boolean => !row.unreadable && (row.ahead > 0 || row.publish);
 // Publish for a branch never pushed, Push otherwise; a branch that's both is sent by one ordinary push.
-const sendVerb = (row: LedgerRow): string => (row.publish && row.ahead === 0 ? `Publish` : `Push`);
+const sendVerb = (row: LedgerRow): string =>
+    row.publish && row.ahead === 0 ? t(`workspace.otherSandboxChanges.publish`) : t(`workspace.otherSandboxChanges.push`);
 
 const detail = (row: LedgerRow): string => {
     if (row.unreadable) {
-        return `git couldn't read this repo`;
+        return t(`workspace.otherSandboxChanges.unreadable`);
     }
     const parts: string[] = [];
     if (row.ahead > 0) {
-        parts.push(`${row.ahead} to push`);
+        parts.push(t(`workspace.otherSandboxChanges.toPush`, { count: row.ahead }, row.ahead));
     }
     if (row.publish) {
-        parts.push(`never published`);
+        parts.push(t(`workspace.otherSandboxChanges.neverPublished`));
     }
     if (row.uncommitted > 0) {
-        parts.push(`${row.uncommitted} uncommitted`);
+        parts.push(t(`workspace.otherSandboxChanges.uncommitted`, { count: row.uncommitted }, row.uncommitted));
     }
     return parts.join(` · `);
 };

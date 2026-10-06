@@ -7,6 +7,7 @@
     "projectsView": {
         "allProjects": "All projects",
         "cancel": "Cancel",
+        "couldntStart": "Could not start the project.",
         "create": "Create",
         "everyProjectRepositoryIn": "Every project is a repository in this workspace. Open one and the files, the agents and the checks narrow to it.",
         "folder": "Folder: {slug}",

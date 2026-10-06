@@ -157,7 +157,7 @@ const lane = computed(() => props.placed ?? laneOf(props.agent));
 const box = computed(() =>
     props.agent.sandboxId === undefined
         ? undefined
-        : { name: boxNameOf.value.get(props.agent.sandboxId) ?? `Another sandbox`, image: boxImageOf.value.get(props.agent.sandboxId) },
+        : { name: boxNameOf.value.get(props.agent.sandboxId) ?? t(`agents.agentCard.anotherSandbox`), image: boxImageOf.value.get(props.agent.sandboxId) },
 );
 // The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
 // else why the agents it started do (their mark rides along, so their ask never reads as this card's own), else that it
@@ -315,7 +315,7 @@ const requestLand = async (): Promise<void> => {
         await requestLandAgent(props.agent.id, props.agent.sandboxId);
         await (props.agent.sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
     } catch (caught) {
-        agentsNotice.value = messageOr(caught, `Couldn't send the land request.`);
+        agentsNotice.value = messageOr(caught, t(`agents.agentCard.couldntSendLandRequest`));
     } finally {
         requesting.value = false;
     }
@@ -323,7 +323,7 @@ const requestLand = async (): Promise<void> => {
 // The standing ask, worn for everyone: a collaborator sees it took, a maintainer reads it as the cue to land.
 const landAsk = computed(() => {
     const request = props.agent.landRequested;
-    return request === undefined ? undefined : `${request.name ?? request.email} asked to land this`;
+    return request === undefined ? undefined : t(`agents.agentCard.askedToLand`, { name: request.name ?? request.email });
 });
 // Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
 // `landing` is that press, whichever window made it.
@@ -433,7 +433,7 @@ const sendAgain = async (): Promise<void> => {
         await useAgents().resumeHeldTurn(props.agent.id);
     } catch (caught) {
         // The card is left as it was and the words are still safe in the composer; the strip says why nothing moved.
-        agentsNotice.value = messageOr(caught, `Couldn't send that again.`);
+        agentsNotice.value = messageOr(caught, t(`agents.agentCard.couldntSendAgain`));
     } finally {
         resending.value = false;
     }
@@ -475,7 +475,7 @@ const chipHint = computed(
 const edit = createInlineRename(
     () => props.agent.title,
     (name) => rename(props.agent.id, name),
-    `Couldn't rename the agent.`,
+    t(`agents.agentCard.couldntRename`),
 );
 // A blur-commit click on the card body must commit the rename, not also open the agent.
 // The event rides along since a modified click means something else on this board (a chat pane/column); a keyboard open

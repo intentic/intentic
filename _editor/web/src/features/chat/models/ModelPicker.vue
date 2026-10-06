@@ -271,11 +271,13 @@ const coolingBadge = (entry: PickerEntry): string | undefined =>
 const rowAriaLabel = (entry: PickerEntry): string => {
     const cooling = coolingBadge(entry);
     const helperOnly = helperOnlyWhy(entry);
-    return (
-        `${entry.label}${isSelected(entry) ? `, current model` : ``}` +
-        `${isLocked(entry) ? `, ${accessBadge(entry.provider) ?? `not connected`}` : ``}${cooling === undefined ? `` : `, ${cooling}`}` +
-        `${helperOnly === undefined ? `` : `, ${helperOnly}`}`
-    );
+    return [
+        entry.label,
+        ...(isSelected(entry) ? [t(`chat.modelPicker.currentModel`)] : []),
+        ...(isLocked(entry) ? [accessBadge(entry.provider) ?? t(`chat.modelPicker.notConnected`)] : []),
+        ...(cooling === undefined ? [] : [cooling]),
+        ...(helperOnly === undefined ? [] : [helperOnly]),
+    ].join(`, `);
 };
 
 // A provider whose connected account can no longer be refreshed; badged so a broken credential isn't mistaken for a

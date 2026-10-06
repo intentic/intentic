@@ -221,12 +221,12 @@ const viewOptions = computed((): { label: string; value: `chat` | `changes`; bad
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
 // question, which the header draws as a bar rather than filling with the word "Agent".
 const named = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value);
-const title = computed(() => named.value ?? `Agent`);
+const title = computed(() => named.value ?? t(`shared.agent`));
 
 const edit = createInlineRename(
     () => fleetAgent.value?.title ?? conversation.value?.title.value ?? undefined,
     (name) => rename(agentId.value, name),
-    `Couldn't rename the agent.`,
+    t(`agents.agentCard.couldntRename`),
 );
 
 // Fleet's status glyph: what the review can't state (still writing), and the page's only "landed" signal.
@@ -318,13 +318,13 @@ const remoteSilent = computed(
     () => remoteBox.value !== undefined && otherBoxes.value.some((box) => box.sandbox.id === remoteBox.value && box.state === `unreachable`),
 );
 const remoteUnavailable = computed(() => {
-    const name = remoteName.value ?? `That sandbox`;
+    const name = remoteName.value ?? t(`agents.agentDetail.thatSandbox`);
     if (fleetAgent.value !== undefined) {
-        return `This agent has no branch to review.`;
+        return t(`agents.agentDetail.noBranchToReview`);
     }
     return heardFrom.value
-        ? `${name} doesn't have this agent any more: it may have been discarded, or its id belongs to another sandbox.`
-        : `${name} hasn't answered yet, so there's nothing to show for this agent.`;
+        ? t(`agents.agentDetail.agentGoneFrom`, { name })
+        : t(`agents.agentDetail.notAnsweredYet`, { name });
 });
 const crossToAgent = (): void => {
     if (remoteBox.value !== undefined) {

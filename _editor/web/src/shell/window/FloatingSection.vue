@@ -1,7 +1,8 @@
 <!-- Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/preview). -->
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
-import { computed, onMounted, onUnmounted, useTemplateRef, watch } from "vue";
+import { useT } from "@intentic/ui/i18n";
+import { computed, onMounted, onUnmounted, useTemplateRef, watch, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { closeOwnWindow } from "../../app/environments/desktop";
 import { useExtensionHost } from "../../extension-host/useExtensionHost";
@@ -27,12 +28,16 @@ const layout = useLayout();
 // The route's regex admits only these three, so this is a read rather than a validation.
 const panel = route.params[`panel`] as FloatingPanel;
 
-const TITLES: Record<FloatingPanel, string> = {
-    chat: `Intentic · Chat`,
-    terminal: `Intentic · Terminal`,
-    preview: `Intentic · Preview`,
-};
-document.title = TITLES[panel];
+const t = useT();
+// Read inside the effect, so the window's title follows a language switch.
+const titles = (): Record<FloatingPanel, string> => ({
+    chat: `Intentic · ${t(`shared.chat`)}`,
+    terminal: `Intentic · ${t(`shared.terminal`)}`,
+    preview: `Intentic · ${t(`shared.preview`)}`,
+});
+watchEffect(() => {
+    document.title = titles()[panel];
+});
 
 // Two of the three are conditional surfaces in the main window (terminal open/closed, preview looked-at-or-not);
 // standing in this window IS the ask, or a floating window would publish a slot nothing ever mounts into.

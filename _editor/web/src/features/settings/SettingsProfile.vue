@@ -35,14 +35,14 @@ const pickAvatar = async (event: Event): Promise<void> => {
     try {
         square = await fileToSquareDataUrl(file, `cover`);
     } catch {
-        avatarError.value = `Couldn't read that file as an image.`;
+        avatarError.value = t(`settings.settingsProfile.notAnImage`);
         avatarBusy.value = false;
         return;
     }
     try {
         await updateProfile({ image: square });
     } catch (error) {
-        avatarError.value = messageOr(error, `Profile update failed.`);
+        avatarError.value = messageOr(error, t(`settings.settingsProfile.updateFailed`));
     } finally {
         avatarBusy.value = false;
     }

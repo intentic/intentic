@@ -953,7 +953,7 @@ const originSources = (): Record<string, { icon: IconName; label: string }> => (
 // twice.
 export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
     const source = originSources()[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
-    const where = origin.channelId !== undefined ? ` in ${origin.channelId}` : ``;
+    const where = origin.channelId !== undefined ? t(`agents.agentStatus.inChannel`, { channel: origin.channelId }) : ``;
     return {
         icon: source.icon,
         label: source.label,
@@ -974,7 +974,7 @@ export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { labe
 
 // The unread chip's hover, one sentence wherever that chip is drawn; takes the formatted instant, since this module
 // owns no clock (see `unreadBadge`).
-export const unreadHint = (when: string): string => `Worked since you last opened it, ${when}`;
+export const unreadHint = (when: string): string => t(`agents.agentStatus.workedSince`, { when });
 
 // A CARD'S CORNER IS A WORD, NOT A GLYPH, AND THE SAME WORD EVERYWHERE. "Usage limit" and "Stopped" are what the
 // reader needs; a triangle in the corner names neither, and the rail and the board each used to decide the word, the
@@ -1075,7 +1075,7 @@ export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">
     if (running === 0) {
         return own;
     }
-    return [`${running} subagent${running === 1 ? `` : `s`}`, own].filter(Boolean).join(` · `);
+    return [t(`agents.agentStatus.subagents`, { count: running }, running), own].filter(Boolean).join(` · `);
 };
 
 // Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
@@ -1095,7 +1095,7 @@ export type TileRim =
     | (RimInk & { readonly kind: "steps"; readonly segments: number; readonly filled: number })
     | (RimInk & { readonly kind: "context"; readonly percent: number });
 
-const contextSpent = (percent: number): string => `${percent}% of context used`;
+const contextSpent = (percent: number): string => t(`agents.agentStatus.contextUsed`, { percent });
 
 // Amber past 80%, the band where a compaction is close; accent below it. A quiet rim states its number without
 // arguing for it, which is what a receipt and a destination row both want.
@@ -1126,7 +1126,7 @@ export const tileRim = (agent: RimAgent, { quiet }: { quiet: boolean }): TileRim
         filled: settled ? list.total + 1 : done,
         tone: quiet ? `text-subtle` : `text-primary-500`,
         // Noun agrees with the total, not the count done: '1 of 4 steps', but '1 of 1 step'.
-        hint: [`${done} of ${list.total} ${list.total === 1 ? `step` : `steps`} done`, percent === undefined ? undefined : contextSpent(percent)]
+        hint: [t(`agents.agentStatus.stepsDone`, { done, count: list.total }, list.total), percent === undefined ? undefined : contextSpent(percent)]
             .filter((part): part is string => part !== undefined)
             .join(` · `),
     };
@@ -1158,19 +1158,19 @@ export const activityIcon = (tool: string | undefined): IconName => {
 // one), unlike `done` or `exhausted`.
 export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly text: string; readonly class: string; readonly spin: boolean } => {
     if (loop.state === `running`) {
-        return { text: `Iteration ${loop.iteration}/${loop.maxIterations} · until ${loop.goal}`, class: `text-link`, spin: true };
+        return { text: t(`agents.agentStatus.loopIteration`, { iteration: loop.iteration, max: loop.maxIterations, goal: loop.goal }), class: `text-link`, spin: true };
     }
     const ended: Record<Exclude<LoopState, "running">, { readonly text: string; readonly class: string }> = {
-        done: { text: `Goal met after ${loop.iteration}`, class: `text-success` },
+        done: { text: t(`agents.agentStatus.loopDone`, { iteration: loop.iteration }), class: `text-success` },
         // Each names what to do about it: exhausted wants more room, stalled wants a better prompt, overspent wants a
         // decision.
-        exhausted: { text: `Ran out of iterations after ${loop.iteration}`, class: `text-warning` },
-        stalled: { text: `Stalled after ${loop.iteration}, nothing changed`, class: `text-warning` },
-        overspent: { text: `Hit the spend ceiling after ${loop.iteration}`, class: `text-warning` },
+        exhausted: { text: t(`agents.agentStatus.loopExhausted`, { iteration: loop.iteration }), class: `text-warning` },
+        stalled: { text: t(`agents.agentStatus.loopStalled`, { iteration: loop.iteration }), class: `text-warning` },
+        overspent: { text: t(`agents.agentStatus.loopOverspent`, { iteration: loop.iteration }), class: `text-warning` },
         // Wants a priced runtime or no ceiling: its runtime reports no cost, so the ceiling could not hold.
-        unpriced: { text: `Stopped after ${loop.iteration}: its runtime reports no cost to hold the ceiling to`, class: `text-warning` },
-        stopped: { text: `Loop stopped after ${loop.iteration}`, class: `text-muted` },
-        error: { text: `Loop failed after ${loop.iteration}`, class: `text-danger` },
+        unpriced: { text: t(`agents.agentStatus.loopUnpriced`, { iteration: loop.iteration }), class: `text-warning` },
+        stopped: { text: t(`agents.agentStatus.loopStopped`, { iteration: loop.iteration }), class: `text-muted` },
+        error: { text: t(`agents.agentStatus.loopFailed`, { iteration: loop.iteration }), class: `text-danger` },
     };
     return { ...ended[loop.state], spin: false };
 };
@@ -1197,7 +1197,7 @@ export const limitCountdown = (agent: AgentStanding, now: number): LimitClock | 
     }
     const at = reopensAt * 1_000;
     if (at - now < CLOCK_FROM_MS) {
-        return { at, text: `${Math.max(1, Math.ceil((at - now) / 60_000))}m`, wait: true };
+        return { at, text: t(`agents.agentStatus.minutes`, { minutes: Math.max(1, Math.ceil((at - now) / 60_000)) }), wait: true };
     }
     return { at, text: new Date(at).toDateString() === new Date(now).toDateString() ? formatClock(at) : formatWhen(at, now), wait: false };
 };
@@ -1289,7 +1289,7 @@ export const watchLine = (
                   note: t(`agents.agentStatus.firstWakesChat`),
               };
     return {
-        text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,
+        text: watches.length === 1 ? soonest.note : t(`agents.agentStatus.watchingConditions`, { count: watches.length }, watches.length),
         // "5h 46m" alone beside a running card's elapsed readout read as six hours spent, not six hours to go.
         countdown: t(`agents.agentStatus.timeLeft`, { time: countdown }),
         hint,

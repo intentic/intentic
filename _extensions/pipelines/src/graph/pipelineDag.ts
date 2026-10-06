@@ -1,6 +1,7 @@
 import { dagLayers } from "@intentic/base/dag";
 import type { DagEdge, DagNode } from "@intentic/extension-ui";
 import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract";
+import { t } from "../i18n";
 
 // A run's flat job list becomes the layered graph both pipeline views render, from the best available source of shape:
 // 1. Declared dependencies (`needs`): the real graph; layers are dependency depth.
@@ -103,7 +104,7 @@ export const stageLabel = (stage: PipelineStage, index: number): string => {
         return stage.name;
     }
     const [only] = stage.jobs;
-    return stage.jobs.length === 1 && only !== undefined ? only.name : `Step ${index + 1}`;
+    return stage.jobs.length === 1 && only !== undefined ? only.name : t(`pipelineDag.step`, { n: index + 1 });
 };
 
 // Positional node id, not name-based: matrix legs and reruns can repeat a job name, colliding as an id.

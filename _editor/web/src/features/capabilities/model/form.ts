@@ -63,7 +63,7 @@ export const nameError = (name: string): string | undefined => {
     if (cleanName(name).length > 0) {
         return undefined;
     }
-    return name.trim().length === 0 ? `Name is required.` : `This name has no Latin letters or digits to use. Try a romanised name.`;
+    return name.trim().length === 0 ? t(`capabilities.form.nameRequired`) : t(`capabilities.form.nameNoLatin`);
 };
 
 // Each rule refuses a value that is actually present; emptiness is handled separately by
@@ -72,19 +72,19 @@ type FieldRule = (field: CapabilityField, value: string) => string | undefined;
 
 const RULES: readonly FieldRule[] = [
     (field, value) =>
-        !field.secret && field.key.toLowerCase().includes(`url`) && !parsesAsUrl(value) ? `Enter a valid URL (e.g. https://…).` : undefined,
+        !field.secret && field.key.toLowerCase().includes(`url`) && !parsesAsUrl(value) ? t(`capabilities.form.invalidUrl`) : undefined,
     // Ciphertext lifted straight from a FortiClient config; the daemon rejects it, so refuse it before
     // the round trip.
     (_field, value) =>
         isForticlientCiphertext(value)
-            ? `FortiClient encrypted this with a key tied to the machine that exported it: it can't be used. Enter the real value.`
+            ? t(`capabilities.form.forticlientCiphertext`)
             : undefined,
     (field, value) => {
         if (field.key !== `port`) {
             return undefined;
         }
         const port = Number(value);
-        return Number.isInteger(port) && port >= 1 && port <= 65_535 ? undefined : `Enter a valid port number (1–65535).`;
+        return Number.isInteger(port) && port >= 1 && port <= 65_535 ? undefined : t(`capabilities.form.invalidPort`);
     },
     // Context token bounds are imported from the schema, not restated, so box and schema cannot disagree.
     (field, value) => {
@@ -94,7 +94,7 @@ const RULES: readonly FieldRule[] = [
         const tokens = Number(value);
         return Number.isInteger(tokens) && tokens >= LOCAL_MODEL_WINDOW_MIN && tokens <= LOCAL_MODEL_WINDOW_MAX
             ? undefined
-            : `Enter a whole number of tokens (${formatCount(LOCAL_MODEL_WINDOW_MIN)}–${formatCount(LOCAL_MODEL_WINDOW_MAX)}).`;
+            : t(`capabilities.form.invalidTokens`, { min: formatCount(LOCAL_MODEL_WINDOW_MIN), max: formatCount(LOCAL_MODEL_WINDOW_MAX) });
     },
 ];
 
@@ -123,7 +123,7 @@ export const fieldInvalid = (field: CapabilityField, value: string | undefined, 
 
 // The two folded back together, for the callers that only ask "is this field fine".
 export const fieldError = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): string | undefined =>
-    fieldMissing(field, value, stored) ? `This field is required.` : fieldInvalid(field, value, stored);
+    fieldMissing(field, value, stored) ? t(`capabilities.form.fieldRequired`) : fieldInvalid(field, value, stored);
 
 /** Whether a box has been left (blurred) and whether a submit was refused: what decides how loudly it may object. */
 export interface FieldVisit {
@@ -144,14 +144,14 @@ export const fieldRefusal = (
     }
     const missing = fieldMissing(field, value, stored);
     return {
-        alarm: fieldInvalid(field, value, stored) ?? (visit.attempted && missing ? `This field is required.` : undefined),
+        alarm: fieldInvalid(field, value, stored) ?? (visit.attempted && missing ? t(`capabilities.form.fieldRequired`) : undefined),
         quiet: !visit.attempted && missing,
     };
 };
 
 // An empty credential box's placeholder: the tile's own on add, or "already set, leave blank to keep" over a stored one.
 export const placeholderFor = (field: CapabilityField, value: string | undefined, stored: StoredSecrets): string | undefined =>
-    keepsSecret(field, value, stored) ? `•••••••••••• already set, leave blank to keep it` : field.placeholder;
+    keepsSecret(field, value, stored) ? t(`capabilities.form.keepStored`) : field.placeholder;
 
 // The green check, shown only for fields with a rule that can genuinely vouch for the value (sha,
 // URL, port); free text earns none.
@@ -181,7 +181,7 @@ export const defaultAnswer = (field: CapabilityField): string => field.default ?
 // Advanced fields default correctly for nearly everyone and fold behind one line. A browser tile's fold is a specific
 // offer (stored sign-in credentials), not generic "Advanced".
 export const advancedLabel = (entry: CapabilityCatalogEntry): string =>
-    entry.kind === `browser` ? `Let the agent sign in for you (optional)` : `Advanced`;
+    entry.kind === `browser` ? t(`capabilities.form.browserAdvanced`) : t(`capabilities.form.advanced`);
 
 // Whether the fold opens on arrival: only when it holds a value other than its default, so an edit never hides what
 // it's set to.
@@ -228,9 +228,9 @@ export const isCommitSha = (value: string | undefined): boolean => SHA_RE.test(v
 // connection; DevOps activates.
 export const submitWord = (editing: boolean, kind: CapabilityKind | undefined): string => {
     if (editing) {
-        return `Save changes`;
+        return t(`capabilities.form.saveChanges`);
     }
-    return kind === `devops` ? `Activate` : `Add`;
+    return kind === `devops` ? t(`capabilities.form.activate`) : t(`ui.action.add`);
 };
 
 // The same press after a Test that failed: it still saves, and says it does so over the Test's answer.

@@ -108,32 +108,62 @@
         "waitingForOtherRun": "Waiting for what is already running on this device to finish."
     },
     "requirements": {
+        "badge": {
+            "done": "done",
+            "failed": "didn't work",
+            "needsRestart": "needs a restart",
+            "needsSignOut": "needs a sign-out",
+            "onHost": "on the host machine",
+            "unsupported": "not supported",
+            "weDoIt": "we'll do this",
+            "working": "working on it",
+            "youDoIt": "you'll have to do this"
+        },
         "beforeSandboxRunHere": "Before your sandbox can run here:",
         "checkAgain": "Check again",
         "deviceCantRunSandbox": "This computer can't run a sandbox yet:",
+        "doTheseAndContinue": "Do these and continue",
+        "doThisAndContinue": "Do this and continue",
         "hideSteps": "Hide the steps",
         "restartNow": "Restart now",
         "runOnMachineWe": "Run it on a machine we host",
+        "setupSaved": "Your setup is saved: this window picks it up again once you're back.",
         "showMeHow": "Show me how",
+        "signOutAgain": "Signing out and back in didn't refresh it on this PC. A restart always does: your setup is saved and continues on its own once you're back.",
+        "signOutExhausted": "Even a restart didn't apply it. Whoever looks after this PC may have to add your account to Docker's group by hand; until then, your sandbox can run on a machine we host.",
         "signOutNow": "Sign out now",
+        "tryAgain": "Try again",
         "windowsAskPermissionOnce": "Windows will ask for permission once."
     },
     "setupPlan": {
+        "aboutMinutes": "about {count} minute | about {count} minutes",
         "checkAnswers": "Check it answers",
         "checkDevice": "Check this device",
+        "checkDocker": "Check Docker",
+        "checkDockerNeeds": "Check what Docker needs",
         "connectDevice": "Connect this device",
         "downloadSandboxImage": "Download the sandbox image",
         "fetchInstaller": "Fetch the installer",
+        "installDocker": "Install Docker",
+        "lessThanMinute": "less than a minute",
         "redeemSetupCode": "Redeem your setup code",
+        "setUpDocker": "Set up Docker",
         "setUpFolderSync": "Set up folder sync",
         "startSandbox": "Start your sandbox",
+        "stepOf": "Step {index} of {total}",
         "useSandboxImage": "Use the sandbox image already here",
         "waitToComeUp": "Wait for it to come up"
     },
     "setupProgress": {
+        "allDone": "All done",
+        "gettingStarted": "Getting started",
         "hideSteps": "Hide the steps",
         "pausedAt": "Paused at {toLowerCase}",
-        "seeAllSteps": "See all {count} steps"
+        "seeAllSteps": "See all {count} steps",
+        "stopped": "Stopped",
+        "stoppedAt": "Stopped at {position}",
+        "stoppedAtThisStep": "Stopped at this step",
+        "waitingForYou": "Waiting for you"
     },
     "device": {
         "title": "This computer",
@@ -199,5 +229,13 @@
             "ready": "in",
             "failed": "couldn't be added"
         }
+    },
+    "account": {
+        "profileUpdateFailed": "Profile update failed.",
+        "sessionCheckFailed": "Couldn't check your session.",
+        "signOutFailed": "Sign out failed."
+    },
+    "setup": {
+        "stuckInstallerNotStopped": "The stuck installer could not be stopped: {error}"
     }
 }

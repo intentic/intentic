@@ -51,7 +51,7 @@ const act = async (action: () => Promise<void>): Promise<void> => {
     try {
         await action();
     } catch (error) {
-        failure.value = messageOr(error, `That didn't work.`);
+        failure.value = messageOr(error, t(`sandbox.extensionUpdateCard.didntWork`));
     } finally {
         busy.value = false;
     }
@@ -68,7 +68,7 @@ const rebuildNote = ref(false);
 const apply = (): Promise<void> =>
     act(() =>
         // Fetching the new code and reconciling it takes longer than a click, so the Extensions row says so.
-        hubWork.track(`Updating ${extension.id}`, async () => {
+        hubWork.track(t(`sandbox.extensionUpdateCard.updating`, { id: extension.id }), async () => {
             const applied = await applyUpdate(extension.id, preview.value?.ref);
             rebuildNote.value = applied.rebuildNeeded === true;
             preview.value = undefined;
@@ -112,15 +112,27 @@ const readDiff = (): void => {
 
 // Labels the confirm click by what it means: growing powers makes it an approval, not a refresh.
 const confirmLabel = computed(() =>
-    preview.value !== undefined && preview.value.powers.added.length > 0 ? `Approve new powers & update` : `Update`,
+    preview.value !== undefined && preview.value.powers.added.length > 0
+        ? t(`sandbox.extensionUpdateCard.approvePowersUpdate`)
+        : t(`sandbox.extensionUpdateCard.update`),
 );
 
 const policy = computed<ExtensionUpdatePolicy>(() => extension.updatePolicy ?? { updates: `notify`, advisories: `auto-disable` });
-const POLICY_CAPTIONS: Record<ExtensionUpdatePolicy["updates"], string> = {
-    notify: `New releases badge this row and wait for you.`,
-    agent: `Your agent reads the diff the moment a release is listed, you open a finished review and decide.`,
-    auto: `A human-verified release whose powers didn't grow applies unattended, health-watched, auto-reverted if it comes up wrong. Anything less falls back to notify.`,
+const policyCaption = (updates: ExtensionUpdatePolicy["updates"]): string => {
+    switch (updates) {
+        case `notify`:
+            return t(`sandbox.extensionUpdateCard.policyNotify`);
+        case `agent`:
+            return t(`sandbox.extensionUpdateCard.policyAgent`);
+        case `auto`:
+            return t(`sandbox.extensionUpdateCard.policyAuto`);
+    }
 };
+const POLICY_OPTIONS = computed(() => [
+    { label: t(`sandbox.extensionUpdateCard.notify`), value: `notify` },
+    { label: t(`sandbox.extensionUpdateCard.agentPrepared`), value: `agent` },
+    { label: t(`sandbox.extensionUpdateCard.auto`), value: `auto` },
+]);
 const setPolicy = (updates: ExtensionUpdatePolicy["updates"]): Promise<void> => act(() => setUpdatePolicy(extension.id, { updates }));
 const setAdvisories = (autoDisable: boolean): Promise<void> =>
     act(() => setUpdatePolicy(extension.id, { advisories: autoDisable ? `auto-disable` : `notify` }));
@@ -175,7 +187,9 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                 <StatusBadge v-if="update.securityFix" variant="danger" :label="t(`sandbox.extensionUpdateCard.securityFix`)" size="xs" />
                 <StatusBadge
                     :variant="update.trust === `verified` ? `success` : `neutral`"
-                    :label="update.trust === `verified` ? `verified` : t(`sandbox.extensionUpdateCard.listedNoHumanReview`)"
+                    :label="
+                        update.trust === `verified` ? t(`sandbox.extensionUpdateCard.verified`) : t(`sandbox.extensionUpdateCard.listedNoHumanReview`)
+                    "
                     size="xs"
                 />
                 <span class="text-2xs text-subtle">{{ t(`sandbox.extensionUpdateCard.listed`, { at: timeAgo(Date.parse(update.at)) }) }}</span>
@@ -247,14 +261,10 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionUpdateCard.newReleaseListed`) }}</p>
             <SegmentedControl
                 :model-value="policy.updates"
-                :options="[
-                    { label: `Notify`, value: `notify` },
-                    { label: `Agent-prepared`, value: `agent` },
-                    { label: `Auto`, value: `auto` },
-                ]"
+                :options="POLICY_OPTIONS"
                 @update:model-value="(value: string) => setPolicy(value as ExtensionUpdatePolicy[`updates`])"
             />
-            <p class="mt-1 text-2xs text-subtle">{{ POLICY_CAPTIONS[policy.updates] }}</p>
+            <p class="mt-1 text-2xs text-subtle">{{ policyCaption(policy.updates) }}</p>
             <label class="mt-1.5 flex items-center gap-1.5 text-2xs text-muted">
                 <input
                     type="checkbox"

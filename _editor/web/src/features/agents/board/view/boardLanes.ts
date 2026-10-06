@@ -161,10 +161,10 @@ export const useBoardLanes = (host: LanesHost) => {
     const beyondLabel = computed(() => {
         const parts: string[] = [];
         if (archivedHits.value.length > 0) {
-            parts.push(`${archivedHits.value.length} in the archive`);
+            parts.push(t(`agents.boardLanes.inArchive`, { count: archivedHits.value.length }));
         }
         if (filter.sessionMatches.value.length > 0) {
-            parts.push(`${filter.sessionMatches.value.length} in earlier chats`);
+            parts.push(t(`agents.boardLanes.inEarlierChats`, { count: filter.sessionMatches.value.length }));
         }
         return parts.join(` · `);
     });
@@ -186,7 +186,9 @@ export const useBoardLanes = (host: LanesHost) => {
     );
     const kept = computed(() => LANE_ORDER.reduce((sum, lane) => sum + keptIn(lane), 0));
     // Never claims more than it knows: "n of 40" asserts all forty were checked, false while the daemon's half is out.
-    const matchTally = computed(() => (filter.partial.value ? `searching the rest…` : `${kept.value} of ${total.value}`));
+    const matchTally = computed(() =>
+        filter.partial.value ? t(`agents.boardLanes.searchingRest`) : t(`agents.boardLanes.keptOfTotal`, { kept: kept.value, total: total.value }),
+    );
     // The filter's own empty state (cards exist, none matched), never while its answer is still partial.
     const noMatches = computed(
         () => filter.active.value && !filter.partial.value && !view.value.archive && kept.value === 0 && beyondCount.value === 0,

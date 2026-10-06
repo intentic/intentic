@@ -15,7 +15,11 @@ const t = useT();
 
 const { active } = useSandbox();
 
-const title = computed(() => `Starting "${active.value?.name ?? `your sandbox`}"…`);
+const title = computed(() =>
+    active.value?.name === undefined
+        ? t(`sandbox.sandboxWarming.startingYourSandbox`)
+        : t(`sandbox.sandboxWarming.startingNamed`, { name: active.value.name }),
+);
 
 const done = computed(() => bootSteps.value.filter((step) => step.state === `done` || step.state === `failed`).length);
 const running = computed(() => bootSteps.value.find((step) => step.state === `running`));

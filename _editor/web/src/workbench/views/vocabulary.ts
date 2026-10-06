@@ -56,11 +56,10 @@ export interface Vocabulary {
     readonly publishing: string;
     readonly syncing: string;
     readonly diff: string;
-    // The workspace sidebar's second mode, and the noun its badge counts with, either side of the number
-    // ("3 unsaved changes"). Two rows rather than one, since English needs the singular spelled separately.
+    // The workspace sidebar's second mode, and what its badge says with the count ("3 unsaved changes"): a plural
+    // message rather than a noun beside the number, since Polish bends the noun three ways by the count.
     readonly changes: string;
-    readonly pendingChange: string;
-    readonly pendingChanges: string;
+    readonly pendingChanges: (count: number) => string;
     // The file tree's own tile, and the home tile's: the same tile for a developer, two for a maker.
     readonly workspace: string;
     readonly home: string;
@@ -114,8 +113,7 @@ const developer = (): Vocabulary => ({
     syncing: t(`views.vocabulary.syncing`),
     diff: t(`views.vocabulary.diff`),
     changes: t(`shared.changes`),
-    pendingChange: t(`views.vocabulary.uncommittedChange`),
-    pendingChanges: t(`views.vocabulary.uncommittedChanges`),
+    pendingChanges: (count) => t(`views.vocabulary.uncommittedChangeCount`, { count }, count),
     workspace: t(`shared.workspace`),
     home: t(`shared.workspace`),
     preview: t(`shared.preview`),
@@ -168,8 +166,7 @@ const maker = (): Vocabulary => ({
     syncing: t(`views.vocabulary.backingUp`),
     diff: t(`views.vocabulary.whatChanged`),
     changes: t(`views.vocabulary.whatChanged`),
-    pendingChange: t(`views.vocabulary.unsavedChange`),
-    pendingChanges: t(`views.vocabulary.unsavedChanges`),
+    pendingChanges: (count) => t(`views.vocabulary.unsavedChangeCount`, { count }, count),
     workspace: t(`shared.files`),
     home: t(`views.vocabulary.projects`),
     preview: t(`views.vocabulary.see`),

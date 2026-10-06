@@ -97,7 +97,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const remote = computed(() => conversationBox.value !== undefined);
     // The box's name off the roster, not copied onto the conversation, so a rename can't go stale here.
     const remoteName = computed(() =>
-        conversationBox.value === undefined ? undefined : (boxNameOf.value.get(conversationBox.value) ?? `another sandbox`),
+        conversationBox.value === undefined ? undefined : (boxNameOf.value.get(conversationBox.value) ?? t(`chat.chatPlacementMenu.anotherSandbox`)),
     );
     const { runners: pairedRunners } = useRunners();
     const { agentById } = useAgents();
@@ -183,7 +183,7 @@ export const useComposerControls = (host: ControlsHost) => {
         remote,
         pairedRunners,
         placementShown,
-        placementLabel: computed(() => remoteName.value ?? conversation().runner.value ?? `Here`),
+        placementLabel: computed(() => remoteName.value ?? conversation().runner.value ?? t(`chat.composerQuickPick.here`)),
         modelReading,
         modelLabelText: computed(() => modelReading.value.label),
         // Our own text, always a real model name; `providerDisplayLabel` covers capability-derived providers too.

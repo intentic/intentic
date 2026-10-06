@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { type FileCategory, formatOf } from "@intentic/ui/file-format";
+import { t } from "@intentic/ui/i18n";
 import { resolveFile } from "../explorer/fileType";
 
 // What a hover can show of an entry, and what to call it. Text gets its first lines, a picture gets painted, a video
@@ -44,29 +45,32 @@ export const quickLookPlan = (entry: WorkspaceTreeEntry): QuickLookPlan => {
     return resolved.lang === undefined ? { kind: `text` } : { kind: `text`, lang: resolved.lang };
 };
 
-// The word for a format with no name of its own.
-const BY_CATEGORY = {
-    code: `Code`,
-    style: `Style sheet`,
-    config: `Config`,
-    data: `Data`,
-    image: `Picture`,
-    audio: `Sound`,
-    video: `Video`,
-    doc: `Document`,
-    shell: `Script`,
-    archive: `Archive`,
-    lock: `Lockfile`,
-    binary: `File`,
-    generic: `File`,
-} satisfies Record<FileCategory, string>;
+// The word for a format with no name of its own; built when read so it follows the language.
+const byCategory = (category: FileCategory): string =>
+    (
+        ({
+            code: t(`workspace.quickLookContent.code`),
+            style: t(`workspace.quickLookContent.style`),
+            config: t(`workspace.quickLookContent.config`),
+            data: t(`workspace.quickLookContent.data`),
+            image: t(`workspace.quickLookContent.image`),
+            audio: t(`workspace.quickLookContent.audio`),
+            video: t(`workspace.quickLookContent.video`),
+            doc: t(`workspace.quickLookContent.doc`),
+            shell: t(`workspace.quickLookContent.shell`),
+            archive: t(`workspace.quickLookContent.archive`),
+            lock: t(`workspace.quickLookContent.lock`),
+            binary: t(`workspace.quickLookContent.file`),
+            generic: t(`workspace.quickLookContent.file`),
+        }) satisfies Record<FileCategory, string>
+    )[category];
 
 export const kindLabel = (entry: Pick<WorkspaceTreeEntry, "name" | "type">): string => {
     if (entry.type === `dir`) {
-        return `Folder`;
+        return t(`workspace.quickLookContent.folder`);
     }
     const format = formatOf(entry.name);
-    return format.label ?? BY_CATEGORY[format.category];
+    return format.label ?? byCategory(format.category);
 };
 
 // Lines the card shows: enough to recognise a file, few enough to stay a glance.

@@ -46,8 +46,12 @@ const remaining = computed(() => size.value - end.value);
 // What the reader is looking at, in one line: how much of the file, from where.
 const position = computed(() =>
     start.value === 0 && atEnd.value
-        ? `All ${formatBytes(size.value)}`
-        : `${formatBytes(shown.value)} of ${formatBytes(size.value)}${start.value === 0 ? ` from the start` : atEnd.value ? ` at the end` : ``}`,
+        ? t(`workspace.bigTextView.positionAll`, { size: formatBytes(size.value) })
+        : start.value === 0
+          ? t(`workspace.bigTextView.positionStart`, { shown: formatBytes(shown.value), size: formatBytes(size.value) })
+          : atEnd.value
+            ? t(`workspace.bigTextView.positionEnd`, { shown: formatBytes(shown.value), size: formatBytes(size.value) })
+            : t(`workspace.bigTextView.positionMiddle`, { shown: formatBytes(shown.value), size: formatBytes(size.value) }),
 );
 
 const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow | undefined> => {
@@ -59,14 +63,14 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow
         const window = await readFileWindow(path, { offset, limit, signal: controller.signal, scope: { agent: viewAgent.value } });
         // Deleted while being followed: view keeps what it already holds rather than blanking on the reader.
         if (!window.present) {
-            error.value = `That file is no longer there.`;
+            error.value = t(`workspace.bigTextView.gone`);
             return undefined;
         }
         return window;
     } catch (err) {
         // An abort is this component replacing its own request, never a failure to report.
         if (!controller.signal.aborted) {
-            error.value = messageOr(err, `Could not read the file.`);
+            error.value = messageOr(err, t(`workspace.bigTextView.readFailed`));
         }
         return undefined;
     } finally {

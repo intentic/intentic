@@ -83,7 +83,7 @@ const applyResize = async (shape: ResourcesForm): Promise<void> => {
     // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the
     // machine actually sent has anything to say.
     await selfResources.apply(shape).catch((error: unknown) => {
-        resizeFailed.value = messageOr(error, `That didn't work on this device.`);
+        resizeFailed.value = messageOr(error, t(`sandbox.sandboxOverview.didntWorkOnDevice`));
     });
 };
 // Saving leaves the sandbox running, so unlike Apply this one answers: the share line picks up "changes on restart".
@@ -91,7 +91,7 @@ const saveResize = async (shape: ResourcesForm | undefined): Promise<void> => {
     resizing.value = false;
     resizeFailed.value = undefined;
     await selfResources.save(shape).catch((error: unknown) => {
-        resizeFailed.value = messageOr(error, `That didn't work on this device.`);
+        resizeFailed.value = messageOr(error, t(`sandbox.sandboxOverview.didntWorkOnDevice`));
     });
 };
 
@@ -114,13 +114,13 @@ const subline = computed<{ text: string; tone: string }>(() => {
         return { text: logoError.value, tone: `text-danger` };
     }
     if (availability.value === `busy`) {
-        return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
+        return { text: t(`sandbox.sandboxOverview.busyLiveActionsResume`), tone: `text-muted` };
     }
     if (availability.value === `unreachable`) {
-        return { text: `The sandbox isn't responding. Live actions resume when it does.`, tone: `text-muted` };
+        return { text: t(`sandbox.sandboxOverview.notRespondingLiveActions`), tone: `text-muted` };
     }
     if (availability.value === `starting` || availability.value === `warming`) {
-        return { text: `Getting the workspace ready…`, tone: `text-muted` };
+        return { text: t(`sandbox.sandboxOverview.gettingWorkspaceReady`), tone: `text-muted` };
     }
     return { text: ``, tone: `text-muted` };
 });
@@ -156,7 +156,7 @@ const writeLogo = async (image: string | null): Promise<void> => {
     try {
         await sandbox.update(id, { image });
     } catch (err) {
-        logoError.value = messageOr(err, `Couldn't save the logo.`);
+        logoError.value = messageOr(err, t(`sandbox.sandboxOverview.couldntSaveLogo`));
     } finally {
         logoBusy.value = false;
     }
@@ -176,7 +176,7 @@ const pickFile = async (event: Event): Promise<void> => {
     try {
         square = await fileToSquareDataUrl(file, `contain`);
     } catch {
-        logoError.value = `Couldn't read that file as an image.`;
+        logoError.value = t(`sandbox.sandboxOverview.couldntReadImage`);
         return;
     }
     await writeLogo(square);

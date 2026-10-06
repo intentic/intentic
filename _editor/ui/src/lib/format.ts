@@ -78,6 +78,7 @@ const percentFormats = new Map<number, Intl.NumberFormat>();
 // Every other number shape, keyed by what it is for: counts, compact counts, money, the units of a span of time.
 const shapedFormats = new Map<string, Intl.NumberFormat>();
 let durationFormat: Intl.DurationFormat | undefined;
+const listFormats = new Map<Intl.ListFormatType, Intl.ListFormat>();
 
 // Half of Europe writes "1,4 MB". A decimal point is a language's answer, not a constant, so every number this
 // module prints with a fraction goes through here.
@@ -144,6 +145,7 @@ export const setFormatLocale = (tag: string): void => {
     numberFormats.clear();
     percentFormats.clear();
     shapedFormats.clear();
+    listFormats.clear();
     durationFormat = undefined;
     formatLocale.value = tag;
 };
@@ -258,6 +260,22 @@ export const formatCompact = (value: number): string => {
 
 // A token count is a compact count; the name stays because extensions import it (`@intentic/extension-ui`).
 export const formatTokens = (tokens: number): string => formatCompact(tokens);
+
+// --- Lists -----------------------------------------------------------------------------------------------------------
+
+/**
+ * Items joined the way the language joins them: "a, b, and c" in English, "a, b i c" in Polish; `disjunction` for
+ * "a, b, or c".
+ */
+export const formatList = (items: readonly string[], type: Intl.ListFormatType = `conjunction`): string => {
+    const locale = formatLocale.value;
+    let format = listFormats.get(type);
+    if (format === undefined) {
+        format = new Intl.ListFormat(locale, { type });
+        listFormats.set(type, format);
+    }
+    return format.format(items);
+};
 
 // --- Money -----------------------------------------------------------------------------------------------------------
 

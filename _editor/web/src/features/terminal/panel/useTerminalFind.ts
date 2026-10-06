@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, type Ref, watch } from "vue";
 import type { TerminalSession } from "../terminalSession";
 
@@ -98,9 +99,11 @@ export const useTerminalFind = ({ activeName, sessionOf }: TerminalFindHost) => 
             return ``;
         }
         if (results.count === 0) {
-            return `No results`;
+            return t(`terminal.terminalFind.noResults`);
         }
-        return `${String(results.index + 1)} of ${results.count < 0 ? `many` : String(results.count)}`;
+        return results.count < 0
+            ? t(`terminal.terminalFind.positionOfMany`, { index: String(results.index + 1) })
+            : t(`terminal.terminalFind.position`, { index: String(results.index + 1), count: String(results.count) });
     });
 
     watch(activeName, () => {

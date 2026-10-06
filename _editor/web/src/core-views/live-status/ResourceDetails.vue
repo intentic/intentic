@@ -127,7 +127,7 @@ const logoFailed = reactive(new Set<string>());
                 <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.words.runningNow`) }}</h4>
                 <StatusBadge
                     :variant="deployment.live ? 'success' : 'neutral'"
-                    :label="deployment.live ? 'live' : t(`views.resourceDetails.notDeployed`)"
+                    :label="deployment.live ? t(`views.resourceDetails.live`) : t(`views.resourceDetails.notDeployed`)"
                     size="xs"
                     dot
                 />

@@ -489,7 +489,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         ...(canSplit.value
             ? [
                   {
-                      label: home === `side` ? `Move Back` : `Open to the Side`,
+                      label: home === `side` ? t(`workspace.workspaceDesktop.moveBack`) : t(`workspace.workspaceDesktop.openToSide`),
                       icon: `split-columns`,
                       shortcut: commandShortcut(`workspace.splitEditor`),
                       command: () => openToSide(id),
@@ -774,33 +774,30 @@ const onPick = (event: Event): void => {
 
 // Tooltips teach their command's key via commandShortcut, so a remap re-renders the key cap.
 // States why as well as what: the reader didn't close this panel and shouldn't have to guess what happened to it.
-const explorerTooltip = computed(
-    (): Tip => ({
-        title: sidebarOpen.value && !autoHidden.value ? t(`workspace.workspaceDesktop.hideExplorer`) : t(`workspace.workspaceDesktop.showExplorer`),
-        keys: commandShortcut(`workspace.toggleSidebar`),
-        note: autoHidden.value ? t(`workspace.workspaceDesktop.hiddenForSplit`) : undefined,
-    }),
-);
-const rootHealthTooltip = computed((): Tip => ({ title: t(`workspace.workspaceDesktop.codebaseHealth`), keys: commandShortcut(`workspace.codebaseHealth`) }));
-const homeTooltip = computed(
-    (): Tip => ({
-        title: t(`workspace.workspaceDesktop.showHome`),
-        keys: commandShortcut(`workspace.showHome`),
-        note: t(`workspace.workspaceDesktop.tabsStayOpen`),
-    }),
-);
+const explorerTooltip = computed((): Tip => ({
+    title: sidebarOpen.value && !autoHidden.value ? t(`workspace.workspaceDesktop.hideExplorer`) : t(`workspace.workspaceDesktop.showExplorer`),
+    keys: commandShortcut(`workspace.toggleSidebar`),
+    note: autoHidden.value ? t(`workspace.workspaceDesktop.hiddenForSplit`) : undefined,
+}));
+const rootHealthTooltip = computed((): Tip => ({
+    title: t(`workspace.workspaceDesktop.codebaseHealth`),
+    keys: commandShortcut(`workspace.codebaseHealth`),
+}));
+const homeTooltip = computed((): Tip => ({
+    title: t(`workspace.workspaceDesktop.showHome`),
+    keys: commandShortcut(`workspace.showHome`),
+    note: t(`workspace.workspaceDesktop.tabsStayOpen`),
+}));
 // The include field's grammar as three samples and what each matches, rather than a sentence about commas.
-const includeTip = computed(
-    (): Tip => ({
-        title: t(`workspace.words.filesToInclude`),
-        rows: [
-            { label: `package.json`, value: t(`workspace.workspaceDesktop.anywhere`) },
-            { label: `./src`, value: t(`workspace.workspaceDesktop.fromRoot`) },
-            { label: `!dist`, value: t(`workspace.workspaceDesktop.excluded`) },
-        ],
-        note: t(`workspace.workspaceDesktop.commaSeparated`),
-    }),
-);
+const includeTip = computed((): Tip => ({
+    title: t(`workspace.words.filesToInclude`),
+    rows: [
+        { label: `package.json`, value: t(`workspace.workspaceDesktop.anywhere`) },
+        { label: `./src`, value: t(`workspace.workspaceDesktop.fromRoot`) },
+        { label: `!dist`, value: t(`workspace.workspaceDesktop.excluded`) },
+    ],
+    note: t(`workspace.workspaceDesktop.commaSeparated`),
+}));
 </script>
 
 <template>
@@ -948,7 +945,11 @@ const includeTip = computed(
                             :options="[
                                 { label: t(`shared.name`), value: `name`, title: t(`workspace.workspaceDesktop.scopeNameHint`) },
                                 { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.workspaceDesktop.scopeTextHint`) },
-                                { label: t(`workspace.workspaceDesktop.smart`), value: `smart`, title: t(`workspace.workspaceDesktop.scopeSmartHint`) },
+                                {
+                                    label: t(`workspace.workspaceDesktop.smart`),
+                                    value: `smart`,
+                                    title: t(`workspace.workspaceDesktop.scopeSmartHint`),
+                                },
                             ]"
                         />
                         <span class="flex-1"></span>
@@ -965,13 +966,7 @@ const includeTip = computed(
                             <Icon name="filter" class="text-xs" />
                         </button>
                         <!-- One file read in every folder: the tree then lists folders alone, and the page beside it reads them. -->
-                        <HomeCoverPicker
-                            v-if="!contentMode"
-                            compact
-                            :cover="cover"
-                            @choose="(name) => (cover = name)"
-                            @drop="cover = undefined"
-                        />
+                        <HomeCoverPicker v-if="!contentMode" compact :cover="cover" @choose="(name) => (cover = name)" @drop="cover = undefined" />
                         <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
                         <button
                             type="button"
@@ -1107,7 +1102,13 @@ const includeTip = computed(
                                 >{{ actionError.title }}</span
                             >
                             <!-- The one remaining status: a single spinner for both a running file action and a tree (re)load. -->
-                            <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
+                            <Icon
+                                name="spinner"
+                                v-if="busy || isLoading"
+                                class="text-sm text-muted"
+                                spin
+                                :aria-label="t(`workspace.words.working`)"
+                            />
                             <!-- Suppressed while the scope itself is broken, since the pane below already says so at full size. -->
                             <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
                                 error

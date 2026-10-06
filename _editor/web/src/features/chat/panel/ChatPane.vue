@@ -3,7 +3,7 @@ import { FACE_SIZES, Icon, Notice, PersonaFace, ResponsiveOverlay, useDevice } f
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { loopDesignLine } from "@intentic/sandbox-contract";
+import { loopDesignWords } from "../models/run-settings/loopDesignWords";
 import type { Conversation } from "../session/conversation";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useChat } from "../run/useChat";
@@ -832,7 +832,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <!-- The loop badge includes its stop condition. -->
                         <p v-else-if="runThroughState === 'loop' && pickedLoop" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                             <Icon name="repeat" class="shrink-0 text-2xs text-link" />{{
-                                t(`chat.chatPane.sendLoopsUntilEndsOn`, { design: loopDesignLine(pickedLoop) })
+                                t(`chat.chatPane.sendLoopsUntilEndsOn`, { design: loopDesignWords(pickedLoop) })
                             }}
                         </p>
                         <!-- Persona capability text appears where the message is written. -->

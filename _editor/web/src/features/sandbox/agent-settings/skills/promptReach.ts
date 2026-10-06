@@ -1,4 +1,5 @@
 import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Groups providers by what they do with the system prompt (replace vs. append), read from the daemon's own
 // AgentCapabilities.instructions so the sentence can't drift from what a turn does. Derived rather than
@@ -28,4 +29,4 @@ export const promptReach = (): PromptReach => {
 
 // Joins as "A, B and C"; an empty list renders as nothing rather than a dangling "and".
 export const spokenList = (items: readonly string[]): string =>
-    items.length <= 1 ? (items[0] ?? ``) : `${items.slice(0, -1).join(`, `)} and ${items.at(-1)}`;
+    items.length <= 1 ? (items[0] ?? ``) : t(`sandbox.promptReach.listAnd`, { head: items.slice(0, -1).join(`, `), last: items.at(-1) ?? `` });

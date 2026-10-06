@@ -91,5 +91,5 @@ export const deviceConnections = (devices: readonly Device[], readAt: number): D
 export const sameMachineNote = (devices: readonly Device[], id: string): string | undefined => {
     const machine = machinesOf(devices).find((candidate) => candidate.environments.some((environment) => environment.hostId === id));
     const others = (machine?.environments ?? []).filter((environment) => environment.hostId !== undefined && environment.hostId !== id);
-    return others.length === 0 ? undefined : `one PC with ${others.map((environment) => environment.hostId).join(`, `)}`;
+    return others.length === 0 ? undefined : t(`capabilities.deviceConnections.onePcWith`, { hosts: others.map((environment) => environment.hostId).join(`, `) });
 };

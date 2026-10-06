@@ -1,5 +1,4 @@
 import { computed, ref } from "vue";
-import { plural } from "@intentic/base/format";
 import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
@@ -87,7 +86,7 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
                 title: t(`shell.notificationSources.nothingToUpload`),
                 detail:
                     (state.skipped ?? 0) > 0
-                        ? `Skipped ${plural(state.skipped ?? 0, `item`, `items`)} that couldn't be read (symlink or special file).`
+                        ? t(`shell.notificationSources.skippedUnreadable`, { count: state.skipped ?? 0 }, state.skipped ?? 0)
                         : undefined,
                 tone: `info`,
                 spin: false,
@@ -95,21 +94,21 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
         case `unchanged`:
             return {
                 title: t(`shell.notificationSources.alreadyUpToDate`),
-                detail: `Skipped ${plural(state.unchanged, `unchanged file`, `unchanged files`)}.`,
+                detail: t(`shell.notificationSources.skippedUnchanged`, { count: state.unchanged }, state.unchanged),
                 tone: `done`,
                 spin: false,
             };
         case `scanning`:
             return {
                 title: t(`shell.notificationSources.scanningDroppedFolder`),
-                detail: `${plural(state.scanned, `file`, `files`)} so far.`,
+                detail: t(`shell.notificationSources.scannedSoFar`, { count: state.scanned }, state.scanned),
                 tone: `info`,
                 spin: true,
             };
         case `uploading`:
             return { title: t(`shell.notificationSources.uploading`, { done: state.done, count: state.count }), tone: `info`, spin: true };
         case `uploaded`:
-            return { title: `Uploaded ${plural(state.count, `file`, `files`)}`, tone: `done`, spin: false };
+            return { title: t(`shell.notificationSources.uploadedFiles`, { count: state.count }, state.count), tone: `done`, spin: false };
         case `partial`:
             return {
                 title: t(`shell.notificationSources.uploadedFailed`, { done: state.done, count: state.count, failed: state.failed }),
@@ -351,20 +350,20 @@ export const startNotificationSources = (): void => {
             return {
                 title: t(`shell.notificationSources.intenticReady`, { version: update.version }),
                 detail: t(`shell.notificationSources.downloadedRestartingTakesFew`),
-                action: `Restart`,
+                action: t(`ui.action.restart`),
             };
         }
         if (update.kind === `web`) {
             return {
                 title: t(`shell.notificationSources.newVersionIntenticOut`),
                 detail: t(`shell.notificationSources.reloadToPickUp`),
-                action: `Reload`,
+                action: t(`ui.action.reload`),
             };
         }
         return {
             title: t(`shell.notificationSources.partIntenticDidNot`),
             detail: t(`shell.notificationSources.somethingFetchesGoesNever`),
-            action: `Reload`,
+            action: t(`ui.action.reload`),
         };
     };
     hold(`app-update`, () => {

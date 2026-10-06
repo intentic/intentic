@@ -228,7 +228,7 @@ const reconcileOpenFile = (currentPath: string): void => {
                 }
                 return;
             }
-            error.value = messageOr(err, `Could not load the file.`);
+            error.value = messageOr(err, t(`workspace.fileViewer.loadFailed`));
         },
     );
 };
@@ -257,7 +257,7 @@ const refreshLook = (currentPath: string): void => {
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = messageOr(err, `Could not load the file.`);
+            error.value = messageOr(err, t(`workspace.fileViewer.loadFailed`));
         },
     );
 };
@@ -336,7 +336,7 @@ watch(
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = messageOr(err, `Could not load the file.`);
+            error.value = messageOr(err, t(`workspace.fileViewer.loadFailed`));
         };
 
         if (resolution.kind === `code` || resolution.kind === `markdown`) {
@@ -409,7 +409,7 @@ const reloadFromDisk = (): void => {
             reloadNonce.value++;
         },
         (err) => {
-            error.value = messageOr(err, `Could not reload the file.`);
+            error.value = messageOr(err, t(`workspace.fileViewer.reloadFailed`));
         },
     );
 };
@@ -421,7 +421,7 @@ const download = async (): Promise<void> => {
     try {
         await downloadEntries([{ path, type: `file` }], viewScope.value);
     } catch (err) {
-        error.value = messageOr(err, `Could not download the file.`);
+        error.value = messageOr(err, t(`workspace.fileViewer.downloadFailed`));
     }
 };
 
@@ -455,16 +455,20 @@ const editableKind = computed(() => (open.value.kind === `code` || open.value.ki
 // file of the same path, possibly racing the agent's own writes to it. Off for a lossy read, whose save would write the
 // replacement characters back, and for any file but a document window's own.
 const canEdit = computed(
-    () => !readOnly && canEditFiles.value && viewAgent.value === undefined && !inArchive.value && editableKind.value && !lossy.value && writableHere(path),
+    () =>
+        !readOnly &&
+        canEditFiles.value &&
+        viewAgent.value === undefined &&
+        !inArchive.value &&
+        editableKind.value &&
+        !lossy.value &&
+        writableHere(path),
 );
 // Reason lives here, where a reader would look for edit capability.
 // Four causes: tier (checked first, outranks the rest), scope, an archive, or a document window's other file; any one
 // disables Edit. A lossy read says why in a line of its own over the text instead.
 const scopedReadOnly = computed(
-    () =>
-        !mobile.value &&
-        editableKind.value &&
-        (!canEditFiles.value || viewAgent.value !== undefined || inArchive.value || !writableHere(path)),
+    () => !mobile.value && editableKind.value && (!canEditFiles.value || viewAgent.value !== undefined || inArchive.value || !writableHere(path)),
 );
 // A look at a file this reader could edit in the Workspace: says where the caret is, rather than leaving it missing.
 const lookReadOnly = computed(() => readOnly && !mobile.value && !scopedReadOnly.value && editableKind.value && !lossy.value);
@@ -487,13 +491,11 @@ const readOnlyReason = computed((): Tip => {
     };
 });
 // The file came from the shared tree because the agent's own copy has none.
-const sharedTip = computed(
-    (): Tip => ({
-        title: t(`workspace.fileViewer.sharedVersion`),
-        rows: [{ label: words.value.Agent, value: scopeTitle.value }],
-        note: t(`workspace.fileViewer.notInItsCopy`),
-    }),
-);
+const sharedTip = computed((): Tip => ({
+    title: t(`workspace.fileViewer.sharedVersion`),
+    rows: [{ label: words.value.Agent, value: scopeTitle.value }],
+    note: t(`workspace.fileViewer.notInItsCopy`),
+}));
 // Monaco's own save chord, drawn the platform's way.
 const saveKeys = formatChord(`Mod+S`, isApplePlatform());
 // The lossy line's place: over text this viewer shows, which a big file's window is too.
@@ -556,7 +558,7 @@ const onEditorSave = (value: string): void =>
         edit.markSaved(path, value);
         // Read view shows `text`, not the buffer: adopt it too.
         text.value = value;
-    }, `Couldn't save your changes.`);
+    }, t(`workspace.fileViewer.saveFailed`));
 </script>
 
 <template>
@@ -625,9 +627,12 @@ const onEditorSave = (value: string): void =>
             >
                 <Icon :name="note.icon" class="shrink-0 text-[0.7rem]" />
                 <span class="truncate @max-4xl/tabbar:sr-only @max-sm/viewerbar:sr-only">{{ note.text }}</span>
-                <span v-if="note.count !== undefined" aria-hidden="true" class="hidden tabular-nums @max-4xl/tabbar:inline @max-sm/viewerbar:inline">{{
-                    note.count
-                }}</span>
+                <span
+                    v-if="note.count !== undefined"
+                    aria-hidden="true"
+                    class="hidden tabular-nums @max-4xl/tabbar:inline @max-sm/viewerbar:inline"
+                    >{{ note.count }}</span
+                >
             </span>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
@@ -650,7 +655,10 @@ const onEditorSave = (value: string): void =>
             <span
                 v-if="lookReadOnly"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted"
-                v-tooltip.bottom="{ title: t(`workspace.fileViewer.readOnlyHere`), note: t(`workspace.fileViewer.editIn`, { section: words.workspace }) }"
+                v-tooltip.bottom="{
+                    title: t(`workspace.fileViewer.readOnlyHere`),
+                    note: t(`workspace.fileViewer.editIn`, { section: words.workspace }),
+                }"
             >
                 <Icon name="lock" class="text-xs" />
                 <span class="max-md:hidden">{{ t(`workspace.words.readOnly`) }}</span>

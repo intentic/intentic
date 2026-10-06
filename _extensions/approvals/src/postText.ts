@@ -3,6 +3,7 @@
 // agree on the same post.
 
 import { messageLimitOf } from "@intentic/sandbox-contract/message-limits";
+import { t } from "./i18n";
 
 // Over the limit, a post doesn't post at all; absent means no known cap, so it just shows a plain count. The limits are
 // the contract's one table, the same numbers the gateways spill a reply at and the daemon refuses a direct post past.
@@ -57,11 +58,11 @@ export const destinationOf = (target: string): Destination => {
     const reddit = REDDIT_THREAD.exec(target);
     const subreddit = reddit?.[1];
     if (subreddit !== undefined) {
-        return { label: subreddit, verb: reddit?.[2] === undefined ? `reply in` : `reply to a comment in`, href: target };
+        return { label: subreddit, verb: reddit?.[2] === undefined ? t(`postText.replyIn`) : t(`postText.replyToCommentIn`), href: target };
     }
     try {
         // The host alone: a reply's path is an id and a slug, which is the part a reader gains nothing from.
-        return { label: new URL(target).hostname.replace(/^www\./, ``), verb: `reply on`, href: target };
+        return { label: new URL(target).hostname.replace(/^www\./, ``), verb: t(`postText.replyOn`), href: target };
     } catch {
         // Starts with "http" but still isn't a URL: shown as written rather than swallowed.
         return { label: target };
@@ -72,10 +73,12 @@ export const destinationOf = (target: string): Destination => {
 // as "any moment now", since by then the executor already has the post.
 export const countdownWords = (msLeft: number): string => {
     if (msLeft <= 0) {
-        return `any moment now`;
+        return t(`postText.anyMomentNow`);
     }
     const seconds = Math.ceil(msLeft / 1_000);
-    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, `0`)}s`;
+    return seconds < 60
+        ? t(`postText.seconds`, { seconds })
+        : t(`postText.minutesSeconds`, { minutes: Math.floor(seconds / 60), seconds: String(seconds % 60).padStart(2, `0`) });
 };
 
 // Character-count fold threshold, decided before paint: a screenful of body text; an ordinary post stays whole.

@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { usePoll } from "@intentic/ui/async";
 import { ref, type Ref } from "vue";
@@ -123,7 +124,7 @@ export const useRegistryWatch = ({ sandbox, row, hosted, mintedFor }: RegistryWa
                 action,
             );
         } catch {
-            status.value = `Can't reach the platform to check. Retrying…`;
+            status.value = t(`setup.useRegistryWatch.cantReachPlatform`);
         } finally {
             checking = false;
         }

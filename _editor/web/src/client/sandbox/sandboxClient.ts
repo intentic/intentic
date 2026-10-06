@@ -1,4 +1,5 @@
 import { sandboxRouteName } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { trackPerf } from "../../app/perf";
 import { CHUNK_BYTES } from "../../lib/files/uploadChunking";
@@ -18,7 +19,7 @@ const { getSessionToken, rejectSessionToken } = useSandboxSession();
 const requestTo = async (target: SandboxTarget | undefined, path: string, init?: RequestInit): Promise<Response> =>
     trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
         if (target === undefined) {
-            throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
+            throw new Error(t(`sandbox.sandboxClient.unaddressed`));
         }
         // Exempt from the headers deadline when the body streams up: its headers arrive only once the upload finishes.
         return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, { deadline: !uploadsBody(init?.body) });
@@ -70,7 +71,7 @@ const UPLOAD_STALL_MS = 60_000;
 const uploadTarget = (at: string | undefined): SandboxTarget => {
     const target = at === undefined ? currentSandboxTarget() : targetFor(at);
     if (target === undefined) {
-        throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
+        throw new Error(t(`sandbox.sandboxClient.unaddressed`));
     }
     return target;
 };
@@ -89,7 +90,7 @@ export async function sandboxUpload(
         // Refreshed per part, so a token can't expire partway through a large multi-part upload.
         let bearer = await getSessionToken(target);
         if (bearer === undefined) {
-            throw new Error(`Sign in with Google to reach your sandbox.`);
+            throw new Error(t(`sandbox.sandboxClient.signIn`));
         }
         const url = `${target.base}${path}&offset=${offset}`;
         const part = body.slice(offset, offset + CHUNK_BYTES);
@@ -131,7 +132,7 @@ const sendPart = (
         const arm = (): void => {
             clearTimeout(stall);
             stall = setTimeout(() => {
-                reject(new Error(`Upload stalled: no progress for ${UPLOAD_STALL_MS / 1000}s.`));
+                reject(new Error(t(`sandbox.sandboxClient.uploadStalled`, { seconds: UPLOAD_STALL_MS / 1000 })));
                 xhr.abort();
             }, UPLOAD_STALL_MS);
         };
@@ -158,9 +159,9 @@ const sendPart = (
                     return undefined;
                 }
             })();
-            reject(new SandboxHttpError(xhr.status, detail?.error ?? `Request failed (${xhr.status}).`));
+            reject(new SandboxHttpError(xhr.status, detail?.error ?? t(`sandbox.sandboxClient.requestFailed`, { status: xhr.status })));
         });
-        xhr.addEventListener(`error`, () => reject(new Error(`Upload failed: the sandbox was unreachable.`)));
+        xhr.addEventListener(`error`, () => reject(new Error(t(`sandbox.sandboxClient.uploadUnreachable`))));
         // Fires from the caller's abort or the stall watchdog; only the first reject on a promise ever counts.
         xhr.addEventListener(`abort`, () => reject(new DOMException(`Upload canceled`, `AbortError`)));
         arm();

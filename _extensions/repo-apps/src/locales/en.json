@@ -7,9 +7,11 @@
         "pickOneMoreTemplates": "Pick one or more templates to scaffold into this monorepo. Name each instance to run several of a kind."
     },
     "appsView": {
+        "actionFailed": "The action failed.",
         "addApp": "Add app",
         "addingAppsFollowProgress": "Adding apps: follow progress in the terminal.",
         "api": "API",
+        "healthy": "healthy",
         "libraryTests": "Library tests",
         "noAppsYetUse": "No apps yet: use \"Add app\" to scaffold one and get a live preview.",
         "noVitestProjectsFound": "No test projects found: nothing here owns a vitest.config.*, bunfig.toml or *.test.* file.",
@@ -23,9 +25,12 @@
         "runTests": "Run tests",
         "start": "Start",
         "startAll": "Start all",
+        "starting": "starting",
         "stop": "Stop",
         "stopAll": "Stop all",
+        "stopped": "stopped",
         "terminal": "Terminal",
+        "tests": "Tests",
         "web": "Web"
     },
     "dependenciesView": {

@@ -28,7 +28,7 @@ const wrongGoogleAccount = computed(
         user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
 );
 
-const title = computed(() => `No access to "${active.value?.name}"`);
+const title = computed(() => t(`sandbox.sandboxUnauthorized.noAccessTo`, { name: active.value?.name ?? `` }));
 
 // Clears both the 403 session and the Google credential, then re-establishes through Google's ACCOUNT CHOOSER —
 // which is the whole of what this button means, and the part that used to be dropped: Google answers with the

@@ -1,5 +1,6 @@
 import { sandboxScopeGuard } from "@intentic/extension-api";
 import type { TranscriptRow, TranscriptQuestion, TranscriptTool, ToolCallContent } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { track } from "../../../app/analytics";
 import type { TabFacts } from "../../chat/tabs/tabFacts";
@@ -164,32 +165,32 @@ const transcriptOf = async (conversation: TabFacts): Promise<TranscriptRow[] | u
 // them. Refuses whole if any source can't be captured completely, rather than synthesizing a silent subset.
 export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
     if (synthesizing.value) {
-        return refused(`A synthesis is already being prepared.`);
+        return refused(t(`agents.synthesizeSessions.alreadyPreparing`));
     }
     const { panes, tabs } = chatStrip.value;
     const sources = panes.map((id) => tabs.find((tab) => tab.id === id));
     if (sources.length < 2 || sources.some((source) => source === undefined)) {
-        return refused(`Open at least two conversations side by side to synthesize them.`);
+        return refused(t(`agents.synthesizeSessions.openTwo`));
     }
     const settled = sources.filter((source) => source !== undefined);
     if (settled.some((source) => source.standing === `draft`)) {
-        return refused(`Every conversation to synthesize needs at least one completed turn.`);
+        return refused(t(`agents.synthesizeSessions.needsCompletedTurn`));
     }
     if (settled.some((source) => source.standing === `starting`)) {
-        return refused(`Wait for every selected agent to finish, or stop it: before synthesizing.`);
+        return refused(t(`agents.synthesizeSessions.waitForFinish`));
     }
     synthesizing.value = true;
     // The panes are one sandbox's conversations: a switch while they are read or written stops the synthesis before
     // they land in the box switched to.
     const here = sandboxScopeGuard();
-    const moved = `The sandbox changed while the conversations were being captured, so nothing was synthesized.`;
+    const moved = t(`agents.synthesizeSessions.sandboxChanged`);
     try {
         const transcripts = await Promise.all(settled.map(transcriptOf));
         if (!here()) {
             return refused(moved);
         }
         if (transcripts.some((transcript) => transcript === undefined)) {
-            return refused(`Couldn't capture every conversation in full, so nothing was synthesized.`);
+            return refused(t(`agents.synthesizeSessions.couldntCapture`));
         }
         const refs: SourceRef[] = [];
         const attachments = settled.map((source, index) => {
@@ -210,7 +211,7 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
                 ),
             );
         } catch {
-            return refused(`Couldn't capture every conversation in full, so nothing was synthesized.`);
+            return refused(t(`agents.synthesizeSessions.couldntCapture`));
         }
         if (!here()) {
             return refused(moved);

@@ -1,6 +1,7 @@
 import type { GitChanges, RepoChanges } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { type AcrossRecord, createAcrossStore } from "../../sandbox/live/acrossSandboxes";
@@ -108,12 +109,12 @@ export const pushRow = async (row: LedgerRow): Promise<void> => {
         // Started, then followed to its verdict, so a slow hook on that box doesn't hang this request.
         const result = await usePushRun(row.repo, row.sandboxId).start();
         if (result.status !== `passed`) {
-            pushError.value = { key, reason: result.reason ?? `That push was refused.` };
+            pushError.value = { key, reason: result.reason ?? t(`workspace.changesAcross.pushRefused`) };
         }
         // Re-reads only this box; a push here doesn't change any other box's counts.
         await store.readOne(row.sandboxId);
     } catch (caught) {
-        pushError.value = { key, reason: messageOr(caught, `That push didn't work.`) };
+        pushError.value = { key, reason: messageOr(caught, t(`workspace.changesAcross.pushFailed`)) };
     } finally {
         pushing.value = undefined;
     }

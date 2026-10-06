@@ -1,5 +1,6 @@
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import {
     type AgentProvider,
     type KeyedProvider,
@@ -56,7 +57,7 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The ${translatorProviderLabel(target)} sign-in expired: start the connection again.`;
+        error.value = t(`chat.chatConnect.signInExpired`, { provider: translatorProviderLabel(target) });
         translatorConnectFlow.value = undefined;
         return;
     }
@@ -79,7 +80,7 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
         }
         if (result.status === "error") {
             translatorConnectFlow.value = undefined;
-            error.value = `The ${translatorProviderLabel(target)} sign-in failed: ${result.error}`;
+            error.value = t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: result.error });
             return;
         }
         // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
@@ -109,7 +110,7 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
         translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
         translatorPollTimer.value = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
     } catch (caught) {
-        error.value = messageOr(caught, `Could not start the subscription connection: is your sandbox online?`);
+        error.value = messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`));
     } finally {
         accountBusy.value = undefined;
     }
@@ -141,7 +142,7 @@ export const completeTranslator = async (redirectUrl: string): Promise<boolean> 
         void loadProviderModels(flow.provider);
         return true;
     } catch (caught) {
-        error.value = messageOr(caught, `That sign-in link could not be completed: copy the whole URL and try again.`);
+        error.value = messageOr(caught, t(`chat.chatConnect.linkNotCompleted`));
         return false;
     } finally {
         accountBusy.value = undefined;
@@ -228,7 +229,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The ${providerLabel(target)} sign-in expired: start the connection again.`;
+        error.value = t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) });
         cancelConnect();
         return;
     }
@@ -264,7 +265,7 @@ const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Pr
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The ${providerLabel(target)} sign-in expired: start the connection again.`;
+        error.value = t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) });
         cancelConnect();
         return;
     }
@@ -288,7 +289,7 @@ const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Pr
         }
         if (result.status === `error`) {
             settleConnect();
-            error.value = `The ${providerLabel(target)} sign-in failed: ${result.error}`;
+            error.value = t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: result.error });
             return;
         }
         // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
@@ -324,7 +325,7 @@ export const startConnect = async (variant?: string): Promise<void> => {
             // Which estate to sign in to (Z.ai sells several); absent takes the provider's default.
             body = await orRefusal(sandboxRpc.accounts.start({ provider: target as NativeProvider, variant }));
         } catch (err) {
-            error.value = messageOr(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
+            error.value = messageOr(err, t(`chat.chatConnect.connectionNotStarted`, { provider: providerLabel(target) }));
             return;
         }
         if (!current()) {
@@ -377,7 +378,7 @@ export const showActiveProvider = (): void => {
 export const completeConnect = async (pasted: string): Promise<boolean> => {
     const flow = nativeConnectFlow.value;
     if (flow === undefined || flow.flow === `device`) {
-        error.value = `Start the connection first.`;
+        error.value = t(`chat.chatConnect.startFirst`);
         return false;
     }
     accountBusy.value = flow.provider;
@@ -390,7 +391,7 @@ export const completeConnect = async (pasted: string): Promise<boolean> => {
         try {
             completed = await orRefusal(sandboxRpc.accounts.complete({ provider: flow.provider as NativeProvider, ...body }));
         } catch (err) {
-            error.value = messageOr(err, `Could not finish the ${providerLabel(flow.provider)} sign-in: is your sandbox online?`);
+            error.value = messageOr(err, t(`chat.chatConnect.signInNotFinished`, { provider: providerLabel(flow.provider) }));
             return false;
         }
         if (completed instanceof SandboxHttpError) {

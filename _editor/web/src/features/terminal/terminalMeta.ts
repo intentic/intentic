@@ -1,5 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import type { TerminalTab } from "./useTerminal";
@@ -15,14 +16,15 @@ export interface TerminalMeta {
 
 type TerminalKind = TerminalTab[`kind`];
 
-// Per kind: glyph, whether it is work (tabbed only when shown), whether it is a read-only log view, and its count noun.
+// Per kind: glyph, whether it is work (tabbed only when shown), whether it is a read-only log view, and its count
+// ("2 shells"), built when read so it follows the language.
 export const KINDS = {
-    shell: { icon: `code`, work: false, logs: false, noun: [`shell`, `shells`] },
-    panel: { icon: `code`, work: false, logs: false, noun: [`dev server`, `dev servers`] },
-    agent: { icon: `sparkles`, work: true, logs: false, noun: [`agent shell`, `agent shells`] },
-    job: { icon: `bolt`, work: true, logs: false, noun: [`job`, `jobs`] },
-    process: { icon: `cog`, work: false, logs: true, noun: undefined },
-} as const satisfies Record<TerminalKind, { icon: IconName; work: boolean; logs: boolean; noun: readonly [string, string] | undefined }>;
+    shell: { icon: `code`, work: false, logs: false, counted: (count: number) => t(`terminal.terminalMeta.shells`, { count }, count) },
+    panel: { icon: `code`, work: false, logs: false, counted: (count: number) => t(`terminal.terminalMeta.devServers`, { count }, count) },
+    agent: { icon: `sparkles`, work: true, logs: false, counted: (count: number) => t(`terminal.terminalMeta.agentShells`, { count }, count) },
+    job: { icon: `bolt`, work: true, logs: false, counted: (count: number) => t(`terminal.terminalMeta.jobs`, { count }, count) },
+    process: { icon: `cog`, work: false, logs: true, counted: undefined },
+} as const satisfies Record<TerminalKind, { icon: IconName; work: boolean; logs: boolean; counted: ((count: number) => string) | undefined }>;
 
 export const isWork = <T extends { readonly kind: TerminalKind }>(tab: T): tab is T & { readonly kind: `agent` | `job` } => KINDS[tab.kind].work;
 

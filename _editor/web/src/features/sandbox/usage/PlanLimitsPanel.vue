@@ -103,13 +103,13 @@ const barsOf = (group: PlanLimitGroup): readonly PlanLimitRow[] => group.rows.sl
 // (unread/no limits). Inline groups say nothing here, their meters are already visible below.
 const groupState = (group: PlanLimitGroup): string => {
     if (group.tightest?.percent !== undefined) {
-        return `tightest: ${formatRemaining(group.tightest.percent, group.tightest.stale)} · ${group.tightest.label}`;
+        return t(`sandbox.planLimitsPanel.tightest`, { remaining: formatRemaining(group.tightest.percent, group.tightest.stale), label: group.tightest.label });
     }
     if (group.counts.none === group.rows.length) {
-        return `publishes no limits`;
+        return t(`sandbox.planLimitsPanel.publishesNoLimits`);
     }
     if (group.counts.unread > 0) {
-        return `unread`;
+        return t(`sandbox.planLimitsPanel.unread`);
     }
     return ``;
 };
@@ -119,8 +119,10 @@ const nestedPools = (row: PlanLimitRow) => nestPools(row.pools, (pool) => pool);
 
 const barTooltip = (row: PlanLimitRow): string =>
     row.percent === undefined
-        ? `${row.label} · no reading yet`
-        : `${row.label} · ${row.binding?.label ?? ``} ${formatRemaining(row.percent, row.stale)}${row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`}`;
+        ? `${row.label} · ${t(`sandbox.planLimitsPanel.noReadingYetLower`)}`
+        : `${row.label} · ${row.binding?.label ?? ``} ${formatRemaining(row.percent, row.stale)}${
+              row.binding?.resetsAt === undefined ? `` : ` · ${t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(row.binding.resetsAt) })}`
+          }`;
 
 // attention
 
@@ -503,7 +505,7 @@ const roster = computed(() => {
                                     {{ row.percent === undefined ? `—` : remainingFigure(row.percent, row.stale) }}
                                 </td>
                                 <td class="py-1.5 pr-3">{{ row.binding?.resetsAt === undefined ? `—` : formatReset(row.binding.resetsAt) }}</td>
-                                <td class="py-1.5">{{ row.measuredAt === undefined ? `never` : formatAge(row.measuredAt) }}</td>
+                                <td class="py-1.5">{{ row.measuredAt === undefined ? t(`sandbox.planLimitsPanel.neverMeasured`) : formatAge(row.measuredAt) }}</td>
                             </tr>
                         </tbody>
                     </table>

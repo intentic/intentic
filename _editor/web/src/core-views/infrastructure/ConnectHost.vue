@@ -47,15 +47,15 @@ const commandReady = computed(() => {
 });
 const lockedReason = computed(() => {
     if (cfToken.value.trim().length === 0) {
-        return `Enter your Cloudflare API token to reveal the command.`;
+        return t(`views.connectHost.enterTokenToReveal`);
     }
     if (!cfTokenValid.value) {
-        return `The command appears once the token above looks valid.`;
+        return t(`views.connectHost.commandOnceTokenValid`);
     }
     if (!hostNameReady.value) {
-        return `Enter a host name to generate this machine's command.`;
+        return t(`views.connectHost.enterHostName`);
     }
-    return `Preparing your command…`;
+    return t(`views.connectHost.preparingCommand`);
 });
 // One command at a time; the preferred OS is a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();

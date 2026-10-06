@@ -305,7 +305,7 @@ const expandable = (item: EnvironmentItem): boolean =>
         </SkeletonSnapshot>
         <!-- Nothing drawn during the brief pre-outline delay; `loading` still decides which of the four states this is. -->
         <template v-else-if="loading" />
-        <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
+        <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: t(`sandbox.environmentContents.couldNotRead`), detail: error }" />
         <div v-else-if="groups.length === 0" v-skeleton-source="`sandbox.environment.contents`" :class="ui.emptyState(`py-8`)">
             {{ t(`sandbox.environmentContents.nothingAddedOnTop`) }}
         </div>

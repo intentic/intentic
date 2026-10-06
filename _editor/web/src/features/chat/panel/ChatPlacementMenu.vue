@@ -38,10 +38,13 @@ const settled = computed(() => conversation.registered.value);
 // updating first vs. running now is the user's call (Devices has the button).
 const detail = (runner: { online: boolean; parity: string; facts?: { cpus: number; load: number } }): string => {
     if (!runner.online) {
-        return `Offline — wake that machine to use it`;
+        return t(`chat.chatPlacementMenu.runnerOffline`);
     }
-    const load = runner.facts === undefined ? `Ready` : `${runner.facts.cpus} cores · load ${runner.facts.load.toFixed(2)}`;
-    return runner.parity === `outdated` ? `${load} · older build than this sandbox` : load;
+    const load =
+        runner.facts === undefined
+            ? t(`chat.chatPlacementMenu.runnerReady`)
+            : t(`chat.chatPlacementMenu.runnerLoad`, { cpus: runner.facts.cpus, load: runner.facts.load.toFixed(2) });
+    return runner.parity === `outdated` ? `${load} · ${t(`chat.chatPlacementMenu.runnerOutdated`)}` : load;
 };
 
 // A box that's never answered isn't offered: a turn posted to an absent daemon fails at the door.
@@ -49,17 +52,19 @@ const answering = (box: BoxFleet): boolean => box.state === `ready`;
 
 const boxDetail = (box: BoxFleet): string =>
     box.state === `ready`
-        ? `Its workspace, its accounts, its agents`
+        ? t(`chat.chatPlacementMenu.boxReady`)
         : box.state === `reading`
-          ? `Checking whether it's awake…`
-          : `Not answering — it may be asleep`;
+          ? t(`chat.chatPlacementMenu.boxReading`)
+          : t(`chat.chatPlacementMenu.boxAsleep`);
 
 // Named from the roster, not from anything stored on the conversation, so a later rename stays true.
 const placedAt = computed(() => {
     if (picked.value !== undefined) {
-        return `in “${boxNameOf.value.get(picked.value) ?? `another sandbox`}”`;
+        return t(`chat.chatPlacementMenu.placedInBox`, { name: boxNameOf.value.get(picked.value) ?? t(`chat.chatPlacementMenu.anotherSandbox`) });
     }
-    return pickedRunner.value === undefined ? `here` : `on “${pickedRunner.value}”`;
+    return pickedRunner.value === undefined
+        ? t(`chat.chatPlacementMenu.placedHere`)
+        : t(`chat.chatPlacementMenu.placedOnRunner`, { name: pickedRunner.value });
 });
 
 const place = (at: { box?: string; runner?: string }): void => {

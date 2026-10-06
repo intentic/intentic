@@ -53,8 +53,12 @@ useRowReveal(column, {
 // Provider name omitted — already said by the heading above.
 // A nested lane says which allowance holds it, and that its room waits on that one when the holder is spent.
 const laneDetail = (lane: CapacityLane, row: CapacityRow): string =>
-    `${lane.label} ${formatRemaining(lane.percent, row.stale)}${lane.resetsAt === undefined ? `` : ` (resets ${formatReset(lane.resetsAt)})`}${
-        lane.within === undefined ? `` : lane.capped ? `, unusable until ${lane.within} reopens` : `, within ${lane.within}`
+    `${lane.label} ${formatRemaining(lane.percent, row.stale)}${
+        lane.resetsAt === undefined ? `` : ` (${t(`chat.chatCapacityRail.resets`, { when: formatReset(lane.resetsAt) })})`
+    }${
+        lane.within === undefined
+            ? ``
+            : `, ${lane.capped ? t(`chat.chatCapacityRail.unusableUntil`, { name: lane.within }) : t(`chat.chatCapacityRail.within`, { name: lane.within })}`
     }`;
 
 const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
@@ -70,9 +74,9 @@ const outNote = (entry: { readonly reason: string; readonly reopensAt: number | 
 // Says what the ratio counts, which is the only place a credential held out of it is accounted for on this line.
 const countDetail = (entry: CapacityProvider): string =>
     [
-        `${entry.ready} of ${entry.total} accounts have room`,
-        ...(entry.blocked === 0 ? [] : [`${entry.blocked} more can't serve a turn at all`]),
-        ...(entry.pooled ? [`turns are spread across them automatically`] : []),
+        t(`chat.chatCapacityRail.accountsHaveRoom`, { ready: entry.ready, total: entry.total }),
+        ...(entry.blocked === 0 ? [] : [t(`chat.chatCapacityRail.moreCantServe`, { count: entry.blocked })]),
+        ...(entry.pooled ? [t(`chat.chatCapacityRail.turnsSpread`)] : []),
     ].join(` · `);
 
 // One control for age and re-measure: the age itself is the pressable label, so watching it reset is the
@@ -88,8 +92,8 @@ const remeasure = async (): Promise<void> => {
 };
 const remeasureLabel = computed(() =>
     capacity.value.measuredAt === undefined
-        ? `Measure plan limits`
-        : `Re-measure plan limits, oldest reading ${formatAge(capacity.value.measuredAt)}`,
+        ? t(`chat.pickerAccounts.measurePlanLimits`)
+        : t(`chat.chatCapacityRail.remeasureOldest`, { age: formatAge(capacity.value.measuredAt) }),
 );
 
 // Readings a re-read could not reach: the provider holding reads off, or refusing them ("Verify your account to
@@ -102,13 +106,18 @@ const staleNote = computed((): { readonly count: number; readonly detail: string
         ...(held === undefined
             ? []
             : [
-                  `Can't re-read ${held.labels.length === held.count ? held.labels.join(`, `) : plural(held.count)} yet, retry ${formatReset(held.resumesAt)}`,
+                  t(`chat.chatCapacityRail.cantReReadYet`, {
+                      who: held.labels.length === held.count ? held.labels.join(`, `) : plural(held.count),
+                      when: formatReset(held.resumesAt),
+                  }),
               ]),
         ...capacity.value.unread.map((entry: CapacityUnread) =>
             [
-                `Can't re-read ${entry.count <= 2 && entry.labels.length === entry.count ? entry.labels.join(`, `) : plural(entry.count)}`,
+                t(`chat.chatCapacityRail.cantReRead`, {
+                    who: entry.count <= 2 && entry.labels.length === entry.count ? entry.labels.join(`, `) : plural(entry.count),
+                }),
                 entry.reason.replace(/\.$/, ``),
-                ...(entry.lastReadAt === undefined ? [] : [`last read ${formatAge(entry.lastReadAt)}`]),
+                ...(entry.lastReadAt === undefined ? [] : [t(`chat.chatCapacityRail.lastReadAge`, { age: formatAge(entry.lastReadAt) })]),
             ].join(` · `),
         ),
     ];
@@ -116,7 +125,7 @@ const staleNote = computed((): { readonly count: number; readonly detail: string
     return lines.length === 0 ? undefined : { count, detail: lines.join(`. `) };
 });
 
-const plural = (count: number): string => `${count} ${count === 1 ? `account` : `accounts`}`;
+const plural = (count: number): string => t(`chat.chatCapacityRail.accountCount`, { count }, count);
 
 // Who a row of the hover card means: the names while there are few enough to read, else how many.
 const whoOf = (labels: readonly string[], count: number): string | number => (labels.length === count && count <= 2 ? labels.join(`, `) : count);

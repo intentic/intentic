@@ -25,14 +25,29 @@ export const DESTRUCTIVE_VERB = `remove` satisfies SandboxVerb;
 
 // What each verb is called on the button. `logs` is labelled by its caller, since it says which way the
 // toggle goes; `resources` gets an ellipsis, the menu convention for "opens a form" rather than acting.
-export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {
-    start: `Start`,
-    stop: `Stop`,
-    restart: `Restart`,
-    update: `Update`,
-    rollback: `Roll back`,
-    resources: `Resources…`,
-    remove: `Remove`,
+// Getters, so each read says the word in the language on screen now rather than the one the page booted in.
+export const VERB_LABEL: Readonly<Record<Exclude<SandboxVerb, `logs`>, string>> = {
+    get start() {
+        return t(`ui.action.start`);
+    },
+    get stop() {
+        return t(`ui.action.stop`);
+    },
+    get restart() {
+        return t(`ui.action.restart`);
+    },
+    get update() {
+        return t(`ui.action.update`);
+    },
+    get rollback() {
+        return t(`ui.sandboxSandboxVerbs.rollBack`);
+    },
+    get resources() {
+        return t(`ui.sandboxSandboxVerbs.resources`);
+    },
+    get remove() {
+        return t(`ui.action.remove`);
+    },
 };
 
 // One place, since the two apps used to ask differently about the same thing. Only the three hard- or
@@ -62,17 +77,17 @@ export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): SandboxVerbP
     switch (verb) {
         case `remove`:
             return {
-                header: `Remove ${name}?`,
+                header: t(`ui.sandboxSandboxVerbs.removeHeader`, { name }),
                 body: t(`ui.sandboxSandboxVerbs.deletesSandboxEverythingIn`),
             };
         case `update`:
             return {
-                header: `Update ${name}?`,
+                header: t(`ui.sandboxSandboxVerbs.updateHeader`, { name }),
                 body: t(`ui.sandboxSandboxVerbs.sandboxRestartsOntoNewest`),
             };
         case `rollback`:
             return {
-                header: `Roll ${name} back?`,
+                header: t(`ui.sandboxSandboxVerbs.rollBackHeader`, { name }),
                 body: t(`ui.sandboxSandboxVerbs.sandboxRestartsOntoImage`),
             };
         default:

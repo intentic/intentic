@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityKind, HostSummary, PhoneSummary, WebExtSummary, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
@@ -136,7 +137,7 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
                 const { session } = await sandboxRpc.capabilities.login({ id });
                 useTerminalPanel().openFocused(session);
             } catch (caught) {
-                error.value = noticeFrom(caught, `Sign-in could not start.`);
+                error.value = noticeFrom(caught, t(`capabilities.capabilityPairing.signInCouldNotStart`));
             }
         },
         // Which of the three pairing dialogs a row's Connect means; the row itself draws one button for every kind.
@@ -147,7 +148,7 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
                 await (entry.kind === `webext` ? browsers.revoke(id) : entry.kind === `phone` ? phones.revoke(id) : hosts.revoke(id));
             } catch (caught) {
                 // A refused revoke leaves the access in place; the row must not read as removed.
-                error.value = noticeFrom(caught, `Access could not be removed.`);
+                error.value = noticeFrom(caught, t(`capabilities.capabilityPairing.accessNotRemoved`));
             }
             void refetch();
         },

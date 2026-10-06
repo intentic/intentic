@@ -46,11 +46,17 @@
         },
         "title": "{branch} is failing"
     },
+    "pipelineDag": {
+        "step": "Step {n}"
+    },
     "pipelineDagGraph": {
         "expand": "Expand",
         "fit": "Fit",
         "fitAll": "Fit all",
         "fullScreen": "Full screen"
+    },
+    "pipelineGraph": {
+        "jobs": "{count} job | {count} jobs"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "An agent is already working on {branch}, started from run #{runId} — open it",
@@ -85,7 +91,20 @@
             "ready": "Review, then land",
             "waiting": "Allowance spent",
             "working": "Open to watch"
-        }
+        },
+        "attemptWord": "attempt {n}",
+        "attemptSummary": "Attempt {n}",
+        "filesOnBranch": "{count} file on its branch | {count} files on its branch",
+        "files": "{count} file | {count} files",
+        "age": {
+            "days": "{n}d",
+            "hours": "{n}h",
+            "minutes": "{n}m",
+            "underMinute": "<1m"
+        },
+        "startedAgo": "started {ago}",
+        "fixAria": "Fix agent: {state} — open the conversation",
+        "fixAriaFacts": "Fix agent: {state}, {facts} — open the conversation"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Loading pipelines"
@@ -114,6 +133,30 @@
         "openOn": "Open on {forge}",
         "run": "Run {number}",
         "unreadable": "This tab doesn't name a run."
+    },
+    "statusVisual": {
+        "minutesSeconds": "{minutes}m {seconds}s",
+        "seconds": "{seconds}s",
+        "status": {
+            "canceled": "canceled",
+            "failed": "failed",
+            "queued": "queued",
+            "running": "running",
+            "skipped": "skipped",
+            "success": "passed"
+        },
+        "trigger": {
+            "api": "API",
+            "dispatch": "Dispatch",
+            "manual": "Manual",
+            "mergeRequest": "Merge request",
+            "pullRequest": "Pull request",
+            "release": "Release",
+            "scheduled": "Scheduled",
+            "tag": "Tag",
+            "trigger": "Trigger",
+            "upstream": "Upstream"
+        }
     },
     "tip": {
         "attempt": "Attempt",

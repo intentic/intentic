@@ -388,7 +388,7 @@ export const useComposerSend = (host: SendHost) => {
             return refused === undefined ? sendHintFor(intent.value, words.value) : { title: refused, tone: `warn` };
         }),
         // Offered for every live turn, a parked one included, naming what goes with it there.
-        stopLabel: computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`)),
+        stopLabel: computed(() => (awaitingDecision.value ? t(`chat.composerSend.stopTheTurn`) : t(`chat.composerSend.stopGenerating`))),
         stopHint: computed((): TooltipValue => {
             if (awaitingDecision.value) {
                 return { title: t(`chat.composerIntent.stopTurn`), note: t(`chat.composerIntent.discardsRequest`) };

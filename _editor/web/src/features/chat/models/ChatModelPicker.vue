@@ -73,17 +73,18 @@ const pick = (entry: PickerEntry): void => {
 const limitations = computed(() => limitationsOf(capabilities.value));
 
 // Sentence per reason the harness can give; an unrecognized one still shows the raw word verbatim.
-const FAST_MODE_REASONS: Record<string, string> = {
-    free: `Fast speed needs a paid plan.`,
-    preference: `Fast speed is switched off in this account's Claude settings.`,
-    extra_usage_disabled: `Fast speed needs extra usage enabled on this account.`,
-    model_not_allowed: `This model doesn't offer fast speed.`,
-    not_first_party: `Fast speed isn't available on a routed endpoint.`,
-    disabled_by_env: `Fast speed is disabled by this sandbox's environment.`,
-    sdk_opt_in_required: `The harness declined the fast-speed request.`,
-    network_error: `Couldn't reach Anthropic to confirm fast speed.`,
-    pending: `Still confirming fast speed.`,
-};
+// Built when read, so a switched language reaches it.
+const fastModeReasons = (): Record<string, string> => ({
+    free: t(`chat.chatModelPicker.fastNeedsPaidPlan`),
+    preference: t(`chat.chatModelPicker.fastSwitchedOff`),
+    extra_usage_disabled: t(`chat.chatModelPicker.fastNeedsExtraUsage`),
+    model_not_allowed: t(`chat.chatModelPicker.fastModelNotAllowed`),
+    not_first_party: t(`chat.chatModelPicker.fastNotFirstParty`),
+    disabled_by_env: t(`chat.chatModelPicker.fastDisabledByEnv`),
+    sdk_opt_in_required: t(`chat.chatModelPicker.fastHarnessDeclined`),
+    network_error: t(`chat.chatModelPicker.fastNetworkError`),
+    pending: t(`chat.chatModelPicker.fastPending`),
+});
 
 // Shown only when the answer disagrees with the ask: cooldown, a refusal with reason, or served without asking.
 const fastSpeedNotice = computed<string | undefined>(() => {
@@ -92,17 +93,17 @@ const fastSpeedNotice = computed<string | undefined>(() => {
         return undefined;
     }
     if (state.state === `cooldown`) {
-        return `Fast speed is rate-limited right now: turns run at standard speed until it resets.`;
+        return t(`chat.chatModelPicker.fastCooldown`);
     }
     if (state.state === `on`) {
-        return fast.value ? undefined : `Ran at fast speed, this account has fast mode switched on by default.`;
+        return fast.value ? undefined : t(`chat.chatModelPicker.fastByDefault`);
     }
     if (!fast.value) {
         return undefined;
     }
     return state.reason === undefined
-        ? `The last turn ran at standard speed.`
-        : (FAST_MODE_REASONS[state.reason] ?? `The last turn ran at standard speed (${state.reason}).`);
+        ? t(`chat.chatModelPicker.ranStandard`)
+        : (fastModeReasons()[state.reason] ?? t(`chat.chatModelPicker.ranStandardBecause`, { reason: state.reason }));
 });
 
 // Whether the footer earns its own border and padding; prevents a rule drawn above an otherwise-empty footer.

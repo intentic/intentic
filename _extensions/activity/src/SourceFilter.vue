@@ -24,19 +24,24 @@ const SOURCE_ICONS: Readonly<Record<string, IconName>> = {
 const iconOf = (key: string): IconName => SOURCE_ICONS[key] ?? `comments`;
 
 // `idle` is deliberate (nothing asked it to connect), not a fault; `disconnected` is. `ready` shows nothing.
-const GATEWAY_WORDS: Readonly<Record<NonNullable<Source["gateway"]>, string | undefined>> = {
+// Built when read, so the words follow the language on screen.
+const gatewayWords = (): Readonly<Record<NonNullable<Source["gateway"]>, string | undefined>> => ({
     ready: undefined,
-    connecting: `connecting…`,
+    connecting: t(`sourceFilter.gateway.connecting`),
     // Not "connecting": nothing resolves by waiting, someone has to type a code shown elsewhere.
-    pairing: `waiting to be linked`,
-    disconnected: `not connected`,
-    idle: `idle`,
-};
+    pairing: t(`sourceFilter.gateway.pairing`),
+    disconnected: t(`sourceFilter.gateway.disconnected`),
+    idle: t(`sourceFilter.gateway.idle`),
+});
 
 // Episode count plus whatever's wrong; built from parts so a healthy source reads as a bare number, not padded with
 // empty separators.
 const describe = (source: Source): string =>
-    [String(source.episodes), source.failed > 0 ? `${source.failed} failed` : undefined, GATEWAY_WORDS[source.gateway ?? `ready`]]
+    [
+        String(source.episodes),
+        source.failed > 0 ? t(`sourceFilter.failed`, { count: source.failed }, source.failed) : undefined,
+        gatewayWords()[source.gateway ?? `ready`],
+    ]
         .filter((part) => part !== undefined)
         .join(` · `);
 
@@ -47,7 +52,7 @@ const groups = computed<PickerOptions<string>>(() => [
             {
                 value: ``,
                 label: t(`sourceFilter.allSources`),
-                description: failed > 0 ? `${total} · ${failed} failed` : String(total),
+                description: failed > 0 ? `${total} · ${t(`sourceFilter.failed`, { count: failed }, failed)}` : String(total),
                 icon: `wave-pulse` as IconName,
             },
         ],

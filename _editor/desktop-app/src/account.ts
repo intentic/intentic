@@ -1,4 +1,5 @@
 import type { User } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { accountOfSession, refusalOf } from "@intentic/web/local-host";
 import { type AccountAnswer, type AccountAsk, accountRelay } from "./desktop";
 
@@ -16,14 +17,14 @@ const answered = (answer: AccountAnswer, otherwise: string): void => {
 
 export const readAccount = async (relay: Relay = accountRelay): Promise<User | null> => {
     const answer = await relay({ method: `GET`, path: `/api/auth/get-session` });
-    answered(answer, `Couldn't check your session.`);
+    answered(answer, t(`desktop.account.sessionCheckFailed`));
     return accountOfSession(answer.body);
 };
 
 export const updateAccount = async (change: { readonly name?: string; readonly image?: string }, relay: Relay = accountRelay): Promise<void> => {
-    answered(await relay({ method: `POST`, path: `/api/auth/update-user`, body: JSON.stringify(change) }), `Profile update failed.`);
+    answered(await relay({ method: `POST`, path: `/api/auth/update-user`, body: JSON.stringify(change) }), t(`desktop.account.profileUpdateFailed`));
 };
 
 export const signOutAccount = async (relay: Relay = accountRelay): Promise<void> => {
-    answered(await relay({ method: `POST`, path: `/api/auth/sign-out`, body: `{}` }), `Sign out failed.`);
+    answered(await relay({ method: `POST`, path: `/api/auth/sign-out`, body: `{}` }), t(`desktop.account.signOutFailed`));
 };

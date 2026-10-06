@@ -19,7 +19,8 @@ const reached = computed(() => composition.segments.find((segment) => segment.ki
 // Split from the residual so "removed" and "left" read as two claims; order is preserved from compositionOf.
 const removed = computed(() => composition.segments.filter((segment) => segment.kind === `saved`));
 
-const tooltipFor = (label: string, tokens: number): string => `${label} · ~${formatCompact(tokens)} tokens · ${Math.round(share(tokens))}% of raw`;
+const tooltipFor = (label: string, tokens: number): string =>
+    t(`sandbox.savingsStackBar.segmentTooltip`, { label, tokens: formatCompact(tokens), pct: Math.round(share(tokens)) });
 </script>
 
 <template>

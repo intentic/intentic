@@ -7,6 +7,7 @@ import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { t } from "@intentic/ui/i18n";
 
 // Live tunnels and disks: state is read back from the OS, so a link the agent opens or drops outside the UI shows up.
 
@@ -20,10 +21,11 @@ export type LinkKind = keyof LinkOf;
 const TRANSIENT_POLL_MS = 2000;
 const STEADY_POLL_MS = 15_000;
 
-const OPENING: { readonly [K in LinkKind]: { readonly refused: string; readonly failed: string } } = {
-    vpn: { refused: `Could not connect the VPN`, failed: `The VPN could not connect.` },
-    netdisk: { refused: `Could not mount the disk`, failed: `The disk could not be mounted.` },
-};
+// Built when read, so the words follow the language on screen.
+const linkWords = (kind: LinkKind, status?: number): { readonly refused: string; readonly failed: string } =>
+    kind === `vpn`
+        ? { refused: t(`sandbox.useLiveLinks.vpnRefused`, { status: String(status) }), failed: t(`sandbox.useLiveLinks.vpnFailed`) }
+        : { refused: t(`sandbox.useLiveLinks.diskRefused`, { status: String(status) }), failed: t(`sandbox.useLiveLinks.diskFailed`) };
 
 // Parses an exported FortiClient config into addable connections; nothing is stored until the capability add.
 export const importForticlient = async (xml: string): Promise<ForticlientConnection[]> =>
@@ -59,10 +61,9 @@ export function useLiveLinks<K extends LinkKind>(
 
     // Throws the daemon's own message on an error frame: a refused password or certificate needs reading, not a toast.
     const open = async (id: string, onLine?: (message: string) => void, otp?: string): Promise<void> => {
-        const words = OPENING[kind];
         const opening = kind === `vpn` ? sandboxRpc.vpn.connect({ id, ...(otp === undefined || otp === `` ? {} : { otp }) }) : sandboxRpc.netdisk.mount({ id });
         const lines = await opening.catch((failure: unknown) => {
-            throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? `${words.refused} (${failure.status}).`) : failure;
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? linkWords(kind, failure.status).refused) : failure;
         });
         try {
             for await (const line of readIntenticLines(lines)) {
@@ -71,7 +72,7 @@ export function useLiveLinks<K extends LinkKind>(
                     onLine?.(message);
                 }
                 if (line[`kind`] === `error`) {
-                    throw new Error(typeof message === `string` ? message : words.failed);
+                    throw new Error(typeof message === `string` ? message : linkWords(kind).failed);
                 }
             }
         } finally {

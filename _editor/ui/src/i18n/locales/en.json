@@ -73,6 +73,8 @@
         "thisRunOnly": "This run only"
     },
     "code": {
+        "copyCode": "Copy code",
+        "copyLangCode": "Copy {lang} code",
         "showAll": "Show all"
     },
     "colorPicker": {
@@ -95,6 +97,8 @@
         "more": "…and {count} more"
     },
     "deviceAgent": {
+        "agentStalled": "Agent stalled — what is below may be out of date.",
+        "agentStopped": "Agent stopped — nothing reaches its folders or ports.",
         "commands": "Commands",
         "device": "Device",
         "folders": "Folders",
@@ -103,7 +107,12 @@
         "oneProcess": "One process",
         "ports": "Ports",
         "restartAgent": "Restart agent",
-        "roundsStopped": "Rounds stopped"
+        "roundsStopped": "Rounds stopped",
+        "running": "running",
+        "servingBuild": "Serving {running}, {installed} installed — a restart picks it up.",
+        "servingOlderBuild": "Serving a build older than the {installed} installed — a restart picks it up.",
+        "stalled": "stalled",
+        "stopped": "stopped"
     },
     "deviceAgentGroup": {
         "agent": "Agent",
@@ -154,7 +163,38 @@
         "tunnelOff": "tunnel off",
         "idle": "Inactive on this computer",
         "idleHint": "Sandboxes that run on other computers, or no longer exist, whose files and ports don't reach this one now: their syncing is paused or stopped. Unpair or remove them from their ⋯ menu.",
-        "notSyncing": "not syncing"
+        "notSyncing": "not syncing",
+        "cpuCount": "{count} CPU | {count} CPUs",
+        "privileged": "privileged",
+        "changesOnRestart": "changes on restart",
+        "notBackedUp": "not backed up",
+        "createdOnDevice": "created on this device",
+        "changedOnDevice": "changed on this device",
+        "deletedOnDevice": "deleted on this device",
+        "buildOutputOnDevice": "build output left on this device",
+        "createdInSandbox": "created in the sandbox",
+        "changedInSandbox": "changed in the sandbox",
+        "deletedInSandbox": "deleted in the sandbox",
+        "buildOutputInSandbox": "build output left in the sandbox",
+        "folderItself": "the folder itself",
+        "derivedLead": "One directory the sandbox deleted is still here, held open by build output this device never syncs (node_modules, dist, a build cache). Nothing of yours is in it: clearing it lets that deletion land. | {count} directories the sandbox deleted are still here, held open by build output this device never syncs (node_modules, dist, a build cache). Nothing of yours is in them: clearing it lets those deletions land.",
+        "disputedLead": "One path changed both on this device and in the sandbox since they last agreed, so neither copy was overwritten and it has stopped syncing. Make the two copies match — same contents, or gone on both sides — and syncing resumes on its own. | {count} paths changed both on this device and in the sandbox since they last agreed, so neither copy was overwritten and they have stopped syncing. Make the two copies match — same contents, or gone on both sides — and syncing resumes on its own.",
+        "derivedAndDisputedLead": "{lead} The other one is a real disagreement: both ends hold their own copy. | {lead} The other {count} are real disagreements: both ends hold their own copy.",
+        "portCount": "{count} port | {count} ports",
+        "portsBusyHere": "{count} port busy here | {count} ports busy here",
+        "portsLeftAlone": "{count} port left alone | {count} ports left alone",
+        "portsTakenByOther": "{count} port taken by another sandbox | {count} ports taken by another sandbox",
+        "portsOnly": "ports only",
+        "off": "off",
+        "portsOnLocalhost": "{count} port on localhost: {numbers} | {count} ports on localhost: {numbers}",
+        "busyCount": "{count} busy",
+        "fileSyncingPaused": "file syncing paused",
+        "filesSyncHere": "files sync here",
+        "adoptedFrom": "looked after from here: {side} went quiet",
+        "keptBy": "kept by {side} on this computer",
+        "portLeftAlone": "not on localhost: left alone on purpose",
+        "portBusy": "not on localhost: another program here already uses it",
+        "portHeldBy": "not on localhost: {holder} has it"
     },
     "imageView": {
         "actualSize": "Actual size",
@@ -171,6 +211,7 @@
         "zoomOut2": "Zoom out"
     },
     "inlineRename": {
+        "couldntRename": "Couldn't rename this.",
         "couldntSaveName": "Couldn't save that name.",
         "unnamed": "Unnamed"
     },
@@ -179,7 +220,10 @@
     },
     "markdownDocument": {
         "document": "Document",
-        "overLimit": "{over} character over the {max}-character limit | {over} characters over the {max}-character limit"
+        "notSavedYet": "Not saved yet",
+        "overLimit": "{over} character over the {max}-character limit | {over} characters over the {max}-character limit",
+        "saved": "Saved",
+        "unsaved": "Unsaved"
     },
     "markdownDocumentSurface": {
         "document": "Document",
@@ -226,16 +270,28 @@
         "cores": "cores",
         "cpuCapInCores": "CPU cap in cores",
         "cpus": "CPUs",
+        "cpusAtLeast": "At least {min} CPUs: a sandbox needs a core to run on.",
+        "cpusAtMost": "At most {max} CPUs on this computer: that is every core its engine has.",
         "cpusWhole": "Whole CPUs, {bounds} on this computer. Empty is no limit: every core it has.",
+        "cpusWholeOnly": "Whole CPUs only.",
         "default": "default",
         "defaultIs": "default: {value}",
+        "defaultMemory": "default memory",
+        "everyCpu": "every CPU",
         "fullAccessToComputers": "Full access to this computer's devices and kernel, the way a nested Docker engine needs. Only for a tool that cannot run without it.",
         "gib": "GiB",
         "gpu": "GPU",
+        "locked": "Your approved environment requires this, so it can't be turned off here.",
         "memory": "Memory",
+        "memoryAtLeast": "At least {min} GiB: below that the sandbox's own toolchain stops fitting.",
+        "memoryAtMost": "At most {max} GiB on this computer.",
         "memoryCapInGib": "Memory cap in GiB",
+        "memoryGib": "{count} GiB memory",
         "memoryWhole": "Whole GiB, at least {min}. Empty is the default: everything this computer has beyond what it keeps for itself.",
         "memoryWholeOf": "Whole GiB, at least {min}. Docker on this computer has {engine} GiB, so a higher cap is no cap at all. Empty is the default: everything it has beyond what it keeps for itself.",
+        "memoryWholeOnly": "Whole GiB only.",
+        "noGpu": "no GPU",
+        "notPrivileged": "not privileged",
         "passComputersNvidiaGpus": "Pass this computer's NVIDIA GPUs into the sandbox: the driver rides in with them.",
         "passGpuThrough": "Pass the GPU through",
         "privileged": "Privileged",
@@ -254,7 +310,14 @@
         "rollBackTo": "Roll back to {version}",
         "versionBefore": "the version before this one",
         "rollBackToHeader": "Roll {name} back to {version}?",
-        "sandboxRestartsOntoVersion": "The sandbox restarts onto {version}, an older version this machine kept. Its files are kept."
+        "sandboxRestartsOntoVersion": "The sandbox restarts onto {version}, an older version this machine kept. Its files are kept.",
+        "rollBack": "Roll back",
+        "resources": "Resources…",
+        "removeHeader": "Remove {name}?",
+        "updateHeader": "Update {name}?",
+        "rollBackHeader": "Roll {name} back?",
+        "hideLogs": "Hide logs",
+        "logs": "Logs"
     },
     "searchBar": {
         "aa": "Aa",
@@ -265,8 +328,15 @@
     },
     "timeWindow": {
         "all": "All",
+        "day": "24h",
+        "hour": "1h",
+        "inLastDay": "in the last 24 hours",
+        "inLastHour": "in the last hour",
+        "inLastWeek": "in the last 7 days",
+        "onRecord": "on record",
         "todayAt": "{time} today",
-        "tomorrowAt": "{time} tomorrow"
+        "tomorrowAt": "{time} tomorrow",
+        "week": "7d"
     },
     "useOsPreference": {
         "linuxMacos": "Linux / macOS",
@@ -280,7 +350,8 @@
         "loading": "Loading…",
         "working": "Working…",
         "reading": "Reading…",
-        "sending": "Sending…"
+        "sending": "Sending…",
+        "saving": "Saving…"
     },
     "keys": {
         "enter": "Enter",
@@ -288,5 +359,59 @@
     },
     "dagEditor": {
         "fitGraph": "Fit graph"
+    },
+    "fileFormat": {
+        "aacAudio": "AAC audio",
+        "aiffAudio": "AIFF audio",
+        "astroPage": "Astro page",
+        "audiobook": "Audiobook",
+        "avifPicture": "AVIF picture",
+        "cHeader": "C header",
+        "excelSpreadsheet": "Excel spreadsheet",
+        "flacAudio": "FLAC audio",
+        "flashVideo": "Flash video",
+        "gifPicture": "GIF picture",
+        "gzipArchive": "Gzip archive",
+        "icon": "Icon",
+        "jpegPicture": "JPEG picture",
+        "lockfile": "Lockfile",
+        "matroskaVideo": "Matroska video",
+        "mp3Audio": "MP3 audio",
+        "mp4Video": "MP4 video",
+        "mpegVideo": "MPEG video",
+        "oggAudio": "Ogg audio",
+        "openTypeFont": "OpenType font",
+        "pdfDocument": "PDF document",
+        "plainText": "Plain text",
+        "pngPicture": "PNG picture",
+        "powerPointDeck": "PowerPoint deck",
+        "powerShellScript": "PowerShell script",
+        "prismaSchema": "Prisma schema",
+        "quickTimeVideo": "QuickTime video",
+        "rarArchive": "RAR archive",
+        "sevenZipArchive": "7-Zip archive",
+        "shellScript": "Shell script",
+        "styleSheet": "Style sheet",
+        "svelteComponent": "Svelte component",
+        "svgDrawing": "SVG drawing",
+        "tarArchive": "Tar archive",
+        "trueTypeFont": "TrueType font",
+        "vueComponent": "Vue component",
+        "wavAudio": "WAV audio",
+        "webFont": "Web font",
+        "webPage": "Web page",
+        "webmVideo": "WebM video",
+        "webpPicture": "WebP picture",
+        "windowsMediaAudio": "Windows Media audio",
+        "wordDocument": "Word document",
+        "zipArchive": "ZIP archive"
+    },
+    "portPreview": {
+        "failed": "Forwarding port {port} failed.",
+        "forwarding": "Forwarding port {port} from your sandbox…",
+        "lapsed": "The forward for port {port} has lapsed: re-open the preview from the Ports view.",
+        "noPublicHostname": "This sandbox has no public preview hostname, so ports can't be previewed from the browser.",
+        "unreachable": "{url} doesn't reach this sandbox: the address may still be propagating, or this sandbox publishes no preview hostnames. Close this tab and try again.",
+        "waitingFor": "Waiting for {url} to come up…"
     }
 }

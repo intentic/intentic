@@ -39,7 +39,7 @@ watch(
         try {
             plan.value = await removalPlan(id);
         } catch (error) {
-            failure.value = messageOr(error, `Couldn't work out what removing this would take away.`);
+            failure.value = messageOr(error, t(`sandbox.extensionRemoveDialog.couldntWorkOut`));
         }
     },
     { immediate: true },
@@ -57,12 +57,19 @@ const surfaces = computed(() =>
 
 // What removal does not reach at once, for the same reason the row states it before a switch-off: an agent's tools are
 // rebuilt per turn and the image only at a rebuild, so "removed" is true of different things at different moments.
-const DEFERRED: Record<string, string> = {
-    agent: `its skills, hooks and MCP servers leave the agent from the next turn`,
-    bin: `its CLIs leave the agent's PATH from the next turn`,
-    environment: `what it baked into the sandbox image is gone only after the next environment rebuild`,
+const deferredNote = (kind: string): string[] => {
+    switch (kind) {
+        case `agent`:
+            return [t(`sandbox.extensionRemoveDialog.deferredAgent`)];
+        case `bin`:
+            return [t(`sandbox.extensionRemoveDialog.deferredBin`)];
+        case `environment`:
+            return [t(`sandbox.extensionRemoveDialog.deferredEnvironment`)];
+        default:
+            return [];
+    }
 };
-const deferred = computed(() => Object.keys(extension?.manifest.contributes ?? {}).flatMap((kind) => DEFERRED[kind] ?? []));
+const deferred = computed(() => Object.keys(extension?.manifest.contributes ?? {}).flatMap(deferredNote));
 
 // Credentials are counted rather than listed per connection: the count is the consequence (you will be entering these
 // again), the field names are not.
@@ -76,19 +83,17 @@ const credentialsLost = computed(() => credentials.value + secretSettings.value)
 // mustaches renders as a space and puts one in front of the comma.
 const settingsLine = computed(() => {
     const settings = plan.value?.settings ?? [];
-    const noun = settings.length === 1 ? `setting you entered` : `settings you entered`;
     const keys = settings.map((setting) => setting.key).join(`, `);
-    return { lead: `${settings.length} ${noun}`, keys };
+    return { lead: t(`sandbox.extensionRemoveDialog.settingsEntered`, { count: settings.length }, settings.length), keys };
 });
 const secretsAside = computed(() =>
     secretSettings.value === 0
         ? undefined
-        : `, ${secretSettings.value} of them ${secretSettings.value === 1 ? `a stored credential` : `stored credentials`}`,
+        : `, ${t(`sandbox.extensionRemoveDialog.ofThemCredentials`, { count: secretSettings.value }, secretSettings.value)}`,
 );
 const processesLine = computed(() => {
     const processes = plan.value?.processes ?? [];
-    const subject = processes.length === 1 ? `a background service stops now` : `${processes.length} background services stop now`;
-    return `${subject}: ${processes.join(`, `)}`;
+    return t(`sandbox.extensionRemoveDialog.servicesStop`, { count: processes.length, names: processes.join(`, `) }, processes.length);
 });
 </script>
 
@@ -108,12 +113,12 @@ const processesLine = computed(() => {
             </SkeletonSnapshot>
         </div>
 
-        <Notice v-else-if="failure" :of="{ tone: `danger`, title: `Couldn't read what this would remove.`, detail: failure }" />
+        <Notice v-else-if="failure" :of="{ tone: `danger`, title: t(`sandbox.extensionRemoveDialog.couldntRead`), detail: failure }" />
 
         <div v-else-if="plan" v-skeleton-source="`sandbox.extensions.remove`" class="flex flex-col gap-4">
             <!-- Refusals are shown, not hidden behind a missing button: the row hides the affordance, but a plan read
                  while an image changed underneath still has to say why. -->
-            <Notice v-if="plan.blocked" :of="{ tone: `warning`, title: `This one can't be removed.`, detail: plan.blocked }" />
+            <Notice v-if="plan.blocked" :of="{ tone: `warning`, title: t(`sandbox.extensionRemoveDialog.cantBeRemoved`), detail: plan.blocked }" />
 
             <p class="text-sm text-content">
                 v{{ plan.version }} ·

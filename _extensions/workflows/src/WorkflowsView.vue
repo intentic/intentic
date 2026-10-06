@@ -29,7 +29,7 @@ import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPage from "./WorkflowRunPage.vue";
 import { host } from "./host";
 import { workflowTemplates, type WorkflowTemplate } from "./templates";
-import { stepTone } from "./graph/workflowDag";
+import { runStateLabel, stepTone } from "./graph/workflowDag";
 import { loopIdFrom, useLoopDesigns } from "./useLoopDesigns";
 import { useWorkflows } from "./useWorkflows";
 import { t } from "./i18n.js";
@@ -96,7 +96,7 @@ const fromTemplate = (template: WorkflowTemplate): void => openDraft({ ...templa
 const blank = (): void =>
     openDraft({
         id: mintWorkflowId(),
-        name: `New workflow`,
+        name: t(`workflowsView.newWorkflow`),
         // No goal or prompt, so a blank workflow is runnable the moment it's named.
         steps: [
             {
@@ -141,7 +141,7 @@ const removeWorkflow = async (): Promise<void> => {
         await remove.mutateAsync(id);
         confirmRemoveId.value = undefined;
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `The workflow could not be removed.`;
+        actionError.value = error instanceof Error ? error.message : t(`workflowsView.couldntRemoveWorkflow`);
     }
 };
 
@@ -186,7 +186,7 @@ const persistLoop = async (fields: Omit<LoopDesign, "id">): Promise<void> => {
         await saveLoop.mutateAsync({ design, create: existing === undefined });
         loopFormOpen.value = false;
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `The loop could not be saved.`;
+        actionError.value = error instanceof Error ? error.message : t(`workflowsView.couldntSaveLoop`);
     }
 };
 
@@ -200,7 +200,7 @@ const deleteLoop = async (): Promise<void> => {
         await removeLoop.mutateAsync(id);
         confirmRemoveLoopId.value = undefined;
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `The loop could not be removed.`;
+        actionError.value = error instanceof Error ? error.message : t(`workflowsView.couldntRemoveLoop`);
     }
 };
 
@@ -212,7 +212,12 @@ const spentOn = (run: WorkflowRun): number => run.steps.reduce((total, step) => 
 
 // Progress and cost, the two questions about a run you weren't watching; when it ran gets its own column instead.
 const runLine = (run: WorkflowRun): string =>
-    [`${doneSteps(run)}/${run.steps.length} steps`, spentOn(run) > 0 ? `$${spentOn(run).toFixed(2)}` : ``].filter((part) => part !== ``).join(` · `);
+    [
+        t(`workflowsView.stepsDone`, { done: doneSteps(run), count: run.steps.length }, run.steps.length),
+        spentOn(run) > 0 ? `$${spentOn(run).toFixed(2)}` : ``,
+    ]
+        .filter((part) => part !== ``)
+        .join(` · `);
 
 // `stopped` isn't an error color, the user chose it; `running` gets the brand tint, not a status color.
 const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
@@ -378,7 +383,11 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 @click="watchRun(workflow.runs[0].runId)"
                             >
                                 <span>{{ t(`workflowsView.lastRun`) }}</span>
-                                <StatusBadge :variant="RUN_VARIANT[workflow.runs[0].state]" size="xs" :label="workflow.runs[0].state" />
+                                <StatusBadge
+                                    :variant="RUN_VARIANT[workflow.runs[0].state]"
+                                    size="xs"
+                                    :label="runStateLabel(workflow.runs[0].state)"
+                                />
                                 <span>{{ timeAgo(workflow.runs[0].startedAt) }}</span>
                             </button>
                             <span v-else>{{ t(`workflowsView.neverRun`) }}</span>
@@ -473,7 +482,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                     class="ui-row-select flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
                     @click="watchRun(run.runId)"
                 >
-                    <StatusBadge :variant="RUN_VARIANT[run.state]" size="xs" :label="run.state" class="w-20 shrink-0 justify-center" />
+                    <StatusBadge :variant="RUN_VARIANT[run.state]" size="xs" :label="runStateLabel(run.state)" class="w-20 shrink-0 justify-center" />
                     <span class="shrink-0 truncate text-xs text-content">{{ run.workflow.name }}</span>
                     <!-- What it was asked to do, the only thing telling two runs of one design apart. -->
                     <span v-if="run.request" class="min-w-0 flex-1 truncate text-2xs text-muted">{{ run.request }}</span>

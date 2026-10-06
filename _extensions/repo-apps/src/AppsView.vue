@@ -78,7 +78,7 @@ const kindOf = (kind: string | undefined): AppKind => {
 // Decorate each app with its resolved kind so the template binds one value per row (no repeated kindOf calls).
 const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(app.kind) })));
 
-const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
+const headerTitle = computed(() => (props.monorepo ? t(`extension.apps`) : t(`appsView.tests`)));
 
 // Test projects split into this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
 const grouped = computed(() =>
@@ -107,7 +107,7 @@ const act = async (action: () => Promise<void>): Promise<void> => {
     try {
         await action();
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `The action failed.`;
+        actionError.value = err instanceof Error ? err.message : t(`appsView.actionFailed`);
     } finally {
         busy.value = false;
     }
@@ -276,7 +276,7 @@ onMounted(async () => {
                             </div>
                             <StatusBadge
                                 :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
-                                :label="app.healthy ? 'healthy' : app.running ? 'starting' : 'stopped'"
+                                :label="app.healthy ? t(`appsView.healthy`) : app.running ? t(`appsView.starting`) : t(`appsView.stopped`)"
                                 size="xs"
                                 dot
                             />

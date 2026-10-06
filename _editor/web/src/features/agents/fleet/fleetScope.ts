@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { definePreference } from "@intentic/ui/preference";
 import { computed, type Ref, watch } from "vue";
 import { boxAttention, markSeenAcross, otherBoxes, silentBoxes } from "../../sandbox/live/fleetAcross";
@@ -117,16 +118,15 @@ export const partialAnswer = computed<{ readonly title: string; readonly detail:
         return undefined;
     }
     const names = silent.map((box) => box.sandbox.name);
-    const one = names.length === 1;
     return {
-        title: `${listNames(names)} ${one ? `isn't` : `aren't`} answering`,
-        detail: `This board leaves ${one ? `it` : `them`} out until ${one ? `it does` : `they do`}.`,
+        title: t(`agents.fleetScope.notAnswering`, { names: listNames(names), count: names.length }, names.length),
+        detail: t(`agents.fleetScope.leftOut`, names.length),
     };
 });
 
 // Names for a reader, not a count: three is where a list stops being read and starts being skimmed.
 export const listNames = (names: readonly string[]): string =>
-    names.length <= 3 ? names.join(`, `) : `${names.slice(0, 3).join(`, `)} and ${names.length - 3} more`;
+    names.length <= 3 ? names.join(`, `) : t(`agents.fleetScope.namesAndMore`, { names: names.slice(0, 3).join(`, `), count: names.length - 3 });
 
 // The sum of what every other box says it needs, the half of the rail badge that only exists while the scope is wide; a
 // box that hasn't answered contributes nothing rather than blocking the sum.

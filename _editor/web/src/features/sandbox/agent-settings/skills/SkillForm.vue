@@ -32,13 +32,13 @@ const onName = (event: Event): void => {
 // Names the missing field, in the order the boxes sit, so fixing what it names always moves you forward.
 const missing = computed<string | undefined>(() => {
     if (name.value.replace(/-+$/, ``) === ``) {
-        return `Give it a name.`;
+        return t(`sandbox.skillForm.giveItName`);
     }
     if (description.value.trim() === ``) {
-        return `Say when the agent should reach for it: this is the line it reads to decide.`;
+        return t(`sandbox.skillForm.sayWhenToReach`);
     }
     if (body.value.trim() === ``) {
-        return `Write what it should do.`;
+        return t(`sandbox.skillForm.writeWhatItDoes`);
     }
     return undefined;
 });

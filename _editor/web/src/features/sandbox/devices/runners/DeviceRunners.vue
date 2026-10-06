@@ -56,7 +56,12 @@ const builtOn = (host: string | undefined): string | undefined => {
 // Building or updating a container on somebody's laptop, so the Devices row carries it while the reader is
 // elsewhere in the hub.
 const hubWork = useHubWork();
-const WORKING: Record<RunnerOp, string> = { create: `Adding runner`, remove: `Removing runner`, update: `Updating runner` };
+const working = (op: RunnerOp, name: string): string =>
+    op === `create`
+        ? t(`sandbox.deviceRunners.adding`, { name })
+        : op === `remove`
+          ? t(`sandbox.deviceRunners.removing`, { name })
+          : t(`sandbox.deviceRunners.updating`, { name });
 
 // One flow at a time on one machine, same rule the sandbox rows above follow.
 const busy = ref<string | undefined>();
@@ -67,11 +72,15 @@ const done = ref<string | undefined>();
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
     if (!runner.online) {
-        return `Offline — asleep, or its container is down`;
+        return t(`sandbox.deviceRunners.offlineAsleep`);
     }
     return runner.facts === undefined
-        ? `Ready`
-        : `${runner.facts.cpus} cores · ${Math.round(runner.facts.memoryMb / 1024)} GB · load ${runner.facts.load.toFixed(2)}`;
+        ? t(`sandbox.deviceRunners.ready`)
+        : t(`sandbox.deviceRunners.facts`, {
+              cpus: runner.facts.cpus,
+              memory: Math.round(runner.facts.memoryMb / 1024),
+              load: runner.facts.load.toFixed(2),
+          });
 };
 
 // Parity drift lines from the daemon: a "Setting …" line is fixable via Sync; others need a rebuild
@@ -80,7 +89,7 @@ const driftSummary = (runner: { drift?: { subject: string; detail: string }[] })
     if (runner.drift === undefined || runner.drift.length === 0) {
         return undefined;
     }
-    return `Differs from this sandbox: ${runner.drift.map((line) => line.subject).join(", ")}`;
+    return t(`sandbox.deviceRunners.differs`, { subjects: runner.drift.map((line) => line.subject).join(", ") });
 };
 const driftDetail = (runner: { drift?: { subject: string; detail: string }[] }): string =>
     (runner.drift ?? []).map((line) => `${line.subject} — ${line.detail}`).join("\n");
@@ -98,7 +107,7 @@ const sync = async (id: string): Promise<void> => {
         await syncRunnerSettings(id);
     } catch (error) {
         // No line of its own: a runner's settings are pushed over this door and have no CLI verb behind them.
-        failure.value = { notice: noticeFrom(error, `The settings didn't reach that runner.`) };
+        failure.value = { notice: noticeFrom(error, t(`sandbox.deviceRunners.settingsFailed`)) };
     } finally {
         syncing.value = undefined;
         refetch();
@@ -109,7 +118,7 @@ const sync = async (id: string): Promise<void> => {
 // dashes, what `ic` accepts.
 // Removal parks here until the app's own dialog answers, rather than the browser's confirm().
 const confirmingRemove = ref<string | undefined>();
-const removeHeader = computed(() => `Remove runner "${confirmingRemove.value ?? ``}"?`);
+const removeHeader = computed(() => t(`sandbox.deviceRunners.removeHeader`, { name: confirmingRemove.value ?? `` }));
 
 const run = async (op: RunnerOp, name: string): Promise<void> => {
     if (door.value?.device.hostId === undefined || busy.value !== undefined) {
@@ -139,7 +148,7 @@ const execute = async (op: RunnerOp, name: string): Promise<void> => {
     failure.value = undefined;
     done.value = undefined;
     lines.value = [];
-    const endMark = hubWork.begin(`${WORKING[op]} ${name}`);
+    const endMark = hubWork.begin(working(op, name));
     try {
         const onLine = (line: string): void => void (lines.value = [...lines.value, line]);
         const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
@@ -155,9 +164,7 @@ const execute = async (op: RunnerOp, name: string): Promise<void> => {
 
 const asked = ref("");
 const adding = ref(false);
-const nameError = computed(() =>
-    asked.value !== "" && !/^[a-z0-9-]+$/.test(asked.value) ? `Lowercase letters, digits and dashes only.` : undefined,
-);
+const nameError = computed(() => (asked.value !== "" && !/^[a-z0-9-]+$/.test(asked.value) ? t(`sandbox.deviceRunners.nameRule`) : undefined));
 
 const add = async (): Promise<void> => {
     if (asked.value === "" || nameError.value !== undefined) {

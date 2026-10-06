@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { PushChannel } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/client";
 import { pushPlugin, type PushNotificationsPlugin } from "../window/capacitor.js";
@@ -19,17 +20,14 @@ const TOKEN_TIMEOUT_MS = 10_000;
 
 const apnsToken = async (plugin: PushNotificationsPlugin): Promise<string> =>
     new Promise((resolve, reject) => {
-        const timer = setTimeout(
-            () => reject(new Error(`The push service did not answer. Check the phone's connection and try again.`)),
-            TOKEN_TIMEOUT_MS,
-        );
+        const timer = setTimeout(() => reject(new Error(t(`shell.pushNotifications.serviceSilent`))), TOKEN_TIMEOUT_MS);
         const settle = (work: () => void) => {
             clearTimeout(timer);
             work();
         };
         void plugin.addListener(`registration`, (token) => settle(() => resolve(token.value)));
         void plugin.addListener(`registrationError`, (error) =>
-            settle(() => reject(new Error(`The push service refused this device: ${error.error}`))),
+            settle(() => reject(new Error(t(`shell.pushNotifications.serviceRefusedDevice`, { error: error.error })))),
         );
         plugin.register().catch((cause: unknown) => settle(() => reject(cause instanceof Error ? cause : new Error(String(cause)))));
     });
@@ -38,7 +36,7 @@ const apnsToken = async (plugin: PushNotificationsPlugin): Promise<string> =>
 const mint = async (_publicKey: () => Promise<string>): Promise<Minted> => {
     const plugin = pushPlugin();
     if (plugin === undefined) {
-        throw new Error(`Notifications are not available in this app build.`);
+        throw new Error(t(`shell.pushNotifications.notInBuild`));
     }
     const permission = await plugin.requestPermissions();
     if (permission.receive !== `granted`) {
@@ -53,9 +51,9 @@ const mint = async (_publicKey: () => Promise<string>): Promise<Minted> => {
         return { outcome: `granted`, channel };
     } catch (cause) {
         if (cause instanceof ORPCError && cause.status === 404) {
-            throw new Error(`This platform has no push relay configured, so the app cannot receive notifications.`, { cause });
+            throw new Error(t(`shell.pushNotifications.noRelay`), { cause });
         }
-        throw new Error(`Registering this device with the platform failed. Check the connection and try again.`, { cause });
+        throw new Error(t(`shell.pushNotifications.registerFailed`), { cause });
     }
 };
 

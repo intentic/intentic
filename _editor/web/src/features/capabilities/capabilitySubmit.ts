@@ -113,7 +113,7 @@ export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add
             }
             walk.leaveTile(next);
         } catch (err) {
-            error.value = noticeFrom(err, wasEditing ? `Could not save that connection.` : `Could not add the capability.`);
+            error.value = noticeFrom(err, wasEditing ? t(`capabilities.capabilitySubmit.couldNotSave`) : t(`capabilities.capabilitySubmit.couldNotAdd`));
         } finally {
             submitting.value = false;
         }

@@ -96,17 +96,15 @@ export const offerStatus = (offer: TranscriptPaymentOffer | TranscriptCredential
 export const credentialLane = (offer: TranscriptCredentialOffer["offer"]): string => {
     switch (offer.lane) {
         case "shell":
-            return "The agent is about to use it in a shell command.";
+            return t(`chat.cardStatus.laneShell`);
         case "code":
-            return "The agent is about to use it in a script it is running.";
+            return t(`chat.cardStatus.laneCode`);
         case "browser":
-            return "The agent is about to type it into a page.";
+            return t(`chat.cardStatus.laneBrowser`);
         case "otp":
-            return "The agent is about to mint a one-time code from it.";
+            return t(`chat.cardStatus.laneOtp`);
         default:
-            return offer.kind === "capability"
-                ? "The agent is asking for this connected account to be loaded into the conversation."
-                : "The agent is asking to use this credential.";
+            return offer.kind === "capability" ? t(`chat.cardStatus.laneCapability`) : t(`chat.cardStatus.laneCredential`);
     }
 };
 

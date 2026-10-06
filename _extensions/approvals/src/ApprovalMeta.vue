@@ -16,7 +16,9 @@ const { name, target, actsAs, note } = defineProps<{
 
 const destination = computed(() => (target === undefined ? undefined : destinationOf(target)));
 const full = computed<string | undefined>(() =>
-    target === undefined ? undefined : [name, target, actsAs === undefined ? undefined : `as ${actsAs}`, note].filter(Boolean).join(` · `),
+    target === undefined
+        ? undefined
+        : [name, target, actsAs === undefined ? undefined : `${t(`approvalMeta.as`)} ${actsAs}`, note].filter(Boolean).join(` · `),
 );
 </script>
 

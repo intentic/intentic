@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { KINDS } from "../terminalMeta";
 import type { TerminalTab } from "../useTerminal";
 
@@ -28,12 +29,12 @@ export interface KillQuestion {
 const headerOf = (busy: readonly TerminalTab[], items: readonly TerminalTab[]): string => {
     if (busy.length === 1) {
         // The command IS the question; cut short, since a session can be running something with a long name.
-        return `Kill the terminal running ${(busy[0]?.command ?? ``).slice(0, 24)}?`;
+        return t(`terminal.killPlan.killBusyOne`, { command: (busy[0]?.command ?? ``).slice(0, 24) });
     }
     if (busy.length > 1) {
-        return `Kill ${busy.length} busy terminals?`;
+        return t(`terminal.killPlan.killBusyMany`, { count: busy.length }, busy.length);
     }
-    return items.length === 1 ? `Kill the running terminal?` : `Kill ${items.length} running terminals?`;
+    return items.length === 1 ? t(`terminal.killPlan.killRunningOne`) : t(`terminal.killPlan.killRunningMany`, { count: items.length }, items.length);
 };
 
 export const killQuestion = (order: readonly TerminalTab[], names: readonly string[]): KillQuestion => {
@@ -41,10 +42,7 @@ export const killQuestion = (order: readonly TerminalTab[], names: readonly stri
     const items = busy.length > 0 ? busy : runningIn(order, names);
     return {
         header: headerOf(busy, items),
-        body:
-            busy.length > 0
-                ? `This stops what ${busy.length === 1 ? `it is` : `they are`} doing. Scrollback goes with it, and there is no undo.`
-                : `Killing these ends whatever they are running. Scrollback goes with them.`,
+        body: busy.length > 0 ? t(`terminal.killPlan.busyBody`, { count: busy.length }, busy.length) : t(`terminal.killPlan.runningBody`),
         items,
     };
 };

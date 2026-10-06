@@ -175,7 +175,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     const conversation = openConversation(id);
     // Send only to conversations that still have an open agent card.
     if (conversation === undefined) {
-        return { kind: `refused`, why: `That agent has no conversation left to send to.` };
+        return { kind: `refused`, why: t(`agents.agentActions.noConversationLeft`) };
     }
     const press = claim(id, undefined, `turn`);
     const read = new AbortController();
@@ -233,10 +233,10 @@ const answerFor = async (id: string, conflicts: AgentChanges[`conflicts`]): Prom
         kind: `refused`,
         why:
             yours > 0
-                ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit them, then land again.`
+                ? t(`agents.agentActions.rebaseCantReach`, { count: yours }, yours)
                 : // A refusal naming no path at all is a repo the land couldn't reach (land.ts). Naming it beats sending
                   // the reader to a report whose entire content is this one sentence.
-                  `The land couldn't reach your workspace's copy of ${conflicts.map((conflict) => conflict.repo).join(`, `)}, so there's nothing here for the agent to rebase.`,
+                  t(`agents.agentActions.landCouldntReach`, { repos: conflicts.map((conflict) => conflict.repo).join(`, `) }),
     };
 };
 
@@ -248,10 +248,10 @@ const rejudged = async (id: string): Promise<ResolveAsk> => {
     try {
         await landAgent(id, `measure`);
         await invalidateAgentAction(id);
-        return { kind: `settled`, why: `Nothing is blocking this any more: it's ready to land.` };
+        return { kind: `settled`, why: t(`agents.agentActions.readyToLand`) };
     } catch {
         // The re-check itself failed (a land holding the repo, a daemon that went away); the card stays as it was.
-        return { kind: `refused`, why: `Nothing is blocking this any more, but the re-check didn't go through. Try landing it.` };
+        return { kind: `refused`, why: t(`agents.agentActions.recheckFailed`) };
     }
 };
 

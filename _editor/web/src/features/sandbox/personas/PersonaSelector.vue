@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type Persona, personaBounds } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract";
+import { personaBoundsWords } from "./personaBounds";
 import { Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { createInlineRename } from "@intentic/ui/inline-rename";
@@ -25,7 +26,7 @@ const offline = computed(() => persona.capabilities.length > 0 && !signedIn);
 const description = computed(() =>
     [
         persona.brief,
-        persona.powers === undefined ? undefined : personaBounds(persona),
+        persona.powers === undefined ? undefined : personaBoundsWords(persona),
         offline.value ? t(`sandbox.sandboxPersonas.notSignedIn`) : undefined,
     ]
         .filter(Boolean)
@@ -34,7 +35,7 @@ const description = computed(() =>
 const rename = createInlineRename(
     () => label.value,
     (name) => write(name),
-    `Couldn't rename this persona.`,
+    () => t(`sandbox.personaSelector.couldntRename`),
 );
 </script>
 

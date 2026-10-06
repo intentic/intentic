@@ -1,4 +1,5 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // What a refused push says: the line under its command, naming who refused it in the words that decide what the owner
 // can do about it. Everything the push printed stays in the terminal it ran in.
@@ -7,13 +8,13 @@ import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
 // the rest.
 export const outcomeSummary = (run: CommandRun): string => {
     if (run.timedOut === true) {
-        return `never finished: it hit its time limit and was killed.`;
+        return t(`workspace.refusalSummary.timedOut`);
     }
     if (run.status === `error`) {
-        return `could not run at all.`;
+        return t(`workspace.refusalSummary.couldNotRun`);
     }
     if (run.status === `cancelled`) {
-        return `was stopped before it finished.`;
+        return t(`workspace.refusalSummary.cancelled`);
     }
     return ``;
 };
@@ -24,9 +25,10 @@ export const outcomeSummary = (run: CommandRun): string => {
 const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 const REFUSED_BY: Record<NonNullable<PushRun["refusedBy"]>, (reason: string | undefined) => string> = {
-    hook: () => `was refused by this repository's pre-push hook.`,
-    remote: (reason) => sentence(`was rejected by the remote: ${reason ?? `it said no`}`),
-    transport: (reason) => sentence(`never reached the remote: ${reason ?? `it could not be contacted`}`),
+    hook: () => t(`workspace.refusalSummary.hook`),
+    remote: (reason) => sentence(t(`workspace.refusalSummary.remote`, { reason: reason ?? t(`workspace.refusalSummary.remoteSaidNo`) })),
+    transport: (reason) =>
+        sentence(t(`workspace.refusalSummary.transport`, { reason: reason ?? t(`workspace.refusalSummary.transportUnreachable`) })),
 };
 
 export const refusalSummary = (run: PushRun): string => {
@@ -34,7 +36,7 @@ export const refusalSummary = (run: PushRun): string => {
         return run.refusedBy === undefined ? (run.reason ?? ``) : REFUSED_BY[run.refusedBy](run.reason);
     }
     if (run.status === `error` && run.reason !== undefined) {
-        return sentence(`could not run: ${run.reason}`);
+        return sentence(t(`workspace.refusalSummary.couldNotRunBecause`, { reason: run.reason }));
     }
     return outcomeSummary(run);
 };
@@ -42,7 +44,8 @@ export const refusalSummary = (run: PushRun): string => {
 // A push the remote turned away for want of a credential, and the git host that did: what connecting that account as a
 // capability fixes, so the card can lead there rather than only to the terminal. Undefined for every other refusal,
 // and for a host no capability signs in to.
-const CREDENTIAL_REFUSAL = /Authentication failed|could not read Username|terminal prompts disabled|Invalid username or (?:password|token)|returned error: 40[13]\b/i;
+const CREDENTIAL_REFUSAL =
+    /Authentication failed|could not read Username|terminal prompts disabled|Invalid username or (?:password|token)|returned error: 40[13]\b/i;
 
 export const credentialHostOf = (run: PushRun): `github` | `gitlab` | undefined => {
     if (run.status !== `failed` || run.refusedBy === `hook`) {

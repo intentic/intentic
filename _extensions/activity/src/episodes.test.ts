@@ -1,6 +1,12 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
 import { formatDayMonth } from "@intentic/extension-ui/format";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, sourceLabel, toEpisodes, toSources } from "./episodes.js";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
+
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // Fixtures mirror real event shapes: agent.routes.ts's record(), outbound.ts's sniffer, listeners.ts's inbound.
 // Includes a turn.started with no sessionId yet and a turn titled only at completion, the shapes that broke the old

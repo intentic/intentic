@@ -33,8 +33,7 @@ const sent = computed(() => {
     if (delivered.value === undefined) {
         return undefined;
     }
-    const where = delivered.value === 1 ? `1 registered device` : `${delivered.value} registered devices`;
-    return `Sent to ${where}. If nothing appeared, the send worked and your system swallowed it. Check notification settings and Do Not Disturb for your browser.`;
+    return t(`settings.settingsNotifications.sentTo`, { count: delivered.value }, delivered.value);
 });
 
 const settle = async (next: boolean): Promise<void> => {
@@ -116,7 +115,7 @@ const status = computed(() => {
         case `unsupported`:
             return unsupportedLine();
         case `denied`:
-            return `Blocked for this app. Re-allow notifications in site settings, then reload.`;
+            return t(`settings.settingsNotifications.blocked`);
         default:
             return undefined;
     }

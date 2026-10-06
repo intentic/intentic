@@ -52,7 +52,7 @@ const meta = computed(() => {
     const bits = [formatBytes(look.size)];
     const lines = quickLookLines(look);
     if (lines !== undefined) {
-        bits.push(`${formatCount(lines)} ${lines === 1 ? `line` : `lines`}`);
+        bits.push(t(`chat.chatFileChip.lineCount`, { count: formatCount(lines) }, lines));
     }
     return bits.join(` · `);
 });
@@ -67,15 +67,15 @@ const truncated = computed(() => look !== undefined && (look.headBytes < look.si
 const nothingToShow = computed(() => {
     if (look === undefined) {
         // Unreachable while `looking` gates on the windows having landed; kept so the card can never draw a blank body.
-        return `Reading the file…`;
+        return t(`chat.chatFileChip.reading`);
     }
     if (!look.present) {
-        return `This file is no longer in the workspace.`;
+        return t(`chat.chatFileChip.gone`);
     }
     if (look.binary) {
-        return `Not text: nothing to preview here.`;
+        return t(`chat.chatFileChip.binary`);
     }
-    return look.head === `` ? `This file is empty.` : undefined;
+    return look.head === `` ? t(`chat.chatFileChip.empty`) : undefined;
 });
 
 const omitted = computed(() => (look === undefined ? 0 : quickLookOmitted(look)));

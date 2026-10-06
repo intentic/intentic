@@ -116,7 +116,7 @@ const commit = async (): Promise<void> => {
         gateToken.value = saved.gateToken;
         emit(`saved`, draft.value.id);
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : `The workflow could not be saved.`;
+        failure.value = error instanceof Error ? error.message : t(`workflowDesigner.couldntSave`);
     }
 };
 </script>

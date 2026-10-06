@@ -2,6 +2,7 @@ import type { GitCommitDiff, StashEntry } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
+import { t } from "./i18n.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
@@ -48,16 +49,14 @@ export function useStashes(repo: Ref<string>) {
                 await invalidate();
                 if (!result.ok) {
                     throw new Error(
-                        result.reason === `conflict`
-                            ? `Could not apply cleanly: resolve the conflict in the Changes panel. The stash is still there.`
-                            : `Nothing was applied: ${result.reason}. The stash is still there.`,
+                        result.reason === `conflict` ? t(`useStashes.conflict`) : t(`useStashes.nothingApplied`, { reason: result.reason }),
                     );
                 }
-            }, `Could not apply that stash.`),
+            }, t(`useStashes.couldntApply`)),
         drop: (ref: string): Promise<void> =>
             run(async () => {
                 await api.sandbox.rpc.git.stashDrop({ repo: repo.value, ref });
                 await invalidate();
-            }, `Could not drop that stash.`),
+            }, t(`useStashes.couldntDrop`)),
     };
 }

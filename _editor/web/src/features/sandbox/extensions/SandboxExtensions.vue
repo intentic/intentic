@@ -93,7 +93,10 @@ const viewOptions = computed(() => [
         ...(updatable.value > 0
             ? {
                   mark: `arrow-circle-up` as const,
-                  markTitle: { title: t(`sandbox.sandboxExtensions.newerCommits`), rows: [{ label: t(`sandbox.sandboxExtensions.updatable`), value: updatable.value }] },
+                  markTitle: {
+                      title: t(`sandbox.sandboxExtensions.newerCommits`),
+                      rows: [{ label: t(`sandbox.sandboxExtensions.updatable`), value: updatable.value }],
+                  },
               }
             : {}),
     },
@@ -107,7 +110,7 @@ const reload = async (): Promise<void> => {
     try {
         await reloadExtensions();
     } catch (failure) {
-        viewNotice.value = noticeFrom(failure, `Could not reload the extension host.`);
+        viewNotice.value = noticeFrom(failure, t(`sandbox.sandboxExtensions.couldNotReload`));
     } finally {
         reloading.value = false;
     }
@@ -121,7 +124,8 @@ const staleNotice = computed<NoticeModel | undefined>(() => {
         return undefined;
     }
     const names = updatedSinceLoaded.value.map((extension) => extensionIdOf(extension.manifest)).join(`, `);
-    const plural = updatedSinceLoaded.value.length === 1 ? `was` : `were`;
+    const count = updatedSinceLoaded.value.length;
+    const plural = t(`sandbox.sandboxExtensions.wasWere`, count);
     return {
         tone: `info`,
         title: t(`sandbox.sandboxExtensions.reloadToFinishUpdating`),
@@ -146,7 +150,6 @@ const newNotice = computed<NoticeModel | undefined>(() => {
     };
 });
 
-
 // States when updates were last checked, re-rendered on every refetch so it stays as fresh as the check.
 const checking = ref(false);
 const checkNow = async (): Promise<void> => {
@@ -155,7 +158,7 @@ const checkNow = async (): Promise<void> => {
     try {
         await checkUpdates();
     } catch (failure) {
-        viewNotice.value = noticeFrom(failure, `Could not check the registry for updates.`);
+        viewNotice.value = noticeFrom(failure, t(`sandbox.sandboxExtensions.couldNotCheckUpdates`));
     } finally {
         checking.value = false;
     }
@@ -210,9 +213,9 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                     <SegmentedControl
                         v-model="mode"
                         :options="[
-                            { label: `All`, value: `all`, badge: entries.length },
-                            { label: `On`, value: `on`, badge: enabledCount },
-                            { label: `Off`, value: `off`, badge: entries.length - enabledCount },
+                            { label: t(`sandbox.words.all`), value: `all`, badge: entries.length },
+                            { label: t(`sandbox.sandboxExtensions.on`), value: `on`, badge: enabledCount },
+                            { label: t(`sandbox.sandboxExtensions.off`), value: `off`, badge: entries.length - enabledCount },
                         ]"
                     />
                 </template>
@@ -221,8 +224,8 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                     <SegmentedControl
                         v-model="trust"
                         :options="[
-                            { label: `All`, value: `all`, badge: listings.length },
-                            { label: `Verified`, value: `verified`, badge: verifiedCount },
+                            { label: t(`sandbox.words.all`), value: `all`, badge: listings.length },
+                            { label: t(`sandbox.words.verified`), value: `verified`, badge: verifiedCount },
                         ]"
                     />
                 </template>

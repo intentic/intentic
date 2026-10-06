@@ -73,7 +73,7 @@ const workingRow = computed<GitCommit | undefined>(() =>
               sha: WORKING,
               short: ``,
               parents: [headSha.value],
-              subject: `Uncommitted changes`,
+              subject: t(`gitHistoryTab.uncommittedChanges`),
               body: ``,
               author: ``,
               email: ``,
@@ -213,7 +213,7 @@ watch(openSha, async (sha) => {
         }
     } catch (cause) {
         if (token === detailToken) {
-            filesError.value = cause instanceof Error ? cause.message : `Failed to load commit.`;
+            filesError.value = cause instanceof Error ? cause.message : t(`gitHistoryTab.failedToLoadCommit`);
         }
     } finally {
         if (token === detailToken) {
@@ -295,18 +295,31 @@ const copy = (text: string): void =>
 
 // Commit context menu and write actions (VSCode Git Graph parity).
 type ActionKind = "branch" | "tag" | "checkout" | "cherry-pick" | "revert" | "drop" | "merge" | "rebase" | "reset";
-// Dialog header, confirm label, whether it needs a name, and whether it's destructive; body text computed below.
-const ACTIONS: Record<ActionKind, { header: string; confirm: string; needsName?: boolean; placeholder?: string; danger?: boolean }> = {
-    branch: { header: `Create branch`, confirm: `Create`, needsName: true, placeholder: `branch-name` },
-    tag: { header: `Add tag`, confirm: `Add tag`, needsName: true, placeholder: `tag-name` },
-    checkout: { header: `Checkout commit`, confirm: `Checkout`, danger: true },
-    "cherry-pick": { header: `Cherry-pick commit`, confirm: `Cherry-pick`, danger: true },
-    revert: { header: `Revert commit`, confirm: `Revert`, danger: true },
-    drop: { header: `Drop commit`, confirm: `Drop`, danger: true },
-    merge: { header: `Merge into current branch`, confirm: `Merge`, danger: true },
-    rebase: { header: `Rebase current branch`, confirm: `Rebase`, danger: true },
-    reset: { header: `Reset current branch`, confirm: `Reset`, danger: true },
+// Whether the dialog needs a name, and whether it's destructive; header, confirm label and body text are built below.
+const ACTIONS: Record<ActionKind, { needsName?: boolean; placeholder?: string; danger?: boolean }> = {
+    branch: { needsName: true, placeholder: `branch-name` },
+    tag: { needsName: true, placeholder: `tag-name` },
+    checkout: { danger: true },
+    "cherry-pick": { danger: true },
+    revert: { danger: true },
+    drop: { danger: true },
+    merge: { danger: true },
+    rebase: { danger: true },
+    reset: { danger: true },
 };
+// Dialog header and confirm label, built when read so they follow the language on screen.
+const actionWords = (kind: ActionKind): { header: string; confirm: string } =>
+    ({
+        branch: { header: t(`gitHistoryTab.dialog.branch`), confirm: t(`gitHistoryTab.dialog.branchConfirm`) },
+        tag: { header: t(`gitHistoryTab.dialog.tag`), confirm: t(`gitHistoryTab.dialog.tagConfirm`) },
+        checkout: { header: t(`gitHistoryTab.dialog.checkout`), confirm: t(`gitHistoryTab.dialog.checkoutConfirm`) },
+        "cherry-pick": { header: t(`gitHistoryTab.dialog.cherryPick`), confirm: t(`gitHistoryTab.dialog.cherryPickConfirm`) },
+        revert: { header: t(`gitHistoryTab.dialog.revert`), confirm: t(`gitHistoryTab.dialog.revertConfirm`) },
+        drop: { header: t(`gitHistoryTab.dialog.drop`), confirm: t(`gitHistoryTab.dialog.dropConfirm`) },
+        merge: { header: t(`gitHistoryTab.dialog.merge`), confirm: t(`gitHistoryTab.dialog.mergeConfirm`) },
+        rebase: { header: t(`gitHistoryTab.dialog.rebase`), confirm: t(`gitHistoryTab.dialog.rebaseConfirm`) },
+        reset: { header: t(`gitHistoryTab.dialog.reset`), confirm: t(`gitHistoryTab.dialog.resetConfirm`) },
+    })[kind];
 
 const menu = ref<{ show: (event: Event) => void }>();
 const menuCommit = ref<GitCommit | undefined>(undefined);
@@ -436,19 +449,19 @@ const pendingBody = computed<string>(() => {
     const sha = target.commit.short;
     switch (target.kind) {
         case `checkout`:
-            return `Check out ${sha} directly (detached HEAD). Uncommitted changes will block this.`;
+            return t(`gitHistoryTab.body.checkout`, { sha });
         case `cherry-pick`:
-            return `Copy ${sha}'s change onto the current branch as a new commit.`;
+            return t(`gitHistoryTab.body.cherryPick`, { sha });
         case `revert`:
-            return `Add a new commit that undoes ${sha}. Nothing is rewritten.`;
+            return t(`gitHistoryTab.body.revert`, { sha });
         case `drop`:
-            return `Remove ${sha} from history, replaying the commits after it onto its parent.`;
+            return t(`gitHistoryTab.body.drop`, { sha });
         case `merge`:
-            return `Merge ${sha} into the current branch (${branch.value ?? `HEAD`}).`;
+            return t(`gitHistoryTab.body.merge`, { sha, branch: branch.value ?? `HEAD` });
         case `rebase`:
-            return `Replay the current branch's commits on top of ${sha}.`;
+            return t(`gitHistoryTab.body.rebase`, { sha });
         case `reset`:
-            return `Move the current branch (${branch.value ?? `HEAD`}) to ${sha}.`;
+            return t(`gitHistoryTab.body.reset`, { sha, branch: branch.value ?? `HEAD` });
         default:
             return ``;
     }
@@ -497,7 +510,7 @@ const runPending = async (): Promise<void> => {
     try {
         const result = await runAction(kind, commit, name);
         if (isConflict(result)) {
-            actionError.value = `Couldn't ${ACTIONS[kind].confirm.toLowerCase()} cleanly: a conflict or uncommitted changes. Resolve it in a terminal.`;
+            actionError.value = t(`gitHistoryTab.conflict`, { action: actionWords(kind).confirm.toLowerCase() });
             return; // keep the dialog open with the message
         }
         pending.value = undefined; // success
@@ -505,7 +518,7 @@ const runPending = async (): Promise<void> => {
             openSha.value = undefined; // HEAD moved / history rewrote: the open detail may be stale
         }
     } catch (cause) {
-        actionError.value = cause instanceof Error ? cause.message : `Action failed.`;
+        actionError.value = cause instanceof Error ? cause.message : t(`useAsyncAction.actionFailed`);
     } finally {
         acting.value = false;
     }
@@ -817,7 +830,7 @@ const runPending = async (): Promise<void> => {
         <ContextMenu ref="refMenu" :model="refMenuItems" :min-width="14" />
 
         <!-- Each history action uses one focused dialog. -->
-        <Modal :open="pending !== undefined" size="sm" :header="pending ? ACTIONS[pending.kind].header : ''" @update:open="cancelAction">
+        <Modal :open="pending !== undefined" size="sm" :header="pending ? actionWords(pending.kind).header : ''" @update:open="cancelAction">
             <template v-if="pending">
                 <p class="text-xs text-content">
                     {{ pending.commit.subject }} <span class="font-mono text-2xs text-subtle">{{ pending.commit.short }}</span>
@@ -839,9 +852,9 @@ const runPending = async (): Promise<void> => {
                         v-model="resetMode"
                         size="xs"
                         :options="[
-                            { label: 'Soft', value: 'soft', title: t(`gitHistoryTab.keepStaged`) },
-                            { label: 'Mixed', value: 'mixed', title: t(`gitHistoryTab.keepUnstaged`) },
-                            { label: 'Hard', value: 'hard', title: t(`gitHistoryTab.discardChanges`) },
+                            { label: t(`gitHistoryTab.resetSoft`), value: 'soft', title: t(`gitHistoryTab.keepStaged`) },
+                            { label: t(`gitHistoryTab.resetMixed`), value: 'mixed', title: t(`gitHistoryTab.keepUnstaged`) },
+                            { label: t(`gitHistoryTab.resetHard`), value: 'hard', title: t(`gitHistoryTab.discardChanges`) },
                         ]"
                     />
                     <p class="text-2xs text-subtle">
@@ -866,7 +879,7 @@ const runPending = async (): Promise<void> => {
                     v-if="pending"
                     size="small"
                     :severity="ACTIONS[pending.kind].danger ? `warn` : `success`"
-                    :label="ACTIONS[pending.kind].confirm"
+                    :label="actionWords(pending.kind).confirm"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"
                     @click="runPending"
                 />

@@ -2,6 +2,7 @@ import type { Disposable } from "@intentic/extension-api";
 import type { Tip } from "@intentic/ui";
 import { evaluateWhen, parseWhen, type WhenExpression } from "@intentic/base/when";
 import { shallowRef } from "vue";
+import { categoryLabel } from "./categories";
 import { commandContext } from "./contextKeys";
 import { formatChord, isApplePlatform, matchesChord } from "./keybindings";
 import { effectiveKeybinding } from "./useKeymap";
@@ -38,7 +39,7 @@ export const commands = shallowRef<readonly RegisteredCommand[]>([]);
 // One spelling of a command for every surface that names it (palette row, keybindings row, search text), so a
 // category can never be drawn one way here and another there. Read live: some titles are getters.
 export const commandLabel = (entry: Pick<CommandRegistration, `category` | `title`>): string =>
-    entry.category === undefined ? entry.title : `${entry.category}: ${entry.title}`;
+    entry.category === undefined ? entry.title : `${categoryLabel(entry.category)}: ${entry.title}`;
 
 export const registerCommand = (registration: CommandRegistration): Disposable => {
     if (commands.value.some((existing) => existing.command === registration.command)) {

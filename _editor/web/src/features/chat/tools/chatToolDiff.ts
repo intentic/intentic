@@ -1,4 +1,5 @@
 import { diffSequence, type Op } from "@intentic/ui/diff";
+import { t } from "@intentic/ui/i18n";
 
 // Line-level diff rows for chat's inline tool cards, a lightweight render of a tool_call's structured diff.
 // Monaco stays the full-screen reviewer; a diff editor per card would be too heavy. Common prefix/suffix trim
@@ -20,7 +21,7 @@ const splitLines = (text: string): string[] => (text === "" ? [] : text.split("\
 const del = (text: string): DiffRow => ({ type: "del", text });
 const add = (text: string): DiffRow => ({ type: "add", text });
 const context = (text: string): DiffRow => ({ type: "context", text });
-const skip = (count: number): DiffRow => ({ type: "skip", text: `⋯ ${count} unchanged lines` });
+const skip = (count: number): DiffRow => ({ type: "skip", text: `⋯ ${t(`chat.chatToolDiff.unchangedLines`, { count }, count)}` });
 
 const rowOf = (op: Op<string>): DiffRow => (op.kind === `same` ? context(op.after) : op.kind === `removed` ? del(op.item) : add(op.item));
 

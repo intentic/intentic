@@ -51,7 +51,7 @@ const load = async (file: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        error.value = caught instanceof Error ? caught.message : `Could not open this book.`;
+        error.value = caught instanceof Error ? caught.message : t(`epubViewer.couldNotOpen`);
     } finally {
         if (isLatest()) {
             loading.value = false;

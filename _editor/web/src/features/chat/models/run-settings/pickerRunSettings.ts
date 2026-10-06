@@ -6,6 +6,7 @@ import {
     fastAllowed,
 } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
+import { t } from "@intentic/ui/i18n";
 import { clampEffort, effortLabelOf, effortsFor } from "./effortScale";
 import { providerModels } from "../../accounts/providerCatalog";
 
@@ -87,8 +88,10 @@ export const pinKnobSummary = (pin: ModelPin): string | undefined => {
     return (
         [
             ...(effort === undefined ? [] : [effort]),
-            ...(honored.thinking === undefined ? [] : [honored.thinking ? `thinking` : `no thinking`]),
-            ...(honored.fast === true ? [`fast`] : []),
+            ...(honored.thinking === undefined
+                ? []
+                : [honored.thinking ? t(`chat.pickerRunSettings.thinking`) : t(`chat.pickerRunSettings.noThinking`)]),
+            ...(honored.fast === true ? [t(`chat.pickerRunSettings.fast`)] : []),
             ...(honored.harness === `claude-code` ? [`Claude Code`] : []),
         ].join(` · `) || undefined
     );

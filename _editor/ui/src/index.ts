@@ -293,6 +293,7 @@ export {
     formatDayMonth,
     formatDayMonthTime,
     formatElapsed,
+    formatList,
     formatMoney,
     formatPercent,
     formatTime,

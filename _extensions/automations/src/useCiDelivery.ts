@@ -27,10 +27,7 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
     if (scoped.length === 0) {
         return {
             state: `none`,
-            summary:
-                repoFilter === ``
-                    ? `No workspace repo maps to a connected GitHub or GitLab account, so nothing can fire this yet.`
-                    : `No repo named "${repoFilter}" maps to a connected GitHub or GitLab account, so nothing can fire this.`,
+            summary: repoFilter === `` ? t(`useCiDelivery.noRepoMaps`) : t(`useCiDelivery.namedRepoDoesNotMap`, { repo: repoFilter }),
         };
     }
     const unwired = scoped.filter((repo) => repo.hookWarning !== undefined);
@@ -43,8 +40,12 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
         state: `polling`,
         summary:
             unwired.length === scoped.length
-                ? `Webhooks aren't set up, so pipelines are polled instead: this fires within ${POLL_MINUTES} minutes rather than instantly.`
-                : `Wired for ${scoped.length - unwired.length} of ${scoped.length} repos. ${names} ${unwired.length === 1 ? `is` : `are`} polled instead, those fire within ${POLL_MINUTES} minutes.`,
+                ? t(`useCiDelivery.allPolled`, { minutes: POLL_MINUTES })
+                : t(
+                      `useCiDelivery.partlyPolled`,
+                      { wired: scoped.length - unwired.length, total: scoped.length, names, minutes: POLL_MINUTES },
+                      unwired.length,
+                  ),
         ...(first !== undefined ? { detail: first } : {}),
     };
 };

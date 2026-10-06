@@ -96,7 +96,7 @@ const nameOfPlatform = (platform: string): string =>
     platformCatalog.value.get(platform)?.name ?? `${platform.charAt(0).toUpperCase()}${platform.slice(1)}`;
 const logoOfPlatform = (platform: string): string | undefined => platformCatalog.value.get(platform)?.logo;
 // What the meta line calls the item: the platform's name for a post, and plainly "Action" for an action.
-const nameOf = (item: ApprovalSummary): string => (isPost(item) ? nameOfPlatform(item.platform) : `Action`);
+const nameOf = (item: ApprovalSummary): string => (isPost(item) ? nameOfPlatform(item.platform) : t(`approvalsView.action`));
 const targetOf = (item: ApprovalSummary): string | undefined => (isPost(item) ? item.target : undefined);
 
 // Rows are the slices the queue actually holds, not ones it merely could: an empty slice has no way back. Platforms
@@ -131,7 +131,7 @@ const hooksScope = computed<ApprovalScope>(() => ({
     failed: 0,
 }));
 const allScope = computed<ApprovalScope>(() => {
-    const own = scopeOf(``, `All approvals`, approvals.value, { icon: `check-square` });
+    const own = scopeOf(``, t(`approvalsView.allApprovals`), approvals.value, { icon: `check-square` });
     return {
         ...own,
         total: own.total + wakesScope.value.total + hooksScope.value.total,
@@ -153,7 +153,7 @@ const scopes = computed<ApprovalScope[]>(() => {
     const actions = approvals.value.filter(isAction);
     return [
         ...platforms,
-        ...(actions.length === 0 ? [] : [scopeOf(ACTIONS_SCOPE, `Actions`, actions, { icon: `bolt` })]),
+        ...(actions.length === 0 ? [] : [scopeOf(ACTIONS_SCOPE, t(`approvalsView.actions`), actions, { icon: `bolt` })]),
         ...(held.value.length === 0 ? [] : [wakesScope.value]),
         ...(hookSets.value.length === 0 ? [] : [hooksScope.value]),
     ];
@@ -233,7 +233,7 @@ onMounted(() => approvalsAttention.refresh());
 // covers past-due, since the daemon releases on its own coarser tick.
 const startsIn = (autoRunAt: number): string => {
     const seconds = Math.ceil((autoRunAt - now.value) / 1_000);
-    return seconds <= 0 ? `starting…` : `starts in ${seconds}s unless you cancel`;
+    return seconds <= 0 ? t(`approvalsView.starting`) : t(`approvalsView.startsInUnlessCancel`, { seconds });
 };
 const wakeName = (wake: AutomationApproval): string => wake.title ?? wake.automationId;
 
@@ -241,11 +241,11 @@ const wakeName = (wake: AutomationApproval): string => wake.title ?? wake.automa
 const releaseWake = (wake: AutomationApproval): Promise<void> =>
     run(async () => {
         await approveWake.mutateAsync(wake.id);
-    }, `Could not start the automation.`);
+    }, t(`approvalsView.couldntStartAutomation`));
 const dropWake = (wake: AutomationApproval): Promise<void> =>
     run(async () => {
         await rejectWake.mutateAsync(wake.id);
-    }, `Could not drop the held automation.`);
+    }, t(`approvalsView.couldntDropHeldAutomation`));
 
 // A yes pins this exact set from the next turn on; dismissing keeps it off without asking again. Each re-reads the asks,
 // which nothing on /work announces for these.
@@ -268,7 +268,7 @@ const approvingAll = ref(false);
 const patch = <T extends ApprovalSummary>(item: T, changes: Partial<T>): Promise<void> =>
     run(async () => {
         await save.mutateAsync({ ...item, ...changes });
-    }, `Could not update it.`);
+    }, t(`approvalsView.couldntUpdateIt`));
 
 // One post editable at a time, saved as typed (usePostEdit.ts): a second open field is a second thing to track, and the
 // row shouldn't need a Save button.
@@ -279,7 +279,7 @@ const settled = (act: () => Promise<unknown>): Promise<void> =>
     run(async () => {
         await edit.flush();
         await act();
-    }, `Could not update it.`);
+    }, t(`approvalsView.couldntUpdateIt`));
 
 const approve = (item: ApprovalSummary): Promise<void> => settled(() => save.mutateAsync({ ...item, status: `approved` }));
 
@@ -293,21 +293,21 @@ const approveAll = (): Promise<void> => {
         for (const item of queue) {
             await save.mutateAsync({ ...item, status: `approved` });
         }
-    }, `Could not approve everything.`);
+    }, t(`approvalsView.couldntApproveEverything`));
 };
 
 const reject = (item: ApprovalSummary): Promise<void> => {
     rejecting.value = undefined;
     return run(async () => {
         await remove.mutateAsync(item.id);
-    }, `Could not remove it.`);
+    }, t(`approvalsView.couldntRemoveIt`));
 };
 
 // Toggles in place: opening makes the words typeable where they are; closing writes the last of them on the way out.
 const toggleEdit = (post: PostApprovalSummary): Promise<void> =>
     run(async () => {
         await (edit.isEditing(post) ? edit.close() : edit.open(post));
-    }, `Could not save your changes.`);
+    }, t(`approvalsView.couldntSaveChanges`));
 
 // Clears `scheduledAt` along with the status: it's a deadline the daemon wrote, and re-approving a held item without
 // clearing it would fire instantly, with no second hold to stop it.
@@ -319,7 +319,7 @@ const holdBackAll = (): Promise<void> => {
         for (const item of queue) {
             await save.mutateAsync({ ...item, status: `proposed`, scheduledAt: undefined });
         }
-    }, `Could not hold those back.`);
+    }, t(`approvalsView.couldntHoldBack`));
 };
 
 // One line at the top covers the case where the eye has moved on from the row itself. `info`, not `warning`: nothing's
@@ -330,12 +330,15 @@ const goingAheadNotice = computed<NoticeModel | undefined>(() => {
         return undefined;
     }
     const count = holding.value.length;
-    const when = countdownWords((soonest.scheduledAt ?? 0) - now.value);
-    const inWhen = when === `any moment now` ? when : `in ${when}`;
+    const msLeft = (soonest.scheduledAt ?? 0) - now.value;
+    const when = msLeft <= 0 ? countdownWords(msLeft) : t(`approvalsView.inWhen`, { when: countdownWords(msLeft) });
     return {
         tone: `info`,
-        title: count === 1 ? `"${headline(soonest)}" goes ahead ${inWhen}.` : `${count} things go ahead, the first ${inWhen}.`,
-        action: { label: count === 1 ? `Hold it back` : `Hold them back`, run: () => void holdBackAll() },
+        title:
+            count === 1
+                ? t(`approvalsView.goesAheadOne`, { item: headline(soonest), when })
+                : t(`approvalsView.goAheadMany`, { count, when }, count),
+        action: { label: count === 1 ? t(`approvalsView.holdItBack`) : t(`approvalsView.holdThemBack`), run: () => void holdBackAll() },
         key: `approvals-going-ahead`,
     };
 });
@@ -356,7 +359,7 @@ const lengthOf = (item: ApprovalSummary): string | undefined => {
     if (limit !== undefined) {
         return `${formatCount(count)} / ${formatCount(limit)}`;
     }
-    return count > OVERSIZED || edit.isEditing(item) ? `${formatCount(count)} characters` : undefined;
+    return count > OVERSIZED || edit.isEditing(item) ? t(`approvalsView.characters`, { count: formatCount(count) }, count) : undefined;
 };
 const isOver = (item: ApprovalSummary): boolean => isPost(item) && edit.liveLength(item) > (limitOf(item.platform) ?? Infinity);
 
@@ -392,7 +395,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
         <template #strips>
             <NoticeStack :of="[actionError, listNotice, heldNotice, hooksNotice, goingAheadNotice]" />
             <Notice v-if="invalid.length > 0" tone="warning">
-                {{ invalid.length }} {{ t(`approvalsView.file`) }}{{ invalid.length === 1 ? "" : "s" }} {{ t(`approvalsView.couldntReadWontRun`) }}
+                {{ t(`approvalsView.invalidFiles`, { count: invalid.length }, invalid.length) }}
                 <span class="font-mono">{{ invalid.join(", ") }}</span>
             </Notice>
         </template>
@@ -481,7 +484,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     </template>
                                     <ActionBody v-else :action="item" />
                                     <!-- Failed rows show their reason as the primary content. -->
-                                    <Notice :of="noticeOf(item.error ?? `The run did not say why.`)" class="mt-3 max-w-read" />
+                                    <Notice :of="noticeOf(item.error ?? t(`asks.failedNoReason`))" class="mt-3 max-w-read" />
                                     <div v-if="lengthOf(item)" :class="FACTS">
                                         <span :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
                                     </div>
@@ -645,7 +648,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     severity="secondary"
                                     :text="true"
                                     :disabled="rejectWake.isPending.value"
-                                    :aria-label="`${wake.autoRunAt !== undefined ? `Cancel` : `Reject`} ${wakeName(wake)}`"
+                                    :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.cancelItem`, { item: wakeName(wake) }) : t(`approvalsView.reject`, { item: wakeName(wake) })"
                                     @click="dropWake(wake)"
                                 />
                                 <Button
@@ -653,7 +656,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :label="wake.autoRunAt !== undefined ? t(`approvalsView.startNow`) : t(`approvalsView.approve`)"
                                     size="small"
                                     :disabled="approveWake.isPending.value"
-                                    :aria-label="`${wake.autoRunAt !== undefined ? `Start` : `Approve`} ${wakeName(wake)}`"
+                                    :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.startItem`, { item: wakeName(wake) }) : t(`approvalsView.approveItem`, { item: wakeName(wake) })"
                                     @click="releaseWake(wake)"
                                 >
                                     <template #icon><Icon name="check" /></template>

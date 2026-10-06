@@ -2,7 +2,7 @@ import type { IconName } from "@intentic/ui";
 import { z } from "zod";
 import { type RequestDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
 import { codeLangForPath } from "@intentic/code-read";
-import { plural } from "@intentic/base/format";
+import { t } from "@intentic/ui/i18n";
 import { diffStat } from "./chatToolDiff";
 
 // Per-tool rendering table for the chat's tool cards: a presenter is looked up by the tool's normalized display name
@@ -63,6 +63,19 @@ export const TEXT_CAP = 4000;
 const FILE_ROW_CAP = 50;
 
 const countLines = (text: string): number => (text === `` ? 0 : text.split(`\n`).filter((line) => line !== ``).length);
+// A tool card's count, in the reader's language: one message per noun, since each language inflects its own.
+const lineCount = (text: string): string => {
+    const count = countLines(text);
+    return t(`chat.toolPresentation.lines`, { count }, count);
+};
+const matchCount = (text: string): string => {
+    const count = countLines(text);
+    return t(`chat.toolPresentation.matches`, { count }, count);
+};
+const fileCount = (text: string): string => {
+    const count = countLines(text);
+    return t(`chat.toolPresentation.files`, { count }, count);
+};
 
 // Parses a `path[:line[:match]]` line as ripgrep/glob tools emit it; requires a path-shaped segment (`/` or a
 // dot-extension, no leading `-`), else undefined.
@@ -159,7 +172,7 @@ export const numberedFileBody = (text: string): { readonly code: string; readonl
 
 // Per-tool presenters keyed by lowercased display name (agent/tool-calls.ts normalizes it across backends).
 const PRESENTERS: Record<string, Presenter> = {
-    bash: { body: commandBody, summary: (text) => (text === `` ? `no output` : plural(countLines(text), `line`)) },
+    bash: { body: commandBody, summary: (text) => (text === `` ? t(`chat.toolPresentation.noOutput`) : lineCount(text)) },
     bashoutput: { body: commandBody },
     read: {
         // Colors the read via the path's extension; unknown extension or non-file read falls back to plain text.
@@ -174,10 +187,10 @@ const PRESENTERS: Record<string, Presenter> = {
             const path = tool.locations?.[0]?.path ?? tool.target;
             return { kind: `code`, code: parsed.code, lang: path === undefined ? undefined : codeLangForPath(path), firstLine: parsed.firstLine };
         },
-        summary: (text) => (text === `` ? undefined : plural(countLines(text), `line`)),
+        summary: (text) => (text === `` ? undefined : lineCount(text)),
     },
-    grep: { body: filesBody, summary: (text) => (text === `` ? `no matches` : plural(countLines(text), `match`)) },
-    glob: { body: filesBody, summary: (text) => (text === `` ? `no matches` : plural(countLines(text), `file`)) },
+    grep: { body: filesBody, summary: (text) => (text === `` ? t(`chat.toolPresentation.noMatches`) : matchCount(text)) },
+    glob: { body: filesBody, summary: (text) => (text === `` ? t(`chat.toolPresentation.noMatches`) : fileCount(text)) },
     edit: { summary: diffSummary },
     write: { summary: diffSummary },
     multiedit: { summary: diffSummary },
@@ -194,7 +207,7 @@ const PRESENTERS: Record<string, Presenter> = {
 // Shared presenter for every `Browser <verb>` tool; a snapshot's body is summarized by line count only.
 const BROWSER_PRESENTER: Presenter = {
     icon: `globe`,
-    summary: (text, tool) => (tool.name.toLowerCase() === `browser snapshot` && text !== `` ? plural(countLines(text), `line`) : undefined),
+    summary: (text, tool) => (tool.name.toLowerCase() === `browser snapshot` && text !== `` ? lineCount(text) : undefined),
 };
 
 // The sandbox's spawn door as a runtime calls it: its own `subagents` server, or the custom tools Cursor mounts it as.
@@ -255,7 +268,7 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
         .filter((entry) => entry.type === `text`)
         .map((entry) => entry.text)
         .join(``);
-    const capped = text.length > TEXT_CAP ? `${text.slice(0, TEXT_CAP)}\n… (truncated)` : text;
+    const capped = text.length > TEXT_CAP ? `${text.slice(0, TEXT_CAP)}\n… (${t(`chat.toolPresentation.truncated`)})` : text;
     const running = tool.status === `pending` || tool.status === `in_progress`;
     const failed = tool.status === `failed`;
 
@@ -270,7 +283,7 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
         images,
         body: diffs.length === 0 && images.length === 0 && document === undefined && shown === undefined ? undefined : shown,
         // A failed call's own message is the summary; a successful one asks its presenter.
-        summary: failed ? `failed` : presenter.summary?.(text, tool),
+        summary: failed ? t(`chat.toolPresentation.failed`) : presenter.summary?.(text, tool),
         // Collapsed once a call settles cleanly; images and documents stay open regardless.
         defaultOpen: running || failed || images.length > 0 || document !== undefined,
         delegates: delegates(tool),

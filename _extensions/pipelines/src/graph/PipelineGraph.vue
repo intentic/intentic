@@ -30,7 +30,7 @@ const toggleStage = (index: number, event: Event): void => {
 // Hover text: what the stage is called, how it ended, and, when it holds more than the one job its label
 // already names: how many jobs are inside.
 const stageTooltip = (stage: PipelineStage, index: number): string => {
-    const detail = stage.jobs.length > 1 ? ` · ${stage.jobs.length} jobs` : ``;
+    const detail = stage.jobs.length > 1 ? ` · ${t(`pipelineGraph.jobs`, { count: stage.jobs.length }, stage.jobs.length)}` : ``;
     return `${stageLabel(stage, index)}: ${STATUS_TONE[stage.status].label}${detail}`;
 };
 </script>

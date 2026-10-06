@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
 import { isBrowsableArchive } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { basename, joinPath } from "@intentic/ui/path";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed, markRaw, reactive, ref } from "vue";
@@ -160,7 +161,7 @@ const runInstall = async (): Promise<void> => {
         }
     } catch (error) {
         if (current()) {
-            installError.value = messageOr(error, `Couldn't start the install.`);
+            installError.value = messageOr(error, t(`workspace.uploadQueue.installFailed`));
         }
     } finally {
         if (current()) {
@@ -272,7 +273,7 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
                     return;
                 }
                 setStatus(item, `failed`);
-                item.error = messageOr(error, `Upload failed.`);
+                item.error = messageOr(error, t(`workspace.uploadQueue.uploadFailed`));
             }
         }
     };
@@ -349,7 +350,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
         // Stall or a real error: record it for the give-up message, but leave status alone; a retry resends the chunk.
         for (const item of items) {
             if (item.status !== `done`) {
-                item.error = messageOr(error, `Upload failed.`);
+                item.error = messageOr(error, t(`workspace.uploadQueue.uploadFailed`));
             }
         }
         return `failed`;
@@ -404,7 +405,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
     for (const item of chunk) {
         if (item.status !== `done`) {
             setStatus(item, `failed`);
-            item.error ??= `Upload failed after ${RETRY_ATTEMPTS} attempts.`;
+            item.error ??= t(`workspace.uploadQueue.uploadFailedAfter`, { attempts: RETRY_ATTEMPTS }, RETRY_ATTEMPTS);
         }
     }
 };

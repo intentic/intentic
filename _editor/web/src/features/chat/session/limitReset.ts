@@ -68,12 +68,12 @@ export const limitResetNote = (claim: LimitResetClaim): string => {
         case `reset`:
             return ``;
         case `already_used`:
-            return `This week's reset is already spent.`;
+            return t(`chat.limitReset.alreadyUsed`);
         case `not_limited`:
-            return `The window had already reopened — just continue.`;
+            return t(`chat.limitReset.notLimited`);
         case `ineligible`:
-            return `Anthropic didn't grant this account a reset. Its current limit still applies.`;
+            return t(`chat.limitReset.ineligible`);
         default:
-            return claim.detail ?? `Couldn't reset it right now — try again in a moment.`;
+            return claim.detail ?? t(`chat.limitReset.failed`);
     }
 };

@@ -14,6 +14,7 @@ import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
 import { cronOf, defaultSchedule, instantOf, localInputOf, parseCron } from "./cronSchedule";
+import { t } from "./i18n";
 
 // One automation form for the create dialog and the edit dialog. `load` and `build` are inverse: `build` omits fields
 // at their default, `load` reconstructs the same form so an unchanged save round-trips to an identical automation.
@@ -205,9 +206,9 @@ export function useAutomationForm(
         }
         try {
             const runs = new Cron(cron, cronOptions(effectiveZone.value)).nextRuns(3).map((date) => date.getTime());
-            return runs.length > 0 ? { runs } : { error: `This schedule never fires.` };
+            return runs.length > 0 ? { runs } : { error: t(`useAutomationForm.neverFires`) };
         } catch {
-            return { error: `Invalid cron expression.` };
+            return { error: t(`useAutomationForm.invalidCron`) };
         }
     });
 
@@ -221,9 +222,9 @@ export function useAutomationForm(
             return undefined;
         }
         if (Number.isNaN(onceAt.value)) {
-            return `Pick the date and time it should fire.`;
+            return t(`useAutomationForm.pickDateTime`);
         }
-        return onceAt.value <= Date.now() ? `That moment has already passed.` : undefined;
+        return onceAt.value <= Date.now() ? t(`useAutomationForm.momentPassed`) : undefined;
     });
 
     /* ---- the prompt follows the trigger ---- */
@@ -288,14 +289,14 @@ export function useAutomationForm(
     const nameError = computed<string | undefined>(() => {
         const trimmed = form.id.trim();
         if (trimmed.length === 0) {
-            return `Name is required.`;
+            return t(`useAutomationForm.nameRequired`);
         }
         if (!NAME_RE.test(trimmed)) {
-            return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
+            return t(`useAutomationForm.nameFormat`);
         }
         return undefined;
     });
-    const promptError = computed<string | undefined>(() => (form.prompt.trim() === `` ? `Prompt is required.` : undefined));
+    const promptError = computed<string | undefined>(() => (form.prompt.trim() === `` ? t(`useAutomationForm.promptRequired`) : undefined));
     // Must match exactly what a browser sends in the Origin header: scheme + host, no path, since that's what the
     // daemon compares.
     const originsError = computed<string | undefined>(() => {
@@ -303,17 +304,15 @@ export function useAutomationForm(
             return undefined;
         }
         if (originList.value.length === 0) {
-            return `Add at least one site: a Visitor chat with no allowed sites admits nobody.`;
+            return t(`useAutomationForm.addSite`);
         }
         const bad = originList.value.find((origin) => !/^https?:\/\/[^/]+$/.test(origin));
-        return bad === undefined ? undefined : `"${bad}" isn't an origin, use scheme + host only, e.g. https://example.com`;
+        return bad === undefined ? undefined : t(`useAutomationForm.notAnOrigin`, { origin: bad });
     });
 
     // The one error about spending rather than syntax: no sandbox-wide tier to fall back on, so an empty ladder must
     // refuse. Enforced here too, not just in the schema, so the refusal happens at save with an actionable message.
-    const modelsError = computed<string | undefined>(() =>
-        form.models.length === 0 ? `Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.` : undefined,
-    );
+    const modelsError = computed<string | undefined>(() => (form.models.length === 0 ? t(`useAutomationForm.pickModel`) : undefined));
 
     // A rule naming nobody would be refused by the daemon's schema; said here so the refusal points at the row.
     const sendersError = computed<string | undefined>(() => {
@@ -321,7 +320,7 @@ export function useAutomationForm(
             return undefined;
         }
         const empty = form.senderRules.some((rule) => splitIds(rule.ids).length === 0 && splitIds(rule.groups).length === 0);
-        return empty ? `Every rule needs at least one person or group; remove the empty one.` : undefined;
+        return empty ? t(`useAutomationForm.emptyRule`) : undefined;
     });
 
     const valid = computed(

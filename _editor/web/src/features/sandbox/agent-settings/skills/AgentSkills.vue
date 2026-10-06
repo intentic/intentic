@@ -89,7 +89,7 @@ const toggle = async (skill: SkillSummary): Promise<void> => {
     try {
         openBody.value = (await readBody(skill.id)).body;
     } catch (failure) {
-        bodyError.value = failure instanceof Error ? failure.message : `Couldn't read this skill.`;
+        bodyError.value = failure instanceof Error ? failure.message : t(`sandbox.agentSkills.couldntReadSkill`);
     }
 };
 

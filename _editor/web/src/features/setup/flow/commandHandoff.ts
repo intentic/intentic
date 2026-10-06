@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { SetupReport } from "@intentic/api-contract";
 
 // Where the install command is on its way to a machine, why none is on screen yet, and when a quiet wait needs a word.
@@ -41,33 +42,33 @@ export interface LockInput {
 // The own-zone form's first unanswered question, or undefined once every answer is in.
 const zoneQuestion = (lock: LockInput): string | undefined => {
     if (lock.cfToken.length === 0) {
-        return `Enter your Cloudflare API token to reveal your install command.`;
+        return t(`setup.commandHandoff.enterToken`);
     }
     if (!lock.cfTokenValid) {
-        return `Your install command appears once the token above looks valid.`;
+        return t(`setup.commandHandoff.tokenValid`);
     }
     if (lock.zonesLoading) {
-        return `Checking which Cloudflare zones this token can use…`;
+        return t(`setup.commandHandoff.checkingZones`);
     }
     if (lock.zonesError !== undefined) {
-        return `Fix the Cloudflare token issue above to continue.`;
+        return t(`setup.commandHandoff.fixToken`);
     }
     if (lock.zone === undefined) {
-        return `Choose which Cloudflare zone to use to reveal your command.`;
+        return t(`setup.commandHandoff.chooseZone`);
     }
-    return lock.subdomainValid ? undefined : `Enter a valid subdomain (letters, numbers, hyphens) to reveal your command.`;
+    return lock.subdomainValid ? undefined : t(`setup.commandHandoff.invalidSubdomain`);
 };
 
 // Why no command is on screen yet, in the words of what is missing.
 export const lockedReasonOf = (lock: LockInput): string => {
     // Not a wait: no command is coming, so this states the fact rather than saying 'Preparing…', which read as hung.
     if (lock.addressless) {
-        return `This platform doesn't hand out addresses, so there's no install command to run. Connect a sandbox you're already running instead.`;
+        return t(`setup.commandHandoff.addressless`);
     }
     if (lock.mode === `intentic`) {
-        return lock.mintError ?? `Preparing your intentic domain…`;
+        return lock.mintError ?? t(`setup.commandHandoff.preparingDomain`);
     }
-    return zoneQuestion(lock) ?? lock.mintError ?? `Preparing your install command…`;
+    return zoneQuestion(lock) ?? lock.mintError ?? t(`setup.commandHandoff.preparingCommand`);
 };
 
 // Once the wait reads as a misunderstanding (ms): a long fuse wherever the command is not the path (compose, a phone,

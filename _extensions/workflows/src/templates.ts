@@ -28,7 +28,10 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> = {}): Work
 });
 
 // Both get the raw request directly, no goal/prompt/output declared, so neither has a completion gate or a paraphrased
-// brief. Titles stay neutral (not naming the model), since downstream steps see them under `### From "<title>"`.
+// brief. Titles stay neutral (not naming the model), since downstream steps see them under `### From "<title>"`; and
+// they stay English in every language, since the evaluator's prompt names them ("Attempt A and Attempt B"). The other
+// steps' titles and the workflows' names are the reader's and follow the language on screen; goals, prompts and rubrics
+// are what the agents are told, and stay English.
 const attempts = (): WorkflowStep[] => [step(`attempt-a`, `Attempt A`, { agent: `claude` }), step(`attempt-b`, `Attempt B`, { agent: `codex` })];
 
 // Shared merge prompt: start from the stronger branch, fix its faults, fold in the other's strengths.
@@ -49,7 +52,7 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
         summary: t(`templates.whatTypeGoesTo`),
         workflow: {
             id: `two-models-one-task`,
-            name: `Two models, one task`,
+            name: t(`templates.name.twoModelsOneTask`),
             description: t(`templates.oneRequestBuiltTwice`),
             // Both attempts must start at once; 1 here would silently turn this into a race with a false start.
             maxParallel: 2,
@@ -57,7 +60,7 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
                 ...attempts(),
                 // One step, no separate scoring pass: reading both diffs is the comparison. Unpinned and fresh, with no
                 // stake in either attempt; no declared check, since a hardcoded test command failed outside this repo.
-                step(`synthesise`, `Take the best of both`, {
+                step(`synthesise`, t(`templates.step.takeBest`), {
                     needs: [`attempt-a`, `attempt-b`],
                     goal: `One coherent implementation exists that keeps the best of both attempts, and the project's own tests pass.`,
                     prompt: SYNTHESIS_PROMPT,
@@ -70,14 +73,14 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
         summary: t(`templates.sameRaceGradedThird`),
         workflow: {
             id: `two-models-scored`,
-            name: `Two models, scored and merged`,
+            name: t(`templates.name.twoModelsScored`),
             description: t(`templates.oneRequestBuiltTwice2`),
             maxParallel: 2,
             steps: [
                 ...attempts(),
                 // Pinned to a third provider so neither attempt's family grades its own work; the declared JSON output
                 // is a completion gate, and the extra session is why this card isn't the default.
-                step(`evaluate`, `Score both attempts`, {
+                step(`evaluate`, t(`templates.step.scoreBoth`), {
                     needs: [`attempt-a`, `attempt-b`],
                     agent: `grok`,
                     goal: `Both anonymous attempts have been scored against the request, the repository, and concrete verification evidence.`,
@@ -130,7 +133,7 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
                 }),
                 // Same merge, plus the score as evidence (not authority) and a judge that rejects the claim unless
                 // verification is named and run. No fixed test command, since it would guess a stranger's build system.
-                step(`synthesise`, `Take the best of both`, {
+                step(`synthesise`, t(`templates.step.takeBest`), {
                     needs: [`attempt-a`, `attempt-b`, `evaluate`],
                     agent: `grok`,
                     goal: `One coherent implementation exists that keeps the best of both attempts, and the project's own tests pass.`,
@@ -160,11 +163,11 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
         summary: t(`templates.intelligentStepCiPipeline`),
         workflow: {
             id: `release-gate`,
-            name: `Release gate`,
+            name: t(`templates.name.releaseGate`),
             description: t(`templates.calledByPipelineOver`),
             maxParallel: 1,
             steps: [
-                step(`judge`, `Judge the change`, {
+                step(`judge`, t(`templates.step.judgeChange`), {
                     goal: `The change the pipeline named has been exercised against the workspace and a defensible verdict recorded.`,
                     prompt:
                         `A pipeline called this gate with everything it knows about a change, the text above: typically a commit, a branch, ` +
@@ -205,11 +208,11 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
         summary: t(`templates.questionBecomesPlanThree`),
         workflow: {
             id: `research-report`,
-            name: `Research report`,
+            name: t(`templates.name.researchReport`),
             description: t(`templates.questionDecomposedIntoThree`),
             maxParallel: 3,
             steps: [
-                step(`plan`, `Plan`, {
+                step(`plan`, t(`templates.step.plan`), {
                     goal: `The request is decomposed into three mutually exclusive subtopics that together cover it, with its constraints stated.`,
                     prompt:
                         `Turn the request above into a research plan. Decide what it is really asking, note any constraint it carries (a time window, a geography, a scope), and split it into THREE subtopics that are mutually exclusive and together exhaustive: distinct facets, angles, entities or regions, never three restatements of the whole. ` +
@@ -251,7 +254,7 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
                     },
                 }),
                 ...[1, 2, 3].map((index) =>
-                    step(`research-${index}`, `Research ${index}`, {
+                    step(`research-${index}`, t(`templates.step.research`, { index }), {
                         needs: [`plan`],
                         goal: `Subtopic ${index} of the plan is answered with cited findings, and what could not be found is named.`,
                         prompt:
@@ -262,7 +265,7 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
                             `Your closing message IS your notes and is handed to the writer verbatim, so make it complete and self-contained, in exactly this shape: a top heading with the subtopic, then for each key question a "### Takeaway" (one or two sentences), "### Cited findings" (one line per fact, each ending with an inline [Source](URL); a contradiction cites both), "### Inferences" (yours, labelled as such) and "### Gaps" (what you could not answer and why). Also save the same text to research_notes/<the plan's title>/subtopic-${index}.md.`,
                     }),
                 ),
-                step(`write`, `Write the report`, {
+                step(`write`, t(`templates.step.writeReport`), {
                     needs: [`research-1`, `research-2`, `research-3`],
                     goal: `A report that answers the original question exists, every major claim carrying an inline citation from the notes, and the gaps stated.`,
                     prompt:

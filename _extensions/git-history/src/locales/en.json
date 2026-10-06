@@ -7,6 +7,7 @@
         "delete": "Delete {name}?",
         "delete2": "Delete",
         "deleteBranch": "Delete branch",
+        "detached": "detached",
         "filterBranches": "Filter branches",
         "filterBranches2": "Filter branches…",
         "forceDelete": "Force delete",
@@ -84,6 +85,74 @@
         "rightClick": "Right-click",
         "scrollOlderCommits": "Scroll for older commits",
         "softKeepsChangesStaged": "Soft: keeps your changes staged.",
-        "stashedWork": "Stashed work"
+        "stashedWork": "Stashed work",
+        "uncommittedChanges": "Uncommitted changes",
+        "failedToLoadCommit": "Failed to load commit.",
+        "dialog": {
+            "branch": "Create branch",
+            "branchConfirm": "Create",
+            "checkout": "Checkout commit",
+            "checkoutConfirm": "Checkout",
+            "cherryPick": "Cherry-pick commit",
+            "cherryPickConfirm": "Cherry-pick",
+            "drop": "Drop commit",
+            "dropConfirm": "Drop",
+            "merge": "Merge into current branch",
+            "mergeConfirm": "Merge",
+            "rebase": "Rebase current branch",
+            "rebaseConfirm": "Rebase",
+            "reset": "Reset current branch",
+            "resetConfirm": "Reset",
+            "revert": "Revert commit",
+            "revertConfirm": "Revert",
+            "tag": "Add tag",
+            "tagConfirm": "Add tag"
+        },
+        "body": {
+            "checkout": "Check out {sha} directly (detached HEAD). Uncommitted changes will block this.",
+            "cherryPick": "Copy {sha}'s change onto the current branch as a new commit.",
+            "drop": "Remove {sha} from history, replaying the commits after it onto its parent.",
+            "merge": "Merge {sha} into the current branch ({branch}).",
+            "rebase": "Replay the current branch's commits on top of {sha}.",
+            "reset": "Move the current branch ({branch}) to {sha}.",
+            "revert": "Add a new commit that undoes {sha}. Nothing is rewritten."
+        },
+        "conflict": "Couldn't {action} cleanly: a conflict or uncommitted changes. Resolve it in a terminal.",
+        "resetSoft": "Soft",
+        "resetMixed": "Mixed",
+        "resetHard": "Hard"
+    },
+    "useAsyncAction": {
+        "actionFailed": "Action failed."
+    },
+    "useBranches": {
+        "checkoutFailed": "Checkout failed. Commit, stage or discard your changes first.",
+        "couldntCreate": "Could not create that branch.",
+        "couldntDelete": "Could not delete that branch.",
+        "couldntPush": "Could not push that branch.",
+        "pushRefused": "Push was refused.",
+        "pushRefusedBecause": "Push was refused: {reason}",
+        "unmerged": "Branch has unmerged commits, deleting it would lose them."
+    },
+    "useOperation": {
+        "couldntAbort": "Could not abort: try it in a terminal."
+    },
+    "useStashes": {
+        "conflict": "Could not apply cleanly: resolve the conflict in the Changes panel. The stash is still there.",
+        "couldntApply": "Could not apply that stash.",
+        "couldntDrop": "Could not drop that stash.",
+        "nothingApplied": "Nothing was applied: {reason}. The stash is still there."
+    },
+    "useUndo": {
+        "amend": "Undo amend",
+        "cherryPick": "Undo cherry-pick",
+        "commit": "Undo commit",
+        "couldntUndo": "Could not undo.",
+        "merge": "Undo merge",
+        "other": "Undo last action",
+        "pull": "Undo pull",
+        "rebase": "Undo rebase",
+        "reset": "Undo reset",
+        "revert": "Undo revert"
     }
 }

@@ -31,7 +31,9 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
     acting.value = path;
     return run(
         () => repair({ path, key: action.key, ...(action.to === undefined ? {} : { to: action.to }) }),
-        action.to === undefined ? `Couldn't remove "${action.key}".` : `Couldn't rename "${action.key}".`,
+        action.to === undefined
+            ? t(`sandbox.sandboxManifestCard.couldntRemoveKey`, { key: action.key })
+            : t(`sandbox.sandboxManifestCard.couldntRenameKey`, { key: action.key }),
     );
 };
 </script>

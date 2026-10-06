@@ -2,7 +2,7 @@
 import type { ApiToken } from "@intentic/api-contract";
 import { Button, Code, CopyButton, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { apiClient } from "../../lib/useApi";
 import { useMintedTokens } from "../../lib/useMintedTokens";
 import { useT } from "@intentic/ui/i18n";
@@ -39,13 +39,15 @@ const now = ref(Date.now());
 // at a phone's width. "Never used" is the fact worth seeing: it is how a forgotten token is spotted.
 const describe = (token: ApiToken): string =>
     [
-        `${token.scope} · minted ${formatDate(Date.parse(token.createdAt))}`,
-        token.lastUsedAt === undefined ? `never used` : `used ${timeAgo(Date.parse(token.lastUsedAt), { now: now.value, days: true })}`,
+        t(`settings.settingsTokens.minted`, { scope: token.scope, date: formatDate(Date.parse(token.createdAt)) }),
+        token.lastUsedAt === undefined
+            ? t(`settings.settingsTokens.neverUsed`)
+            : t(`settings.settingsTokens.used`, { ago: timeAgo(Date.parse(token.lastUsedAt), { now: now.value, days: true }) }),
     ].join(` · `);
 
 // What the owner does with it: paste it into the sandbox's own Sandbox fleet card. Not a curl line — nothing about
 // this token is meant to be driven by hand.
-const pasteSnippet = `Capabilities → Sandbox fleet → Provisioning token`;
+const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
 </script>
 
 <template>

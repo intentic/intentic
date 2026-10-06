@@ -34,7 +34,10 @@ const registryStateOf = (extension: ExtensionSummary): ExtensionState | undefine
     }
     if (extension.health?.state === `unhealthy`) {
         return {
-            label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`,
+            label:
+                extension.health.autoReverted === true
+                    ? t(`extensions.useExtensionList.updateRolledBack`)
+                    : t(`extensions.useExtensionList.updateUnhealthy`),
             variant: `warning`,
             badge: true,
             attention: true,
@@ -46,7 +49,7 @@ const registryStateOf = (extension: ExtensionSummary): ExtensionState | undefine
 // The registry's reason for the state above, when it set one.
 const registryDetailOf = (extension: ExtensionSummary): string | undefined => {
     if (extension.advisory !== undefined) {
-        return `Blocked by its registry: ${extension.advisory.reason}`;
+        return t(`extensions.useExtensionList.blockedByRegistry`, { reason: extension.advisory.reason });
     }
     return extension.health?.state === `unhealthy` ? extension.health.detail : undefined;
 };

@@ -53,25 +53,39 @@ export const deviceTone = (device: Device, readAt: number): StatusVariant => {
 
 // The badge's word must agree with its colour: a dead sync agent is amber, so it reads "needs attention"
 // rather than "live".
-export const deviceState = (device: Device, readAt: number): string => {
+type DeviceStateCode = `live` | `attention` | `quiet` | `reconnecting` | `offline`;
+
+const stateCode = (device: Device, readAt: number): DeviceStateCode => {
     // Said before the gap it is a case of: a socket dropped seconds ago is a machine on its way back, and calling
     // that offline is a verdict this row contradicts a second later.
     if (deviceReconnecting(device, readAt)) {
         return `reconnecting`;
     }
     if (device.gap !== undefined) {
-        return device.gap === `offline` ? `offline` : `needs attention`;
+        return device.gap === `offline` ? `offline` : `attention`;
     }
     if (deviceQuiet(device, readAt)) {
-        return `gone quiet`;
+        return `quiet`;
     }
-    return device.report?.agent.running === false || agentHalted(device) ? `needs attention` : `live`;
+    return device.report?.agent.running === false || agentHalted(device) ? `attention` : `live`;
 };
+
+// The badge's word, built when read so it follows the language on screen.
+const stateWord = (code: DeviceStateCode): string =>
+    ({
+        live: t(`sandbox.deviceRows.stateLive`),
+        attention: t(`sandbox.deviceRows.stateAttention`),
+        quiet: t(`sandbox.deviceRows.stateQuiet`),
+        reconnecting: t(`sandbox.deviceRows.stateReconnecting`),
+        offline: t(`sandbox.deviceRows.stateOffline`),
+    })[code];
+
+export const deviceState = (device: Device, readAt: number): string => stateWord(stateCode(device, readAt));
 
 // Machines worth reading first: state leads, name breaks ties, so order only changes when a machine's state
 // does. Live ranks above needs-attention, since a live card is the point of the board; a machine with several
 // environments ranks by its best one, since that is the door that works.
-const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, reconnecting: 3, offline: 4 };
+const RANK: Record<DeviceStateCode, number> = { live: 0, attention: 1, quiet: 2, reconnecting: 3, offline: 4 };
 
 // One word for the whole PC, so the masthead carries a verdict instead of restating the environment names that
 // are the section under it; worst side wins, since each row below carries its own state.
@@ -79,11 +93,11 @@ export const machineState = (machine: MachineRow, readAt: number): { word: strin
     const states = machine.environments.map((environment) => ({
         word: deviceState(environment.device, readAt),
         variant: deviceTone(environment.device, readAt),
-        rank: RANK[deviceState(environment.device, readAt)] ?? 9,
+        rank: RANK[stateCode(environment.device, readAt)],
     }));
     const worst = states.toSorted((a, b) => b.rank - a.rank)[0];
     if (worst === undefined) {
-        return { word: `offline`, variant: `neutral` };
+        return { word: stateWord(`offline`), variant: `neutral` };
     }
     return { word: worst.word, variant: worst.variant };
 };
@@ -103,7 +117,7 @@ export const machineHardware = (machine: MachineRow): string => {
 };
 
 const machineRank = (machine: MachineRow, readAt: number): number =>
-    Math.min(...machine.environments.map((environment) => RANK[deviceState(environment.device, readAt)] ?? 9));
+    Math.min(...machine.environments.map((environment) => RANK[stateCode(environment.device, readAt)]));
 
 export const sortMachines = (machines: readonly MachineRow[], readAt: number): MachineRow[] =>
     machines.toSorted((a, b) => machineRank(a, readAt) - machineRank(b, readAt) || a.label.localeCompare(b.label));
@@ -429,7 +443,7 @@ export interface BoardBody {
 
 const doorsOf = (row: DeviceRow): string[] => [
     ...deviceDoors(row.device).map((door) => door.name),
-    ...(row.chip === undefined ? [] : [`agent ${row.chip.version}`]),
+    ...(row.chip === undefined ? [] : [t(`sandbox.deviceRows.agentVersion`, { version: row.chip.version })]),
 ];
 
 const boardEnvironment = (row: DeviceRow, readAt: number): BoardEnvironment => ({

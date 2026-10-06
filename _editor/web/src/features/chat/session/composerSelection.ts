@@ -1,4 +1,5 @@
 import { capabilitiesOf, clampMode, fastAllowed, type PermissionMode, providerLabel, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef } from "vue";
 import { providerAccounts } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
@@ -36,14 +37,14 @@ export interface SwitchPoint {
 // A provider, account or harness switch retires the session; unconditional about what carries over, since that is the
 // daemon's own record, not what this window happens to have painted.
 export const segmentSwitchText = (point: SwitchPoint): string | undefined =>
-    !point.started || point.resumes
-        ? undefined
-        : `Switched to ${point.providerLabel}: your next message starts a fresh session with the conversation so far carried over.`;
+    !point.started || point.resumes ? undefined : t(`chat.composerSelection.switchedProvider`, { provider: point.providerLabel });
 
 // A model swap keeps the session and still costs something: it re-reads the whole conversation on a cold cache.
 // Nothing sent yet on this segment, or the pick back where the last turn left it, says nothing.
 export const modelSwitchText = (point: SwitchPoint): string | undefined =>
-    point.sentModel === undefined || point.sentModel === point.model ? undefined : `Switched to ${point.modelLabel}${point.allowance}`;
+    point.sentModel === undefined || point.sentModel === point.model
+        ? undefined
+        : `${t(`chat.composerSelection.switchedModel`, { model: point.modelLabel })}${point.allowance}`;
 
 // The pending divider's words while settings change; undefined retracts it.
 export const switchNoticeText = (point: SwitchPoint): string | undefined => segmentSwitchText(point) ?? modelSwitchText(point);
@@ -268,7 +269,7 @@ export class ComposerSelection {
         }
         const resetsAt = allowance.percent >= SPENT_UTILIZATION ? allowance.resetsAt : undefined;
         return ` · ${allowance.name} ${formatRemaining(allowance.percent, isStale(usage))}${
-            resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`
+            resetsAt === undefined ? `` : `, ${t(`chat.composerSelection.resets`, { when: formatReset(resetsAt) })}`
         }`;
     }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type Persona, personaBounds } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract";
+import { personaBoundsWords } from "../../sandbox/personas/personaBounds";
 import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -113,18 +114,22 @@ const nameHint = computed(() => {
     if (label.value === `` || nameValid.value) {
         return undefined;
     }
-    return taken.value ? `You already have a persona called ${cardId.value}.` : `Use letters or digits.`;
+    return taken.value ? t(`workspace.directoryPersonas.nameTaken`, { id: cardId.value }) : t(`workspace.directoryPersonas.useLettersOrDigits`);
 });
 
 const heading = computed(() =>
-    mode.value === `edit` ? `Editing ${label.value}` : mode.value === `existing` ? `Use an existing persona` : `Add a persona`,
+    mode.value === `edit`
+        ? t(`workspace.directoryPersonas.editing`, { label: label.value })
+        : mode.value === `existing`
+          ? t(`workspace.directoryPersonas.useExisting`)
+          : t(`workspace.directoryPersonas.addAPersona`),
 );
 
 // How bounded this draft is, in the app's own phrase; shown beside the collapsed Advanced section so a limited
 // card doesn't read as full-powers just because that section is folded away.
 const bounds = computed(() => {
     const stored = storedPowers(powers.value);
-    return stored === undefined ? undefined : personaBounds({ id: cardId.value, capabilities: [], powers: stored });
+    return stored === undefined ? undefined : personaBoundsWords({ id: cardId.value, capabilities: [], powers: stored });
 });
 
 // Fields this panel never asks about but must not drop when rewriting an existing card: what it's for, its
@@ -186,7 +191,7 @@ const submit = async (): Promise<void> => {
         await save.mutateAsync(card);
         dir.value = undefined;
     } catch (err) {
-        saveError.value = noticeFrom(err, `Could not save this persona.`);
+        saveError.value = noticeFrom(err, t(`workspace.directoryPersonas.couldNotSave`));
     } finally {
         submitting.value = false;
     }
@@ -214,7 +219,7 @@ const submit = async (): Promise<void> => {
                     <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
                     <PersonaFace :persona :size="FACE_SIZES.row" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
-                    <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
+                    <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBoundsWords(persona) }}</StatusBadge>
                     <button
                         type="button"
                         :class="ui.iconButton()"

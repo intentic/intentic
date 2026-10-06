@@ -38,19 +38,19 @@ const BUTTON_HINT: Record<VoiceState, () => TooltipValue> = {
 };
 
 // Shared with the turn's own shortcuts, so an idle mic yields it back.
-const SLOT_HINT: Record<VoiceState, string | undefined> = {
-    preparing: `Preparing voice (first use)…`,
-    listening: `Listening, pause to send, Esc to stop`,
-    idle: undefined,
+const SLOT_HINT: Record<VoiceState, () => string | undefined> = {
+    preparing: () => t(`chat.composerVoice.preparingFirstUse`),
+    listening: () => t(`chat.composerVoice.listening`),
+    idle: () => undefined,
 };
 
 // `needs-rebuild` means the image predates the whisper pack; the Environment card's rebuild adds it.
-const ERROR_LINE: Record<VoiceError, string> = {
-    "mic-blocked": `Microphone access is blocked. Allow it in your browser's site settings, then try again.`,
-    "no-mic": `No microphone was found.`,
-    "needs-rebuild": `Voice needs a one-time sandbox update, run the rebuild on the Sandbox page's Environment card first.`,
-    unavailable: `Voice isn't available on this sandbox, update it, then try again.`,
-    failed: `Couldn't transcribe that, try again.`,
+const ERROR_LINE: Record<VoiceError, () => string> = {
+    "mic-blocked": () => t(`chat.composerVoice.micBlocked`),
+    "no-mic": () => t(`chat.composerVoice.noMic`),
+    "needs-rebuild": () => t(`chat.composerVoice.needsRebuild`),
+    unavailable: () => t(`chat.composerVoice.unavailable`),
+    failed: () => t(`chat.composerVoice.failed`),
 };
 
 export const useComposerVoice = (composer: {
@@ -108,14 +108,14 @@ export const useComposerVoice = (composer: {
         // Armed-send first (narrowest window), then transcription, then the two working states.
         slotHint: computed(() => {
             if (armed.value) {
-                return `Sending: Esc to edit`;
+                return t(`chat.composerVoice.sending`);
             }
             if (pending.value > 0) {
-                return `Transcribing…`;
+                return t(`chat.composerVoice.transcribing`);
             }
-            return SLOT_HINT[state.value];
+            return SLOT_HINT[state.value]();
         }),
-        errorMessage: computed(() => (error.value === undefined ? undefined : ERROR_LINE[error.value])),
+        errorMessage: computed(() => (error.value === undefined ? undefined : ERROR_LINE[error.value]())),
         toggle: (): void => {
             if (on.value) {
                 stop();

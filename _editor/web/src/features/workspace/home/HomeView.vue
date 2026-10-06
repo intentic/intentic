@@ -82,7 +82,11 @@ const clearQuery = (): void => {
     home.value?.focus({ preventScroll: true });
 };
 const placeholder = computed(() =>
-    search?.scope.value === `text` ? `Search text` : search?.scope.value === `smart` ? `Smart search` : `Filter names`,
+    search?.scope.value === `text`
+        ? t(`workspace.homeView.searchText`)
+        : search?.scope.value === `smart`
+          ? t(`workspace.homeView.smartSearch`)
+          : t(`workspace.homeView.filterNames`),
 );
 const queryField = ref<HTMLInputElement>();
 // The field owns its keys; Escape hands the home back, Enter lands on the first result so the next Enter opens it.
@@ -186,23 +190,22 @@ const crumbs = computed<readonly { readonly label: string; readonly path: string
 const here = computed(() => crumbs.value.at(-1)?.label ?? rootLabel.value);
 
 // --- The verbs: the tree's file management over these tiles (useHomeActions) -----------------------------------------
-const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuItems, openMenu, handleKey } =
-    useHomeActions({
-        dir: homeDir,
-        order,
-        lead: selected,
-        host: home,
-        // Closures, not the functions: both are declared below, and are only ever called later.
-        open: (entry) => open(entry),
-        // A new file opens kept, not previewed, so a later look can't close it mid-type, and takes the caret.
-        openCreated: (path) => {
-            requestCaret(path);
-            openFile(path, `keep`);
-        },
-        // A closure, like `open`: declared with the cover's other verbs below.
-        cover: (name) => showCover(name),
-        dirActions,
-    });
+const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuItems, openMenu, handleKey } = useHomeActions({
+    dir: homeDir,
+    order,
+    lead: selected,
+    host: home,
+    // Closures, not the functions: both are declared below, and are only ever called later.
+    open: (entry) => open(entry),
+    // A new file opens kept, not previewed, so a later look can't close it mid-type, and takes the caret.
+    openCreated: (path) => {
+        requestCaret(path);
+        openFile(path, `keep`);
+    },
+    // A closure, like `open`: declared with the cover's other verbs below.
+    cover: (name) => showCover(name),
+    dirActions,
+});
 const { pending, noDrops } = rules;
 const { edit, draft, createError, editing } = inline;
 const { onCopyEvent, onPasteEvent, onPointerDown, carried, dropDir, dropLit, onDragOver, onDragLeave, onDrop } = transfer;

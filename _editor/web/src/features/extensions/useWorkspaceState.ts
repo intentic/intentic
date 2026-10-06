@@ -5,6 +5,7 @@ import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { WORKSPACE_STATE } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { projectWorkspaceState } from "./workspaceStateProjection";
+import { t } from "@intentic/ui/i18n";
 
 /* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result. */
 
@@ -24,7 +25,7 @@ const readJson = async (path: string): Promise<unknown> => {
     try {
         return JSON.parse(file.content);
     } catch (cause) {
-        throw new Error(`desired-state/${path} is not valid JSON.`, { cause });
+        throw new Error(t(`extensions.useWorkspaceState.notValidJson`, { path: `desired-state/${path}` }), { cause });
     }
 };
 

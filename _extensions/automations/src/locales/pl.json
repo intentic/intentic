@@ -64,6 +64,15 @@
         "ignore": "Ignoruj",
         "inZone": "Według zegara w",
         "invisibleMostVisitorsNeeds": "Dla większości odwiedzających niewidoczne. Wymaga widżetu Cloudflare.",
+        "kindCaption": {
+            "event": "Gdy dowolny zewnętrzny system wyśle POST na jej adres webhooka, który zobaczysz, gdy tylko powstanie.",
+            "listener": "W chwili, gdy podłączona usługa coś wyśle. Nic nie jest odpytywane: brama trzyma otwarte połączenie.",
+            "once": "W jednym momencie, według Twojego zegara, a potem sama się wyłącza. Sandbox, który śpi, gdy nadejdzie ten moment, uruchomi ją zaraz po powrocie i powie, ile się spóźnił.",
+            "schedule": "Według zegara, w strefie czasowej tego sandboxa.",
+            "source": "W chwili, gdy {source} wyśle coś z tego. Nic nie jest odpytywane: brama trzyma otwarte połączenie.",
+            "visitorChat": "Gdy odwiedzający napisze w widżecie czatu na Twojej stronie: każdy dostaje osobną rozmowę, na żywo, gotową do przejęcia przez Ciebie.",
+            "workspace": "W pewnym momencie pracy tej przestrzeni roboczej. Bez tokenu i bez adresu: nic spoza sandboxa nie może jej uruchomić."
+        },
         "live": "Na żywo",
         "minutes": "minut",
         "minutes2": "Minuty",
@@ -92,6 +101,11 @@
         "onlyAllowedSitesDaily": "Zostają tylko dozwolone witryny i dzienny limit.",
         "onlyOnce": "Tylko raz",
         "onlyRepoOptional": "Tylko to repozytorium (opcjonalnie)",
+        "othersCaption": {
+            "allow": "Każdy, kogo nie wymieniono, dostaje odpowiedź jako persona powyżej — tak działała ta automatyzacja, zanim miała reguły.",
+            "hold": "Każdy, kogo nie wymieniono, czeka na Ciebie w Zatwierdzeniach i działa jako persona powyżej, gdy się zgodzisz.",
+            "ignore": "Każdy, kogo nie wymieniono, nie dostaje odpowiedzi. Nadal pojawia się w sekcji „widziane niedawno”, więc wymienienie go później to jedno kliknięcie."
+        },
         "peopleRuleNames": "Nazwy reguły osób {index}",
         "persona": "Persona",
         "personaAutomationRuns": "Persona, jako która działa ta automatyzacja",
@@ -199,7 +213,36 @@
         "urlShownToMaintainers": "Jej adres jest pokazywany opiekunom i właścicielowi.",
         "visitorChat": "Recepcja",
         "wakesOnFinding": "Budzi się po znalezisku",
-        "webhook": "Webhook"
+        "webhook": "Webhook",
+        "sourceLive": "{source} na żywo",
+        "mentions": "wzmianki",
+        "turnSettles": "Tura się kończy",
+        "onceAt": "Raz · {at}",
+        "outcome": {
+            "cutOff": "przerwano",
+            "failed": "nieudane",
+            "ran": "wykonano",
+            "skipped": "pominięto"
+        },
+        "couldntSave": "Nie udało się zapisać automatyzacji.",
+        "googleSignInRequired": "Wymagane logowanie przez Google",
+        "openToAnyone": "otwarte dla każdego",
+        "turnstileUnfinished": "Turnstile nie jest dokończony: brak sprawdzania botów",
+        "builtInBotCheck": "wbudowane sprawdzanie botów",
+        "noBotCheck": "brak sprawdzania botów",
+        "noModel": "brak modelu",
+        "othersPhrase": {
+            "allow": "pozostali obsługiwani zgodnie z ustawieniami",
+            "hold": "pozostali wstrzymani dla Ciebie",
+            "ignore": "pozostali ignorowani"
+        },
+        "peopleCount": "{count} osoba | {count} osoby | {count} osób",
+        "groupsCount": "{count} grupa | {count} grupy | {count} grup",
+        "and": " i ",
+        "named": "wymienieni: {who}",
+        "nobodyNamed": "nikt nie jest wymieniony",
+        "heldForYou": "wstrzymywane dla Ciebie",
+        "holdBeforeRun": "{seconds} s przed każdym przebiegiem"
     },
     "automationsView": {
         "addAutomation": "Dodaj automatyzację",
@@ -207,6 +250,9 @@
         "automations": "Automatyzacje",
         "buildOne": "Zbuduj jedną za pomocą",
         "codeChores": "Zadania przy kodzie",
+        "couldntRemove": "Nie udało się usunąć automatyzacji.",
+        "couldntRun": "Nie udało się uruchomić automatyzacji.",
+        "couldntUpdate": "Nie udało się zaktualizować automatyzacji.",
         "delete": "Usuń",
         "deleteAutomation": "Usuń automatyzację",
         "errors": "Błędy",
@@ -231,7 +277,11 @@
         "automations": "Automatyzacje"
     },
     "useCiDelivery": {
-        "firesWithinSecondsProvider": "Odpala w kilka sekund: dostawca dostarcza każdy skończony pipeline prosto do tego sandboxa."
+        "allPolled": "Webhooki nie są skonfigurowane, więc pipeline'y są zamiast tego odpytywane: to uruchomi się w ciągu {minutes} minut, a nie od razu.",
+        "firesWithinSecondsProvider": "Odpala w kilka sekund: dostawca dostarcza każdy skończony pipeline prosto do tego sandboxa.",
+        "namedRepoDoesNotMap": "Żadne repozytorium o nazwie „{repo}” nie jest powiązane z podłączonym kontem GitHub ani GitLab, więc nic nie może tego uruchomić.",
+        "noRepoMaps": "Żadne repozytorium z przestrzeni roboczej nie jest powiązane z podłączonym kontem GitHub ani GitLab, więc nic nie może tego jeszcze uruchomić.",
+        "partlyPolled": "Podpięte dla {wired} z {total} repozytoriów. {names} jest zamiast tego odpytywane i uruchamia się w ciągu {minutes} minut. | Podpięte dla {wired} z {total} repozytoriów. {names} są zamiast tego odpytywane i uruchamiają się w ciągu {minutes} minut. | Podpięte dla {wired} z {total} repozytoriów. {names} są zamiast tego odpytywane i uruchamiają się w ciągu {minutes} minut."
     },
     "visitorChatInstallDialog": {
         "allow": "Zezwól",
@@ -240,10 +290,13 @@
         "askedTurnedAway": "pytał i został odprawiony · {lastSeenAt}",
         "checking": "Sprawdzanie…",
         "copyEmbedSnippet": "Kopiuj fragment osadzenia dla {id}",
+        "couldntAddSite": "Nie udało się dodać tej witryny.",
         "done": "Gotowe",
         "install": "Zainstaluj",
+        "loadCount": "{count} wczytanie | {count} wczytania | {count} wczytań",
         "loaded": "Czy się wczytało?",
         "noBrowserLoadedWidget": "Żadna przeglądarka nie wczytała jeszcze tego widżetu. Wklej fragment, otwórz swoją stronę, a to zaktualizuje się samo w ciągu kilku sekund.",
+        "noSitesAllowed": "Nie ma jeszcze dozwolonych witryn, więc każdy odwiedzający zostaje odprawiony. Dodaj jedną poniżej albo edytuj automatyzację.",
         "pasteIntoSiteBefore": "Wklej to na swojej stronie, przed"
     },
     "runStrip": {
@@ -252,5 +305,41 @@
         "lastRuns": "Ostatnie uruchomienie | Ostatnie {count} uruchomienia | Ostatnich {count} uruchomień",
         "ran": "Wykonane",
         "skipped": "Pominięte"
+    },
+    "useAutomationForm": {
+        "addSite": "Dodaj przynajmniej jedną witrynę: recepcja bez dozwolonych witryn nikogo nie wpuści.",
+        "emptyRule": "Każda reguła potrzebuje przynajmniej jednej osoby lub grupy; usuń pustą.",
+        "invalidCron": "Nieprawidłowe wyrażenie cron.",
+        "momentPassed": "Ten moment już minął.",
+        "nameFormat": "Używaj liter, cyfr, łączników i podkreśleń; nazwa musi zaczynać się od litery lub cyfry.",
+        "nameRequired": "Nazwa jest wymagana.",
+        "neverFires": "Ten harmonogram nigdy się nie uruchomi.",
+        "notAnOrigin": "„{origin}” to nie jest źródło (origin); podaj tylko schemat i host, np. https://example.com",
+        "pickDateTime": "Wybierz datę i godzinę, o której ma się uruchomić.",
+        "pickModel": "Wybierz przynajmniej jeden model: automatyzacja działa, gdy nikt nie patrzy, więc nic nie zostanie wybrane za nią.",
+        "promptRequired": "Prompt jest wymagany."
+    },
+    "cronSchedule": {
+        "afterSessions": "{label} · po {count} sesji | {label} · po {count} sesjach | {label} · po {count} sesjach",
+        "daily": "Codziennie {time}",
+        "daysAgo": "{count} dzień temu | {count} dni temu | {count} dni temu",
+        "due": "teraz",
+        "everyDay": "Każdego dnia {time}",
+        "everyMinutes": "Co {minutes} min",
+        "hourly": "Co godzinę",
+        "hoursAgo": "{count} godz. temu | {count} godz. temu | {count} godz. temu",
+        "inDays": "za {count} dzień | za {count} dni | za {count} dni",
+        "inHours": "za {count} godz. | za {count} godz. | za {count} godz.",
+        "inMinutes": "za {count} min | za {count} min | za {count} min",
+        "justNow": "przed chwilą",
+        "minutesAgo": "{count} min temu | {count} min temu | {count} min temu",
+        "monthly": "Co miesiąc, {day} dnia, {time}",
+        "ordinal": {
+            "nd": "{day}.",
+            "rd": "{day}.",
+            "st": "{day}.",
+            "th": "{day}."
+        },
+        "weekdays": "W dni robocze {time}"
     }
 }

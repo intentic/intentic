@@ -43,7 +43,7 @@ const renderSheet = async (name: string, target: NonNullable<typeof client>): Pr
         if (!isLatest() || target !== client) {
             return;
         }
-        error.value = caught instanceof Error ? caught.message : `Could not read this spreadsheet.`;
+        error.value = caught instanceof Error ? caught.message : t(`sheetViewer.couldNotRead`);
     } finally {
         if (isLatest() && target === client) {
             loading.value = false;
@@ -92,7 +92,7 @@ const render = async (source: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        error.value = caught instanceof Error ? caught.message : `Could not read this spreadsheet.`;
+        error.value = caught instanceof Error ? caught.message : t(`sheetViewer.couldNotRead`);
         loading.value = false;
     }
 };

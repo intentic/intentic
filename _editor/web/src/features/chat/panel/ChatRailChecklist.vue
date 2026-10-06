@@ -19,7 +19,7 @@ const todos = computed(() => currentChecklist(active.value.transcript.messages.v
 // `generating`, not `streaming`: a turn parked on a permission card is waiting on the reader, so nothing should spin.
 const live = computed(() => active.value.turn.generating.value);
 const done = computed(() => todos.value?.filter((item) => item.status === `completed`).length ?? 0);
-const progress = computed(() => `${done.value} of ${todos.value?.length ?? 0} done`);
+const progress = computed(() => t(`chat.chatRailChecklist.progress`, { done: done.value, total: todos.value?.length ?? 0 }));
 
 // THE ITEMS ARRIVE TOP TO BOTTOM, as the lanes beside it do (reveal.ts): when the checklist shows, and again for another
 // chat's list (the section is keyed by the chat, so its rows are new), and an item the agent adds later plays in on

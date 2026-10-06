@@ -1,4 +1,5 @@
 import { nextTick, reactive, ref, type VNode } from "vue";
+import { t } from "../i18n/index.js";
 import { messageOr } from "./useAsyncAction.js";
 
 // The state behind <InlineRename>: a name that reads as text until it is pressed. Per-instance factory, returned
@@ -21,8 +22,8 @@ export const createInlineRename = (
     current: () => string | undefined,
     /** Where a committed name goes. Throwing is how it reports failure; the message lands on `error`. */
     write: (name: string) => Promise<void>,
-    /** What to say when the write fails, in the words of whatever is being renamed. */
-    failure = `Couldn't rename this.`,
+    /** What to say when the write fails, in the words of whatever is being renamed; a function to say it in the language of the moment. */
+    failure?: string | (() => string),
 ) => {
     const editing = ref(false);
     const draft = ref(``);
@@ -59,7 +60,7 @@ export const createInlineRename = (
             await write(trimmed);
             editing.value = false;
         } catch (caught) {
-            error.value = messageOr(caught, failure);
+            error.value = messageOr(caught, (typeof failure === `function` ? failure() : failure) ?? t(`ui.inlineRename.couldntRename`));
         } finally {
             busy.value = false;
         }

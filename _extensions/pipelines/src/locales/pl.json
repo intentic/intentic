@@ -2,8 +2,8 @@
     "extension": {
         "branchesFailing": "Gałęzie z błędem: {count}",
         "pipelines": "Pipeline'y",
-        "streakOnCommit": "{repo} {branch} · {runs} nieudane · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commity · {runs} nieudane",
+        "streakOnCommit": "{repo} {branch} · nieudane: {runs} · {sha}",
+        "streakOverCommits": "{repo} {branch} · commity: {commits} · nieudane: {runs}",
         "running": "{count} w toku",
         "queued": "{count} w kolejce",
         "noRunsYet": "Jeszcze żadnych uruchomień",
@@ -46,11 +46,17 @@
         },
         "title": "{branch} nie przechodzi"
     },
+    "pipelineDag": {
+        "step": "Krok {n}"
+    },
     "pipelineDagGraph": {
         "expand": "Rozwiń",
         "fit": "Dopasuj",
         "fitAll": "Dopasuj całość",
         "fullScreen": "Pełny ekran"
+    },
+    "pipelineGraph": {
+        "jobs": "{count} zadanie | {count} zadania | {count} zadań"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Agent już pracuje na {branch}, uruchomiony z przebiegu #{runId} — otwórz go",
@@ -85,7 +91,20 @@
             "ready": "Przejrzyj i wdróż",
             "waiting": "Limit wyczerpany",
             "working": "Otwórz, by śledzić"
-        }
+        },
+        "attemptWord": "próba {n}",
+        "attemptSummary": "Próba {n}",
+        "filesOnBranch": "{count} plik na jej gałęzi | {count} pliki na jej gałęzi | {count} plików na jej gałęzi",
+        "files": "{count} plik | {count} pliki | {count} plików",
+        "age": {
+            "days": "{n} d",
+            "hours": "{n} godz.",
+            "minutes": "{n} min",
+            "underMinute": "<1 min"
+        },
+        "startedAgo": "rozpoczęto {ago}",
+        "fixAria": "Agent naprawy: {state} — otwórz rozmowę",
+        "fixAriaFacts": "Agent naprawy: {state}, {facts} — otwórz rozmowę"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Wczytywanie pipeline'ów"
@@ -106,7 +125,7 @@
         "openRepo": "Otwórz repo",
         "pipelines": "Pipeline'y",
         "repository": "Repozytorium",
-        "runs": "{runs} przebiegów",
+        "runs": "przebiegi: {runs}",
         "thisRepo": "to repozytorium"
     },
     "runSide": {
@@ -114,6 +133,30 @@
         "openOn": "Otwórz w: {forge}",
         "run": "Przebieg {number}",
         "unreadable": "Ta karta nie wskazuje żadnego przebiegu."
+    },
+    "statusVisual": {
+        "minutesSeconds": "{minutes} min {seconds} s",
+        "seconds": "{seconds} s",
+        "status": {
+            "canceled": "anulowano",
+            "failed": "błąd",
+            "queued": "w kolejce",
+            "running": "w toku",
+            "skipped": "pominięto",
+            "success": "sukces"
+        },
+        "trigger": {
+            "api": "API",
+            "dispatch": "Dispatch",
+            "manual": "Ręcznie",
+            "mergeRequest": "Merge request",
+            "pullRequest": "Pull request",
+            "release": "Wydanie",
+            "scheduled": "Zaplanowany",
+            "tag": "Tag",
+            "trigger": "Wyzwalacz",
+            "upstream": "Nadrzędny"
+        }
     },
     "tip": {
         "attempt": "Próba",

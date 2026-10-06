@@ -62,7 +62,7 @@ const save = async (): Promise<void> => {
         }
         value.value = ``;
         emit(`saved`);
-    }, `Could not save the secret.`);
+    }, t(`capabilities.secretField.couldNotSave`));
 };
 
 // In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly.

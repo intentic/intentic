@@ -51,11 +51,11 @@ const listenerLabel = (fires: Extract<Trigger, { kind: `listener` }>): string =>
     const source = listenerSourceOf(props.listenerSources, fires.provider, fires.eventType).label;
     return [
         // "live" means a held-open gateway; CI has none, so saying it there would describe a thing that isn't running.
-        fires.provider === `ci` ? source : `${source} live`,
+        fires.provider === `ci` ? source : t(`automationRow.sourceLive`, { source }),
         ...(fires.eventType !== undefined ? [fires.eventType] : []),
         // Branch earns room in the row; two CI automations differing only by branch would otherwise read identically.
         ...(fires.branch !== undefined ? [fires.branch] : []),
-        ...(fires.mentioned === true ? [`mentions`] : []),
+        ...(fires.mentioned === true ? [t(`automationRow.mentions`)] : []),
     ].join(` · `);
 };
 // A workspace moment by name. The two retired ones (the edges of the check that ran after every land) say so, since an
@@ -67,7 +67,7 @@ const workspaceWhen = (event: Extract<Trigger, { kind: `workspace` }>[`event`]):
     if (event === `deps.fixed`) {
         return t(`automationRow.checksRecoverRetired`);
     }
-    return event === `turn.settled` ? `Turn settles` : `Work lands`;
+    return event === `turn.settled` ? t(`automationRow.turnSettles`) : t(`automationFields.workLands`);
 };
 const triggerLabel = computed<string>(() => {
     const fires = trigger.value;
@@ -78,10 +78,10 @@ const triggerLabel = computed<string>(() => {
     }
     // The moment itself, in the reader's own clock, since that is the clock they picked it on.
     if (fires.kind === `once`) {
-        return `Once · ${formatDateTime(fires.at)}`;
+        return t(`automationRow.onceAt`, { at: formatDateTime(fires.at) });
     }
     if (fires.kind === `event`) {
-        return `Webhook`;
+        return t(`automationRow.webhook`);
     }
     if (fires.kind === `workspace`) {
         const when = workspaceWhen(fires.event);
@@ -115,13 +115,14 @@ const health = computed<Health>(() => {
     return lastRun.value?.outcome === `error` ? `failed` : `on`;
 });
 
-const OUTCOME_VERB: Record<AutomationRun[`outcome`], string> = {
-    completed: `ran`,
-    error: `failed`,
-    skipped: `skipped`,
-    // Not "failed": the sandbox restarted under it before the run reached its own outcome.
-    interrupted: `cut off`,
-};
+const outcomeVerb = (outcome: AutomationRun[`outcome`]): string =>
+    ({
+        completed: t(`automationRow.outcome.ran`),
+        error: t(`automationRow.outcome.failed`),
+        skipped: t(`automationRow.outcome.skipped`),
+        // Not "failed": the sandbox restarted under it before the run reached its own outcome.
+        interrupted: t(`automationRow.outcome.cutOff`),
+    })[outcome];
 const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
     completed: `text-muted`,
     error: `text-danger`,
@@ -184,7 +185,7 @@ const saveEdit = async (): Promise<void> => {
         await save.mutateAsync(editForm.build());
         editing.value = false;
     } catch (err) {
-        editError.value = err instanceof Error ? err.message : `Could not save the automation.`;
+        editError.value = err instanceof Error ? err.message : t(`automationRow.couldntSave`);
     }
 };
 
@@ -200,15 +201,15 @@ const visitorChat = computed(() => {
     const turnstileReady = config.turnstileSiteKey !== undefined && config.turnstileSecret !== undefined;
     return {
         origins: fires.allowedOrigins ?? [],
-        access: config.access === `google` ? `Google sign-in required` : `open to anyone`,
+        access: config.access === `google` ? t(`automationRow.googleSignInRequired`) : t(`automationRow.openToAnyone`),
         botCheck:
             config.antiBot === `turnstile` && turnstileReady
                 ? `Turnstile`
                 : config.antiBot === `turnstile`
-                  ? `Turnstile not finished: no bot check`
+                  ? t(`automationRow.turnstileUnfinished`)
                   : config.antiBot === `pow`
-                    ? `built-in bot check`
-                    : `no bot check`,
+                    ? t(`automationRow.builtInBotCheck`)
+                    : t(`automationRow.noBotCheck`),
     };
 });
 
@@ -218,18 +219,18 @@ const visitorChat = computed(() => {
 const runsOn = computed<string>(() => {
     const [head, ...rest] = props.automation.models;
     if (head === undefined) {
-        return `no model`;
+        return t(`automationRow.noModel`);
     }
     const named = `${head.provider} · ${head.model}`;
     return rest.length === 0 ? named : `${named} +${rest.length}`;
 });
 // Who it answers, in one phrase: how many people and groups the rules name, then what everyone else gets.
-const OTHERS_PHRASE: Record<NonNullable<AutomationSummary[`senders`]>[`others`], string> = {
-    ignore: `everyone else ignored`,
-    hold: `everyone else held for you`,
-    allow: `everyone else answered as configured`,
-};
-const count = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? `` : `s`}`;
+const othersPhrase = (others: NonNullable<AutomationSummary[`senders`]>[`others`]): string =>
+    ({
+        ignore: t(`automationRow.othersPhrase.ignore`),
+        hold: t(`automationRow.othersPhrase.hold`),
+        allow: t(`automationRow.othersPhrase.allow`),
+    })[others];
 const namedIn = (senders: NonNullable<AutomationSummary[`senders`]>) => ({
     people: senders.rules.reduce((sum, rule) => sum + (rule.ids?.length ?? 0), 0),
     groups: senders.rules.reduce((sum, rule) => sum + (rule.groups?.length ?? 0), 0),
@@ -240,8 +241,14 @@ const answers = computed<string | undefined>(() => {
         return undefined;
     }
     const { people, groups } = namedIn(senders);
-    const named = [...(people > 0 ? [count(people, `person`).replace(`persons`, `people`)] : []), ...(groups > 0 ? [count(groups, `group`)] : [])];
-    return [...(named.length > 0 ? [`${named.join(` and `)} named`] : [`nobody named`]), OTHERS_PHRASE[senders.others]].join(` · `);
+    const named = [
+        ...(people > 0 ? [t(`automationRow.peopleCount`, { count: people }, people)] : []),
+        ...(groups > 0 ? [t(`automationRow.groupsCount`, { count: groups }, groups)] : []),
+    ];
+    return [
+        named.length > 0 ? t(`automationRow.named`, { who: named.join(t(`automationRow.and`)) }) : t(`automationRow.nobodyNamed`),
+        othersPhrase(senders.others),
+    ].join(` · `);
 });
 // The same rules as a hover card on the row's glyph: the counts, then what everyone else gets.
 const othersWord = (others: NonNullable<AutomationSummary[`senders`]>[`others`]): string =>
@@ -265,9 +272,9 @@ const settings = computed<readonly { label: string; value: string }[]>(() => [
     { label: t(`automationRow.runsOn`), value: runsOn.value },
     ...(props.automation.actsAs !== undefined ? [{ label: t(`automationRow.runs2`), value: props.automation.actsAs }] : []),
     ...(answers.value !== undefined ? [{ label: t(`automationRow.answers`), value: answers.value }] : []),
-    ...(props.automation.requireApproval === true ? [{ label: t(`automationRow.approval`), value: `held for you` }] : []),
+    ...(props.automation.requireApproval === true ? [{ label: t(`automationRow.approval`), value: t(`automationRow.heldForYou`) }] : []),
     ...(props.automation.holdForSeconds !== undefined && props.automation.holdForSeconds > 0
-        ? [{ label: t(`automationRow.hold`), value: `${props.automation.holdForSeconds}s before each run` }]
+        ? [{ label: t(`automationRow.hold`), value: t(`automationRow.holdBeforeRun`, { seconds: props.automation.holdForSeconds }) }]
         : []),
 ]);
 
@@ -354,7 +361,7 @@ const verbs = computed((): ActionItem[] => [
                 :class="OUTCOME_CLASS[lastRun.outcome]"
                 v-tooltip.top="runTooltip(lastRun)"
             >
-                {{ OUTCOME_VERB[lastRun.outcome] }} {{ since(lastRun.at) }}
+                {{ outcomeVerb(lastRun.outcome) }} {{ since(lastRun.at) }}
             </span>
             <span v-else class="hidden w-20 shrink-0 text-right @xl:block">{{ t(`automationRow.neverRun`) }}</span>
 
@@ -553,7 +560,7 @@ const verbs = computed((): ActionItem[] => [
                             @click="openRun(run)"
                         >
                             <span class="w-16 shrink-0 text-subtle" v-tooltip.top="formatDateTime(run.at)">{{ since(run.at) }}</span>
-                            <span class="w-12 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
+                            <span class="w-12 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ outcomeVerb(run.outcome) }}</span>
                             <span v-if="run.detail" class="min-w-0 flex-1 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
                             <Icon v-if="run.conversationId" name="chevron-right" class="ml-auto shrink-0 text-2xs text-subtle" />
                         </component>

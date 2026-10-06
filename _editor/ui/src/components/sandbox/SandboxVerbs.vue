@@ -56,7 +56,8 @@ const VERB_ICON: Record<SandboxVerb, IconName> = {
 };
 
 const power = computed(() => primaryVerb(running));
-const labelOf = (verb: SandboxVerb): string => (verb === `logs` ? (logsOpen ? `Hide logs` : `Logs`) : VERB_LABEL[verb]);
+const labelOf = (verb: SandboxVerb): string =>
+    verb === `logs` ? (logsOpen ? t(`ui.sandboxSandboxVerbs.hideLogs`) : t(`ui.sandboxSandboxVerbs.logs`)) : VERB_LABEL[verb];
 
 // What the ⋯ button shows while something runs: a menu verb has no button of its own to spin, so the
 // control that opened it takes the spinner.

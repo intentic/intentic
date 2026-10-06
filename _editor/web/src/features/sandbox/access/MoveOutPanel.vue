@@ -42,7 +42,7 @@ const host = computed(() => workspace.value?.hosts[0]);
 const loadWorkspace = (): Promise<void> =>
     runWorkspace(async () => {
         workspace.value = await sandboxRaw(`GET /definition/workspace`);
-    }, `Could not read the workspace repo.`);
+    }, t(`sandbox.moveOutPanel.couldntReadWorkspaceRepo`));
 
 onMounted(() => {
     void loadWorkspace();
@@ -54,7 +54,7 @@ const publish = (): Promise<void> =>
         const result = await sandboxRaw(`POST /definition/workspace/publish`, { input: {} });
         workspace.value = { remote: result.remote, branch: result.branch, hosts: workspace.value?.hosts ?? [] };
         confirmingPublish.value = false;
-    }, `Could not publish the workspace.`);
+    }, t(`sandbox.moveOutPanel.couldntPublishWorkspace`));
 
 // The document
 const derived = ref<DefinitionExport | undefined>(undefined);
@@ -71,7 +71,7 @@ const downloadDefinition = (): Promise<void> =>
         anchor.download = `sandbox.toml`;
         anchor.click();
         URL.revokeObjectURL(url);
-    }, `Could not derive this sandbox's definition.`);
+    }, t(`sandbox.moveOutPanel.couldntDeriveDefinition`));
 
 // The bundle
 // Export state derives from the export directory (useBundleExports), surviving a refresh or view switch.
@@ -91,14 +91,14 @@ const startExport = (secrets: boolean): Promise<void> =>
     runStart(async () => {
         await start(secrets);
         exporting.value = false;
-    }, `Could not start the export.`);
+    }, t(`sandbox.moveOutPanel.couldntStartExport`));
 
 // Navigates to the URL so the browser's own download manager takes over; a multi-GB bundle never passes through this
 // tab's memory, and closing the tab doesn't cancel it.
 const download = (entry: BundleExport): Promise<void> =>
     runStart(async () => {
         window.location.href = await bundleDownloadUrl(entry.name);
-    }, `Could not start the download.`);
+    }, t(`sandbox.moveOutPanel.couldntStartDownload`));
 
 // The read
 const diff = ref<DefinitionDiff | undefined>(undefined);
@@ -113,7 +113,7 @@ const compare = (event: Event): Promise<void> =>
             return;
         }
         diff.value = await sandboxRaw(`POST /definition/diff`, { input: await file.text() });
-    }, `Could not compare against that definition.`);
+    }, t(`sandbox.moveOutPanel.couldntCompareDefinition`));
 </script>
 
 <template>

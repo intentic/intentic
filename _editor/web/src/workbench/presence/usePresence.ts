@@ -1,5 +1,6 @@
 import type { MemberRole, PresenceUser } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
+import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useAuth } from "../../client/auth/useAuth";
@@ -90,17 +91,20 @@ export const viewersOfSession = (sessionId: string): readonly PresenceMember[] =
 // What a member is doing, for tooltips, from their most specific tab, visible tabs first.
 export const presenceActivity = (member: PresenceMember): string => {
     const tabs = member.tabs.toSorted((a, b) => Number(a.idle) - Number(b.idle));
-    const tab = tabs.find((t) => t.path !== undefined) ?? tabs.find((t) => t.sessionId !== undefined) ?? tabs.find((t) => t.view !== undefined);
+    const tab =
+        tabs.find((each) => each.path !== undefined) ??
+        tabs.find((each) => each.sessionId !== undefined) ??
+        tabs.find((each) => each.view !== undefined);
     if (tab?.path !== undefined) {
-        return `Viewing ${tab.path.split(`/`).pop()}`;
+        return t(`shell.presence.viewing`, { name: tab.path.split(`/`).pop() ?? `` });
     }
     if (tab?.sessionId !== undefined) {
-        return `In a chat session`;
+        return t(`shell.presence.inChat`);
     }
     if (tab?.view !== undefined) {
-        return `Viewing ${tab.view}`;
+        return t(`shell.presence.viewing`, { name: tab.view });
     }
-    return `Online`;
+    return t(`shell.presence.online`);
 };
 
 // Clears the roster while the stream is down, where nobody's presence can be vouched for.

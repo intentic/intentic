@@ -48,7 +48,7 @@ const commitPrompt = async (text: string): Promise<void> => {
     try {
         await savePrompt.mutateAsync(text.trim());
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't save this persona's prompt.`).detail;
+        error.value = noticeFrom(err, t(`sandbox.personaKitFields.couldntSavePrompt`)).detail;
     }
 };
 
@@ -96,7 +96,7 @@ const toggle = async (name: string): Promise<void> => {
     try {
         openBody.value = (await readSkill(name)).body;
     } catch (err) {
-        bodyError.value = noticeFrom(err, `Couldn't read that skill.`).detail;
+        bodyError.value = noticeFrom(err, t(`sandbox.personaKitFields.couldntReadSkill`)).detail;
     }
 };
 
@@ -118,8 +118,8 @@ const run = async (action: () => Promise<unknown>, whenItFails: string): Promise
     }
 };
 
-const save = (skill: SkillDraft): Promise<void> => run(() => saveSkill.mutateAsync(skill), `Couldn't save that skill.`);
-const remove = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), `Couldn't remove that skill.`);
+const save = (skill: SkillDraft): Promise<void> => run(() => saveSkill.mutateAsync(skill), t(`sandbox.personaKitFields.couldntSaveSkill`));
+const remove = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), t(`sandbox.personaKitFields.couldntRemoveSkill`));
 
 // Switching personas closes whatever was open on the last one, since the accordion reuses this component.
 watch(
@@ -216,7 +216,7 @@ watch(
 
         <Notice
             v-if="kitError !== undefined"
-            :of="{ tone: `danger`, title: `Couldn't read this persona's own prompt and skills.`, detail: kitError }"
+            :of="{ tone: `danger`, title: t(`sandbox.personaKitFields.couldntReadKit`), detail: kitError }"
         />
         <Notice v-if="error !== undefined" tone="warning" class="text-2xs">{{ error }}</Notice>
     </div>

@@ -73,7 +73,7 @@ const render = async (source: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        error.value = caught instanceof Error ? caught.message : `Could not read this presentation.`;
+        error.value = caught instanceof Error ? caught.message : t(`pptxViewer.couldNotRead`);
     } finally {
         if (isLatest()) {
             loading.value = false;
@@ -160,7 +160,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
             v-if="deck !== undefined && !loading"
             class="flex shrink-0 items-center gap-3 border-b border-line-subtle px-3 py-1.5 text-2xs text-muted"
         >
-            <span>{{ deck.slides.length }} {{ deck.slides.length === 1 ? `slide` : `slides` }}</span>
+            <span>{{ t(`pptxViewer.slideCount`, { count: deck.slides.length }, deck.slides.length) }}</span>
             <button
                 v-if="hasNotes"
                 type="button"

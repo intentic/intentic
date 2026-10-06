@@ -1,6 +1,7 @@
 import { hostRunningSandbox } from "@intentic/sandbox-contract";
 import { type DeviceSandboxResources, type DeviceSandboxRow, type EngineFacts, type ResourcesForm, runningShape } from "@intentic/ui";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
+import { t } from "@intentic/ui/i18n";
 import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "./shapeFlow";
 import { manageDeviceSandbox, useDevices } from "./useDevices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -72,7 +73,7 @@ export function useSelfResources(): SelfResources {
         const name = slug.value;
         const share = current.value;
         if (sendTo === undefined || name === undefined || share === undefined) {
-            throw new Error(`This sandbox's machine is not connected, so its share can't be changed from here.`);
+            throw new Error(t(`sandbox.useSelfResources.notConnected`));
         }
         const { op, payload } = shapeFlow(intent, canSave.value, runningShape(share), tooOldToSave(door.value?.facts));
         applying.value = true;

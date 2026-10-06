@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/vue-query";
+import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
@@ -22,7 +23,7 @@ export function useAddRepo() {
         const url = cloneUrl.trim();
         const name = repoNameFromUrl(url);
         if (url.length === 0 || name.length === 0) {
-            error.value = `That doesn't look like a repository address.`;
+            error.value = t(`workspace.useAddRepo.notAnAddress`);
             return false;
         }
         cloning.value = true;
@@ -37,7 +38,7 @@ export function useAddRepo() {
             return true;
         } catch (cause) {
             // Daemon's own message: knows whether it's a reserved name, unreachable host, or missing credentials.
-            error.value = cause instanceof Error ? cause.message : `Couldn't clone that repository.`;
+            error.value = cause instanceof Error ? cause.message : t(`workspace.useAddRepo.cloneFailed`);
             return false;
         } finally {
             cloning.value = false;

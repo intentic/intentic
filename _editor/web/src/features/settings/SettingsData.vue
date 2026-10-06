@@ -30,7 +30,7 @@ const deleteInWorkspace = async (): Promise<void> => {
     try {
         await localHost().openWorkspace(`/settings/data`);
     } catch (error) {
-        deleteError.value = messageOr(error, `The workspace could not be opened.`);
+        deleteError.value = messageOr(error, t(`settings.settingsData.workspaceNotOpened`));
     } finally {
         handing.value = false;
     }
@@ -42,7 +42,7 @@ const exporting = ref(false);
 const exportData = async (): Promise<void> => {
     exporting.value = true;
     // The platform gathers every row it holds about the account before it answers, so the row says so meanwhile.
-    const endMark = hubWork.begin(`Gathering your data`);
+    const endMark = hubWork.begin(t(`settings.settingsData.gatheringData`));
     try {
         const data = await apiClient.me.export();
         const url = URL.createObjectURL(new Blob([JSON.stringify(data, undefined, 2)], { type: `application/json` }));
@@ -69,7 +69,7 @@ const confirmDelete = async (): Promise<void> => {
         await deleteAccount(sandboxes.value);
         await router.push(`/login`);
     } catch (error) {
-        deleteError.value = messageOr(error, `Account deletion failed.`);
+        deleteError.value = messageOr(error, t(`settings.settingsData.accountDeletionFailed`));
     } finally {
         deleting.value = false;
     }

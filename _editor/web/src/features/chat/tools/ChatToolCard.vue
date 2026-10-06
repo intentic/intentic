@@ -137,8 +137,8 @@ const subagentFacts = computed<string[]>(() => {
     }
     return [
         ...(subagentLive.value && child.lastTool !== undefined ? [child.lastTool] : []),
-        ...(child.toolUses !== undefined && child.toolUses > 0 ? [`${child.toolUses} tools`] : []),
-        ...(child.tokens !== undefined && child.tokens > 0 ? [`${Math.round(child.tokens / 1000)}k tokens`] : []),
+        ...(child.toolUses !== undefined && child.toolUses > 0 ? [t(`chat.chatToolCard.toolUses`, { count: child.toolUses }, child.toolUses)] : []),
+        ...(child.tokens !== undefined && child.tokens > 0 ? [t(`chat.chatToolCard.kiloTokens`, { count: Math.round(child.tokens / 1000) })] : []),
     ];
 });
 

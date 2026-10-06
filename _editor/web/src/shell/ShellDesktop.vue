@@ -184,7 +184,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     if (changes.count.value > 0) {
         return {
             count: changes.count.value,
-            tooltip: `${changes.count.value} ${changes.count.value === 1 ? words.value.pendingChange : words.value.pendingChanges}`,
+            tooltip: words.value.pendingChanges(changes.count.value),
             ...landing,
         };
     }
@@ -496,7 +496,7 @@ const tileMenuItems = computed<MenuItem[]>(() => {
                 command: (): void => toggleChatHome(router),
             },
             {
-                label: chatFloats.value ? `Dock chat back` : `Move chat into new window`,
+                label: chatFloats.value ? t(`shell.shellDesktop.dockChatBack`) : t(`shell.shellDesktop.moveChatToWindow`),
                 shortcut: commandShortcut(`chat.toggleFloating`),
                 command: (): void => toggleChatFloating(),
             },
@@ -506,7 +506,7 @@ const tileMenuItems = computed<MenuItem[]>(() => {
         {
             label: t(`shell.shellDesktop.keepOnRail2`),
             // States what happens either way, since this is the one place the tile rule is explained.
-            hint: pins.isPinned(tile.to) ? `Always on the rail, badge or not` : `Otherwise it shows only when it needs you`,
+            hint: pins.isPinned(tile.to) ? t(`shell.shellDesktop.pinnedHint`) : t(`shell.shellDesktop.unpinnedHint`),
             checked: pins.isPinned(tile.to),
             command: (): void => pins.toggle(tile.to),
         },

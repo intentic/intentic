@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { t } from "@intentic/ui/i18n";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -169,10 +170,10 @@ const sessionSocket = (s: Omit<TerminalSession, "live">): LiveSocket<TerminalCli
         onMintFailed: (error) => {
             // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
             console.warn(`terminal ${s.name}: authorizing the socket failed`, error);
-            down(`\r\n\x1b[31mCouldn't authorize the terminal (${errorMessage(error)}); retrying.\x1b[0m`);
+            down(`\r\n\x1b[31m${t(`terminal.terminalSession.authFailed`, { reason: errorMessage(error) })}\x1b[0m`);
         },
         // Usually a transient startup state; retries on the normal backoff instead of parking the session forever.
-        onUnreachable: () => down(`\x1b[31mSandbox isn't reachable, or you're not signed in: finish setup and sign in with Google.\x1b[0m`),
+        onUnreachable: () => down(`\x1b[31m${t(`terminal.terminalSession.unreachable`)}\x1b[0m`),
         onOpen: () => {
             resetTerminalGrid(s);
             s.down = false;
@@ -182,8 +183,9 @@ const sessionSocket = (s: Omit<TerminalSession, "live">): LiveSocket<TerminalCli
         onDrop: (code, reason) => {
             if (!s.down) {
                 s.down = true;
-                s.term.writeln(`\r\n\x1b[90m[disconnected (${code}${reason === `` ? `` : `: ${reason}`})]\x1b[0m`);
-                s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
+                const why = reason === `` ? String(code) : `${code}: ${reason}`;
+                s.term.writeln(`\r\n\x1b[90m[${t(`terminal.terminalSession.disconnected`, { why })}]\x1b[0m`);
+                s.term.writeln(`\x1b[90m[${t(`terminal.terminalSession.reconnecting`)}]\x1b[0m`);
             }
         },
     });

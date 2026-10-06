@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
@@ -111,7 +112,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         note: computed(() =>
             workspaceAgent.value === undefined
                 ? head.value?.note
-                : [head.value?.note, `Searching the shared workspace, an agent's own copy isn't indexed.`].filter(Boolean).join(` `),
+                : [head.value?.note, t(`workspace.useWorkspaceSearch.sharedOnly`)].filter(Boolean).join(` `),
         ),
         // True while input hasn't produced a searchable query yet, in either field: too short or still debouncing.
         pending: computed(

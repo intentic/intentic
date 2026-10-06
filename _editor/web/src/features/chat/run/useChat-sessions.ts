@@ -47,7 +47,7 @@ export const loadSessions = async (query?: string): Promise<void> => {
     } catch (error) {
         // Our own abort means a newer read owns the menu; anything else is this read's failure to say.
         if (!controller.signal.aborted) {
-            sessionsFailure.value = messageOr(error, `Couldn't read your past chats.`);
+            sessionsFailure.value = messageOr(error, t(`chat.chatSessions.couldntReadPastChats`));
         }
     }
 };

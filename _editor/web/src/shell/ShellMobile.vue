@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
@@ -12,6 +13,7 @@ import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 // bar yields to the on-screen keyboard. No rail, chat column, or docked terminal: chat and terminal are
 // full-screen routes, and the rail's tiles live on /menu.
 
+const t = useT();
 const { keyboardOpen } = useDevice();
 
 // Undefined on a tab root or its own drill-down (mobileTabs.ts): those already carry their own back arrow.
@@ -27,7 +29,7 @@ const back = computed<PageBack | undefined>(() => {
     }
     const stepped = typeof router.options.history.state[`back`] === `string`;
     return {
-        label: stepped ? `Back` : `Back to Menu`,
+        label: stepped ? t(`shell.shellMobile.back`) : t(`shell.shellMobile.backToMenu`),
         go: () => {
             if (stepped) {
                 router.back();

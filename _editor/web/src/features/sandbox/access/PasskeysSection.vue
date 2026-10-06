@@ -31,8 +31,10 @@ const now = ref(Date.now());
 // it is bound to (a passkey made on one origin answers from no other).
 const describe = (passkey: PasskeySummary): string =>
     [
-        `added ${formatDate(passkey.createdAt)}`,
-        passkey.lastUsedAt === undefined ? `never used` : `used ${timeAgo(passkey.lastUsedAt, { now: now.value, days: true })}`,
+        t(`sandbox.passkeysSection.addedOn`, { date: formatDate(passkey.createdAt) }),
+        passkey.lastUsedAt === undefined
+            ? t(`sandbox.passkeysSection.neverUsed`)
+            : t(`sandbox.passkeysSection.usedAgo`, { ago: timeAgo(passkey.lastUsedAt, { now: now.value, days: true }) }),
         passkey.rpId,
     ].join(` · `);
 
@@ -45,9 +47,7 @@ const submit = async (): Promise<void> => {
 };
 
 const requiredDescription = computed(() =>
-    list.value.required
-        ? `On. Google alone no longer opens this sandbox for anyone; a member without a passkey adds one on their next sign-in.`
-        : `Off. A Google sign-in opens the sandbox; a passkey is a faster way in beside it.`,
+    list.value.required ? t(`sandbox.passkeysSection.requiredOn`) : t(`sandbox.passkeysSection.requiredOff`),
 );
 
 // Switching on needs a passkey of the owner's own to open the door with; the button says so rather than 409ing.
@@ -100,7 +100,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
         <template v-if="isOwner && unread === undefined">
             <Row icon="shield" :title="t(`sandbox.passkeysSection.requirePasskeyToOpen`)" :description="requiredDescription">
                 <template #meta>
-                    <StatusBadge :variant="list.required ? `success` : `neutral`" :label="list.required ? `required` : `optional`" size="xs" />
+                    <StatusBadge :variant="list.required ? `success` : `neutral`" :label="list.required ? t(`sandbox.passkeysSection.required`) : t(`sandbox.passkeysSection.optional`)" size="xs" />
                 </template>
                 <template #control>
                     <Button

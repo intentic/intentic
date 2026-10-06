@@ -128,9 +128,10 @@ const shown = computed(() => groups.reduce((sum, group) => sum + group.hits.leng
 const summary = computed(() => {
     // The `+` sits on the number, not the noun (`4,211+ matches`, not `4,211 matches+`).
     const floor = partial ? `+` : ``;
-    const matches = `${formatCount(total)}${floor} ${total === 1 && !partial ? `match` : `matches`}`;
-    const scope = `${matches} in ${formatCount(files)}${floor} ${files === 1 && !partial ? `file` : `files`}`;
-    return truncated ? `${scope} · showing ${formatCount(shown.value)}` : scope;
+    // A floor is never one: `1+ matches` takes the plural (5 picks it in every language, Polish "many" included).
+    const matches = t(`workspace.workspaceSearchResults.matchCount`, { count: `${formatCount(total)}${floor}` }, partial ? 5 : total);
+    const scope = t(`workspace.workspaceSearchResults.matchesInFiles`, { matches, count: `${formatCount(files)}${floor}` }, partial ? 5 : files);
+    return truncated ? t(`workspace.workspaceSearchResults.showing`, { scope, shown: formatCount(shown.value) }) : scope;
 });
 
 const activate = (row: ResultRow, mode: OpenMode): void => {

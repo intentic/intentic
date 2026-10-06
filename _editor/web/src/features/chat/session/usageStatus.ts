@@ -28,24 +28,25 @@ import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } f
 export { bindingWindow };
 
 // One label per pool kind; provider's own name wins when given, since these are separate allowances.
-const WINDOW_NAMES: Record<string, string> = {
-    five_hour: `5-hour session`,
-    seven_day: `Weekly · all models`,
-    seven_day_opus: `Weekly · Opus`,
-    seven_day_sonnet: `Weekly · Sonnet`,
-    seven_day_oauth_apps: `Weekly · third-party apps`,
-    seven_day_overage_included: `Weekly · included overage`,
-    overage: `Overage credits`,
-};
+// Built when read, so a switched language reaches it.
+const windowNames = (): Record<string, string> => ({
+    five_hour: t(`chat.usageStatus.fiveHourSession`),
+    seven_day: t(`chat.usageStatus.weeklyAllModels`),
+    seven_day_opus: t(`chat.usageStatus.weeklyScoped`, { label: `Opus` }),
+    seven_day_sonnet: t(`chat.usageStatus.weeklyScoped`, { label: `Sonnet` }),
+    seven_day_oauth_apps: t(`chat.usageStatus.weeklyThirdParty`),
+    seven_day_overage_included: t(`chat.usageStatus.weeklyOverage`),
+    overage: t(`chat.usageStatus.overageCredits`),
+});
 
 // Model/surface-scoped pools are weekly slices; labeled "Weekly · X" rather than a bare name.
 const SCOPED_KINDS = [`model:`, `surface:`];
 export const usageWindowLabel = (window: UsageWindow): string =>
     window.label !== undefined
         ? SCOPED_KINDS.some((prefix) => window.kind.startsWith(prefix))
-            ? `Weekly · ${window.label}`
+            ? t(`chat.usageStatus.weeklyScoped`, { label: window.label })
             : window.label
-        : (WINDOW_NAMES[window.kind] ?? window.kind);
+        : (windowNames()[window.kind] ?? window.kind);
 
 // Display order: the account-wide ceilings outermost-first (monthly, weekly, then the 5-hour throttle nested inside
 // them), then per-model slices, then anything unrecognised. The top line is read as "how much is left"; a
@@ -400,9 +401,11 @@ export const usageDetail = (headroom: PlanHeadroom): string =>
     [
         ...headroom.pools.map(
             (pool) =>
-                `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${pool.resetsAt === undefined ? `` : ` (resets ${formatReset(pool.resetsAt)})`}`,
+                `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${
+                    pool.resetsAt === undefined ? `` : ` (${t(`chat.usageStatus.resets`, { when: formatReset(pool.resetsAt) })})`
+                }`,
         ),
-        `measured ${formatAge(headroom.measuredAt)}`,
+        t(`chat.usageStatus.measured`, { age: formatAge(headroom.measuredAt) }),
     ].join(` · `);
 
 // Every connection this sandbox holds — a provider's own account and a routed subscription alike — as one row
@@ -664,16 +667,16 @@ export const planLimitGroups = (
 };
 
 // Provider's own words, quoted while current; once answered they move to `detail` as a footnote.
-const REFUSAL_CONDITION: Record<ProviderRefusal["kind"], string> = {
-    limit: `Hit its usage limit`,
-    auth: `Refused its credential`,
+const REFUSAL_CONDITION: Record<ProviderRefusal["kind"], () => string> = {
+    limit: () => t(`chat.usageStatus.refusedLimit`),
+    auth: () => t(`chat.usageStatus.refusedAuth`),
     // Not "refused its credential": the credential is fine, the plan turned the account away.
-    entitlement: `Turned this account away`,
+    entitlement: () => t(`chat.usageStatus.refusedEntitlement`),
 };
-const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], string> = {
-    limit: `has had room since`,
-    auth: `authenticated fine since`,
-    entitlement: `has run a turn since`,
+const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], () => string> = {
+    limit: () => t(`chat.usageStatus.answeredLimit`),
+    auth: () => t(`chat.usageStatus.answeredAuth`),
+    entitlement: () => t(`chat.usageStatus.answeredEntitlement`),
 };
 
 export interface RefusalNote {
@@ -691,8 +694,8 @@ export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: read
         return undefined;
     }
     const verdict = refusalVerdict(refusal, accounts);
-    const answer = verdict === `gone` ? `that account is no longer connected` : verdict === `answered` ? REFUSAL_ANSWERED[refusal.kind] : undefined;
-    const opening = `${REFUSAL_CONDITION[refusal.kind]} ${formatAge(refusal.at, now)}`;
+    const answer = verdict === `gone` ? t(`chat.usageStatus.accountGone`) : verdict === `answered` ? REFUSAL_ANSWERED[refusal.kind]() : undefined;
+    const opening = `${REFUSAL_CONDITION[refusal.kind]()} ${formatAge(refusal.at, now)}`;
     return {
         line: answer === undefined ? `${opening}, ${refusal.message}` : `${opening}, ${answer}.`,
         detail: refusal.message,

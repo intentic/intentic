@@ -111,21 +111,21 @@ const parseSshTarget = (pasted: string): PasteExpansion | undefined => {
     }
     const [, user, host, targetPort] = match;
     const values: Record<string, string> = { host: host ?? `` };
-    const parts = [`host ${host}`];
+    const parts = [t(`capabilities.normalize.host`, { value: host ?? `` })];
     const chosenPort = port ?? targetPort;
     if (chosenPort !== undefined) {
         values[`port`] = chosenPort;
-        parts.push(`port ${chosenPort}`);
+        parts.push(t(`capabilities.normalize.port`, { value: chosenPort }));
     }
     if (user !== undefined) {
         values[`user`] = user;
-        parts.push(`user ${user}`);
+        parts.push(t(`capabilities.normalize.user`, { value: user }));
     }
     // A bare hostname with nothing else read from it is not an expansion, it is just a hostname.
     if (parts.length === 1) {
         return undefined;
     }
-    return { values, summary: `Read from the paste: ${parts.join(` · `)}.` };
+    return { values, summary: t(`capabilities.normalize.readFromPaste`, { parts: parts.join(` · `) }) };
 };
 
 // Parses a database connection string, filling all five boxes; the summary names what landed where,
@@ -145,24 +145,24 @@ const parseConnectionString = (entry: CapabilityCatalogEntry, pasted: string): P
     }
     const database = decodeURIComponent(url.pathname.replace(/^\//u, ``));
     const values: Record<string, string> = { host: url.hostname };
-    const parts = [`host ${url.hostname}`];
+    const parts = [t(`capabilities.normalize.host`, { value: url.hostname })];
     if (url.port.length > 0) {
         values[`port`] = url.port;
-        parts.push(`port ${url.port}`);
+        parts.push(t(`capabilities.normalize.port`, { value: url.port }));
     }
     if (database.length > 0) {
         values[`database`] = database;
-        parts.push(`database ${database}`);
+        parts.push(t(`capabilities.normalize.database`, { value: database }));
     }
     if (url.username.length > 0) {
         values[`user`] = decodeURIComponent(url.username);
-        parts.push(`user ${decodeURIComponent(url.username)}`);
+        parts.push(t(`capabilities.normalize.user`, { value: decodeURIComponent(url.username) }));
     }
     if (url.password.length > 0) {
         values[`password`] = decodeURIComponent(url.password);
-        parts.push(`password set`);
+        parts.push(t(`capabilities.normalize.passwordSet`));
     }
-    return { values, summary: `Read from the connection string: ${parts.join(` · `)}.` };
+    return { values, summary: t(`capabilities.normalize.readFromConnectionString`, { parts: parts.join(` · `) }) };
 };
 
 // Splits a repository deep link (…/tree/<ref>/<path>, …/commit/<sha>) into url, ref and path; GitHub
@@ -177,16 +177,19 @@ const parseRepoDeepLink = (entry: CapabilityCatalogEntry, pasted: string): Paste
     }
     const [, repo, verb, ref, path] = match;
     const values: Record<string, string> = { url: repo ?? ``, ref: ref ?? `` };
-    const parts = [`repository ${repo}`, verb === `commit` ? `commit ${(ref ?? ``).slice(0, 12)}` : `ref ${ref}`];
+    const parts = [
+        t(`capabilities.normalize.repository`, { value: repo ?? `` }),
+        verb === `commit` ? t(`capabilities.normalize.commit`, { value: (ref ?? ``).slice(0, 12) }) : t(`capabilities.normalize.ref`, { value: ref ?? `` }),
+    ];
     if (path !== undefined && path.length > 0 && hasField(entry, `path`)) {
         // A blob link names a file; the subdirectory the form wants is the folder it sits in.
         const directory = verb === `blob` ? path.split(`/`).slice(0, -1).join(`/`) : path;
         if (directory.length > 0) {
             values[`path`] = directory;
-            parts.push(`subdirectory ${directory}`);
+            parts.push(t(`capabilities.normalize.subdirectory`, { value: directory }));
         }
     }
-    return { values, summary: `Split the link: ${parts.join(` · `)}.` };
+    return { values, summary: t(`capabilities.normalize.splitLink`, { parts: parts.join(` · `) }) };
 };
 
 // IMAP hosts for common providers, looked up from the pasted address; a host already typed is left
@@ -280,20 +283,24 @@ export const wireguardSummary = (value: string | undefined): ConfSummary | undef
     const peers = (text.match(/^\s*\[peer\]/gim) ?? []).length;
     const endpoints = [...text.matchAll(/^\s*endpoint\s*=\s*(\S+)/gim)].map((match) => match[1] ?? ``);
     const countries = [...new Set([...text.matchAll(/^\s*#\s*country:\s*([a-z]{2})\b/gim)].map((match) => (match[1] ?? ``).toUpperCase()))];
-    const parts = [`${interfaces} config${interfaces === 1 ? `` : `s`}`];
+    const parts = [t(`capabilities.normalize.configCount`, { count: interfaces }, interfaces)];
     if (peers < interfaces) {
         return {
-            text: `${parts[0]}, but only ${peers} [Peer] section${peers === 1 ? `` : `s`}: a config without its peer can't connect. Check the paste.`,
+            text: t(`capabilities.normalize.peersMissing`, { configs: parts[0] ?? ``, count: peers }, peers),
             warning: true,
         };
     }
     if (endpoints.length > 0) {
-        parts.push(endpoints.length === 1 ? `endpoint ${endpoints[0]}` : `${endpoints.length} endpoints`);
+        parts.push(
+            endpoints.length === 1
+                ? t(`capabilities.normalize.endpoint`, { value: endpoints[0] ?? `` })
+                : t(`capabilities.normalize.endpointCount`, { count: endpoints.length }, endpoints.length),
+        );
     }
     if (countries.length > 0) {
         parts.push(countries.join(`, `));
     }
-    return { text: `Read: ${parts.join(` · `)}.`, warning: false };
+    return { text: t(`capabilities.normalize.readSummary`, { parts: parts.join(` · `) }), warning: false };
 };
 
 // Whether this field is the kind the summary above narrates: a multiline WireGuard config box.

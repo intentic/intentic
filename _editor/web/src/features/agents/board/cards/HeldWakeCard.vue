@@ -35,12 +35,14 @@ const autoRunLabel = computed(() => {
     }
     const seconds = Math.max(0, Math.round((entry.autoRunAt - coarseNow.value) / 1000));
     if (seconds < 120) {
-        return `runs itself in ${seconds}s`;
+        return t(`agents.heldWakeCard.runsInSeconds`, { seconds });
     }
     if (seconds < 2 * 3_600) {
-        return `runs itself in ${Math.round(seconds / 60)}m`;
+        return t(`agents.heldWakeCard.runsInMinutes`, { minutes: Math.round(seconds / 60) });
     }
-    return seconds < 2 * 86_400 ? `runs itself in ${Math.round(seconds / 3_600)}h` : `runs itself in ${Math.round(seconds / 86_400)}d`;
+    return seconds < 2 * 86_400
+        ? t(`agents.heldWakeCard.runsInHours`, { hours: Math.round(seconds / 3_600) })
+        : t(`agents.heldWakeCard.runsInDays`, { days: Math.round(seconds / 86_400) });
 });
 </script>
 

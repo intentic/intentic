@@ -31,7 +31,7 @@ const send = async (): Promise<void> => {
         sent.value = true;
         emit(`sent`);
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't send that email. Try again.`);
+        error.value = noticeFrom(err, t(`setup.setupHandoff.couldntSend`));
     } finally {
         sending.value = false;
     }

@@ -73,7 +73,7 @@ const SPECS: { readonly [P in LinkKind]: KindSpec<LinkOf[P]> } = {
     vpn: {
         group: () => t(`shared.connections`),
         listFailed: () => t(`common.vpnConnections.couldntReadWhatTunnels`),
-        failed: () => `The VPN action failed.`,
+        failed: () => t(`common.vpnConnections.actionFailed`),
         open: () => t(`ui.action.connect`),
         close: () => t(`ui.action.disconnect`),
         autoNote: () => t(`common.vpnConnections.connectsAutomaticallyAfterSandbox`),
@@ -91,7 +91,7 @@ const SPECS: { readonly [P in LinkKind]: KindSpec<LinkOf[P]> } = {
                     : [
                           link.address,
                           // Full-tunnel is named, since 0.0.0.0/0 is the most consequential thing a VPN can do here.
-                          link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.length > 0 ? link.routes.join(`, `) : undefined,
+                          link.routes.includes(`0.0.0.0/0`) ? t(`capabilities.words.allTraffic`) : link.routes.length > 0 ? link.routes.join(`, `) : undefined,
                           link.interface,
                           uptime(link.since),
                       ]),
@@ -101,7 +101,7 @@ const SPECS: { readonly [P in LinkKind]: KindSpec<LinkOf[P]> } = {
         },
         caption: (links) =>
             links.some((link) => link.state === `connected`)
-                ? `traffic matching a connected tunnel's routes leaves the sandbox through it: including the agent's`
+                ? t(`common.vpnConnections.routesCaption`)
                 : undefined,
         otp: true,
     },

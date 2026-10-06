@@ -1,6 +1,7 @@
 {
     "activityTimeline": {
         "activityFeed": "Activity feed",
+        "entries": "{count} entry | {count} entries",
         "idleNoEnabledListener": "Idle: no enabled listener automation for {label} yet, so nothing is being listened for.",
         "loadingActivity": "Loading activity",
         "nothingEntriesAppearMessage": "Nothing {window}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every turn it runs.",
@@ -12,17 +13,63 @@
         "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
+        "durationMinutes": "{minutes}m {seconds}s",
+        "durationSeconds": "{seconds}s",
+        "error": "error",
         "failed": "failed",
+        "from": "from {author}",
         "openTranscript": "Open transcript",
+        "outboundCalls": "{count} outbound call | {count} outbound calls",
         "session": "session {sessionId}",
         "source": "source {sourceKey}"
+    },
+    "episodes": {
+        "today": "Today",
+        "turn": "Turn",
+        "type": {
+            "apiCall": "API call",
+            "automationPending": "Automation held for approval",
+            "automationRun": "Automation run",
+            "depsFixUnarmed": "Fix available, nothing armed",
+            "depsInstallFailed": "Dependency install failed",
+            "depsInstallLost": "Dependency install unwatched",
+            "depsInstallStarted": "Installing dependencies",
+            "depsVerifyGreen": "Checks passed",
+            "depsVerifyLost": "Checks unwatched",
+            "depsVerifyRed": "Checks failed",
+            "depsVerifySkipped": "No checks to run",
+            "dispatchFailed": "Dispatch failed",
+            "gatewayLoginFailed": "Gateway login failed",
+            "messageEdit": "Message edited",
+            "messageReceived": "Message received",
+            "messageSend": "Message sent",
+            "messagesRead": "Messages read",
+            "reactionAdd": "Reaction added",
+            "reactionRemove": "Reaction removed",
+            "turnCompleted": "Turn completed",
+            "turnError": "Turn error",
+            "turnPlan": "Plan proposed",
+            "turnStarted": "Turn started",
+            "voiceSessionEnded": "Voice session ended",
+            "voiceSessionStarted": "Voice session started",
+            "voiceTranscriptReceived": "Voice transcript",
+            "voiceUtteranceReceived": "Voice utterance"
+        },
+        "yesterday": "Yesterday"
     },
     "filter": "Filter by text, channel, session…",
     "source": "Source",
     "sourceFilter": {
         "allSources": "All sources",
         "connections": "Connections",
-        "direct": "Direct"
+        "direct": "Direct",
+        "failed": "{count} failed | {count} failed",
+        "gateway": {
+            "connecting": "connecting…",
+            "disconnected": "not connected",
+            "idle": "idle",
+            "pairing": "waiting to be linked"
+        }
     },
     "sourceLabel": "Activity source",
     "sources": {

@@ -10,8 +10,10 @@ import {
     providerSpec,
     TRIAL_PROVIDER,
 } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
+import { requirementWords, runsWords } from "../accounts/providerWords";
 import { acpProviders, endpointProviders, endpointsLoaded, nativeReady, trialStatus } from "../accounts/providerCatalog";
 
 // Whether a provider can actually run, and what unlocks it: one rule, read by every surface that offers a
@@ -78,9 +80,9 @@ export const hasSignIn = (provider: AgentProvider): boolean => accessFor(provide
 // How a locked provider states its price in one chip. `free` leads with the word that changes a decision, a
 // user who has connected nothing should be able to see, without connecting anything, that one of these rows
 // costs nothing; the others name what they'd have to already pay for.
-const KIND_BADGE: Record<AccessKind, (requirement: string) => string> = {
-    free: (requirement) => `Free · ${requirement}`,
-    subscription: (requirement) => `Needs ${requirement}`,
+const KIND_BADGE: Record<AccessKind, (access: ProviderAccess) => string> = {
+    free: (access) => t(`chat.access.freeBadge`, { requirement: requirementWords(access, `name`) }),
+    subscription: (access) => t(`chat.access.needsBadge`, { requirement: requirementWords(access, `needed`) }),
 };
 
 // Chip a provider's section header shows: nothing once ready (a usable provider looks like the plain default),
@@ -90,7 +92,7 @@ export const accessBadge = (provider: AgentProvider): string | undefined => {
     if (state.ready || state.access === undefined) {
         return undefined;
     }
-    return KIND_BADGE[state.access.kind](state.access.requirement);
+    return KIND_BADGE[state.access.kind](state.access);
 };
 
 // Connect gate's pitch and the button's accessible name (`action`); the visible chip just shows the provider's
@@ -100,8 +102,13 @@ export const connectPitch = (provider: AgentProvider, harness: AgentHarness): { 
     if (access === undefined) {
         return undefined;
     }
-    const runs = provider === `grok` && harness === `claude-code` ? `${access.runs} under Claude Code` : access.runs;
-    return { copy: `Connect your ${access.requirement} to run ${runs}.`, action: `Connect ${access.requirement}` };
+    const runs =
+        provider === `grok` && harness === `claude-code` ? t(`chat.access.runsUnderClaudeCode`, { runs: runsWords(access) }) : runsWords(access);
+    const requirement = requirementWords(access, `object`);
+    return {
+        copy: t(`chat.access.connectPitch`, { requirement, runs }),
+        action: t(`chat.access.connectAction`, { requirement }),
+    };
 };
 
 // Separate from accessBadge: the trial is an endpoint (accessFor rightly returns undefined), but the row needs
@@ -111,7 +118,7 @@ export const trialBadge = (provider: AgentProvider): string | undefined => {
         return undefined;
     }
     const { remaining } = trialStatus.value;
-    return remaining > 0 ? `Free trial · ${remaining} left today` : `Free trial · used up today`;
+    return remaining > 0 ? t(`chat.access.trialLeft`, { remaining }) : t(`chat.access.trialUsedUp`);
 };
 
 // Where the day's free trial stands, the one reading of its allowance every surface takes: `none` (not the trial, or

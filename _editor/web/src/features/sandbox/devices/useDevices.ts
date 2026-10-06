@@ -14,6 +14,7 @@ import {
     SyncStatusSchema,
 } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { sandboxError, sandboxJson, sandboxRequest } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -108,9 +109,28 @@ const flowInput = (
 // Stands in for the device's own sentence when the op that succeeded took the connection carrying it down: the
 // daemon relaying the call lived in the container the call acted on, so no result frame can ever arrive.
 const severedOutcome = (op: DeviceSandboxOp, slug: string): string =>
-    op === `remove`
-        ? `Removed "${slug}" from this device: its container, its files and its history are gone.`
-        : `"${slug}" took this connection down with it, which is what ${op} does from inside it. What it is now shows up once the page reconnects.`;
+    op === `remove` ? t(`sandbox.useDevices.removedSevered`, { slug }) : t(`sandbox.useDevices.severed`, { slug, op: OP_WORDS[op]() });
+
+// Each op as the sentence above names it: the op's own name in English, a noun in the reader's language.
+const OP_WORDS: Readonly<Record<DeviceSandboxOp, () => string>> = {
+    start: () => t(`sandbox.useDevices.ops.start`),
+    stop: () => t(`sandbox.useDevices.ops.stop`),
+    restart: () => t(`sandbox.useDevices.ops.restart`),
+    prepare: () => t(`sandbox.useDevices.ops.prepare`),
+    "prepare-background": () => t(`sandbox.useDevices.ops.prepareBackground`),
+    update: () => t(`sandbox.useDevices.ops.update`),
+    rebuild: () => t(`sandbox.useDevices.ops.rebuild`),
+    rollback: () => t(`sandbox.useDevices.ops.rollback`),
+    reshape: () => t(`sandbox.useDevices.ops.reshape`),
+    "set-shape": () => t(`sandbox.useDevices.ops.setShape`),
+    "forget-shape": () => t(`sandbox.useDevices.ops.forgetShape`),
+    remove: () => t(`sandbox.useDevices.ops.remove`),
+    logs: () => t(`sandbox.useDevices.ops.logs`),
+    reconnect: () => t(`sandbox.useDevices.ops.reconnect`),
+    create: () => t(`sandbox.useDevices.ops.create`),
+    "runner-up": () => t(`sandbox.useDevices.ops.runnerUp`),
+    "runner-remove": () => t(`sandbox.useDevices.ops.runnerRemove`),
+};
 
 // Everything the flow said: its result sentence, and its refusal if it sent one. A refusal is returned rather than
 // thrown so the caller can tell one the device SENT from the connection dying under it.
@@ -128,7 +148,7 @@ const flowSaid = async (
             continue;
         }
         if (line[`kind`] === `error`) {
-            return { outcome, refusal: frameText(line, `message`) ?? `That operation failed on the device.` };
+            return { outcome, refusal: frameText(line, `message`) ?? t(`sandbox.useDevices.opFailed`) };
         }
         if (line[`kind`] === `result`) {
             outcome = frameText(line, `message`) ?? outcome;
@@ -143,8 +163,11 @@ const flowSaid = async (
  */
 export class DeviceFlowLostError extends Error {
     constructor(readonly transport: string | undefined) {
-        const browser = transport === undefined ? `` : ` The browser said: "${transport}".`;
-        super(`Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to.${browser}`);
+        super(
+            transport === undefined
+                ? t(`sandbox.useDevices.lostContact`)
+                : t(`sandbox.useDevices.lostContactSaid`, { transport }),
+        );
     }
 }
 
@@ -209,7 +232,7 @@ export async function runDeviceAgentFlow(
         }
         // An `error` frame means the device refused (its switch off, or its agent too old), not a dropped connection.
         if (line[`kind`] === `error`) {
-            throw new Error(frameText(line, `message`) ?? `That device wouldn't update its agent.`);
+            throw new Error(frameText(line, `message`) ?? t(`sandbox.useDevices.agentUpdateRefused`));
         }
         if (line[`kind`] === `result`) {
             message = frameText(line, `message`) ?? message;

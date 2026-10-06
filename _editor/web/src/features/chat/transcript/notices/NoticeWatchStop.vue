@@ -22,7 +22,7 @@ const refused = ref<string | undefined>(undefined);
 const stop = async (): Promise<void> => {
     refused.value = undefined;
     await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch((error: unknown) => {
-        refused.value = messageOr(error, `The watch could not be stopped.`);
+        refused.value = messageOr(error, t(`chat.noticeWatchStop.couldNotStop`));
     });
 };
 </script>

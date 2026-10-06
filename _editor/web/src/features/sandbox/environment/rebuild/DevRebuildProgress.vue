@@ -62,8 +62,7 @@ const secondsOf = (stage: DevRebuildStage): number | undefined => {
 
 // How much of a step's own segment of the bar is filled. Zero for a step with nothing countable in it, which the
 // segment then says by pulsing rather than by sitting at a number it cannot justify.
-const fillOf = (stage: DevRebuildStage, weight: number): number =>
-    Math.min(1, Math.max(0, (props.run.fraction - stageStart(stage)) / weight));
+const fillOf = (stage: DevRebuildStage, weight: number): number => Math.min(1, Math.max(0, (props.run.fraction - stageStart(stage)) / weight));
 
 const steps = computed(() =>
     DEV_REBUILD_STEPS.map((step) => ({
@@ -89,7 +88,7 @@ const detail = computed(() => {
     return said;
 });
 
-const heading = `Rebuilding from your checkout`;
+const heading = computed(() => t(`sandbox.useDevRebuild.rebuildingFromCheckout`));
 
 // The one sentence about THIS sandbox, which flips at the swap: up to it the build costs the reader nothing, and from
 // it their workspace is the thing that went away.
@@ -97,14 +96,14 @@ const cost = computed(() => {
     if (!live.value) {
         return undefined;
     }
-    return props.run.stage === `swap`
-        ? `Your sandbox is restarting on the new image. This page reconnects on its own.`
-        : `Your sandbox keeps working, and restarts on its own once it's built.`;
+    return props.run.stage === `swap` ? t(`sandbox.devRebuildProgress.restartingOnNewImage`) : t(`sandbox.devRebuildProgress.keepsWorking`);
 });
 
 const done = computed(() =>
     props.run.phase === `done`
-        ? `Rebuilt from your checkout in ${elapsedLabel.value ?? `a few minutes`}. You're running the new image.`
+        ? elapsedLabel.value === undefined
+            ? t(`sandbox.devRebuildProgress.rebuiltFewMinutes`)
+            : t(`sandbox.devRebuildProgress.rebuiltIn`, { elapsed: elapsedLabel.value })
         : undefined,
 );
 
@@ -112,15 +111,15 @@ const failure = computed<NoticeModel | undefined>(() => {
     if (props.run.phase === `failed`) {
         const title =
             props.run.exitCode === undefined
-                ? `That device didn't run the rebuild.`
-                : `The rebuild failed on that device (exit ${props.run.exitCode}).`;
+                ? t(`sandbox.devRebuildProgress.deviceDidntRun`)
+                : t(`sandbox.devRebuildProgress.failedOnDevice`, { code: props.run.exitCode });
         return { tone: `warning`, title, ...(props.run.trouble === undefined ? {} : { detail: props.run.trouble }) };
     }
     if (props.run.phase === `lost`) {
         return {
             tone: `warning`,
             title: t(`sandbox.devRebuildProgress.rebuildStoppedReportingNever`),
-            detail: props.run.trouble ?? `Nothing has been written to its log for a while: the machine may have slept, or the build was stopped.`,
+            detail: props.run.trouble ?? t(`sandbox.devRebuildProgress.logSilent`),
         };
     }
     return undefined;
@@ -132,7 +131,7 @@ const QUIET_AFTER_S = 90;
 const quiet = computed(() => {
     const seconds = props.run.quietFor ?? 0;
     return props.run.phase === `building` && seconds > QUIET_AFTER_S
-        ? `Nothing new in the log for ${Math.round(seconds / 60)}m — a single docker layer can take that long.`
+        ? t(`sandbox.devRebuildProgress.quietFor`, { minutes: Math.round(seconds / 60) })
         : undefined;
 });
 
@@ -152,7 +151,7 @@ watch(
     { immediate: true },
 );
 
-const logLabel = computed(() => (showLog.value ? `Hide the build log` : `Show the build log`));
+const logLabel = computed(() => (showLog.value ? t(`sandbox.devRebuildProgress.hideLog`) : t(`sandbox.devRebuildProgress.showLog`)));
 </script>
 
 <template>
@@ -219,7 +218,8 @@ const logLabel = computed(() => (showLog.value ? `Hide the build log` : `Show th
             </button>
             <!-- The whole thing outlives this card, so where it lives is worth keeping beside the tail it shows. -->
             <p v-if="showLog" class="text-2xs text-subtle">
-                {{ t(`sandbox.devRebuildProgress.fullOutputIn`) }} <span class="font-mono">{{ logPath }}</span> {{ t(`sandbox.devRebuildProgress.onDevice`) }}
+                {{ t(`sandbox.devRebuildProgress.fullOutputIn`) }} <span class="font-mono">{{ logPath }}</span>
+                {{ t(`sandbox.devRebuildProgress.onDevice`) }}
             </p>
         </div>
     </div>

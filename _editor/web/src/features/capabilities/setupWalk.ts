@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -55,7 +56,7 @@ export const useSetupWalk = ({ tiles, selected, walking, move, dismissRecommenda
         try {
             await dismissRecommendation.mutateAsync(entry.id);
         } catch (err) {
-            error.value = noticeFrom(err, `Could not dismiss that suggestion.`);
+            error.value = noticeFrom(err, t(`capabilities.setupWalk.couldNotDismiss`));
             return;
         }
         leaveTile(next);

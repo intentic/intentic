@@ -7,6 +7,7 @@ import { computed, useId } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
+import { roleBlurb, roleLabel } from "./roleWords";
 import { useT } from "@intentic/ui/i18n";
 
 // One job's row (name, mark, tick, ordered model list), componentized since eighteen of these are drawn from the
@@ -72,7 +73,7 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
 
 <template>
     <!-- Spine follows what's below: a pinned list, or the note slot; neither means nothing draws. -->
-    <Row :selected="selected" :spine="pinned || $slots[`note`] !== undefined" :description="role.blurb">
+    <Row :selected="selected" :spine="pinned || $slots[`note`] !== undefined" :description="roleBlurb(role)">
         <!-- The lead size comes from the row tier so density stays consistent. -->
         <template #lead="{ mark, iconClass }">
             <span class="relative flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
@@ -85,7 +86,7 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
                     size="small"
                     class="absolute transition-opacity"
                     :class="boxClass"
-                    :aria-label="t(`sandbox.modelRoleRow.select`, { toLowerCase: role.label.toLowerCase() })"
+                    :aria-label="t(`sandbox.modelRoleRow.select`, { toLowerCase: roleLabel(role).toLowerCase() })"
                     @update:model-value="(value: unknown) => emit(`select`, value === true)"
                 />
             </span>
@@ -94,8 +95,8 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
         <!-- flex-wrap: a long job label may push the chip to its own line before pushing off the row. -->
         <template #title>
             <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <label v-if="selectable" :for="tickId" class="min-w-0 cursor-pointer">{{ role.label }}</label>
-                <span v-else class="min-w-0">{{ role.label }}</span>
+                <label v-if="selectable" :for="tickId" class="min-w-0 cursor-pointer">{{ roleLabel(role) }}</label>
+                <span v-else class="min-w-0">{{ roleLabel(role) }}</span>
                 <StatusBadge v-if="chip !== undefined" v-tooltip.top="chip.hint" variant="neutral" size="xs" :label="chip.label" />
                 <StatusBadge v-if="badge !== undefined" v-tooltip.top="badge.hint" variant="neutral" size="xs" :label="badge.label" />
             </span>
@@ -106,7 +107,7 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
             <div class="flex items-center gap-1.5">
                 <slot name="control" />
                 <AddModelButton
-                    :label="t(`sandbox.modelRoleRow.addModel`, { toLowerCase: role.label.toLowerCase() })"
+                    :label="t(`sandbox.modelRoleRow.addModel`, { toLowerCase: roleLabel(role).toLowerCase() })"
                     :disabled="disabled"
                     @open="(anchor: HTMLElement) => emit(`open`, undefined, anchor)"
                 />

@@ -27,7 +27,9 @@ const duration = computed(() => {
         return undefined;
     }
     const seconds = Math.round(episode.durationMs / 1000);
-    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return seconds < 60
+        ? t(`episodeRow.durationSeconds`, { seconds })
+        : t(`episodeRow.durationMinutes`, { minutes: Math.floor(seconds / 60), seconds: seconds % 60 });
 });
 // Without this, a sub-cent cost would round to $0.00 and read as free.
 const cost = computed(() => (episode.costUsd === undefined ? undefined : episode.costUsd < 0.01 ? `<$0.01` : `$${episode.costUsd.toFixed(2)}`));
@@ -40,10 +42,10 @@ const preview = computed(() => (episode.titled === true ? episode.detail : undef
 const facts = computed(() =>
     [
         episode.typeName,
-        episode.author === undefined ? undefined : `from ${episode.author}`,
+        episode.author === undefined ? undefined : t(`episodeRow.from`, { author: episode.author }),
         episode.channelId === undefined ? undefined : `#${episode.channelId}`,
         episode.runtime === undefined ? undefined : nameOf(episode.runtime),
-        episode.outbound > 0 ? `${episode.outbound} outbound ${episode.outbound === 1 ? `call` : `calls`}` : undefined,
+        episode.outbound > 0 ? t(`episodeRow.outboundCalls`, { count: episode.outbound }, episode.outbound) : undefined,
     ].filter((fact): fact is string => fact !== undefined),
 );
 </script>
@@ -95,7 +97,7 @@ const facts = computed(() =>
                     <span class="font-mono text-subtle">{{ formatTime(entry.at) }}</span>
                     <span class="text-muted">{{ typeLabel(entry.type) }}</span>
                     <span v-if="entry.method" class="font-mono text-subtle">{{ entry.method }} {{ entry.endpoint }}</span>
-                    <span v-if="entry.outcome === `error`" class="text-danger">{{ entry.error ?? `error` }}</span>
+                    <span v-if="entry.outcome === `error`" class="text-danger">{{ entry.error ?? t(`episodeRow.error`) }}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-x-3 font-mono text-2xs text-subtle/70">
                     <span v-if="episode.sessionId">{{ t(`episodeRow.session`, { sessionId: episode.sessionId }) }}</span>

@@ -1,4 +1,5 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
@@ -16,7 +17,9 @@ import { twinsOf } from "./titleTwins";
 // What a tab calls a conversation: derived title, else the draft preview, else "New agent"/"New chat". A
 // stand-in title, replaced (not merged) the moment a real one arrives.
 export const tabLabel = (conversation: Conversation): string =>
-    conversation.title.value ?? draftPreview(conversation.draft.value) ?? (conversation.isolated.value ? `New agent` : `New chat`);
+    conversation.title.value ??
+    draftPreview(conversation.draft.value) ??
+    (conversation.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`));
 
 // Titles two or more open chats share (titleTwins.ts), held once for every row that asks; made on first use, since this
 // module is imported before the chat list exists.

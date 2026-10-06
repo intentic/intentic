@@ -1,3 +1,4 @@
+import { t } from "../../i18n/index.js";
 import type { DeviceSandboxResources } from "./deviceDetail.js";
 
 // Arithmetic behind SandboxResourcesDialog.vue: what the form holds, where it starts, what the machine
@@ -71,11 +72,11 @@ export interface ResourcesLocks {
     readonly gpu?: string | undefined;
 }
 
-const LOCKED = `Your approved environment requires this, so it can't be turned off here.`;
+const locked = (): string => t(`ui.sandboxResourcesDialog.locked`);
 
 export const locksOf = (current: DeviceSandboxResources): ResourcesLocks => ({
-    ...(current.overlayRuntime.includes(PRIVILEGED_TOKEN) ? { privileged: LOCKED } : {}),
-    ...(current.overlayRuntime.includes(GPU_TOKEN) ? { gpu: LOCKED } : {}),
+    ...(current.overlayRuntime.includes(PRIVILEGED_TOKEN) ? { privileged: locked() } : {}),
+    ...(current.overlayRuntime.includes(GPU_TOKEN) ? { gpu: locked() } : {}),
 });
 
 // A GPU asked for and not delivered: `--gpus` needs the NVIDIA runtime, and a host without it drops the
@@ -89,26 +90,44 @@ export interface FormProblems {
     readonly cpus?: string | undefined;
 }
 
-// `ceilingWhy` speaks only for bounds that carry a max.
-const capProblem = (value: number | null, bounds: CapBounds, unit: string, floorWhy: string, ceilingWhy?: string): string | undefined => {
+// Each field's own sentences, one per way a value can be refused, built when read.
+interface CapWords {
+    readonly whole: () => string;
+    readonly atLeast: (min: number) => string;
+    readonly atMost: (max: number) => string;
+}
+
+const MEMORY_WORDS: CapWords = {
+    whole: () => t(`ui.sandboxResourcesDialog.memoryWholeOnly`),
+    atLeast: (min) => t(`ui.sandboxResourcesDialog.memoryAtLeast`, { min }),
+    atMost: (max) => t(`ui.sandboxResourcesDialog.memoryAtMost`, { max }),
+};
+
+const CPU_WORDS: CapWords = {
+    whole: () => t(`ui.sandboxResourcesDialog.cpusWholeOnly`),
+    atLeast: (min) => t(`ui.sandboxResourcesDialog.cpusAtLeast`, { min }),
+    atMost: (max) => t(`ui.sandboxResourcesDialog.cpusAtMost`, { max }),
+};
+
+const capProblem = (value: number | null, bounds: CapBounds, words: CapWords): string | undefined => {
     if (value === null) {
         return undefined;
     }
     if (!Number.isInteger(value)) {
-        return `Whole ${unit} only.`;
+        return words.whole();
     }
     if (value < bounds.min) {
-        return `At least ${bounds.min} ${unit}: ${floorWhy}`;
+        return words.atLeast(bounds.min);
     }
     if (bounds.max !== undefined && value > bounds.max) {
-        return `At most ${bounds.max} ${unit} on this computer${ceilingWhy === undefined ? `.` : `: ${ceilingWhy}`}`;
+        return words.atMost(bounds.max);
     }
     return undefined;
 };
 
 export const formProblems = (form: ResourcesForm, engine: EngineFacts | undefined): FormProblems => {
-    const memory = capProblem(form.memoryGib, MEMORY_BOUNDS, `GiB`, `below that the sandbox's own toolchain stops fitting.`);
-    const cpus = capProblem(form.cpus, cpuBounds(engine), `CPUs`, `a sandbox needs a core to run on.`, `that is every core its engine has.`);
+    const memory = capProblem(form.memoryGib, MEMORY_BOUNDS, MEMORY_WORDS);
+    const cpus = capProblem(form.cpus, cpuBounds(engine), CPU_WORDS);
     return { ...(memory === undefined ? {} : { memory }), ...(cpus === undefined ? {} : { cpus }) };
 };
 
@@ -148,10 +167,12 @@ export const sameShape = (a: ResourcesForm, b: ResourcesForm): boolean =>
 // A shape in a few words, e.g. "20 GiB memory · every CPU · not privileged · GPU"; the words `resourcesSummary` uses.
 export const shapeSummary = (shape: ResourcesForm): string =>
     [
-        shape.memoryGib === null ? `default memory` : `${shape.memoryGib} GiB memory`,
-        shape.cpus === null ? `every CPU` : `${shape.cpus} ${shape.cpus === 1 ? `CPU` : `CPUs`}`,
-        shape.privileged ? `privileged` : `not privileged`,
-        shape.gpu ? `GPU` : `no GPU`,
+        shape.memoryGib === null
+            ? t(`ui.sandboxResourcesDialog.defaultMemory`)
+            : t(`ui.sandboxResourcesDialog.memoryGib`, { count: shape.memoryGib }),
+        shape.cpus === null ? t(`ui.sandboxResourcesDialog.everyCpu`) : t(`ui.deviceDetail.cpuCount`, { count: shape.cpus }, shape.cpus),
+        shape.privileged ? t(`ui.deviceDetail.privileged`) : t(`ui.sandboxResourcesDialog.notPrivileged`),
+        shape.gpu ? `GPU` : t(`ui.sandboxResourcesDialog.noGpu`),
     ].join(` · `);
 
 // A number field's text, read back live. Not-a-number stays out entirely, so a field mid-edit ("1e")

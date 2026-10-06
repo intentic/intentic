@@ -54,7 +54,9 @@ const churn = computed(() => {
 // is a stamp from earlier in the turn. Absent where the count held, so the figure can only ever mean movement.
 const advance = computed(() => {
     const moved = delta.value;
-    return moved === undefined || moved.done === moved.doneBefore ? undefined : `${moved.doneBefore}→${moved.done} of ${moved.total}`;
+    return moved === undefined || moved.done === moved.doneBefore
+        ? undefined
+        : t(`chat.chatTodoList.advance`, { before: moved.doneBefore, done: moved.done, total: moved.total });
 });
 
 // The line as a sentence, for hover and screen readers: icons and an arrow say none of this out loud.
@@ -64,17 +66,17 @@ const summary = computed(() => {
         return ``;
     }
     const said = [
-        ...moved.finished.map((item) => `finished ${item.content}`),
-        ...moved.started.map((item) => `started ${item.content}`),
-        ...moved.parked.map((item) => `left ${item.content} open`),
-        ...(moved.added > 0 ? [`${moved.added} added`] : []),
-        ...(moved.dropped > 0 ? [`${moved.dropped} dropped`] : []),
+        ...moved.finished.map((item) => t(`chat.chatTodoList.finished`, { content: item.content })),
+        ...moved.started.map((item) => t(`chat.chatTodoList.started`, { content: item.content })),
+        ...moved.parked.map((item) => t(`chat.chatTodoList.leftOpen`, { content: item.content })),
+        ...(moved.added > 0 ? [t(`chat.chatTodoList.added`, { count: moved.added })] : []),
+        ...(moved.dropped > 0 ? [t(`chat.chatTodoList.dropped`, { count: moved.dropped })] : []),
     ].join(`, `);
     // "still" and "at this point" are the words that stop a past snapshot reading as the checklist's state now.
     const progress =
         advance.value === undefined
-            ? `still ${moved.done} of ${moved.total} done`
-            : `${moved.doneBefore} to ${moved.done} of ${moved.total} done at this point`;
+            ? t(`chat.chatTodoList.stillDone`, { done: moved.done, total: moved.total })
+            : t(`chat.chatTodoList.doneAtPoint`, { before: moved.doneBefore, done: moved.done, total: moved.total });
     return `${said}${said === `` ? `` : ` · `}${progress}`;
 });
 
@@ -82,7 +84,9 @@ const expanded = ref(false);
 const toggle = (): void => {
     expanded.value = !expanded.value;
 };
-const hint = computed(() => `${expanded.value ? `Hide` : `Show`} the checklist · ${summary.value}`);
+const hint = computed(() =>
+    expanded.value ? t(`chat.chatTodoList.hide`, { summary: summary.value }) : t(`chat.chatTodoList.show`, { summary: summary.value }),
+);
 </script>
 
 <template>

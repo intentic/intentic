@@ -1,5 +1,7 @@
-// How a daemon refusal reads, for both clients (typed and raw). Import-free, so a suite that fakes a client can still
-// throw the real class and code under test can still recognize it.
+// How a daemon refusal reads, for both clients (typed and raw). Free of client imports, so a suite that fakes a client
+// can still throw the real class and code under test can still recognize it.
+
+import { t } from "@intentic/ui/i18n";
 
 // What a refusal's body said, field by field: an oRPC handler's `message`, a hand-written route's `error`.
 export interface RefusalWords {
@@ -38,4 +40,5 @@ export const wordsOf = (body: unknown): RefusalWords => {
 };
 
 // The daemon's own words for a refusal: its `message`, else a hand-written route's `error`, else the bare status.
-export const refusalText = (status: number, said: RefusalWords): string => said.message ?? said.error ?? `Request failed (${status}).`;
+export const refusalText = (status: number, said: RefusalWords): string =>
+    said.message ?? said.error ?? t(`sandbox.sandboxClient.requestFailed`, { status });

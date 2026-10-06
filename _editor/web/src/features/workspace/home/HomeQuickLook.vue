@@ -209,7 +209,7 @@ const unreadable = computed(() => kind.value === `document` && !loading.value &&
 const size = computed(() => (entry === undefined || entry.type === `dir` ? undefined : formatBytes(entry.size)));
 const count = computed(() => {
     const listed = folderChildren.value;
-    return listed === undefined ? undefined : `${formatCount(listed.length)} ${listed.length === 1 ? `item` : `items`}`;
+    return listed === undefined ? undefined : t(`workspace.homeQuickLook.itemCount`, { count: formatCount(listed.length) }, listed.length);
 });
 
 onBeforeUnmount(() => controller?.abort());

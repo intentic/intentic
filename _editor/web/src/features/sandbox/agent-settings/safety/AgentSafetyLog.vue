@@ -54,7 +54,7 @@ const statusOf = (entry: SafetyLogEntry): DecisionStatus => {
     // label must say both halves, not just "Ran".
     if (entry.outcome === `allowed` && entry.decision !== `allow`) {
         return {
-            label: entry.decision === `refuse` ? `Ran · would refuse` : `Ran · would ask`,
+            label: entry.decision === `refuse` ? t(`sandbox.agentSafetyLog.ranWouldRefuse`) : t(`sandbox.agentSafetyLog.ranWouldAsk`),
             variant: `warning`,
             dot: true,
             icon: `exclamation-triangle`,
@@ -97,6 +97,8 @@ const filterOptions = computed(() => [
 
 const query = ref(``);
 const outcomeFilter = ref<OutcomeFilter>(`all`);
+// The empty state names the filter in the reader's language, lower-cased as it sits mid-sentence.
+const outcomeFilterWord = computed(() => (filterOptions.value.find((option) => option.value === outcomeFilter.value)?.label ?? ``).toLowerCase());
 
 const matchesSearch = (entry: SafetyLogEntry, q: string): boolean => {
     if (!q) {
@@ -194,7 +196,7 @@ const commandSummary = (program: string): string => {
 
             <RowNote v-else-if="visibleEntries.length === 0" variant="empty">
                 <template v-if="query.trim() !== ''">{{ t(`sandbox.agentSafetyLog.noDecisionsMatch`, { trim: query.trim() }) }}</template>
-                <template v-else>{{ t(`sandbox.agentSafetyLog.noDecisionsRecordedYet`, { outcomeFilter }) }}</template>
+                <template v-else>{{ t(`sandbox.agentSafetyLog.noDecisionsRecordedYet`, { outcomeFilter: outcomeFilterWord }) }}</template>
             </RowNote>
 
             <template v-else>

@@ -42,10 +42,8 @@ const memoryLine = computed<string | undefined>(() => {
     if (!pushFlow.fromMemory.value || at === undefined) {
         return undefined;
     }
-    const when = `From ${timeAgo(at, { now: clock.value })}.`;
-    return pushFlow.heldStale.value
-        ? `${when} Files have changed since, so this may no longer be what happens.`
-        : `${when} Nothing has changed since.`;
+    const when = t(`shell.pushQuestionBody.fromWhen`, { when: timeAgo(at, { now: clock.value }) });
+    return pushFlow.heldStale.value ? t(`shell.pushQuestionBody.staleSince`, { when }) : t(`shell.pushQuestionBody.unchangedSince`, { when });
 });
 </script>
 

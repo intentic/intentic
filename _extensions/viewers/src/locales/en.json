@@ -1,6 +1,12 @@
 {
+    "common": {
+        "couldNotRenderDocument": "Could not render this document."
+    },
     "deck": {
-        "pictureInFormatBrowsers": "Picture in a format browsers cannot draw"
+        "chart": "Chart",
+        "embeddedObject": "Embedded object",
+        "pictureInFormatBrowsers": "Picture in a format browsers cannot draw",
+        "smartArt": "SmartArt diagram"
     },
     "documentPaper": {
         "documentNoTextIn": "This document has no text in it."
@@ -23,7 +29,9 @@
     "epubViewer": {
         "bookNoChaptersIn": "This book has no chapters in it.",
         "chapter": "Chapter",
-        "contents": "Contents"
+        "contents": "Contents",
+        "couldNotOpen": "Could not open this book.",
+        "noPackageDocument": "This file has no EPUB package document in it."
     },
     "mediaViewer": {
         "back10s": "Back 10s",
@@ -46,6 +54,7 @@
         "volume": "Volume"
     },
     "odfSlidesViewer": {
+        "couldNotRender": "Could not render this presentation.",
         "presentationNoSlides": "This presentation has no slides."
     },
     "pdfViewer": {
@@ -53,13 +62,18 @@
         "pdfCantDisplayedInline": "This PDF can't be displayed inline."
     },
     "pptxViewer": {
+        "couldNotRead": "Could not read this presentation.",
         "pictureOnSlide": "Picture on slide {number}",
         "presentationNoSlides": "This presentation has no slides.",
         "slide": "Slide {number}",
+        "slideCount": "{count} slide | {count} slides",
         "speakerNotes": "Speaker notes"
     },
     "sheetViewer": {
-        "sheetEmpty": "This sheet is empty."
+        "couldNotRead": "Could not read this spreadsheet.",
+        "sheetEmpty": "This sheet is empty.",
+        "workerFailed": "Spreadsheet worker failed.",
+        "workerUnexpected": "Spreadsheet worker returned an unexpected response."
     },
     "svgViewer": {
         "preview": "Preview",

@@ -44,21 +44,20 @@ const sentence = (text: string): string => {
     return /[.!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
 };
 
-const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
-
 // How much of the file is currently not applying, in the reader's terms, not the parser's. An unreadable file
 // outranks any per-key count: the whole file is off, not "1 problem".
 const impactOf = (problems: readonly ManifestProblem[]): string => {
     if (problems.some((problem) => problem.kind === `unreadable`)) {
-        return `using defaults`;
+        return t(`sandbox.manifestNotice.usingDefaults`);
     }
+    const count = problems.length;
     if (problems.every((problem) => problem.kind === `unknownKey`)) {
-        return `${count(problems.length, `setting`, `settings`)} ignored`;
+        return t(`sandbox.manifestNotice.settingsIgnored`, { count }, count);
     }
     if (problems.every((problem) => problem.kind === `invalidEntry`)) {
-        return `${count(problems.length, `entry`, `entries`)} skipped`;
+        return t(`sandbox.manifestNotice.entriesSkipped`, { count }, count);
     }
-    return count(problems.length, `problem`, `problems`);
+    return t(`sandbox.manifestNotice.problems`, { count }, count);
 };
 
 // States only what the tag above doesn't: which key, and what it was probably meant to be. Quoted since it's a
@@ -67,17 +66,21 @@ const lineOf = (problem: ManifestProblem): ManifestLine => {
     if (problem.kind === `unknownKey`) {
         // Buttons answer the question their own line asked, so they need no separate heading. A rename stays a question
         // until clicked: `nearestKey` guesses, so applying it silently would decide for the reader.
-        const remove = { key: problem.detail, label: t(`sandbox.manifestNotice.remove`), spoken: `Remove "${problem.detail}"` };
+        const remove = {
+            key: problem.detail,
+            label: t(`sandbox.manifestNotice.remove`),
+            spoken: t(`sandbox.manifestNotice.removeKey`, { key: problem.detail }),
+        };
         return problem.suggestion === undefined
-            ? { text: `"${problem.detail}" — no setting by that name.`, repairs: [remove] }
+            ? { text: t(`sandbox.manifestNotice.noSuchSetting`, { key: problem.detail }), repairs: [remove] }
             : {
-                  text: `"${problem.detail}" — did you mean "${problem.suggestion}"?`,
+                  text: t(`sandbox.manifestNotice.didYouMean`, { key: problem.detail, suggestion: problem.suggestion }),
                   repairs: [
                       {
                           key: problem.detail,
                           to: problem.suggestion,
                           label: t(`sandbox.manifestNotice.rename`),
-                          spoken: `Rename "${problem.detail}" to "${problem.suggestion}"`,
+                          spoken: t(`sandbox.manifestNotice.renameKey`, { key: problem.detail, suggestion: problem.suggestion }),
                       },
                       remove,
                   ],
@@ -93,7 +96,7 @@ const fixOf = (problems: readonly ManifestProblem[]): string | undefined => {
     if (told !== undefined) {
         return told;
     }
-    return problems.some((problem) => problem.kind === `unreadable`) ? `Fix the file and it applies again.` : undefined;
+    return problems.some((problem) => problem.kind === `unreadable`) ? t(`sandbox.manifestNotice.fixFileApplies`) : undefined;
 };
 
 export const manifestNotices = (reports: readonly ManifestProblemReport[]): ManifestNotice[] =>

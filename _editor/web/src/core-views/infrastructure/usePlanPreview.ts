@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../features/extensions/reconcileStatus";
 import { useSecretKeys } from "../../features/capabilities/connect/useSecrets";
@@ -56,9 +57,11 @@ export function usePlanPreview() {
 
     // resolve (streamed): rewrites desired-state.json and reports required env secrets. Throws on kind:"error".
     const resolve = async (signal: AbortSignal): Promise<void> => {
-        activity.value = `Resolving your configuration…`;
+        activity.value = t(`views.planPreview.resolving`);
         const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `resolve`] }, { signal }).catch((failure: unknown) => {
-            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? `Resolve failed (${failure.status}).`) : failure;
+            throw failure instanceof SandboxHttpError
+                ? new Error(failure.said.error ?? t(`views.planPreview.resolveFailedStatus`, { status: failure.status }))
+                : failure;
         });
         for await (const line of readIntenticLines(lines)) {
             // Heartbeats only prove the daemon's tail is alive, not the CLI; arming on them would neuter the watchdog.
@@ -74,7 +77,7 @@ export function usePlanPreview() {
             }
             if (line[`kind`] === `error`) {
                 const message = line[`message`] ?? line[`text`];
-                throw new Error(typeof message === `string` ? message : `Resolve failed.`);
+                throw new Error(typeof message === `string` ? message : t(`views.planPreview.resolveFailed`));
             }
         }
         // Refreshes the graph and secrets queries after resolve rewrote desired-state.json and named its secrets.
@@ -84,9 +87,11 @@ export function usePlanPreview() {
 
     // plan (streamed): per-resource create/update/noop verdicts plus the orphan list, narrating as it reads.
     const runPlan = async (signal: AbortSignal): Promise<void> => {
-        activity.value = `Reading your live infrastructure…`;
+        activity.value = t(`views.planPreview.readingLive`);
         const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `plan`] }, { signal }).catch((failure: unknown) => {
-            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? `Plan failed (${failure.status}).`) : failure;
+            throw failure instanceof SandboxHttpError
+                ? new Error(failure.said.error ?? t(`views.planPreview.planFailedStatus`, { status: failure.status }))
+                : failure;
         });
         const result = await readPlanSteps(lines, (progress) => {
             armStall();
@@ -94,7 +99,7 @@ export function usePlanPreview() {
                 // The plan runs visibly in the check session; open its tab (own surfacing when resolve was skipped).
                 openFocused(progress.terminal);
             } else if (progress.node !== undefined) {
-                activity.value = `Checking ${progress.node}…`;
+                activity.value = t(`views.planPreview.checkingNode`, { node: progress.node });
             } else if (progress.log !== undefined) {
                 activity.value = progress.log;
             }
@@ -122,10 +127,10 @@ export function usePlanPreview() {
                 return; // cancelled by the user, not an error; the preview simply stays stale.
             }
             if (reason instanceof DOMException && reason.name === `TimeoutError`) {
-                error.value = `The preview stalled, last activity: ${activity.value ?? `starting`}. Cancel-and-retry, or check the sandbox.`;
+                error.value = t(`views.planPreview.stalled`, { activity: activity.value ?? t(`views.planPreview.starting`) });
                 return;
             }
-            error.value = describeProvisionError(messageOr(err, `Preview failed.`));
+            error.value = describeProvisionError(messageOr(err, t(`views.planPreview.previewFailed`)));
         } finally {
             clearTimeout(stall);
             controller = undefined;

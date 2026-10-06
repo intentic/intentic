@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { t } from "@intentic/ui/i18n";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
 import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
@@ -98,7 +99,7 @@ const sameSize = (left: Size | undefined, right: Size | undefined): boolean =>
 // nothing to preserve across the switch.
 export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const frame = ref<string | undefined>();
-    const status = ref<string | undefined>(`Connecting to the agent's browser…`);
+    const status = ref<string | undefined>(t(`browsers.browserView.connecting`));
     const driving = ref(false);
     const kind = ref<"video" | "frames" | undefined>();
     const viewWidth = ref(VIEW_WIDTH);
@@ -146,12 +147,12 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         viewScale.value = message.scale !== undefined && message.scale > 0 ? message.scale : 1;
         if (kind.value === `video`) {
             if (!canDecodeVideo()) {
-                status.value = `This browser can't play the live view. Chrome, Edge, Safari 16.4+ or Firefox 130+ can.`;
+                status.value = t(`browsers.browserView.unsupported`);
                 return;
             }
             video.configure(message.codec ?? ``);
         }
-        status.value = `Waiting for the first frame…`;
+        status.value = t(`browsers.browserView.waiting`);
         askSize();
     };
 
@@ -188,7 +189,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     // The daemon knows this session is done for good; reconnecting would only ask the same dead question.
     const onError = (reason: string | undefined): void => {
         live.end();
-        status.value = reason ?? `That browser session is gone.`;
+        status.value = reason ?? t(`browsers.browserView.sessionGone`);
         frame.value = undefined;
     };
 
@@ -252,10 +253,10 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         onMintFailed: (error) => {
             // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
             console.warn(`browser ${name.value ?? ``}: authorizing the view's socket failed`, error);
-            status.value = `Couldn't authorize the browser view (${errorMessage(error)}); retrying.`;
+            status.value = t(`browsers.browserView.authFailed`, { reason: errorMessage(error) });
         },
         onUnreachable: () => {
-            status.value = `The sandbox isn't reachable, or you're not signed in.`;
+            status.value = t(`browsers.browserView.unreachable`);
         },
         onOpen: () => {
             // A fresh socket knows nothing of the box; the first `ready` asks again.
@@ -267,7 +268,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             syncVisibility();
         },
         onDrop: () => {
-            status.value = `Reconnecting…`;
+            status.value = t(`browsers.browserView.reconnecting`);
         },
     });
 
@@ -294,7 +295,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             cursor.value = `default`;
             // A menu from the browser being left has nothing left to point at.
             select.value = undefined;
-            status.value = name.value === undefined ? undefined : `Connecting to the agent's browser…`;
+            status.value = name.value === undefined ? undefined : t(`browsers.browserView.connecting`);
             if (name.value !== undefined) {
                 live.connect();
             }

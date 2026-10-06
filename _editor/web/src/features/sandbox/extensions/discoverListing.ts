@@ -54,9 +54,11 @@ export const checksProblem = (entry: RegistryEntry): string | undefined => {
         return undefined;
     }
     if (entry.checks.manifest !== `ok`) {
-        return `At the pinned commit, ${entry.checks.manifest}`;
+        return t(`sandbox.discoverListing.atPinnedCommit`, { problem: entry.checks.manifest });
     }
-    return entry.checks.bundle === `ok` || entry.checks.bundle === `none` ? undefined : `At the pinned commit, the bundle ${entry.checks.bundle}`;
+    return entry.checks.bundle === `ok` || entry.checks.bundle === `none`
+        ? undefined
+        : t(`sandbox.discoverListing.bundleAtPinnedCommit`, { problem: entry.checks.bundle });
 };
 
 export const checksOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && checksProblem(entry) === undefined;
@@ -87,7 +89,7 @@ const sameCommit = (installed: string, pinned: string | undefined): boolean => i
 // Pointer validity is checked next, and only then does what's installed here decide the rest.
 export const listingState = (entry: RegistryEntry, installed: readonly ExtensionSummary[]): ListingState => {
     if (entry.trust === `blocked`) {
-        return { kind: `blocked`, reason: entry.trustReason ?? `Blocked by the registry.` };
+        return { kind: `blocked`, reason: entry.trustReason ?? t(`sandbox.discoverListing.blockedByRegistry`) };
     }
     const here = installed.find((extension) => extensionIdOf(extension.manifest) === entry.name);
     if (entry.install === undefined) {
@@ -99,13 +101,13 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
     }
     const audit = entry.admitted ? {} : { unaudited: true as const };
     if (here === undefined) {
-        return { kind: `installable`, action: `Install`, ...audit };
+        return { kind: `installable`, action: t(`sandbox.discoverListing.install`), ...audit };
     }
     // Built-in or workspace extensions here read as installed, never updatable: replacing either deletes work.
     if (here.source !== `installed` || sameCommit(here.commit, entry.install.ref)) {
         return { kind: `installed` };
     }
-    return { kind: `update`, action: `Update`, installedRef: here.commit, installedId: here.id, ...audit };
+    return { kind: `update`, action: t(`sandbox.discoverListing.update`), installedRef: here.commit, installedId: here.id, ...audit };
 };
 
 // Pre-lowercased and wider than the card shows: matches on description and publisher too, not just name.

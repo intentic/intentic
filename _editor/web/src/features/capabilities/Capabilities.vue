@@ -341,7 +341,9 @@ onBeforeUnmount(() => {
                                     </template>
                                     <template #title>{{ row.name }}</template>
                                     <template #meta>
-                                        <span :class="row.running ? 'text-muted' : 'text-warning'">{{ row.running ? "running" : "stopped" }}</span>
+                                        <span :class="row.running ? 'text-muted' : 'text-warning'">{{
+                                            row.running ? t(`capabilities.capabilities.running`) : t(`capabilities.capabilities.stopped`)
+                                        }}</span>
                                     </template>
                                     <template #control>
                                         <Button
@@ -393,7 +395,7 @@ onBeforeUnmount(() => {
                                     }}</span>
                                     <span class="block text-2xs text-muted">
                                         <template v-if="publishedCount > 0"
-                                            >{{ publishedCount }} {{ t(`capabilities.capabilities.published`)
+                                            >{{ t(`capabilities.capabilities.publishedCount`, { count: publishedCount })
                                             }}<template v-if="verifiedCount > 0">{{
                                                 t(`capabilities.capabilities.sourceReadByHuman`, { verifiedCount })
                                             }}</template

@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { awaitingUser, conflictIsYours, endingByHand, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "../fleet/agentStatus";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
@@ -40,7 +41,7 @@ const refusedForItsBox = (agent: FleetAgent, target: DropTarget): string | undef
     if (action === undefined || agent.sandboxId === undefined || !NEEDS_THIS_BOX.has(action)) {
         return undefined;
     }
-    return action === `resolve` ? `Asking the agent to resolve needs its own sandbox` : `Ending a watch needs the agent's own sandbox`;
+    return action === `resolve` ? t(`agents.laneDrop.resolveNeedsOwnSandbox`) : t(`agents.laneDrop.unwatchNeedsOwnSandbox`);
 };
 
 // What a refused land offers: the agent redoes its own merge, unless nothing is left for it to redo. A blocker held by
@@ -113,20 +114,20 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
         return elsewhere;
     }
     if (unregistered(agent.status)) {
-        return `This agent hasn't run yet`;
+        return t(`agents.laneDrop.notRunYet`);
     }
     // Ahead of every target since it's true for all of them; `dismissing` gets the same line as `stopping` since its
     // turn is unwinding too, and "Already finished" would be a beat early.
     if (endingByHand(agent)) {
-        return `This turn is already ending`;
+        return t(`agents.laneDrop.alreadyEnding`);
     }
     // No turn to stop and nothing to land: the running turn is coming back to this worktree by itself.
     if (agent.status === `resuming`) {
-        return `This turn is picking itself back up`;
+        return t(`agents.laneDrop.pickingBackUp`);
     }
     // Nothing to stop, and the land it would ask for is the one already under way.
     if (agent.status === `landing`) {
-        return `Its work is landing right now`;
+        return t(`agents.laneDrop.landingNow`);
     }
     return rejectionForTarget(agent, target);
 };
@@ -135,35 +136,35 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
 // above.
 const rejectionForTarget = (agent: FleetAgent, target: DropTarget): string => {
     if (target === `discard`) {
-        return agent.branch === undefined ? `Workspace conversations have no isolated branch to discard` : `Stop the turn first`;
+        return agent.branch === undefined ? t(`agents.laneDrop.noBranchToDiscard`) : t(`agents.laneDrop.stopTurnFirst`);
     }
     if (target === `attention`) {
-        return `Agents raise their own attention flags`;
+        return t(`agents.laneDrop.agentsRaiseFlags`);
     }
     if (target === `active`) {
-        return `Send a message to start a turn`;
+        return t(`agents.laneDrop.sendToStart`);
     }
     if (laneOf(agent) === `finished`) {
-        return `Already finished`;
+        return t(`agents.laneDrop.alreadyFinished`);
     }
     // Two ways to reach here: the blocked-on-the-user guard, and a refusal only the user can clear. The second names
     // the press that works, since it's the one refusal where "ask the agent" is the wrong answer rather than a busy one.
-    return conflictIsYours(agent) ? `Commit your own edits first` : `Answer the agent first`;
+    return conflictIsYours(agent) ? t(`agents.laneDrop.commitFirst`) : t(`agents.laneDrop.answerFirst`);
 };
 
 // The verb shown on the drag hint while a legal target is hovered.
 export const dropActionLabel = (action: DropAction): string =>
     action === `stop`
-        ? `Stop the turn`
+        ? t(`agents.laneDrop.stopTurn`)
         : action === `land`
-          ? `Land the work`
+          ? t(`agents.laneDrop.landWork`)
           : action === `resolve`
-            ? `Ask the agent to resolve it`
+            ? t(`agents.laneDrop.askResolve`)
             : // Names what it ends, not what it "cancels": the promise was to watch, and the drop withdraws it.
               // Same words as the card menu's row, one vocabulary per action.
               action === `unwatch`
-              ? `Stop watching`
-              : `Discard this agent`;
+              ? t(`agents.words.stopWatching`)
+              : t(`agents.laneDrop.discardAgent`);
 
 // What the ghost promises over a target: the action's verb, or the reason there isn't one.
 export const dropHint = (action: DropAction | undefined, dragged: FleetAgent | undefined, over: DropTarget | undefined): string | undefined => {
@@ -171,7 +172,7 @@ export const dropHint = (action: DropAction | undefined, dragged: FleetAgent | u
         return dropActionLabel(action);
     }
     if (dragged === undefined || over === undefined) {
-        return `Drop on a lane to act`;
+        return t(`agents.laneDrop.dropOnLane`);
     }
     return dropRejection(dragged, over);
 };

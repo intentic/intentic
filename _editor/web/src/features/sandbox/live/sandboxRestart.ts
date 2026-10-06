@@ -1,5 +1,6 @@
 import { shallowRef } from "vue";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../../../lib/browserStorage";
+import { t } from "@intentic/ui/i18n";
 
 // THE RESTART, AS SOMETHING EVERY SURFACE CAN SAY. Four things end by replacing this sandbox's container — a rebuild
 // from a checkout, a hosted environment build, a staged update, a recreate on the host — and each of them reported
@@ -169,7 +170,7 @@ export const restartRunning = (sandbox: string | undefined): string | undefined 
     if (first === undefined) {
         return undefined;
     }
-    return running.length === 1 ? first.what : `${running.length} running`;
+    return running.length === 1 ? first.what : t(`sandbox.sandboxRestart.countRunning`, { count: running.length });
 };
 
 /** Test seam: the ledger is module state, and a leaked expectation would follow one test into the next. */

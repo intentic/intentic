@@ -108,7 +108,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [metaphor-home](metaphor-home.mjs) | the four-noun picture defined twice or on the home page |
 | [alias-targets](alias-targets.mjs) | a resolver alias pointing at a missing path |
 | [i18n](i18n-catalogs.mjs) | translation keys, placeholders or plurals English lacks, and any key English has that Polish lacks (Polish has users, so it must be complete) |
-| [i18n-literals](i18n-literals.mjs) | English typed into a Vue template, or handed to a notice, a receipt or a failure line from a `.ts` module (ratcheted: `baselines/i18n-code-literals.json`) |
+| [i18n-literals](i18n-literals.mjs) | English typed into a Vue template, or handed to a notice, a receipt or a failure line from a `.ts` module (ratcheted against `baselines/i18n-code-literals.json`, empty since the 2026-10 sweep, so any finding fails) |
 | [i18n-keys](i18n-keys.mjs) | a missing `t()` key, an unused message, a message that does not compile |
 | [i18n-shared](i18n-shared.mjs) | a `shared.*` message that is not a noun phrase: a conjunction, a pronoun, a verb, a placeholder, a fragment, a numbered twin |
 | [tailwind](tailwind-bypass.mjs) | arbitrary colours or pixel sizes in class attributes |

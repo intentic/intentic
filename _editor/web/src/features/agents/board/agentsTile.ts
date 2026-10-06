@@ -1,4 +1,5 @@
 import type { ViewBadge } from "@intentic/extension-api";
+import { t } from "@intentic/ui/i18n";
 import { computed, onUnmounted, watch } from "vue";
 import { subscribe as watchOtherBoxes, silentBoxes } from "../../sandbox/live/fleetAcross";
 import { acrossAttention, listNames, readingAcross, watchRemoteSeen } from "../fleet/fleetScope";
@@ -18,8 +19,8 @@ export const agentsScopeNote = computed<string | undefined>(() => {
     }
     const names = silentBoxes.value.map((box) => box.sandbox.name);
     return names.length === 0
-        ? `Counting every sandbox`
-        : `Counting every sandbox except ${listNames(names)}, which ${names.length === 1 ? `isn't` : `aren't`} answering`;
+        ? t(`agents.agentsTile.countingEverySandbox`)
+        : t(`agents.agentsTile.countingExcept`, { names: listNames(names), count: names.length }, names.length);
 });
 
 // The badge shown by every rail tile and tab; the tooltip splits off the count elsewhere since that decides whether to
@@ -30,8 +31,8 @@ export const agentsBadge = computed<ViewBadge | undefined>(() => {
         return undefined;
     }
     const elsewhere = readingAcross.value ? acrossAttention.value : 0;
-    const owed = `${total} need${total === 1 ? `s` : ``} you`;
-    return { count: total, tooltip: elsewhere > 0 ? `${owed}, ${elsewhere} elsewhere` : owed };
+    const owed = t(`agents.agentsTile.needYou`, { count: total }, total);
+    return { count: total, tooltip: elsewhere > 0 ? t(`agents.agentsTile.owedElsewhere`, { owed, elsewhere }) : owed };
 });
 
 // Keeps other sandboxes live in fleetAcross while the scope is wide, releasing the moment it narrows or the caller

@@ -15,7 +15,7 @@ export const environmentTitle = (row: DeviceRow): string => osLabel(row.device) 
 // thing two environments of a machine never share. A row with no command door says so instead — an absent door
 // is worth a word, a present one is the normal case and was four rows of "commands" saying nothing.
 export const environmentIdentity = (row: DeviceRow): string | undefined =>
-    row.device.hostId ?? (deviceDoors(row.device).length === 0 ? undefined : `desktop sync only`);
+    row.device.hostId ?? (deviceDoors(row.device).length === 0 ? undefined : t(`sandbox.machineEnvironments.desktopSyncOnly`));
 
 /** Whether that identity is a door id, which is set in mono; the fallback clause is prose. */
 export const environmentAddressed = (row: DeviceRow): boolean => row.device.hostId !== undefined;

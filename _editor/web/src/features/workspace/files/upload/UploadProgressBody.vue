@@ -70,7 +70,7 @@ const scanLine = computed(() => scanning.value && (files.value.length > 0 || sca
 // it. One row per project; label names the file read (e.g. "pnpm · pnpm-lock.yaml") so the pick isn't opaque.
 const setupSummary = computed(() =>
     setupProjects.value.map((project) => ({
-        dir: project.dir === `` ? `the workspace root` : project.dir,
+        dir: project.dir === `` ? t(`workspace.uploadProgressBody.workspaceRoot`) : project.dir,
         label: `${project.recipe.manager} · ${project.recipe.evidence}`,
     })),
 );

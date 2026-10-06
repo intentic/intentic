@@ -47,47 +47,53 @@ const decide = (entry: EnvironmentRecurring, decision: `adopt` | `dismiss` | `re
 };
 
 // Counts sessions, not install attempts: a session that retried an install several times still needed the tool once.
-const sessionsLabel = (entry: EnvironmentRecurring): string => (entry.sessions === 1 ? `1 session` : `${entry.sessions} sessions`);
+const sessionsLabel = (entry: EnvironmentRecurring): string => t(`sandbox.runtimeInstalls.sessions`, { count: entry.sessions }, entry.sessions);
 
 // `live` isn't a badge: almost every row is currently present, so a badge for it would be a tick on every line; it
-// shows up in the opened row's sentence instead.
+// shows up in the opened row's sentence instead. Labels are functions, so they follow a language switch.
 const STATES = {
-    drafted: { icon: `sparkles`, label: `proposed`, tone: `text-link` },
-    declined: { icon: `eye-slash`, label: `dismissed`, tone: `text-subtle` },
+    drafted: { icon: `sparkles`, label: () => t(`sandbox.runtimeInstalls.proposed`), tone: `text-link` },
+    declined: { icon: `eye-slash`, label: () => t(`sandbox.runtimeInstalls.dismissed`), tone: `text-subtle` },
 } as const;
 const stateOf = (entry: EnvironmentRecurring) => (entry.declined === true ? STATES.declined : entry.drafted === true ? STATES.drafted : undefined);
 
 // Explains per ecosystem, not with one shrug: the reason a step can't be templated differs each time, and the reader
 // needs it to judge the agent's answer.
-const NO_STEP: Partial<Record<EnvironmentRecurring[`kind`], string>> = {
-    pip: `Where a Python package belongs is a routing decision — a virtualenv, a Debian package, or pipx — and it is a fact about this workspace rather than about the package.`,
-    pipx: `pipx installs into a per-tool virtualenv under the home directory, which a rebuild recreates empty; making it durable means deciding what it should become instead.`,
-    gem: `A Ruby gem's step depends on which Ruby is meant to own it, and this sandbox does not pin one.`,
-    go: `The ledger records the binary's name, not the module path it came from, so there is nothing here to template.`,
-    other: `Replaying a shell installer would bake whatever its command line carried, which is not a decision a template gets to make.`,
+const noStep = (entry: EnvironmentRecurring): string => {
+    switch (entry.kind) {
+        case `pip`:
+            return t(`sandbox.runtimeInstalls.noStepPip`);
+        case `pipx`:
+            return t(`sandbox.runtimeInstalls.noStepPipx`);
+        case `gem`:
+            return t(`sandbox.runtimeInstalls.noStepGem`);
+        case `go`:
+            return t(`sandbox.runtimeInstalls.noStepGo`);
+        case `other`:
+            return t(`sandbox.runtimeInstalls.noStepOther`);
+        default:
+            return t(`sandbox.runtimeInstalls.noStepDefault`);
+    }
 };
-const noStep = (entry: EnvironmentRecurring): string =>
-    NO_STEP[entry.kind] ?? `This ecosystem has no Dockerfile step that follows from a package name alone.`;
 
 // Leads with the row's state in one sentence: the badges are a word each, and proposed vs. dismissed is the actual
 // choice being read.
 const explanation = (entry: EnvironmentRecurring): string => {
     if (entry.declined === true) {
-        return `Dismissed. Nothing will propose a step for it again, and sessions may go on installing it.`;
+        return t(`sandbox.runtimeInstalls.explainDismissed`);
     }
     if (entry.drafted === true) {
-        return `A step for this is already in the proposal above, waiting for your approval. Approving it bakes the tool into the image on the next rebuild.`;
+        return t(`sandbox.runtimeInstalls.explainDrafted`);
     }
-    const lost = entry.live ? `It is in the container right now and the next rebuild loses it.` : `The container does not have it at the moment.`;
-    return entry.step === undefined
-        ? `${lost} ${noStep(entry)}`
-        : `${lost} Its Dockerfile step follows from the package name, so it can be added as it stands.`;
+    const lost = entry.live ? t(`sandbox.runtimeInstalls.liveLost`) : t(`sandbox.runtimeInstalls.notPresent`);
+    return entry.step === undefined ? `${lost} ${noStep(entry)}` : `${lost} ${t(`sandbox.runtimeInstalls.stepFollows`)}`;
 };
 
 // Carries what the turn can't recover itself (tool, ecosystem, repeat count) and names the target file, so two agents
 // converge on one draft. Doesn't presume an image step: the tool may belong elsewhere.
+// The brief is the agent's prompt, so it stays English whatever the reader's language.
 const brief = (entry: EnvironmentRecurring): string =>
-    `This sandbox has installed \`${entry.tool}\` (${entry.kind}) at runtime in ${sessionsLabel(entry)}, so it is lost on every container rebuild. ` +
+    `This sandbox has installed \`${entry.tool}\` (${entry.kind}) at runtime in ${entry.sessions === 1 ? `1 session` : `${entry.sessions} sessions`}, so it is lost on every container rebuild. ` +
     `Work out where it actually belongs. If it belongs in the sandbox image, load the \`environment\` skill and write the overlay step as ` +
     `\`.intentic/config/environment.d/${entry.tool.replace(/[^a-zA-Z0-9._-]+/g, `-`)}.Dockerfile\` for me to approve. ` +
     `If it belongs to a project instead — a virtualenv, a devDependency, a package script — set it up there and tell me that is what you did.`;
@@ -110,7 +116,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                 :class="ui.linkButton(`gap-1 text-2xs font-medium text-subtle hover:text-content`)"
                 @click="revealed = !revealed"
             >
-                <Icon :name="revealed ? `eye` : `eye-slash`" />{{ dismissed.length }} {{ t(`sandbox.runtimeInstalls.dismissed`) }}
+                <Icon :name="revealed ? `eye` : `eye-slash`" />{{ t(`sandbox.runtimeInstalls.dismissedCount`, { count: dismissed.length }) }}
             </button>
         </template>
 
@@ -142,7 +148,7 @@ const brief = (entry: EnvironmentRecurring): string =>
             </template>
             <template #meta>
                 <span v-if="stateOf(entry) !== undefined" :class="stateOf(entry)?.tone" class="inline-flex items-center gap-1 font-medium">
-                    <Icon :name="stateOf(entry)!.icon" />{{ stateOf(entry)!.label }}
+                    <Icon :name="stateOf(entry)!.icon" />{{ stateOf(entry)!.label() }}
                 </span>
             </template>
             <template #below>

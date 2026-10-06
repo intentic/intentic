@@ -1,4 +1,10 @@
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
 import { countdownWords, destinationOf, isReply, limitOf, LONG_POST, postEdit, postsATitle } from "./postText";
+
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // No mocks: pure functions over a post's own fields, so the page can ask the same question from four sections.
 

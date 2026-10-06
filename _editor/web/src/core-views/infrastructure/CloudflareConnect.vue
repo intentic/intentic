@@ -49,7 +49,7 @@ const connect = async (): Promise<void> => {
         });
         emit(`connected`);
     } catch (err) {
-        error.value = noticeFrom(err, `Could not connect Cloudflare.`);
+        error.value = noticeFrom(err, t(`views.cloudflareConnect.couldNotConnect`));
     } finally {
         submitting.value = false;
     }

@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import type { TerminalTabs } from "../useTerminal";
 import { clearTerminalRequest, type TerminalRequest } from "../useTerminalPanel";
@@ -38,15 +39,13 @@ export const usePanelWait = ({ tabs, initial }: PanelWaitHost) => {
     const emptyHint = computed(() => {
         if (pending.value !== undefined) {
             // The wait still stands: it only stopped holding the panel empty.
-            return `It hasn't appeared yet: the sandbox is probably still starting it. This panel keeps looking and shows it the moment it's listed.`;
+            return t(`terminal.panelWait.notYet`);
         }
         if (answer.value === `refused`) {
             // The one case where it is the asking that failed, not the sandbox that is empty.
-            return `This sandbox didn't answer when asked what it was running. Anything already going is still going: try again from the refresh button.`;
+            return t(`terminal.panelWait.refused`);
         }
-        return about.value === undefined
-            ? `Open one to run something here.`
-            : `Nothing in this sandbox runs under that name, it was started outside it, or it has already stopped.`;
+        return about.value === undefined ? t(`terminal.panelWait.openOne`) : t(`terminal.panelWait.noSuchSession`);
     });
 
     // Takes the request and spends it: standing in module state lets it open a panel not yet mounted, but left standing it

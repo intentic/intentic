@@ -1,4 +1,5 @@
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
 import { forgetMedia, type MediaKind, rememberMedia } from "./attachmentPreviews";
@@ -90,7 +91,7 @@ export const useChatAttachments = (composer: {
             },
             (err: unknown) => {
                 entry.status = `failed`;
-                entry.error = messageOr(err, `Upload failed.`);
+                entry.error = messageOr(err, t(`chat.chatAttachments.uploadFailed`));
             },
         );
     };

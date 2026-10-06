@@ -2,6 +2,7 @@ import { followCommandRun, type GitBranch, type GitRemoteBranch } from "@intenti
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
+import { t } from "./i18n.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { groupBranches } from "./groupBranches.js";
 import { useRefRefresh } from "./useRefRefresh.js";
@@ -45,7 +46,7 @@ export function useBranches(repo: Ref<string>) {
         run(async () => {
             await api.sandbox.rpc.git.checkout({ repo: repo.value, ref: name });
             await invalidateRefs();
-        }, `Checkout failed. Commit, stage or discard your changes first.`);
+        }, t(`useBranches.checkoutFailed`));
 
     // `start` defaults to HEAD daemon-side. `checkout` makes this "new branch from here"; without it the branch is
     // created and HEAD stays put.
@@ -53,7 +54,7 @@ export function useBranches(repo: Ref<string>) {
         run(async () => {
             await api.sandbox.rpc.git.createBranchAt({ repo: repo.value, name, ...options });
             await invalidateRefs();
-        }, `Could not create that branch.`);
+        }, t(`useBranches.couldntCreate`));
 
     // Pushes the named branch, not HEAD; the daemon resolves the remote from its upstream. Followed as a run since the
     // pre-push hook can take minutes; a refusal is a caught reason, not a throw.
@@ -65,10 +66,12 @@ export function useBranches(repo: Ref<string>) {
                 onError: (cause) => console.warn(`git-history: could not read the push's progress, asking again`, cause),
             });
             if (settled === undefined || settled.status !== `passed`) {
-                throw new Error(settled?.reason === undefined ? `Push was refused.` : `Push was refused: ${settled.reason}`);
+                throw new Error(
+                    settled?.reason === undefined ? t(`useBranches.pushRefused`) : t(`useBranches.pushRefusedBecause`, { reason: settled.reason }),
+                );
             }
             await invalidateRefs();
-        }, `Could not push that branch.`);
+        }, t(`useBranches.couldntPush`));
 
     // git refuses to delete a branch with commits nowhere else; `force` is the caller's deliberate retry after that
     // refusal.
@@ -78,7 +81,7 @@ export function useBranches(repo: Ref<string>) {
                 await api.sandbox.rpc.git.deleteBranch({ repo: repo.value, name, force });
                 await invalidateRefs();
             },
-            force ? `Could not delete that branch.` : `Branch has unmerged commits, deleting it would lose them.`,
+            force ? t(`useBranches.couldntDelete`) : t(`useBranches.unmerged`),
         );
 
     return {

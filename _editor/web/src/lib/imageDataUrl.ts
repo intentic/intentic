@@ -1,3 +1,5 @@
+import { t } from "@intentic/ui/i18n";
+
 // The square every inline picture (avatars, sandbox logos, no upload path) downscales to: 128px, WebP with a PNG
 // fallback, under the API's data-URL cap. `fit` is required, not defaulted, since the right crop depends on the
 // subject:
@@ -12,7 +14,7 @@ export const fileToSquareDataUrl = async (file: File, fit: `cover` | `contain`):
     canvas.height = SIDE;
     const context = canvas.getContext(`2d`);
     if (context === null) {
-        throw new Error(`Canvas is unavailable in this browser.`);
+        throw new Error(t(`common.imageDataUrl.noCanvas`));
     }
     if (fit === `cover`) {
         const source = Math.min(bitmap.width, bitmap.height);

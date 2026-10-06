@@ -110,7 +110,7 @@ export const daemonDrifted = computed(() => driftedRoutes.value.length > 0);
 const daemonOlderRemedy = (): string =>
     import.meta.env.DEV
         ? `This sandbox is running older code than this app: restart it with 'sh _sandbox/sandbox/scripts/dev-restart.sh'.`
-        : `Update the sandbox to a newer image to use this feature.`;
+        : t(`sandbox.useDaemonRoutes.updateImage`);
 
 // Drift says which side moved only when something else has proved it. The dev server's reading comes first because it
 // names a cause rather than a side, and rules the page reload out; then a route only this app knows leans the other
@@ -120,11 +120,11 @@ const eitherSideOlderRemedy = (): string => {
         return `The sandbox is running code older than this checkout: restart it with 'sh _sandbox/sandbox/scripts/dev-restart.sh', which rebuilds it first. Reloading this page won't help.`;
     }
     if (appBehind.value) {
-        return `This page is running older code than the sandbox: reload the page.`;
+        return t(`sandbox.useDaemonRoutes.pageOlder`);
     }
     return import.meta.env.DEV
         ? `One of the two is running older code: reload this page, or restart the sandbox with 'sh _sandbox/sandbox/scripts/dev-restart.sh'.`
-        : `Reload this page, or update the sandbox to a newer image.`;
+        : t(`sandbox.useDaemonRoutes.reloadOrUpdate`);
 };
 
 // Why a call to route `name` failed because this daemon predates it; undefined for one the daemon advertises. A
@@ -137,13 +137,13 @@ export const staleDaemonReason = (name: string): string | undefined => {
     if (folderSurface.value) {
         return t(`sandbox.useDaemonRoutes.folderLacks`, { route: name });
     }
-    return `This sandbox's daemon doesn't provide '${name}'. ${daemonOlderRemedy()}`;
+    return t(`sandbox.useDaemonRoutes.routeMissing`, { route: name, remedy: daemonOlderRemedy() });
 };
 
 // A schema refusing the daemon's answer is version drift no status code carries, and its issue list is developer JSON.
 export const readFailure = (error: unknown): string => {
     if (error instanceof z.core.$ZodError) {
-        return `This sandbox answered in a shape this app doesn't expect. ${eitherSideOlderRemedy()}`;
+        return t(`sandbox.useDaemonRoutes.unexpectedShape`, { remedy: eitherSideOlderRemedy() });
     }
     return error instanceof Error ? error.message : String(error);
 };
@@ -154,5 +154,5 @@ export const driftedRouteReason = (name: string): string | undefined => {
     if (!driftedRoutes.value.includes(name)) {
         return undefined;
     }
-    return `This sandbox's daemon has '${name}' but exchanges different fields for it than this app expects. ${eitherSideOlderRemedy()}`;
+    return t(`sandbox.useDaemonRoutes.routeDrifted`, { route: name, remedy: eitherSideOlderRemedy() });
 };

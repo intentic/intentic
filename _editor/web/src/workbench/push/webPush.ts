@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { PushChannel } from "@intentic/sandbox-contract";
 import type { Minted, PushDriver } from "./driver.js";
 
@@ -40,9 +41,7 @@ const isBrave = async (): Promise<boolean> => {
 // Subscribing fails independently of the permission just granted, and the browser's own message ('push service error')
 // names nothing actionable; it also reads as the sandbox breaking, when the browser never reached its push service.
 const pushServiceAdvice = async (): Promise<string> =>
-    (await isBrave())
-        ? `Brave ships with push messaging turned off. Enable "Use Google services for push messaging" in brave://settings/privacy, restart Brave, then try again.`
-        : `Your browser's push service refused to register this browser, nothing on the sandbox side can fix it. A VPN or firewall blocking the browser's push connection is the usual cause.`;
+    (await isBrave()) ? t(`shell.pushNotifications.braveAdvice`) : t(`shell.pushNotifications.pushServiceRefused`);
 
 const registration = async (): Promise<ServiceWorkerRegistration> => navigator.serviceWorker.register(SW_URL);
 

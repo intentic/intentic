@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { AddressOffer, SandboxSummary, SetupCode } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -99,7 +100,7 @@ export const useCommandLane = ({ platform, row, hosted, lane }: CommandLaneHost)
             if (isNotFound(err)) {
                 intenticAvailable.value = false;
             } else if (key === targetKey.value) {
-                setupError.value = noticeFrom(err, `Couldn't prepare your install command. Try again.`);
+                setupError.value = noticeFrom(err, t(`setup.useCommandLane.couldntPrepare`));
             }
         }
     };

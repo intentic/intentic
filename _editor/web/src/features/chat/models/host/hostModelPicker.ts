@@ -2,6 +2,7 @@ import { sandboxShallowRef } from "@intentic/extension-api";
 import { type AgentHarness, type AgentProvider, type FixResume, sendableEffort } from "@intentic/sandbox-contract";
 import { defaultPinRunSettings, type RunSettingsPatch } from "../run-settings/pickerRunSettings";
 import { modelLabelFor } from "../../accounts/providerCatalog";
+import { t } from "@intentic/ui/i18n";
 
 /* THE SHELL'S MODEL PICKER, OPENED BY SOMETHING THAT IS NOT THE COMPOSER: a run button about to start an agent (useAgentRunPick), an automation rung. */
 
@@ -130,7 +131,7 @@ export const requestModelPick = (
                       ...(seeded.thinking !== undefined ? { thinking: request.thinking ?? seeded.thinking } : {}),
                       ...(request.fast !== undefined ? { fast: request.fast } : {}),
                   }),
-            action: request.action ?? `Use this model`,
+            action: request.action ?? t(`chat.hostModelPicker.useThisModel`),
             settle: resolve,
         };
     });

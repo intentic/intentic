@@ -41,22 +41,29 @@ const at = computed(() => props.view.steps.find((step) => step.state === `runnin
 const started = computed(() => props.view.steps.some((step) => step.state !== `waiting`));
 // Survives a stop, unlike `view.position`, which is the wire report's and goes quiet the moment a run ends.
 const position = computed(() =>
-    at.value === undefined ? undefined : `Step ${props.view.steps.indexOf(at.value) + 1} of ${props.view.steps.length}`,
+    at.value === undefined
+        ? undefined
+        : t(`desktop.setupPlan.stepOf`, { index: props.view.steps.indexOf(at.value) + 1, total: props.view.steps.length }),
 );
 const heading = computed(() => {
     const step = at.value;
     if (parked.value) {
-        return `Waiting for you`;
+        return t(`desktop.setupProgress.waitingForYou`);
     }
     if (failed.value) {
         // The step is named on the line under this one, so this says where in the plan rather than repeating it.
-        return step === undefined ? `Stopped` : `Stopped at ${position.value?.toLowerCase() ?? `this step`}`;
+        if (step === undefined) {
+            return t(`desktop.setupProgress.stopped`);
+        }
+        return position.value === undefined
+            ? t(`desktop.setupProgress.stoppedAtThisStep`)
+            : t(`desktop.setupProgress.stoppedAt`, { position: position.value.toLowerCase() });
     }
     if (step === undefined || done.value) {
-        return `All done`;
+        return t(`desktop.setupProgress.allDone`);
     }
     if (!started.value) {
-        return `Getting started`;
+        return t(`desktop.setupProgress.gettingStarted`);
     }
     return step.label;
 });

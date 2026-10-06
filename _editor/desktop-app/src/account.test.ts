@@ -3,7 +3,7 @@ import { readAccount, signOutAccount, updateAccount } from "./account";
 import type { AccountAnswer, AccountAsk } from "./desktop";
 
 // The app's carrying of the call is account.rs's (and its tests'); this is the page's half: what it asks, and how it
-// reads what the platform answered.
+// reads what the platform answered. No catalog is registered here, so the app's own sentence reads back as its key.
 
 const asked: AccountAsk[] = [];
 const answering =
@@ -42,7 +42,7 @@ describe(`readAccount`, () => {
 
     it(`rejects with the platform's sentence, or its own when the answer has none`, async () => {
         await expect(readAccount(answering(500, JSON.stringify({ message: `Database is waking up.` })))).rejects.toThrow(`Database is waking up.`);
-        await expect(readAccount(answering(502, `<html>Bad gateway</html>`))).rejects.toThrow(`Couldn't check your session.`);
+        await expect(readAccount(answering(502, `<html>Bad gateway</html>`))).rejects.toThrow(`desktop.account.sessionCheckFailed`);
     });
 });
 
@@ -60,6 +60,6 @@ describe(`updateAccount and signOutAccount`, () => {
         await expect(updateAccount({ image: `data:,x` }, answering(400, JSON.stringify({ message: `That picture is too large.` })))).rejects.toThrow(
             `That picture is too large.`,
         );
-        await expect(signOutAccount(answering(401, `{}`))).rejects.toThrow(`Sign out failed.`);
+        await expect(signOutAccount(answering(401, `{}`))).rejects.toThrow(`desktop.account.signOutFailed`);
     });
 });

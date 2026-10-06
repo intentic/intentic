@@ -154,7 +154,7 @@ const nameHint = computed(() => {
     if (newName.value === undefined || newName.value === `` || newValid.value) {
         return undefined;
     }
-    return taken.value ? `You already have a persona called ${newId.value}.` : `Use letters or digits.`;
+    return taken.value ? t(`sandbox.sandboxPersonas.personaNameTaken`, { name: newId.value }) : t(`sandbox.sandboxPersonas.useLettersOrDigits`);
 });
 
 // Stores only what was decided: no `powers` for a persona that grants everything, no `workspace` for one that limits
@@ -207,7 +207,7 @@ const submit = async (): Promise<void> => {
             draft.value = draftOf({ id, capabilities: [], ...(label !== id ? { label } : {}) });
         });
     } catch (err) {
-        saveError.value = noticeFrom(err, `Could not save this persona.`);
+        saveError.value = noticeFrom(err, t(`sandbox.sandboxPersonas.couldntSavePersona`));
     } finally {
         submitting.value = false;
     }
@@ -221,7 +221,7 @@ const persist = async (state: PersonaDraft): Promise<void> => {
         await save.mutateAsync(cardFrom(state));
     } catch (err) {
         if (draft.value === state) {
-            saveError.value = noticeFrom(err, `Could not save this persona.`);
+            saveError.value = noticeFrom(err, t(`sandbox.sandboxPersonas.couldntSavePersona`));
         }
     }
 };

@@ -102,7 +102,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
     const edit = createInlineRename(
         () => renaming.value?.title.value ?? undefined,
         (name) => rename(renaming.value?.conversationId ?? ``, name),
-        `Couldn't rename the agent.`,
+        () => t(`chat.chatTabs.couldntRenameAgent`),
     );
     const beginRename = (id: string): void => {
         renamingId.value = id;

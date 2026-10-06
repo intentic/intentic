@@ -5,6 +5,7 @@ import { computed } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
+import { blockLabel, roleLabel } from "./roleWords";
 import { useT } from "@intentic/ui/i18n";
 
 // Collapsed, one-row view of a job block (vs. <ModelRoleRow>'s per-job Advanced view); not a separate setting, it
@@ -33,10 +34,10 @@ const emit = defineEmits<{ open: [number | undefined, HTMLElement] }>();
 const pinned = computed<boolean>(() => list.entries.value.length > 0);
 
 // Count is the point (how many jobs one press writes), so it's in the title, not a separate badge.
-const title = computed<string>(() => `One list for all ${roles.length} jobs`);
+const title = computed<string>(() => t(`sandbox.modelGroupRow.oneListForAllJobs`, { count: roles.length }, roles.length));
 
 // Names which jobs, since a row writing several settings owes their names.
-const jobs = computed<string>(() => roles.map((role) => role.label).join(`, `));
+const jobs = computed<string>(() => roles.map((role) => roleLabel(role)).join(`, `));
 
 // Three states; "jobs differ" outranks the others, since "off" would misstate jobs that do hold models of their own.
 // Empty-state wordings mirror <ModelRoleRow>'s, said for the whole block.
@@ -82,7 +83,7 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
         <template #control>
             <!-- Named for the group: the accessible name is what distinguishes this button from the per-job ones. -->
             <AddModelButton
-                :label="t(`sandbox.modelGroupRow.addModelEveryJob`, { toLowerCase: block.label.toLowerCase() })"
+                :label="t(`sandbox.modelGroupRow.addModelEveryJob`, { toLowerCase: blockLabel(block).toLowerCase() })"
                 :disabled="disabled"
                 @open="(anchor: HTMLElement) => emit(`open`, undefined, anchor)"
             />

@@ -39,7 +39,11 @@ const scripted = (states: readonly (CommandRun | `throw`)[]) => {
             calls.cancel += 1;
         },
         reveal: (run) => ({ title: `Pushing intentic`, detail: run.command }),
-        subject: `push`,
+        says: {
+            startFailed: () => `Could not start the push.`,
+            lostContact: () => `Lost contact with the push.`,
+            stopFailed: () => `Could not stop the push.`,
+        },
     };
     return { source, calls };
 };

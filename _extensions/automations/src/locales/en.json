@@ -148,7 +148,21 @@
         "workLands": "Work lands",
         "workspace": "Workspace",
         "retired": "retired",
-        "retiredNeverFires": "Nothing sends this any more: the check that ran after every land is gone, so this automation never fires. Pick one of the moments above, or wake on a failed CI pipeline instead."
+        "retiredNeverFires": "Nothing sends this any more: the check that ran after every land is gone, so this automation never fires. Pick one of the moments above, or wake on a failed CI pipeline instead.",
+        "othersCaption": {
+            "allow": "Anyone not named is answered as the persona above, which is what this automation did before it had rules.",
+            "hold": "Anyone not named waits in Approvals for you, and runs as the persona above once you say so.",
+            "ignore": "Anyone not named gets no answer. They still show up under “seen recently”, so naming them later is a click."
+        },
+        "kindCaption": {
+            "event": "When any outside system POSTs to its webhook URL, which is shown to you once it exists.",
+            "listener": "The moment a connected service sends something. Nothing is polled: a gateway holds the connection open.",
+            "once": "At one moment, on your own clock, and then it switches itself off. A sandbox that is asleep when the moment comes fires it as soon as it is back, saying how late it is.",
+            "schedule": "On a clock, in this sandbox's own timezone.",
+            "source": "The moment {source} sends one of these. Nothing is polled: a gateway holds the connection open.",
+            "visitorChat": "When a visitor writes in the chat widget on your site: one conversation each, live for you to take over.",
+            "workspace": "On a moment in this workspace's own work. No token and no URL: nothing outside the sandbox can fire it."
+        }
     },
     "automationRow": {
         "alreadyFired": "Already fired",
@@ -199,7 +213,36 @@
         "wakesOnFinding": "Wakes on a finding",
         "webhook": "Webhook",
         "checksBreakRetired": "Checks break (retired, never fires)",
-        "checksRecoverRetired": "Checks recover (retired, never fires)"
+        "checksRecoverRetired": "Checks recover (retired, never fires)",
+        "sourceLive": "{source} live",
+        "mentions": "mentions",
+        "turnSettles": "Turn settles",
+        "onceAt": "Once · {at}",
+        "outcome": {
+            "cutOff": "cut off",
+            "failed": "failed",
+            "ran": "ran",
+            "skipped": "skipped"
+        },
+        "couldntSave": "Could not save the automation.",
+        "googleSignInRequired": "Google sign-in required",
+        "openToAnyone": "open to anyone",
+        "turnstileUnfinished": "Turnstile not finished: no bot check",
+        "builtInBotCheck": "built-in bot check",
+        "noBotCheck": "no bot check",
+        "noModel": "no model",
+        "othersPhrase": {
+            "allow": "everyone else answered as configured",
+            "hold": "everyone else held for you",
+            "ignore": "everyone else ignored"
+        },
+        "peopleCount": "{count} person | {count} people",
+        "groupsCount": "{count} group | {count} groups",
+        "and": " and ",
+        "named": "{who} named",
+        "nobodyNamed": "nobody named",
+        "heldForYou": "held for you",
+        "holdBeforeRun": "{seconds}s before each run"
     },
     "automationsView": {
         "addAutomation": "Add an automation",
@@ -207,6 +250,9 @@
         "automations": "Automations",
         "buildOne": "Build one with",
         "codeChores": "Code chores",
+        "couldntRemove": "Could not remove the automation.",
+        "couldntRun": "Could not run the automation.",
+        "couldntUpdate": "Could not update the automation.",
         "delete": "Delete",
         "deleteAutomation": "Delete automation",
         "errors": "Errors",
@@ -237,14 +283,21 @@
         "askedTurnedAway": "asked and was turned away · {lastSeenAt}",
         "checking": "Checking…",
         "copyEmbedSnippet": "Copy the embed snippet for {id}",
+        "couldntAddSite": "Could not add that site.",
         "done": "Done",
         "install": "Install",
+        "loadCount": "{count} load | {count} loads",
         "loaded": "Has it loaded?",
         "noBrowserLoadedWidget": "No browser has loaded this widget yet. Paste the snippet, open your site, and this updates on its own within a few seconds.",
+        "noSitesAllowed": "No sites are allowed yet, so every visitor is turned away. Add one below or edit the automation.",
         "pasteIntoSiteBefore": "Paste this into your site, before"
     },
     "useCiDelivery": {
-        "firesWithinSecondsProvider": "Fires within seconds, the provider delivers each finished pipeline straight to this sandbox."
+        "allPolled": "Webhooks aren't set up, so pipelines are polled instead: this fires within {minutes} minutes rather than instantly.",
+        "firesWithinSecondsProvider": "Fires within seconds, the provider delivers each finished pipeline straight to this sandbox.",
+        "namedRepoDoesNotMap": "No repo named \"{repo}\" maps to a connected GitHub or GitLab account, so nothing can fire this.",
+        "noRepoMaps": "No workspace repo maps to a connected GitHub or GitLab account, so nothing can fire this yet.",
+        "partlyPolled": "Wired for {wired} of {total} repos. {names} is polled instead, those fire within {minutes} minutes. | Wired for {wired} of {total} repos. {names} are polled instead, those fire within {minutes} minutes."
     },
     "runStrip": {
         "cutOff": "Cut off",
@@ -252,5 +305,41 @@
         "lastRuns": "Last run | Last {count} runs",
         "ran": "Ran",
         "skipped": "Skipped"
+    },
+    "useAutomationForm": {
+        "addSite": "Add at least one site: a Visitor chat with no allowed sites admits nobody.",
+        "emptyRule": "Every rule needs at least one person or group; remove the empty one.",
+        "invalidCron": "Invalid cron expression.",
+        "momentPassed": "That moment has already passed.",
+        "nameFormat": "Use letters, digits, hyphens and underscores; must start with a letter or digit.",
+        "nameRequired": "Name is required.",
+        "neverFires": "This schedule never fires.",
+        "notAnOrigin": "\"{origin}\" isn't an origin, use scheme + host only, e.g. https://example.com",
+        "pickDateTime": "Pick the date and time it should fire.",
+        "pickModel": "Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.",
+        "promptRequired": "Prompt is required."
+    },
+    "cronSchedule": {
+        "afterSessions": "{label} · after {count} sessions | {label} · after {count} sessions",
+        "daily": "Daily {time}",
+        "daysAgo": "{count}d ago | {count}d ago",
+        "due": "due",
+        "everyDay": "Every day {time}",
+        "everyMinutes": "Every {minutes} min",
+        "hourly": "Hourly",
+        "hoursAgo": "{count}h ago | {count}h ago",
+        "inDays": "in {count}d | in {count}d",
+        "inHours": "in {count}h | in {count}h",
+        "inMinutes": "in {count}m | in {count}m",
+        "justNow": "just now",
+        "minutesAgo": "{count}m ago | {count}m ago",
+        "monthly": "Monthly {day} {time}",
+        "ordinal": {
+            "nd": "{day}nd",
+            "rd": "{day}rd",
+            "st": "{day}st",
+            "th": "{day}th"
+        },
+        "weekdays": "Weekdays {time}"
     }
 }

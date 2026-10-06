@@ -12,25 +12,54 @@ export type ReconcileContext = `live` | `plan`;
 
 // One row per action, read by every surface, rather than a branch per surface. `diff` and `prune` are the daemon's
 // older spellings of `update` and `delete` and share their rows.
+// The words are functions, so they are built in the language active when a row renders, not the one at import.
 interface Reading {
-    readonly live: string;
-    readonly plan: string;
+    readonly live: () => string;
+    readonly plan: () => string;
     readonly variant: StatusVariant;
     readonly dot: string;
     // Present-continuous for an apply node still in flight (kind:"node" state:"start"): "Creating…", "Updating…".
-    readonly gerund: string;
+    readonly gerund: () => string;
 }
 
-const CREATE: Reading = { live: `to create`, plan: `create`, variant: `info`, dot: `bg-info`, gerund: `creating` };
-const UPDATE: Reading = { live: `drift`, plan: `update`, variant: `info`, dot: `bg-info`, gerund: `updating` };
-const REMOVE: Reading = { live: `to remove`, plan: `remove`, variant: `danger`, dot: `bg-danger`, gerund: `removing` };
+const unknownLive = (): string => t(`extensions.reconcileStatus.live.unknown`);
+const unknownPlan = (): string => t(`extensions.reconcileStatus.plan.unknown`);
+const working = (): string => t(`extensions.reconcileStatus.gerund.working`);
+
+const CREATE: Reading = {
+    live: () => t(`extensions.reconcileStatus.live.toCreate`),
+    plan: () => t(`extensions.reconcileStatus.plan.create`),
+    variant: `info`,
+    dot: `bg-info`,
+    gerund: () => t(`extensions.reconcileStatus.gerund.creating`),
+};
+const UPDATE: Reading = {
+    live: () => t(`extensions.reconcileStatus.live.drift`),
+    plan: () => t(`extensions.reconcileStatus.plan.update`),
+    variant: `info`,
+    dot: `bg-info`,
+    gerund: () => t(`extensions.reconcileStatus.gerund.updating`),
+};
+const REMOVE: Reading = {
+    live: () => t(`extensions.reconcileStatus.live.toRemove`),
+    plan: () => t(`extensions.reconcileStatus.plan.remove`),
+    variant: `danger`,
+    dot: `bg-danger`,
+    gerund: () => t(`extensions.reconcileStatus.gerund.removing`),
+};
 
 // `unknown` is the daemon's own signal; an unrecognised action keeps info colour, only its wording gives up.
-const UNREADABLE: Reading = { live: `unknown`, plan: `unknown`, variant: `neutral`, dot: `bg-subtle`, gerund: `working` };
-const UNRECOGNISED: Reading = { live: `unknown`, plan: `unknown`, variant: `info`, dot: `bg-info`, gerund: `working` };
+const UNREADABLE: Reading = { live: unknownLive, plan: unknownPlan, variant: `neutral`, dot: `bg-subtle`, gerund: working };
+const UNRECOGNISED: Reading = { live: unknownLive, plan: unknownPlan, variant: `info`, dot: `bg-info`, gerund: working };
 
 const READINGS: Record<string, Reading> = {
-    noop: { live: `in sync`, plan: `no change`, variant: `success`, dot: `bg-success`, gerund: `working` },
+    noop: {
+        live: () => t(`extensions.reconcileStatus.live.inSync`),
+        plan: () => t(`extensions.reconcileStatus.plan.noChange`),
+        variant: `success`,
+        dot: `bg-success`,
+        gerund: working,
+    },
     create: CREATE,
     update: UPDATE,
     diff: UPDATE,
@@ -41,14 +70,14 @@ const READINGS: Record<string, Reading> = {
 
 const readingOf = (status: string): Reading => READINGS[status] ?? UNRECOGNISED;
 
-export const statusLabel = (status: string, context: ReconcileContext = `live`): string => readingOf(status)[context];
+export const statusLabel = (status: string, context: ReconcileContext = `live`): string => readingOf(status)[context]();
 
 export const statusVariant = (status: string): StatusVariant => readingOf(status).variant;
 
 // Same colour semantics as statusVariant, rendered as a dot.
 export const statusDot = (status: string): string => readingOf(status).dot;
 
-export const statusGerund = (status: string): string => readingOf(status).gerund;
+export const statusGerund = (status: string): string => readingOf(status).gerund();
 
 // One resource's verdict from an `intentic deploy plan` stream (kind:"node"): the resource id and its reconcile action.
 export interface PlanStep {
@@ -121,7 +150,7 @@ export const readPlanSteps = async (
             orphans = readOrphans(line[`orphans`]);
         } else if (line[`kind`] === `error`) {
             const message = line[`message`];
-            throw new Error(typeof message === `string` ? message : `The plan check failed.`);
+            throw new Error(typeof message === `string` ? message : t(`extensions.reconcileStatus.planCheckFailed`));
         }
     }
     return { steps, orphans };

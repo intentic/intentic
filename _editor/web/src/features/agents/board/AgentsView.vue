@@ -331,7 +331,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :class="pulsing ? 'bg-primary-600/25 ring-1 ring-primary-500/50' : ''"
                 @click="toggleArchive"
             >
-                <Icon name="history" class="text-2xs" />{{ archiveSize }} {{ t(`agents.agentsView.archivedAgent`) }}{{ archiveSize === 1 ? "" : "s" }}
+                <Icon name="history" class="text-2xs" />{{ t(`agents.agentsView.archivedAgents`, { count: archiveSize }, archiveSize) }}
             </button>
         </EmptyState>
         <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->

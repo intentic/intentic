@@ -1,5 +1,6 @@
 import { inject, type InjectionKey, provide, type Ref, shallowRef } from "vue";
 import { activeSandboxId } from "../../lib/activeSandbox";
+import { t } from "@intentic/ui/i18n";
 
 // WORK IN FLIGHT BEHIND A HUB ROW. A hub mounts one section at a time, so the rebuild started on Environment leaves
 // nothing on screen the moment Devices is opened — and these are the runs that take minutes. The ledger is module
@@ -53,7 +54,7 @@ export const hubWorkRunning = (key: string, sandboxId?: string): string | undefi
     if (first === undefined) {
         return undefined;
     }
-    return here.length === 1 ? first.what : `${here.length} running`;
+    return here.length === 1 ? first.what : t(`shell.hubWork.running`, { count: here.length });
 };
 
 /** Test seam: the ledger is module state, and a leaked ticket would follow one test into the next. */

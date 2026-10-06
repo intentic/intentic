@@ -1,4 +1,5 @@
 import type { SandboxSummary, User } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
@@ -45,7 +46,7 @@ const refresh = async (): Promise<User | null> => {
     const pending = (refreshing ??= (async () => {
         const { data, error } = await client.getSession();
         if (error) {
-            throw new Error(error.message ?? `Couldn't check your session.`);
+            throw new Error(error.message ?? t(`auth.useAuth.sessionCheckFailed`));
         }
         if (data?.user === undefined) {
             // Only tears down when there was a session to lose; invalidating on a cold signed-out load would cancel
@@ -79,7 +80,7 @@ const signInWithGoogle = async (callbackPath = `/`): Promise<void> => {
 const signInWithGoogleCredential = async (idToken: string): Promise<void> => {
     const { error } = await client.$fetch(`/one-tap/callback`, { method: `POST`, body: { idToken } });
     if (error) {
-        throw new Error(error.message ?? `Google sign-in was refused.`);
+        throw new Error(error.message ?? t(`auth.useAuth.googleRefused`));
     }
     // Fills `user` early only; a failure here is a harmless blip after sign-in already succeeded.
     await refresh().catch(() => undefined);
@@ -89,7 +90,7 @@ const signOut = async (): Promise<void> => {
     // Server session goes first; a blocked local storage must never block the authoritative logout.
     const { error } = await client.signOut();
     if (error) {
-        throw new Error(error.message ?? `Sign out failed.`);
+        throw new Error(error.message ?? t(`auth.useAuth.signOutFailed`));
     }
     // Only an explicit sign-out: a refused session (the teardown below) is when this device's memory is needed most.
     if (user.value !== null) {
@@ -111,7 +112,7 @@ const enterDirect = (account: User): void => {
 const updateProfile = async (input: { name?: string; image?: string }): Promise<void> => {
     const { error } = await client.updateUser(input);
     if (error) {
-        throw new Error(error.message ?? `Profile update failed.`);
+        throw new Error(error.message ?? t(`auth.useAuth.profileUpdateFailed`));
     }
     await refresh();
 };
@@ -122,7 +123,7 @@ const deleteAccount = async (sandboxes: readonly SandboxSummary[]): Promise<void
     await retireAccountAccess(sandboxes);
     const { error } = await client.deleteUser();
     if (error) {
-        throw new Error(error.message ?? `Account deletion failed.`);
+        throw new Error(error.message ?? t(`auth.useAuth.accountDeletionFailed`));
     }
     await invalidatePlatformAuth();
 };

@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import { capabilityRoute } from "../deviceLinks";
 import { PHONE_DOOR, usePeerConnect } from "../usePeerConnect";
-import { phoneRowOf } from "./phoneRows";
+import { phoneRowOf, phoneStateWord } from "./phoneRows";
 
 const t = useT();
 
@@ -25,7 +25,7 @@ const rows = computed(() => peers.value.map(phoneRowOf));
                 <span class="flex flex-wrap items-center gap-2">
                     <Icon name="mobile" class="shrink-0 text-muted" aria-hidden="true" />
                     <span class="truncate font-mono">{{ row.id }}</span>
-                    <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="row.state" />
+                    <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="phoneStateWord(row.state)" />
                 </span>
             </template>
             <template v-if="row.detail" #description>

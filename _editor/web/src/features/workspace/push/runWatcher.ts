@@ -28,8 +28,9 @@ export interface RunSource<R extends CommandRun> {
     readonly cancel: () => Promise<unknown>;
     // What the terminal panel is told it's opening on, since the panel can't know; undefined means no panel to open.
     readonly reveal: (run: R) => { readonly title: string; readonly detail: string } | undefined;
-    // The noun in error lines: "Could not start the push.", "Lost contact with the push."
-    readonly subject: string;
+    // The error lines' fallbacks, when the failure carries no words of its own: "Could not start the push.", "Lost
+    // contact with the push." Whole sentences, built when said, so each language puts the noun in its own case.
+    readonly says: { readonly startFailed: () => string; readonly lostContact: () => string; readonly stopFailed: () => string };
 }
 
 export interface RunWatcher<R extends CommandRun> {
@@ -83,7 +84,7 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
         try {
             await source.start();
         } catch (cause) {
-            error.value = messageOr(cause, `Could not start the ${source.subject}.`);
+            error.value = messageOr(cause, source.says.startFailed());
             run.value = source.idle;
             return run.value;
         }
@@ -102,7 +103,7 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
                 }
             },
             onError: (cause) => {
-                error.value = messageOr(cause, `Lost contact with the ${source.subject}.`);
+                error.value = messageOr(cause, source.says.lostContact());
             },
         });
         if (following === follow) {
@@ -116,7 +117,7 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
         try {
             await source.cancel();
         } catch (cause) {
-            error.value = messageOr(cause, `Could not stop the ${source.subject}.`);
+            error.value = messageOr(cause, source.says.stopFailed());
         }
     };
 

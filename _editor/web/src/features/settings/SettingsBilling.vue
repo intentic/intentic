@@ -31,7 +31,7 @@ const { state: plan, error, refetch, setSlots, slotsWorking, changeTier, moving,
 const working = ref(false);
 const actionError = ref<string | undefined>(undefined);
 
-const loadError = computed(() => (error.value === null ? undefined : messageOr(error.value, `Couldn't load the plan state.`)));
+const loadError = computed(() => (error.value === null ? undefined : messageOr(error.value, t(`settings.settingsBilling.couldntLoadPlan`))));
 
 const outline = useLoadingReveal(
     computed(() => plan.value === undefined && error.value === null),
@@ -120,7 +120,7 @@ const returning = computed(() => hasReturned(plan.value) && lapsed.value === und
 const onTrial = computed(() => plan.value?.status === `trialing`);
 const cancelling = computed(() => plan.value?.cancelAtPeriodEnd === true);
 const comped = computed(() => plan.value?.comped === true);
-const dateWord = computed(() => (cancelling.value ? `ends` : onTrial.value ? `trial ends` : `renews`));
+const dateWord = computed(() => (cancelling.value ? t(`settings.settingsBilling.dateEnds`) : onTrial.value ? t(`settings.settingsBilling.dateTrialEnds`) : t(`settings.settingsBilling.dateRenews`)));
 
 const buyLabel = computed(() => subscribeLabel(plan.value, returning.value));
 
@@ -143,7 +143,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
             waitForPlan(BROWSER_WAIT_MS);
         }
     } catch (err) {
-        actionError.value = messageOr(err, `Couldn't open the payment page.`);
+        actionError.value = messageOr(err, t(`settings.settingsBilling.couldntOpenPayment`));
         working.value = false;
     }
 };
@@ -183,7 +183,7 @@ const freeHoursNote = computed(() => {
 });
 
 // A machine's standing this minute, off the row's own stamp: no provider call, honest about what it knows.
-const machineState = (wokeAt: string | null): string => (wokeAt === null ? `asleep` : `awake since ${timeAgo(new Date(wokeAt).getTime())}`);
+const machineState = (wokeAt: string | null): string => wokeAt === null ? t(`settings.settingsBilling.machineAsleep`) : t(`settings.settingsBilling.machineAwakeSince`, { ago: timeAgo(new Date(wokeAt).getTime()) });
 
 // Slots are a subscriber's only (not comped); bounded up by the plan's cap, down by machines still standing.
 const paying = computed(() => plan.value?.onPlan === true && !comped.value);
@@ -213,7 +213,7 @@ const changeSlots = async (tier: string, quantity: number): Promise<void> => {
     try {
         await setSlots(tier, quantity);
     } catch (err) {
-        slotsError.value = messageOr(err, `Couldn't change the plan.`);
+        slotsError.value = messageOr(err, t(`settings.settingsBilling.couldntChangePlan`));
     }
 };
 
@@ -227,10 +227,10 @@ const moveTo = async (sandboxId: string, tier: string): Promise<void> => {
     try {
         const migration = await changeTier(sandboxId, tier);
         if (migration.state !== `done`) {
-            moveError.value = migration.error ?? `The machine was put back as it was.`;
+            moveError.value = migration.error ?? t(`settings.settingsBilling.machinePutBack`);
         }
     } catch (err) {
-        moveError.value = messageOr(err, `Couldn't move this sandbox.`);
+        moveError.value = messageOr(err, t(`settings.settingsBilling.couldntMoveSandbox`));
     }
 };
 
@@ -255,7 +255,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             }"
         />
 
-        <Notice v-if="loadError" :of="{ tone: `danger`, title: `Couldn't load your plan.`, detail: loadError }" />
+        <Notice v-if="loadError" :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntLoadYourPlan`), detail: loadError }" />
 
         <RowGroup v-else-if="plan && !plan.enabled" v-skeleton-source="`settings.billing`" :label="t(`settings.settingsBilling.billing`)">
             <RowNote variant="block">
@@ -365,16 +365,16 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                     v-if="justJoined && !waiting"
                     :of="{
                         tone: `info`,
-                        title: `Your payment went through, but the plan hasn't come back from Stripe yet.`,
-                        detail: `This is unusual. Reload in a minute. If it still isn't here, get in touch and nothing will be charged twice.`,
+                        title: t(`settings.settingsBilling.paymentWentThrough`),
+                        detail: t(`settings.settingsBilling.paymentWentThroughDetail`),
                     }"
                 />
                 <Notice
                     v-if="returning"
                     :of="{
                         tone: `info`,
-                        title: `Your previous plan has ended.`,
-                        detail: `Subscribing again starts a fresh month. Nothing was carried over, and nothing is owed.`,
+                        title: t(`settings.settingsBilling.previousPlanEnded`),
+                        detail: t(`settings.settingsBilling.previousPlanEndedDetail`),
                     }"
                 />
                 <HostedPlanOffer :subscribe-label="buyLabel" :working="working" @checkout="open(`checkout`)" />
@@ -385,7 +385,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             <RowGroup
                 v-if="hosted"
                 :label="t(`settings.settingsBilling.hostedSandboxes`)"
-                :count="`${machines.length} of ${slots} ${slots === 1 ? `slot` : `slots`}`"
+                :count="t(`settings.settingsBilling.slotsUsed`, { used: machines.length, count: slots }, slots)"
             >
                 <!-- The one state where cancelling is the advice, not the door. -->
                 <RowNote v-if="planWithoutMachine" variant="block">
@@ -477,7 +477,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                     <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                         <span class="text-sm font-medium text-content">{{ rung.name }}</span>
                         <span class="text-2xs text-subtle">
-                            {{ rung.priceUsd === 0 ? t(`settings.settingsBilling.noCard`) : `$${rung.priceUsd}/month` }}
+                            {{ rung.priceUsd === 0 ? t(`settings.settingsBilling.noCard`) : t(`settings.settingsBilling.pricePerMonth`, { price: rung.priceUsd }) }}
                         </span>
                     </div>
                     <p class="mt-1 text-xs text-muted">
@@ -550,6 +550,6 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             </RowGroup>
         </SkeletonSnapshot>
 
-        <Notice v-if="actionError" :of="{ tone: `danger`, title: `Couldn't open the payment page.`, detail: actionError }" />
+        <Notice v-if="actionError" :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntOpenPayment`), detail: actionError }" />
     </div>
 </template>

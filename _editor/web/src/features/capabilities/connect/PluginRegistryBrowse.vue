@@ -36,7 +36,7 @@ const browse = async (): Promise<void> => {
     try {
         market.value = await browseMarketplace(url.value.trim(), token.value.trim() || undefined);
     } catch (err) {
-        emit(`notice`, noticeFrom(err, `Could not browse the registry.`));
+        emit(`notice`, noticeFrom(err, t(`capabilities.pluginRegistryBrowse.couldNotBrowse`)));
     } finally {
         browsing.value = false;
     }
@@ -50,13 +50,13 @@ const entries = computed<RegistryEntry[]>(() => market.value?.plugins.filter((en
 // rule bites only extensions, since their code runs trusted in this browser.
 const blockedReason = (entry: RegistryEntry): string | undefined => {
     if (entry.trust === `blocked`) {
-        return entry.trustReason ?? `blocked`;
+        return entry.trustReason ?? t(`capabilities.pluginRegistryBrowse.blocked`);
     }
     if (entry.install === undefined) {
-        return `not installable from here`;
+        return t(`capabilities.pluginRegistryBrowse.notInstallable`);
     }
     if (entry.kind === `extension` && !isShaPinned(entry.install)) {
-        return `no pinned commit`;
+        return t(`capabilities.pluginRegistryBrowse.noPinnedCommit`);
     }
     return undefined;
 };

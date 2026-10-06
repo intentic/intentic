@@ -21,12 +21,10 @@ const source = computed(() => (forkedFrom.value === undefined ? undefined : agen
 
 // Source may be open, closed, or discarded entirely; only the first two are a real destination to link to.
 const reachable = computed(() => source.value !== undefined);
-const label = computed(() => source.value?.title ?? `the chat this was forked from`);
+const label = computed(() => source.value?.title ?? t(`chat.chatForkLine.sourceChat`));
 
 // Which files the fork started on: the only record of whether inherited turns match today's workspace.
-const files = computed(() =>
-    forkedFrom.value?.files === `then` ? `on the files as they were at that point` : `on the files as they stood when it was forked`,
-);
+const files = computed(() => (forkedFrom.value?.files === `then` ? t(`chat.chatForkLine.filesThen`) : t(`chat.chatForkLine.filesNow`)));
 
 const openSource = (): void => {
     const id = forkedFrom.value?.conversationId;

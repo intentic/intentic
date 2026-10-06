@@ -5,14 +5,14 @@ import { t } from "./i18n.js";
 
 /* Share a live preview: the one-click viral primitive. */
 
-const { url, label = `Share` } = defineProps<{ url: string; label?: string }>();
+const { url, label } = defineProps<{ url: string; label?: string }>();
 
 const popover = ref<InstanceType<typeof Popover> | null>(null);
 const toggle = (event: Event): void => popover.value?.toggle(event);
 </script>
 
 <template>
-    <Button :label="label" size="small" severity="secondary" @click="toggle">
+    <Button :label="label ?? t(`sharePreview.share`)" size="small" severity="secondary" @click="toggle">
         <template #icon><Icon name="link" /></template>
     </Button>
     <Popover ref="popover">

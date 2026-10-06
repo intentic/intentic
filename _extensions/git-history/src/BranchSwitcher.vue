@@ -92,7 +92,7 @@ const confirmDelete = async (name: string): Promise<void> => {
             @click="toggle"
         >
             <Icon name="code" class="shrink-0 text-3xs" />
-            <span class="truncate">{{ current?.name ?? "detached" }}</span>
+            <span class="truncate">{{ current?.name ?? t(`branchSwitcher.detached`) }}</span>
             <span v-if="current && current.behind > 0" class="shrink-0 text-muted">↓{{ current.behind }}</span>
             <span v-if="current && current.ahead > 0" class="shrink-0 text-muted">↑{{ current.ahead }}</span>
             <Icon name="chevron-down" class="shrink-0 text-4xs" />

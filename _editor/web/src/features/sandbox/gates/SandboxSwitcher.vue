@@ -80,7 +80,7 @@ const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`);
     const tooltip = attentionBadge.value?.tooltip;
     const status =
-        availability.value === `live` || availability.value === `stale` ? undefined : `Sandbox ${availabilityVisual.value.label.toLowerCase()}`;
+        availability.value === `live` || availability.value === `stale` ? undefined : t(`sandbox.sandboxSwitcher.sandboxState`, { state: availabilityVisual.value.label.toLowerCase() });
     return [name, placement.value?.detail, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
 });
 
@@ -241,7 +241,7 @@ const syncSwitchCommands = (options: readonly SandboxSummary[]): void => {
             // Getter, so the row names the box this chord lands on even as the roster reorders under it.
             get title(): string {
                 const option = switchable.value[at];
-                return option === undefined ? `Switch to Slot ${at + 1}` : `Switch to ${option.name}`;
+                return option === undefined ? t(`sandbox.sandboxSwitcher.switchToSlot`, { slot: at + 1 }) : t(`sandbox.sandboxSwitcher.switchTo`, { name: option.name });
             },
             category: SANDBOX,
             icon: `server`,
@@ -273,7 +273,10 @@ onMounted(() => {
         thisComputerCommand = registerCommand({
             owner: `builtin`,
             command: `sandbox.thisComputer`,
-            title: t(`sandbox.sandboxSwitcher.switchToThisComputer`),
+            // Getter, so the palette row follows a language switch.
+            get title(): string {
+                return t(`sandbox.sandboxSwitcher.switchToThisComputer`);
+            },
             category: SANDBOX,
             icon: `desktop`,
             keybinding: `Alt+0`,

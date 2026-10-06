@@ -198,8 +198,8 @@ const loadPass = async (host: HostBindings): Promise<void> => {
             listed,
             host,
             listFailure === undefined
-                ? `this sandbox image doesn't list it: the image and the app are on different versions, so it can't be switched off here`
-                : `the extension list couldn't be loaded, so this build activated it on its own: ${listFailure}`,
+                ? t(`extension-host.loader.unlistedByImage`)
+                : t(`extension-host.loader.listFailedActivated`, { failure: listFailure }),
             startedIn,
         ),
     ]);

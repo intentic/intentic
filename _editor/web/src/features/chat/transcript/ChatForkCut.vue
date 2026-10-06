@@ -113,10 +113,10 @@ const forkRows = computed<MenuItem[]>(() =>
                   // Named by outcome: which files the new chat opens on, since they have to live in a copy of their
                   // own.
                   hint: !anchored.value
-                      ? `No saved state for this point`
+                      ? t(`chat.chatForkCut.noSavedState`)
                       : filesBusy.value
-                        ? `Old files have to wait for the turn to finish`
-                        : `New chat, files as they were here, in its own copy`,
+                        ? t(`chat.chatForkCut.oldFilesWait`)
+                        : t(`chat.chatForkCut.newChatOwnCopy`),
                   disabled: !anchored.value || filesBusy.value,
                   command: () => forkAt(props.cut, `then`),
               },
@@ -160,10 +160,10 @@ const editRow = computed<MenuItem[]>(() => {
             label: t(`chat.words.editMessage`),
             icon: `pencil`,
             hint: !anchored.value
-                ? `No saved state for this point`
+                ? t(`chat.chatForkCut.noSavedState`)
                 : filesBusy.value
-                  ? `Old files have to wait for the turn to finish`
-                  : `Ask it differently, replaces this and everything below`,
+                  ? t(`chat.chatForkCut.oldFilesWait`)
+                  : t(`chat.chatForkCut.askDifferently`),
             disabled: !anchored.value || filesBusy.value,
             command: () => {
                 conversation.value.transcript.beginEdit(target);
@@ -174,9 +174,9 @@ const editRow = computed<MenuItem[]>(() => {
 
 const rewindRow = computed<MenuItem[]>(() => [
     {
-        label: armed.value ? `Click again, drops ${dropped.value} message${dropped.value === 1 ? `` : `s`}` : `Rewind this chat`,
+        label: armed.value ? t(`chat.chatForkCut.clickAgainDrops`, { count: dropped.value }, dropped.value) : t(`chat.chatForkCut.rewindChat`),
         icon: `history`,
-        hint: armed.value ? undefined : filesBusy.value ? `Wait for the turn to finish` : `Go back here and drop what follows`,
+        hint: armed.value ? undefined : filesBusy.value ? t(`chat.chatForkCut.waitForTurn`) : t(`chat.chatForkCut.goBackHere`),
         disabled: !anchored.value || filesBusy.value,
         danger: armed.value,
         // Kept open on the arming press so the second click has something to land on.
@@ -198,7 +198,7 @@ const wholeRow = computed<MenuItem[]>(() => [
 // Branches already taken from this point, named individually rather than left as a count to go find.
 const openRows = computed<MenuItem[]>(() =>
     forks.value.map((fork) => ({
-        label: fork.title ?? `Untitled fork`,
+        label: fork.title ?? t(`chat.chatForkCut.untitledFork`),
         icon: `arrow-up-right`,
         hint: t(`chat.chatForkCut.openFork`),
         command: () => openFork(fork.id),

@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
 import type {
     CapabilityKind,
@@ -46,8 +47,13 @@ export const phoneFacts = (instance: CapabilitySummary, sources: ConnectionSourc
     if (phone?.facts === undefined) {
         return connectionFacts(instance);
     }
-    const wake = phone.wake === `ready` ? `` : phone.wake === `register` ? `wake not set up yet` : `answers only while its app is open`;
-    return [`${phone.facts.device} · Android ${phone.facts.android}`, phone.facts.paused ? `paused on the phone` : ``, wake]
+    const wake =
+        phone.wake === `ready`
+            ? ``
+            : phone.wake === `register`
+              ? t(`capabilities.connections.wakeNotSetUp`)
+              : t(`capabilities.connections.answersWhileAppOpen`);
+    return [`${phone.facts.device} · Android ${phone.facts.android}`, phone.facts.paused ? t(`capabilities.connections.pausedOnPhone`) : ``, wake]
         .filter((fact) => fact !== ``)
         .join(` · `);
 };
@@ -73,7 +79,7 @@ export const tileRowFacts = (kind: CapabilityKind | undefined, instance: Capabil
         const facts = sources.browser(instance.id)?.facts;
         return facts === undefined
             ? connectionFacts(instance)
-            : `${facts.browser} · ${facts.grants.length} site${facts.grants.length === 1 ? `` : `s`} allowed`;
+            : t(`capabilities.connectionRows.sitesAllowed`, { browser: facts.browser, count: facts.grants.length }, facts.grants.length);
     }
     return connectionFacts(instance);
 };

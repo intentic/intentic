@@ -7,6 +7,7 @@
     "projectsView": {
         "allProjects": "Wszystkie projekty",
         "cancel": "Anuluj",
+        "couldntStart": "Nie udało się założyć projektu.",
         "create": "Utwórz",
         "everyProjectRepositoryIn": "Każdy projekt to repozytorium w tej przestrzeni roboczej. Otwórz jeden, a pliki, agenty i sprawdzenia zawężą się do niego.",
         "folder": "Folder: {slug}",

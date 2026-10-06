@@ -1,6 +1,12 @@
 {
+    "common": {
+        "couldNotRenderDocument": "Nie udało się wyświetlić tego dokumentu."
+    },
     "deck": {
-        "pictureInFormatBrowsers": "Obraz w formacie, którego przeglądarki nie narysują"
+        "chart": "Wykres",
+        "embeddedObject": "Osadzony obiekt",
+        "pictureInFormatBrowsers": "Obraz w formacie, którego przeglądarki nie narysują",
+        "smartArt": "Diagram SmartArt"
     },
     "documentPaper": {
         "documentNoTextIn": "Ten dokument nie zawiera tekstu."
@@ -23,7 +29,9 @@
     "epubViewer": {
         "bookNoChaptersIn": "Ta książka nie ma rozdziałów.",
         "chapter": "Rozdział",
-        "contents": "Spis treści"
+        "contents": "Spis treści",
+        "couldNotOpen": "Nie udało się otworzyć tej książki.",
+        "noPackageDocument": "Ten plik nie zawiera dokumentu pakietu EPUB."
     },
     "mediaViewer": {
         "back10s": "10 s wstecz",
@@ -46,6 +54,7 @@
         "volume": "Głośność"
     },
     "odfSlidesViewer": {
+        "couldNotRender": "Nie udało się wyświetlić tej prezentacji.",
         "presentationNoSlides": "Ta prezentacja nie ma slajdów."
     },
     "pdfViewer": {
@@ -53,13 +62,18 @@
         "pdfCantDisplayedInline": "Tego PDF-a nie da się wyświetlić w miejscu."
     },
     "pptxViewer": {
+        "couldNotRead": "Nie udało się odczytać tej prezentacji.",
         "pictureOnSlide": "Obraz na slajdzie {number}",
         "presentationNoSlides": "Ta prezentacja nie ma slajdów.",
         "slide": "Slajd {number}",
+        "slideCount": "{count} slajd | {count} slajdy | {count} slajdów",
         "speakerNotes": "Notatki prelegenta"
     },
     "sheetViewer": {
-        "sheetEmpty": "Ten arkusz jest pusty."
+        "couldNotRead": "Nie udało się odczytać tego arkusza kalkulacyjnego.",
+        "sheetEmpty": "Ten arkusz jest pusty.",
+        "workerFailed": "Proces arkusza kalkulacyjnego zawiódł.",
+        "workerUnexpected": "Proces arkusza kalkulacyjnego zwrócił nieoczekiwaną odpowiedź."
     },
     "svgViewer": {
         "preview": "Podgląd",

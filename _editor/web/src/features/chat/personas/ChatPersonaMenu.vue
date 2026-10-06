@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type Persona, personaBounds } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract";
+import { personaBoundsWords } from "../../sandbox/personas/personaBounds";
 import { browserOwnsClick, FACE_SIZES, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -89,7 +90,7 @@ const closeMenu = (event: MouseEvent): void => {
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>
-                        <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
+                        <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBoundsWords(persona) }}</StatusBadge>
                     </span>
                     <!-- An account-less persona still bounds the turn and still names the speaker. -->
                     <!-- The persona's own blurb, when set: what a chat is matched on, and what tells "Work" from "Studio" fastest. -->

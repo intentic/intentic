@@ -92,7 +92,7 @@ const applyNotice = computed<NoticeModel | undefined>(() =>
                 :key="prune.id"
                 :id="prune.id"
                 action="delete"
-                :reason="prune.state === 'skipped' ? 'left in place' : prune.reason"
+                :reason="prune.state === 'skipped' ? t(`views.applyProgress.leftInPlace`) : prune.reason"
                 context="plan"
             />
         </div>

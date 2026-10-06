@@ -106,7 +106,7 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 key: control,
                 icon: `users`,
                 label: t(`chat.words.acts`),
-                value: `Anyone`,
+                value: t(`chat.words.anyone`),
                 description: t(`chat.composerMore.onePersonasAccountsOnly`),
             };
         case `runThrough`:
@@ -114,7 +114,7 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 key: control,
                 icon: `fork`,
                 label: t(`chat.composerMore.runThrough`),
-                value: `Just this chat`,
+                value: t(`chat.chatRunThroughMenu.justChat`),
                 description: t(`chat.composerMore.loopRunWorkflow`),
             };
         case `voice`:
@@ -122,7 +122,7 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 key: control,
                 icon: `robot`,
                 label: t(`chat.composerMore.writeAgent`),
-                value: `Off`,
+                value: t(`chat.composerMore.off`),
                 description: t(`chat.composerMore.landsInTranscriptNo`),
             };
         // The press itself, as voice's is: it turns the answer the other way, and the pill it leaves turns it back.

@@ -17,20 +17,27 @@ export interface SourceGuide {
     readonly fallbackNote?: string;
 }
 
+// The prose is read through getters, so it follows a language switch; the commands stay as written.
 export const SOURCE_GUIDES: Record<AssistantSource, SourceGuide> = {
     hermes: {
         label: `Hermes`,
         folder: `.hermes`,
         command: `tar czf ~/hermes-setup.tar.gz -C ~ .hermes && echo "Ready: ~/hermes-setup.tar.gz"`,
-        lands: `It prints "Ready" and leaves hermes-setup.tar.gz in your home folder. No "Ready" line means it did not work, read the error above it.`,
+        get lands(): string {
+            return t(`sandbox.assistantGuide.hermesLands`);
+        },
     },
     openclaw: {
         label: `OpenClaw`,
         folder: `.openclaw`,
         command: `openclaw backup create --output ~ --verify`,
-        lands: `It prints the name of the file it made, in your home folder.`,
+        get lands(): string {
+            return t(`sandbox.assistantGuide.openclawLands`);
+        },
         fallbackCommand: `tar czf ~/openclaw-setup.tar.gz -C ~ .openclaw && echo "Ready: ~/openclaw-setup.tar.gz"`,
-        fallbackNote: `Older versions have no backup command. This packs the folder directly instead.`,
+        get fallbackNote(): string {
+            return t(`sandbox.assistantGuide.openclawFallbackNote`);
+        },
     },
 };
 

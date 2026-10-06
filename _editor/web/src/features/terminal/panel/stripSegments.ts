@@ -26,12 +26,15 @@ export const cycled = (groups: readonly (readonly string[])[], active: string | 
 };
 
 // What a cleared name resets to, shown as the rename field's placeholder so 'empty resets' is visible.
-export const clearedLabel = (tab: TerminalTab | undefined, position: number | undefined): string => tab?.label ?? `Terminal ${position ?? ``}`;
+export const clearedLabel = (tab: TerminalTab | undefined, position: number | undefined): string =>
+    tab?.label ?? t(`terminal.stripSegments.numbered`, { position: position ?? `` });
 
 // What a pill says of a session with nothing running right now, by kind.
 const idleTooltip = (tab: TerminalTab): TooltipValue => {
     if (tab.kind === `agent`) {
-        return tab.running ? t(`terminal.stripSegments.aiTerminal`) : { title: t(`terminal.stripSegments.aiTerminal`), note: t(`terminal.stripSegments.finished`) };
+        return tab.running
+            ? t(`terminal.stripSegments.aiTerminal`)
+            : { title: t(`terminal.stripSegments.aiTerminal`), note: t(`terminal.stripSegments.finished`) };
     }
     if (tab.kind === `job`) {
         return t(`terminal.stripSegments.jobTerminal`);

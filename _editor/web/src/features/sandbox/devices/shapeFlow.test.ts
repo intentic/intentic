@@ -1,4 +1,4 @@
-import { shapeFlow, shapeSevers, TOO_OLD_TO_SAVE, tooOldToSave } from "./shapeFlow";
+import { shapeFlow, shapeSevers, tooOldToSave, tooOldWords } from "./shapeFlow";
 
 // What the resources form's answer becomes on the wire. An agent with `set-shape` is sent the whole shape and nothing is
 // merged on this side; an older one is sent only the old op's delta, now, and can save nothing.
@@ -21,8 +21,8 @@ test(`a set-shape carries the contract's four fields and nothing else`, () => {
 
 test(`an older agent is sent the old op's delta for Apply, and refuses a save rather than restarting`, () => {
     expect(shapeFlow({ shape: bigger, when: `now` }, false, running)).toEqual({ op: `reshape`, payload: { resources: { memoryGib: 20 } } });
-    expect(() => shapeFlow({ shape: bigger, when: `nextRestart` }, false, running)).toThrow(TOO_OLD_TO_SAVE);
-    expect(() => shapeFlow({ forget: true }, false, running)).toThrow(TOO_OLD_TO_SAVE);
+    expect(() => shapeFlow({ shape: bigger, when: `nextRestart` }, false, running)).toThrow(tooOldWords());
+    expect(() => shapeFlow({ forget: true }, false, running)).toThrow(tooOldWords());
     // Nothing differs: the old op's empty ask meant "restart onto what is saved", which is never sent by accident.
     expect(() => shapeFlow({ shape: running, when: `now` }, false, running)).toThrow(/nothing to apply/);
 });
@@ -39,7 +39,7 @@ test(`only a shape applied now takes the container, and the connection through i
 test(`refuses a save in the agent's own words about its stale ic when it gave them`, () => {
     const stale = `ic is out of date: the installed ic is 1.310.0, this agent is 1.316.0, and fetching ic 1.316.0 failed (offline).`;
     expect(tooOldToSave({ icOutOfDate: stale })).toBe(stale);
-    expect(tooOldToSave({})).toBe(TOO_OLD_TO_SAVE);
-    expect(tooOldToSave(undefined)).toBe(TOO_OLD_TO_SAVE);
+    expect(tooOldToSave({})).toBe(tooOldWords());
+    expect(tooOldToSave(undefined)).toBe(tooOldWords());
     expect(() => shapeFlow({ shape: bigger, when: `nextRestart` }, false, running, stale)).toThrow(stale);
 });

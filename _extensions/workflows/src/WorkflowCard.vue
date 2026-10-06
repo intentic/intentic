@@ -31,8 +31,8 @@ const frameRem = computed(() => Math.min(20, Math.max(6, (widest.value * NODE_HE
 
 // Step count, plus `maxParallel` only when there's an actual fan-out to note.
 const shape = computed(() => {
-    const steps = `${workflow.steps.length} step${workflow.steps.length === 1 ? `` : `s`}`;
-    return widest.value > 1 ? `${steps} · up to ${workflow.maxParallel} at once` : steps;
+    const steps = t(`workflowCard.steps`, { count: workflow.steps.length }, workflow.steps.length);
+    return widest.value > 1 ? t(`workflowCard.upToAtOnce`, { steps, parallel: workflow.maxParallel }) : steps;
 });
 </script>
 

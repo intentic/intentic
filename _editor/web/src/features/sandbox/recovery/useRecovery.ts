@@ -4,6 +4,7 @@ import { type RelinkAnswer, type RelinkRequest, sandboxIdOfDaemonUrl } from "@in
 import { ORPCError } from "@orpc/client";
 import { computed, ref } from "vue";
 import type { RememberedSandbox } from "../../../client/directory/deviceDirectory";
+import { t } from "@intentic/ui/i18n";
 
 // THE RECOVERY SCREEN'S WORK (Recover.vue, README.md): the sandboxes this device remembers and the account's list
 // lacks, each asked whether it answers and what the platform holds of it, then brought back on the owner's press. Every
@@ -75,7 +76,7 @@ export const useRecovery = (deps: RecoveryDeps) => {
     // What the platform holds of one answering sandbox decides what the screen offers for it.
     const sortOne = (entry: RememberedSandbox, sandboxId: string, standing: SandboxLookup[`sandboxes`][number][`standing`] | undefined): void => {
         if (standing === undefined) {
-            set(entry, failed(`intentic could not be asked about this sandbox: check again in a moment`, sandboxId));
+            set(entry, failed(t(`sandbox.useRecovery.couldntAskIntentic`), sandboxId));
         } else if (standing === `yours`) {
             set(entry, { kind: `reconnected`, byAddress: false });
         } else if (standing === `deleted` || standing === `other`) {
@@ -130,13 +131,13 @@ export const useRecovery = (deps: RecoveryDeps) => {
             await deps.refreshList();
             return { kind: `reconnected`, byAddress: false };
         }
-        return failed(answer.adoption?.detail ?? answer.announce.detail ?? `the sandbox could not register with intentic`, sandboxId);
+        return failed(answer.adoption?.detail ?? answer.announce.detail ?? t(`sandbox.useRecovery.couldntRegister`), sandboxId);
     };
 
     const reconnectOne = async (entry: RememberedSandbox, sandboxId: string): Promise<CandidateState> => {
         const bearer = await deps.bearer(entry);
         if (bearer === undefined) {
-            return failed(`sign in with Google to reconnect it`, sandboxId);
+            return failed(t(`sandbox.useRecovery.signInToReconnect`), sandboxId);
         }
         let ticket: AdoptionTicket;
         try {

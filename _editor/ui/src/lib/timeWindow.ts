@@ -15,9 +15,9 @@ const WINDOW_MS: Readonly<Record<Exclude<TimeWindow, `all`>, number>> = {
 
 /** Ready to spread into <SegmentedControl :options>, so the four pills cannot drift apart between two views. */
 export const timeWindows = (): readonly { label: string; value: TimeWindow }[] => [
-    { label: `1h`, value: `1h` },
-    { label: `24h`, value: `24h` },
-    { label: `7d`, value: `7d` },
+    { label: t(`ui.timeWindow.hour`), value: `1h` },
+    { label: t(`ui.timeWindow.day`), value: `24h` },
+    { label: t(`ui.timeWindow.week`), value: `7d` },
     { label: t(`ui.timeWindow.all`), value: `all` },
 ];
 
@@ -25,8 +25,18 @@ export const timeWindows = (): readonly { label: string; value: TimeWindow }[] =
 export const sinceOf = (window: TimeWindow, now: number): number => (window === `all` ? -Infinity : now - WINDOW_MS[window]);
 
 /** The window as it reads mid-sentence: `${count} entries ${timeWindowWords(window)}`. */
-export const timeWindowWords = (window: TimeWindow): string =>
-    ({ "1h": `in the last hour`, "24h": `in the last 24 hours`, "7d": `in the last 7 days`, all: `on record` })[window];
+export const timeWindowWords = (window: TimeWindow): string => {
+    switch (window) {
+        case `1h`:
+            return t(`ui.timeWindow.inLastHour`);
+        case `24h`:
+            return t(`ui.timeWindow.inLastDay`);
+        case `7d`:
+            return t(`ui.timeWindow.inLastWeek`);
+        case `all`:
+            return t(`ui.timeWindow.onRecord`);
+    }
+};
 
 /** True when the entry is inside the window, the filter every feed applies, spelled once. */
 export const withinWindow = (at: number, window: TimeWindow, now: number): boolean => at >= sinceOf(window, now);

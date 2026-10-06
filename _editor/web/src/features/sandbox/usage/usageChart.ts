@@ -3,7 +3,7 @@ import type { BarItem } from "@intentic/ui";
 import { seriesColor } from "@intentic/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 import { utcDayOf } from "@intentic/sandbox-contract/time";
-import { t } from "@intentic/ui/i18n";
+import { activeLocale, t } from "@intentic/ui/i18n";
 import { formatMoney, formatPercent } from "@intentic/ui/format";
 
 // Every number and mark on the Usage tab, as pure functions over the daemon's rollup rows; the screen only binds.
@@ -157,9 +157,12 @@ export interface SpendBucket {
     readonly segments: readonly { readonly key: string; readonly value: number }[];
 }
 
-const MONTHS = [`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `Oct`, `Nov`, `Dec`] as const;
-const monthLabel = (day: string): string => `${MONTHS[Number(day.slice(5, 7)) - 1] ?? ``} ${day.slice(0, 4)}`;
-const dayLabel = (day: string): string => `${MONTHS[Number(day.slice(5, 7)) - 1] ?? ``} ${Number(day.slice(8, 10))}`;
+// Month names in the reader's language ("Mar 2024", "mar 2024"), read as a UTC calendar day so no timezone shifts it.
+const utcDay = (day: string): number => Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)) || 1);
+const monthLabel = (day: string): string =>
+    new Intl.DateTimeFormat(activeLocale.value, { month: `short`, year: `numeric`, timeZone: `UTC` }).format(utcDay(day));
+const dayLabel = (day: string): string =>
+    new Intl.DateTimeFormat(activeLocale.value, { month: `short`, day: `numeric`, timeZone: `UTC` }).format(utcDay(day));
 
 // Days anchor to themselves; weeks grid back from the window's last day; months to the 1st.
 const bucketStart = (day: string, bucket: Bucket, window: { from: string; to: string }): string => {

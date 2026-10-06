@@ -150,7 +150,7 @@ export const cacheCooling = (agent: CacheStanding, now: number): CacheCooling | 
     const countdown = formatElapsed((deadline - now) / 1000);
     const near = left <= window / 2;
     return {
-        text: `Cooling`,
+        text: t(`agents.promptCache.coolingShort`),
         countdown,
         near,
         // Named in tokens, never dollars: the rate depends on a model price list this app does not carry. An unmeasured

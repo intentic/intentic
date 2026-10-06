@@ -145,7 +145,7 @@ const renaming = ref(false);
 const edit = createInlineRename(
     () => active.value.title.value ?? undefined,
     (name) => rename(active.value.conversationId, name),
-    `Couldn't rename the agent.`,
+    () => t(`chat.chatTabs.couldntRenameAgent`),
 );
 const beginRename = (): void => {
     renaming.value = true;

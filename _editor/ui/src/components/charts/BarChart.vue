@@ -2,6 +2,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { formatCount, formatFixed } from "../../lib/format.js";
 import type { BarItem } from "./barChart.js";
 import { seriesColor } from "./seriesAccent.js";
 
@@ -14,8 +15,15 @@ const { items, title, labelWidth = 9, grow = false } = defineProps<{ items: read
 const max = computed(() => Math.max(...items.map((item) => item.value), 0) || 1);
 
 // The authored tip label, else the number thousands-separated: a bare 18400 in a document about code is read
-// slower than 18,400, and the author only writes `display` when the raw number is not the point.
-const tip = (item: BarItem): string => item.display ?? item.value.toLocaleString();
+// slower than 18,400, and the author only writes `display` when the raw number is not the point. Separators are the
+// app's language's, not the browser's; a fraction keeps the decimals it was written with, up to three.
+const tip = (item: BarItem): string => {
+    if (item.display !== undefined) {
+        return item.display;
+    }
+    const decimals = Math.min(3, (String(item.value).split(`.`)[1] ?? ``).length);
+    return decimals === 0 ? formatCount(item.value) : formatFixed(item.value, decimals);
+};
 </script>
 
 <template>

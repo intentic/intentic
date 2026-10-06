@@ -1,4 +1,5 @@
 import { createWorkerCall, type WorkerFactory } from "@intentic/extension-ui/worker";
+import { t } from "./i18n.js";
 import type { SheetRows, SheetWorkerAnswer, SheetWorkerCommand } from "./sheetProtocol";
 
 // One workbook per worker: `load` hands the bytes over and the worker keeps what it parsed, so the page holds no copy
@@ -7,7 +8,7 @@ export const createSheetWorkerClient = (workerFactory: WorkerFactory<SheetWorker
     const call = createWorkerCall<SheetWorkerCommand, SheetWorkerAnswer>(
         workerFactory,
         () => {
-            throw new Error(`Spreadsheet worker failed.`);
+            throw new Error(t(`sheetViewer.workerFailed`));
         },
         { transfer: (command) => (command.type === `load` ? [command.buffer] : []), final: () => true },
     );
@@ -15,14 +16,14 @@ export const createSheetWorkerClient = (workerFactory: WorkerFactory<SheetWorker
         async load(buffer: ArrayBuffer): Promise<readonly string[]> {
             const answer = await call({ type: `load`, buffer });
             if (answer.type !== `loaded`) {
-                throw new Error(`Spreadsheet worker returned an unexpected response.`);
+                throw new Error(t(`sheetViewer.workerUnexpected`));
             }
             return answer.names;
         },
         async render(name: string): Promise<SheetRows> {
             const answer = await call({ type: `render`, name });
             if (answer.type !== `rendered`) {
-                throw new Error(`Spreadsheet worker returned an unexpected response.`);
+                throw new Error(t(`sheetViewer.workerUnexpected`));
             }
             return answer.rows;
         },

@@ -119,7 +119,7 @@ const decide = (at: `step` | `installs` | `contents`, write: () => Promise<Envir
     decidedAt.value = at;
     return run(async () => {
         queryClient.setQueryData(ENVIRONMENT_KEY, await write());
-    }, `Could not update the environment.`);
+    }, t(`sandbox.environmentCard.couldNotUpdate`));
 };
 const approve = (): Promise<void> => {
     const hash = proposal.value?.hash;

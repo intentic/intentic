@@ -1,6 +1,7 @@
 import { agentBuildSkew, agentStalled, type Device, type DeviceAgentOp, machinesOf } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { shallowRef } from "vue";
+import { t } from "@intentic/ui/i18n";
 import { activeSandboxId } from "../../../../lib/activeSandbox";
 import { type AgentRun, agentRunTitle, type LinksAsked } from "./agentRun";
 
@@ -320,7 +321,7 @@ const pressDoing = (record: AgentRecord): string =>
 // One run speaks for itself; several are counted rather than listed, as a hub row's are (hubWork.ts).
 const spoken = (said: readonly string[]): string | undefined => {
     const [first] = said;
-    return first === undefined ? undefined : said.length === 1 ? first : `${said.length} running`;
+    return first === undefined ? undefined : said.length === 1 ? first : t(`sandbox.deviceWork.running`, { count: said.length });
 };
 
 /** What is moving on one machine, for its card's own line. */

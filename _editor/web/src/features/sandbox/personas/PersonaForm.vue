@@ -82,7 +82,7 @@ const compact = (value: string): string => value.toLowerCase().replace(/[^a-z0-9
 const detailOf = (account: BrowserAccount): string | undefined => {
     const id = compact(account.id);
     const saysSite = compact(account.site).startsWith(id) || id.startsWith(compact(account.platform));
-    const parts = [...(saysSite ? [] : [account.site]), ...(connected.includes(account.id) ? [] : [`not signed in`])];
+    const parts = [...(saysSite ? [] : [account.site]), ...(connected.includes(account.id) ? [] : [t(`sandbox.personaForm.accountNotSignedIn`)])];
     return parts.length === 0 ? undefined : parts.join(` · `);
 };
 

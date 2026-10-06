@@ -1,4 +1,5 @@
 import type { TranscriptPatch, TurnFact } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { importOrReload } from "../../../lib/staleChunk";
 import { setAccountUsage } from "../accounts/providerAccounts";
 import { boundSession } from "../run/turnRequest";
@@ -68,9 +69,7 @@ const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
         conversation.worktree.value = { branch: fact.branch, base: fact.base };
         if (fact.unenforced === true && !warnedUnenforced.has(conversation)) {
             warnedUnenforced.add(conversation);
-            conversation.transcript.notice(
-                `This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into ${fact.branch}, but a command that builds its own paths can still reach the shared workspace: recreate the sandbox to restore full isolation.`,
-            );
+            conversation.transcript.notice(t(`chat.turnFacts.worktreeUnenforced`, { branch: fact.branch }));
         }
     },
     // The turn's live posture, echoed back or moved by the agent; drives the selector, not the pick.

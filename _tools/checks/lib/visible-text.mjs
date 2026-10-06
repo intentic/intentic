@@ -35,7 +35,9 @@ export const VISIBLE_ATTRS = new Set([
     "cancel-label",
     "caption",
     "confirm-label",
+    "count",
     "description",
+    "detail",
     "empty",
     "empty-text",
     "header",
@@ -129,6 +131,11 @@ export const isProse = (raw, drawn = false) => {
     if (!/\p{L}\p{L}/u.test(text) || BRANDS.has(text.toLowerCase())) {
         return false;
     }
+    // Brands side by side, `Linux / macOS`, are as untranslatable as one of them.
+    const names = text.split(/\s*[/,&+·|]\s*/);
+    if (names.length > 1 && names.every((name) => BRANDS.has(name.toLowerCase()))) {
+        return false;
+    }
     if (!drawn && /^[a-z][a-zA-Z0-9]*$/.test(text)) {
         return false;
     }
@@ -153,55 +160,184 @@ const staticAttr = (prop) =>
 // A directive whose argument is drawn as words: `v-tooltip.top="'Zoom out'"` is a label like any other.
 const VISIBLE_DIRECTIVES = new Set(["tooltip"]);
 
-const boundTarget = (prop) => {
+// The keys under which an object hands words to whatever draws it: a Notice's `{ tone: \`danger\`, title: \`…\` }`, a
+// control's `[{ label: \`Soft\`, value: \`soft\` }]`, a tooltip's `{ title, note }`: the visible attributes, in both
+// spellings. `value`, `tone` and `kind` stay out: they are what code switches on.
+const camel = (name) => name.replace(/-(\w)/g, (_, letter) => letter.toUpperCase());
+export const VISIBLE_KEYS = new Set([...VISIBLE_ATTRS, ...[...VISIBLE_ATTRS].map(camel)]);
+
+// Bound attributes no word is drawn from, even inside an object: classes, styles, the list key, a ref, and PrimeVue's
+// pass-through `pt`, whose `header` is the classes of a header rather than its words.
+const NEVER_WORDS = new Set(["class", "style", "key", "ref", "is", "pt"]);
+
+// How a bound expression is read. `drawn` is an expression whose RESULT is on screen (a `{{ }}`, a bound label), so a
+// lone lowercase word there is a word a reader reads, not an enum member. `nested` is somewhere inside such an
+// expression but not in its result (a call's argument, a condition), where only what plainly reads as prose counts.
+// `objects` is any other bound attribute (`:of`, `:options`, `:count` on a component that does not name it a label),
+// which is read only through the visible keys of the objects it builds.
+const BOUND = (prop) => {
     if (prop.type !== DIRECTIVE || prop.exp?.type !== EXPRESSION) {
         return undefined;
     }
     if (prop.name === "bind") {
-        return prop.arg?.type === EXPRESSION && VISIBLE_ATTRS.has(prop.arg.content) ? prop.arg.content : undefined;
+        if (prop.arg === undefined || prop.arg === null) {
+            return { name: "v-bind", mode: "objects" };
+        }
+        if (prop.arg.type !== EXPRESSION || !prop.arg.isStatic || NEVER_WORDS.has(prop.arg.content)) {
+            return undefined;
+        }
+        return { name: prop.arg.content, mode: VISIBLE_ATTRS.has(prop.arg.content) ? "drawn" : "objects" };
     }
-    return VISIBLE_DIRECTIVES.has(prop.name) ? `v-${prop.name}` : undefined;
+    return VISIBLE_DIRECTIVES.has(prop.name) ? { name: `v-${prop.name}`, mode: "drawn" } : undefined;
 };
 
 // `t`, `$t`, and the same under a receiver (`i18n.t`): the callee shapes a catalog lookup wears.
 const isCatalogLookup = (ts, callee) =>
     (ts.isIdentifier(callee) && /^\$?t$/.test(callee.text)) || (ts.isPropertyAccessExpression(callee) && /^\$?t$/.test(callee.name.text));
 
+// Helpers a template hands a sentence to, and which argument: the same notice helpers i18n-literals.mjs reads in code.
+const SPOKEN_ARGUMENT = new Map([
+    ["noticeOf", 0],
+    ["noticeFrom", 1],
+]);
+
+// Methods whose arguments are matched against data, never drawn: `kinds.includes(\`running\`)`, `map.get(\`key\`)`.
+const MATCHING_METHODS = new Set(["includes", "startsWith", "endsWith", "has", "get", "indexOf", "lastIndexOf", "test", "match", "split", "emit", "$emit"]);
+
+const quiet = (mode) => (mode === "objects" ? "objects" : "nested");
+
 /**
  * Every string and template literal in one bound expression, read with the TypeScript parser rather than a quote
  * scanner: `busy ? \`Stop ${n}\` : "Start"` carries three of them, two of them nested inside a third's braces, and a
- * regex that stops at the first quote reads that as one.
+ * regex that stops at the first quote reads that as one. Each literal carries whether it is where the expression's
+ * result is drawn, which is what lets `{{ running ? \`running\` : \`stopped\` }}` count while
+ * `{{ state === \`running\` ? … }}` and `{{ bandLabel(\`blocked\`) }}` do not.
  */
-const expressionLiterals = (ts, expression) => {
+const expressionLiterals = (ts, expression, start) => {
     const wrapped = `(${expression})`;
     const file = ts.createSourceFile("expression.ts", wrapped, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
     const found = [];
     const span = (node) => ({ start: node.getStart(file) - 1, end: node.getEnd() - 1 });
-    // A lookup's first argument is the catalog key — the way the translation arrives, never a word on screen. Whole
-    // keys are already turned away as dotted paths, but one built around a `${}` joins to a trailing-dot stem
-    // (`docxCompare.`) that no longer looks like one; the arguments after it still carry values a reader sees.
-    const visit = (node) => {
-        if (ts.isCallExpression(node) && isCatalogLookup(ts, node.expression)) {
-            for (const argument of node.arguments.slice(1)) {
-                visit(argument);
+    const keyOf = (name) => (ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined);
+    const named = (node) => {
+        // The values a lookup interpolates are drawn inside its message: `t(\`gate\`, { scope: \`everyone\` })`.
+        if (ts.isObjectLiteralExpression(node)) {
+            for (const property of node.properties) {
+                if (ts.isPropertyAssignment(property)) {
+                    visit(property.initializer, "drawn");
+                }
             }
+            return;
+        }
+        visit(node, "nested");
+    };
+    const visit = (node, mode) => {
+        if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression?.(node)) {
+            visit(node.expression, mode);
             return;
         }
         if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-            found.push({ parts: [{ text: node.text }], ...span(node) });
+            if (mode !== "objects") {
+                found.push({ parts: [{ text: node.text }], drawn: mode === "drawn", ...span(node) });
+            }
             return;
         }
         if (ts.isTemplateExpression(node)) {
-            const parts = [{ text: node.head.text }];
-            for (const piece of node.templateSpans) {
-                parts.push({ expression: wrapped.slice(piece.expression.getStart(file), piece.expression.getEnd()) }, { text: piece.literal.text });
+            if (mode !== "objects") {
+                const parts = [{ text: node.head.text }];
+                for (const piece of node.templateSpans) {
+                    parts.push({ expression: wrapped.slice(piece.expression.getStart(file), piece.expression.getEnd()) }, { text: piece.literal.text });
+                }
+                found.push({ parts, drawn: mode === "drawn", ...span(node) });
             }
-            found.push({ parts, ...span(node) });
+            // What a `${}` holds is drawn wherever the template is: `\`${n} ${n === 1 ? \`slot\` : \`slots\`}\``.
+            for (const piece of node.templateSpans) {
+                visit(piece.expression, mode);
+            }
             return;
         }
-        ts.forEachChild(node, visit);
+        if (ts.isConditionalExpression(node)) {
+            // `{{ n === 1 ? "" : "s" }}`: an English plural glued to whatever came before, a word only English inflects so.
+            const branches = [node.whenTrue, node.whenFalse].map((branch) => (ts.isStringLiteral(branch) || ts.isNoSubstitutionTemplateLiteral(branch) ? branch.text : undefined));
+            if (mode === "drawn" && branches.includes("") && branches.some((text) => text === "s" || text === "es")) {
+                found.push({ parts: [{ text: branches.join("") }], drawn: true, suffix: true, ...span(node) });
+                return;
+            }
+            visit(node.condition, quiet(mode));
+            visit(node.whenTrue, mode);
+            visit(node.whenFalse, mode);
+            return;
+        }
+        if (ts.isBinaryExpression(node)) {
+            const kind = node.operatorToken.kind;
+            const S = ts.SyntaxKind;
+            // A comparison's operands are matched against data, whatever they read like: `action === \`Roll back\``.
+            if ([S.EqualsEqualsEqualsToken, S.ExclamationEqualsEqualsToken, S.EqualsEqualsToken, S.ExclamationEqualsToken, S.InKeyword, S.InstanceOfKeyword].includes(kind)) {
+                return;
+            }
+            if (kind === S.AmpersandAmpersandToken) {
+                visit(node.left, quiet(mode));
+                visit(node.right, mode);
+                return;
+            }
+            const passes = kind === S.QuestionQuestionToken || kind === S.BarBarToken || kind === S.PlusToken;
+            visit(node.left, passes ? mode : quiet(mode));
+            visit(node.right, passes ? mode : quiet(mode));
+            return;
+        }
+        if (ts.isCallExpression(node)) {
+            // A lookup's first argument is the catalog key — the way the translation arrives, never a word on screen.
+            // Whole keys are already turned away as dotted paths, but one built around a `${}` joins to a trailing-dot
+            // stem (`docxCompare.`) that no longer looks like one; the arguments after it still carry values a reader sees.
+            if (isCatalogLookup(ts, node.expression)) {
+                if (node.arguments[1] !== undefined) {
+                    named(node.arguments[1]);
+                }
+                for (const argument of node.arguments.slice(2)) {
+                    visit(argument, quiet(mode));
+                }
+                return;
+            }
+            const callee = node.expression;
+            const method = ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined;
+            const helper = ts.isIdentifier(callee) ? callee.text : method;
+            visit(callee, quiet(mode));
+            node.arguments.forEach((argument, at) => {
+                if (method !== undefined && MATCHING_METHODS.has(method)) {
+                    return;
+                }
+                // `approvers.join(\` or \`)` draws its separator between the words it joins.
+                const spoken = (method === "join" && at === 0) || SPOKEN_ARGUMENT.get(helper ?? "") === at;
+                visit(argument, spoken ? (mode === "nested" ? "nested" : "drawn") : quiet(mode));
+            });
+            return;
+        }
+        if (ts.isArrayLiteralExpression(node)) {
+            for (const element of node.elements) {
+                visit(element, mode);
+            }
+            return;
+        }
+        if (ts.isObjectLiteralExpression(node)) {
+            for (const property of node.properties) {
+                if (ts.isPropertyAssignment(property)) {
+                    const key = keyOf(property.name);
+                    visit(property.initializer, key !== undefined && VISIBLE_KEYS.has(key) ? (mode === "nested" ? "nested" : "drawn") : quiet(mode));
+                } else if (!ts.isShorthandPropertyAssignment(property)) {
+                    ts.forEachChild(property, (child) => visit(child, quiet(mode)));
+                }
+            }
+            return;
+        }
+        if (ts.isElementAccessExpression(node)) {
+            visit(node.expression, quiet(mode));
+            return;
+        }
+        ts.forEachChild(node, (child) => visit(child, quiet(mode)));
     };
-    ts.forEachChild(file, visit);
+    for (const statement of file.statements) {
+        visit(ts.isExpressionStatement(statement) ? statement.expression : statement, start);
+    }
     return found;
 };
 
@@ -223,10 +359,16 @@ const isSplitKey = (parts) => {
 };
 
 // Literals inside one expression, as findings against the file: shared by a bound attribute and a `{{ }}`, which are
-// the same thing — an expression whose result is drawn.
-const inExpression = (ts, expression, base, name) =>
-    expressionLiterals(ts, expression)
-        .filter((literal) => !isSplitKey(literal.parts) && isProse(literal.parts.map((part) => part.text ?? "").join(" "), literal.parts.length > 1))
+// the same thing — an expression whose result is drawn. A literal inside a reported template is part of that one
+// sentence (`\`${n} of ${slots} ${slots === 1 ? \`slot\` : \`slots\`}\``), so it is not reported again on its own.
+// A literal standing where the result is drawn is judged as drawn text, so `\`running\`` there is a word; anywhere
+// else in the expression only a template with a placeholder or plain prose is.
+const inExpression = (ts, expression, base, name, mode) => {
+    const kept = expressionLiterals(ts, expression, mode).filter(
+        (literal) => literal.suffix || (!isSplitKey(literal.parts) && isProse(literal.parts.map((part) => part.text ?? "").join(" "), literal.drawn || literal.parts.length > 1)),
+    );
+    return kept
+        .filter((literal) => !kept.some((outer) => outer !== literal && outer.start <= literal.start && literal.end <= outer.end))
         .map((literal) => ({
             kind: literal.parts.length === 1 ? "expr" : "tpl",
             name,
@@ -235,11 +377,12 @@ const inExpression = (ts, expression, base, name) =>
             start: base + literal.start,
             end: base + literal.end,
         }));
+};
 
-// A bound visible attribute carries its words inside an expression: a ternary, a nullish chain, a call.
+// A bound attribute carries its words inside an expression: a ternary, a nullish chain, a call, an object of options.
 const boundAttr = (prop, ts) => {
-    const name = boundTarget(prop);
-    return name === undefined ? [] : inExpression(ts, prop.exp.content, prop.exp.loc.start.offset, name);
+    const bound = BOUND(prop);
+    return bound === undefined ? [] : inExpression(ts, prop.exp.content, prop.exp.loc.start.offset, bound.name, bound.mode);
 };
 
 // A sentence built from text and `{{ }}` is ONE message with placeholders. Extracted node by node it becomes fragments
@@ -263,7 +406,7 @@ const speaking = (node) => (node.children ?? []).filter((child) => child.type !=
 const textFinding = (node, verbatim) => (verbatim || !isProse(node.content, true) ? [] : [{ kind: "text", text: node.content.trim(), ...trimmedSpan(node) }]);
 
 // `{{ busy ? `Stopping…` : `Stop` }}`: an expression drawn where it stands, the same judgment as a bound attribute's.
-const drawnExpression = (node, verbatim, ts) => (verbatim ? [] : inExpression(ts, node.content.content, node.content.loc.start.offset, "{{}}"));
+const drawnExpression = (node, verbatim, ts) => (verbatim ? [] : inExpression(ts, node.content.content, node.content.loc.start.offset, "{{}}", "drawn"));
 
 const walk = (node, verbatim, found, ts) => {
     const inside = verbatim || verbatimHere(node);

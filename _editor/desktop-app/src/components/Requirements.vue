@@ -46,23 +46,37 @@ const ICON: Record<RequirementAction, string> = {
 };
 
 // One-word promise per row, so which ones this app will fix is visible without reading each line.
-const BADGE: Record<RequirementAction, string> = {
-    fix: `we'll do this`,
-    fixElevated: `we'll do this`,
-    restart: `needs a restart`,
-    firmware: `you'll have to do this`,
-    hostVm: `on the host machine`,
-    user: `you'll have to do this`,
-    signOut: `needs a sign-out`,
-    unsupported: `not supported`,
+const badgeFor = (action: RequirementAction): string => {
+    switch (action) {
+        case `fix`:
+        case `fixElevated`:
+            return t(`desktop.requirements.badge.weDoIt`);
+        case `restart`:
+            return t(`desktop.requirements.badge.needsRestart`);
+        case `firmware`:
+        case `user`:
+            return t(`desktop.requirements.badge.youDoIt`);
+        case `hostVm`:
+            return t(`desktop.requirements.badge.onHost`);
+        case `signOut`:
+            return t(`desktop.requirements.badge.needsSignOut`);
+        case `unsupported`:
+            return t(`desktop.requirements.badge.unsupported`);
+    }
 };
 
-// Overrides BADGE once a row has a state; `pending` is undefined so the lookup is total.
-const STATE_BADGE: Record<string, string | undefined> = {
-    pending: undefined,
-    running: `working on it`,
-    done: `done`,
-    failed: `didn't work`,
+// Overrides the action's badge once a row has a state; `pending` has none, so the action's badge shows.
+const stateBadgeFor = (state: string): string | undefined => {
+    switch (state) {
+        case `running`:
+            return t(`desktop.requirements.badge.working`);
+        case `done`:
+            return t(`desktop.requirements.badge.done`);
+        case `failed`:
+            return t(`desktop.requirements.badge.failed`);
+        default:
+            return undefined;
+    }
 };
 
 // The two actions whose remedy is the button under the list and nothing more; every other remedy says
@@ -75,9 +89,15 @@ const ourCount = computed(
 const ours = computed(() => ourCount.value > 0);
 // A row that was tried and did not work: the button becomes a retry, since "continue" is not what it would do.
 const anyFailed = computed(() => props.requirements.some((requirement) => stateOf(requirement.id)?.state === `failed`));
-// Button label matches the per-row promise in BADGE, so the two verbs never disagree (e.g. "Install" when the
+// Button label matches the per-row promise in badgeFor, so the two verbs never disagree (e.g. "Install" when the
 // real job is just starting Docker).
-const doLabel = computed(() => (anyFailed.value ? `Try again` : ourCount.value > 1 ? `Do these and continue` : `Do this and continue`));
+const doLabel = computed(() =>
+    anyFailed.value
+        ? t(`desktop.requirements.tryAgain`)
+        : ourCount.value > 1
+          ? t(`desktop.requirements.doTheseAndContinue`)
+          : t(`desktop.requirements.doThisAndContinue`),
+);
 const restarting = computed(() => props.requirements.some((requirement) => requirement.action === `restart`));
 // docker-users membership needs a Windows sign-out to take effect, not a recheck; setup is parked and resumes via
 // the same RunOnce as a restart.
@@ -94,20 +114,20 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
 const many = computed(() => props.requirements.length > 1);
 
 const badgeOf = (requirement: Requirement): string | undefined =>
-    STATE_BADGE[stateOf(requirement.id)?.state ?? `pending`] ?? (many.value ? BADGE[requirement.action] : undefined);
+    stateBadgeFor(stateOf(requirement.id)?.state ?? `pending`) ?? (many.value ? badgeFor(requirement.action) : undefined);
 
 const remedyOf = (requirement: Requirement): string | undefined => (SAID_BY_BUTTON.has(requirement.action) ? undefined : requirement.remedy);
 
 // What the session-ending button will do, said once under the buttons rather than per row.
 const sessionNote = computed(() => {
     if (signOutExhausted.value) {
-        return `Even a restart didn't apply it. Whoever looks after this PC may have to add your account to Docker's group by hand; until then, your sandbox can run on a machine we host.`;
+        return t(`desktop.requirements.signOutExhausted`);
     }
     if (signOutAgain.value) {
-        return `Signing out and back in didn't refresh it on this PC. A restart always does: your setup is saved and continues on its own once you're back.`;
+        return t(`desktop.requirements.signOutAgain`);
     }
     if (restarting.value || signingOut.value) {
-        return `Your setup is saved: this window picks it up again once you're back.`;
+        return t(`desktop.requirements.setupSaved`);
     }
     return undefined;
 });

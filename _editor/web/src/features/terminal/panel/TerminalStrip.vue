@@ -136,6 +136,18 @@ const applyCustomize = (meta: { color?: TerminalColor; icon?: IconName }): void 
     customize.value = undefined;
 };
 const colorOptions = Object.entries(TERMINAL_COLORS) as [TerminalColor, string][];
+// A swatch's name, said by its tooltip and to a screen reader; built when read so it follows the language.
+const colorName = (color: TerminalColor): string =>
+    ({
+        red: t(`terminal.terminalStrip.colors.red`),
+        orange: t(`terminal.terminalStrip.colors.orange`),
+        yellow: t(`terminal.terminalStrip.colors.yellow`),
+        green: t(`terminal.terminalStrip.colors.green`),
+        cyan: t(`terminal.terminalStrip.colors.cyan`),
+        blue: t(`terminal.terminalStrip.colors.blue`),
+        purple: t(`terminal.terminalStrip.colors.purple`),
+        pink: t(`terminal.terminalStrip.colors.pink`),
+    })[color];
 
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 // The pill a right-click landed on; undefined for empty bar space, whose menu is the strip-wide rows alone.
@@ -167,7 +179,7 @@ const stripItems = computed<MenuItem[]>(() => {
     // Above kill-all, as the narrower option.
     if (killTabs !== undefined && inactive.value.length > 0) {
         items.push({
-            label: `Kill ${inactive.value.length} inactive ${inactive.value.length === 1 ? `terminal` : `terminals`}`,
+            label: t(`terminal.terminalStrip.killInactive`, { count: inactive.value.length }, inactive.value.length),
             shortcut: commandShortcut(`terminal.killInactive`),
             command: sweepInactive,
         });
@@ -189,7 +201,7 @@ const stripItems = computed<MenuItem[]>(() => {
             command: () => (showWorkTerminals.value = !showWorkTerminals.value),
         },
         {
-            label: floating.floats.value ? `Dock panel back` : `Move panel into new window`,
+            label: floating.floats.value ? t(`terminal.terminalStrip.dockPanelBack`) : t(`terminal.terminalStrip.movePanelToWindow`),
             shortcut: commandShortcut(`terminal.toggleFloating`),
             command: floating.toggle,
         },
@@ -259,7 +271,9 @@ const pillItems = (name: string, group: readonly string[]): MenuItem[] => {
         ...items,
         { separator: true },
         {
-            label: KINDS[tabByName.value.get(name)?.kind ?? `shell`].logs ? `Close log view` : `Kill terminal`,
+            label: KINDS[tabByName.value.get(name)?.kind ?? `shell`].logs
+                ? t(`terminal.terminalStrip.closeLogView`)
+                : t(`terminal.terminalPanel.killTerminal`),
             shortcut: commandShortcut(`terminal.kill`),
             // Through requestKill like any kill: a menu row knows no more about a busy session than the ×.
             command: () => requestKill([name]),
@@ -478,8 +492,8 @@ onBeforeUnmount(() => {
                         class="h-7 w-7 rounded-full transition-transform hover:scale-110"
                         :class="{ 'ring-2 ring-line-strong ring-offset-2 ring-offset-card': terminalMeta(customize.name).color === key }"
                         :style="{ background: hex }"
-                        v-tooltip.top="key"
-                        :aria-label="key"
+                        v-tooltip.top="colorName(key)"
+                        :aria-label="colorName(key)"
                         @click="applyCustomize({ color: key })"
                     ></button>
                 </div>

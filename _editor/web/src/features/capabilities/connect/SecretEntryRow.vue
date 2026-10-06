@@ -96,7 +96,7 @@ const saveGate = async (): Promise<void> => {
             scope: draftScope.value,
         });
     } catch (err) {
-        gateError.value = noticeFrom(err, `Could not save who has to approve this.`);
+        gateError.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotSaveApprovers`));
     }
 };
 
@@ -108,7 +108,7 @@ const clearGate = async (): Promise<void> => {
     try {
         await removeGate.mutateAsync(row.gateSubject);
     } catch (err) {
-        gateError.value = noticeFrom(err, `Could not stop requiring approval.`);
+        gateError.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotStopApproval`));
     }
 };
 
@@ -163,7 +163,7 @@ const toggleReveal = async (): Promise<void> => {
     try {
         revealedValue.value = await reveal(entry.value.key);
     } catch (err) {
-        error.value = noticeFrom(err, `Could not reveal the value.`);
+        error.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotReveal`));
     }
 };
 
@@ -181,7 +181,7 @@ const removeKey = async (): Promise<void> => {
     } catch (err) {
         confirming.value = false;
         open();
-        error.value = noticeFrom(err, `Could not remove the secret.`);
+        error.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotRemove`));
     }
 };
 
@@ -344,7 +344,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <template v-if="gate">
                         {{
                             t(`capabilities.secretEntryRow.gateExplained`, {
-                                approvers: gate.approvers.join(` or `),
+                                approvers: gate.approvers.join(t(`capabilities.secretEntryRow.approverSeparator`)),
                                 scope:
                                     gate.scope === `conversation`
                                         ? t(`capabilities.secretEntryRow.scopeConversation`)

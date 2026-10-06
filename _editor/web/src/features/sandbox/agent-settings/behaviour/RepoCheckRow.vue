@@ -27,7 +27,7 @@ const {
 const emit = defineEmits<{ switch: [boolean] }>();
 
 // "root" is the workspace's own repository, which nobody calls "root" when they mean it.
-const name = computed((): string => (entry.repo === `root` ? `This workspace` : entry.repo));
+const name = computed((): string => (entry.repo === `root` ? t(`sandbox.repoCheckRow.thisWorkspace`) : entry.repo));
 
 const MOMENTS: readonly RepoCheckMoment[] = [`edit`, `turn`, `land`];
 

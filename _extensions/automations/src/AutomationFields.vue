@@ -134,11 +134,12 @@ const OTHERS_OPTIONS = computed(
             { value: `allow`, label: t(`automationFields.answer`) },
         ] as const,
 );
-const OTHERS_CAPTION: Record<(typeof OTHERS_OPTIONS.value)[number][`value`], string> = {
-    ignore: `Anyone not named gets no answer. They still show up under “seen recently”, so naming them later is a click.`,
-    hold: `Anyone not named waits in Approvals for you, and runs as the persona above once you say so.`,
-    allow: `Anyone not named is answered as the persona above, which is what this automation did before it had rules.`,
-};
+const othersCaption = (others: (typeof OTHERS_OPTIONS.value)[number][`value`]): string =>
+    ({
+        ignore: t(`automationFields.othersCaption.ignore`),
+        hold: t(`automationFields.othersCaption.hold`),
+        allow: t(`automationFields.othersCaption.allow`),
+    })[others];
 
 // CI's delivery path: instant, polled, or never; fetched only while a CI trigger is on screen.
 const isCi = computed(() => form.kind === `listener` && form.provider === `ci`);
@@ -178,24 +179,26 @@ const TRIGGER_TABS = computed<readonly { value: TriggerKind; label: string; icon
 ]);
 
 // One caption sentence per trigger kind, shown under the picker instead of a label with its own gloss.
-const KIND_CAPTION: Record<TriggerKind, string> = {
-    schedule: `On a clock, in this sandbox's own timezone.`,
-    // Says the two things a reminder's owner has to know and cannot see: which clock the time was read on, and that a
-    // sleeping sandbox delivers late rather than never.
-    once: `At one moment, on your own clock, and then it switches itself off. A sandbox that is asleep when the moment comes fires it as soon as it is back, saying how late it is.`,
-    event: `When any outside system POSTs to its webhook URL, which is shown to you once it exists.`,
-    listener: `The moment a connected service sends something. Nothing is polled: a gateway holds the connection open.`,
-    workspace: `On a moment in this workspace's own work. No token and no URL: nothing outside the sandbox can fire it.`,
-};
+// Built when read, so the caption follows the language on screen.
+const kindCaption = (kind: TriggerKind): string =>
+    ({
+        schedule: t(`automationFields.kindCaption.schedule`),
+        // Says the two things a reminder's owner has to know and cannot see: which clock the time was read on, and that a
+        // sleeping sandbox delivers late rather than never.
+        once: t(`automationFields.kindCaption.once`),
+        event: t(`automationFields.kindCaption.event`),
+        listener: t(`automationFields.kindCaption.listener`),
+        workspace: t(`automationFields.kindCaption.workspace`),
+    })[kind];
 // Names the source directly, not "a connected service", since the reader just picked it; a Visitor chat isn't a service,
 // so it says what actually happens.
 const whenCaption = computed<string>(() => {
     if (form.kind !== `listener`) {
-        return KIND_CAPTION[form.kind];
+        return kindCaption(form.kind);
     }
     return isVisitorChat.value
-        ? `When a visitor writes in the chat widget on your site: one conversation each, live for you to take over.`
-        : `The moment ${listenerSource.value.label} sends one of these. Nothing is polled: a gateway holds the connection open.`;
+        ? t(`automationFields.kindCaption.visitorChat`)
+        : t(`automationFields.kindCaption.source`, { source: listenerSource.value.label });
 });
 
 // Wrapped, not bound straight to `form.kind`: switching to Live also has to pick a connected source.
@@ -982,7 +985,7 @@ const setProvider = (provider: string): void => {
                             <span>{{ t(`automationFields.everyoneElse`) }}</span>
                             <SegmentedControl v-model="form.senderOthers" :options="OTHERS_OPTIONS" />
                         </div>
-                        <p class="-mt-1 text-2xs text-subtle">{{ OTHERS_CAPTION[form.senderOthers] }}</p>
+                        <p class="-mt-1 text-2xs text-subtle">{{ othersCaption(form.senderOthers) }}</p>
                     </template>
                 </div>
 

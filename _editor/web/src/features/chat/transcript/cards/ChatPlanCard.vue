@@ -30,7 +30,7 @@ const plan = useMarkdown(
     false,
     () => conversation.value.scope.value,
 );
-const title = computed(() => planParts(card.value.text).title ?? `Proposed plan`);
+const title = computed(() => planParts(card.value.text).title ?? t(`chat.chatPlanCard.proposedPlan`));
 
 // What the agent asked people for before presenting this (docs/architecture/needs.md): said on the plan, so approving it
 // is read beside what it still waits on, and every one is answered in the same sitting rather than mid-run.

@@ -62,15 +62,15 @@ export const statusLabel = (status: ConversationStatus): string => {
         return agentStatusMeta(status).label;
     }
     if (status === `streaming`) {
-        return `Working`;
+        return t(`chat.catalog.working`);
     }
     if (status === `awaiting`) {
-        return `Needs you`;
+        return t(`shared.needs`);
     }
     if (status === `error`) {
-        return `Error`;
+        return t(`chat.catalog.error`);
     }
-    return `Idle`;
+    return t(`chat.catalog.idle`);
 };
 
 // Desktop tab title colour by status, layered under statusIcon's glyph, not replacing it (colour alone fails

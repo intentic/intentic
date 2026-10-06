@@ -189,7 +189,7 @@ const remove = (path: string): void => {
                         type="button"
                         :class="ui.iconButton('h-6 w-5')"
                         :aria-expanded="opened.has(row.entry.path)"
-                        :aria-label="`${opened.has(row.entry.path) ? `Collapse` : `Expand`} ${row.entry.path}`"
+                        :aria-label="opened.has(row.entry.path) ? t(`sandbox.folderPicker.collapse`, { path: row.entry.path }) : t(`sandbox.folderPicker.expand`, { path: row.entry.path })"
                         v-action="() => expand(row.entry)"
                     >
                         <Icon

@@ -1,5 +1,6 @@
 import { DEVICE_FEATURE_SET_SHAPE, type DeviceFacts, type DeviceSandboxOp, deviceSupports, type SandboxShapeWhen } from "@intentic/sandbox-contract";
 import { askFrom, type ResourcesForm } from "@intentic/ui/sandbox-resources";
+import { t } from "@intentic/ui/i18n";
 import type { DeviceSandboxPayload } from "./useDevices";
 
 // WHAT THE RESOURCES FORM'S ANSWER BECOMES ON THE WIRE. The form holds a whole shape; the machine's `ic` stores and
@@ -17,14 +18,14 @@ const contractFields = ({ memoryGib, cpus, privileged, gpu }: ResourcesForm): Re
 /** Whether this machine's agent takes whole shapes (and so can save one for the next restart). */
 export const canSetShape = (facts: Pick<DeviceFacts, "features"> | undefined): boolean => deviceSupports(facts, DEVICE_FEATURE_SET_SHAPE);
 
-export const TOO_OLD_TO_SAVE = `This machine's agent is too old to save a change for the next restart. Update its agent first.`;
+export const tooOldWords = (): string => t(`sandbox.shapeFlow.tooOldToSave`);
 
 /**
  * Why this machine can't save a shape for the next restart, in the truest words there are. An agent as new as the
  * feature can still lack it when the `ic` it drives is older and fetching the current one failed; that agent says so
  * itself (`icOutOfDate`), and telling its owner to update an agent that is already current sends them the wrong way.
  */
-export const tooOldToSave = (facts: Pick<DeviceFacts, "icOutOfDate"> | undefined): string => facts?.icOutOfDate ?? TOO_OLD_TO_SAVE;
+export const tooOldToSave = (facts: Pick<DeviceFacts, "icOutOfDate"> | undefined): string => facts?.icOutOfDate ?? tooOldWords();
 
 /**
  * The op and payload for an intent. `running` is the shape the container runs with (the form's own reading of it),
@@ -35,7 +36,7 @@ export const shapeFlow = (
     intent: ShapeIntent,
     canShape: boolean,
     running: ResourcesForm,
-    refusal: string = TOO_OLD_TO_SAVE,
+    refusal: string = tooOldWords(),
 ): { readonly op: DeviceSandboxOp; readonly payload: Pick<DeviceSandboxPayload, `shape` | `when` | `resources`> } => {
     if (canShape) {
         return `forget` in intent ? { op: `forget-shape`, payload: {} } : { op: `set-shape`, payload: { shape: contractFields(intent.shape), when: intent.when } };
@@ -45,7 +46,7 @@ export const shapeFlow = (
     }
     const resources = askFrom(running, intent.shape);
     if (resources === undefined) {
-        throw new Error(`Nothing differs from what this sandbox runs, so there is nothing to apply.`);
+        throw new Error(t(`sandbox.shapeFlow.nothingDiffers`));
     }
     return { op: `reshape`, payload: { resources } };
 };

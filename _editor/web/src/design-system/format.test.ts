@@ -3,6 +3,7 @@ import {
     formatCount,
     formatDate,
     formatElapsed,
+    formatList,
     formatMoney,
     formatTokens,
     setFormatLocale,
@@ -85,6 +86,13 @@ describe(`formatCount and formatCompact: exact and grouped, or at chip width`, (
 
     it(`counts tokens as a compact count`, () => {
         expect([formatTokens(1_400_000), formatTokens(12_345), formatTokens(512)]).toEqual([`1.4M`, `12.3K`, `512`]);
+    });
+});
+
+describe(`formatList: joined with the language's own words`, () => {
+    it(`says "and" or "or" as the language does, and follows a language change`, () => {
+        expect([formatList([`a`, `b`, `c`]), formatList([`a`, `b`], `disjunction`)]).toEqual([`a, b, and c`, `a or b`]);
+        expect(inLocale(`pl`, () => [formatList([`a`, `b`, `c`]), formatList([`a`, `b`], `disjunction`)])).toEqual([`a, b i c`, `a lub b`]);
     });
 });
 

@@ -2,7 +2,7 @@
 import { Button, Icon, Notice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { isTrialProvider, TRIAL_NOTICE, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { isTrialProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { trialExhausted, trialPhase } from "../session/access";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
@@ -70,10 +70,10 @@ const trialNotice = computed(() => {
     if (trialSpent.value) {
         // Names no single vendor: free-and-uncapped is a Google sign-in, a model on this machine, or a subscription the
         // reader may already hold, and the view that offers all three is one press away.
-        return `Free trial used up for today. Connect a model to keep going — one of them is free.`;
+        return t(`chat.chatPaneNotices.trialSpent`);
     }
     if (trialUnavailable.value) {
-        return `Free trial isn't answering right now. Failed messages are not counted.`;
+        return t(`chat.chatPaneNotices.trialUnavailable`);
     }
     const remaining = trialStatus.value.remaining;
     // Not a warning until it is one: shown once the trial is past fresh (trialPhase) or the pool is straining, not from
@@ -81,14 +81,14 @@ const trialNotice = computed(() => {
     if (trialPhase(provider.value) === `fresh` && trialStatus.value.health !== `degraded`) {
         return undefined;
     }
-    const left = `${remaining} free ${remaining === 1 ? `message` : `messages`} left today`;
+    const left = t(`chat.chatPaneNotices.trialLeft`, { count: remaining }, remaining);
     // Which model answered, once one has: the trial serves a different real model per message (trial-ladder.ts), so
     // this is the only way to tell a weak answer from a fallback rung. Leads the sentence only after a turn has run.
     const served = trialStatus.value.servedModel;
-    const answered = served === undefined ? `` : `Last answer: ${modelLabelFor(TRIAL_PROVIDER, served)}. `;
+    const answered = served === undefined ? [] : [t(`chat.chatPaneNotices.trialLastAnswer`, { model: modelLabelFor(TRIAL_PROVIDER, served) })];
     // The pool working for its answer, said last and mildly: it explains a slower or weaker turn.
-    const strained = trialStatus.value.health === `degraded` ? ` Trial capacity is tight right now, so answers can be slower.` : ``;
-    return `${answered}${left}. Each agent step costs one. ${TRIAL_NOTICE}${strained}`;
+    const strained = trialStatus.value.health === `degraded` ? [t(`chat.chatPaneNotices.trialStrained`)] : [];
+    return [...answered, left, t(`chat.chatPaneNotices.trialStepCost`), t(`chat.chatPaneNotices.trialPassesThrough`), ...strained].join(` `);
 });
 const retryTrial = async (): Promise<void> => {
     if (!reachable.value) {

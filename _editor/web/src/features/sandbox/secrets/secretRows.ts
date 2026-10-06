@@ -1,6 +1,7 @@
 import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary } from "@intentic/sandbox-contract";
 import { capabilityTile } from "../../capabilities/model/tiles";
 import { type ConnectionState, connectionFacts, connectionState } from "../../capabilities/model/connections";
+import { t } from "@intentic/ui/i18n";
 
 // A secret row: an inventory entry plus what the daemon can't supply (a label, a distinguishing detail, whether
 // anything is owed). `group` splits owner-set values (editable here) from connection or subscription credentials
@@ -61,18 +62,22 @@ const CREDENTIAL_GLYPH = `key`;
 const PROVIDER_GLYPH = `sparkles`;
 
 const usedBy = (entry: SecretInventoryEntry): string =>
-    entry.requiredBy.length === 0 ? `` : `used by ${entry.requiredBy.map((use) => use.resourceId).join(`, `)}`;
+    entry.requiredBy.length === 0 ? `` : t(`sandbox.secretRows.usedBy`, { users: entry.requiredBy.map((use) => use.resourceId).join(`, `) });
+
+// Who has to release a gated value, as the row says it.
+const needsApproval = (approvers: readonly string[]): string =>
+    t(`sandbox.secretRows.needsApprovalFrom`, { approvers: approvers.join(` ${t(`sandbox.secretRows.or`)} `) });
 
 // Priority: an unset value, then a stale CI copy. A gate needing approval is not a debt (never sets `attention`)
 // but still worth a line so a reader sees why a turn could not use it.
 const noteOf = (entry: SecretInventoryEntry): string | undefined => {
     if (entry.status === `missing`) {
-        return `not set`;
+        return t(`sandbox.secretRows.notSet`);
     }
     if (entry.ci !== undefined && !entry.ci.synced) {
-        return `CI hasn't got this yet`;
+        return t(`sandbox.secretRows.ciMissing`);
     }
-    return entry.gate === undefined ? undefined : `needs approval from ${entry.gate.approvers.join(` or `)}`;
+    return entry.gate === undefined ? undefined : needsApproval(entry.gate.approvers);
 };
 
 // Lets the filter match a gated row by its approvers' addresses too (e.g. "who is waiting on Bob").
@@ -98,7 +103,7 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
         icon: tile?.icon ?? CREDENTIAL_GLYPH,
         attention: false,
         // A gated connection is not loaded into a turn; the note distinguishes that from a broken connection.
-        ...(entry.gate === undefined ? {} : { note: `needs approval from ${entry.gate.approvers.join(` or `)}` }),
+        ...(entry.gate === undefined ? {} : { note: needsApproval(entry.gate.approvers) }),
         state: connectionState(instance.kind, instance, undefined),
         editable: true,
         removable: false,
@@ -112,7 +117,7 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
 // box, and a row silently disappearing is worse than a thin one.
 const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => {
     const title = entry.label ?? entry.key;
-    const detail = group === `provider` ? `AI subscription` : usedBy(entry);
+    const detail = group === `provider` ? t(`sandbox.secretRows.aiSubscription`) : usedBy(entry);
     return {
         entry,
         group,

@@ -41,18 +41,20 @@ export interface LadderInput {
 // stays on screen. No rung is ever "always on": every hosted machine sleeps once nobody is using it.
 const hostedMeta = ({ hostedFull, hostedSuspended, plan, hours }: LadderInput): string => {
     if (hostedFull) {
-        return `No machines free right now`;
+        return t(`setup.machineLadder.noMachinesFree`);
     }
     if (hostedSuspended) {
-        return `Switched off for this account`;
+        return t(`setup.machineLadder.switchedOff`);
     }
     if (hours === null) {
-        return plan ? `No hour limit · ready in seconds` : `Free · ready in seconds`;
+        return plan ? t(`setup.machineLadder.noHourLimit`) : t(`setup.machineLadder.freeReady`);
     }
     if (hours.rampUntil !== undefined) {
-        return `Free to try · ${hours.allowance}h to start, more after your first days`;
+        return t(`setup.machineLadder.freeToTry`, { hours: hours.allowance });
     }
-    return hours.remaining < hours.allowance ? `Free · ${hours.remaining} of ${hours.allowance}h left this month` : `Free · ${hours.allowance}h a month`;
+    return hours.remaining < hours.allowance
+        ? t(`setup.machineLadder.freeLeft`, { remaining: hours.remaining, allowance: hours.allowance })
+        : t(`setup.machineLadder.freeMonthly`, { allowance: hours.allowance });
 };
 
 export const ladderOptionsOf = (input: LadderInput): readonly MachineOption[] => [
@@ -65,8 +67,11 @@ export const ladderOptionsOf = (input: LadderInput): readonly MachineOption[] =>
               {
                   value: `mine` as const,
                   title: t(`setup.setup.myOwnComputer`),
-                  meta: `Most power · no limits`,
-                  note: input.installer === undefined ? `One pasted command` : `A ${input.installer.label} installer`,
+                  meta: t(`setup.machineLadder.mostPower`),
+                  note:
+                      input.installer === undefined
+                          ? t(`setup.machineLadder.onePastedCommand`)
+                          : t(`setup.machineLadder.installer`, { label: input.installer.label }),
               },
           ]
         : []),

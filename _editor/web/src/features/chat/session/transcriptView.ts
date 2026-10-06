@@ -1,6 +1,7 @@
 import { type EditorContext, isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
+import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { trackPerf } from "../../../app/perf";
 import { uuid } from "../../../lib/uuid";
@@ -24,11 +25,9 @@ import type { TurnClient } from "./turnClient";
 // where it was, since another window rewound or a turn ran after this one read it; anything else, no saved state.
 const rewindRefusal = (status: number): string => {
     if (status === 409) {
-        return `This agent is running a turn, stop it before going back.`;
+        return t(`chat.transcriptView.rewindBusy`);
     }
-    return status === 412
-        ? `This conversation has moved on since you opened it: reload it and try again.`
-        : `That message can no longer be gone back to.`;
+    return status === 412 ? t(`chat.transcriptView.rewindMovedOn`) : t(`chat.transcriptView.rewindGone`);
 };
 
 // A read of the conversation still owed an answer: `reconnecting` while one sent after a long sleep is out, `failed`
@@ -198,8 +197,8 @@ export class TranscriptView extends TranscriptClock {
         // An edit says so in its own words, naming what the prompt replaced; a plain rewind keeps its own wording.
         this.notice(
             reason === `edit`
-                ? `Edited this message, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`
-                : `Went back to here, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
+                ? t(`chat.transcriptView.editedDropped`, { count: dropped }, dropped)
+                : t(`chat.transcriptView.wentBackDropped`, { count: dropped }, dropped),
         );
         this.host.session.value = undefined;
         this.host.error.value = null;
@@ -249,7 +248,7 @@ export class TranscriptView extends TranscriptClock {
         if (message === undefined) {
             // The row left the transcript under an open editor; nothing to edit, so the mode just ends.
             this.editing.value = undefined;
-            this.host.error.value = `That message is no longer in this conversation.`;
+            this.host.error.value = t(`chat.transcriptView.messageGone`);
             return false;
         }
         if (!(await this.rewindTo(message, `edit`))) {
@@ -267,10 +266,10 @@ export class TranscriptView extends TranscriptClock {
         if (placed instanceof SandboxHttpError) {
             this.host.error.value =
                 placed.status === 409
-                    ? `This agent is running a turn: wait for it to finish before speaking as it.`
+                    ? t(`chat.transcriptView.placeBusy`)
                     : placed.status === 404
-                      ? `Could not place the message: this conversation hasn't run a turn yet.`
-                      : `Could not place the message, ${placed.message}`;
+                      ? t(`chat.transcriptView.placeNoTurnYet`)
+                      : t(`chat.transcriptView.placeFailed`, { reason: placed.message });
             return false;
         }
         this.append({ role: `assistant`, text, placed: true });
@@ -283,7 +282,7 @@ export class TranscriptView extends TranscriptClock {
     // The files moved under this conversation without it doing anything: a checkpoint was restored mid-chat.
     // Only a notice, not a truncation: the transcript is intact, only the disk moved.
     noteWorkspaceRestored(): void {
-        this.notice(`The workspace was restored to an earlier point, the files below this line have changed.`);
+        this.notice(t(`chat.transcriptView.workspaceRestored`));
         this.persist(true);
     }
 

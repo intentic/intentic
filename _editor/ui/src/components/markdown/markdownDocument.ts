@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, ref, watch } from "vue";
+import { t } from "../../i18n/index.js";
 
 // Save-timing state machine, no DOM: ships on `@intentic/ui/markdown-document` so tests reach it without a component.
 // Reading a document must never write it; `stored` is the caller's copy of what disk says, so writing only happens when
@@ -91,13 +92,13 @@ export const useSaveDraft = (input: SaveDraftInput): SaveDraft => {
             return ``;
         }
         if (input.saving()) {
-            return `Saving…`;
+            return t(`ui.status.saving`);
         }
         if (dirty.value) {
             // Two promises: `auto` is about to write it, `explicit` won't until told; conflating them costs a prompt.
-            return input.policy() === `auto` ? `Unsaved` : `Not saved yet`;
+            return input.policy() === `auto` ? t(`ui.markdownDocument.unsaved`) : t(`ui.markdownDocument.notSavedYet`);
         }
-        return justSaved.value ? `Saved` : ``;
+        return justSaved.value ? t(`ui.markdownDocument.saved`) : ``;
     });
 
     return { dirty, status, touched, commit, leave };

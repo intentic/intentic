@@ -1,6 +1,7 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, stopAgent } from "../fleet/agentActions";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { otherFleet } from "../fleet/fleetScope";
@@ -97,7 +98,7 @@ const runLand = async (id: string, chosen: PendingAction, at?: string): Promise<
     if (!result.landed) {
         // Reachable from an errored card's drop or a ready card's button; either way a first refusal with a report to
         // read, not a repeat.
-        notice.value = `Landing hit a conflict: open the agent to see what blocked it.`;
+        notice.value = t(`agents.useAgentDrag.landingHitConflict`);
         return;
     }
     if (!result.changed) {
@@ -170,7 +171,7 @@ const perform = async (id: string, chosen: PendingAction, at?: string): Promise<
         await (at === undefined ? refresh() : Promise.resolve(refreshAcross()));
     } catch (caught) {
         if (current()) {
-            notice.value = messageOr(caught, `That didn't work.`);
+            notice.value = messageOr(caught, t(`agents.useAgentDrag.didntWork`));
         }
     } finally {
         lift();

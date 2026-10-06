@@ -1,4 +1,5 @@
 import { type ChatRoute, type Persona, mentionPaths, parsePinned, personaModels } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed, ref, type Ref } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
@@ -87,7 +88,7 @@ const pathsOf = (chat: Conversation, text: string): string[] => {
 // What the reading cost, named: the model that answered, or nothing at all when none was reached.
 const spent = (route: ChatRoute): string => {
     const choice = route.judge === undefined ? undefined : parsePinned(route.judge);
-    return choice === undefined ? `` : ` Read by ${modelLabelFor(choice.provider, choice.model)}.`;
+    return choice === undefined ? `` : ` ${t(`chat.chatRoute.readBy`, { model: modelLabelFor(choice.provider, choice.model) })}`;
 };
 
 const nameOf = (persona: Persona): string => persona.label ?? persona.id;
@@ -100,11 +101,11 @@ const personaClause = (route: ChatRoute, worn: Worn, matched: Persona | undefine
         return [];
     }
     if (worn.persona !== undefined) {
-        return [`Acting as ${nameOf(worn.persona)}.`, verdict.reason];
+        return [t(`chat.chatRoute.actingAs`, { name: nameOf(worn.persona) }), verdict.reason];
     }
     return matched === undefined
-        ? [`No persona matched, so this chat acts as everyone.`, verdict.reason]
-        : [`${nameOf(matched)} matched, but this chat was pointed somewhere by hand first, so nothing moved.`];
+        ? [t(`chat.chatRoute.noPersonaMatched`), verdict.reason]
+        : [t(`chat.chatRoute.matchedButHeld`, { name: nameOf(matched) })];
 };
 
 // A persona that names its own model has already answered which model this chat runs on; the reading's pick stands
@@ -115,19 +116,17 @@ const modelClause = (route: ChatRoute, worn: Worn): readonly string[] => {
         return [];
     }
     if (worn.carried && worn.persona !== undefined) {
-        return [`${nameOf(worn.persona)} brings its own model, so this chat runs on that instead.`];
+        return [t(`chat.chatRoute.personaBringsModel`, { name: nameOf(worn.persona) })];
     }
-    return worn.model ? [verdict.reason, `Every turn after this one stays on it until you change it.`] : [verdict.reason];
+    return worn.model ? [verdict.reason, t(`chat.chatRoute.staysOnIt`)] : [verdict.reason];
 };
 
 // Nothing came back inside the wait: each half says what the chat keeps instead.
 const timedOut = (want: Want): string => {
     if (want.model && want.persona) {
-        return `Couldn't read what this chat opens on in time, so it stays open to everything and runs on the model it already had.`;
+        return t(`chat.chatRoute.timedOutBoth`);
     }
-    return want.model
-        ? `Couldn't choose a model for this chat in time, so it runs on the one it already had.`
-        : `Couldn't read which persona this chat belongs to in time, so it stays open to everything.`;
+    return want.model ? t(`chat.chatRoute.timedOutModel`) : t(`chat.chatRoute.timedOutPersona`);
 };
 
 const verdictLine = (route: ChatRoute | undefined, want: Want, worn: Worn, matched: Persona | undefined): string =>
@@ -136,11 +135,9 @@ const verdictLine = (route: ChatRoute | undefined, want: Want, worn: Worn, match
 // What the row says while the call is out: the halves it is paying for, named, since this is the bill the owner sees.
 const noticeText = (want: Want): string => {
     if (want.model && want.persona) {
-        return `Reading what this chat opens on: one call that picks both its persona and its model.`;
+        return t(`chat.chatRoute.readingBoth`);
     }
-    return want.model
-        ? `Choosing which model this chat runs on: one call on the New chat routing list.`
-        : `Reading which persona this chat belongs to: one call on the New chat routing list.`;
+    return want.model ? t(`chat.chatRoute.readingModel`) : t(`chat.chatRoute.readingPersona`);
 };
 
 // A chat nothing has run in yet: the only state either question can be asked in, and the one the answers are free to

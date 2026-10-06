@@ -7,6 +7,7 @@
         "delete": "Usunąć {name}?",
         "delete2": "Usuń",
         "deleteBranch": "Usuń gałąź",
+        "detached": "odłączony HEAD",
         "filterBranches": "Filtruj gałęzie",
         "filterBranches2": "Filtruj gałęzie…",
         "forceDelete": "Wymuś usunięcie",
@@ -84,6 +85,74 @@
         "rightClick": "Prawy klik",
         "scrollOlderCommits": "Przewiń po starsze commity",
         "softKeepsChangesStaged": "Soft: zostawia Twoje zmiany w indeksie.",
-        "stashedWork": "Odłożona praca"
+        "stashedWork": "Odłożona praca",
+        "uncommittedChanges": "Niezacommitowane zmiany",
+        "failedToLoadCommit": "Nie udało się wczytać commita.",
+        "dialog": {
+            "branch": "Utwórz gałąź",
+            "branchConfirm": "Utwórz",
+            "checkout": "Checkout commita",
+            "checkoutConfirm": "Checkout",
+            "cherryPick": "Cherry-pick commita",
+            "cherryPickConfirm": "Cherry-pick",
+            "drop": "Odrzuć commit",
+            "dropConfirm": "Odrzuć",
+            "merge": "Scal do bieżącej gałęzi",
+            "mergeConfirm": "Scal",
+            "rebase": "Rebase bieżącej gałęzi",
+            "rebaseConfirm": "Rebase",
+            "reset": "Zresetuj bieżącą gałąź",
+            "resetConfirm": "Zresetuj",
+            "revert": "Revert commita",
+            "revertConfirm": "Revert",
+            "tag": "Dodaj tag",
+            "tagConfirm": "Dodaj tag"
+        },
+        "body": {
+            "checkout": "Przełącz bezpośrednio na {sha} (odłączony HEAD). Niezacommitowane zmiany to zablokują.",
+            "cherryPick": "Skopiuj zmianę z {sha} na bieżącą gałąź jako nowy commit.",
+            "drop": "Usuń {sha} z historii, odtwarzając commity po nim na jego rodzicu.",
+            "merge": "Scal {sha} do bieżącej gałęzi ({branch}).",
+            "rebase": "Odtwórz commity bieżącej gałęzi na {sha}.",
+            "reset": "Przenieś bieżącą gałąź ({branch}) na {sha}.",
+            "revert": "Dodaj nowy commit, który cofa {sha}. Nic nie jest przepisywane."
+        },
+        "conflict": "Akcja „{action}” nie przeszła czysto: konflikt albo niezacommitowane zmiany. Rozwiąż to w terminalu.",
+        "resetSoft": "Miękki",
+        "resetMixed": "Mieszany",
+        "resetHard": "Twardy"
+    },
+    "useAsyncAction": {
+        "actionFailed": "Akcja się nie powiodła."
+    },
+    "useBranches": {
+        "checkoutFailed": "Checkout się nie powiódł. Najpierw zrób commit, dodaj do indeksu albo odrzuć swoje zmiany.",
+        "couldntCreate": "Nie udało się utworzyć tej gałęzi.",
+        "couldntDelete": "Nie udało się usunąć tej gałęzi.",
+        "couldntPush": "Nie udało się wypchnąć tej gałęzi.",
+        "pushRefused": "Push został odrzucony.",
+        "pushRefusedBecause": "Push został odrzucony: {reason}",
+        "unmerged": "Gałąź ma niescalone commity, usunięcie jej by je utraciło."
+    },
+    "useOperation": {
+        "couldntAbort": "Nie udało się przerwać: spróbuj w terminalu."
+    },
+    "useStashes": {
+        "conflict": "Nie udało się zastosować bez konfliktu: rozwiąż go w panelu Zmiany. Stash nadal tam jest.",
+        "couldntApply": "Nie udało się zastosować tego stasha.",
+        "couldntDrop": "Nie udało się odrzucić tego stasha.",
+        "nothingApplied": "Nic nie zostało zastosowane: {reason}. Stash nadal tam jest."
+    },
+    "useUndo": {
+        "amend": "Cofnij amend",
+        "cherryPick": "Cofnij cherry-pick",
+        "commit": "Cofnij commit",
+        "couldntUndo": "Nie udało się cofnąć.",
+        "merge": "Cofnij scalenie",
+        "other": "Cofnij ostatnią akcję",
+        "pull": "Cofnij pull",
+        "rebase": "Cofnij rebase",
+        "reset": "Cofnij reset",
+        "revert": "Cofnij revert"
     }
 }

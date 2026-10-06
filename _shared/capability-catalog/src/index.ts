@@ -1099,6 +1099,10 @@ const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> =
     browser: BROWSER_CREDENTIAL_FIELDS,
 };
 
+// The fields the core adds to a contributed tile of this kind, for a reader that renders or translates them apart from
+// any one tile (the web's copy of their words).
+export const coreFields = (kind: CapabilityKind): readonly CapabilityField[] => CORE_FIELDS[kind] ?? [];
+
 // A contribution rendered as a catalog tile; the manifest is the single source of name/logo/fields/guide. The
 // contribution's id becomes the tile id and the pinned discriminator; an unknown category lands under "extend".
 export const contributionEntry = (contribution: CapabilityContribution): CapabilityCatalogEntry => {

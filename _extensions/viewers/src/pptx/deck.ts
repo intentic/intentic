@@ -47,7 +47,8 @@ const MIMES: Record<string, string> = {
     webp: "image/webp",
     svg: "image/svg+xml",
 };
-const GRAPHICS: Record<string, string> = { chart: "Chart", diagram: "SmartArt diagram", ole: "Embedded object" };
+// Built when read, so the words follow the language on screen.
+const graphics = (): Readonly<Record<string, string>> => ({ chart: t(`deck.chart`), diagram: t(`deck.smartArt`), ole: t(`deck.embeddedObject`) });
 
 /** A shape's box, mapped out of whatever coordinate space its groups nest it in. */
 type Mapper = (frame: Frame) => Frame;
@@ -251,7 +252,7 @@ const graphicBoxOf = (holder: Element, context: SlideContext, map: Mapper): Box 
         return tableBoxOf(table, frame, context);
     }
     const uri = attr(data, "uri") ?? "";
-    const label = Object.entries(GRAPHICS).find(([kind]) => uri.includes(`/${kind}`))?.[1];
+    const label = Object.entries(graphics()).find(([kind]) => uri.includes(`/${kind}`))?.[1];
     return label === undefined ? undefined : { kind: "unsupported", ...frame, label };
 };
 

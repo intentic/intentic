@@ -2,6 +2,7 @@ import { invalidatePushedQueries } from "../../../../lib/pushInvalidation";
 import { roleAtLeast, type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
+import { t } from "@intentic/ui/i18n";
 import { desktopSyncLink } from "../../../../app/environments/desktop";
 import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
 import { onRuntimeChanged } from "../../live/runtimeEvents";
@@ -27,7 +28,7 @@ export interface SyncPairing {
 export const mintSyncPairing = async (mode: SyncMode): Promise<SyncPairing> => {
     const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, { method: `POST` });
     if (!response.ok) {
-        throw new Error(`Couldn't start desktop sync (${response.status}).`);
+        throw new Error(t(`sandbox.useDesktopSync.startFailed`, { status: String(response.status) }));
     }
     const body = (await response.json()) as { token: string; mode?: SyncMode };
     return { token: body.token, mode: body.mode ?? `sync` };

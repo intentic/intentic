@@ -17,7 +17,7 @@ describe(`the vocabulary table`, () => {
 
         expect(Object.keys(maker).toSorted()).toEqual(Object.keys(developer).toSorted());
         for (const [key, value] of Object.entries({ ...developer, ...maker })) {
-            expect(value.trim(), key).not.toBe(``);
+            expect((typeof value === `function` ? value(2) : value).trim(), key).not.toBe(``);
         }
     });
 
@@ -32,6 +32,12 @@ describe(`the vocabulary table`, () => {
         expect(vocabularyFor(`maker`).landed).toBe(`Accepted`);
         expect(vocabularyFor(`maker`).couldntLand).toBe(`Couldn't accept`);
         expect(vocabularyFor(`maker`).publish).toBe(vocabularyFor(`maker`).push);
+    });
+
+    it(`counts the changes in one message per audience`, () => {
+        expect(vocabularyFor(`developer`).pendingChanges(1)).toBe(`1 uncommitted change`);
+        expect(vocabularyFor(`developer`).pendingChanges(6)).toBe(`6 uncommitted changes`);
+        expect(vocabularyFor(`maker`).pendingChanges(3)).toBe(`3 unsaved changes`);
     });
 
     it(`follows the audience preference as it changes`, () => {

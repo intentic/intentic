@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
+import { t } from "@intentic/ui/i18n";
 import { BUNDLE_EXPORTS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
@@ -48,7 +49,7 @@ export const bundleDownloadUrl = async (name: string): Promise<string> => {
     const { ticket } = await sandboxJson<{ ticket: string }>(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: `POST` });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
-        throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
+        throw new Error(t(`sandbox.useBundleExports.notReachableYet`));
     }
     return `${base}/bundles/download?${new URLSearchParams({ name, ticket }).toString()}`;
 };

@@ -1,5 +1,11 @@
 import { ZoneSchema } from "@intentic/sandbox-contract/time";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { cronOf, defaultSchedule, nextIn, parseCron, type ScheduleState, scheduleLabel, scheduleTriggerLabel, since } from "./cronSchedule";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
+
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 const schedule = (overrides: Partial<ScheduleState>): ScheduleState => ({ ...defaultSchedule(), ...overrides });
 

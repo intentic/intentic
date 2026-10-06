@@ -19,7 +19,7 @@ const act = async (id: string, action: (id: string) => Promise<unknown>): Promis
     try {
         await action(id);
     } catch (caught) {
-        actionError.value = caught instanceof Error ? caught.message : `The action failed.`;
+        actionError.value = caught instanceof Error ? caught.message : t(`common.actionFailed`);
     } finally {
         busy.value = undefined;
     }
@@ -30,10 +30,10 @@ const DAY = 86_400_000;
 const when = (at: number): string => {
     const ago = Date.now() - at;
     if (ago < 3_600_000) {
-        return `${Math.max(1, Math.round(ago / 60_000))}m ago`;
+        return t(`sharedConversations.minutesAgo`, { n: Math.max(1, Math.round(ago / 60_000)) });
     }
     if (ago < DAY) {
-        return `${Math.round(ago / 3_600_000)}h ago`;
+        return t(`sharedConversations.hoursAgo`, { n: Math.round(ago / 3_600_000) });
     }
     // Through the kit, not `toLocaleDateString` directly: the kit's formatters follow the language the app is in and
     // re-render when it changes, which a formatter built here does not.

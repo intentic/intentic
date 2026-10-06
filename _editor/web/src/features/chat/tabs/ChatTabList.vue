@@ -374,7 +374,7 @@ defineExpose({ beginRename: actions.beginRename });
                     >
                         <template #meta>
                             <span class="min-w-0 truncate text-subtle">
-                                {{ run.steps.filter((step) => step.state === `done`).length }}/{{ run.steps.length }} {{ t(`chat.chatTabList.steps`)
+                                {{ t(`chat.chatTabList.stepsDone`, { done: run.steps.filter((step) => step.state === `done`).length, total: run.steps.length })
                                 }}<template v-if="runningTitles(run).length > 0"> · {{ runningTitles(run).join(` · `) }}</template>
                             </span>
                         </template>

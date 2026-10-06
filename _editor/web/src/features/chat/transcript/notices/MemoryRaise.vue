@@ -31,7 +31,7 @@ const apply = async (resources: ResourcesForm): Promise<void> => {
     try {
         await selfResources.apply(resources);
     } catch (refusal) {
-        failed.value = messageOr(refusal, `That didn't work on this device.`);
+        failed.value = messageOr(refusal, t(`chat.memoryRaise.didntWork`));
     }
 };
 </script>

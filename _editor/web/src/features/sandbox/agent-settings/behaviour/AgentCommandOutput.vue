@@ -97,8 +97,8 @@ const savingsVerdict = computed(() => {
     const input = savings.value?.input;
     if (input === undefined || input.commands === 0) {
         return {
-            value: `Nothing yet`,
-            unit: `no commands cleaned so far`,
+            value: t(`sandbox.agentCommandOutput.nothingYet`),
+            unit: t(`sandbox.agentCommandOutput.noCommandsCleaned`),
             tone: `muted`,
             detail: t(`sandbox.agentCommandOutput.ledgerFillsAssistantRuns`),
             evidence: ``,
@@ -107,12 +107,14 @@ const savingsVerdict = computed(() => {
     const measured = input.holdout.measuredSavedPct;
     return {
         value: `${input.savedPct}%`,
-        unit: `of command output removed, all time`,
+        unit: t(`sandbox.agentCommandOutput.ofOutputRemoved`),
         tone: `success`,
-        detail: `~${formatTokens(input.rawTokens)} → ~${formatTokens(input.emittedTokens)} tokens over ${input.commands} commands${
-            measured === undefined ? `` : ` · ${measured}% measured against the holdout`
-        }`,
-        evidence: input.updatedAt === undefined ? `` : `last command ${timeAgo(input.updatedAt, { days: true })}`,
+        detail: `${t(
+            `sandbox.agentCommandOutput.tokensOverCommands`,
+            { raw: formatTokens(input.rawTokens), emitted: formatTokens(input.emittedTokens), count: input.commands },
+            input.commands,
+        )}${measured === undefined ? `` : ` · ${t(`sandbox.agentCommandOutput.measuredAgainstHoldout`, { pct: measured })}`}`,
+        evidence: input.updatedAt === undefined ? `` : t(`sandbox.agentCommandOutput.lastCommand`, { ago: timeAgo(input.updatedAt, { days: true }) }),
     } as const;
 });
 

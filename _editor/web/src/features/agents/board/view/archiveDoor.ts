@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
 import type { BoardView, ViewEvent } from "./boardView";
 
@@ -45,7 +46,8 @@ export const useArchiveDoor = (host: DoorHost) => {
             await agents.purgeArchived();
             host.move({ kind: `purged` });
             // The one report here nothing on screen can re-derive, since what it is about is gone.
-            announcement.value = `${aimedAt - agents.archived.value.length} archived agents deleted`;
+            const deleted = aimedAt - agents.archived.value.length;
+            announcement.value = t(`agents.archiveDoor.deleted`, { count: deleted }, deleted);
         } finally {
             purging.value = false;
         }
@@ -55,7 +57,8 @@ export const useArchiveDoor = (host: DoorHost) => {
         pulsing.value = true;
         clearTimeout(pulseTimer);
         pulseTimer = setTimeout(() => (pulsing.value = false), PULSE_MS);
-        announcement.value = `${agents.undoable.value.length} agent${agents.undoable.value.length === 1 ? `` : `s`} archived`;
+        const archived = agents.undoable.value.length;
+        announcement.value = t(`agents.useAgentsArchive.archivedCount`, { count: archived }, archived);
     });
     onScopeDispose(() => clearTimeout(pulseTimer));
     return { announcement, pendingPurge, purging, pulsing, toggleArchive, confirmPurge };

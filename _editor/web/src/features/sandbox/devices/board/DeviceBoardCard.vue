@@ -111,7 +111,7 @@ const turning = computed(() => sandboxesWorking(machine.key));
                                 class="h-1.5 w-1.5 rounded-full"
                                 :class="line.running ? `bg-success` : `bg-subtle`"
                                 role="img"
-                                :aria-label="line.running ? `running` : `stopped`"
+                                :aria-label="line.running ? t(`sandbox.deviceBoardCard.running`) : t(`sandbox.deviceBoardCard.stopped`)"
                             ></span>
                             <Icon v-else name="box" class="text-2xs text-subtle" aria-hidden="true" />
                         </span>

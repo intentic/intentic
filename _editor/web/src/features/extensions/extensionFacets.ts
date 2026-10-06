@@ -18,13 +18,15 @@ export interface ExtensionFacet {
     readonly surface: boolean;
 }
 
-const counted = (count: number, noun: string, plural = `${noun}s`): string => (count === 1 ? noun : `${count} ${plural}`);
+// An unknown contribution kind is named by its schema key, so it is counted the same way in every language.
+const counted = (count: number, noun: string): string => (count === 1 ? noun : `${count} ${noun}`);
 
-// Sidebar families a view can claim, named for where the user finds it, not the enum.
+// Sidebar families a view can claim, named for where the user finds it, not the enum. Functions, so the words are
+// built in the language active when the row renders.
 const VIEW_SURFACES = {
-    rail: { noun: `rail tile`, plural: `rail tiles` },
-    sandbox: { noun: `sandbox tab`, plural: `sandbox tabs` },
-    directory: { noun: `workspace panel`, plural: `workspace panels` },
+    rail: (count: number): string => t(`extensions.extensionFacets.railTiles`, { count }, count),
+    sandbox: (count: number): string => t(`extensions.extensionFacets.sandboxTabs`, { count }, count),
+    directory: (count: number): string => t(`extensions.extensionFacets.workspacePanels`, { count }, count),
 } as const;
 
 export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
@@ -42,18 +44,18 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
 
     // Ordered by how visible the contribution is: what the reader can point at first, plumbing last.
     take(`views`, (views) =>
-        Object.entries(VIEW_SURFACES).flatMap(([surface, { noun, plural }]) => {
+        Object.entries(VIEW_SURFACES).flatMap(([surface, label]) => {
             const matching = views.filter((view) => view.surface === surface);
             if (matching.length === 0) {
                 return [];
             }
-            return [{ kind: `views`, label: counted(matching.length, noun, plural), names: matching.map((view) => view.label), surface: true }];
+            return [{ kind: `views`, label: label(matching.length), names: matching.map((view) => view.label), surface: true }];
         }),
     );
     take(`viewers`, (viewers) => [
         {
             kind: `viewers`,
-            label: counted(viewers.length, `file viewer`),
+            label: t(`extensions.extensionFacets.fileViewers`, { count: viewers.length }, viewers.length),
             names: viewers.flatMap((viewer) => viewer.extensions.map((extension) => `.${extension}`)),
             surface: true,
         },
@@ -62,18 +64,23 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     take(`documents`, (documents) => [
         {
             kind: `documents`,
-            label: counted(documents.length, `folder document`),
+            label: t(`extensions.extensionFacets.folderDocuments`, { count: documents.length }, documents.length),
             names: documents.map((document) => document.label),
             surface: true,
         },
     ]);
     take(`commands`, (commands) => [
-        { kind: `commands`, label: counted(commands.length, `command`), names: commands.map((command) => command.title), surface: true },
+        {
+            kind: `commands`,
+            label: t(`extensions.extensionFacets.commands`, { count: commands.length }, commands.length),
+            names: commands.map((command) => command.title),
+            surface: true,
+        },
     ]);
     take(`capabilities`, (capabilities) => [
         {
             kind: `capabilities`,
-            label: counted(capabilities.length, `capability card`),
+            label: t(`extensions.extensionFacets.capabilityCards`, { count: capabilities.length }, capabilities.length),
             names: capabilities.map((contribution) => contribution.catalog.name),
             surface: true,
         },
@@ -90,7 +97,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     take(`processes`, (processes) => [
         {
             kind: `processes`,
-            label: counted(processes.length, `background service`),
+            label: t(`extensions.extensionFacets.backgroundServices`, { count: processes.length }, processes.length),
             names: processes.map((process) => process.name),
             surface: true,
         },
@@ -99,23 +106,33 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
         {
             kind: `agent`,
             label: t(`extensions.extensionFacets.agentPlugin`),
-            names: [`skills, subagents, hooks and MCP servers, loaded each turn`],
+            names: [t(`extensions.extensionFacets.agentPluginNames`)],
             surface: true,
         },
     ]);
     take(`bin`, (bin) => [
-        { kind: `bin`, label: t(`extensions.extensionFacets.agentCli`), names: [`executables from ${bin}/, on the agent's PATH`], surface: true },
+        {
+            kind: `bin`,
+            label: t(`extensions.extensionFacets.agentCli`),
+            names: [t(`extensions.extensionFacets.binNames`, { dir: bin })],
+            surface: true,
+        },
     ]);
     take(`environment`, (environment) => [
         {
             kind: `environment`,
             label: t(`extensions.extensionFacets.imageLayer`),
-            names: [`${environment.fragment}, applied at the next environment rebuild`],
+            names: [t(`extensions.extensionFacets.environmentNames`, { fragment: environment.fragment })],
             surface: true,
         },
     ]);
     take(`settings`, (settings) => [
-        { kind: `settings`, label: counted(settings.length, `setting`), names: settings.map((setting) => setting.title), surface: true },
+        {
+            kind: `settings`,
+            label: t(`extensions.extensionFacets.settings`, { count: settings.length }, settings.length),
+            names: settings.map((setting) => setting.title),
+            surface: true,
+        },
     ]);
     // Not a place; explains why a view refreshes without polling. Worth stating once the row is open, not on it.
     take(`files`, (files) => [
@@ -128,7 +145,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
         }
         const count = Array.isArray(value) ? value.length : 1;
         if (count > 0) {
-            facets.push({ kind, label: counted(count, kind, kind), names: [], surface: true });
+            facets.push({ kind, label: counted(count, kind), names: [], surface: true });
         }
     }
     return facets;

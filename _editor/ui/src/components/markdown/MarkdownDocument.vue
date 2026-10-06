@@ -175,7 +175,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
             <span class="min-w-0 text-2xs text-subtle"><slot name="note" /></span>
             <span class="flex shrink-0 items-center gap-2">
                 <span v-if="count !== undefined" class="text-2xs tabular-nums" :class="over > 0 ? `text-danger` : `text-muted`">{{ count }}</span>
-                <span class="text-2xs" :class="status === `Saved` ? `text-success` : `text-subtle`">{{ status }}</span>
+                <span class="text-2xs" :class="status === t(`ui.markdownDocument.saved`) ? `text-success` : `text-subtle`">{{ status }}</span>
                 <slot name="actions" />
                 <!-- Always on screen under `explicit`, not appearing on dirty, since a control that materializes gets pressed by accident; disabled instead. -->
                 <Button

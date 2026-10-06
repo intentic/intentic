@@ -47,8 +47,8 @@ const installOn = async (device: Device): Promise<void> => {
     // flipped, so the machine's card and the Devices tile carry it while the reader looks elsewhere.
     const endMark = beginDeviceWork({
         machine: machineKeyOf(devices.value, device),
-        doing: `Setting file syncing up`,
-        what: `Setting file syncing up on ${device.label}`,
+        doing: t(`sandbox.deviceOps.workingInstall`),
+        what: t(`sandbox.deviceOps.doingOn`, { doing: t(`sandbox.deviceOps.workingInstall`), machine: device.label }),
     });
     try {
         const result = await runDeviceCommand(id, `sync-install`, {

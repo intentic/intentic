@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
 import type { LineStat } from "@intentic/code-read";
@@ -17,6 +18,8 @@ import DiffView from "./DiffView.vue";
 import ProseDiffView from "./ProseDiffView.vue";
 import { sheetOfDelimited } from "./table/tableDiff";
 import TableDiffView from "./table/TableDiffView.vue";
+
+const t = useT();
 
 // One file's diff, whichever of seven shapes it arrives in; every review surface (Changes tab, phone, agent
 // review) renders this same fork. Loading state stays with the host; content does not. The seven shapes, decided
@@ -91,15 +94,16 @@ const size = computed(() => {
 const note = computed(() => {
     const regions = patched.value?.regions;
     if (regions === undefined) {
-        return `${size.value} — too large to diff in the browser, and the change too large to send as a patch.`;
+        return t(`workspace.fileDiffPane.tooLargeForPatch`, { size: size.value });
     }
     if (partial?.beforeBytes === undefined || partial.afterBytes === undefined) {
-        return partial?.more === true ? `${size.value} — the start of it; too large to show whole.` : `${size.value} — the whole file.`;
+        return partial?.more === true
+            ? t(`workspace.fileDiffPane.startOnly`, { size: size.value })
+            : t(`workspace.fileDiffPane.wholeFile`, { size: size.value });
     }
-    const counted = `${regions} changed ${regions === 1 ? `region` : `regions`}`;
     return partial.more === true
-        ? `${size.value} — the first ${counted}; more follow further down the file.`
-        : `${size.value} — ${counted}; the rest of the file is unchanged.`;
+        ? t(`workspace.fileDiffPane.firstRegions`, { size: size.value, count: regions }, regions)
+        : t(`workspace.fileDiffPane.allRegions`, { size: size.value, count: regions }, regions);
 });
 </script>
 

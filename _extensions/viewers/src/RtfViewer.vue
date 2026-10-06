@@ -2,6 +2,7 @@
 import { useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
+import { t } from "./i18n.js";
 import { renderBlocks } from "./odf/render";
 import { parseRtf } from "./rtf/parse";
 
@@ -58,7 +59,7 @@ const render = async (source: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        error.value = caught instanceof Error ? caught.message : `Could not render this document.`;
+        error.value = caught instanceof Error ? caught.message : t(`common.couldNotRenderDocument`);
     } finally {
         if (isLatest()) {
             loading.value = false;

@@ -55,7 +55,7 @@ const share = async (): Promise<void> => {
         result.value = await sandboxRpc.share.create({ conversationId: props.conversationId, title: name.value.trim(), detail: detail.value });
         emit(`shared`);
     } catch (caught) {
-        error.value = caught instanceof Error ? caught.message : `The conversation could not be shared.`;
+        error.value = caught instanceof Error ? caught.message : t(`chat.chatShareDialog.couldNotShare`);
     } finally {
         busy.value = false;
     }

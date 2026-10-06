@@ -139,7 +139,9 @@ const attemptNumber = computed(() =>
     props.fix === undefined ? undefined : fixAttemptOf(ciFixConversationId(props.run.repo, props.run.runId), props.fix.id),
 );
 // Only worth a word past the first: "attempt 1" on every chip would be noise, "attempt 3" is the story.
-const attemptWord = computed(() => (attemptNumber.value === undefined || attemptNumber.value <= 1 ? undefined : `attempt ${attemptNumber.value}`));
+const attemptWord = computed(() =>
+    attemptNumber.value === undefined || attemptNumber.value <= 1 ? undefined : t(`pipelineRunRow.attemptWord`, { n: attemptNumber.value }),
+);
 /* An attempt is continuable only when it has ended; landed attempts are history. */
 const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
     const state = fixState.value;
@@ -148,10 +150,10 @@ const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
     }
     const files = props.fix?.diff?.files ?? 0;
     const summary = [
-        `Attempt ${attemptNumber.value ?? 1}`,
+        t(`pipelineRunRow.attemptSummary`, { n: attemptNumber.value ?? 1 }),
         props.fix?.model,
         state.label.toLowerCase(),
-        files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`} on its branch`,
+        files === 0 ? undefined : t(`pipelineRunRow.filesOnBranch`, { count: files }, files),
     ]
         .filter((part) => part !== undefined)
         .join(` · `);
@@ -207,10 +209,10 @@ const compactAge = (at: number): string => {
     const minutes = Math.floor((Date.now() - at) / 60_000);
     if (minutes < 60) {
         // `<1m`, not `now`: 'Agent working now' reads redundant, 'Fix ready now' reads like an invitation.
-        return minutes < 1 ? `<1m` : `${minutes}m`;
+        return minutes < 1 ? t(`pipelineRunRow.age.underMinute`) : t(`pipelineRunRow.age.minutes`, { n: minutes });
     }
     const hours = Math.floor(minutes / 60);
-    return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+    return hours < 24 ? t(`pipelineRunRow.age.hours`, { n: hours }) : t(`pipelineRunRow.age.days`, { n: Math.floor(hours / 24) });
 };
 const fixAge = computed<string | undefined>(() => {
     const agent = props.fix;
@@ -222,7 +224,7 @@ const fixSince = computed<string | undefined>(() => {
     if (agent === undefined) {
         return undefined;
     }
-    return agent.startedAt === undefined ? timeAgo(agent.updatedAt) : `started ${timeAgo(agent.startedAt)}`;
+    return agent.startedAt === undefined ? timeAgo(agent.updatedAt) : t(`pipelineRunRow.startedAgo`, { ago: timeAgo(agent.startedAt) });
 });
 // Spells out what the chip abbreviates, for the tooltip and screen reader. Model name and file count live only here;
 // the chip's numbers say the same in fewer pixels.
@@ -234,7 +236,7 @@ const fixFacts = computed<string | undefined>(() => {
     }
     const files = agent.diff?.files ?? 0;
     return (
-        [attemptWord.value, fixSince.value, agent.model, spend.value, files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`}`]
+        [attemptWord.value, fixSince.value, agent.model, spend.value, files === 0 ? undefined : t(`pipelineRunRow.files`, { count: files }, files)]
             .filter((part) => part !== undefined)
             .join(` · `) || undefined
     );
@@ -291,7 +293,9 @@ const fixAria = computed<string | undefined>(() => {
     if (state === undefined) {
         return undefined;
     }
-    return `Fix agent: ${state.label.toLowerCase()}${fixFacts.value === undefined ? `` : `, ${fixFacts.value}`} — open the conversation`;
+    return fixFacts.value === undefined
+        ? t(`pipelineRunRow.fixAria`, { state: state.label.toLowerCase() })
+        : t(`pipelineRunRow.fixAriaFacts`, { state: state.label.toLowerCase(), facts: fixFacts.value });
 });
 
 // One card: what happened leads; why the button is quiet follows as one more row, its headline against the branch.
@@ -329,7 +333,7 @@ const openStartOver = (): void => {
     if (el === undefined) {
         return;
     }
-    void fixModel.choose(el, `Start over`).then((committed) => {
+    void fixModel.choose(el, t(`pipelineRunRow.startOver`)).then((committed) => {
         if (committed) {
             startFix();
         }

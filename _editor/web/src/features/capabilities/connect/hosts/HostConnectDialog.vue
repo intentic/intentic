@@ -111,7 +111,7 @@ const command = computed(() => {
     const bash = bashCommand(`deviceSh`, `env SANDBOX_URL='${url}' PAIR_TOKEN='${pairToken.value}' `, ``);
     return fromPowerShell.value ? `wsl -d ${distro.value} --exec sh -c "${bash}"` : bash;
 });
-const shell = computed(() => (props.platform === `windows` || fromPowerShell.value ? `PowerShell` : `a terminal`));
+const shell = computed(() => (props.platform === `windows` || fromPowerShell.value ? `PowerShell` : t(`capabilities.hostConnectDialog.aTerminal`)));
 
 // Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching.
 watch(

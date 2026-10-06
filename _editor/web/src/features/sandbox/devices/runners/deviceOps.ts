@@ -71,106 +71,131 @@ const PAIRED_WITH: Partial<Record<SyncCommand, SyncCommand>> = {
 // drift apart.
 // `sync-install` rides these too: turning sync ON is the same kind of act as the switches beside it, and the row it
 // is pressed on is the row its answer belongs under.
-const COMMAND_REFUSAL: Record<SyncCommand, string> = {
-    "mirror-off": `That device didn't change its port mirroring.`,
-    "mirror-on": `That device didn't change its port mirroring.`,
-    "mirror-ignore": `That device didn't change what it does with that port.`,
-    "mirror-unignore": `That device didn't change what it does with that port.`,
-    "sync-pause": `That device didn't pause its file syncing.`,
-    "sync-resume": `That device didn't resume its file syncing.`,
-    "sync-unpair": `That device didn't unpair this sandbox.`,
-    "sync-install": `That device didn't start syncing this sandbox.`,
-    "sync-clean": `That device didn't clear the build output holding its deletions back.`,
-};
+// Built when read, so each sentence follows the language on screen.
+const commandRefusal = (command: SyncCommand): string =>
+    ({
+        "mirror-off": t(`sandbox.deviceOps.refusedMirroring`),
+        "mirror-on": t(`sandbox.deviceOps.refusedMirroring`),
+        "mirror-ignore": t(`sandbox.deviceOps.refusedPort`),
+        "mirror-unignore": t(`sandbox.deviceOps.refusedPort`),
+        "sync-pause": t(`sandbox.deviceOps.refusedPause`),
+        "sync-resume": t(`sandbox.deviceOps.refusedResume`),
+        "sync-unpair": t(`sandbox.deviceOps.refusedUnpair`),
+        "sync-install": t(`sandbox.deviceOps.refusedInstall`),
+        "sync-clean": t(`sandbox.deviceOps.refusedClean`),
+    })[command];
 
-const COMMAND_UNREACHED: Record<SyncCommand, string> = {
-    "mirror-off": `Couldn't reach that device to change its port mirroring.`,
-    "mirror-on": `Couldn't reach that device to change its port mirroring.`,
-    "mirror-ignore": `Couldn't reach that device to change what it does with that port.`,
-    "mirror-unignore": `Couldn't reach that device to change what it does with that port.`,
-    "sync-pause": `Couldn't reach that device to pause its file syncing.`,
-    "sync-resume": `Couldn't reach that device to resume its file syncing.`,
-    "sync-unpair": `Couldn't reach that device to unpair this sandbox.`,
-    "sync-install": `Couldn't reach that device to start syncing this sandbox.`,
-    "sync-clean": `Couldn't reach that device to clear the build output holding its deletions back.`,
-};
+const commandUnreached = (command: SyncCommand): string =>
+    ({
+        "mirror-off": t(`sandbox.deviceOps.unreachedMirroring`),
+        "mirror-on": t(`sandbox.deviceOps.unreachedMirroring`),
+        "mirror-ignore": t(`sandbox.deviceOps.unreachedPort`),
+        "mirror-unignore": t(`sandbox.deviceOps.unreachedPort`),
+        "sync-pause": t(`sandbox.deviceOps.unreachedPause`),
+        "sync-resume": t(`sandbox.deviceOps.unreachedResume`),
+        "sync-unpair": t(`sandbox.deviceOps.unreachedUnpair`),
+        "sync-install": t(`sandbox.deviceOps.unreachedInstall`),
+        "sync-clean": t(`sandbox.deviceOps.unreachedClean`),
+    })[command];
 
 // Update and restart both stop the resident process carrying the request, so the page can't claim an
 // outcome: it shows what was watched, then this, and the confirmation is the next poll's version. The
 // connection dropping isn't announced here — the log says it in the moment it happens.
-const AGENT_ASKED: Record<DeviceAgentOp, string> = {
-    upgrade: `Updating. The new version shows here when its loop comes back.`,
-    restart: `Restarting. This page catches up when its loop comes back.`,
-    // The machine restarts its agent against the links it has left, so this page hears the new count the same way it
-    // hears a new version: on the loop's next hello, not from this request.
-    "forget-unreachable": `Dropping the links that stopped answering. The count here catches up when its loop comes back.`,
-};
+const agentAsked = (op: DeviceAgentOp): string =>
+    ({
+        upgrade: t(`sandbox.deviceOps.askedUpgrade`),
+        restart: t(`sandbox.deviceOps.askedRestart`),
+        // The machine restarts its agent against the links it has left, so this page hears the new count the same way it
+        // hears a new version: on the loop's next hello, not from this request.
+        "forget-unreachable": t(`sandbox.deviceOps.askedForget`),
+    })[op];
 
 // What the Devices row and the machine's card say while one of these is out on a machine. `logs` is absent: reading a
 // tail is not work being done to anything, and a row that marks it would be marking almost every visit.
-const VERB_WORKING: Partial<Record<SandboxVerb, string>> = {
-    start: `Starting`,
-    stop: `Stopping`,
-    restart: `Restarting`,
-    update: `Updating`,
-    rollback: `Rolling back`,
-    resources: `Resizing`,
-    remove: `Removing`,
+const verbWorking = (verb: SandboxVerb, name: string): string | undefined => {
+    switch (verb) {
+        case `start`:
+            return t(`sandbox.deviceOps.workingStart`, { name });
+        case `stop`:
+            return t(`sandbox.deviceOps.workingStop`, { name });
+        case `restart`:
+            return t(`sandbox.deviceOps.workingRestart`, { name });
+        case `update`:
+            return t(`sandbox.deviceOps.workingUpdate`, { name });
+        case `rollback`:
+            return t(`sandbox.deviceOps.workingRollback`, { name });
+        case `resources`:
+            return t(`sandbox.deviceOps.workingResources`, { name });
+        case `remove`:
+            return t(`sandbox.deviceOps.workingRemove`, { name });
+        default:
+            return undefined;
+    }
 };
 
-const SYNC_WORKING: Record<SyncCommand, string> = {
-    "mirror-off": `Turning port mirroring off`,
-    "mirror-on": `Turning port mirroring on`,
-    "mirror-ignore": `Taking a port off localhost`,
-    "mirror-unignore": `Putting a port back on localhost`,
-    "sync-pause": `Pausing file syncing`,
-    "sync-resume": `Resuming file syncing`,
-    "sync-unpair": `Unpairing this sandbox`,
-    "sync-install": `Setting file syncing up`,
-    "sync-clean": `Clearing build output`,
-};
+// The same, over several rows at once: "Stopping 3 sandboxes".
+const batchWorking = (verb: Exclude<BatchVerb, `remove`>, count: number): string =>
+    ({
+        start: t(`sandbox.deviceOps.batchWorkingStart`, { count }, count),
+        stop: t(`sandbox.deviceOps.batchWorkingStop`, { count }, count),
+        restart: t(`sandbox.deviceOps.batchWorkingRestart`, { count }, count),
+        update: t(`sandbox.deviceOps.batchWorkingUpdate`, { count }, count),
+    })[verb];
 
-const AGENT_WORKING: Record<DeviceAgentOp, string> = {
-    upgrade: `Updating a machine's agents`,
-    restart: `Restarting a device's agent`,
-    "forget-unreachable": `Dropping a device's dead links`,
-};
+const syncWorking = (command: SyncCommand): string =>
+    ({
+        "mirror-off": t(`sandbox.deviceOps.workingMirrorOff`),
+        "mirror-on": t(`sandbox.deviceOps.workingMirrorOn`),
+        "mirror-ignore": t(`sandbox.deviceOps.workingIgnore`),
+        "mirror-unignore": t(`sandbox.deviceOps.workingUnignore`),
+        "sync-pause": t(`sandbox.deviceOps.workingPause`),
+        "sync-resume": t(`sandbox.deviceOps.workingResume`),
+        "sync-unpair": t(`sandbox.deviceOps.workingUnpair`),
+        "sync-install": t(`sandbox.deviceOps.workingInstall`),
+        "sync-clean": t(`sandbox.deviceOps.workingClean`),
+    })[command];
 
-const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+const agentWorking = (op: DeviceAgentOp): string =>
+    ({
+        upgrade: t(`sandbox.deviceOps.workingAgentUpgrade`),
+        restart: t(`sandbox.deviceOps.workingAgentRestart`),
+        "forget-unreachable": t(`sandbox.deviceOps.workingAgentForget`),
+    })[op];
+
+/** A run's words said away from the machine's card, so they name the machine. */
+const doingOn = (doing: string, machine: string): string => t(`sandbox.deviceOps.doingOn`, { doing, machine });
 
 // A batch's one answer, in the verb's own tense: "3 sandboxes stopped", "1 sandbox didn't stop".
-const BATCH_DONE: Record<Exclude<BatchVerb, `remove`>, string> = { start: `started`, stop: `stopped`, restart: `restarted`, update: `updated` };
-const BATCH_REFUSED: Record<Exclude<BatchVerb, `remove`>, string> = {
-    start: `didn't start`,
-    stop: `didn't stop`,
-    restart: `didn't restart`,
-    update: `didn't update`,
-};
+const batchDone = (verb: Exclude<BatchVerb, `remove`>, count: number): string =>
+    ({
+        start: t(`sandbox.deviceOps.batchStarted`, { count }, count),
+        stop: t(`sandbox.deviceOps.batchStopped`, { count }, count),
+        restart: t(`sandbox.deviceOps.batchRestarted`, { count }, count),
+        update: t(`sandbox.deviceOps.batchUpdated`, { count }, count),
+    })[verb];
+
+const batchRefused = (verb: Exclude<BatchVerb, `remove`>, count: number, machine: string): string =>
+    ({
+        start: t(`sandbox.deviceOps.batchDidntStart`, { count, machine }, count),
+        stop: t(`sandbox.deviceOps.batchDidntStop`, { count, machine }, count),
+        restart: t(`sandbox.deviceOps.batchDidntRestart`, { count, machine }, count),
+        update: t(`sandbox.deviceOps.batchDidntUpdate`, { count, machine }, count),
+    })[verb];
 
 /** The device's own sentence, whatever shape it arrived in. */
-const refusalText = (error: unknown): string => (error instanceof Error ? error.message : `that device didn't say why`);
+const refusalText = (error: unknown): string => (error instanceof Error ? error.message : t(`sandbox.deviceOps.didntSayWhy`));
 
 // What agreeing to a removal does, counted over the rows it was asked for. One line per half, because they are
 // unlike: the first ends a sandbox, the second only stops this machine keeping a copy of one.
 const removalEffects = (label: string, containers: number, pairings: number): string[] => [
-    ...(containers === 0
-        ? []
-        : [
-              `${counted(containers, `sandbox is`, `sandboxes are`)} deleted on ${label}: the container, its files and its history. ` +
-                  `Running "ic sandbox restore" there brings one back for a week.`,
-          ]),
-    ...(pairings === 0
-        ? []
-        : [
-              `${counted(pairings, `sandbox stops`, `sandboxes stop`)} syncing and mirroring ports on ${label}. ` +
-                  `The folders already on that device are left exactly as they are.`,
-          ]),
+    ...(containers === 0 ? [] : [t(`sandbox.deviceOps.removalDeletes`, { count: containers, label }, containers)]),
+    ...(pairings === 0 ? [] : [t(`sandbox.deviceOps.removalUnpairs`, { count: pairings, label }, pairings)]),
 ];
 
 /** The same two halves once they have happened, for the line under the list. */
 const removalSettled = (containers: number, pairings: number): string[] => [
-    ...(containers === 0 ? [] : [`${counted(containers, `sandbox`, `sandboxes`)} deleted`]),
-    ...(pairings === 0 ? [] : [`${counted(pairings, `pairing`, `pairings`)} ended`]),
+    ...(containers === 0 ? [] : [t(`sandbox.deviceOps.settledDeleted`, { count: containers }, containers)]),
+    ...(pairings === 0 ? [] : [t(`sandbox.deviceOps.settledEnded`, { count: pairings }, pairings)]),
 ];
 
 /** One container verb's payload: what its shape flow carries, the kept version a rollback goes to, and its log's sink. */
@@ -189,17 +214,16 @@ const actPayload = (
 
 /** The machine's mark for a verb that does something, and an inert end for one that only reads. */
 const markVerb = (machine: MachineRow, group: DeviceSandboxGroup, verb: SandboxVerb): (() => void) => {
-    const says = VERB_WORKING[verb];
-    if (says === undefined) {
+    const doing = verbWorking(verb, group.title);
+    if (doing === undefined) {
         return (): void => {};
     }
-    const doing = `${says} ${group.title}`;
-    return beginDeviceWork({ machine: machine.key, sandboxes: [group.sandboxId], doing, what: `${doing} on ${machine.label}` });
+    return beginDeviceWork({ machine: machine.key, sandboxes: [group.sandboxId], doing, what: doingOn(doing, machine.label) });
 };
 
 /** One mark over every row a run was asked for, said with and without the machine's name. */
-const markRun = (machine: MachineRow, groups: readonly DeviceSandboxGroup[], doing: string, where: string): (() => void) =>
-    beginDeviceWork({ machine: machine.key, sandboxes: groups.map((group) => group.sandboxId), doing, what: `${doing} ${where} ${machine.label}` });
+const markRun = (machine: MachineRow, groups: readonly DeviceSandboxGroup[], doing: string, what: string): (() => void) =>
+    beginDeviceWork({ machine: machine.key, sandboxes: groups.map((group) => group.sandboxId), doing, what });
 
 /** The question a removal asks, over one row or several. */
 export interface RemovalPrompt {
@@ -406,7 +430,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         return {
             // A verb with no prompt of its own only reaches here by severing, so the fallback still asks a
             // real question.
-            header: asked?.header ?? `${label} ${pending.group.title}?`,
+            header: asked?.header ?? t(`sandbox.deviceOps.verbHeader`, { verb: label, name: pending.group.title }),
             body: asked?.body,
             severing: severs(pending.group, pending.verb),
             label,
@@ -551,7 +575,10 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         const taken = pending.map((group) => rowRemoval(machine(), group));
         const label = machine().label;
         return {
-            header: pending.length === 1 ? `Remove ${pending[0]?.title} from ${label}?` : `Remove ${pending.length} sandboxes from ${label}?`,
+            header:
+                pending.length === 1
+                    ? t(`sandbox.deviceOps.removeOneHeader`, { name: pending[0]?.title ?? ``, label })
+                    : t(`sandbox.deviceOps.removeManyHeader`, { count: pending.length, label }),
             effects: removalEffects(label, taken.filter((removal) => removal.container).length, taken.filter((removal) => removal.pairing).length),
             names: pending.map((group) => group.title),
             severing: pending.some((group) => severs(group, `remove`)),
@@ -563,7 +590,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         const hostId = door();
         const slug = group.sandbox?.slug;
         if (hostId === undefined || slug === undefined) {
-            return `no open door onto that container`;
+            return t(`sandbox.deviceOps.noDoorContainer`);
         }
         // The stream dies with the container when this is the sandbox serving the page, so that drop is the answer
         // rather than a failure — which is what the dialog warned about, and why `removalOrder` puts the unpair first.
@@ -577,7 +604,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const endPairing = async (group: DeviceSandboxGroup): Promise<string | undefined> => {
         const pairHost = folderOwner(machine(), group)?.device.hostId;
         if (pairHost === undefined) {
-            return `no open door onto that pairing`;
+            return t(`sandbox.deviceOps.noDoorPairing`);
         }
         return await runDeviceCommand(pairHost, `sync-unpair`, { sandboxId: group.sandboxId }).then(
             (result) => (result.ok ? undefined : result.message),
@@ -616,7 +643,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         if (refused.length === 0) {
             // Nothing done is still something to say: a poll landing between the dialog and the press can leave a
             // row with neither half still on this machine.
-            const said = settled.length === 0 ? `already held none of them` : settled.join(`, `);
+            const said = settled.length === 0 ? t(`sandbox.deviceOps.heldNone`) : settled.join(`, `);
             outcome.value = { key: listKey, message: `${machine().label}: ${said}.` };
             return;
         }
@@ -624,8 +651,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             key: listKey,
             notice: {
                 tone: `warning`,
-                title: `${counted(refused.length, `sandbox`, `sandboxes`)} stayed on ${machine().label}.`,
-                detail: [...refused, ...(settled.length === 0 ? [] : [`What did come off: ${settled.join(`, `)}.`])].join(` · `),
+                title: t(`sandbox.deviceOps.stayedOn`, { count: refused.length, machine: machine().label }, refused.length),
+                detail: [...refused, ...(settled.length === 0 ? [] : [t(`sandbox.deviceOps.cameOff`, { list: settled.join(`, `) })])].join(` · `),
             },
         };
     };
@@ -637,7 +664,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         removing.value = true;
         failure.value = undefined;
         outcome.value = undefined;
-        const endMark = markRun(machine(), groups, `Removing ${counted(groups.length, `sandbox`, `sandboxes`)}`, `from`);
+        const removingWords = t(`sandbox.deviceOps.batchWorkingRemove`, { count: groups.length }, groups.length);
+        const endMark = markRun(machine(), groups, removingWords, t(`sandbox.deviceOps.doingFrom`, { doing: removingWords, machine: machine().label }));
         let containers = 0;
         let pairings = 0;
         const refused: string[] = [];
@@ -682,7 +710,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
         failure.value = undefined;
         outcome.value = undefined;
-        const endMark = markRun(machine(), groups, `${VERB_WORKING[verb] ?? verb} ${counted(groups.length, `sandbox`, `sandboxes`)}`, `on`);
+        const batchWords = batchWorking(verb, groups.length);
+        const endMark = markRun(machine(), groups, batchWords, doingOn(batchWords, machine().label));
         let settled = 0;
         const refused: string[] = [];
         batchProgress.value = { verb, done: 0, total: groups.length };
@@ -690,7 +719,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             for (const [index, group] of groups.entries()) {
                 const slug = group.sandbox?.slug;
                 if (slug === undefined) {
-                    refused.push(`${group.title}: no container on this device`);
+                    refused.push(`${group.title}: ${t(`sandbox.deviceOps.noContainerHere`)}`);
                     continue;
                 }
                 busy.value = `${rowKey(group)}:${verb}`;
@@ -714,15 +743,15 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             refetch();
         }
         if (refused.length === 0) {
-            outcome.value = { key: listKey, message: `${machine().label}: ${counted(settled, `sandbox`, `sandboxes`)} ${BATCH_DONE[verb]}.` };
+            outcome.value = { key: listKey, message: `${machine().label}: ${batchDone(verb, settled)}.` };
             return;
         }
         failure.value = {
             key: listKey,
             notice: {
                 tone: `warning`,
-                title: `${counted(refused.length, `sandbox`, `sandboxes`)} ${BATCH_REFUSED[verb]} on ${machine().label}.`,
-                detail: [...refused, ...(settled === 0 ? [] : [`${counted(settled, `sandbox`, `sandboxes`)} ${BATCH_DONE[verb]}.`])].join(` · `),
+                title: batchRefused(verb, refused.length, machine().label),
+                detail: [...refused, ...(settled === 0 ? [] : [`${batchDone(verb, settled)}.`])].join(` · `),
             },
         };
     };
@@ -750,10 +779,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             return undefined;
         }
         return {
-            header: `Update ${counted(pending.groups.length, `sandbox`, `sandboxes`)} on ${machine().label}?`,
-            body:
-                `Each one restarts onto the newest image and is unavailable while that happens — seconds if the update is ` +
-                `already downloaded, a few minutes if not. Their files are kept.`,
+            header: t(`sandbox.deviceOps.updateBatchHeader`, { count: pending.groups.length, machine: machine().label }, pending.groups.length),
+            body: t(`sandbox.deviceOps.updateBatchBody`),
             names: pending.groups.map((group) => group.title),
             label: VERB_LABEL.update,
         };
@@ -802,8 +829,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         const endMark = beginDeviceWork({
             machine: machine().key,
             sandboxes: sandboxId === undefined ? [] : [sandboxId],
-            doing: SYNC_WORKING[command],
-            what: `${SYNC_WORKING[command]} on ${environment.device.label}`,
+            doing: syncWorking(command),
+            what: doingOn(syncWorking(command), environment.device.label),
         });
         try {
             const result = await runDeviceCommand(hostId, command, { sandboxId, ...about });
@@ -813,11 +840,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
                 ? undefined
                 : {
                       key,
-                      notice: { tone: `warning`, title: COMMAND_REFUSAL[command], detail: result.message },
+                      notice: { tone: `warning`, title: commandRefusal(command), detail: result.message },
                       command: syncFallback(command, sandboxId, about?.port),
                   };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, COMMAND_UNREACHED[command]), command: syncFallback(command, sandboxId, about?.port) };
+            failure.value = { key, notice: noticeFrom(error, commandUnreached(command)), command: syncFallback(command, sandboxId, about?.port) };
         } finally {
             syncBusy.value = undefined;
             endMark();
@@ -865,11 +892,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
         const press = pressAgent({
             machine: machine().key,
-            what: `${AGENT_WORKING[op]} on ${machine().label}`,
+            what: doingOn(agentWorking(op), machine().label),
             op,
             door: environment.device,
             moved: moved.map((side) => side.device),
-            waiting: AGENT_ASKED[op],
+            waiting: agentAsked(op),
             links: linksAsked(environment, op),
         });
         try {

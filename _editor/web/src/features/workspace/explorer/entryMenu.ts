@@ -114,7 +114,9 @@ const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
 // (`lead`) are dropped with the rest, since none of them mean anything about a copy the daemon keeps out of sight.
 const archiveMenu = (input: EntryMenuInput): MenuItem[] => {
     const { target, multi, count, head = [], tail = [], verbs } = input;
-    const copyRow: MenuItem[] = offers(input, VERB_ROUTES.copy) ? [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }] : [];
+    const copyRow: MenuItem[] = offers(input, VERB_ROUTES.copy)
+        ? [{ label: multi ? t(`workspace.entryMenu.copyItems`, { count }, count) : t(`ui.action.copy`), icon: `copy`, command: verbs.copy }]
+        : [];
     const reads: MenuItem[] = target === undefined ? [] : [...copyRow, ...downloadRow(input)];
     return joinGroups(head, reads, tail, [archiveNote()]);
 };
@@ -145,11 +147,29 @@ const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
     }
     const changes: MenuItem[] = [
         ...(multi ? [] : soleVerbs(target, input)),
-        ...(offers(input, VERB_ROUTES.remove) ? [{ label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: verbs.remove }] : []),
+        ...(offers(input, VERB_ROUTES.remove)
+            ? [
+                  {
+                      label: multi ? t(`workspace.entryMenu.deleteItems`, { count }, count) : t(`ui.action.delete`),
+                      icon: `trash`,
+                      command: verbs.remove,
+                  },
+              ]
+            : []),
     ];
     const carries: MenuItem[] = [
-        ...(offers(input, VERB_ROUTES.cut) ? [{ label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: verbs.cut }] : []),
-        ...(offers(input, VERB_ROUTES.copy) ? [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }] : []),
+        ...(offers(input, VERB_ROUTES.cut)
+            ? [
+                  {
+                      label: multi ? t(`workspace.entryMenu.cutItems`, { count }, count) : t(`workspace.entryMenu.cut`),
+                      icon: `arrows-h`,
+                      command: verbs.cut,
+                  },
+              ]
+            : []),
+        ...(offers(input, VERB_ROUTES.copy)
+            ? [{ label: multi ? t(`workspace.entryMenu.copyItems`, { count }, count) : t(`ui.action.copy`), icon: `copy`, command: verbs.copy }]
+            : []),
         ...downloadRow(input),
     ];
     return [...withSeparator(changes), ...withSeparator(carries)];

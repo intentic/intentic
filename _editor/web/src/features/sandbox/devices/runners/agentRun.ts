@@ -85,7 +85,7 @@ export const agentRunDetail = (run: AgentRun): string | undefined => {
 /** What a refusal is titled when the machine gave no sentence of its own; one per verb, never "update" for all three. */
 export const agentRefusal = (op: DeviceAgentOp): string =>
     op === `forget-unreachable`
-        ? `That device didn't drop its unreachable links.`
+        ? t(`sandbox.agentRun.forgetRefused`)
         : op === `restart`
-          ? `That device wouldn't restart its agent.`
-          : `That device wouldn't update its agent.`;
+          ? t(`sandbox.agentRun.restartRefused`)
+          : t(`sandbox.useDevices.agentUpdateRefused`);

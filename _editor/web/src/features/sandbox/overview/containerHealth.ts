@@ -54,7 +54,7 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
             {
                 fault: "unreachable",
                 title: t(`sandbox.containerHealth.sandboxDoesNotAnswer`),
-                detail: report.detail ?? `Its public address did not answer when the sandbox checked it from the inside.`,
+                detail: report.detail ?? t(`sandbox.containerHealth.publicAddressDidNotAnswer`),
             },
         ];
     }

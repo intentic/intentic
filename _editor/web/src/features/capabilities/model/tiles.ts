@@ -3,7 +3,7 @@ import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { entryDescription, entryHint, entryName } from "./catalogCopy";
+import { entryDescription, entryHint, entryName, withFieldWords } from "./catalogCopy";
 import { cleanName } from "./form";
 
 // A tile's facts and which live connections came from it: the catalog and connected-inventory questions both join a
@@ -71,11 +71,12 @@ export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: re
     return { ...entry, fields: entry.fields.map((field) => (field.key === `identity` ? { ...field, options } : field)) };
 };
 
-// Every tile the page offers: the enabled extensions' contributions, then the static core catalog, each browser tile's
-// identity field narrowed to the identities this sandbox actually holds.
+// Every tile the page offers: the enabled extensions' contributions, then the static core catalog, each with its
+// add-form's words in the reader's language and each browser tile's identity field narrowed to the identities this
+// sandbox actually holds.
 export const catalogEntries = (enabled: readonly ExtensionSummary[], capabilities: readonly CapabilitySummary[]): CapabilityCatalogEntry[] => {
     const identities = capabilities.filter((instance) => instance.kind === `identity`).map((instance) => instance.id);
-    return [...contributedTiles(enabled), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(entry, identities));
+    return [...contributedTiles(enabled), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(withFieldWords(entry), identities));
 };
 
 // Which tile a live connection came from (instancesOf run backwards): a kind's tiles pin their own id into the
@@ -100,7 +101,7 @@ export const capabilityTile = (capability: CapabilitySummary, extensions: readon
         return { id: contribution.id, ...contribution.catalog };
     }
     const tile = CAPABILITY_CATALOG.find((entry) => entry.kind === capability.kind);
-    return tile === undefined ? undefined : { id: tile.id, name: tile.name, logo: tile.logo, icon: tile.icon };
+    return tile === undefined ? undefined : { id: tile.id, name: entryName(tile), logo: tile.logo, icon: tile.icon };
 };
 
 // Just the mark, for rows that name a connection with something of their own (a skill's title, a secret's key).

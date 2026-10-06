@@ -39,10 +39,10 @@ const upgrade = (): AgentAction<DeviceAgentOp> => ({
 // `forget-unreachable` is deliberately NOT here. These two are standing verbs, offered whether or not anything is
 // wrong; the drop only means something when a machine is holding links that stopped answering, so it is raised as
 // that concern's own fix (health/deviceAttention.ts) and would be a question nobody asked anywhere else.
-const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [upgrade(), restartAgent()];
+const actions = (): readonly AgentAction<DeviceAgentOp>[] => [upgrade(), restartAgent()];
 
 // Restart alone on a side of a many-sided machine: an update moves every side, so it is the machine's button (machineAgent).
-const RESTART_ONLY: readonly AgentAction<DeviceAgentOp>[] = [restartAgent()];
+const restartOnly = (): readonly AgentAction<DeviceAgentOp>[] => [restartAgent()];
 
 // Every verb here travels over the device's own outbound socket, so a machine not holding one gets the
 // sentence without the controls. Wider than the container verbs' `commandable`, by one case: a device
@@ -57,7 +57,7 @@ const reachable = (device: Device): boolean =>
     (device.gap === undefined || device.gap === `unreported` || device.gap === `scope-off`);
 
 const syncOnly = (): AgentNote => ({
-    text: `Enrolled for syncing only.`,
+    text: t(`sandbox.deviceAgent.syncOnly`),
     icon: `lock`,
     hint: { title: t(`sandbox.deviceAgent.notADevice`), note: t(`sandbox.deviceAgent.connectToUpdate`) },
 });
@@ -65,7 +65,7 @@ const syncOnly = (): AgentNote => ({
 // The one case with no errand in it, and the only line on screen while it holds: the concerns strip stands down
 // for a socket this young (deviceAttention.ts), so this is what explains the missing buttons.
 const reconnecting = (): AgentNote => ({
-    text: `Reconnecting — its buttons come back with it.`,
+    text: t(`sandbox.deviceAgent.reconnectingNote`),
     icon: `sync`,
     hint: { title: t(`sandbox.deviceAgent.socketDropped`), note: t(`sandbox.deviceAgent.redialsByItself`) },
 });
@@ -89,12 +89,12 @@ const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
     // A loop whose socket dropped seconds ago reported perfectly well a moment before; the reading is missing
     // because the machine is between connections, which is the badge's own word for it rather than the absence.
     if (deviceReconnecting(row.device, readAt)) {
-        return { word: `reconnecting`, variant: `neutral` };
+        return { word: t(`sandbox.deviceAgent.reconnecting`), variant: `neutral` };
     }
     // A machine that has never reported has an agent this sandbox has only ever been dialled by; its
     // version is known from the hello frame, its loop is not.
     if (row.agent === undefined) {
-        return { word: `not reported`, variant: `neutral` };
+        return { word: t(`sandbox.deviceAgent.notReported`), variant: `neutral` };
     }
     return agentProcessState(row.agent);
 };
@@ -104,7 +104,7 @@ const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
 const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     const held = row.device.report?.agent.installed ?? row.chip?.version;
     return {
-        text: held === undefined ? `Agent ${latest} has been published.` : `Agent ${latest} has been published; this device has ${held}.`,
+        text: held === undefined ? t(`sandbox.deviceAgent.publishedForMachine`, { latest }) : t(`sandbox.deviceAgent.publishedDeviceHas`, { latest, held }),
         tone: `info`,
         hint: { title: t(`sandbox.deviceAgent.updateAgent`), note: t(`sandbox.deviceAgent.fetchInstallRestart`) },
     };
@@ -136,7 +136,7 @@ const actionsOf = (device: Device, update: boolean, latest: string | undefined):
         return [];
     }
     const installed = device.report?.agent.installed;
-    return update && (latest === undefined || installed === undefined || agentBehind(device, latest)) ? ACTIONS : RESTART_ONLY;
+    return update && (latest === undefined || installed === undefined || agentBehind(device, latest)) ? actions() : restartOnly();
 };
 
 // Nothing to say and nothing to do: a machine with no version from either door and no command door is one

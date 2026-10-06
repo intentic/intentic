@@ -33,7 +33,7 @@ const readFile = async (file: File | undefined): Promise<void> => {
     fileName.value = ``;
     connections.value = [];
     if (file.size > MAX_BYTES) {
-        emit(`notice`, noticeOf(`${file.name} is far too big to be a FortiClient configuration: that looks like the wrong file.`));
+        emit(`notice`, noticeOf(t(`capabilities.forticlientImport.tooBig`, { fileName: file.name })));
         return;
     }
     importing.value = true;
@@ -44,7 +44,7 @@ const readFile = async (file: File | undefined): Promise<void> => {
         connections.value = xml.trim().length === 0 ? [] : await importForticlient(xml);
         fileName.value = file.name;
     } catch (err) {
-        emit(`notice`, noticeFrom(err, `Could not read that FortiClient configuration.`));
+        emit(`notice`, noticeFrom(err, t(`capabilities.forticlientImport.couldNotRead`)));
     } finally {
         importing.value = false;
     }

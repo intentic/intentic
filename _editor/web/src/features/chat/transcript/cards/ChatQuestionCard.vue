@@ -25,7 +25,7 @@ const card = computed(() => props.message.question!);
 const { mobile } = useDevice();
 
 // A multi-question card takes a generic title, since no one of its asks can stand for the rest.
-const title = computed(() => (card.value.questions.length > 1 ? `A few questions` : (card.value.questions[0]?.question ?? ``)));
+const title = computed(() => (card.value.questions.length > 1 ? t(`chat.chatQuestionCard.fewQuestions`) : (card.value.questions[0]?.question ?? ``)));
 
 // Picks and typed text, keyed by question index; "Other" is an ordinary option label, not parallel state.
 const selections = ref<Record<number, string[]>>({});

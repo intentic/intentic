@@ -49,10 +49,10 @@ const HINT: Record<RunThroughState, (words: BadgeWords) => Tip> = {
 };
 
 const LABEL: Record<RunThroughState, (words: BadgeWords) => string> = {
-    running: () => `Stop looping`,
-    workflow: (words) => `Workflow: ${words.name}`,
-    loop: (words) => `Loop: ${words.name}`,
-    idle: () => `Run this message through a loop or a workflow`,
+    running: () => t(`chat.runThrough.stopLooping`),
+    workflow: (words) => t(`chat.runThrough.workflowNamed`, { name: words.name }),
+    loop: (words) => t(`chat.runThrough.loopNamed`, { name: words.name }),
+    idle: () => t(`chat.runThrough.runMessageThrough`),
 };
 
 export interface RunThrough {
@@ -134,7 +134,7 @@ export const useRunThrough = (
             conversation.value.workflowId.value = undefined;
             await openRunInChat(run);
         } catch (error) {
-            workflowFailure.value = error instanceof Error ? error.message : `The workflow could not be started.`;
+            workflowFailure.value = error instanceof Error ? error.message : t(`chat.runThrough.workflowNotStarted`);
         }
     };
 
@@ -148,7 +148,7 @@ export const useRunThrough = (
             composer.draft.value = ``;
             conversation.value.loopId.value = undefined;
         } catch (error) {
-            loopFailure.value = error instanceof Error ? error.message : `The loop could not be started.`;
+            loopFailure.value = error instanceof Error ? error.message : t(`chat.runThrough.loopNotStarted`);
         }
     };
 
@@ -195,7 +195,7 @@ export const useRunThrough = (
             // it spending unattended, so it is said under the box rather than dropped.
             loopFailure.value = undefined;
             await stopLoop(conversation.value.conversationId).catch((error: unknown) => {
-                loopFailure.value = messageOr(error, `The loop could not be stopped.`);
+                loopFailure.value = messageOr(error, t(`chat.runThrough.loopNotStopped`));
             });
         },
         clear: (): void => {

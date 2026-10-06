@@ -9,11 +9,13 @@ import type { PendingAttachment } from "../drafts/useChatAttachments";
 import ChatAudioChip from "../transcript/attachments/ChatAudioChip.vue";
 import ChatFileChip from "../transcript/attachments/ChatFileChip.vue";
 import ChatImageThumb from "../transcript/attachments/ChatImageThumb.vue";
+import { useT } from "@intentic/ui/i18n";
 
 /* A row of attachments, each drawn by what it is: a player per sound, a file chip per anything else, and on a sent prompt a bare hover-previewable thumbnail per picture. Staged (the composer's) chips are framed, removable and show their upload. */
 
 const { staged = false } = defineProps<{ attachments: readonly T[]; staged?: boolean }>();
 const emit = defineEmits<{ remove: [attachment: T] }>();
+const t = useT();
 
 // How many of a file's own lines a sent chip draws: enough to tell one capture from another, short enough to keep a row.
 const LEAD_LINES = 3;
@@ -22,7 +24,8 @@ const LEAD_LINES = 3;
 const landed = (attachment: T): boolean => attachment.status === undefined || attachment.status === `done`;
 const pictureOf = (attachment: T): string | undefined => (landed(attachment) ? attachmentPreview(attachment.path) : attachment.previewUrl);
 const progressOf = (attachment: T): number | undefined => (attachment.status === `uploading` ? attachment.progress : undefined);
-const errorOf = (attachment: T): string | undefined => (attachment.status === `failed` ? (attachment.error ?? `Upload failed`) : undefined);
+const errorOf = (attachment: T): string | undefined =>
+    attachment.status === `failed` ? (attachment.error ?? t(`chat.chatAttachmentStrip.uploadFailed`)) : undefined;
 </script>
 
 <template>

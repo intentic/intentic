@@ -143,5 +143,5 @@ export const refFor = (refs: RemoteRefs, key: string): RemoteRef | undefined => 
 // holds, because the whole point of resolving a branch here is that the install stops following it.
 export const refSummary = (ref: RemoteRef): string =>
     ref.kind === `tag`
-        ? `${ref.name} is commit ${shortSha(ref.sha)}. That commit is what gets installed, so a re-tag can't move it.`
-        : `${ref.name} is at commit ${shortSha(ref.sha)}. That commit is what gets installed, so the branch can't move under it.`;
+        ? t(`capabilities.refs.tagSummary`, { name: ref.name, sha: shortSha(ref.sha) })
+        : t(`capabilities.refs.branchSummary`, { name: ref.name, sha: shortSha(ref.sha) });

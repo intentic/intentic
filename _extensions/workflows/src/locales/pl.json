@@ -38,6 +38,10 @@
         "alreadyLoopName": "Masz już pętlę o tej nazwie.",
         "cancel": "Anuluj",
         "commandPasses": "Polecenie przechodzi",
+        "contextNote": {
+            "continue": "Każda runda kontynuuje tę samą sesję. Taniej i zachowuje tok rozumowania, ale długa pętla zaczyna przytakiwać sama sobie.",
+            "fresh": "Każda runda zaczyna nową sesję na tym samym drzewie roboczym, a swoje notatki niesie w pliku postępu. Wolniej na rundę, ale nie dryfuje."
+        },
         "createLoop": "Utwórz pętlę",
         "dollars": "dolarów",
         "editLoop": "Edytuj pętlę",
@@ -59,6 +63,11 @@
         "runTestsPickTop": "uruchom testy, weź pierwsze niepowodzenie, napraw je",
         "save": "Zapisz",
         "stopAnywayAfter": "Zatrzymaj mimo wszystko po",
+        "stopNote": {
+            "claim": "Agent co rundę wystawia werdykt. Ocenia sam siebie, więc to tylko wskazówka: połącz to z ciasnym limitem rund.",
+            "command": "Uruchamiane po każdej rundzie. Kod wyjścia 0 kończy pętlę. Jedyne sprawdzenie tutaj, którego odpowiedź nie pochodzi od modelu.",
+            "judge": "Osobny model, który nie wykonał żadnej z tej pracy, ocenia raport agenta według Twoich kryteriów."
+        },
         "untilTestsPass": "Dopóki testy nie przejdą",
         "what": "Do czego jest",
         "whatEachRoundDoes": "Co robi każda runda",
@@ -77,6 +86,12 @@
         "fieldType": "Typ pola",
         "freshEachRound": "Świeży w każdej rundzie",
         "fullToolsNoAccounts": "pełne narzędzia, żadnych kont",
+        "hint": {
+            "goal": "Puste: mierzone tym, o co poproszono przebieg. Albo ustaw własną poprzeczkę: „cała suita testów przechodzi”.",
+            "prompt": "Pusty: ten krok robi to, o co poproszono przebieg. Albo daj mu własne zadanie: „uruchom testy, weź pierwsze niepowodzenie, napraw je”.",
+            "rubric": "Kryteria dla recenzenta, który nie wykonał żadnej z tej pracy.",
+            "title": "Napraw padające testy"
+        },
         "keepThread": "Zachowaj wątek",
         "leavesWorkNothingElse": "Zostawia swoją pracę i nic więcej, więc potrzebuje sprawdzenia poniżej — inaczej nic nie powie mu, że skończył.",
         "listText": "lista tekstów",
@@ -98,10 +113,26 @@
         "runsOn": "Działa na",
         "spendCeiling": "Limit wydatków",
         "stepRunsNobodyAt": "Krok działa bez nikogo przy klawiaturze, więc nie sięgnie do żadnego zalogowanego konta, o ile nie działa jako persona: karta ustala też, jak daleko sięgają jego narzędzia i gdzie pracuje.",
+        "summary": {
+            "actsAs": "działa jako {persona}",
+            "dataFields": "{count} pole danych | {count} pola danych | {count} pól danych",
+            "keepsThread": "zachowuje wątek",
+            "noOutput": "bez zapisanego wyjścia",
+            "pinnedAccount": "przypięte konto",
+            "reviewer": "recenzent",
+            "runs": "uruchamia `{command}`",
+            "upTo": "do {amount} $"
+        },
+        "type": {
+            "boolean": "tak/nie",
+            "number": "liczba",
+            "text": "tekst"
+        },
         "unpin": "Odepnij model",
         "unpinModel": "Odepnij model",
         "whatBelongsHereModel": "co tu należy: model to czyta",
         "whatHandsOn": "Co przekazuje dalej",
+        "whateverYouUse": "To, czego zwykle używasz",
         "writesDoneHereWhy": "Pisze „gotowe, i oto dlaczego”: ocenia sam siebie, więc przy czymkolwiek drogim dołóż do tego sprawdzenie poniżej."
     },
     "templates": {
@@ -113,6 +144,12 @@
         "n0To100Score": "ocena od 0 do 100 dla próby A wobec prośby i dowodów z repozytorium",
         "n0To100Score2": "ocena od 0 do 100 dla próby B wobec prośby i dowodów z repozytorium",
         "n3To6Words": "3 do 6 słów, zdanie z wielkiej litery, tylko litery i cyfry: nazywa raport i folder notatek",
+        "name": {
+            "releaseGate": "Bramka wydania",
+            "researchReport": "Raport z badań",
+            "twoModelsOneTask": "Dwa modele, jedno zadanie",
+            "twoModelsScored": "Dwa modele, ocenione i scalone"
+        },
         "oneRequestBuiltTwice": "Jedna prośba, zbudowana dwa razy naraz przez różne modele we własnych worktree, potem przeczytana obok siebie i scalona w wersję, którą warto zachować.",
         "oneRequestBuiltTwice2": "Jedna prośba zbudowana dwa razy naraz, potem oceniona na ślepo przez trzeci model wobec repozytorium i scalona pod sprawdzeniem zakończenia, które odczytuje z powrotem wymagania z oceny.",
         "oneSentenceOnWhy": "jedno zdanie o tym dlaczego, jedyna linia z tego, którą pokaże dziennik pipeline'u",
@@ -122,18 +159,43 @@
         "secondResearchersBriefDisjoint": "zadanie drugiego badacza, rozłączne z pierwszym",
         "specificDefectsOmissionsRegression": "konkretne wady, pominięcia albo ryzyka regresji, każde poprzedzone A albo B",
         "specificStrengthsWorthPreserving": "konkretne mocne strony warte zachowania, każda poprzedzona A albo B",
+        "step": {
+            "judgeChange": "Oceń zmianę",
+            "plan": "Plan",
+            "research": "Badanie {index}",
+            "scoreBoth": "Oceń obie próby",
+            "takeBest": "Weź to, co najlepsze z obu",
+            "writeReport": "Napisz raport"
+        },
         "thirdResearchersBriefDisjoint": "zadanie trzeciego badacza, rozłączne z dwoma pozostałymi",
         "whatTypeGoesTo": "To, co wpiszesz, idzie do Claude'a i do GPT w tej samej chwili, każdy buduje to na własnej gałęzi. Potem trzecia sesja czyta oba diffy, zatrzymuje to, co każdy zrobił dobrze, i pisze scaloną wersję."
     },
     "workflowCard": {
-        "openInDesigner": "Otwórz {name} w projektancie"
+        "openInDesigner": "Otwórz {name} w projektancie",
+        "steps": "{count} krok | {count} kroki | {count} kroków",
+        "upToAtOnce": "{steps} · do {parallel} naraz"
     },
     "workflowDag": {
         "didNotFinish": "Nie skończyło się",
         "done": "Gotowe",
+        "runState": {
+            "done": "gotowe",
+            "error": "błąd",
+            "failed": "nieudane",
+            "overspent": "przekroczony budżet",
+            "running": "działa",
+            "stopped": "zatrzymane"
+        },
         "running": "Działa",
         "skipped": "Pominięte",
         "stopped": "Zatrzymane",
+        "subtitle": {
+            "claim": "twierdzenie",
+            "command": "polecenie",
+            "fields": "{count} pole | {count} pola | {count} pól",
+            "noOutput": "bez wyjścia",
+            "reviewer": "recenzent"
+        },
         "waiting": "Czeka"
     },
     "workflowDesigner": {
@@ -143,6 +205,7 @@
         "backToWorkflows": "Wróć do workflow",
         "cancel": "Anuluj",
         "ciGate": "Bramka CI",
+        "couldntSave": "Nie udało się zapisać workflow.",
         "declaredOnly": "Tylko zadeklarowany wynik",
         "handoff": "Przekazanie",
         "howManyStepsMay": "Ile kroków może działać obok siebie. Każdy z nich pracuje we własnym worktree.",
@@ -169,6 +232,7 @@
     },
     "workflowRunPage": {
         "backToWorkflows": "Wróć do workflow",
+        "couldntStop": "Nie udało się zatrzymać przebiegu.",
         "done": "Gotowe, gdy:",
         "openSessionLog": "Otwórz dziennik sesji",
         "rounds": "{count} runda | {count} rundy | {count} rund",
@@ -181,6 +245,9 @@
         "ciWiring": "Podłączenie CI dla {name}",
         "ciWiringTitle": "Podpięcie CI",
         "copySavingHereReplaces": "Masz kopię: zapis stąd ją zastąpi.",
+        "couldntRemoveLoop": "Nie udało się usunąć pętli.",
+        "couldntRemoveWorkflow": "Nie udało się usunąć workflow.",
+        "couldntSaveLoop": "Nie udało się zapisać pętli.",
         "delete": "Usuń {name}",
         "delete2": "Usuń",
         "deleteLoop": "Usunąć tę pętlę?",
@@ -207,6 +274,7 @@
         "runsOnceYouSend": "Rusza po wysłaniu",
         "startBlank": "albo zacznij od pustego",
         "startTemplate": "Wyjdź od szablonu",
+        "stepsDone": "{done}/{count} kroku | {done}/{count} kroków | {done}/{count} kroków",
         "template": "Szablon",
         "use": "Użyj",
         "useTemplate": "Użyj tego szablonu",

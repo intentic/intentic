@@ -1,4 +1,5 @@
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { shallowRef, watch } from "vue";
 
 // A credential list where minting answers the raw value once and the server keeps only its digest.
@@ -23,7 +24,7 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
             tokens.value = await source.list();
         } catch (caught) {
             tokens.value = [];
-            notice.value ??= noticeFrom(caught, `Couldn't load the tokens.`);
+            notice.value ??= noticeFrom(caught, t(`common.useMintedTokens.couldntLoad`));
         }
     };
 
@@ -41,7 +42,7 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
         run(async () => {
             minted.value = await source.mint(request);
             await refresh();
-        }, `Minting failed.`);
+        }, t(`common.useMintedTokens.mintingFailed`));
 
     // Not routed through `run`: revoking must not flash the mint button's busy state.
     const revoke = async (id: string): Promise<void> => {
@@ -49,7 +50,7 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
         try {
             live = await source.revoke(id);
         } catch (caught) {
-            notice.value = noticeFrom(caught, `Couldn't revoke that token.`);
+            notice.value = noticeFrom(caught, t(`common.useMintedTokens.couldntRevoke`));
         }
         if (live === undefined) {
             await refresh();

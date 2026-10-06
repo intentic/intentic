@@ -5,6 +5,7 @@ import { Button, ui, type NoticeModel, Row, RowGroup, SkeletonRows, SkeletonSnap
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCategories";
+import { hostStateWord } from "../../extensions/extensionState";
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
@@ -124,12 +125,12 @@ const emptyNote = computed<string | undefined>(() => {
     }
     if (entries.value.length === 0) {
         // The other half of this section, not another page: why Browse is a pill, not a nav row.
-        return `Nothing installed yet.`;
+        return t(`sandbox.extensionsInstalled.nothingInstalled`);
     }
     if (attention.value.length > 0) {
-        return `Nothing else to show: see the group above.`;
+        return t(`sandbox.extensionsInstalled.nothingElse`);
     }
-    return `Nothing matches that filter.`;
+    return t(`sandbox.extensionsInstalled.nothingMatches`);
 });
 
 // The daemon has already stopped or started the processes; reloadExtensions activates or retires the row here, without
@@ -141,7 +142,15 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
         await setEnabled(extension.id, enabled);
         await reloadExtensions();
     } catch (failure) {
-        emit(`notice`, noticeFrom(failure, `Could not ${enabled ? `enable` : `disable`} ${extensionIdOf(extension.manifest)}.`));
+        emit(
+            `notice`,
+            noticeFrom(
+                failure,
+                enabled
+                    ? t(`sandbox.extensionsInstalled.couldNotEnable`, { manifest: extensionIdOf(extension.manifest) })
+                    : t(`sandbox.extensionsInstalled.couldNotDisable`, { manifest: extensionIdOf(extension.manifest) }),
+            ),
+        );
     } finally {
         pending.value = undefined;
     }
@@ -198,8 +207,14 @@ const confirmRemove = async (): Promise<void> => {
         const said = [
             ...(removed.connections.length === 0
                 ? []
-                : [`${removed.connections.length === 1 ? `Connection` : `Connections`} ${removed.connections.join(`, `)} went with it.`]),
-            ...(removed.rebuildNeeded === true ? [`What it added to the sandbox image is still there until the next environment rebuild.`] : []),
+                : [
+                      t(
+                          `sandbox.extensionsInstalled.connectionsWent`,
+                          { count: removed.connections.length, names: removed.connections.join(`, `) },
+                          removed.connections.length,
+                      ),
+                  ]),
+            ...(removed.rebuildNeeded === true ? [t(`sandbox.extensionsInstalled.imageStillHas`)] : []),
         ];
         emit(`notice`, {
             tone: removed.rebuildNeeded === true ? `warning` : `info`,
@@ -207,7 +222,7 @@ const confirmRemove = async (): Promise<void> => {
             ...(said.length === 0 ? {} : { detail: said.join(` `) }),
         });
     } catch (failure) {
-        emit(`notice`, noticeFrom(failure, `Could not remove ${extensionIdOf(extension.manifest)}.`));
+        emit(`notice`, noticeFrom(failure, t(`sandbox.extensionsInstalled.couldNotRemove`, { manifest: extensionIdOf(extension.manifest) })));
     } finally {
         removingNow.value = false;
     }
@@ -326,7 +341,7 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="text-warning">{{ status.detail }}</span>
                 </template>
                 <template #meta>
-                    <StatusBadge :variant="status.state === `error` ? `danger` : `warning`" :label="status.state" size="xs" />
+                    <StatusBadge :variant="status.state === `error` ? `danger` : `warning`" :label="hostStateWord(status.state)" size="xs" />
                 </template>
             </Row>
         </RowGroup>

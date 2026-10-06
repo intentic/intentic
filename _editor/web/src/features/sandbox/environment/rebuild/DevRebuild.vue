@@ -72,13 +72,13 @@ const anchorRef = ref<HTMLElement>();
 const live = computed(() => rebuildRunning(run.phase));
 
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
-const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
+const cost = computed(() => t(`sandbox.devRebuild.cost`));
 
 // THE OTHER OFFER, NAMED BEFORE IT IS MISTAKEN FOR THIS ONE. The Sandbox overview carries "Restart sandbox" when the
 // two sides drift apart, and both offers read as one action on two tabs: both say "from your checkout", both end in a
 // restart. They are not the same size. This builds a whole new image; that one restarts the sandbox already running,
 // which is all a code change needs.
-const insteadOfRestart = `Only needed for the image itself. For a code change, “Restart sandbox” on the Sandbox overview is quicker.`;
+const insteadOfRestart = computed(() => t(`sandbox.devRebuild.insteadOfRestart`));
 
 const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
@@ -138,16 +138,13 @@ const interrupted = computed(() => {
     if (count === 0) {
         return undefined;
     }
-    const who = count === 1 ? `An agent is` : `${count} agents are`;
-    return autoResume.value
-        ? `${who} mid-turn — interrupted, then picked up once the sandbox is back.`
-        : `${who} mid-turn — interrupted, and would need sending again.`;
+    return autoResume.value ? t(`sandbox.devRebuild.midTurnResumed`, { count }, count) : t(`sandbox.devRebuild.midTurnLost`, { count }, count);
 });
 
 // The two costs as two steps, in the order they land: run through one sentence, the minutes that interrupt nothing
 // read as the half-minute that does.
 const STEPS = computed((): readonly { icon: IconName; label: string; note: string; takes: string }[] => [
-    { icon: `hammer`, label: t(`sandbox.devRebuild.buildsImage`), note: t(`sandbox.devRebuild.keepWorking`), takes: `minutes` },
+    { icon: `hammer`, label: t(`sandbox.devRebuild.buildsImage`), note: t(`sandbox.devRebuild.keepWorking`), takes: t(`sandbox.devRebuild.minutes`) },
     { icon: `refresh`, label: t(`sandbox.devRebuild.restartsSandbox`), note: t(`sandbox.devRebuild.reconnectsOnOwn`), takes: `~30s` },
 ]);
 
@@ -241,7 +238,7 @@ const checkout = computed(() => {
 
                     <p class="flex items-center gap-2 text-2xs text-muted">
                         <Icon name="check" class="shrink-0 text-success" />
-                        <span>/work is kept. Nothing else on that device is touched.</span>
+                        <span>{{ t(`sandbox.devRebuild.workKept`) }}</span>
                     </p>
 
                     <!-- Said here and nowhere on the card: whether this also settles the pending recipe is the question
@@ -264,7 +261,7 @@ const checkout = computed(() => {
                 {{ t(`sandbox.devRebuild.makesButtonOn`) }}
             </p>
             <Code :code="command" :lang="commandLang(`unix`)" :label="t(`sandbox.devRebuild.rebuildCommand`)" :wrap="true" />
-            <ConnectDeviceHint v-if="root" :slug="slug" gains="rebuilding from your checkout becomes a button here." />
+            <ConnectDeviceHint v-if="root" :slug="slug" :gains="t(`sandbox.devRebuild.becomesButton`)" />
         </template>
     </div>
 </template>

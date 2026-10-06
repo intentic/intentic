@@ -77,23 +77,23 @@ export const settingsPagesOf = (conflicts: readonly LandConflict[] | undefined):
 export const reasonCopy = (): Record<LandConflictReason, { icon: IconName; mark: string; title: string; fix: string; row: Tip }> => ({
     diverged: {
         icon: `sync`,
-        mark: `moved`,
+        mark: t(`agents.conflictResolution.mark.diverged`),
         title: t(`agents.conflictResolution.workspaceMovedOnSince`),
-        fix: `The agent can rebase onto it and merge these itself.`,
+        fix: t(`agents.conflictResolution.fix.diverged`),
         row: { title: t(`agents.conflictResolution.rowTip.diverged.title`), note: t(`agents.conflictResolution.rowTip.diverged.note`) },
     },
     workspace: {
         icon: `user`,
-        mark: `yours`,
+        mark: t(`agents.conflictResolution.mark.workspace`),
         title: t(`agents.conflictResolution.uncommittedEditsTo`),
-        fix: `Only you can clear this, git cannot merge through unstaged work, and the agent's checkout cannot see it.`,
+        fix: t(`agents.conflictResolution.fix.workspace`),
         row: { title: t(`agents.conflictResolution.rowTip.workspace.title`), note: t(`agents.conflictResolution.rowTip.workspace.note`) },
     },
     binary: {
         icon: `image`,
-        mark: `binary`,
+        mark: t(`agents.conflictResolution.mark.binary`),
         title: t(`agents.conflictResolution.binaryFilesNoAutomatic`),
-        fix: `The agent can re-create them against the current file, or pick a side.`,
+        fix: t(`agents.conflictResolution.fix.binary`),
         row: { title: t(`agents.conflictResolution.rowTip.binary.title`), note: t(`agents.conflictResolution.rowTip.binary.note`) },
     },
 });

@@ -138,7 +138,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
                     if (current()) {
                         failures.value = new Map(failures.value).set(task.scope, {
                             action: task.action,
-                            detail: messageOr(caught, `git gave no reason.`),
+                            detail: messageOr(caught, t(`workspace.useChanges.gitGaveNoReason`)),
                             ...(caught instanceof PushRefused ? { run: caught.run } : {}),
                         });
                     }
@@ -218,7 +218,7 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
         await runBatch(
             groups.map((group) => ({
                 scope: COMMIT_SCOPE,
-                action: `Commit failed`,
+                action: t(`workspace.useChanges.commitFailed`),
                 run: async (): Promise<void> => {
                     const result = await sandboxRpc.git.commit({
                         repo: group.repo,
@@ -241,7 +241,7 @@ const discardGroups = (groups: readonly RepoTarget[]): Promise<void> =>
     runBatch(
         groups.map((group) => ({
             scope: group.repo,
-            action: `Discard failed`,
+            action: t(`workspace.useChanges.discardFailed`),
             run: async (): Promise<void> => {
                 await sandboxRpc.git.discard({ repo: group.repo, ...targetBody(group) });
             },
@@ -261,7 +261,7 @@ const abortOperation = (repo: string): Promise<void> =>
         [
             {
                 scope: repo,
-                action: `Abort failed`,
+                action: t(`workspace.useChanges.abortFailed`),
                 run: async (): Promise<void> => {
                     await sandboxRpc.git.abort({ repo });
                 },
@@ -281,7 +281,7 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
             .filter((group) => group.paths === undefined || group.paths.length > 0)
             .map((group) => ({
                 scope: group.repo,
-                action: staged ? `Stage failed` : `Unstage failed`,
+                action: staged ? t(`workspace.useChanges.stageFailed`) : t(`workspace.useChanges.unstageFailed`),
                 run: async (): Promise<void> => {
                     const target = { repo: group.repo, ...targetBody(group) };
                     await (staged ? sandboxRpc.git.stage(target) : sandboxRpc.git.unstage(target));
@@ -303,7 +303,7 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
     runBatch(
         repos.map((repo) => ({
             scope: repo,
-            action: `Fetch failed`,
+            action: t(`workspace.useChanges.fetchFailed`),
             run: async (): Promise<void> => {
                 const result = await sandboxRpc.git.fetch({ repo });
                 if (!result.ok) {
@@ -329,7 +329,12 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
             scope: target.repo,
             // Names the verb the repo actually needed ("Push failed", not "Sync"), so a push-only failure isn't
             // misnamed.
-            action: `${target.pull && target.push ? `Sync` : target.push ? `Push` : `Pull`} failed`,
+            action:
+                target.pull && target.push
+                    ? t(`workspace.useChanges.syncFailed`)
+                    : target.push
+                      ? t(`workspace.useChanges.pushFailed`)
+                      : t(`workspace.useChanges.pullFailed`),
             run: async (): Promise<void> => {
                 if (target.pull) {
                     const pulled = await sandboxRpc.git.pull({ repo: target.repo });

@@ -4,6 +4,7 @@ import type { CapabilityEffect } from "@intentic/capability-catalog";
 import type { IconName, TooltipValue } from "@intentic/ui";
 import { computed } from "vue";
 import { useT } from "@intentic/ui/i18n";
+import { grantList } from "../model/grants";
 
 const t = useT();
 
@@ -59,7 +60,10 @@ type Describers = { readonly [K in CapabilityEffect["kind"]]: (effect: Extract<C
 const DESCRIBE: Describers = {
     skill: (effect) => ({
         icon: `sparkles`,
-        label: effect.name === undefined ? `Adds a skill the agent loads next turn` : `Adds skill "${effect.name}" the agent loads next turn`,
+        label:
+            effect.name === undefined
+                ? t(`capabilities.capabilityEffects.addsSkill`)
+                : t(`capabilities.capabilityEffects.addsNamedSkill`, { name: effect.name }),
     }),
     secret: (effect) =>
         effect.exposure === `agent-env`
@@ -67,7 +71,10 @@ const DESCRIBE: Describers = {
             : { icon: `lock`, label: t(`capabilities.capabilityEffects.storesSecretInSandbox`) },
     clone: (effect) => ({
         icon: `download`,
-        label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox`,
+        label:
+            effect.url === undefined
+                ? t(`capabilities.capabilityEffects.clonesRepository`)
+                : t(`capabilities.capabilityEffects.clonesUrl`, { url: effect.url }),
     }),
     image: () => ({
         icon: `box`,
@@ -78,14 +85,17 @@ const DESCRIBE: Describers = {
     gpu: () => ({ icon: `bolt`, label: t(`capabilities.capabilityEffects.claimsEveryNvidiaGpu`), warn: true }),
     mount: (effect) => describeMount(effect.target, effect.writable),
     restart: (effect) => ({ icon: `refresh`, label: t(`capabilities.capabilityEffects.appliesWithoutRebuildBy`, { process: effect.process }) }),
-    process: (effect) => ({ icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` }),
+    process: (effect) => ({
+        icon: `play`,
+        label: t(`capabilities.capabilityEffects.runsProcesses`, { names: effect.names.join(`, `) }, effect.names.length),
+    }),
     mcp: () => ({ icon: `bolt`, label: t(`capabilities.capabilityEffects.registersMcpServerAgent`) }),
     scaffold: (effect) => ({
         icon: `sitemap`,
         label:
             effect.repos.length === 0
-                ? `Scaffolds a repository`
-                : `Scaffolds ${effect.repos.length === 1 ? `repository` : `repositories`} ${effect.repos.join(`, `)}`,
+                ? t(`capabilities.capabilityEffects.scaffoldsRepository`)
+                : t(`capabilities.capabilityEffects.scaffoldsRepos`, { repos: effect.repos.join(`, `) }, effect.repos.length),
     }),
     "trusted-code": () => ({
         icon: `exclamation-triangle`,
@@ -99,21 +109,27 @@ const DESCRIBE: Describers = {
     // Reaches outside the sandbox: warned, and states the actual verbs granted on the user's device.
     machine: (effect) => ({
         icon: `desktop`,
-        label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} device`,
+        label: t(`capabilities.capabilityEffects.machine`, {
+            grants: grantList(effect.grants),
+            platform: effect.platform === `windows` ? `Windows` : `Linux`,
+        }),
         warn: true,
     }),
     // Warned like `machine`; the allowed sites are the user's own choice in the extension, which the reader must know
     // before agreeing to this.
     "own-browser": (effect) => ({
         icon: `globe`,
-        label: `Lets the agent ${effect.grants.join(`, `)} in your ${effect.platform === `edge` ? `Edge` : `Chrome`}, on the sites you allow it in the extension`,
+        label: t(`capabilities.capabilityEffects.ownBrowser`, {
+            grants: grantList(effect.grants),
+            browser: effect.platform === `edge` ? `Edge` : `Chrome`,
+        }),
         warn: true,
     }),
     // Warned like `machine`; which apps it may act in is the person's own choice on the phone, which the reader must
     // know before agreeing to this.
     "own-phone": (effect) => ({
         icon: `mobile`,
-        label: `Lets the agent ${effect.grants.join(`, `)} on your Android phone, in the apps you allow on the phone`,
+        label: t(`capabilities.capabilityEffects.ownPhone`, { grants: grantList(effect.grants) }),
         warn: true,
     }),
     // Named, not warned: pointing at a server is the point of this capability (as often a private choice, like a local
@@ -122,23 +138,23 @@ const DESCRIBE: Describers = {
         icon: `cloud-upload`,
         label:
             effect.url === ``
-                ? `Sends this sandbox's prompts, files and command output to the model API you configure`
-                : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
+                ? t(`capabilities.capabilityEffects.endpointConfigured`)
+                : t(`capabilities.capabilityEffects.endpointUrl`, { url: effect.url }),
     }),
     // Warned like `machine`: the spend leaves the sandbox and can't be undone by removing the tile; the row leads with
     // the ceiling and whether it asks each time.
     spend: (effect) => ({
         icon: `credit-card`,
         label: effect.carded
-            ? `Lets the agent spend real money: up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and it asks you in chat every time`
-            : `Lets the agent spend real money, up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and small payments go through without asking`,
+            ? t(`capabilities.capabilityEffects.spendAsks`, { perPayment: effect.perPaymentUsd, daily: effect.dailyUsd })
+            : t(`capabilities.capabilityEffects.spendAuto`, { perPayment: effect.perPaymentUsd, daily: effect.dailyUsd }),
         warn: true,
     }),
     // Warned, and worded for what survives removing the tile: sandboxes the agent made stay made, on the account
     // rather than in this box.
     provision: () => ({
         icon: `server`,
-        label: `Lets the agent create sandboxes on your intentic account, asking you in chat each time. Ones it made outlive this connection`,
+        label: t(`capabilities.capabilityEffects.provision`),
         warn: true,
     }),
 };

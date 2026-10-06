@@ -59,14 +59,14 @@ const runLiveCheck = async (): Promise<void> => {
     liveOrphans.value = [];
     try {
         const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `plan`] }).catch((failure: unknown) => {
-            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? `Could not run a live check (${failure.status}).`) : failure;
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? t(`views.liveStatusView.couldNotRunLiveCheck`, { status: failure.status })) : failure;
         });
         const { steps, orphans } = await readPlanSteps(lines);
         liveActions.value = steps;
         liveOrphans.value = orphans;
         liveRan.value = true;
     } catch (err) {
-        liveError.value = noticeFrom(err, `Live check failed.`);
+        liveError.value = noticeFrom(err, t(`views.liveStatusView.liveCheckFailed`));
     } finally {
         checking.value = false;
     }
@@ -95,7 +95,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
     try {
         revealedAccess.set(key, await reveal(key));
     } catch (err) {
-        accessError.value = noticeFrom(err, `Could not reveal the password.`);
+        accessError.value = noticeFrom(err, t(`views.liveStatusView.couldNotRevealPassword`));
     }
 };
 </script>

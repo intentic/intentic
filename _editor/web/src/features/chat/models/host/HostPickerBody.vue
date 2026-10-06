@@ -64,7 +64,7 @@ const chosen = computed(() => {
 const spend = computed<string>(() => {
     const held = request.value;
     if (held === undefined || !chosen.value) {
-        return `Choose a model to continue`;
+        return t(`chat.hostPickerBody.chooseModelToContinue`);
     }
     const tier = held.chooseRun === true ? effortLabelOf(held.effort, held.provider, held.model, held.thinking) : undefined;
     return [modelLabelFor(held.provider, held.model), ...(tier === undefined ? [] : [tier])].join(` · `);

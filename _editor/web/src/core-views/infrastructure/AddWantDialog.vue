@@ -8,6 +8,7 @@ import { useInventory } from "../../features/extensions/useInventory";
 import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
 import ConnectHost from "./ConnectHost.vue";
+import { serviceDescription } from "./serviceWords";
 import { useT } from "@intentic/ui/i18n";
 
 // Add-a-want dialog. Step 1: catalog of workspace apps (i.want.app) and INVENTORY_SERVICES (i.want.service).
@@ -57,7 +58,7 @@ const subdomainError = computed<string | undefined>(() => {
     if (label.length === 0 || subdomainValid.value) {
         return undefined;
     }
-    return label.length > SUBDOMAIN_MAX ? `A domain label stops at ${SUBDOMAIN_MAX} characters; this one is ${label.length}.` : undefined;
+    return label.length > SUBDOMAIN_MAX ? t(`views.addWantDialog.domainLabelTooLong`, { max: SUBDOMAIN_MAX, length: label.length }) : undefined;
 });
 const nameError = computed<string | undefined>(() => {
     const typed = name.value.trim();
@@ -65,8 +66,8 @@ const nameError = computed<string | undefined>(() => {
         return undefined;
     }
     return typed.length > INVENTORY_NAME_MAX
-        ? `A name stops at ${INVENTORY_NAME_MAX} characters; this one is ${typed.length}.`
-        : `This becomes a name in your deploy config: Latin letters, digits and underscores, not starting with a digit.`;
+        ? t(`views.addWantDialog.nameTooLong`, { max: INVENTORY_NAME_MAX, length: typed.length })
+        : t(`views.addWantDialog.nameRule`);
 });
 // Offered rather than applied: the box is the user's, and a name silently rewritten under the cursor is worse than one
 // refused out loud.
@@ -173,7 +174,7 @@ const submit = async (): Promise<void> => {
         emit(`added`);
         close();
     } catch (err) {
-        error.value = noticeFrom(err, `Could not add it.`);
+        error.value = noticeFrom(err, t(`views.addWantDialog.couldNotAdd`));
     } finally {
         submitting.value = false;
     }
@@ -201,7 +202,9 @@ const submit = async (): Promise<void> => {
                     <div class="font-medium text-content">{{ selected.kind === `service` ? selected.service.label : selected.app }}</div>
                     <div class="text-xs text-muted">
                         {{
-                            selected.kind === `service` ? selected.service.description : t(`views.addWantDialog.appMonorepo`, { repo: selected.repo })
+                            selected.kind === `service`
+                                ? serviceDescription(selected.service)
+                                : t(`views.addWantDialog.appMonorepo`, { repo: selected.repo })
                         }}
                     </div>
                 </div>
@@ -316,7 +319,7 @@ const submit = async (): Promise<void> => {
                     <BrandMark :size="32" :name="service.label" :logo="service.logo" :icon="service.icon ?? `server`" />
                     <div class="min-w-0">
                         <div class="font-medium text-content">{{ service.label }}</div>
-                        <div class="mt-0.5 text-xs text-muted">{{ service.description }}</div>
+                        <div class="mt-0.5 text-xs text-muted">{{ serviceDescription(service) }}</div>
                     </div>
                 </button>
             </div>

@@ -52,9 +52,11 @@ const outline = useSandboxOutline(isLoading);
 // A version swap is a download and an install, not a settings write, so it is reported to the row holding this card
 // and keeps its mark while the reader is off reading something else.
 const hubWork = useHubWork();
-const runUpdate = (engine: EngineRow): Promise<void> => hubWork.track(`Updating ${engine.label}`, () => update(engine));
-const runRevert = (engine: EngineRow): Promise<void> => hubWork.track(`Reverting ${engine.label}`, () => revert(engine));
-const runUpdateAll = (): Promise<void> => hubWork.track(`Updating agent engines`, () => updateAll());
+const runUpdate = (engine: EngineRow): Promise<void> =>
+    hubWork.track(t(`sandbox.enginesCard.updatingEngine`, { label: engine.label }), () => update(engine));
+const runRevert = (engine: EngineRow): Promise<void> =>
+    hubWork.track(t(`sandbox.enginesCard.revertingEngine`, { label: engine.label }), () => revert(engine));
+const runUpdateAll = (): Promise<void> => hubWork.track(t(`sandbox.enginesCard.updatingAgentEngines`), () => updateAll());
 
 const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>[] => [
     {

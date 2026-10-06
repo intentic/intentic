@@ -1,5 +1,6 @@
 import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceDistro, isBehind, reportQuiet } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui/format";
+import { t } from "@intentic/ui/i18n";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
 // (folders, ports, containers). Every fact comes from the daemon's own row (DeviceSchema), the capability
@@ -34,7 +35,7 @@ export const osLabel = (device: Device): string | undefined => {
         return describedOs(device) ?? platformName(device);
     }
     const named = describedOs(device) ?? (distro === `` ? undefined : distro) ?? platformName(device);
-    return named === undefined ? `WSL` : `${named} on WSL`;
+    return named === undefined ? `WSL` : t(`sandbox.deviceFacts.onWsl`, { os: named });
 };
 
 // The full string, when there is more to it than the label shows (a Windows build number, a kernel). Compared
@@ -48,9 +49,11 @@ export interface DeviceDoor {
 }
 
 export const deviceDoors = (device: Device): DeviceDoor[] => [
-    ...(device.sync === undefined ? [] : [{ name: device.sync.mode === `mirror` ? `ports only` : `desktop sync` }]),
+    ...(device.sync === undefined
+        ? []
+        : [{ name: device.sync.mode === `mirror` ? t(`sandbox.deviceFacts.portsOnly`) : t(`sandbox.deviceFacts.desktopSync`) }]),
     // The door every verb on the row travels through; a row with no buttons should show it's missing.
-    ...(device.hostId === undefined ? [] : [{ name: `commands` }]),
+    ...(device.hostId === undefined ? [] : [{ name: t(`sandbox.deviceFacts.commands`) }]),
 ];
 
 // The agent as one chip: the build serving (what the device's behaviour comes from), the installed build only
@@ -104,11 +107,14 @@ export const syncNote = (device: Device, readAt: number): string | undefined => 
     if (device.sync === undefined) {
         return undefined;
     }
-    const what = device.sync.mode === `mirror` ? `mirroring ports` : `syncing files and ports`;
+    const mirror = device.sync.mode === `mirror`;
     if (!syncStopped(device, readAt)) {
-        return what;
+        return mirror ? t(`sandbox.deviceFacts.mirroringPorts`) : t(`sandbox.deviceFacts.syncingFilesPorts`);
     }
-    return device.sync.seenAt === undefined ? `enrolled for ${what}, never checked in` : `${what}: stopped`;
+    if (device.sync.seenAt === undefined) {
+        return mirror ? t(`sandbox.deviceFacts.mirrorNeverCheckedIn`) : t(`sandbox.deviceFacts.syncNeverCheckedIn`);
+    }
+    return mirror ? t(`sandbox.deviceFacts.mirrorStopped`) : t(`sandbox.deviceFacts.syncStopped`);
 };
 
 // Judged on the installed build, since that's what an update downloads over; a stale-loop-only device needs
@@ -148,14 +154,14 @@ export const machineWarnings = (device: Device, readAt: number): readonly string
     }
     // A dead loop leaves every fact beneath it reading as it did the moment before; said once, here.
     if (device.report !== undefined && (!device.report.agent.running || agentHalted(device))) {
-        warnings.push(`agent stopped`);
+        warnings.push(t(`sandbox.deviceFacts.agentStopped`));
     }
     return warnings;
 };
 
 // Only shown when offline: noise on a live row, the most useful fact on one that isn't.
 export const lastSeenNote = (device: Device): string | undefined =>
-    device.online === false && device.lastSeen !== undefined ? `last seen ${timeAgo(device.lastSeen)}` : undefined;
+    device.online === false && device.lastSeen !== undefined ? t(`sandbox.deviceFacts.lastSeen`, { ago: timeAgo(device.lastSeen) }) : undefined;
 
 // Why a device's sandboxes have no buttons: desktop sync alone never reports containers, and even a connected
 // device needs the sandbox switches granted. Two distinct gaps: no device connection, or one without the grant.

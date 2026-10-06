@@ -20,6 +20,7 @@ import ModelGroupRow from "./ModelGroupRow.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
 import ModelPinPicker from "./ModelPinPicker.vue";
 import ModelRoleRow from "./ModelRoleRow.vue";
+import { blockLabel } from "./roleWords";
 import { useT } from "@intentic/ui/i18n";
 
 // Every model choice the sandbox makes: one row per job from the catalog (MODEL_ROLE_BLOCKS), grouped by
@@ -315,7 +316,7 @@ const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void =>
     editing.value = {
         anchor,
         // The safeguard against this panel's one mistake: it looks like a single row's, but spends across every job.
-        header: `Model for ${roles.length} ${roles.length === 1 ? `job` : `jobs`}`,
+        header: t(`sandbox.agentModels.modelForJobs`, { count: roles.length }, roles.length),
         knobs: true,
         helperJobs: roles.every(helperJob),
         pin: () => bulkPin.value,
@@ -356,14 +357,14 @@ const setPickerOpen = (open: boolean): void => {
     <!-- `id` so a chat's "Turn it off everywhere" link can land here directly, not at the top of a long settings page. -->
     <div id="models" class="flex flex-col gap-6">
         <!-- Each catalog block owns its heading and visible model rows. -->
-        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" sticky>
+        <RowGroup v-for="block in blocks" :key="block.id" :label="blockLabel(block)" sticky>
             <!-- The filter controls the visible model rows. -->
             <template #info>
                 <SegmentedControl
                     :model-value="viewOf(block.id)"
                     :options="VIEWS"
                     size="xs"
-                    :aria-label="t(`sandbox.agentModels.howToShow`, { toLowerCase: block.label.toLowerCase() })"
+                    :aria-label="t(`sandbox.agentModels.howToShow`, { toLowerCase: blockLabel(block).toLowerCase() })"
                     @update:model-value="(view: ModelView) => setView(block, view)"
                 />
             </template>
@@ -377,7 +378,7 @@ const setPickerOpen = (open: boolean): void => {
                             :indeterminate="someSelectedIn(block.ids)"
                             binary
                             size="small"
-                            :aria-label="t(`sandbox.agentModels.selectEveryJobUnder`, { toLowerCase: block.label.toLowerCase() })"
+                            :aria-label="t(`sandbox.agentModels.selectEveryJobUnder`, { toLowerCase: blockLabel(block).toLowerCase() })"
                             @update:model-value="(value: unknown) => selectAllIn(block.ids, value === true)"
                         />
                         <span>{{

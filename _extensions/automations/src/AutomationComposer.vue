@@ -114,7 +114,7 @@ const submit = async (): Promise<void> => {
         }
         finish(id);
     } catch (err) {
-        submitError.value = err instanceof Error ? err.message : `Could not save the automation.`;
+        submitError.value = err instanceof Error ? err.message : t(`automationRow.couldntSave`);
     }
 };
 

@@ -53,7 +53,7 @@ const loadBuiltin = async (base: `intentic` | `claude`): Promise<BuiltinPromptTe
     if (builtinPrompts.value[base] === undefined) {
         await runBuiltin(async () => {
             builtinPrompts.value = { ...builtinPrompts.value, [base]: await sandboxRpc.settings.builtinPrompt({ base }) };
-        }, `Couldn't read that system prompt from your sandbox.`);
+        }, t(`sandbox.agentInstructions.couldntReadBuiltinPrompt`));
     }
     return builtinPrompts.value[base];
 };

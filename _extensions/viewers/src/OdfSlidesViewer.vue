@@ -125,7 +125,7 @@ const render = async (source: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        error.value = caught instanceof Error ? caught.message : `Could not render this presentation.`;
+        error.value = caught instanceof Error ? caught.message : t(`odfSlidesViewer.couldNotRender`);
     } finally {
         if (isLatest()) {
             loading.value = false;

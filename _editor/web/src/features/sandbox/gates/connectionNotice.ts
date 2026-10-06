@@ -112,7 +112,7 @@ const removedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNo
     if (input.removed !== true) {
         return undefined;
     }
-    const where = input.removedBy === undefined || input.removedBy === null || input.removedBy === `` ? `the computer it ran on` : input.removedBy;
+    const where = input.removedBy === undefined || input.removedBy === null || input.removedBy === `` ? t(`sandbox.connectionNotice.computerItRanOn`) : input.removedBy;
     const count = SANDBOX_RECOVERY_DAYS;
     return member(input)
         ? {
@@ -303,7 +303,7 @@ const isSettled = (kind: ConnectionFailure[`kind`]): kind is SettledKind => kind
 
 export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice => {
     const { failure } = input;
-    const name = input.sandboxName ?? `your sandbox`;
+    const name = input.sandboxName ?? t(`sandbox.connectionNotice.yourSandbox`);
     const addressComing = failure?.kind === `unaddressed` && input.claimed === true && input.outageMs < UNADDRESSED_PATIENCE_MS;
     if (failure === undefined || (addressComing && input.removed !== true)) {
         return {

@@ -138,7 +138,7 @@ export function useSandboxAttention() {
                 item: {
                     icon: `desktop`,
                     tone: `warning`,
-                    message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)}, its folder isn't syncing`,
+                    message: t(`sandbox.sandboxAttention.desktopSyncStopped`, { devices: stoppedOn.value.join(`, `) }),
                     to: DEVICES_PATH,
                     kind: `needs`,
                 },
@@ -148,7 +148,7 @@ export function useSandboxAttention() {
                 item: {
                     icon: `key`,
                     tone: `warning`,
-                    message: `${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`,
+                    message: t(`sandbox.sandboxAttention.requiredSecretsMissing`, { count: missingRequiredCount.value }, missingRequiredCount.value),
                     to: `/sandbox/secrets`,
                     count: missingRequiredCount.value,
                     kind: `needs`,
@@ -188,7 +188,7 @@ export function useSandboxAttention() {
                 item: {
                     icon: `desktop`,
                     tone: `info`,
-                    message: `${heldPorts.value.length} port${heldPorts.value.length === 1 ? `` : `s`} taken by another sandbox on your machine`,
+                    message: t(`sandbox.sandboxAttention.portsTaken`, { count: heldPorts.value.length }, heldPorts.value.length),
                     to: DEVICES_PATH,
                     count: heldPorts.value.length,
                     kind: `note`,

@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -35,7 +36,7 @@ export const useCapabilityProbe = ({ selected, form, error }: ProbeHost) => {
                 form.heardWho(entry, probe.who);
             }
         } catch (caught) {
-            error.value = noticeFrom(caught, `Could not test that connection.`);
+            error.value = noticeFrom(caught, t(`capabilities.capabilityProbe.couldNotTest`));
         } finally {
             probing.value = false;
         }

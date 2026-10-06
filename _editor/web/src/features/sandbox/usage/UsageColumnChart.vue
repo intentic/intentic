@@ -3,12 +3,15 @@ import { computed } from "vue";
 import { providerGroupLabel } from "../../chat/accounts/providerCatalog";
 import { niceMax, providerColor, type SpendBucket } from "./usageChart";
 import { formatMoney } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 
 // Spend over time as columns; a single series shows no legend (the title already names it), two or more get one.
 // Hand-rolled in HTML, not SVG or a library: percentage heights in a flex row are already responsive (no resize
 // observer needed), and colours are theme-aware CSS variables.
 
 // `providers` are series keys, not provider ids (locals folded into one); labelled via the group label.
+const t = useT();
+
 const { series, providers } = defineProps<{ series: readonly SpendBucket[]; providers: readonly string[] }>();
 
 // Axis top from the column's own total, never the stacked segments, for gridlines that read as round numbers.
@@ -23,7 +26,7 @@ const tooltipFor = (bucket: SpendBucket): string =>
     [
         `${bucket.label} · ${formatMoney(bucket.totals.costUsd)}`,
         ...(stacked.value ? stackOf(bucket).map((segment) => `${providerGroupLabel(segment.key)} ${formatMoney(segment.value)}`) : []),
-        `${bucket.totals.turns} ${bucket.totals.turns === 1 ? `turn` : `turns`}`,
+        t(`sandbox.usageColumnChart.turns`, { count: bucket.totals.turns }, bucket.totals.turns),
     ].join(` · `);
 
 const PLOT_HEIGHT = `10rem`;

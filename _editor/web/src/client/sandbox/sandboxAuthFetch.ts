@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { noteEdgeVerdict } from "./edgeVerdict";
 import { type SandboxBearer, useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
@@ -10,7 +11,7 @@ const { activeSandboxId } = useSandbox();
 
 export class SandboxUnaddressedError extends Error {
     constructor() {
-        super(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
+        super(t(`sandbox.sandboxClient.unaddressed`));
     }
 }
 
@@ -24,7 +25,7 @@ export const DEADLINE_MS = 45_000;
 
 export class SandboxTimeoutError extends Error {
     constructor() {
-        super(`Your sandbox didn't answer in time.`);
+        super(t(`sandbox.sandboxClient.timedOut`));
     }
 }
 
@@ -138,7 +139,7 @@ const timedOut = (): SandboxTimeoutError => {
 const bearerFor = async (target: SandboxTarget, background: boolean): Promise<SandboxBearer> => {
     const bearer = await getSessionToken(target, { background });
     if (bearer === undefined) {
-        throw new Error(background ? `This browser holds no session for that sandbox yet.` : `Sign in with Google to reach your sandbox.`);
+        throw new Error(background ? t(`sandbox.sandboxClient.noBackgroundSession`) : t(`sandbox.sandboxClient.signIn`));
     }
     return bearer;
 };

@@ -135,11 +135,11 @@ export const resourcesSummary = (row: DeviceSandboxRow): string | undefined => {
     }
     const parts = [
         ...(share.memoryBytes === undefined ? [] : [`${gibOf(share.memoryBytes)} GiB`]),
-        ...(share.cpus === undefined ? [] : [`${share.cpus} ${share.cpus === 1 ? `CPU` : `CPUs`}`]),
-        ...(share.privileged ? [`privileged`] : []),
+        ...(share.cpus === undefined ? [] : [t(`ui.deviceDetail.cpuCount`, { count: share.cpus }, share.cpus)]),
+        ...(share.privileged ? [t(`ui.deviceDetail.privileged`)] : []),
         ...(share.gpu ? [`GPU`] : []),
         // Said on the row too, not only in the form: a saved shape is a change still waiting for a restart.
-        ...(share.desired === undefined && share.saved === undefined ? [] : [`changes on restart`]),
+        ...(share.desired === undefined && share.saved === undefined ? [] : [t(`ui.deviceDetail.changesOnRestart`)]),
     ];
     return parts.length === 0 ? undefined : parts.join(` · `);
 };
@@ -244,9 +244,9 @@ export const folderState = (folder: DeviceFolderRow): string | undefined => {
         return undefined;
     }
     if (folder.paused === true) {
-        return `paused`;
+        return t(`ui.deviceDetail.paused`);
     }
-    return folder.mutagenStatus ?? `not syncing`;
+    return folder.mutagenStatus ?? t(`ui.deviceDetail.notSyncing`);
 };
 
 // Whether this pairing has a file-sync session at all. Not the same question as `mode === "sync"`: a pairing
@@ -260,7 +260,7 @@ export const backupState = (folder: DeviceFolderRow): string | undefined => {
     if (folder.mode === `mirror` || folder.paused === true || (folder.remoteDir !== undefined && folder.remoteDir !== WORKSPACE_ROOT)) {
         return undefined;
     }
-    return folder.backupStatus ?? `not backed up`;
+    return folder.backupStatus ?? t(`ui.deviceDetail.notBackedUp`);
 };
 
 // Only two answers, unlike `folderTone`'s three: a backup is either running or a gap worth acting on.
@@ -280,19 +280,22 @@ type ConflictChange = NonNullable<DeviceConflictRow[`local`]>;
 
 // `untracked` never reads as somebody's edit, which is what the old wording made of it: a reader told their own
 // `node_modules` was "created on this device" goes looking for a difference in content that does not exist.
-const ON_DEVICE: Record<ConflictChange, string> = {
-    created: `created on this device`,
-    modified: `changed on this device`,
-    deleted: `deleted on this device`,
-    untracked: `build output left on this device`,
-};
+// Built when read, so the words follow the language on screen.
+const onDevice = (change: ConflictChange): string =>
+    ({
+        created: t(`ui.deviceDetail.createdOnDevice`),
+        modified: t(`ui.deviceDetail.changedOnDevice`),
+        deleted: t(`ui.deviceDetail.deletedOnDevice`),
+        untracked: t(`ui.deviceDetail.buildOutputOnDevice`),
+    })[change];
 
-const IN_SANDBOX: Record<ConflictChange, string> = {
-    created: `created in the sandbox`,
-    modified: `changed in the sandbox`,
-    deleted: `deleted in the sandbox`,
-    untracked: `build output left in the sandbox`,
-};
+const inSandbox = (change: ConflictChange): string =>
+    ({
+        created: t(`ui.deviceDetail.createdInSandbox`),
+        modified: t(`ui.deviceDetail.changedInSandbox`),
+        deleted: t(`ui.deviceDetail.deletedInSandbox`),
+        untracked: t(`ui.deviceDetail.buildOutputInSandbox`),
+    })[change];
 
 export interface ConflictLine {
     /** The lead counts conflicts, never rows: the machine and Mutagen both cap what they report. */
@@ -320,10 +323,10 @@ export interface FolderConflicts {
 const conflictLine = (conflict: DeviceConflictRow): ConflictLine => ({
     // Why there's no list at all: an agent older than the field reports only the count. Absent whenever
     // there is a list, however short.
-    path: conflict.path === `` ? `the folder itself` : conflict.path,
+    path: conflict.path === `` ? t(`ui.deviceDetail.folderItself`) : conflict.path,
     note: [
-        conflict.local === undefined ? undefined : ON_DEVICE[conflict.local],
-        conflict.sandbox === undefined ? undefined : IN_SANDBOX[conflict.sandbox],
+        conflict.local === undefined ? undefined : onDevice(conflict.local),
+        conflict.sandbox === undefined ? undefined : inSandbox(conflict.sandbox),
     ]
         .filter((side) => side !== undefined)
         .join(` · `),
@@ -342,15 +345,9 @@ const isDerived = (conflict: DeviceConflictRow): boolean =>
 // sends them looking for a difference in content that does not exist.
 // Kept to two clauses on purpose: at the width this card is read on, the sentence it replaced ran to eight lines
 // before the first path, and half of those explained how the sync decides rather than what is stuck.
-const derivedLead = (count: number): string =>
-    `${count === 1 ? `One directory` : `${count} directories`} the sandbox deleted ${count === 1 ? `is` : `are`} still here, held open by ` +
-    `build output this device never syncs (node_modules, dist, a build cache). Nothing of yours is in ${count === 1 ? `it` : `them`}: ` +
-    `clearing it lets ${count === 1 ? `that deletion` : `those deletions`} land.`;
+const derivedLead = (count: number): string => t(`ui.deviceDetail.derivedLead`, { count }, count);
 
-const disputedLead = (count: number): string =>
-    `${count === 1 ? `One path changed` : `${count} paths changed`} both on this device and in the sandbox since they last agreed, so ` +
-    `neither copy was overwritten and ${count === 1 ? `it has` : `they have`} stopped syncing. Make the two copies match — same ` +
-    `contents, or gone on both sides — and syncing resumes on its own.`;
+const disputedLead = (count: number): string => t(`ui.deviceDetail.disputedLead`, { count }, count);
 
 export const folderConflicts = (folder: DeviceFolderRow | undefined): FolderConflicts | undefined => {
     const count = folder?.conflicts ?? 0;
@@ -368,8 +365,7 @@ export const folderConflicts = (folder: DeviceFolderRow | undefined): FolderConf
             ? disputedLead(count)
             : disputed === 0
               ? derivedLead(clearable)
-              : `${derivedLead(clearable)} The other ${disputed === 1 ? `one is a real disagreement` : `${disputed} are real disagreements`}: ` +
-                `both ends hold their own copy.`;
+              : t(`ui.deviceDetail.derivedAndDisputedLead`, { lead: derivedLead(clearable), count: disputed }, disputed);
     return {
         lead,
         rows,
@@ -391,8 +387,6 @@ export interface GroupSummary {
     readonly warnings: readonly string[];
 }
 
-const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
-
 const countOf = (group: DeviceSandboxGroup, state: DevicePortRow[`state`]): number => group.ports.filter((port) => port.state === state).length;
 
 // WHICH PORT OUTCOMES DESERVE A WARNING, AND WHICH ARE MERELY TRUE. Only one of the three has a remedy on this page:
@@ -404,15 +398,15 @@ const portCounts = (group: DeviceSandboxGroup): string[] => {
     const facts: string[] = [];
     const reached = countOf(group, `mirrored`);
     if (reached > 0) {
-        facts.push(plural(reached, `port`, `ports`));
+        facts.push(t(`ui.deviceDetail.portCount`, { count: reached }, reached));
     }
     const busy = countOf(group, `busy`);
     if (busy > 0) {
-        facts.push(`${plural(busy, `port`, `ports`)} busy here`);
+        facts.push(t(`ui.deviceDetail.portsBusyHere`, { count: busy }, busy));
     }
     const alone = countOf(group, `ignored`);
     if (alone > 0) {
-        facts.push(`${plural(alone, `port`, `ports`)} left alone`);
+        facts.push(t(`ui.deviceDetail.portsLeftAlone`, { count: alone }, alone));
     }
     return facts;
 };
@@ -423,10 +417,10 @@ const summaryFacts = (group: DeviceSandboxGroup): string[] => {
     // that one word accounts for every port at once, so the per-outcome counts would only repeat it.
     const off = mirroringOff(group.folder);
     return [
-        ...(off ? [`mirroring off`] : portCounts(group)),
+        ...(off ? [t(`ui.deviceDetail.mirroringOff`)] : portCounts(group)),
         // A fact, not a warning: the reader chose this. It explains the absence of everything the folder half
         // would otherwise say.
-        ...(group.folder?.mode === `mirror` ? [`ports only`] : []),
+        ...(group.folder?.mode === `mirror` ? [t(`ui.deviceDetail.portsOnly`)] : []),
     ];
 };
 
@@ -440,14 +434,14 @@ const summaryWarnings = (group: DeviceSandboxGroup): string[] => {
     // A pairing that syncs nothing is how it was set up, not a fault: one word on the closed line rather
     // than an opened row repeating it.
     if (taken > 0 && !mirroringOff(group.folder)) {
-        warnings.push(`${plural(taken, `port`, `ports`)} taken by another sandbox`);
+        warnings.push(t(`ui.deviceDetail.portsTakenByOther`, { count: taken }, taken));
     }
     if (group.folder?.conflicts) {
-        warnings.push(plural(group.folder.conflicts, `conflict`, `conflicts`));
+        warnings.push(t(`ui.deviceDetail.conflicts`, { count: group.folder.conflicts }, group.folder.conflicts));
     }
     // Silent while mirroring is off: that's not a fault, and the fact above already names the remedy.
     if (group.sandbox?.tunnelRunning === false) {
-        warnings.push(`tunnel off`);
+        warnings.push(t(`ui.deviceDetail.tunnelOff`));
     }
     const sync = group.folder === undefined ? undefined : folderState(group.folder);
     if (sync !== undefined && folderTone(sync) === `warning`) {
@@ -491,7 +485,7 @@ const portsTip = (group: DeviceSandboxGroup, state: DevicePortRow[`state`], titl
 
 const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
     if (mirroringOff(group.folder)) {
-        return [{ key: `mirroring`, icon: `ports`, text: `off`, label: `mirroring off`, tone: `quiet` }];
+        return [{ key: `mirroring`, icon: `ports`, text: t(`ui.deviceDetail.off`), label: t(`ui.deviceDetail.mirroringOff`), tone: `quiet` }];
     }
     const chips: GroupChip[] = [];
     const reached = countOf(group, `mirrored`);
@@ -501,7 +495,7 @@ const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
             key: `ports`,
             icon: `ports`,
             text: String(reached),
-            label: `${plural(reached, `port`, `ports`)} on localhost: ${numbers.join(`, `)}`,
+            label: t(`ui.deviceDetail.portsOnLocalhost`, { count: reached, numbers: numbers.join(`, `) }, reached),
             hint: portsTip(group, `mirrored`, t(`ui.deviceDetail.onLocalhost`)),
             tone: `quiet`,
         });
@@ -511,8 +505,8 @@ const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
         chips.push({
             key: `busy`,
             icon: `ports`,
-            text: `${busy} busy`,
-            label: `${plural(busy, `port`, `ports`)} busy here`,
+            text: t(`ui.deviceDetail.busyCount`, { count: busy }),
+            label: t(`ui.deviceDetail.portsBusyHere`, { count: busy }, busy),
             hint: portsTip(group, `busy`, t(`ui.deviceDetail.busyHere`)),
             tone: `quiet`,
         });
@@ -523,7 +517,7 @@ const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
             key: `alone`,
             icon: `eye-slash`,
             text: String(alone),
-            label: `${plural(alone, `port`, `ports`)} left alone`,
+            label: t(`ui.deviceDetail.portsLeftAlone`, { count: alone }, alone),
             hint: portsTip(group, `ignored`, t(`ui.deviceDetail.leftAlone`)),
             tone: `quiet`,
         });
@@ -539,14 +533,14 @@ const folderChips = (group: DeviceSandboxGroup): GroupChip[] => {
         return [];
     }
     if (folder.paused === true) {
-        return [{ key: `folder`, icon: `pause`, text: ``, label: `file syncing paused`, hint: t(`ui.deviceDetail.syncPaused`), tone: `quiet` }];
+        return [{ key: `folder`, icon: `pause`, text: ``, label: t(`ui.deviceDetail.fileSyncingPaused`), hint: t(`ui.deviceDetail.syncPaused`), tone: `quiet` }];
     }
     return [
         {
             key: `folder`,
             icon: `folder`,
             text: ``,
-            label: `files sync here`,
+            label: t(`ui.deviceDetail.filesSyncHere`),
             hint: { title: t(`ui.deviceDetail.filesSync`), rows: [{ label: t(`ui.deviceDetail.folder`), value: folder.localDir ?? `` }] },
             tone: `quiet`,
         },
@@ -689,10 +683,10 @@ export const portsLine = (group: DeviceSandboxGroup): CardPart[] | undefined => 
 // lists its WSL distros' sandboxes too, and a reader who wonders why one never updates here is reading the answer.
 export const keeperLine = (sandbox: DeviceSandboxRow): string | undefined => {
     if (sandbox.adoptedFrom !== undefined) {
-        return `looked after from here: ${sandbox.adoptedFrom} went quiet`;
+        return t(`ui.deviceDetail.adoptedFrom`, { side: sandbox.adoptedFrom });
     }
     const side = sandbox.keptElsewhereName ?? sandbox.keptElsewhere;
-    return side === undefined ? undefined : `kept by ${side} on this computer`;
+    return side === undefined ? undefined : t(`ui.deviceDetail.keptBy`, { side });
 };
 
 export const cardSubline = (group: DeviceSandboxGroup, now: number): string[] =>
@@ -752,15 +746,15 @@ export const portNote = (port: DevicePortRow, holder?: DeviceSandboxGroup | unde
     // Said as somebody's decision rather than as an outcome: nothing failed, and no reader should go looking for
     // what did.
     if (port.state === `ignored`) {
-        return `not on localhost: left alone on purpose`;
+        return t(`ui.deviceDetail.portLeftAlone`);
     }
     // Names no program. The command a port carries is the SANDBOX's own listener, never whoever won the number, so
     // the sentence that used to put it where it says "who" named the loser as the holder. The listener is the port
     // number's hover instead, as what the port is for.
     if (port.heldBy === undefined) {
-        return `not on localhost: another program here already uses it`;
+        return t(`ui.deviceDetail.portBusy`);
     }
-    return `not on localhost: ${holder?.title ?? port.heldBy} has it`;
+    return t(`ui.deviceDetail.portHeldBy`, { holder: holder?.title ?? port.heldBy });
 };
 
 // The only commands whose real subject is their argument; everything else is named by its own binary.

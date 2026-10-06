@@ -192,8 +192,9 @@ const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
 // setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
 // next tap goes (an agent's page from the board, the menu), `skip` for the two surfaces a phone never draws.
-const hubOutline = (title: string, description: string, railRows: number): FunctionalComponent => {
-    return () => h(SplitViewOutline, { title, description, railRows });
+// Words read when the outline draws, not when the routes are built, so a language switch reaches them.
+const hubOutline = (title: () => string, description: () => string, railRows: number): FunctionalComponent => {
+    return () => h(SplitViewOutline, { title: title(), description: description(), railRows });
 };
 
 const routes: RouteRecordRaw[] = [
@@ -354,8 +355,8 @@ const routes: RouteRecordRaw[] = [
                 component: asyncView(
                     () => import(`../features/capabilities/Capabilities.vue`),
                     hubOutline(
-                        `Capabilities`,
-                        `Grow your sandbox: each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`,
+                        () => t(`shared.capabilities`),
+                        () => t(`capabilities.slices.catalogDescription`),
                         6,
                     ),
                 ),
@@ -376,7 +377,7 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`shared.sandboxHub`) },
                 // The hub retitles itself with the active sandbox's name once mounted; the outline just says what the
                 // page is.
-                component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),
+                component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(() => t(`shared.sandboxHub`), () => ``, 7)),
             },
             // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`), so a reload or a shared
             // link reopens it. Optional/repeatable, so bare `/workspace` still matches.
@@ -407,7 +408,7 @@ const routes: RouteRecordRaw[] = [
                 name: `settings`,
                 meta: { title: () => t(`shared.settings`) },
                 // Mirrors the page's own heading (pages/SettingsHub.vue).
-                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
+                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5)),
             },
         ],
     },
@@ -475,7 +476,7 @@ const localRoutes = (): RouteRecordRaw[] => [
                 name: `settings`,
                 meta: { title: () => t(`shared.settings`) },
                 beforeEnter: requireAccount,
-                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
+                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5)),
             },
         ],
     },

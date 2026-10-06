@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { nativePushDriver } from "./nativePush";
 import { webPushDriver } from "./webPush";
@@ -96,7 +97,7 @@ export function usePushNotifications() {
             await sandboxRpc.push.subscribe(minted.channel);
             confirm(sandboxId, `on`);
         } catch (cause) {
-            error.value = cause instanceof Error ? cause.message : `Could not enable notifications.`;
+            error.value = cause instanceof Error ? cause.message : t(`shell.pushNotifications.couldntEnable`);
             await refresh();
         } finally {
             busy.value = false;
@@ -118,7 +119,7 @@ export function usePushNotifications() {
             }
             confirm(sandboxId, `off`);
         } catch (cause) {
-            error.value = cause instanceof Error ? cause.message : `Could not turn notifications off.`;
+            error.value = cause instanceof Error ? cause.message : t(`shell.pushNotifications.couldntDisable`);
             await refresh();
         } finally {
             busy.value = false;
@@ -134,7 +135,7 @@ export function usePushNotifications() {
         try {
             delivered.value = (await sandboxRpc.push.test()).delivered;
         } catch (cause) {
-            error.value = cause instanceof Error ? cause.message : `Could not send a test notification.`;
+            error.value = cause instanceof Error ? cause.message : t(`shell.pushNotifications.couldntTest`);
             // A refused send makes the daemon drop the registration; re-read rather than leave the toggle on.
             await refresh();
         } finally {

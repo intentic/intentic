@@ -90,8 +90,10 @@ const sessionMeta = (session: BrowserSession): string =>
     [
         accountOf(session),
         session.running
-            ? `${session.pages.length} ${session.pages.length === 1 ? `page` : `pages`}`
-            : `closed${session.finishedAt === undefined ? `` : ` ${timeAgo(session.finishedAt, { days: true })}`}`,
+            ? t(`browsers.browsers.pageCount`, { count: session.pages.length }, session.pages.length)
+            : session.finishedAt === undefined
+              ? t(`browsers.browsers.closedState`)
+              : t(`browsers.browsers.closedStateWhen`, { when: timeAgo(session.finishedAt, { days: true }) }),
     ]
         .filter((part) => part !== undefined)
         .join(` · `);
@@ -324,7 +326,10 @@ watch(
                         :disabled="sessions.length < 2"
                         v-tooltip.bottom="
                             sessions.length > 1
-                                ? { title: t(`browsers.browsers.switchBrowser`), rows: [{ label: t(`browsers.browsers.openCount`), value: sessions.length }] }
+                                ? {
+                                      title: t(`browsers.browsers.switchBrowser`),
+                                      rows: [{ label: t(`browsers.browsers.openCount`), value: sessions.length }],
+                                  }
                                 : current?.name
                         "
                         @click="switcherOpen = !switcherOpen"
@@ -361,7 +366,10 @@ watch(
                     <span
                         v-if="accountOf(current) && !compact"
                         class="flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-3xs text-muted"
-                        v-tooltip.bottom="{ title: t(`browsers.browsers.signedIn`), rows: [{ label: t(`browsers.browsers.account`), value: accountOf(current) ?? `` }] }"
+                        v-tooltip.bottom="{
+                            title: t(`browsers.browsers.signedIn`),
+                            rows: [{ label: t(`browsers.browsers.account`), value: accountOf(current) ?? `` }],
+                        }"
                     >
                         <Icon name="user" class="text-3xs" />
                         <span class="max-w-24 truncate">{{ accountOf(current) }}</span>

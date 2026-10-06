@@ -119,7 +119,7 @@ const routedFlowLive = computed(() => routedProvider.value !== undefined && tran
 
 // Whose turn the live handshake is on. "Signing in" is only true once the reader has actually been handed to the
 // provider; before that the panel below is asking them to go, and a spinner over it claims work nobody started.
-const flowNote = (live: boolean): string | undefined => (live ? (connectSent.value ? `signing in…` : `waiting for you`) : undefined);
+const flowNote = (live: boolean): string | undefined => (live ? (connectSent.value ? t(`sandbox.aiAccountSection.signingIn`) : t(`sandbox.aiAccountSection.waitingForYou`)) : undefined);
 
 // No two rows may read the same; distinguished in order:
 //   1. identity the provider reports (shown beside the name)
@@ -150,7 +150,7 @@ const identityNote = (account: OauthAccount): string | undefined => {
     if (identity.length > 0) {
         return identity.join(` · `);
     }
-    return ambiguousLabels.value.has(account.label) ? `connected ${timeAgo(account.connectedAt, { days: true })}` : undefined;
+    return ambiguousLabels.value.has(account.label) ? t(`sandbox.aiAccountSection.connectedAgo`, { ago: timeAgo(account.connectedAt, { days: true }) }) : undefined;
 };
 
 // Per-account usage summary, shown in the meter's card rather than permanently on the row. Always a line once
@@ -158,16 +158,20 @@ const identityNote = (account: OauthAccount): string | undefined => {
 const usageLine = (id: string): string => {
     const usage = accountUsage.value[id];
     if (usage === undefined || usage.turns === 0) {
-        return `No turns on this account yet.`;
+        return t(`sandbox.aiAccountSection.noTurnsYet`);
     }
     const cost = usage.costUsd > 0 ? ` · ${formatMoney(usage.costUsd)}` : ``;
     // Cache rate: cacheReadTokens / (cacheReadTokens + inputTokens), the share of prompt input served from cache.
     const cacheDenom = usage.cacheReadTokens + usage.inputTokens;
     const cache =
         usage.cacheReadTokens > 0 && cacheDenom > 0
-            ? ` · ${formatTokens(usage.cacheReadTokens)} cached (${Math.round((100 * usage.cacheReadTokens) / cacheDenom)}%)`
+            ? ` · ${t(`sandbox.aiAccountSection.cachedShare`, { tokens: formatTokens(usage.cacheReadTokens), pct: Math.round((100 * usage.cacheReadTokens) / cacheDenom) })}`
             : ``;
-    return `${usage.turns} turns · ${formatTokens(usage.inputTokens)} in / ${formatTokens(usage.outputTokens)} out${cache}${cost}`;
+    return `${t(
+        `sandbox.aiAccountSection.turnsInOut`,
+        { count: usage.turns, input: formatTokens(usage.inputTokens), output: formatTokens(usage.outputTokens) },
+        usage.turns,
+    )}${cache}${cost}`;
 };
 
 // Usage meter per row (plan-limit headroom), so the list shows who's spent without a Usage-tab trip. One decoration
@@ -236,7 +240,7 @@ const stateLine = (provider: AgentProvider, state: AccountState, label: string, 
         return t(`sandbox.aiAccountSection.signedOutReconnectTo`);
     }
     return provider === `gemini` && state.fix === `reconnect`
-        ? `${state.reason}. Disconnect it, open antigravity.google.com with that account to finish Google's setup, then connect it again.`
+        ? t(`sandbox.aiAccountSection.geminiFinishSetup`, { reason: state.reason })
         : state.reason;
 };
 
@@ -447,7 +451,7 @@ watch(() => route.query[`connect`], focusConnect);
                     <span
                         class="h-1.5 w-1.5 shrink-0 rounded-full"
                         :class="!accountsLoaded ? 'bg-content/25' : providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
-                        :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : t(`sandbox.words.notConnected`)"
+                        :aria-label="!accountsLoaded ? t(`sandbox.aiAccountSection.checking`) : providerReady(tab.value) ? t(`sandbox.aiAccountSection.connected`) : t(`sandbox.words.notConnected`)"
                     />
                     {{ tab.label }}
                     <!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->

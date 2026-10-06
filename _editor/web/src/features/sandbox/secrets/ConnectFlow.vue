@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
 import { Button, ui, CopyButton } from "@intentic/ui";
+import { formatList } from "@intentic/ui/format";
 import { computed, nextTick, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useChat } from "../../chat/run/useChat";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
@@ -92,7 +93,12 @@ const deadEndAddress = computed(() => {
 // sign-in finishes by itself once approved on that machine, and the paste is the way in from anywhere else.
 const catchers = computed(() => flow.value?.catchers ?? []);
 const watching = computed(() => !deviceFlow.value && catchers.value.length > 0);
-const watchedOn = computed(() => new Intl.ListFormat(undefined, { type: `disjunction` }).format(catchers.value.map((catcher) => catcher.label)));
+const watchedOn = computed(() =>
+    formatList(
+        catchers.value.map((catcher) => catcher.label),
+        `disjunction`,
+    ),
+);
 // Asked for by the reader signing in somewhere nothing watches; until then the paste field stays out of the way.
 const pasteInstead = ref(false);
 const bringItBack = (): void => {

@@ -108,32 +108,62 @@
         "waitingForOtherRun": "Czekam, aż skończy się to, co już działa na tym urządzeniu."
     },
     "requirements": {
+        "badge": {
+            "done": "gotowe",
+            "failed": "nie udało się",
+            "needsRestart": "wymaga ponownego uruchomienia",
+            "needsSignOut": "wymaga wylogowania",
+            "onHost": "na maszynie hosta",
+            "unsupported": "nieobsługiwane",
+            "weDoIt": "zrobimy to za Ciebie",
+            "working": "w toku",
+            "youDoIt": "to zadanie dla Ciebie"
+        },
         "beforeSandboxRunHere": "Zanim Twój sandbox będzie mógł tu działać:",
         "checkAgain": "Sprawdź ponownie",
         "deviceCantRunSandbox": "Ten komputer nie może jeszcze uruchomić sandboxa:",
+        "doTheseAndContinue": "Zrób to wszystko i kontynuuj",
+        "doThisAndContinue": "Zrób to i kontynuuj",
         "hideSteps": "Ukryj kroki",
         "restartNow": "Uruchom ponownie teraz",
         "runOnMachineWe": "Uruchom go na maszynie, którą my hostujemy",
+        "setupSaved": "Twoja konfiguracja jest zapisana: to okno wróci do niej po Twoim powrocie.",
         "showMeHow": "Pokaż mi, jak",
+        "signOutAgain": "Wylogowanie i ponowne zalogowanie nie odświeżyło tego na tym komputerze. Ponowne uruchomienie zawsze to robi: Twoja konfiguracja jest zapisana i sama będzie kontynuowana po Twoim powrocie.",
+        "signOutExhausted": "Nawet ponowne uruchomienie tego nie zmieniło. Osoba, która opiekuje się tym komputerem, może musieć ręcznie dodać Twoje konto do grupy Dockera; do tego czasu Twój sandbox może działać na maszynie, którą my hostujemy.",
         "signOutNow": "Wyloguj się teraz",
+        "tryAgain": "Spróbuj ponownie",
         "windowsAskPermissionOnce": "Windows raz poprosi o uprawnienie."
     },
     "setupPlan": {
+        "aboutMinutes": "około {count} minuty | około {count} minut | około {count} minut",
         "checkAnswers": "Sprawdź, czy odpowiada",
         "checkDevice": "Sprawdź to urządzenie",
+        "checkDocker": "Sprawdź Dockera",
+        "checkDockerNeeds": "Sprawdź, czego potrzebuje Docker",
         "connectDevice": "Podłącz to urządzenie",
         "downloadSandboxImage": "Pobierz obraz sandboxa",
         "fetchInstaller": "Pobierz instalator",
+        "installDocker": "Zainstaluj Dockera",
+        "lessThanMinute": "mniej niż minuta",
         "redeemSetupCode": "Zrealizuj kod instalacyjny",
+        "setUpDocker": "Skonfiguruj Dockera",
         "setUpFolderSync": "Skonfiguruj synchronizację folderu",
         "startSandbox": "Uruchom swój sandbox",
+        "stepOf": "Krok {index} z {total}",
         "useSandboxImage": "Użyj obrazu sandboxa, który już tu jest",
         "waitToComeUp": "Poczekaj, aż wstanie"
     },
     "setupProgress": {
+        "allDone": "Wszystko gotowe",
+        "gettingStarted": "Zaczynamy",
         "hideSteps": "Ukryj kroki",
         "pausedAt": "Wstrzymano na: {toLowerCase}",
-        "seeAllSteps": "Zobacz wszystkie kroki ({count})"
+        "seeAllSteps": "Zobacz wszystkie kroki ({count})",
+        "stopped": "Zatrzymano",
+        "stoppedAt": "Zatrzymano na: {position}",
+        "stoppedAtThisStep": "Zatrzymano na tym kroku",
+        "waitingForYou": "Czeka na Ciebie"
     },
     "device": {
         "title": "Ten komputer",
@@ -199,5 +229,13 @@
             "ready": "w środku",
             "failed": "nie udało się dodać"
         }
+    },
+    "account": {
+        "profileUpdateFailed": "Nie udało się zaktualizować profilu.",
+        "sessionCheckFailed": "Nie udało się sprawdzić Twojej sesji.",
+        "signOutFailed": "Nie udało się wylogować."
+    },
+    "setup": {
+        "stuckInstallerNotStopped": "Nie udało się zatrzymać zawieszonego instalatora: {error}"
     }
 }

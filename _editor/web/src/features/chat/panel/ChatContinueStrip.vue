@@ -178,7 +178,7 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
     } catch (error) {
         // Left as it stands: a control that moved on a failed write would claim an automation nobody armed. The snap
         // back alone is easy to miss, so the card says why.
-        answerRefused.value = messageOr(error, `That answer didn't save.`);
+        answerRefused.value = messageOr(error, t(`chat.chatContinueStrip.answerNotSaved`));
     } finally {
         pending.value = undefined;
     }

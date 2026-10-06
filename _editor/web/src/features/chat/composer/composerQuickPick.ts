@@ -11,12 +11,12 @@ import { formatUntil } from "@intentic/ui/time";
 // summary nor a search. Files are the component's own list, appended after these.
 
 export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> => ({
-    persona: { label: t(`chat.words.acts`), badge: `Persona`, icon: `users` },
-    sandbox: { label: t(`chat.words.whereRuns`), badge: `Where`, icon: `desktop` },
-    model: { label: t(`shared.model`), badge: `Model`, icon: `cpu` },
-    effort: { label: t(`chat.composerQuickPick.effort`), badge: `Effort`, icon: `bolt` },
-    send: { label: t(`chat.composerQuickPick.sendLater`), badge: `Send`, icon: `clock` },
-    land: { label: t(`chat.composerQuickPick.landWhenDone`), badge: `Land`, icon: `download` },
+    persona: { label: t(`chat.words.acts`), badge: t(`chat.composerQuickPick.badgePersona`), icon: `users` },
+    sandbox: { label: t(`chat.words.whereRuns`), badge: t(`chat.composerQuickPick.badgeWhere`), icon: `desktop` },
+    model: { label: t(`shared.model`), badge: t(`chat.composerQuickPick.badgeModel`), icon: `cpu` },
+    effort: { label: t(`chat.composerQuickPick.effort`), badge: t(`chat.composerQuickPick.badgeEffort`), icon: `bolt` },
+    send: { label: t(`chat.composerQuickPick.sendLater`), badge: t(`chat.composerQuickPick.badgeSend`), icon: `clock` },
+    land: { label: t(`chat.composerQuickPick.landWhenDone`), badge: t(`chat.composerQuickPick.badgeLand`), icon: `download` },
 });
 
 export interface QuickPickSources {
@@ -243,13 +243,13 @@ const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): Quic
 // raw id rather than nothing.
 const personaValue = (source: NonNullable<QuickPickSources[`persona`]>): string => {
     const persona = source.personas.find((candidate) => candidate.id === source.picked);
-    return persona === undefined ? (source.picked ?? `Anyone`) : (persona.label ?? persona.id);
+    return persona === undefined ? (source.picked ?? t(`chat.words.anyone`)) : (persona.label ?? persona.id);
 };
 const sandboxValue = (source: NonNullable<QuickPickSources[`sandbox`]>): string => {
     if (source.box !== undefined) {
-        return source.boxes.find((box) => box.id === source.box)?.name ?? `Another sandbox`;
+        return source.boxes.find((box) => box.id === source.box)?.name ?? t(`chat.composerQuickPick.anotherSandbox`);
     }
-    return source.runner ?? `Here`;
+    return source.runner ?? t(`chat.composerQuickPick.here`);
 };
 const effortValue = (source: NonNullable<QuickPickSources[`effort`]>): string =>
     source.options.find((option) => option.value === source.picked)?.label ?? source.picked;

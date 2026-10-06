@@ -2,6 +2,7 @@
 // `parseCron` inverts it for the shapes the builder produces, falling back to freq "custom" with the raw string.
 // `scheduleLabel` renders the human badge for the automations list.
 import { asZone, type Zone, zoneLabel } from "@intentic/sandbox-contract/time";
+import { t } from "./i18n";
 
 export type ScheduleFreq = `minutes` | `hourly` | `daily` | `weekly` | `monthly` | `custom`;
 
@@ -143,19 +144,29 @@ export const localInputOf = (at: number): string => {
 /** NaN for a cleared or half-typed box, which every caller reads as "not answered yet". */
 export const instantOf = (local: string): number => new Date(local).getTime();
 
-const DAY_NAMES = [`Sun`, `Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`];
+// Built when read, so the names follow the language on screen; Sunday first, as cron counts.
+const dayNames = (): readonly string[] => [
+    t(`automationFields.sun`),
+    t(`automationFields.mon`),
+    t(`automationFields.tue`),
+    t(`automationFields.wed`),
+    t(`automationFields.thu`),
+    t(`automationFields.fri`),
+    t(`automationFields.sat`),
+];
 
+// A language without suffixed ordinals spells all four the same (Polish: "1.").
 const ordinal = (day: number): string => {
     if (day % 10 === 1 && day !== 11) {
-        return `${day}st`;
+        return t(`cronSchedule.ordinal.st`, { day });
     }
     if (day % 10 === 2 && day !== 12) {
-        return `${day}nd`;
+        return t(`cronSchedule.ordinal.nd`, { day });
     }
     if (day % 10 === 3 && day !== 13) {
-        return `${day}rd`;
+        return t(`cronSchedule.ordinal.rd`, { day });
     }
-    return `${day}th`;
+    return t(`cronSchedule.ordinal.th`, { day });
 };
 
 // Keeps `since`/`nextIn` narrow instead of using the kit's `timeAgo`, which falls back to full dates.
@@ -165,15 +176,17 @@ const MINUTES_PER_DAY = 60 * 24;
 export const since = (at: number): string => {
     const minutes = Math.round((Date.now() - at) / 60_000);
     if (minutes < 1) {
-        return `just now`;
+        return t(`cronSchedule.justNow`);
     }
     if (minutes < 60) {
-        return `${minutes}m ago`;
+        return t(`cronSchedule.minutesAgo`, { count: minutes }, minutes);
     }
     if (minutes < MINUTES_PER_DAY) {
-        return `${Math.round(minutes / 60)}h ago`;
+        const hours = Math.round(minutes / 60);
+        return t(`cronSchedule.hoursAgo`, { count: hours }, hours);
     }
-    return `${Math.round(minutes / MINUTES_PER_DAY)}d ago`;
+    const days = Math.round(minutes / MINUTES_PER_DAY);
+    return t(`cronSchedule.daysAgo`, { count: days }, days);
 };
 
 /**
@@ -183,21 +196,25 @@ export const since = (at: number): string => {
 export const nextIn = (at: number): string => {
     const minutes = Math.round((at - Date.now()) / 60_000);
     if (minutes < 1) {
-        return `due`;
+        return t(`cronSchedule.due`);
     }
     if (minutes < 60) {
-        return `in ${minutes}m`;
+        return t(`cronSchedule.inMinutes`, { count: minutes }, minutes);
     }
     if (minutes < MINUTES_PER_DAY) {
-        return `in ${Math.round(minutes / 60)}h`;
+        const hours = Math.round(minutes / 60);
+        return t(`cronSchedule.inHours`, { count: hours }, hours);
     }
-    return `in ${Math.round(minutes / MINUTES_PER_DAY)}d`;
+    const days = Math.round(minutes / MINUTES_PER_DAY);
+    return t(`cronSchedule.inDays`, { count: days }, days);
 };
 
 // Full trigger rule as one phrase, e.g. "Daily 05:00 Europe/Warsaw · after 30 sessions".
 export const scheduleTriggerLabel = (trigger: { readonly cron: string; readonly afterSessions?: number; readonly tz?: string }, reader: Zone, sandbox: Zone): string => {
     const label = scheduleLabel(trigger.cron, reader, (asZone(trigger.tz) ?? sandbox) as Zone);
-    return trigger.afterSessions === undefined ? label : `${label} · after ${trigger.afterSessions} sessions`;
+    return trigger.afterSessions === undefined
+        ? label
+        : t(`cronSchedule.afterSessions`, { label, count: trigger.afterSessions }, trigger.afterSessions);
 };
 
 /**
@@ -216,24 +233,24 @@ export const scheduleLabel = (cron: string, reader: Zone, rule: Zone): string =>
         return schedule.cron;
     }
     if (schedule.freq === `minutes`) {
-        return `Every ${schedule.everyMinutes} min`;
+        return t(`cronSchedule.everyMinutes`, { minutes: schedule.everyMinutes });
     }
     if (schedule.freq === `hourly`) {
-        return `Hourly`;
+        return t(`cronSchedule.hourly`);
     }
     if (schedule.freq === `daily`) {
-        return qualify(`Daily ${schedule.time}`);
+        return qualify(t(`cronSchedule.daily`, { time: schedule.time }));
     }
     if (schedule.freq === `monthly`) {
-        return qualify(`Monthly ${ordinal(schedule.dayOfMonth)} ${schedule.time}`);
+        return qualify(t(`cronSchedule.monthly`, { day: ordinal(schedule.dayOfMonth), time: schedule.time }));
     }
     if (schedule.days.length === 7) {
-        return qualify(`Every day ${schedule.time}`);
+        return qualify(t(`cronSchedule.everyDay`, { time: schedule.time }));
     }
     if (schedule.days.join(`,`) === `1,2,3,4,5`) {
-        return qualify(`Weekdays ${schedule.time}`);
+        return qualify(t(`cronSchedule.weekdays`, { time: schedule.time }));
     }
     // Mon-first display order.
-    const names = schedule.days.toSorted((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((day) => DAY_NAMES[day]);
+    const names = schedule.days.toSorted((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((day) => dayNames()[day]);
     return qualify(`${names.join(`, `)} ${schedule.time}`);
 };

@@ -470,9 +470,9 @@ const onPick = (event: Event): void => {
                         v-model="searchScope"
                         size="xs"
                         :options="[
-                            { label: `Name`, value: `name` },
-                            { label: `Text`, value: `text` },
-                            { label: `Smart`, value: `smart` },
+                            { label: t(`shared.name`), value: `name` },
+                            { label: t(`workspace.words.text`), value: `text` },
+                            { label: t(`workspace.workspaceDesktop.smart`), value: `smart` },
                         ]"
                     />
                 </div>
@@ -643,7 +643,12 @@ const onPick = (event: Event): void => {
                 </PullToRefresh>
 
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
-                <FloatingAction v-if="!contentMode" icon="upload" :label="t(`workspace.workspaceMobile.uploadFilesHere`)" @click="fileInput?.click()" />
+                <FloatingAction
+                    v-if="!contentMode"
+                    icon="upload"
+                    :label="t(`workspace.workspaceMobile.uploadFilesHere`)"
+                    @click="fileInput?.click()"
+                />
             </template>
         </template>
 

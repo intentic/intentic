@@ -129,11 +129,12 @@ const deltaArrow = (delta: number | undefined): string => (delta === undefined |
 const comparedTo = computed(() =>
     preset.value === `all`
         ? undefined
-        : `vs previous ${
-              rangePresets()
-                  .find((entry) => entry.value === preset.value)
-                  ?.label.toLowerCase() ?? ``
-          }`,
+        : t(`sandbox.sandboxUsage.vsPrevious`, {
+              range:
+                  rangePresets()
+                      .find((entry) => entry.value === preset.value)
+                      ?.label.toLowerCase() ?? ``,
+          }),
 );
 
 // Only counting tiles: a rate would plot 0% on idle days (reads as broken); spend already has its own chart.
@@ -149,12 +150,12 @@ const byModel = computed(() =>
             const choice = parsePinned(key)!;
             return modelLabelFor(choice.provider, choice.model);
         },
-        `Provider default`,
+        t(`sandbox.sandboxUsage.providerDefault`),
         providerGroup,
     ),
 );
 const agentTitle = (id: string): string => fleet.value.find((agent) => agent.id === id)?.title ?? `${id.slice(0, 8)}…`;
-const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, `Main tree`, providerGroup));
+const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, t(`sandbox.sandboxUsage.mainTree`), providerGroup));
 
 // savings
 
@@ -166,7 +167,7 @@ const hasSavings = computed(
     () => (savings.value?.input.commands ?? 0) > 0 || savings.value?.search !== undefined || savings.value?.map !== undefined,
 );
 // States its own period beside the number, since the same digits mean different things under different ranges.
-const savingsPeriod = computed(() => (preset.value === `all` ? `all time` : `this range`));
+const savingsPeriod = computed(() => (preset.value === `all` ? t(`sandbox.sandboxUsage.periodAllTime`) : t(`sandbox.sandboxUsage.periodThisRange`)));
 
 // the table and the export
 
@@ -397,7 +398,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
                             <!-- Age stated always: a frozen figure reads exactly like a live one otherwise. -->
                             <template #footnote>
-                                {{ formatCompact(savings?.input.commands ?? 0) }} {{ t(`sandbox.sandboxUsage.commands`) }} {{ savingsPeriod }}
+                                {{ t(`sandbox.sandboxUsage.commandCount`, { count: formatCompact(savings?.input.commands ?? 0) }) }} {{ savingsPeriod }}
                                 <template v-if="savings?.input.updatedAt !== undefined">{{
                                     t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: timeAgo(savings.input.updatedAt, { days: true }) })
                                 }}</template>

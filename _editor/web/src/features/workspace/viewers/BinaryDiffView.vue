@@ -97,7 +97,10 @@ watch(
                     blob = await sandboxBlob(source, undefined, at);
                 } catch (error) {
                     if (isLatest()) {
-                        loaded.value = { ...loaded.value, [side]: { error: messageOr(error, `Couldn't load this side.`), loading: false } };
+                        loaded.value = {
+                            ...loaded.value,
+                            [side]: { error: messageOr(error, t(`workspace.binaryDiffView.sideLoadFailed`)), loading: false },
+                        };
                     }
                     return;
                 }
@@ -191,14 +194,14 @@ const verdict = computed(() => {
         return undefined;
     }
     if (answer.kind === `bytes`) {
-        return `Both sides are the same file: identical bytes.`;
+        return t(`workspace.binaryDiffView.sameBytes`);
     }
     if (answer.kind === `pixels`) {
-        return `Both sides are the same picture: identical pixels, only the encoding differs.`;
+        return t(`workspace.binaryDiffView.samePixels`);
     }
     // A share this small is a handful of pixels in a screenshot, and "0.0%" would read as "nothing".
-    const share = answer.share < 0.001 ? `Under 0.1%` : `${(answer.share * 100).toFixed(answer.share >= 0.1 ? 0 : 1)}%`;
-    return `Same dimensions: ${share} of the pixels changed.`;
+    const share = answer.share < 0.001 ? t(`workspace.binaryDiffView.underTenth`) : `${(answer.share * 100).toFixed(answer.share >= 0.1 ? 0 : 1)}%`;
+    return t(`workspace.binaryDiffView.pixelsChanged`, { share });
 });
 
 // Panes actually drawn, before → after. A list, so the template states the pane once instead of a second markup

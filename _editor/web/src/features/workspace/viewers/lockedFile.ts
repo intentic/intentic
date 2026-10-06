@@ -19,64 +19,64 @@ const locked = (): Record<string, LockedFile> => ({
     // Holds no secret, only the reach-list; still locked, since editing it would grant an unapproved capability.
     "config/capabilities.json": {
         subject: `capabilities.json`,
-        holds: `the list of accounts, computers and services this sandbox may reach, which the agent acts through`,
+        holds: t(`workspace.lockedFile.holds.capabilities`),
         manage: { label: t(`shared.capabilities`), to: `/capabilities` },
     },
     "identity/owner.json": {
         subject: `owner.json`,
-        holds: `who this sandbox belongs to`,
+        holds: t(`workspace.lockedFile.holds.owner`),
         manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "identity/members.json": {
         subject: `members.json`,
-        holds: `who you've invited to this sandbox`,
+        holds: t(`workspace.lockedFile.holds.members`),
         manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "identity/control-tokens.json": {
         subject: `control-tokens.json`,
-        holds: `the tokens that let this sandbox be driven from outside it`,
+        holds: t(`workspace.lockedFile.holds.controlTokens`),
         manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "identity/passkeys.json": {
         subject: `passkeys.json`,
-        holds: `the passkeys that open this sandbox, whether one is required, and the fingerprints of your recovery codes`,
+        holds: t(`workspace.lockedFile.holds.passkeys`),
         manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
-    "secrets/ci.json": { subject: `ci.json`, holds: `the secret your builds use to reach this sandbox` },
+    "secrets/ci.json": { subject: `ci.json`, holds: t(`workspace.lockedFile.holds.ci`) },
     "secrets/doors.json": {
         subject: `doors.json`,
-        holds: `the tokens behind your webhooks, release gates and bug intakes`,
+        holds: t(`workspace.lockedFile.holds.doors`),
         manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     // Provider CLI's own home, at the state dir's root: written by the agent's runtime, not a daemon store.
     "claude.json": {
         subject: `claude.json`,
-        holds: `an agent's own sign-in`,
+        holds: t(`workspace.lockedFile.holds.claude`),
         manage: { label: t(`workspace.lockedFile.agentSettings`), to: `/sandbox/agent` },
     },
     // An update's undo record, written by the boot that converts stored files; a copy of a vault is a vault.
     "secrets/converting": {
         // allow(contract-paths): a directory under the state dir, not a route
         subject: `${STATE_DIR}/secrets/converting`,
-        holds: `copies of the files an update changed, kept so a version it rolls back to gets its own files back`,
+        holds: t(`workspace.lockedFile.holds.converting`),
     },
     "secrets/auth": {
         // allow(contract-paths): a directory under the state dir, not a route
         subject: `${STATE_DIR}/secrets/auth`,
-        holds: `the agents' sign-ins with their providers, plus the vaults behind your connections and your extensions' settings`,
+        holds: t(`workspace.lockedFile.holds.auth`),
         manage: { label: t(`workspace.lockedFile.agentSettings`), to: `/sandbox/agent` },
     },
     "records/sessions": {
         subject: `${STATE_DIR}/records/sessions`,
-        holds: `your agents' conversations, in the form their provider keeps them`,
+        holds: t(`workspace.lockedFile.holds.sessions`),
         manage: { label: t(`shared.agents`), to: `/agents` },
     },
     "local/browser": {
         subject: `${STATE_DIR}/local/browser`,
-        holds: `the browser profiles your agent is signed in on`,
+        holds: t(`workspace.lockedFile.holds.browser`),
         manage: { label: t(`shared.browsers`), to: `/browsers` },
     },
-    ".git": { subject: `.git`, holds: `this workspace's own history, kept where nothing running here can rewrite it` },
+    ".git": { subject: `.git`, holds: t(`workspace.lockedFile.holds.git`) },
 });
 
 // Exported for the completeness test alone; the app asks `lockedFile` below. A function for the same reason the
@@ -90,7 +90,7 @@ export const lockedFile = (path: string): LockedFile => {
     return (
         (entry === undefined ? undefined : locked()[entry]) ?? {
             subject: basename(path),
-            holds: `something only the sandbox itself uses`,
+            holds: t(`workspace.lockedFile.holds.unknown`),
         }
     );
 };

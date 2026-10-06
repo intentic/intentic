@@ -74,7 +74,7 @@ const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.val
 const { build: hostedBuild } = useHostedBuild(() => hosted.value);
 const runningIn = (slug: string): string | undefined =>
     hubWorkRunning(hubWorkKey(HUB, slug), sandbox.activeSandboxId.value) ??
-    (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
+    (slug === `environment` && hostedBuild.value?.state === `building` ? t(`sandbox.useHostedBuild.buildingEnvironment`) : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
 const contributed = computed<readonly ActiveExtension[]>(() =>

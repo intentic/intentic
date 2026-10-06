@@ -3,6 +3,7 @@ import { type AgentSummary, AgentSummarySchema, type AutomationApproval } from "
 import { z } from "zod";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { agentTranscriptKey } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
@@ -472,7 +473,7 @@ export const loadArchived = async (): Promise<void> => {
         } catch (error) {
             // Leave whatever was listed last, and say why: an empty archive view would claim nothing was ever filed.
             if (current()) {
-                archiveFailure.value = messageOr(error, `Couldn't read the archive.`);
+                archiveFailure.value = messageOr(error, t(`agents.useAgentsRegistry.couldntReadArchive`));
             }
             return;
         } finally {

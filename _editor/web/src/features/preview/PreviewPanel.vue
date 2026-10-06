@@ -59,7 +59,13 @@ const moreMenu = ref<{ show: (event: Event) => void }>();
 // Grouped by where a row comes from: one heading per repo, then forwarded ports, the workspace page, the address. Each
 // row's annotation is its live state, so the list answers "what is up?" unclicked.
 const stateOf = (entry: PreviewTarget): string =>
-    entry.kind === `repo` || entry.kind === `app` ? (entry.healthy ? `running` : entry.running ? `starting` : `stopped`) : `live`;
+    entry.kind === `repo` || entry.kind === `app`
+        ? entry.healthy
+            ? t(`preview.previewPanel.stateRunning`)
+            : entry.running
+              ? t(`preview.previewPanel.stateStarting`)
+              : t(`preview.previewPanel.stateStopped`)
+        : t(`preview.previewPanel.stateLive`);
 const rowOf = (entry: PreviewTarget) => ({
     value: entry.id,
     label: entry.label,
@@ -135,7 +141,7 @@ const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<voi
     try {
         await action(entry);
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `The action failed.`;
+        actionError.value = error instanceof Error ? error.message : t(`preview.previewPanel.actionFailed`);
     } finally {
         busy.value = false;
     }
@@ -150,12 +156,12 @@ const previewServer = async (port: number): Promise<void> => {
     try {
         const id = await forward(port);
         if (id === undefined) {
-            actionError.value = `This sandbox has no public preview address, so its ports can't be previewed from a browser.`;
+            actionError.value = t(`preview.previewPanel.noPublicAddress`);
             return;
         }
         selectPreviewTarget(id);
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `Forwarding port ${port} failed.`;
+        actionError.value = error instanceof Error ? error.message : t(`preview.previewPanel.forwardFailed`, { port });
     } finally {
         forwarding.value = undefined;
     }
@@ -289,7 +295,10 @@ const moreItems = computed<MenuItem[]>(() => {
             const url = entry.url;
             items.push(
                 { label: copyHint.value, command: (): void => void clipboardOf(panelRoot.value).writeText(url) },
-                { label: t(`preview.previewPanel.openInNewTab`, { label: entry.label }), command: (): void => void window.open(url, `_blank`, `noopener`) },
+                {
+                    label: t(`preview.previewPanel.openInNewTab`, { label: entry.label }),
+                    command: (): void => void window.open(url, `_blank`, `noopener`),
+                },
             );
         }
     }
@@ -315,12 +324,12 @@ const startHint = computed<string | undefined>(() => {
         return undefined;
     }
     const what =
-        entry.app === undefined ? `${entry.repo}'s own dev server (its operator/ panel, or its dev script)` : `the ${entry.app} app's dev server`;
+        entry.app === undefined
+            ? t(`preview.previewPanel.repoDevServer`, { repo: entry.repo ?? `` })
+            : t(`preview.previewPanel.appDevServer`, { app: entry.app });
     // Cost is read off the tree's install state, not assumed.
-    const cost = entry.installed
-        ? `Its dependencies are installed, so it's up in a few seconds.`
-        : `Its dependencies aren't installed yet, so they install first, which can take a few minutes.`;
-    return `Runs ${what} in the sandbox. It appears in the terminal ${startSession.value}. ${cost}`;
+    const cost = entry.installed ? t(`preview.previewPanel.startCostInstalled`) : t(`preview.previewPanel.startCostInstall`);
+    return t(`preview.previewPanel.startHint`, { what, session: startSession.value, cost });
 });
 // The Start button's hover: what it runs, where its output lands, and whether an install comes first.
 const startTip = computed((): Tip | undefined => {
@@ -353,29 +362,29 @@ const STARTING_SLOW_MS = 60_000;
 const waitingLong = computed(() => waitedMs.value > STARTING_SLOW_MS);
 const waitedFor = computed(() => {
     const minutes = Math.floor(waitedMs.value / 60_000);
-    return minutes < 1 ? `${Math.floor(waitedMs.value / 1000)}s` : `${minutes} min`;
+    return minutes < 1
+        ? t(`preview.previewPanel.waitedSeconds`, { seconds: Math.floor(waitedMs.value / 1000) })
+        : t(`preview.previewPanel.waitedMinutes`, { minutes });
 });
 
 /* Launch hints describe the daemon's starting phase, not generic preview health. */
-const LAUNCH_HINTS: Record<PanelLaunch, { readonly waiting: string; readonly overdue: (waited: string) => string }> = {
+// Built when read, so a language switch reaches a hint already on screen.
+const LAUNCH_HINTS: Record<PanelLaunch, { readonly waiting: () => string; readonly overdue: (waited: string) => string }> = {
     launching: {
-        waiting: `Opening its terminal.`,
-        overdue: (waited) =>
-            `Its terminal has been opening for ${waited}, which is far longer than it should: the sandbox may be out of memory or CPU. Restart it below.`,
+        waiting: () => t(`preview.previewPanel.launchingWaiting`),
+        overdue: (waited) => t(`preview.previewPanel.launchingOverdue`, { waited }),
     },
     installing: {
-        waiting: `Installing its dependencies first, which can take a few minutes: its terminal shows the install live.`,
-        overdue: (waited) =>
-            `Still installing its dependencies after ${waited}. Its terminal shows the install live: a slow registry is normal, an error there is not.`,
+        waiting: () => t(`preview.previewPanel.installingWaiting`),
+        overdue: (waited) => t(`preview.previewPanel.installingOverdue`, { waited }),
     },
     starting: {
-        waiting: `Its dev server is starting; the preview opens the moment it answers.`,
-        overdue: (waited) =>
-            `Its dev server has been starting for ${waited} without answering, which a working start never takes. Its terminal shows what it is waiting on; restarting it is the usual fix.`,
+        waiting: () => t(`preview.previewPanel.startingWaiting`),
+        overdue: (waited) => t(`preview.previewPanel.startingOverdue`, { waited }),
     },
     exited: {
-        waiting: `Its dev server exited before it served anything. Its terminal has the reason.`,
-        overdue: () => `Its dev server exited before it served anything. Its terminal has the reason.`,
+        waiting: () => t(`preview.previewPanel.exited`),
+        overdue: () => t(`preview.previewPanel.exited`),
     },
 };
 const launchHint = computed<string | undefined>(() => {
@@ -385,14 +394,14 @@ const launchHint = computed<string | undefined>(() => {
     }
     if (entry.launch !== undefined) {
         const hint = LAUNCH_HINTS[entry.launch];
-        return waitingLong.value ? hint.overdue(waitedFor.value) : hint.waiting;
+        return waitingLong.value ? hint.overdue(waitedFor.value) : hint.waiting();
     }
     // No launch state: the daemon sees it serving (or does not run it), and it is the ADDRESS that has not
     // answered. Past the minute that is a routing problem to name, not a start to wait out.
     if (waitingLong.value) {
-        return `Its dev server is up, but its preview address has not answered in ${waitedFor.value}: this sandbox's public address may not be routing yet. Its terminal shows the server live.`;
+        return t(`preview.previewPanel.addressSilent`, { waited: waitedFor.value });
     }
-    return probeSlow.value ? `The address is taking a while to answer: its terminal shows the dev server live.` : undefined;
+    return probeSlow.value ? t(`preview.previewPanel.addressSlow`) : undefined;
 });
 
 /* THE WAY OUT OF A STUCK START: end the pane and start it again, which is what a person does in the terminal once they have looked. */
@@ -505,8 +514,8 @@ watch(
                     v-model="fit"
                     size="xs"
                     :options="[
-                        { label: `Full`, value: `full` },
-                        { label: `Phone`, value: `phone` },
+                        { label: t(`preview.previewPanel.full`), value: `full` },
+                        { label: t(`preview.previewPanel.phone`), value: `phone` },
                     ]"
                 />
                 <!-- Only meaningful once there's a handset on the stage, and the row is tight enough to mind the width. -->

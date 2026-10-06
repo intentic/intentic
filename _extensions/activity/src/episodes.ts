@@ -1,5 +1,6 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
 import { formatDayMonth } from "@intentic/extension-ui/format";
+import { t } from "./i18n";
 
 // Collapses the daemon's event-per-append log into EPISODES (one turn, message, or event) and SOURCES (who set it off);
 // pure functions over a fetched page, no request, no clock, no Vue. `provider` is the runtime that served a turn; the
@@ -72,40 +73,41 @@ export const sourceKeyOf = (event: ActivityEvent): string => {
     return event.provider ?? SCHEDULE;
 };
 
-const TYPE_LABELS: Readonly<Record<string, string>> = {
-    "message.received": `Message received`,
-    "voice_transcript.received": `Voice transcript`,
-    "voice_utterance.received": `Voice utterance`,
-    "message.send": `Message sent`,
-    "message.edit": `Message edited`,
-    "messages.read": `Messages read`,
-    "reaction.add": `Reaction added`,
-    "reaction.remove": `Reaction removed`,
-    "api.call": `API call`,
-    "gateway.login_failed": `Gateway login failed`,
-    "dispatch.failed": `Dispatch failed`,
-    "voice.session_started": `Voice session started`,
-    "voice.session_ended": `Voice session ended`,
-    "automation.run": `Automation run`,
-    "automation.pending": `Automation held for approval`,
+// Built when read, so the words follow the language on screen rather than the one the page booted in.
+const typeLabels = (): Readonly<Record<string, string>> => ({
+    "message.received": t(`episodes.type.messageReceived`),
+    "voice_transcript.received": t(`episodes.type.voiceTranscriptReceived`),
+    "voice_utterance.received": t(`episodes.type.voiceUtteranceReceived`),
+    "message.send": t(`episodes.type.messageSend`),
+    "message.edit": t(`episodes.type.messageEdit`),
+    "messages.read": t(`episodes.type.messagesRead`),
+    "reaction.add": t(`episodes.type.reactionAdd`),
+    "reaction.remove": t(`episodes.type.reactionRemove`),
+    "api.call": t(`episodes.type.apiCall`),
+    "gateway.login_failed": t(`episodes.type.gatewayLoginFailed`),
+    "dispatch.failed": t(`episodes.type.dispatchFailed`),
+    "voice.session_started": t(`episodes.type.voiceSessionStarted`),
+    "voice.session_ended": t(`episodes.type.voiceSessionEnded`),
+    "automation.run": t(`episodes.type.automationRun`),
+    "automation.pending": t(`episodes.type.automationPending`),
     // A dependency install the daemon starts when a change leaves the installed tree behind (bootstrap/deps-coordination.ts).
-    "deps.install_started": `Installing dependencies`,
-    "deps.install_failed": `Dependency install failed`,
+    "deps.install_started": t(`episodes.type.depsInstallStarted`),
+    "deps.install_failed": t(`episodes.type.depsInstallFailed`),
     // The rest were the steps of the check that ran over the main tree after every land, retired with it: nothing emits
     // them any more, and they keep their labels because the activity history still holds rows of them.
-    "deps.install_lost": `Dependency install unwatched`,
-    "deps.verify_green": `Checks passed`,
-    "deps.verify_red": `Checks failed`,
-    "deps.verify_skipped": `No checks to run`,
-    "deps.verify_lost": `Checks unwatched`,
-    "deps.fix_unarmed": `Fix available, nothing armed`,
-    "turn.started": `Turn started`,
-    "turn.plan": `Plan proposed`,
-    "turn.error": `Turn error`,
-    "turn.completed": `Turn completed`,
-};
+    "deps.install_lost": t(`episodes.type.depsInstallLost`),
+    "deps.verify_green": t(`episodes.type.depsVerifyGreen`),
+    "deps.verify_red": t(`episodes.type.depsVerifyRed`),
+    "deps.verify_skipped": t(`episodes.type.depsVerifySkipped`),
+    "deps.verify_lost": t(`episodes.type.depsVerifyLost`),
+    "deps.fix_unarmed": t(`episodes.type.depsFixUnarmed`),
+    "turn.started": t(`episodes.type.turnStarted`),
+    "turn.plan": t(`episodes.type.turnPlan`),
+    "turn.error": t(`episodes.type.turnError`),
+    "turn.completed": t(`episodes.type.turnCompleted`),
+});
 
-export const typeLabel = (type: string): string => TYPE_LABELS[type] ?? type;
+export const typeLabel = (type: string): string => typeLabels()[type] ?? type;
 
 // First line only, clipped short: a prompt can run to 2,000 characters, a row is one line tall.
 const headline = (text: string): string => {
@@ -147,7 +149,7 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
         sourceKey: sourceKeyOf(events[0] as ActivityEvent),
         at: (events[0] as ActivityEvent).at,
         kind: `turn`,
-        label: firstOf(events, (event) => event.title) ?? (prompt === undefined ? `Turn` : headline(prompt)),
+        label: firstOf(events, (event) => event.title) ?? (prompt === undefined ? t(`episodes.turn`) : headline(prompt)),
         // `titled` only when the label is a real name; a label clipped from the prompt itself is not a second fact.
         ...(firstOf(events, (event) => event.title) !== undefined ? { titled: true } : {}),
         ...(prompt !== undefined ? { detail: prompt } : {}),
@@ -290,9 +292,9 @@ export const matches = (episode: Episode, query: string): boolean => {
 const dayLabel = (at: number, now: number): string => {
     const midnight = new Date(now).setHours(0, 0, 0, 0);
     if (at >= midnight) {
-        return `Today`;
+        return t(`episodes.today`);
     }
-    return at >= midnight - 86_400_000 ? `Yesterday` : formatDayMonth(at);
+    return at >= midnight - 86_400_000 ? t(`episodes.yesterday`) : formatDayMonth(at);
 };
 
 // Episodes grouped into consecutive day runs, order preserved; the timeline renders these as sections.

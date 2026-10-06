@@ -77,7 +77,7 @@ const derive = (target: string): void => {
             }
             deriving.value = false;
             stopClock();
-            error.value = messageOr(err, `Could not render this file as text.`);
+            error.value = messageOr(err, t(`workspace.derivedTextView.renderFailed`));
         },
     );
 };
@@ -117,7 +117,7 @@ const load = (target: string): void => {
             }
             loading.value = false;
             stopClock();
-            error.value = messageOr(err, `Could not read this file's text.`);
+            error.value = messageOr(err, t(`workspace.derivedTextView.readFailed`));
         },
     );
 };
@@ -152,17 +152,15 @@ const absent = computed(() => (shadow.value?.present === false ? shadow.value : 
 const emptyMessage = computed(() => {
     switch (shadow.value?.state) {
         case `deriving`:
-            return `This file is being read. Its text will appear here on its own.`;
+            return t(`workspace.derivedTextView.deriving`);
         case `broken`:
-            return `This sandbox has no renderer installed, so nothing can be turned into text here.`;
+            return t(`workspace.derivedTextView.noRenderer`);
         case `undeliverable`:
-            return `Nothing here can turn this file into text.`;
+            return t(`workspace.derivedTextView.undeliverable`);
         default:
             // `reason` is set exactly when a derivation was just attempted and produced nothing, which is the common
             // way to arrive here: opening the file already tried, so "nothing has read this" would be untrue.
-            return absent.value?.reason === undefined
-                ? `Nothing has read this file yet. Rendering it gives you its text — and gives an agent the same.`
-                : `This file was read, but no text came out of it.`;
+            return absent.value?.reason === undefined ? t(`workspace.derivedTextView.notReadYet`) : t(`workspace.derivedTextView.noTextCameOut`);
     }
 });
 </script>

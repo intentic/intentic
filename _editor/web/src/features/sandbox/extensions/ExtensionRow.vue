@@ -50,8 +50,8 @@ const removable = computed(() => entry.extension.source !== `builtin` && entry.e
 // configured themselves go too. The dialog spells out the rest.
 const removalHint = computed(() =>
     entry.dependents.length === 0
-        ? `and everything configured for it`
-        : `with ${entry.dependents.length} connection${entry.dependents.length === 1 ? `` : `s`} configured from its cards`,
+        ? t(`sandbox.extensionRow.removalHintNone`)
+        : t(`sandbox.extensionRow.removalHintConnections`, { count: entry.dependents.length }, entry.dependents.length),
 );
 
 const manifest = computed(() => entry.extension.manifest);
@@ -93,7 +93,7 @@ watch(
             readiness.value = [...result.checks];
         } catch (failure) {
             readiness.value = undefined;
-            readinessError.value = messageOr(failure, `Could not check this extension.`);
+            readinessError.value = messageOr(failure, t(`sandbox.extensionRow.couldNotCheck`));
         }
     },
     { immediate: true },
@@ -126,21 +126,28 @@ const breakdown = computed(() => entry.facets.filter((facet) => facet.kind !== `
 
 // What flipping the switch doesn't reach immediately; stated under the fold, before the flip, rather than on every
 // closed row.
-const DEFERRED: Record<string, string> = {
-    agent: `its agent skills, hooks and MCP servers apply from the next turn`,
-    bin: `its CLIs leave the agent's PATH from the next turn`,
-    environment: `its image fragment only changes at the next environment rebuild`,
+const deferredNote = (kind: string): string[] => {
+    switch (kind) {
+        case `agent`:
+            return [t(`sandbox.extensionRow.deferredAgent`)];
+        case `bin`:
+            return [t(`sandbox.extensionRow.deferredBin`)];
+        case `environment`:
+            return [t(`sandbox.extensionRow.deferredEnvironment`)];
+        default:
+            return [];
+    }
 };
 
 const consequences = computed<string[]>(() => {
-    const deferred = Object.keys(manifest.value.contributes ?? {}).flatMap((kind) => DEFERRED[kind] ?? []);
+    const deferred = Object.keys(manifest.value.contributes ?? {}).flatMap(deferredNote);
     if (entry.dependents.length === 0) {
         return deferred;
     }
     const named = entry.dependents.map((capability) => capability.id).join(`, `);
-    const plural = entry.dependents.length === 1 ? `` : `s`;
+    const count = entry.dependents.length;
     // Switching off only hides their card; removing takes the entries themselves, which is the dialog's job to say.
-    return [...deferred, `${entry.dependents.length} configured connection${plural} (${named}) keep their config but lose their Capabilities card`];
+    return [...deferred, t(`sandbox.extensionRow.dependentsLoseCard`, { count, names: named }, count)];
 });
 
 // Muted by default: anything the host explained without ranking as an exception is a fact, not an alarm.
@@ -151,12 +158,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 <template>
     <!-- Open extensions share one tinted header and detail block. A row that needs attention says so with its badge, its
          tinted detail and the section pinned above the rest, not with an edge stripe as well. -->
-    <DisclosureRow
-        class="@container"
-        body="drawer"
-        :open="expanded"
-        @update:open="emit(`update:expanded`, !expanded)"
-    >
+    <DisclosureRow class="@container" body="drawer" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
         <template #lead="{ mark }">
             <!-- Dimmed and desaturated when off, so the mark goes quiet with the rest of the row. -->
             <BrandMark
@@ -198,7 +200,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <StatusBadge
                     v-if="!entry.state.attention && entry.extension.update !== undefined"
                     :variant="entry.extension.update.securityFix ? `danger` : `info`"
-                    :label="entry.extension.update.securityFix ? t(`sandbox.extensionRow.securityUpdate`) : `update`"
+                    :label="entry.extension.update.securityFix ? t(`sandbox.extensionRow.securityUpdate`) : t(`sandbox.extensionRow.update`)"
                     size="xs"
                 />
                 <StatusBadge v-if="entry.state.badge" :variant="entry.state.variant" :label="entry.state.label" size="xs" />

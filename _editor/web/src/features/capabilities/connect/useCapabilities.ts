@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { RemoteRefs, CapabilityProbe, CapabilityRecommendation, CapabilitySummary, Marketplace } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
@@ -93,12 +94,12 @@ export function useCapabilities() {
     // Reads the streamed apply, calling onLine per frame and throwing on an error frame; refreshes the list on completion.
     const add = async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void): Promise<void> => {
         const lines = await sandboxRpc.capabilities.add(asDeclared(input)).catch((failure: unknown) => {
-            throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? `Could not add the capability (${failure.status}).`) : failure;
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? t(`capabilities.useCapabilities.couldNotAddStatus`, { status: failure.status })) : failure;
         });
         for await (const line of readIntenticLines(lines)) {
             onLine?.(line);
             if (line[`kind`] === `error`) {
-                throw new Error(typeof line[`message`] === `string` ? (line[`message`] as string) : `Apply failed.`);
+                throw new Error(typeof line[`message`] === `string` ? (line[`message`] as string) : t(`capabilities.useCapabilities.applyFailed`));
             }
         }
         await invalidate();

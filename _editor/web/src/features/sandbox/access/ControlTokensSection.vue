@@ -68,22 +68,24 @@ const { canShip } = useRole();
 const SCOPE_ICONS: Record<ControlScope, PickerOption[`icon`]> = { editor: `code`, read: `eye`, drive: `play`, land: `check-circle` };
 
 // Short picker hints, same voice as the member-role picker; CONTROL_SCOPE_REACH stays long for OpenAPI/site.
-const SCOPE_HINTS: Record<ControlScope, string> = {
-    editor: `Can run one conversation: turns, cards, transcripts. Can't see the fleet or land work.`,
-    read: `Can watch everything a viewer sees. Can't change anything.`,
-    drive: `Can drive agents and steer turns. Can't land or purge worktrees.`,
-    land: `Can land and purge conversation worktrees. The broadest credential a program holds.`,
-};
+// Built when read, so the hints follow a language switch.
+const scopeHints = (): Record<ControlScope, string> => ({
+    editor: t(`sandbox.controlTokensSection.hintEditor`),
+    read: t(`sandbox.controlTokensSection.hintRead`),
+    drive: t(`sandbox.controlTokensSection.hintDrive`),
+    land: t(`sandbox.controlTokensSection.hintLand`),
+});
 
 // Picker rows are the model: label is the lowercase scope (capitalized via CSS), hint is the teaching sentence.
-const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
-    CONTROL_SCOPE_REACH.filter((entry) => SCOPES.includes(entry.scope)).map((entry) => ({
+const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() => {
+    const hints = scopeHints();
+    return CONTROL_SCOPE_REACH.filter((entry) => SCOPES.includes(entry.scope)).map((entry) => ({
         value: entry.scope,
         label: entry.scope,
         icon: SCOPE_ICONS[entry.scope],
-        hint: SCOPE_HINTS[entry.scope],
-    })),
-);
+        hint: hints[entry.scope],
+    }));
+});
 
 const EXPIRY_OPTIONS = computed((): readonly PickerOption<Expiry>[] => [
     { value: `30`, label: t(`sandbox.words.n30Days`) },
@@ -174,17 +176,25 @@ const expired = (token: ControlToken): boolean => token.expiresAt !== undefined 
 // phone's width. Only "expired" earns the meta column, as a single coloured word.
 const lifetime = (token: ControlToken): string => {
     if (expired(token)) {
-        return `expired ${formatDate(token.expiresAt ?? 0)}`;
+        return t(`sandbox.controlTokensSection.expiredOn`, { date: formatDate(token.expiresAt ?? 0) });
     }
-    return token.expiresAt === undefined ? `never expires` : `expires ${formatDate(token.expiresAt)}`;
+    return token.expiresAt === undefined
+        ? t(`sandbox.controlTokensSection.neverExpires`)
+        : t(`sandbox.controlTokensSection.expiresOn`, { date: formatDate(token.expiresAt) });
 };
 
 const lastUsed = (token: ControlToken): string =>
-    token.lastUsedAt === undefined ? `never used` : `used ${timeAgo(token.lastUsedAt, { now: now.value, days: true })}`;
+    token.lastUsedAt === undefined
+        ? t(`sandbox.controlTokensSection.neverUsed`)
+        : t(`sandbox.controlTokensSection.usedAgo`, { ago: timeAgo(token.lastUsedAt, { now: now.value, days: true }) });
 
 const describe = (token: ControlToken): string =>
     [
-        `${token.scope} · minted ${formatDate(token.createdAt)}${token.createdBy === undefined ? `` : ` by ${token.createdBy}`}`,
+        `${token.scope} · ${
+            token.createdBy === undefined
+                ? t(`sandbox.controlTokensSection.mintedOn`, { date: formatDate(token.createdAt) })
+                : t(`sandbox.controlTokensSection.mintedOnBy`, { date: formatDate(token.createdAt), who: token.createdBy })
+        }`,
         lifetime(token),
         lastUsed(token),
     ].join(` · `);

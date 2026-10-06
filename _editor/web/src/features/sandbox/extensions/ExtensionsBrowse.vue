@@ -210,7 +210,11 @@ const install = async (listing: DiscoverListing): Promise<void> => {
     const verb = updateOf === undefined ? `install` : `update`;
     // A clone and an install out in the sandbox: minutes on a big extension, and the terminal it streams to is
     // somewhere else entirely, so the row it was started from carries it.
-    const endMark = hubWork.begin(`${updateOf === undefined ? `Installing` : `Updating`} ${listing.entry.name}`);
+    const endMark = hubWork.begin(
+        updateOf === undefined
+            ? t(`sandbox.extensionsBrowse.installing`, { name: listing.entry.name })
+            : t(`sandbox.extensionsBrowse.updating`, { name: listing.entry.name }),
+    );
     try {
         // Both refresh the extension list on the way out, so the card and the Installed pill already say so.
         await (updateOf !== undefined && pinned !== undefined ? applyUpdate(updateOf, pinned) : addFromListing(listing, pointer));
@@ -218,7 +222,12 @@ const install = async (listing: DiscoverListing): Promise<void> => {
         await reloadExtensions();
         report(listing, verb);
     } catch (err) {
-        const said = noticeFrom(err, `Could not ${verb} ${listing.entry.name}.`);
+        const said = noticeFrom(
+            err,
+            verb === `install`
+                ? t(`sandbox.extensionsBrowse.couldNotInstall`, { name: listing.entry.name })
+                : t(`sandbox.extensionsBrowse.couldNotUpdate`, { name: listing.entry.name }),
+        );
         if (openName.value === listing.entry.name) {
             failure.value = said;
         } else {
@@ -273,13 +282,9 @@ const emptyNote = computed<string | undefined>(() => {
         return undefined;
     }
     if (listings.value.length === 0) {
-        return isOfficial.value
-            ? `Nothing is published yet. Yours could be the first: see below.`
-            : `That registry lists no intentic extensions. It may hold Claude plugins, which install from the Capabilities page.`;
+        return isOfficial.value ? t(`sandbox.extensionsBrowse.nothingPublished`) : t(`sandbox.extensionsBrowse.registryListsNone`);
     }
-    return trust === `verified` && query.trim() === ``
-        ? `Nothing here has been reviewed yet. Switch to All to see everything published.`
-        : `Nothing matches that filter.`;
+    return trust === `verified` && query.trim() === `` ? t(`sandbox.extensionsBrowse.nothingReviewed`) : t(`sandbox.extensionsBrowse.nothingMatches`);
 });
 </script>
 

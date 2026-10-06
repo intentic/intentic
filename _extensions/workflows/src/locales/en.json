@@ -38,6 +38,10 @@
         "alreadyLoopName": "You already have a loop with that name.",
         "cancel": "Cancel",
         "commandPasses": "A command passes",
+        "contextNote": {
+            "continue": "Each round continues the same session. Cheaper and it keeps the reasoning, but a long loop starts agreeing with itself.",
+            "fresh": "Every round starts a new session against the same working tree, and carries its notes in a progress file. Slower per round, and it does not drift."
+        },
         "createLoop": "Create loop",
         "dollars": "dollars",
         "editLoop": "Edit loop",
@@ -59,6 +63,11 @@
         "runTestsPickTop": "run the tests, pick the top failure, fix it",
         "save": "Save",
         "stopAnywayAfter": "Stop it anyway after",
+        "stopNote": {
+            "claim": "The agent writes a verdict each round. Self-assessed, so it is advisory: pair it with a tight round ceiling.",
+            "command": "Run after every round. Exit 0 ends the loop. The only check here whose answer does not come from a model.",
+            "judge": "A separate model, which did none of the work, rules on the agent's own report against your rubric."
+        },
         "untilTestsPass": "Until the tests pass",
         "what": "What it's for",
         "whatEachRoundDoes": "What each round does",
@@ -77,6 +86,12 @@
         "fieldType": "Field type",
         "freshEachRound": "Fresh each round",
         "fullToolsNoAccounts": "full tools, no accounts",
+        "hint": {
+            "goal": "Empty, measured against what the run was asked to do. Or set its own bar: \"the whole test suite passes\".",
+            "prompt": "Empty, this step does whatever the run was asked to do. Or give it a job of its own: \"run the tests, take the top failure, fix it\".",
+            "rubric": "A rubric for a reviewer that did none of this work.",
+            "title": "Fix the failing tests"
+        },
         "keepThread": "Keep the thread",
         "leavesWorkNothingElse": "It leaves its work and nothing else, so it needs a check below or nothing can tell it it is finished.",
         "listText": "list of text",
@@ -98,10 +113,26 @@
         "runsOn": "Runs on",
         "spendCeiling": "Spend ceiling",
         "stepRunsNobodyAt": "A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona: the persona also sets how far its tools go and where it works.",
+        "summary": {
+            "actsAs": "acts as {persona}",
+            "dataFields": "{count} data field | {count} data fields",
+            "keepsThread": "keeps its thread",
+            "noOutput": "no written output",
+            "pinnedAccount": "pinned account",
+            "reviewer": "a reviewer",
+            "runs": "runs `{command}`",
+            "upTo": "up to ${amount}"
+        },
+        "type": {
+            "boolean": "yes/no",
+            "number": "number",
+            "text": "text"
+        },
         "unpin": "Unpin model",
         "unpinModel": "Unpin the model",
         "whatBelongsHereModel": "what belongs here: the model reads this",
         "whatHandsOn": "What it hands on",
+        "whateverYouUse": "Whatever you normally use",
         "writesDoneHereWhy": "It writes \"done, and here is why\": self-assessed, so pair it with a check below on anything expensive."
     },
     "templates": {
@@ -113,6 +144,12 @@
         "n0To100Score": "0 to 100 score for Attempt A against the request and repository evidence",
         "n0To100Score2": "0 to 100 score for Attempt B against the request and repository evidence",
         "n3To6Words": "3 to 6 words, sentence case, letters and numbers only: names the report and the notes folder",
+        "name": {
+            "releaseGate": "Release gate",
+            "researchReport": "Research report",
+            "twoModelsOneTask": "Two models, one task",
+            "twoModelsScored": "Two models, scored and merged"
+        },
         "oneRequestBuiltTwice": "One request, built twice at once by different models in their own worktrees, then read side by side and merged into the version worth keeping.",
         "oneRequestBuiltTwice2": "One request built twice at once, then scored blind by a third model against the repository, and merged under a completion check that reads the score's requirements back.",
         "oneSentenceOnWhy": "one sentence on why, the only line of this the pipeline log will show",
@@ -122,18 +159,43 @@
         "secondResearchersBriefDisjoint": "the second researcher's brief, disjoint from the first",
         "specificDefectsOmissionsRegression": "specific defects, omissions, or regression risks, each prefixed with A or B",
         "specificStrengthsWorthPreserving": "specific strengths worth preserving, each prefixed with A or B",
+        "step": {
+            "judgeChange": "Judge the change",
+            "plan": "Plan",
+            "research": "Research {index}",
+            "scoreBoth": "Score both attempts",
+            "takeBest": "Take the best of both",
+            "writeReport": "Write the report"
+        },
         "thirdResearchersBriefDisjoint": "the third researcher's brief, disjoint from the other two",
         "whatTypeGoesTo": "What you type goes to Claude and to GPT at the same moment, each building it on a branch of its own. A third session then reads both diffs, keeps what each got right, and writes the merged version."
     },
     "workflowCard": {
-        "openInDesigner": "Open {name} in the designer"
+        "openInDesigner": "Open {name} in the designer",
+        "steps": "{count} step | {count} steps",
+        "upToAtOnce": "{steps} · up to {parallel} at once"
     },
     "workflowDag": {
         "didNotFinish": "Did not finish",
         "done": "Done",
+        "runState": {
+            "done": "done",
+            "error": "error",
+            "failed": "failed",
+            "overspent": "overspent",
+            "running": "running",
+            "stopped": "stopped"
+        },
         "running": "Running",
         "skipped": "Skipped",
         "stopped": "Stopped",
+        "subtitle": {
+            "claim": "a claim",
+            "command": "a command",
+            "fields": "{count} field | {count} fields",
+            "noOutput": "no output",
+            "reviewer": "a reviewer"
+        },
         "waiting": "Waiting"
     },
     "workflowDesigner": {
@@ -143,6 +205,7 @@
         "backToWorkflows": "Back to workflows",
         "cancel": "Cancel",
         "ciGate": "CI gate",
+        "couldntSave": "The workflow could not be saved.",
         "declaredOnly": "Declared output only",
         "handoff": "Handoff",
         "howManyStepsMay": "How many steps may run side by side. Every one of them works in a worktree of its own.",
@@ -169,6 +232,7 @@
     },
     "workflowRunPage": {
         "backToWorkflows": "Back to workflows",
+        "couldntStop": "The run could not be stopped.",
         "done": "Done when:",
         "openSessionLog": "Open the session log",
         "rounds": "{count} round | {count} rounds",
@@ -181,6 +245,9 @@
         "ciWiring": "CI wiring for {name}",
         "ciWiringTitle": "CI wiring",
         "copySavingHereReplaces": "You have a copy: saving from here replaces it.",
+        "couldntRemoveLoop": "The loop could not be removed.",
+        "couldntRemoveWorkflow": "The workflow could not be removed.",
+        "couldntSaveLoop": "The loop could not be saved.",
         "delete": "Delete {name}",
         "delete2": "Delete",
         "deleteLoop": "Delete this loop?",
@@ -207,6 +274,7 @@
         "runsOnceYouSend": "Runs once you send",
         "startBlank": "or start from blank",
         "startTemplate": "Start from a template",
+        "stepsDone": "{done}/{count} steps | {done}/{count} steps",
         "template": "Template",
         "use": "Use",
         "useTemplate": "Use this template",

@@ -31,16 +31,16 @@ const broken = computed(() => error.value !== undefined);
 
 const words = useVocabulary();
 // Whose copy, and what a press does: the name is the fact, the rest one short line.
-const tip = computed(
-    (): Tip => ({
-        title: broken.value ? t(`workspace.workspaceScopeChip.copyUnreadable`) : t(`workspace.words.privateCopy`),
-        tone: broken.value ? `warn` : undefined,
-        rows: [{ label: words.value.Agent, value: title.value }],
-        note: broken.value ? t(`workspace.workspaceScopeChip.clickForShared`) : t(`workspace.workspaceScopeChip.readOnlyClickToSwitch`),
-    }),
-);
+const tip = computed((): Tip => ({
+    title: broken.value ? t(`workspace.workspaceScopeChip.copyUnreadable`) : t(`workspace.words.privateCopy`),
+    tone: broken.value ? `warn` : undefined,
+    rows: [{ label: words.value.Agent, value: title.value }],
+    note: broken.value ? t(`workspace.workspaceScopeChip.clickForShared`) : t(`workspace.workspaceScopeChip.readOnlyClickToSwitch`),
+}));
 const ariaLabel = computed(() =>
-    broken.value ? t(`workspace.workspaceScopeChip.brokenAria`, { name: title.value }) : t(`workspace.workspaceScopeChip.copyAria`, { name: title.value }),
+    broken.value
+        ? t(`workspace.workspaceScopeChip.brokenAria`, { name: title.value })
+        : t(`workspace.workspaceScopeChip.copyAria`, { name: title.value }),
 );
 
 const items = computed<MenuItem[]>(() => [
@@ -55,7 +55,7 @@ const items = computed<MenuItem[]>(() => [
         : [
               { separator: true },
               ...switchable.value.map((agent) => ({
-                  label: agent.title ?? `Untitled conversation`,
+                  label: agent.title ?? t(`workspace.workspaceScopeChip.untitledConversation`),
                   icon: `robot` as const,
                   command: () => (workspaceAgent.value = agent.id),
               })),

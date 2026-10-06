@@ -1,5 +1,11 @@
 import { strToU8, zipSync, unzipSync } from "fflate";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { messages } from "../i18n";
+import { manifest } from "../manifest";
 import { openEpub, resolveHref } from "./book";
+
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 /* What a book is made of: its order, its titles, and where each file it names actually lives in the zip. */
 

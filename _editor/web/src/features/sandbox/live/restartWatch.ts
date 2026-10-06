@@ -33,9 +33,11 @@ const openEnvironment = (): void => {
 
 const failureTitle = (run: DevRebuildRun): string => {
     if (run.phase === `lost`) {
-        return `That rebuild stopped reporting, and never said how it ended.`;
+        return t(`sandbox.restartWatch.rebuildLost`);
     }
-    return run.exitCode === undefined ? `That device didn't run the rebuild.` : `The rebuild failed on that device (exit ${run.exitCode}).`;
+    return run.exitCode === undefined
+        ? t(`sandbox.restartWatch.deviceDidntRun`)
+        : t(`sandbox.restartWatch.rebuildFailedExit`, { code: run.exitCode });
 };
 
 /**
@@ -55,7 +57,7 @@ export const rebuildReceipt = (before: DevRebuildPhase | undefined, run: DevRebu
         const took = seconds === undefined ? undefined : formatElapsed(seconds);
         return {
             tone: `done`,
-            title: `Rebuilt from your checkout in ${took ?? `a few minutes`}`,
+            title: took === undefined ? t(`sandbox.restartWatch.rebuiltInFewMinutes`) : t(`sandbox.restartWatch.rebuiltIn`, { took }),
             detail: t(`sandbox.restartWatch.youreRunningNewImage`),
             actions: seeTheLog,
         };

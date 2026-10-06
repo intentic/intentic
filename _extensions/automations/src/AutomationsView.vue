@@ -128,7 +128,7 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
     try {
         await setEnabled.mutateAsync({ id: automation.id, enabled });
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not update the automation.`;
+        actionError.value = err instanceof Error ? err.message : t(`automationsView.couldntUpdate`);
     }
 };
 
@@ -141,7 +141,7 @@ const runNow = async (automation: AutomationSummary): Promise<void> => {
     try {
         await run.mutateAsync(automation.id);
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not run the automation.`;
+        actionError.value = err instanceof Error ? err.message : t(`automationsView.couldntRun`);
     }
 };
 
@@ -158,7 +158,7 @@ const removeAutomation = async (): Promise<void> => {
         await remove.mutateAsync(id);
         confirmRemoveId.value = undefined;
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not remove the automation.`;
+        actionError.value = err instanceof Error ? err.message : t(`automationsView.couldntRemove`);
     }
 };
 

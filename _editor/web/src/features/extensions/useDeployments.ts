@@ -5,6 +5,7 @@ import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { DEPLOYMENTS } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import { t } from "@intentic/ui/i18n";
 
 /* The live Komodo deployments surfaced by the in-sandbox `intentic deploy deployments` subcommand. */
 
@@ -16,14 +17,16 @@ import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 // A run that failed, or ended without its result line, is a failed read: never an empty list of deployments.
 const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoReachable: boolean | undefined }> => {
     const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `deployments`] }).catch((error: unknown) => {
-        throw error instanceof SandboxHttpError ? new Error(`Could not load your deployments (${error.status}): ${error.message}`) : error;
+        throw error instanceof SandboxHttpError
+            ? new Error(t(`extensions.useDeployments.couldNotLoad`, { status: error.status, message: error.message }))
+            : error;
     });
     let deployments: unknown;
     let komodoReachable: boolean | undefined;
     for await (const line of readIntenticLines(lines)) {
         if (line[`kind`] === `error`) {
             const message = line[`message`];
-            throw new Error(typeof message === `string` ? message : `Listing your deployments failed.`);
+            throw new Error(typeof message === `string` ? message : t(`extensions.useDeployments.listingFailed`));
         }
         if (line[`kind`] === `result` && Array.isArray(line[`deployments`])) {
             deployments = line[`deployments`];
@@ -31,7 +34,7 @@ const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoRe
         }
     }
     if (deployments === undefined) {
-        throw new Error(`Listing your deployments ended without an answer.`);
+        throw new Error(t(`extensions.useDeployments.noAnswer`));
     }
     return { deployments: DeploymentSchema.array().parse(deployments), komodoReachable };
 };

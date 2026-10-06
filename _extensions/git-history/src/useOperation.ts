@@ -2,6 +2,7 @@ import type { GitOperation } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
+import { t } from "./i18n.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
@@ -38,7 +39,7 @@ export function useOperation(repo: Ref<string>) {
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `log`, repo.value) }),
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `branches`, repo.value) }),
             ]);
-        }, `Could not abort: try it in a terminal.`);
+        }, t(`useOperation.couldntAbort`));
 
     return {
         operation: computed<GitOperation | undefined>(() => query.data.value?.operation),

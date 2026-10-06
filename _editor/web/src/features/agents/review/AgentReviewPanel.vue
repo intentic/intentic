@@ -118,7 +118,7 @@ const history = useAgentHistory(
 const firstRead = computed(() => !changes.loaded.value && changes.error.value === undefined);
 const historyRead = computed(() => changes.count.value === 0 && changes.absorbed.value > 0 && !history.loaded.value);
 const waiting = computed(() => firstRead.value || historyRead.value);
-const waitLabel = computed(() => (firstRead.value ? `Reading this agent's changes…` : `Finding where this work went in your history…`));
+const waitLabel = computed(() => (firstRead.value ? t(`agents.agentReviewPanel.readingChanges`) : t(`agents.agentReviewPanel.findingInHistory`)));
 // Same thresholds every other skeleton in the app answers to, keyed on the agent so walking from one review to the
 // next starts a fresh wait rather than continuing the old one's hold.
 const outline = useLoadingReveal(
@@ -221,10 +221,9 @@ const cross = (): void => {
 
 // The other empty state: "already committed", not "wrote nothing"; shown only when no commit can be found for it.
 const absorbedNote = computed(() => {
-    const whose = remoteName.value === undefined ? `your workspace's history` : `${remoteName.value}'s history`;
-    return changes.absorbed.value === 1
-        ? `The one file this agent wrote is in ${whose}, so nothing of it differs from main any more.`
-        : `All ${changes.absorbed.value} files this agent wrote are in ${whose}, so nothing of it differs from main any more.`;
+    const whose =
+        remoteName.value === undefined ? t(`agents.agentReviewPanel.yourHistory`) : t(`agents.agentReviewPanel.boxHistory`, { name: remoteName.value });
+    return t(`agents.agentReviewPanel.absorbedNote`, { count: changes.absorbed.value, whose }, changes.absorbed.value);
 });
 
 // The committed work: clicking a row here reads it directly instead of pushing a workspace tab and hunting
@@ -755,8 +754,7 @@ const seamWidth = computed<number>({
                 <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
                     <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
                     <span v-else class="whitespace-nowrap text-2xs text-muted">
-                        <span class="font-medium text-content">{{ bodyFiles.length }}</span> {{ t(`agents.agentReviewPanel.file`)
-                        }}{{ bodyFiles.length === 1 ? "" : "s" }}
+                        <span class="font-medium text-content">{{ bodyFiles.length }}</span> {{ t(`agents.agentReviewPanel.files`, {}, bodyFiles.length) }}
                     </span>
                     <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>

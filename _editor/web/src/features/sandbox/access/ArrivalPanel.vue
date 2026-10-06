@@ -58,12 +58,14 @@ const guide = computed(() => (picked.value === undefined ? undefined : SOURCE_GU
 const help = computed(() => (guide.value === undefined ? [] : helpTopics(guide.value)));
 
 // The badge over the checklist: what the daemon decided it was reading, in the reader's own word for it.
-const SOURCE_LABELS: Record<ArrivalPlan["source"], string> = {
-    definition: `sandbox.toml`,
-    bundle: `environment bundle`,
-    hermes: `hermes`,
-    openclaw: `openclaw`,
-};
+// Built when read, so the label follows a language switch.
+const sourceLabel = (source: ArrivalPlan["source"]): string =>
+    ({
+        definition: `sandbox.toml`,
+        bundle: t(`sandbox.arrivalPanel.environmentBundle`),
+        hermes: `hermes`,
+        openclaw: `openclaw`,
+    })[source];
 
 const adopt = (parsed: ArrivalPlan): void => {
     plan.value = parsed;
@@ -85,7 +87,7 @@ const readFromHost = (host: ArrivalHost): Promise<void> =>
                 }),
             ),
         );
-    }, `Could not read the setup from that device.`);
+    }, t(`sandbox.arrivalPanel.couldntReadSetupFromDevice`));
 
 const chooseFile = ref<HTMLInputElement>();
 const readFile = (event: Event): Promise<void> =>
@@ -99,7 +101,7 @@ const readFile = (event: Event): Promise<void> =>
         report.value = undefined;
         // Streamed as one body, like the folder-drop route; a huge bundle never passes through this tab's memory.
         adopt(ArrivalPlanSchema.parse(await sandboxJson(`/arrivals/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit)));
-    }, `Could not read that file.`);
+    }, t(`sandbox.arrivalPanel.couldntReadFile`));
 
 const tickedCount = computed(() => Object.values(ticked.value).filter(Boolean).length);
 
@@ -110,7 +112,7 @@ const hubWork = useHubWork();
 const apply = (): Promise<void> =>
     runApply(
         () =>
-            hubWork.track(`Bringing a sandbox in`, async () => {
+            hubWork.track(t(`sandbox.arrivalPanel.bringingSandboxIn`), async () => {
                 const held = plan.value;
                 if (held === undefined) {
                     return;
@@ -127,7 +129,7 @@ const apply = (): Promise<void> =>
                 picked.value = undefined;
                 await adoptPresentation(report.value.presentation);
             }),
-        `Could not bring that in.`,
+        t(`sandbox.arrivalPanel.couldntBringIn`),
     );
 
 // The one part of an arrival the daemon cannot finish. A sandbox's name and switcher logo are platform rows, so the
@@ -151,10 +153,12 @@ const adoptPresentation = async (presentation: ArrivalReport["presentation"]): P
         });
         adopted.value =
             presentation.name === undefined
-                ? `Took the logo from the bundle.`
-                : `Now called "${presentation.name}"${presentation.image === undefined ? `` : `, with its logo`}, taken from the bundle.`;
+                ? t(`sandbox.arrivalPanel.tookLogoFromBundle`)
+                : presentation.image === undefined
+                  ? t(`sandbox.arrivalPanel.nowCalledFromBundle`, { name: presentation.name })
+                  : t(`sandbox.arrivalPanel.nowCalledWithLogoFromBundle`, { name: presentation.name });
     } catch {
-        adopted.value = `The files arrived, but this sandbox kept its own name and logo — the bundle's could not be applied.`;
+        adopted.value = t(`sandbox.arrivalPanel.keptOwnNameAndLogo`);
     }
 };
 
@@ -164,7 +168,7 @@ const cancel = (): Promise<void> =>
         plan.value = undefined;
         picked.value = undefined;
         report.value = undefined;
-    }, `Could not discard the plan.`);
+    }, t(`sandbox.arrivalPanel.couldntDiscardPlan`));
 </script>
 
 <template>
@@ -189,7 +193,7 @@ const cancel = (): Promise<void> =>
                     <template #control>
                         <Button
                             v-if="host.found !== undefined"
-                            :label="t(`sandbox.arrivalPanel.bringIn`)"
+                            :label="t(`sandbox.arrivalPanel.bringItIn`)"
                             size="small"
                             :loading="planning"
                             @click="readFromHost(host)"
@@ -270,7 +274,7 @@ const cancel = (): Promise<void> =>
         <!-- Same checklist regardless of source; nothing below writes until Apply. -->
         <template v-else>
             <div class="flex items-center gap-2">
-                <StatusBadge variant="info" :label="plan.name ?? SOURCE_LABELS[plan.source]" />
+                <StatusBadge variant="info" :label="plan.name ?? sourceLabel(plan.source)" />
             </div>
             <RowGroup flat :label="t(`sandbox.arrivalPanel.whatWouldLand`)">
                 <Row

@@ -20,11 +20,8 @@ const patch = (over: Partial<WorkflowStep>): void => {
     step.value = { ...step.value, ...over };
 };
 
-const TITLE_HINT = `Fix the failing tests`;
-// Hints lead with what leaving the field empty does, since that's the common case.
-const PROMPT_HINT = `Empty, this step does whatever the run was asked to do. Or give it a job of its own: "run the tests, take the top failure, fix it".`;
-const GOAL_HINT = `Empty, measured against what the run was asked to do. Or set its own bar: "the whole test suite passes".`;
-const RUBRIC_HINT = `A rubric for a reviewer that did none of this work.`;
+// Hints (the fields' placeholders, `stepInspector.hint.*`) lead with what leaving the field empty does, since that's the
+// common case.
 
 // Converts blank to undefined; a step with no prompt/goal falls back to the run's own request, and the schema refuses a
 // stored empty string.
@@ -46,9 +43,9 @@ const CONTEXT_OPTIONS = computed(() => [
     { value: `continue` as const, label: t(`stepInspector.keepThread`) },
 ]);
 const TYPE_OPTIONS = computed((): { label: string; value: OutputField["type"] }[] => [
-    { label: `text`, value: `string` },
-    { label: `number`, value: `number` },
-    { label: `yes/no`, value: `boolean` },
+    { label: t(`stepInspector.type.text`), value: `string` },
+    { label: t(`stepInspector.type.number`), value: `number` },
+    { label: t(`stepInspector.type.boolean`), value: `boolean` },
     { label: t(`stepInspector.listText`), value: `string[]` },
 ]);
 
@@ -115,7 +112,7 @@ const described = computed(() => {
 });
 const pinLabel = computed(() => {
     if (step.value.agent === undefined) {
-        return `Whatever you normally use`;
+        return t(`stepInspector.whateverYouUse`);
     }
     return [described.value.label || providerLabel(step.value.agent), described.value.accountLabel].filter((part) => part !== undefined).join(` · `);
 });
@@ -180,25 +177,25 @@ const advancedSummary = computed(() => {
         parts.push(step.value.model);
     }
     if (step.value.account !== undefined) {
-        parts.push(described.value.accountLabel ?? `pinned account`);
+        parts.push(described.value.accountLabel ?? t(`stepInspector.summary.pinnedAccount`));
     }
     if (step.value.actsAs !== undefined) {
-        parts.push(`acts as ${personaLabel(step.value.actsAs)}`);
+        parts.push(t(`stepInspector.summary.actsAs`, { persona: personaLabel(step.value.actsAs) }));
     }
     if (step.value.output.kind === `json`) {
-        parts.push(`${step.value.output.fields.length} data field${step.value.output.fields.length === 1 ? `` : `s`}`);
+        parts.push(t(`stepInspector.summary.dataFields`, { count: step.value.output.fields.length }, step.value.output.fields.length));
     }
     if (step.value.output.kind === `none`) {
-        parts.push(`no written output`);
+        parts.push(t(`stepInspector.summary.noOutput`));
     }
     for (const check of step.value.checks) {
-        parts.push(check.kind === `command` ? `runs \`${check.command}\`` : `a reviewer`);
+        parts.push(check.kind === `command` ? t(`stepInspector.summary.runs`, { command: check.command }) : t(`stepInspector.summary.reviewer`));
     }
     if (step.value.context === `continue`) {
-        parts.push(`keeps its thread`);
+        parts.push(t(`stepInspector.summary.keepsThread`));
     }
     if (step.value.maxSpendUsd !== undefined) {
-        parts.push(`up to $${step.value.maxSpendUsd}`);
+        parts.push(t(`stepInspector.summary.upTo`, { amount: step.value.maxSpendUsd }));
     }
     return parts.join(` · `);
 });
@@ -210,7 +207,7 @@ const advancedSummary = computed(() => {
         <div class="flex max-w-read flex-col text-sm">
             <!-- Delete sits beside the title rather than in a toolbar, since it's the one action specific to this step. -->
             <div class="-mx-2 flex items-start gap-1">
-                <ProseField v-model="title" variant="heading" :placeholder="TITLE_HINT" class="min-w-0 flex-1" />
+                <ProseField v-model="title" variant="heading" :placeholder="t(`stepInspector.hint.title`)" class="min-w-0 flex-1" />
                 <button
                     type="button"
                     v-tooltip.top="t(`stepInspector.deleteStep2`)"
@@ -223,13 +220,13 @@ const advancedSummary = computed(() => {
             </div>
 
             <!-- Unlabelled: this prose is the step itself, and a label would only restate it. Handed to the agent verbatim. -->
-            <ProseField v-model="prompt" :placeholder="PROMPT_HINT" class="-mx-2 mt-3 min-h-24" />
+            <ProseField v-model="prompt" :placeholder="t(`stepInspector.hint.prompt`)" class="-mx-2 mt-3 min-h-24" />
 
             <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
                 <h3 class="text-sm font-semibold text-content">{{ t(`stepInspector.done`) }}</h3>
                 <span v-if="repeats" class="text-2xs text-subtle">{{ t(`stepInspector.restatedEveryRound`) }}</span>
             </div>
-            <ProseField v-model="goal" :placeholder="GOAL_HINT" class="-mx-2 mt-1 min-h-12" />
+            <ProseField v-model="goal" :placeholder="t(`stepInspector.hint.goal`)" class="-mx-2 mt-1 min-h-12" />
             <!-- Wording depends on `repeats`: without an output or check, this step is one session, not a loop. -->
             <p class="px-0.5 text-2xs text-subtle">
                 {{ repeats ? t(`stepInspector.repeatsUntilTrue`) : t(`stepInspector.oneSessionFinishedFinishes`) }}
@@ -305,7 +302,7 @@ const advancedSummary = computed(() => {
                     <!-- A command is a value and keeps its box; the rubric beside it is prose and does not. -->
                     <input v-model="command" :class="[ui.input(), `font-mono`]" :placeholder="t(`stepInspector.pnpmTest`)" />
                     <!-- Kept flush with its boxed siblings here, unlike the bled-out passages above. -->
-                    <ProseField v-model="rubric" :placeholder="RUBRIC_HINT" class="min-h-12" />
+                    <ProseField v-model="rubric" :placeholder="t(`stepInspector.hint.rubric`)" class="min-h-12" />
                 </div>
 
                 <div class="flex flex-col gap-1.5">

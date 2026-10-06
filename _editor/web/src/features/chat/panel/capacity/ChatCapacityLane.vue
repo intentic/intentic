@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useT } from "@intentic/ui/i18n";
 import { useReducedMotion } from "@intentic/ui/motion";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { CapacityLane, CapacityRow } from "./chatCapacity";
@@ -11,6 +12,7 @@ import { meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "..
 // delta label the column has no width for. A refill just grows. First paint doesn't animate, since nothing changed.
 // Reduced motion snaps straight to the new reading.
 const props = defineProps<{ lane: CapacityLane; row: CapacityRow }>();
+const t = useT();
 
 const reduced = useReducedMotion();
 
@@ -79,19 +81,21 @@ const laneReset = (lane: CapacityLane, now: number = Date.now()): string | undef
     }
     const diffMinutes = Math.ceil(diffMs / 60_000);
     if (diffMinutes < 60) {
-        return `in ${diffMinutes}m`;
+        return t(`chat.chatCapacityLane.inMinutes`, { minutes: diffMinutes });
     }
     const diffHours = Math.floor(diffMinutes / 60);
     const remMinutes = diffMinutes % 60;
     if (diffHours < 24) {
-        return remMinutes > 0 ? `in ${diffHours}h ${remMinutes}m` : `in ${diffHours}h`;
+        return remMinutes > 0
+            ? t(`chat.chatCapacityLane.inHoursMinutes`, { hours: diffHours, minutes: remMinutes })
+            : t(`chat.chatCapacityLane.inHours`, { hours: diffHours });
     }
     const diffDays = Math.floor(diffMinutes / (24 * 60));
     const remHours = Math.floor((diffMinutes % (24 * 60)) / 60);
     if (diffDays < 2 && remHours > 0) {
-        return `in 1d ${remHours}h`;
+        return t(`chat.chatCapacityLane.inDayHours`, { hours: remHours });
     }
-    return `in ${diffDays}d`;
+    return t(`chat.chatCapacityLane.inDays`, { days: diffDays });
 };
 const reset = computed(() => (props.lane.capped ? undefined : laneReset(props.lane)));
 </script>

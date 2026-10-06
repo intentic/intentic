@@ -2,6 +2,7 @@ import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { type DaemonSession, type PasskeyRequired, PasskeyRequiredSchema, rawRouteUrl } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../../lib/browserStorage";
 import { useGoogleIdentity } from "../auth/useGoogleIdentity";
 import { healthAnswers, sandboxIdOf } from "../endpoint/endpoint";
@@ -117,10 +118,10 @@ const storedOf = (session: DaemonSession): StoredSession => ({ token: session.to
 const mintedFrom = (body: unknown): StoredSession => {
     const fields = typeof body === `object` && body !== null ? (body as { token?: unknown; expiresAt?: unknown; email?: unknown }) : {};
     if (typeof fields.token !== `string` || fields.token === `` || typeof fields.expiresAt !== `number` || !Number.isFinite(fields.expiresAt) || typeof fields.email !== `string`) {
-        throw new Error(`The sandbox returned an invalid session.`);
+        throw new Error(t(`sandbox.sandboxSession.invalidSession`));
     }
     if (Date.now() >= fields.expiresAt - EXPIRY_MARGIN_MS) {
-        throw new Error(`The sandbox returned an expired session.`);
+        throw new Error(t(`sandbox.sandboxSession.expiredSession`));
     }
     return { token: fields.token, expiresAt: fields.expiresAt, email: fields.email };
 };
@@ -152,12 +153,12 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
             return stepUpFrom(await response.json().catch(() => undefined));
         }
         if (!response.ok) {
-            throw new SandboxSessionError(response.status, `The sandbox refused its session exchange (${response.status}).`);
+            throw new SandboxSessionError(response.status, t(`sandbox.sandboxSession.exchangeRefused`, { status: response.status }));
         }
         return mintedFrom(await response.json());
     } catch (error) {
         if (error instanceof Error && error.name === `TimeoutError`) {
-            throw new Error(`The sandbox did not finish signing in within 10 seconds.`, { cause: error });
+            throw new Error(t(`sandbox.sandboxSession.signInTimeout`), { cause: error });
         }
         throw error;
     }
@@ -233,7 +234,7 @@ const settleExchange = async (target: SandboxTarget, idToken: string, background
         }
         clearCredential();
         if (!retry) {
-            throw new Error(`The sandbox rejected your Google sign-in.`);
+            throw new Error(t(`sandbox.sandboxSession.googleRejected`));
         }
         // A rejected proof is dead; drop it and let this action drive one interactive retry rather than looping.
         void import("../../app/analytics").then(({ track }) => track(`sandbox_signin_gate`, { reason: `daemon-401` })).catch(() => undefined);
@@ -451,14 +452,14 @@ const retireSandboxAccess = async (sandbox: SandboxSummary): Promise<void> => {
     const stored = sessions.value[sandbox.id] ?? readStored(sandbox.id);
     let bearer = stored !== undefined && Date.now() < stored.expiresAt - EXPIRY_MARGIN_MS ? stored.token : await getIdToken();
     if (bearer === undefined) {
-        throw new Error(`Google sign-in was canceled.`);
+        throw new Error(t(`sandbox.sandboxSession.googleCanceled`));
     }
     let response = await removalRequest(sandbox, base, bearer);
     if (response.status === 401 && stored?.token === bearer) {
         invalidateSession(sandbox.id);
         bearer = await getIdToken();
         if (bearer === undefined) {
-            throw new Error(`Google sign-in was canceled.`);
+            throw new Error(t(`sandbox.sandboxSession.googleCanceled`));
         }
         response = await removalRequest(sandbox, base, bearer);
     }
@@ -473,11 +474,9 @@ const retireSandboxAccess = async (sandbox: SandboxSummary): Promise<void> => {
 // members remove their own grant); one offline machine must not block the rest.
 const retireAccountAccess = async (sandboxes: readonly SandboxSummary[]): Promise<void> => {
     const results = await Promise.allSettled(sandboxes.map((sandbox) => retireSandboxAccess(sandbox)));
-    const failed = results.flatMap((result, index) => (result.status === `rejected` ? [sandboxes[index]?.name ?? `Unknown sandbox`] : []));
+    const failed = results.flatMap((result, index) => (result.status === `rejected` ? [sandboxes[index]?.name ?? t(`sandbox.sandboxSession.unknownSandbox`)] : []));
     if (failed.length > 0) {
-        throw new Error(
-            `Your account was not deleted because access could not be removed from ${failed.join(`, `)}. Bring ${failed.length === 1 ? `that sandbox` : `those sandboxes`} online and try again.`,
-        );
+        throw new Error(t(`sandbox.sandboxSession.accountNotDeleted`, { names: failed.join(`, `) }, failed.length));
     }
 };
 

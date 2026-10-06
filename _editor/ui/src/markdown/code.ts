@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { t } from "../i18n/index.js";
 import { clipboardOf } from "../lib/clipboard.js";
 import { loadChunk } from "../lib/loadChunk.js";
 import { createWorkerCall } from "../lib/workerCall.js";
@@ -225,17 +226,19 @@ export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean):
     const shiki = colour && index < MAX_HIGHLIGHT_BLOCKS ? highlightedCode(block.code, block.lang) : undefined;
     // Fallback carries Shiki's own class, so colour landing later doesn't shift size or position.
     const body = shiki ?? `<pre class="shiki"><code>${escapeHtml(block.code)}</code></pre>`;
-    const lang = escapeHtml(block.lang.trim());
+    const named = block.lang.trim();
+    const lang = escapeHtml(named);
     // Read unconditionally, so the block that isn't copied today re-renders once it is.
     void copiedVersion.value;
     const copied = block.code === copiedCode;
+    const copyLabel = escapeHtml(named === `` ? t(`ui.code.copyCode`) : t(`ui.code.copyLangCode`, { lang: named }));
     return (
         `<div class="ui-code md-code">` +
         `<div class="md-code-actions">${
             lang === `` ? `` : `<span class="md-code-lang">${lang}</span>`
-        }<button type="button" class="md-code-copy${copied ? ` md-code-copied` : ``}" aria-label="Copy ${lang === `` ? `` : `${lang} `}code">${
-            copied ? `Copied` : `Copy`
-        }</button>` +
+        }<button type="button" class="md-code-copy${copied ? ` md-code-copied` : ``}" aria-label="${copyLabel}">${escapeHtml(
+            copied ? t(`ui.action.copied`) : t(`ui.action.copy`),
+        )}</button>` +
         `</div>${body}</div>`
     );
 };

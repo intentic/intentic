@@ -6,6 +6,7 @@ import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { forgetSandbox, missingSandboxes, type RememberedSandbox } from "../../../client/directory/deviceDirectory";
 import { sandboxAt } from "./directMode";
 import type { RecoveryDeps } from "./useRecovery";
+import { t } from "@intentic/ui/i18n";
 
 // The recovery screen's dependencies against the real world: the daemon's own doors for the sandbox (/health, POST
 // /platform/relink, both straight from this browser), the platform's for the account (lookup, adoption ticket).
@@ -48,7 +49,7 @@ const relink = async (entry: RememberedSandbox, bearer: string, request: RelinkR
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
         const refusal = RefusalSchema.safeParse(body);
-        throw new Error(refusal.success ? refusal.data.error : `the sandbox answered ${response.status}`);
+        throw new Error(refusal.success ? refusal.data.error : t(`sandbox.recoveryDeps.sandboxAnswered`, { status: response.status }));
     }
     return RelinkAnswerSchema.parse(body);
 };

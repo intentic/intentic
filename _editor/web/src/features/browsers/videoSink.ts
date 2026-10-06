@@ -6,6 +6,8 @@
 // page (stills.ts) paints into the upper one and shows until a frame the daemon did not mark quiet arrives, so text
 // is sharp exactly while someone is reading it and the moving picture costs no scaling.
 
+import { t } from "@intentic/ui/i18n";
+
 // Microseconds per frame at the daemon's fixed 30fps, since chunks require an increasing timestamp.
 const FRAME_US = Math.round(1_000_000 / 30);
 
@@ -104,7 +106,7 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
             // A new stream is a new picture (a resize, another window); the still was of the old one.
             hideStill();
             if (!canDecodeVideo()) {
-                onError(`This browser can't play the live view. Chrome, Edge, Safari 16.4+ or Firefox 130+ can.`);
+                onError(t(`browsers.browserView.unsupported`));
                 return;
             }
             const built = new VideoDecoder({

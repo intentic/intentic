@@ -2,6 +2,7 @@ import { capabilityEffects } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilityState, NetdiskLink, VpnLink, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { grantList } from "./grants";
 
 // A live connection read the way its owner reads it: both the Connected slice and a tile's own list read state
 // through here, so a Reddit account can't be "needs sign-in" in one and "pending" in the other.
@@ -37,7 +38,7 @@ export const vpnFacts = (id: string, links: readonly VpnLink[]): string | undefi
     if (link === undefined || link.state !== `connected`) {
         return undefined;
     }
-    return [link.address, link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.join(`, `)]
+    return [link.address, link.routes.includes(`0.0.0.0/0`) ? t(`capabilities.words.allTraffic`) : link.routes.join(`, `)]
         .filter((fact) => fact !== undefined && fact !== ``)
         .join(` · `);
 };
@@ -49,7 +50,7 @@ export const netdiskFacts = (id: string, links: readonly NetdiskLink[]): string 
     if (link === undefined || link.state !== `mounted`) {
         return undefined;
     }
-    return `${link.mountPoint} · ${link.writable === true ? `read-write` : `read-only`}`;
+    return `${link.mountPoint} · ${link.writable === true ? t(`common.netdiskMounts.readWrite`) : t(`common.netdiskMounts.readOnly`)}`;
 };
 
 export interface ConnectionState {
@@ -64,15 +65,16 @@ export interface ConnectionState {
 // there's still something to do, not what to call it). Rank follows the same judgement: unfinished or broken sorts
 // above merely working.
 const connectionStates = (): Readonly<Record<CapabilityState, ConnectionState>> => ({
-    error: { label: `error`, tone: `danger`, rank: 0 },
+    error: { label: t(`capabilities.connections.stateError`), tone: `danger`, rank: 0 },
     pending: { label: t(`capabilities.connections.needsSetup`), tone: `warning`, rank: 1 },
-    inactive: { label: `off`, tone: `neutral`, rank: 2 },
-    active: { label: `ready`, tone: `success`, rank: 3 },
+    inactive: { label: t(`capabilities.connections.stateOff`), tone: `neutral`, rank: 2 },
+    active: { label: t(`capabilities.connections.stateReady`), tone: `success`, rank: 3 },
 });
 
-const NEEDS_SIGN_IN: ConnectionState = { label: `needs sign-in`, tone: `warning`, rank: 1 };
-const ONLINE: ConnectionState = { label: `online`, tone: `success`, rank: 3 };
-const OFFLINE: ConnectionState = { label: `offline`, tone: `neutral`, rank: 2 };
+// Built when read, so the label follows the language picked after boot.
+const needsSignIn = (): ConnectionState => ({ label: t(`capabilities.connections.needsSignIn`), tone: `warning`, rank: 1 });
+const online = (): ConnectionState => ({ label: t(`capabilities.connections.online`), tone: `success`, rank: 3 });
+const offline = (): ConnectionState => ({ label: t(`capabilities.connections.offline`), tone: `neutral`, rank: 2 });
 
 // What a connected machine's agent may do out there, in the words its own tile uses. Read from the effects rather
 // than the config so the pairing dialog, wherever it is opened from — the capability tile, an offline device's page
@@ -83,10 +85,10 @@ export const machineGrants = (instance: CapabilitySummary | undefined): string =
     // answer is the floor rather than a guess, and never the throw an unknown kind would cost (capabilityEffects
     // indexes its kinds).
     if (instance?.kind !== `device`) {
-        return `read files`;
+        return t(`capabilities.connections.readFiles`);
     }
     const machine = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find((effect) => effect.kind === `machine`);
-    return machine === undefined ? `read files` : machine.grants.join(`, `);
+    return machine === undefined ? t(`capabilities.connections.readFiles`) : grantList(machine.grants);
 };
 
 // What a browser's switches add up to, read off the same effects the tile renders, so dialog and disclosure agree.
@@ -95,14 +97,14 @@ export const browserGrants = (instance: CapabilitySummary): string => {
         (effect) => effect.kind === `own-browser`,
     );
     const grants = browser === undefined ? [] : browser.grants;
-    return grants.length === 0 ? `nothing until you turn a switch on` : grants.join(`, `);
+    return grants.length === 0 ? t(`capabilities.connections.nothingUntilSwitch`) : grantList(grants);
 };
 
 // What a phone's switches add up to, read off the same effects the tile renders.
 export const phoneGrants = (instance: CapabilitySummary): string => {
     const phone = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find((effect) => effect.kind === `own-phone`);
     const grants = phone === undefined ? [] : phone.grants;
-    return grants.length === 0 ? `nothing until you turn a switch on` : grants.join(`, `);
+    return grants.length === 0 ? t(`capabilities.connections.nothingUntilSwitch`) : grantList(grants);
 };
 
 // The kinds whose sign-in is a window the user drives themselves, rather than a credential they paste.
@@ -114,10 +116,10 @@ export const signsInByHand = (kind: CapabilityKind | undefined): boolean => kind
 // stored status can carry.
 export const connectionState = (kind: CapabilityKind, instance: CapabilitySummary, hostOnline: boolean | undefined): ConnectionState => {
     if (signsInByHand(kind) && awaitingLogin(instance)) {
-        return NEEDS_SIGN_IN;
+        return needsSignIn();
     }
     if (kind === `device` && instance.status.state === `active`) {
-        return hostOnline === true ? ONLINE : OFFLINE;
+        return hostOnline === true ? online() : offline();
     }
     return connectionStates()[instance.status.state];
 };

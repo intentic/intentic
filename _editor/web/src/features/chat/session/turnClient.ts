@@ -89,9 +89,9 @@ const chipOf = (file: ChatAttachment): PendingAttachment => ({ id: uuid(), name:
 // What a waiting message's change was refused for, in the words the error line uses.
 const queueRefusal = (refusal: SandboxHttpError): string => {
     if (refusal.status === 412) {
-        return `That waiting message was changed in another window since you saw it: look again before changing it.`;
+        return t(`chat.turnClient.queueChangedElsewhere`);
     }
-    return refusal.status === 404 ? `That message is no longer waiting: it has gone out, or somebody took it back.` : refusal.message;
+    return refusal.status === 404 ? t(`chat.turnClient.queueGone`) : refusal.message;
 };
 
 // What a run reads and writes of the conversation around it.
@@ -586,7 +586,7 @@ export class TurnClient {
             }
         } catch (err) {
             this.giveBack(sent, messageId);
-            host.error.value = `${messageOr(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
+            host.error.value = `${messageOr(err, t(`chat.turnClient.chatFailed`))} ${t(`chat.turnClient.messageBack`)}`;
         }
     }
 
@@ -615,13 +615,11 @@ export class TurnClient {
         if (!accepted(this.phase.value)) {
             this.host.transcript.dropLocal(bubble);
             this.giveBack(sent, messageId);
-            this.host.error.value = stopped
-                ? null
-                : `${messageOr(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
+            this.host.error.value = stopped ? null : `${messageOr(err, t(`chat.turnClient.chatFailed`))} ${t(`chat.turnClient.messageBack`)}`;
             return;
         }
         if (!stopped) {
-            this.host.error.value = messageOr(err, `Chat failed.`);
+            this.host.error.value = messageOr(err, t(`chat.turnClient.chatFailed`));
         }
     }
 
@@ -739,7 +737,7 @@ export class TurnClient {
             }
         } catch (error) {
             // Unreachable, not refused: said on the error line, and the strip stays for the next press.
-            host.error.value = messageOr(error, `The sandbox did not answer.`);
+            host.error.value = messageOr(error, t(`chat.turnClient.sandboxNoAnswer`));
             return;
         }
         await this.reattach();
@@ -862,7 +860,7 @@ export class TurnClient {
                 }
             },
             (error: unknown) => {
-                host.error.value = messageOr(error, `The sandbox did not answer.`);
+                host.error.value = messageOr(error, t(`chat.turnClient.sandboxNoAnswer`));
             },
         );
     }
@@ -896,7 +894,7 @@ export class TurnClient {
             }
         } catch (error) {
             // Unreachable, not refused: said on the error line, and the held turn stays for the next press.
-            host.error.value = messageOr(error, `The sandbox did not answer.`);
+            host.error.value = messageOr(error, t(`chat.turnClient.sandboxNoAnswer`));
             return true;
         }
         await this.reattach();
@@ -1056,7 +1054,7 @@ export class TurnClient {
     // can no longer trust.
     private stopLocally(): void {
         this.host.transcript.cancelPendingCards();
-        this.host.transcript.notice(`Stopped.`);
+        this.host.transcript.notice(t(`chat.sandboxNotice.stopped`));
         this.abort();
         this.host.transcript.persist();
     }

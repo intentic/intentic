@@ -24,7 +24,7 @@ const setRepo = (repo: string, on: boolean): void => {
 };
 
 // `root` names the workspace repository itself, which has no path to show.
-const repoLabel = (repo: string): string => (repo === `root` ? `Workspace repository` : repo);
+const repoLabel = (repo: string): string => (repo === `root` ? t(`sandbox.agentChangelog.workspaceRepository`) : repo);
 </script>
 
 <template>
