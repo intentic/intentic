@@ -15,7 +15,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { foldTurn, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { setLocale } from "@intentic/ui/i18n";
-import { noticeLine, refusalWords } from "./sandboxNotice";
+import { noticeFailure, noticeLine, refusalWords } from "./sandboxNotice";
 
 // The sandbox writes its notices in English with a code beside them; the chat says them in the reader's language and
 // words. The rows here come from the sandbox's own fold and prompt readers, never typed by hand, so a sentence the
@@ -189,6 +189,20 @@ describe(`a sandbox notice, as the chat says it`, () => {
             `Pamięć sandboxa się kończy (15,9/16,0 GiB). Nic się nie uruchomiło i nic nie czeka: ten przebieg ruszył sam, więc nie ma wiadomości do ponownego wysłania.`,
         );
         await setLocale(`en`);
+    });
+
+    // A provider that says more than a line keeps its first sentence on the row, and the sandbox's clause after it.
+    it(`folds a provider's longer words to their first sentence, and keeps them whole as the row's details`, () => {
+        const said = `API Error: 500 Internal server error. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.`;
+        const [retrying] = turn([{ kind: `error`, code: `provider-outage`, message: said, autoResume: `scheduled`, retries: { made: 1, max: 6 } }]);
+        expect(noticeLine(retrying!, `developer`)).toBe(`Internal server error. Retrying by itself: attempt 2 of 6.`);
+        expect(noticeFailure(retrying!)).toEqual({ said, folded: true });
+        // A failure said in a line already, or worded by the sandbox itself, has nothing behind it to open.
+        expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.code === `retrying`)!)).toEqual({ said: `Anthropic is down.`, folded: false });
+        expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.code === `failed`)!)?.folded).toBe(false);
+        // Every other notice is not a failure at all.
+        expect(noticeFailure(DAEMON[0]!)).toBeUndefined();
+        expect(noticeFailure(UNSPOKEN[0]!)).toBeUndefined();
     });
 
     // A sandbox older than this app sends no code, and a newer one may send one this build has never heard of.

@@ -2420,6 +2420,19 @@
             "installRoot": "katalogu głównym przestrzeni roboczej",
             "installMore": "{named} i jeszcze {more}"
         },
+        "providerFailure": {
+            "flaggedMessage": "Zabezpieczenia modelu {model} oznaczyły tę wiadomość.",
+            "flaggedSession": "Zabezpieczenia modelu {model} oznaczyły tę sesję.",
+            "flagged": "Zabezpieczenia modelu oznaczyły tę turę.",
+            "details": "Szczegóły",
+            "hideDetails": "Ukryj szczegóły",
+            "category": "Kategoria",
+            "requestId": "ID żądania",
+            "messageId": "ID wiadomości",
+            "learnMore": "Dowiedz się więcej",
+            "copyDetails": "Kopiuj szczegóły",
+            "copyValue": "Kopiuj: {name}"
+        },
         "chatJobRow": {
             "ended": "Zakończone po {elapsed}",
             "failed": "Błąd (kod {code}) po {elapsed}",

@@ -2420,6 +2420,19 @@
             "installRoot": "the workspace root",
             "installMore": "{named} and {more} more"
         },
+        "providerFailure": {
+            "flaggedMessage": "{model}'s safeguards flagged this message.",
+            "flaggedSession": "{model}'s safeguards flagged this session.",
+            "flagged": "The model's safeguards flagged this turn.",
+            "details": "Details",
+            "hideDetails": "Hide details",
+            "category": "Category",
+            "requestId": "Request ID",
+            "messageId": "Message ID",
+            "learnMore": "Learn more",
+            "copyDetails": "Copy details",
+            "copyValue": "Copy {name}"
+        },
         "chatJobRow": {
             "ended": "Ended after {elapsed}",
             "failed": "Failed (exit {code}) after {elapsed}",

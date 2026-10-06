@@ -36,12 +36,13 @@ import ChatTodoList from "./ChatTodoList.vue";
 import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
+import NoticeFailureDetails from "./notices/NoticeFailureDetails.vue";
 import NoticeHeld from "./notices/NoticeHeld.vue";
 import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
 import { isMemoryHold } from "./held/heldQueue";
-import { noticeLine } from "./notices/sandboxNotice";
+import { noticeFailure, noticeLine } from "./notices/sandboxNotice";
 import { useAudience } from "../../../app/useAudience";
 import { useT } from "@intentic/ui/i18n";
 
@@ -198,6 +199,9 @@ const watchGaveUp = computed(
 // written: a sandbox older than this app sends no code, and a newer one may send a code this build does not know.
 const { audience } = useAudience();
 const noticeText = computed(() => noticeLine(props.message, audience.value) ?? props.message.text);
+// A failure row: its own glyph, and a provider's longer words folded down to one line, the whole of them a press away.
+const failure = computed(() => (props.message.role === `notice` ? noticeFailure(props.message) : undefined));
+const failureOpen = ref(false);
 // A notice the runtime's own extension or loop said (sandbox-contract events/agent-ui.ts): its level's glyph and colour.
 // An info line stays the muted notice every other row is; only a warning or an error is drawn louder.
 const AGENT_NOTICE_LOOK = {
@@ -210,6 +214,9 @@ const agentNoticeLook = computed(() => (props.message.agentNotice === undefined 
 const noticeIcon = computed(() => {
     if (agentNoticeLook.value !== undefined) {
         return agentNoticeLook.value.icon;
+    }
+    if (failure.value !== undefined) {
+        return `exclamation-triangle`;
     }
     if (props.message.watchWake !== undefined) {
         return `eye`;
@@ -532,7 +539,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
                 <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
-                <Icon v-else :name="noticeIcon" class="shrink-0 text-xs" />
+                <!-- A failure's glyph alone takes the warning colour: the line stays as quiet as every notice, the mark says which kind it is. -->
+                <Icon v-else :name="noticeIcon" class="shrink-0 text-xs" :class="{ 'text-warning': failure && !agentNoticeLook }" />
                 <!-- Who said it, when the runtime named an extension: its words are not the sandbox's. -->
                 <span class="min-w-0" :class="{ 'whitespace-pre-line': message.agentNotice }"
                     ><span v-if="message.agentNotice?.source" class="font-medium">{{ message.agentNotice.source }}: </span>{{ noticeText }}</span
@@ -552,6 +560,17 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 }}</template>
                 <template v-else>{{ watchEvidence ? t(`chat.chatMessageView.hideMessage`) : t(`chat.chatMessageView.showMessage`) }}</template>
             </button>
+            <!-- A provider's longer words, behind the line above: opened by a press, since they hold links and ids to copy. -->
+            <button
+                v-if="failure?.folded"
+                type="button"
+                class="shrink-0 font-medium text-link hover:underline"
+                :aria-expanded="failureOpen"
+                @click="failureOpen = !failureOpen"
+            >
+                {{ failureOpen ? t(`chat.providerFailure.hideDetails`) : t(`chat.providerFailure.details`) }}
+            </button>
+            <NoticeFailureDetails v-if="failureOpen && failure?.folded" :said="failure.said" />
             <pre
                 v-if="watchEvidence && unspokenSent !== undefined"
                 class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"

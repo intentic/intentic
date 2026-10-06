@@ -1721,6 +1721,75 @@ describe(`a sandbox notice with a code`, () => {
     });
 });
 
+// A provider's failure says what happened in one line, and everything else it said is a press away (providerFailure.ts).
+describe(`a provider's failure`, () => {
+    // The Claude CLI's safeguard flag as a sandbox in use wrote it into a transcript.
+    const SAID = [
+        `API Error: Opus 5.5's safeguards flagged this session (https://www.anthropic.com/legal/aup). You may be seeing this for the first time: Opus 5.5 is more capable and has stronger safeguards as a result, which can sometimes flag non-cybersecurity work. Claude Code can't respond to your last message with Opus 5.5.`,
+        `Try rephrasing the request in a new session or change your model.`,
+        `Learn more: https://support.claude.com/en/articles/8106465`,
+        "Details: `[cyber]`",
+        `Request ID: req_011CfmGgktqWtwzpffP3NhAk`,
+        `Message ID: msg_011CfmGgmnQdSfvKck2zDhPr`,
+    ].join(`\n\n`);
+    // As the contract's fold writes it, so the row is the one a live turn and a reopened chat both draw.
+    const flagged = (): ChatMessage => ({ id: 31, ...foldTurn([], [{ kind: `error`, code: `safeguard-flagged`, message: SAID }]).at(-1)! });
+    const iconsOf = (element: HTMLElement): (string | null)[] => [...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
+
+    it(`draws one line naming what happened, under the warning glyph, with the rest folded away`, () => {
+        const element = mount(flagged());
+        expect(element.textContent).toContain(`Opus 5.5's safeguards flagged this session.`);
+        expect(element.textContent).not.toContain(`Request ID`);
+        expect(element.textContent).not.toContain(`You may be seeing this`);
+        expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
+        expect(element.querySelector(`.text-warning`)).not.toBeNull();
+        expect(element.querySelector(`[data-failure-details]`)).toBeNull();
+    });
+
+    it(`opens everything it said on a press: the prose with its links, the ids to copy, and the help article`, async () => {
+        const element = mount(flagged());
+        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!;
+        expect(toggle.textContent?.trim()).toBe(`Details`);
+        toggle.click();
+        await nextTick();
+        const details = element.querySelector(`[data-failure-details]`)!;
+        expect(toggle.getAttribute(`aria-expanded`)).toBe(`true`);
+        expect(toggle.textContent?.trim()).toBe(`Hide details`);
+        expect(details.textContent).toContain(`You may be seeing this for the first time`);
+        expect([...details.querySelectorAll(`dt`)].map((term) => term.textContent)).toEqual([`Category`, `Request ID`, `Message ID`]);
+        expect([...details.querySelectorAll(`dd`)].map((value) => value.textContent?.trim())).toEqual([
+            `cyber`,
+            `req_011CfmGgktqWtwzpffP3NhAk`,
+            `msg_011CfmGgmnQdSfvKck2zDhPr`,
+        ]);
+        expect([...details.querySelectorAll(`a`)].map((link) => link.getAttribute(`href`))).toEqual([
+            `https://www.anthropic.com/legal/aup`,
+            `https://support.claude.com/en/articles/8106465`,
+        ]);
+        // One copy per id, and one for the whole message; a category is a word to read, not to paste.
+        expect(details.querySelectorAll(`.copy-stub`)).toHaveLength(3);
+    });
+
+    // A short failure is already one line: there is nothing to fold, so nothing to open.
+    it(`leaves a short failure whole, with no details to open`, () => {
+        const element = mount({ id: 32, ...foldTurn([], [{ kind: `error`, code: `safeguard-flagged`, message: `Flagged.` }]).at(-1)! });
+        expect(element.textContent).toContain(`Flagged.`);
+        expect(element.querySelector(`button[aria-expanded]`)).toBeNull();
+        expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
+    });
+
+    // A sandbox older than its failure codes wrote the provider's words alone; they read the same.
+    it(`folds a row with no code by its words`, () => {
+        const element = mount({ id: 33, role: `notice`, text: SAID });
+        expect(element.textContent).toContain(`Opus 5.5's safeguards flagged this session.`);
+        expect(element.querySelector(`button[aria-expanded="false"]`)?.textContent?.trim()).toBe(`Details`);
+    });
+
+    it(`keeps the info glyph for a notice that is not a failure`, () => {
+        expect(iconsOf(mount({ id: 34, role: `notice`, text: `Plan approved.`, noticeCode: { code: `planApproved` } }))).toEqual([`info-circle`]);
+    });
+});
+
 describe(`a runtime extension's notice`, () => {
     // As the contract's fold writes it, so the row here is the one a live turn and a reopened chat both draw.
     const noticeRow = (level: `info` | `warning` | `error`, source?: string): ChatMessage => {
