@@ -143,7 +143,8 @@ export const maskingShield = ({ masker, readers, readings, images, tally, fetchI
         const found = await masker.find(readingText(reading.value.lines));
         addCounts(tally.counts, found.counts);
         addFound(tally, found.found, true);
-        if (found.spans.length === 0) {
+        // An animation goes as the one frame that was read, painted or not: the frames after it were never checked.
+        if (found.spans.length === 0 && (reading.value.frames ?? 1) <= 1) {
             return "keep";
         }
         const regions = regionsFor(reading.value.lines, found.spans, reading.value);

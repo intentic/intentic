@@ -33,15 +33,16 @@ test("an owner file that cannot be read refuses both the read and a new claim, a
 });
 
 test("an owner file that cannot be read is said once a boot, with the command that moves it aside on the host", async () => {
-    const workspaceRoot = mkdtempSync(join(tmpdir(), "owner-notice-"));
-    const path = join(workspaceRoot, ownerDocument.path);
+    const base = mkdtempSync(join(tmpdir(), "owner-notice-"));
+    const historyRoot = join(base, "history");
+    const path = join(historyRoot, ownerDocument.path);
     mkdirSync(dirname(path), { recursive: true });
     await writeFile(path, "{", "utf8");
     const LogLine = z.looseObject({ level: z.number(), msg: z.string() });
     const said: z.infer<typeof LogLine>[] = [];
     const logger = pino({ level: "error", base: null, timestamp: false }, { write: (line: string) => void said.push(LogLine.parse(JSON.parse(line))) });
 
-    const slice = createAuthSlice({ ...testConfig, connectToken: "the-connect-token" }, workspaceRoot, logger);
+    const slice = createAuthSlice({ ...testConfig, connectToken: "the-connect-token", historyRoot }, join(base, "work"), logger);
     await expect(slice.ownerEmail()).rejects.toBeInstanceOf(OwnerUnreadableError);
     await expect(slice.ownerEmail()).rejects.toBeInstanceOf(OwnerUnreadableError);
 

@@ -64,7 +64,8 @@ flowchart LR
   first check the old container stays parked for a 24-hour probation (`probation.rs`): `ic sandbox watch`, which the
   machine agent runs every minute while a probation is on, puts it back by itself (a rename and a start, nothing
   downloaded or built) when the new version keeps crashing, never becomes ready, or loses the tunnel the old one had.
-  The same look finishes or undoes a swap that died halfway (Ctrl-C, a dropped SSH session, an agent restart, a
+  A sandbox its owner stopped is waited for rather than judged, and a start or restart made through ic (noted in the
+  ledger before it is made) is not counted as a crash (2026-10-06). The same look finishes or undoes a swap that died halfway (Ctrl-C, a dropped SSH session, an agent restart, a
   reboot): the channel record names the swap in flight before anything stops. What happened is written to the
   sandbox's `/history/update-outcome.json` (`outcome.rs`), which its daemon shows the owner. The dogfood `dev` loop
   keeps no probation. `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
@@ -72,7 +73,9 @@ flowchart LR
   are kept behind it when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
   keeps its data on is read directly, where the check used to skip), and `ic sandbox versions` lists them for
   `rollback --to <version>`. A release nothing kept is downloaded by its version tag, and so is a pin whose image was
-  pruned outside ic; a pin with neither its image nor a version is no longer offered (`versions.rs`, 2026-10-05). Every
+  pruned outside ic; a pin with neither its image nor a version is no longer offered (`versions.rs`, 2026-10-05). A
+  rollback remembers the version it left (`rolled_back_from`), as the watch's own going back does, so the background
+  download never stages it again, even once a rollback onto a release tag follows the registry (2026-10-06). Every
   build a swap leaves is pinned under a tag no other flow writes, chosen by image identity (`identity.rs`): an
   environment overlay is labelled with the base it was built on, since its base tag moves whenever anything on the
   machine pulls it.

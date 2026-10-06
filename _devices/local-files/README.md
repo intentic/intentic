@@ -36,7 +36,9 @@ flowchart LR
   same token again (how the app re-points a window it reuses) all let go of what the old grant held: its handlers
   and its office editor, which are keyed by the grant rather than its token. An old grant's end never takes a
   replacement with it.
-- **Paths resolve twice.** Lexically first (no `..`, no drive, no backslash), then on disk: the real path of whatever
+- **Paths resolve twice.** Lexically first (no `..`, no drive, no backslash, and on Windows no name Windows cannot
+  hold: `<>:"|?*`, which would reach an alternate data stream, a trailing dot or space, or a device name such as `CON`),
+  then on disk: the real path of whatever
   exists must still be inside the granted folder, so a link cannot lead out (`paths.ts`). A folder grant reads and
   writes inside its folder. A single-document grant reads the document's folder, for the pictures and links beside
   it and the folder the window can show, and writes only the document.

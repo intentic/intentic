@@ -97,6 +97,10 @@ export const PhoneSummarySchema = z.object({
     id: z.string(),
     platform: z.string().min(1),
     online: z.boolean(),
+    // Whether the sandbox holds a pairing for this phone. `online`, `lastSeen` and `facts` live in memory and are empty
+    // after every restart, so none of them can tell a phone that was never paired from one that has not dialled in yet.
+    // Absent from a daemon older than this field, which a reader takes as "cannot tell".
+    paired: z.boolean().optional(),
     // The app's build; an old one reads as outdated rather than missing a tool.
     version: z.string().optional(),
     // Epoch ms of the last connection; absent after a restart rather than stale.

@@ -97,3 +97,37 @@ describe("phone numbers", () => {
         expect(found("€ 600 100 200", "phone")).toEqual([]);
     });
 });
+
+describe("after a JSON escape", () => {
+    // Raw JSON text writes a line break as `\n`; the `n` is the escape's, not the first letter of the address or a digit's
+    // neighbour.
+    test("an address and a phone right after an escaped line break are found as themselves", () => {
+        const mail = `${["jan", "nowak"].join(".")  }@` + `firma.pl`;
+        expect(found(`{"body":"Hi\\n${mail}"}`, "email")).toEqual([mail]);
+        expect(found(`{"body":"tel.\\n601 234 567"}`, "phone")).toEqual(["601 234 567"]);
+    });
+});
+
+describe("spellings a detector used to miss", () => {
+    const mail = `${["jan", "kowalski"].join(".")  }@` + `gmail.com`;
+
+    test("an address with its @ written as %40 or \\u0040 is an address", () => {
+        const encoded = mail.replace("@", "%40");
+        expect(found(`GET /api?email=${encoded}&page=1`, "email")).toEqual([encoded]);
+        const escaped = mail.replace("@", "\\u0040");
+        expect(found(`{"e":"${escaped}"}`, "email")).toEqual([escaped]);
+        expect(found("progress 100%40 done", "email")).toEqual([]);
+    });
+
+    test("nine bare digits under a JSON key that names a phone are a phone, and not under any other", () => {
+        expect(found(JSON.stringify({ mobileNumber: "601234567" }), "phone")).toEqual(["601234567"]);
+        expect(found(JSON.stringify({ contact_phone: "601234567" }), "phone")).toEqual(["601234567"]);
+        expect(found(JSON.stringify({ orderNumber: "601234567" }), "phone")).toEqual([]);
+    });
+
+    test("a North American number with its area code in brackets is a phone", () => {
+        expect(found("call (555) 123-4567 today", "phone")).toEqual(["(555) 123-4567"]);
+        expect(found("call (555)123-4567 today", "phone")).toEqual(["(555)123-4567"]);
+        expect(found("f(555) 123-4567", "phone")).toEqual([]);
+    });
+});

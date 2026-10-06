@@ -95,6 +95,7 @@ export const planCursorTurn = async (
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
         anonymousBrowser: persona.powers.browser,
+        shell: persona.powers.shell,
         extensions: persona.powers.extensions,
     });
     const tools = mounted.tools;

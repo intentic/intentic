@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
@@ -143,6 +143,25 @@ test("a checkout that is not built yet is held until its bundle exists", async (
     expect((await installed()).dev?.held).toBe("extensions/maintenance is not built yet (dist/extension.js is missing): run its build there");
 
     await writeFile(join(checkout, "dist", "extension.js"), "built");
+    expect((await installed()).dir).toBe(checkout);
+});
+
+test("a bundle that is a symlink out of the checkout is held, not served", async () => {
+    const { root, pinned, installed, point } = await setup();
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), "ext-dev-secret-")));
+    await writeFile(join(outside, "secret.txt"), "TOP SECRET");
+    const checkout = join(root, "extensions", "maintenance");
+    await writeExtension(checkout, manifest());
+    await symlink(join(outside, "secret.txt"), join(checkout, "dist", "extension.js"));
+    await point(checkout);
+
+    expect((await installed()).dir).toBe(pinned);
+    expect((await installed()).dev?.held).toBe("extensions/maintenance has a bundle (dist/extension.js) that leaves the checkout: a bundle must be a file inside it");
+
+    // A link that stays inside the checkout is an ordinary build output.
+    await rm(join(checkout, "dist", "extension.js"));
+    await writeFile(join(checkout, "dist", "real.js"), "built");
+    await symlink(join(checkout, "dist", "real.js"), join(checkout, "dist", "extension.js"));
     expect((await installed()).dir).toBe(checkout);
 });
 

@@ -19,6 +19,7 @@ use netd_wire::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 
 use support::{Harness, SANDBOX_ID, bound, free_port};
 
@@ -279,11 +280,203 @@ async fn an_upgrade_is_spliced_byte_for_byte() {
         stream.read_exact(&mut byte).await.unwrap();
         answer.push(byte[0]);
     }
-    assert!(String::from_utf8_lossy(&answer).starts_with("HTTP/1.1 101"));
+    let answer = String::from_utf8_lossy(&answer).to_lowercase();
+    assert!(answer.starts_with("http/1.1 101"), "{answer}");
+    // Origin form, as an h1 server expects it from anything but a proxy.
+    assert!(answer.contains("\r\nx-node-saw: /ws\r\n"), "{answer}");
     stream.write_all(b"ping").await.unwrap();
     let mut echoed = [0_u8; 4];
     stream.read_exact(&mut echoed).await.unwrap();
     assert_eq!(&echoed, b"ping");
+}
+
+// A dev server's upgrade, read as it arrived: its request line is sent on `seen`, it answers 101 to anything, and
+// echoes. `ws` (with `path`) and Vite's HMR match the request-target as a path, so an absolute-form one is refused there
+// (2026-10-06: Vite's HMR socket went unanswered through a preview, and a `ws` server on `/ws` answered 400).
+async fn upgrade_upstream() -> (u16, mpsc::UnboundedReceiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (seen, lines) = mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        loop {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut byte = [0_u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    if stream.read_exact(&mut byte).await.is_err() {
+                        return;
+                    }
+                    head.push(byte[0]);
+                }
+                let line = String::from_utf8_lossy(&head)
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned();
+                let _ = seen.send(line);
+                let switching = b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: echo\r\n\r\n";
+                if stream.write_all(switching).await.is_err() {
+                    return;
+                }
+                let mut buffer = [0_u8; 1024];
+                while let Ok(read @ 1..) = stream.read(&mut buffer).await {
+                    if stream.write_all(&buffer[..read]).await.is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    (port, lines)
+}
+
+#[tokio::test]
+async fn a_previews_upgrade_reaches_its_upstream_in_origin_form() {
+    let (upstream_port, mut lines) = upgrade_upstream().await;
+    let (_harness, _daemon, preview, _loopback) = started("upgrade-preview", upstream_port).await;
+    let mut stream = TcpStream::connect(("127.0.0.1", preview)).await.unwrap();
+    let head = format!(
+        "GET /hmr?token=t HTTP/1.1\r\nHost: preview-web-{SANDBOX_ID}.sbx.test\r\nConnection: Upgrade\r\nUpgrade: echo\r\n\r\n"
+    );
+    stream.write_all(head.as_bytes()).await.unwrap();
+    let mut answer = Vec::new();
+    let mut byte = [0_u8; 1];
+    while !answer.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).await.unwrap();
+        answer.push(byte[0]);
+    }
+    assert!(String::from_utf8_lossy(&answer).starts_with("HTTP/1.1 101"));
+    assert_eq!(lines.recv().await.unwrap(), "GET /hmr?token=t HTTP/1.1");
+    stream.write_all(b"ping").await.unwrap();
+    let mut echoed = [0_u8; 4];
+    stream.read_exact(&mut echoed).await.unwrap();
+    assert_eq!(&echoed, b"ping");
+}
+
+// One request written as it stands, its whole answer read back: for heads a client library would not write.
+async fn raw(port: u16, head: &str) -> String {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    stream.write_all(head.as_bytes()).await.unwrap();
+    let mut answer = Vec::new();
+    let _ = stream.read_to_end(&mut answer).await;
+    String::from_utf8_lossy(&answer).into_owned()
+}
+
+#[tokio::test]
+async fn an_absolute_form_request_names_its_target_in_the_host_it_forwards() {
+    let (_harness, _daemon, preview, _loopback) = started("absolute", upstream().await).await;
+    let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+    let web = format!("preview-web-{SANDBOX_ID}.sbx.test");
+    // Routed by its target (RFC 9112 §3.2.2), so Node must hear that target as its Host, never the Host it came with.
+    let answer = raw(
+        preview,
+        &format!("GET http://{own}/hello HTTP/1.1\r\nHost: {web}\r\nConnection: close\r\n\r\n"),
+    )
+    .await;
+    assert!(
+        answer.ends_with(&format!("node saw {own} /hello mark=-")),
+        "{answer}"
+    );
+}
+
+#[tokio::test]
+async fn a_request_naming_two_hosts_is_refused() {
+    let (_harness, daemon, preview, _loopback) = started("two-hosts", upstream().await).await;
+    let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+    let web = format!("preview-web-{SANDBOX_ID}.sbx.test");
+    for port in [daemon, preview] {
+        let answer = raw(
+            port,
+            &format!("GET / HTTP/1.1\r\nHost: {own}\r\nHost: {web}\r\nConnection: close\r\n\r\n"),
+        )
+        .await;
+        assert!(answer.starts_with("HTTP/1.1 400"), "{answer}");
+    }
+}
+
+#[tokio::test]
+async fn a_port_moved_to_another_host_is_bound_there() {
+    let (harness, daemon, preview, loopback) = started("rehost", upstream().await).await;
+    let mut moved = config(daemon, preview, loopback);
+    moved.daemon.host = "0.0.0.0".into();
+    harness.send(&FromNode::Listen { config: moved }).await;
+    // 127.0.0.2 reaches only the wildcard listener: the one on 127.0.0.1 it replaces never answers there.
+    for _ in 0..200 {
+        if TcpStream::connect(("127.0.0.2", daemon)).await.is_ok() {
+            let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+            assert_eq!(
+                get(daemon, &own, "/moved", &[]).await.body,
+                format!("node saw {own} /moved mark=-")
+            );
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the daemon's port was never bound on its new host");
+}
+
+// Past hyper's 30 s for a request head, and past the 10 s a loopback connection has to classify itself, with room for
+// a loaded machine: a connection still open here was never going to be closed.
+const STALLED_GIVE_UP: Duration = Duration::from_secs(45);
+
+// Whether netd hangs up on `stream` before `STALLED_GIVE_UP`, and how long it took.
+async fn hung_up(mut stream: TcpStream) -> Option<Duration> {
+    let started = std::time::Instant::now();
+    let mut buffer = [0_u8; 256];
+    tokio::time::timeout(STALLED_GIVE_UP, async {
+        loop {
+            match stream.read(&mut buffer).await {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {}
+            }
+        }
+    })
+    .await
+    .ok()
+    .map(|()| started.elapsed())
+}
+
+#[tokio::test]
+async fn a_request_head_that_never_ends_is_hung_up_on() {
+    let (_harness, daemon, _preview, _loopback) = started("slow-head", upstream().await).await;
+    let mut stream = TcpStream::connect(("127.0.0.1", daemon)).await.unwrap();
+    stream
+        .write_all(format!("GET / HTTP/1.1\r\nHost: sandbox-{SANDBOX_ID}.sbx.test\r\n").as_bytes())
+        .await
+        .unwrap();
+    let took = hung_up(stream)
+        .await
+        .expect("netd hangs up on a head that never ends");
+    assert!(took >= Duration::from_secs(25), "hung up after {took:?}");
+}
+
+#[tokio::test]
+async fn a_tls_handshake_that_never_ends_is_hung_up_on() {
+    let (harness, _daemon, _preview, loopback) = started("slow-tls", upstream().await).await;
+    let issued =
+        rcgen::generate_simple_self_signed(vec![format!("{SANDBOX_ID}.local.sbx.test")]).unwrap();
+    harness
+        .send(&FromNode::Certificate {
+            certificate: Some(Certificate {
+                certificate: issued.cert.pem(),
+                private_key: issued.signing_key.serialize_pem(),
+            }),
+        })
+        .await;
+    // The certificate lands asynchronously; without one a hello is closed at once, which proves nothing here.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let mut stream = TcpStream::connect(("127.0.0.1", loopback)).await.unwrap();
+    // A TLS record header and nothing of the hello it announces.
+    stream
+        .write_all(&[0x16, 0x03, 0x01, 0x02, 0x00])
+        .await
+        .unwrap();
+    let took = hung_up(stream)
+        .await
+        .expect("netd hangs up on a handshake that never ends");
+    assert!(took >= Duration::from_secs(5), "hung up after {took:?}");
 }
 
 #[tokio::test]

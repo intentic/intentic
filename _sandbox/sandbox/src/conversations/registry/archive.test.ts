@@ -151,6 +151,25 @@ describe("archiveAgents", () => {
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
 
+    // A message booked for later is work still to come, and filing the conversation away would have it dropped at its
+    // time (archivable's rule, which only the aged sweep applied): the archive names it and leaves the conversation be.
+    it("refuses a conversation whose scheduled message has not gone out, and leaves it on the board", async () => {
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences());
+        await agents.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        const item = { id: "m-1", voice: "person", queuedAt: 3_000, turn: { conversationId: "c1", prompt: "then tag it", messageId: "m-1" } } as const;
+        await conversations.send("c1", { kind: "queue-scheduled", item, booking: { until: 90_000 } }, 3_000).settled;
+        const { worktrees, retire } = stubWorktrees();
+
+        const { archived, failed } = await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
+
+        expect(archived).toEqual([]);
+        expect(failed).toEqual([{ id: "c1", reason: expect.stringContaining("scheduled") }]);
+        expect(retire).not.toHaveBeenCalled();
+        expect(agents.get("c1")?.archivedAt).toBeUndefined();
+    });
+
     it("disarms the conversation's watches along with its checkout", async () => {
         const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences());
         const stop = startWatcherRuntime({

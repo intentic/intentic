@@ -1,5 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import { ownPhoneReach, phoneTypingRefusal, sealAnswer, typedOnPhone } from "./phone-peer.js";
+import { ownPhoneReach, phoneSummaries, phoneTypingRefusal, sealAnswer, typedOnPhone } from "./phone-peer.js";
 
 /* What the sandbox decides about a phone's calls before and after they cross: the seal, and the typing check. */
 
@@ -70,4 +70,18 @@ test("a turn is told which phones publish tools, by what they are, and which wer
     ]);
     expect(reach).toEqual({ phones: [{ id: "pixel", what: "Google Pixel 8" }, { id: "work" }], unlisted: ["new"] });
     expect(await ownPhoneReach({ phoneHub: hub as never }, [])).toBeUndefined();
+});
+
+test("the roster says which phones the sandbox holds a pairing for, whether or not they have connected since a restart", async () => {
+    const services = {
+        capabilities: { list: async () => [phoneCard("pixel"), phoneCard("new")] },
+        phones: { enrolled: async (id: string) => id === "pixel" },
+        phoneHub: { refresh: async () => undefined, state: () => ({ online: false }) },
+        phoneWake: { state: async () => "ready" },
+    };
+    const roster = await phoneSummaries(services as never);
+    expect(roster.map((phone) => [phone.id, phone.paired])).toEqual([
+        ["pixel", true],
+        ["new", false],
+    ]);
 });

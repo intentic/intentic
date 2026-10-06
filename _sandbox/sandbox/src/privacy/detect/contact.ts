@@ -1,4 +1,4 @@
-import { digitsOf, type Emit, isDigit, isWordChar, keywordBefore } from "./text.js";
+import { afterEscape, digitsOf, type Emit, isDigit, isWordChar, jsonKeyWordsBefore, keywordBefore } from "./text.js";
 
 // E-mail addresses and phone numbers.
 
@@ -28,29 +28,40 @@ const validDomain = (domain: string): boolean => {
 
 // Scanned outward from each "@" rather than matched with one pattern: a pattern for the part before the "@" would be
 // retried at every character of every long word, and an "@" is rare.
+// The @ as a URL encodes it (`%40`, a query string) and as a JSON escape writes it (`\u0040`).
+const AT_SIGNS = /@|%40|\\u0040/giu;
+
+const nextAt = (text: string, from: number): { readonly at: number; readonly length: number } | undefined => {
+    AT_SIGNS.lastIndex = from;
+    const found = AT_SIGNS.exec(text);
+    return found === null ? undefined : { at: found.index, length: found[0].length };
+};
+
 export const findEmails = (text: string, emit: Emit): void => {
-    let at = text.indexOf("@");
-    while (at !== -1) {
+    for (let sign = nextAt(text, 0); sign !== undefined; ) {
+        const { at } = sign;
         let start = at;
-        while (start > 0 && at - start < 64 && LOCAL_CHAR.test(text[start - 1] ?? "")) {
+        // Back to the first character that can't be in a mailbox name, or to an escape's letter (`\njan@…` in raw JSON).
+        while (start > 0 && at - start < 64 && LOCAL_CHAR.test(text[start - 1] ?? "") && !afterEscape(text, start)) {
             start -= 1;
         }
         while (start < at && text[start] === ".") {
             start += 1;
         }
-        let end = at + 1;
+        const after = at + sign.length;
+        let end = after;
         while (end < text.length && end - at < 254 && DOMAIN_CHAR.test(text[end] ?? "")) {
             end += 1;
         }
-        while (end > at + 1 && (text[end - 1] === "." || text[end - 1] === "-")) {
+        while (end > after && (text[end - 1] === "." || text[end - 1] === "-")) {
             end -= 1;
         }
         const local = text.slice(start, at);
-        const domain = text.slice(at + 1, end);
+        const domain = text.slice(after, end);
         if (local !== "" && validDomain(domain) && !IMPERSONAL_LOCAL.test(local) && !IMPERSONAL_DOMAIN.test(domain)) {
             emit(start, end, "email");
         }
-        at = text.indexOf("@", Math.max(at + 1, end));
+        sign = nextAt(text, Math.max(at + 1, end));
     }
 };
 
@@ -59,6 +70,8 @@ export const findEmails = (text: string, emit: Emit): void => {
 // figures) and a date, a time or a version (other separators) never forms one.
 const DIGIT_RUN = /(?:\(?\+|\()?\d(?:[ .()-]{0,2}\d)*\)?/g;
 const PHONE_KEYWORD = /(?<!\p{L})(?:tel|telefon\p{L}*|phone|mobile|mob|cell|kom|komórk\p{L}*|gsm|fax|faks)(?!\p{L})/iu;
+// The words of a JSON key that name a phone: `mobileNumber`, `contact_phone`, `telefonKomorkowy`.
+const PHONE_KEY_WORD = /^(?:tel|telefon\p{L}*|phone|telephone|mobile|mob|cell|cellphone|kom|komórk\p{L}*|komork\p{L}*|gsm|fax|faks|msisdn)$/u;
 // "123 456 789 zł": Polish writes thousands with spaces, so a 3-3-3 amount looks like a mobile number.
 const AMOUNT_AFTER = /^\s?(?:zł|zl|pln|eur|usd|gbp|chf|€|\$|£|%|km|kg|osób|os\.|szt|sztuk|b|kb|mb|gb|bytes|ms)(?!\p{L})/iu;
 const AMOUNT_BEFORE = /[$€£]\s?$/u;
@@ -70,6 +83,10 @@ const sameSeparators = (separators: readonly string[], allowed: string): boolean
 const domesticFormat = (run: string, groups: readonly string[], separators: readonly string[]): boolean => {
     const lengths = groups.map((group) => group.length).join(",");
     if (run.startsWith("(")) {
+        // North American: the area code's three digits in brackets, then 3-4 (`(555) 123-4567`).
+        if (/^\(\d{3}\) ?\d{3}-\d{4}$/.test(run)) {
+            return true;
+        }
         return /^\((?:0[ -]?)?\d{2}\)/.test(run) && (lengths === "2,3,2,2" || lengths === "2,7" || lengths === "2,3,4");
     }
     if (run.startsWith("0") || separators.some((separator) => separator.includes("."))) {
@@ -104,7 +121,8 @@ const isPhone = (text: string, run: string, start: number): boolean => {
     // Nine digits bare, or in a grouping no format above claims, are a number like any other unless something calls
     // them a phone.
     const national = digits.length === 9 || (digits.length === 11 && digits.startsWith("48"));
-    return national && !digits.startsWith("0") && keywordBefore(text, start, PHONE_KEYWORD, 30);
+    const named = keywordBefore(text, start, PHONE_KEYWORD, 30) || jsonKeyWordsBefore(text, start).some((word) => PHONE_KEY_WORD.test(word));
+    return national && !digits.startsWith("0") && named;
 };
 
 export const findPhones = (text: string, emit: Emit): void => {
@@ -116,7 +134,7 @@ export const findPhones = (text: string, emit: Emit): void => {
             run = run.slice(0, -1);
         }
         const before = text[start - 1];
-        if (isWordChar(before) || before === "+" || before === "/" || (before === "-" && isDigit(text[start - 2]))) {
+        if ((isWordChar(before) && !afterEscape(text, start)) || before === "+" || before === "/" || (before === "-" && isDigit(text[start - 2]))) {
             continue;
         }
         if (isWordChar(text[start + run.length]) || run.replace(/[^()]/g, "").length % 2 === 1) {

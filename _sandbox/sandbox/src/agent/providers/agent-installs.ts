@@ -8,9 +8,37 @@ import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 // writes and the owner's setting, not by its being an install. A browser install is told the browser is already baked.
 
 // A pip install inside a venv is project scope, not image scope.
-const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
+const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|(?:\/|\.)venv\/bin\/(?:pip|python)3?\b)/;
 const NODE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
-const NODE_INSTALL_VERBS = new Set(["i", "install", "add", "ci", "update", "up", "upgrade", "remove", "rm", "uninstall", "prune", "dedupe"]);
+const NODE_INSTALL_VERBS = new Set([
+    "i",
+    "install",
+    "add",
+    "ci",
+    "update",
+    "up",
+    "upgrade",
+    "remove",
+    "rm",
+    "uninstall",
+    "prune",
+    "dedupe",
+    // Rewrites what is already in node_modules, or imports a lockfile into it.
+    "rebuild",
+    "rb",
+    "import",
+    // npm's own aliases, typos it accepts included.
+    "in",
+    "ins",
+    "inst",
+    "insta",
+    "instal",
+    "isnt",
+    "isnta",
+    "isntal",
+    "isntall",
+    "ic",
+]);
 // Verbs that add a package; a global uninstall must not enter the ledger.
 const NODE_ADD_VERBS = new Set(["i", "install", "add"]);
 const OPTION_WITH_VALUE = new Set(["--cwd", "--dir", "--filter", "--prefix", "-C"]);
@@ -62,7 +90,11 @@ const withoutRedirections = (words: readonly string[]): string[] => {
 
 // Prefixes standing in front of the command that matters: env assignments, env/sudo/nice, a for/while body's loop
 // keywords, and `timeout <n>`.
-const PREFIX_WORDS = new Set(["env", "sudo", "nice", "then", "do"]);
+// `time`, `command`, `exec` and `nohup` run what follows; `if`/`while`/`until` and friends run their condition, `!` and `{`
+// stand in front of one.
+const PREFIX_WORDS = new Set(["env", "sudo", "nice", "then", "do", "else", "elif", "if", "while", "until", "time", "command", "exec", "nohup", "!", "{"]);
+// xargs's options that take their value as the next word.
+const XARGS_VALUE_FLAGS = new Set(["-n", "-P", "-I", "-L", "-s", "-d", "-E", "-a"]);
 const DURATION = /^[\d.]+[smhd]?$/;
 
 const withoutPrefixes = (words: readonly string[]): string[] => {
@@ -71,6 +103,14 @@ const withoutPrefixes = (words: readonly string[]): string[] => {
         const word = words[start] as string;
         if (PREFIX_WORDS.has(word) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
             start += 1;
+            continue;
+        }
+        if (word === "xargs") {
+            let ahead = start + 1;
+            while ((words[ahead] ?? "").startsWith("-")) {
+                ahead += XARGS_VALUE_FLAGS.has(words[ahead] as string) ? 2 : 1;
+            }
+            start = ahead;
             continue;
         }
         if (word === "timeout") {
@@ -92,6 +132,8 @@ type Operator = "|" | "&&" | "||" | ";" | "&" | "\n";
 
 interface CommandSegment {
     readonly words: readonly string[];
+    /** How many `(…)` groups or command substitutions the segment sits in: a `cd` inside one ends with it. */
+    readonly depth: number;
     /** The operator this segment ended on; absent at the command's end and around `(`…`)` grouping. */
     readonly next?: Operator;
 }
@@ -102,6 +144,8 @@ const tokenize = (command: string): CommandSegment[] => {
     let word = "";
     let quote: "'" | '"' | undefined;
     let escaped = false;
+    let depth = 0;
+    let ticked = false;
     const endWord = (): void => {
         if (word !== "") {
             words.push(word);
@@ -112,7 +156,7 @@ const tokenize = (command: string): CommandSegment[] => {
         endWord();
         const kept = withoutPrefixes(withoutRedirections(words));
         if (kept.length > 0) {
-            segments.push(next === undefined ? { words: kept } : { words: kept, next });
+            segments.push(next === undefined ? { words: kept, depth } : { words: kept, depth, next });
         }
         words = [];
     };
@@ -144,8 +188,17 @@ const tokenize = (command: string): CommandSegment[] => {
             index += doubled ? 1 : 0;
         } else if (character === ";" || character === "\n") {
             endSegment(character);
-        } else if (character === "(" || character === ")") {
+        } else if (character === "(") {
             endSegment();
+            depth += 1;
+        } else if (character === ")") {
+            endSegment();
+            depth = Math.max(0, depth - 1);
+        } else if (character === "`") {
+            // Backticks open and close a command substitution with the one character.
+            endSegment();
+            depth = Math.max(0, depth + (ticked ? -1 : 1));
+            ticked = !ticked;
         } else if (/\s/.test(character)) {
             endWord();
         } else {
@@ -185,31 +238,57 @@ interface ManagerReading {
 
 const NOT_AN_INSTALL: ManagerReading = { project: false, global: false };
 
+// Flags of the node managers that take their value as the next word, which is not the verb.
+const NODE_VALUE_FLAGS = new Set([
+    ...OPTION_WITH_VALUE,
+    "--registry",
+    "--workspace",
+    "--loglevel",
+    "--reporter",
+    "--userconfig",
+    "--cache",
+    "--config",
+    "--store-dir",
+]);
+// Flags that make a manager read or describe instead of write.
+const READS_ONLY = new Set(["--help", "-h", "--version", "-v", "--dry-run"]);
+
 const nodeInstallOf = (invocation: readonly string[]): ManagerReading => {
     const words = [...invocation];
     if (words[0] === "corepack") {
         words.shift();
     }
     const executable = words.shift()?.split("/").at(-1);
-    if (executable === undefined || !NODE_MANAGERS.has(executable)) {
+    if (executable === undefined || !NODE_MANAGERS.has(executable) || words.some((word) => READS_ONLY.has(word))) {
         return NOT_AN_INSTALL;
     }
     const global = words.some((word) => word === "-g" || word === "--global");
+    const reading = (project: boolean): ManagerReading => ({ project: project && !global, global: project && global });
     for (let index = 0; index < words.length; index += 1) {
         const word = words[index];
         if (word === undefined) {
             break;
         }
-        if (OPTION_WITH_VALUE.has(word)) {
+        // npm's `-w` names a workspace; pnpm's is the workspace root, a flag with no value.
+        if (NODE_VALUE_FLAGS.has(word) || (executable === "npm" && word === "-w")) {
             index += 1;
             continue;
         }
         if (word.startsWith("-")) {
             continue;
         }
-        return { project: NODE_INSTALL_VERBS.has(word) && !global, global: NODE_INSTALL_VERBS.has(word) && global };
+        // `yarn workspace <name> <verb>` runs the verb in that workspace.
+        if (executable === "yarn" && word === "workspace") {
+            index += 1;
+            continue;
+        }
+        if (word === "audit") {
+            return reading(words.slice(index + 1).includes("fix"));
+        }
+        return reading(NODE_INSTALL_VERBS.has(word) || (executable === "bun" && word === "a"));
     }
-    return NOT_AN_INSTALL;
+    // A bare `yarn` is `yarn install`.
+    return executable === "yarn" ? reading(true) : NOT_AN_INSTALL;
 };
 
 // Classification: which tools an image-scoped install would put on this container.
@@ -280,9 +359,17 @@ const withoutVersion = (name: string): string => {
 const withoutSpecifier = (name: string): string => name.split(/[=<>~!]/, 1)[0] ?? name;
 
 // npx and `pnpm exec` are transparent wrappers; the tool being run sits after them.
+// `python -m pip …` is pip: the spelling changes nothing about what it installs, or where.
+const pipOf = (words: readonly string[]): string[] | undefined =>
+    /^python[\d.]*$/.test(words[0]?.split("/").at(-1) ?? "") && words[1] === "-m" && /^pip3?$/.test(words[2] ?? "") ? ["pip", ...words.slice(3)] : undefined;
+
 const unwrapped = (words: string[]): string[] => {
     let current = words;
     for (;;) {
+        const pip = pipOf(current);
+        if (pip !== undefined) {
+            return pip;
+        }
         const head = current[0]?.split("/").at(-1);
         if (head === "npx") {
             current = current.slice(1).filter((word, index) => !(index === 0 && word.startsWith("-")) && word !== "--yes" && word !== "-y");
@@ -345,6 +432,13 @@ export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
         } else if (/^pip3?$/.test(executable) && !venv) {
             if (words[1] === "install" && !words.includes("-r") && !words.includes("--requirement")) {
                 for (const tool of packagesAfter(words, 2)) {
+                    add("pip", withoutSpecifier(tool));
+                }
+            }
+        } else if (executable === "uv") {
+            // Without --system a uv pip install goes into the project's own environment (projectInstallsOf).
+            if (words[1] === "pip" && words[2] === "install" && words.includes("--system") && !words.includes("-r") && !words.includes("--requirement")) {
+                for (const tool of packagesAfter(words, 3)) {
                     add("pip", withoutSpecifier(tool));
                 }
             }
@@ -418,7 +512,7 @@ export interface ProjectInstall {
 // Flags that point a manager at another project than the one the shell stands in.
 const NODE_DIR_FLAGS = new Set(["--dir", "-C", "--prefix", "--cwd"]);
 const PYTHON_DIR_FLAGS = new Set(["--directory", "--project", "-C"]);
-const PYTHON_MANAGER = /^(?:uv\s+sync|poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/;
+const PYTHON_MANAGER = /^(?:poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/;
 const VENV_PIP = /^(?:\S*\/)?pip3?\s+(?:install|uninstall)\b/;
 
 // The value a directory flag carries, spelled either `--dir x` or `--dir=x`.
@@ -436,32 +530,101 @@ const flaggedDir = (words: readonly string[], flags: ReadonlySet<string>): strin
 };
 
 // A `cd` moves the shell for the rest of the line; `~` and `-` are not followed, since neither names a place this can
-// resolve, and the install is then read where the shell stood before.
+// resolve, and neither is anything built by the shell (`$REPO`, `$(git rev-parse --show-toplevel)`, a glob): the install is
+// then read where the shell stood before.
 const moved = (current: string, target: string | undefined): string =>
-    target === undefined || target === "-" || target.startsWith("~") ? current : resolve(current, target);
+    target === undefined || target === "-" || target.startsWith("~") || /[$`*?]/.test(target) ? current : resolve(current, target);
 
-// Every project install the command runs, in order. Precision over recall like the image classifier, but in the other
-// direction: a miss here lets an install run unprepared, so every spelling the deny used to catch is still caught.
-export const projectInstallsOf = (command: string, cwd: string): ProjectInstall[] => {
-    const effective = agentCommand(command);
-    const venv = VENV_SCOPED.test(effective);
+// uv's options that take their value as the next word, which is not the verb.
+const UV_VALUE_FLAGS = new Set(["--directory", "--project", "--python", "-p", "--config-file", "--cache-dir", "--color"]);
+
+// What a `uv …` invocation does to a project: `sync`, `add` and `remove` change its environment, and so does `uv pip`
+// without --system, which installs into the project's own. With --system it is the image's (classifyImageInstalls).
+const uvInstalls = (words: readonly string[]): boolean => {
+    const verbs: string[] = [];
+    for (let index = 1; index < words.length; index += 1) {
+        const word = words[index] as string;
+        if (UV_VALUE_FLAGS.has(word)) {
+            index += 1;
+        } else if (!word.startsWith("-")) {
+            verbs.push(word);
+        }
+    }
+    const [verb, sub] = verbs;
+    if (verb === "pip") {
+        return ["install", "uninstall", "sync"].includes(sub ?? "") && !words.includes("--system");
+    }
+    return verb === "sync" || verb === "add" || verb === "remove";
+};
+
+// The script a shell wrapper runs (`bash -c '…'`, `sh -lc '…'`, `eval '…'`), which is a command line of its own.
+const scriptOf = (words: readonly string[]): string | undefined => {
+    const executable = executableOf(words);
+    if (executable === "eval") {
+        return words.slice(1).join(" ");
+    }
+    if (!SHELLS.has(executable ?? "")) {
+        return undefined;
+    }
+    const flag = words.findIndex((word) => /^-[A-Za-z]*c[A-Za-z]*$/.test(word));
+    return flag === -1 ? undefined : words[flag + 1];
+};
+
+// How deep wrappers are followed; a script that wraps itself is not read forever.
+const SCRIPT_DEPTH = 4;
+
+const installsIn = (command: string, cwd: string, venvScoped: boolean, wrapped: number): ProjectInstall[] => {
     const found: ProjectInstall[] = [];
     let current = cwd;
-    for (const segment of tokenize(effective)) {
+    // Where the shell stood outside each group it is inside, and what `pushd` left to `popd`.
+    const outside: string[] = [];
+    const pushed: string[] = [];
+    let depth = 0;
+    for (const segment of tokenize(command)) {
+        for (; depth < segment.depth; depth += 1) {
+            outside.push(current);
+        }
+        for (; depth > segment.depth; depth -= 1) {
+            current = outside.pop() ?? current;
+        }
         const words = segment.words;
         const executable = executableOf(words);
         if (executable === "cd" || executable === "pushd") {
+            if (executable === "pushd") {
+                pushed.push(current);
+            }
             current = moved(current, words[1]);
             continue;
         }
-        const joined = words.join(" ");
+        if (executable === "popd") {
+            current = pushed.pop() ?? current;
+            continue;
+        }
+        const script = scriptOf(words);
+        if (script !== undefined) {
+            // Its own shell: what it `cd`s into is not where this one stands afterwards.
+            found.push(...(wrapped < SCRIPT_DEPTH ? installsIn(agentCommand(script), current, venvScoped || VENV_SCOPED.test(script), wrapped + 1) : []));
+            continue;
+        }
+        if (words.some((word) => READS_ONLY.has(word))) {
+            continue;
+        }
+        const pip = pipOf(words) ?? words;
         if (nodeInstallOf(words).project) {
             found.push({ dir: moved(current, flaggedDir(words, NODE_DIR_FLAGS)), ecosystem: "node" });
-        } else if ((venv && VENV_PIP.test(joined)) || PYTHON_MANAGER.test(joined)) {
+        } else if (executable === "uv" ? uvInstalls(words) : (venvScoped && VENV_PIP.test(pip.join(" "))) || PYTHON_MANAGER.test(words.join(" "))) {
             found.push({ dir: moved(current, flaggedDir(words, PYTHON_DIR_FLAGS)), ecosystem: "python" });
         }
     }
     return found;
+};
+
+// Every project install the command runs, in order. Precision over recall like the image classifier, but in the other
+// direction: a miss here lets an install run unprepared, so every spelling the deny used to catch is still caught, and
+// so are the ones behind a wrapper (`bash -c`, `time`, `xargs`, `eval`), a manager's own option values and its aliases.
+export const projectInstallsOf = (command: string, cwd: string): ProjectInstall[] => {
+    const effective = agentCommand(command);
+    return installsIn(effective, cwd, VENV_SCOPED.test(effective), 0);
 };
 
 const BROWSER_ALREADY_BAKED =

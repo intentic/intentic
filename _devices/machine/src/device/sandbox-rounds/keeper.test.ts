@@ -88,6 +88,55 @@ test("a run that exited non-zero having said nothing in JSON is an ic that canno
     expect(readFixRun({ code: 0, output: "" })).toEqual({ answers: [] });
 });
 
+// What ic prints when it found no sandbox to look at: the machine's own report, under `"slug": null`, and exit 1
+// (ic: sandbox/fix/mod.rs). Read off omen's log, where it was taken for an ic that cannot fix (2026-10-06).
+const NO_SANDBOX = (outcome: string): IcRun => ({
+    code: 1,
+    output: [
+        "intentic: checking this machine…",
+        JSON.stringify({
+            report: {
+                checks: [{ id: "docker", label: "Docker engine", state: outcome === "healthy" ? "ok" : "fail", problem: "it does not start", fix: "consent" }],
+                machine: "RADARSU-OMEN17",
+                os: "windows",
+                outcome,
+                source: "agent",
+                stage: "done",
+            },
+            slug: null,
+        }),
+        "intentic: there is no sandbox on this machine — run the setup command from your browser to set one up.",
+    ].join("\n"),
+});
+
+test("ic's report on the machine alone, with no sandbox found, is a fix that ran, not an ic that cannot fix", () => {
+    const reading = readFixRun(NO_SANDBOX("healthy"));
+    expect("unavailable" in reading).toBe(false);
+    expect(reading).toMatchObject({ answers: [], machine: { outcome: "healthy" } });
+});
+
+test("a sweep that found no sandbox does not hold the keeper back as an ic that cannot fix", async () => {
+    const { fake, lines, round } = setup();
+    // The logon case with a leftover record: the sweep runs, and ic finds no sandbox behind it.
+    fake.records = [SLUG];
+    fake.listing = new Error("Cannot connect to the Docker daemon");
+    fake.links = [linkView(URL, NOW - 10 * MIN)];
+    fake.answer = async (slug) => await Promise.resolve(slug === undefined ? NO_SANDBOX("healthy") : fixRun([{ slug, outcome: "healthy" }]));
+    await round(NOW + 30_000);
+    await round(NOW + 30_000 + MIN);
+    expect(fake.asked).toEqual([undefined, SLUG]);
+    expect(lines.some((line) => line.includes("cannot fix"))).toBe(false);
+});
+
+test("a machine left needing someone, with no sandbox found, is said once in ic's words", async () => {
+    const { fake, lines, round } = setup();
+    fake.records = ["work"];
+    fake.answer = async () => await Promise.resolve(NO_SANDBOX("needs-you"));
+    await round(NOW + 30_000);
+    await round(NOW + 30_000 + 30 * MIN);
+    expect(lines).toEqual(["keeper: this machine: needs-you — Docker engine: it does not start (needs your yes: `intentic-machine sandbox fix`)"]);
+});
+
 test("the wait after a run that left something starts at three minutes and doubles up to twenty, under ic's adoption window", () => {
     expect([0, 1, 2, 3, 4, 5, 9].map(backoffMs)).toEqual([0, 3, 6, 12, 20, 20, 20].map((minutes) => minutes * MIN));
 });

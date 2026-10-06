@@ -52,9 +52,9 @@ flowchart LR
   transfer routes from the list frozen with the door, and goes once no netd dials it.
 - A `/tunnel/v2` netd pings its WebSockets every 15 s and the edge only listens; either end drops a peer silent for
   45 s, checked in a task of its own so a stalled write cannot postpone it (2026-10-05). On `/tunnel/v1` the edge pings
-  too, because some older netd versions never ping and only answer: an edge that stopped pinging them dropped each one for
-  silence every minute (`Door::liveness` in src/edge.rs). A QUIC connection's own keep-alive and idle timeout run on
-  the same cadence, and since they prove only that packets cross, the edge proves the connection serves streams
+  too, because some older sandboxes (an `intentic-front`, netd's name before 2026-10-06) never ping and only answer:
+  an edge that stopped pinging them dropped each one for silence every minute (`Door::liveness` in src/edge.rs). A QUIC
+  connection's own keep-alive and idle timeout run on the same cadence, and since they prove only that packets cross, the edge proves the connection serves streams
   (2026-10-05: a half-dead QUIC path kept every request, since QUIC outranks the socket): a probe stream at
   registration, which must be answered before QUIC takes a request, then every 15 s with 10 s to answer, any answer
   counting (an older netd answers HTTP 400). An unanswered probe closes the connection with code 4008 and the socket
@@ -136,8 +136,9 @@ fly ips list -a intentic-ingress                           # a dedicated IPv4: F
 - `tests/fly_configs.rs` holds `fly.toml`'s services (PROXY v2 on 443 to 8443, the redirect on 80 to 8080, UDP 443 to
   443, TCP checks) and holds it equal to `fly.edge-proxy.toml` outside them.
 - Never publish `INGRESS_INTERNAL_PORT` (8081): binding only the private address is the peer protocol's one lock.
-- The edge pings `/tunnel/v1` netd instances itself. Some older netd versions never ping and only answer, and an edge that only
-  listened dropped each one for silence every minute; that surfaced at go-live, when every restart met them.
+- The edge pings `/tunnel/v1` sandboxes itself. Some older ones (an `intentic-front`, netd's name before 2026-10-06)
+  never ping and only answer, and an edge that only listened dropped each one for silence every minute; that surfaced
+  at go-live, when every restart met them.
 - An edge serves both doors and lists them on `/health` (`"doors":["/tunnel/v1","/tunnel/v2"]`), and a netd dials
   only `/tunnel/v2`, with no fallback. So no sandbox image moves onto a tag sandboxes pull (`latest` in CI's
   `images-merge`, `stable` in the release and in `rollback.yml`) until the live edge lists the door that image's netd
@@ -172,10 +173,10 @@ for a deployment doing the same:
   `curl -fsS -H "authorization: Bearer $TOKEN" https://api.intentic.dev/api/ingress/certificate | jq -r .certificate |
   openssl x509 -noout -subject -enddate`.
 - **Every hosted machine dialling.** A hosted machine is reached only down its tunnel, so each needs an image with
-  intentic-netd (aa02061469 or later) and `INGRESS_URL` plus `SANDBOX_GRANT` in its config. The api's wake re-applies a
-  machine's config when that pair is missing or stale, moving a stock machine onto today's `stable` (`wakeHosted`). An
-  environment overlay built on an older base keeps its overlay and has no netd to dial with: it answers `no-tunnel`
-  until its owner rebuilds the environment.
+  intentic-netd (named `intentic-front` from aa02061469 until 2026-10-06) and `INGRESS_URL` plus `SANDBOX_GRANT` in
+  its config. The api's wake re-applies a machine's config when that pair is missing or stale, moving a stock machine
+  onto today's `stable` (`wakeHosted`). An environment overlay built on a base older than aa02061469 keeps its overlay
+  and has nothing to dial with: it answers `no-tunnel` until its owner rebuilds the environment.
 - **The secrets and the dedicated IPv4** in the table above, staged (`flyctl secrets set --stage`) so the deploy that
   applied the new services applied them too.
 - **The replay lane removed** (phase 3b). Replay was a header Fly's HTTP proxy acted on; with none in front of 443 the

@@ -39,7 +39,11 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
         if (agent === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "unknown conversation" });
         }
-        const { messages, pictures } = shareTranscript(await services.transcripts.read(agent), detail);
+        // A public page leaves this machine whole: while the privacy shield is on, its personal data is replaced by what
+        // kind it was, as a native push notification's is, its pictures are painted over the same way (or not published
+        // where they cannot be read), and no file name goes with them.
+        const shielded = (await services.privacyShield.policy()).mode === "on";
+        const { messages, pictures } = shareTranscript(await services.transcripts.read(agent), detail, { keepNames: !shielded });
         if (messages.length === 0) {
             throw new ORPCError("BAD_REQUEST", { message: "this conversation has nothing to share yet" });
         }
@@ -52,8 +56,6 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
         } catch {
             throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "this sandbox image is missing the shared-conversation page" });
         }
-        // A public page leaves this machine whole: while the privacy shield is on, its personal data is replaced by what
-        // kind it was, as a native push notification's is.
         const redact = services.privacyShield.redactForDisplay;
         const shown = {
             // Masked like every string of the payload: the title rides the same published page the outbox sniffs.
@@ -61,7 +63,14 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             // SAFETY: redactStrings returns the same shape it was given, only its strings changed.
             messages: (await redactStrings(messages, redact)) as typeof messages,
         };
-        await publishShare(services.workspace.root, viewer, id, { title: shown.title, sharedAt, detail, messages: shown.messages }, pictures);
+        await publishShare(
+            services.workspace.root,
+            viewer,
+            id,
+            { title: shown.title, sharedAt, detail, messages: shown.messages },
+            pictures,
+            shielded ? services.privacyShield.redactPictureForDisplay : undefined,
+        );
         const stored: StoredShare = { id, conversationId, title, detail, sharedAt, messages: messages.length };
         await services.shares.put(stored);
         return withUrl(stored);

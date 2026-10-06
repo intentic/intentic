@@ -1183,6 +1183,7 @@
             "pay": "Payer {amountUsd} $ pour {assetName} ?",
             "pay2": "Payer {amountUsd} $",
             "paymentDidntGoThrough": "Le paiement n'est pas passé : rien n'a été dépensé.",
+            "paymentOwnerOnly": "Seul le propriétaire de ce sandbox peut approuver un paiement : le portefeuille qui paie est le sien.",
             "placedBy": "Passé par vous",
             "readAsItsOwn": "Lu comme les siens",
             "refused": "Refusé",

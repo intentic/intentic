@@ -155,8 +155,13 @@ export type WriteRefusal = `changed` | `busy` | `denied` | `too-large` | `not-te
 // The name a save is written under before it replaces the file, so the watcher can tell its own writes' debris apart.
 export const TEMPORARY_MARK = `.intentic-save-`;
 
-const refusalOf = (code: string | undefined): WriteRefusal | undefined => {
-    if (code === `EBUSY` || (code === `EPERM` && process.platform === `win32`)) {
+// Windows answers EPERM both for a file another program holds and for one marked read-only (seen on NTFS, 2026-10-06),
+// so `readOnly`, the file's own bit as it was before the write, tells the two apart.
+export const refusalOf = (code: string | undefined, readOnly = false, platform: NodeJS.Platform = process.platform): WriteRefusal | undefined => {
+    if (code === `EPERM` && platform === `win32` && readOnly) {
+        return `denied`;
+    }
+    if (code === `EBUSY` || (code === `EPERM` && platform === `win32`)) {
         return `busy`;
     }
     // A link where the file was a moment ago, which the open refused to follow.
@@ -165,6 +170,9 @@ const refusalOf = (code: string | undefined): WriteRefusal | undefined => {
     }
     return code === `EACCES` || code === `EPERM` || code === `EROFS` ? `denied` : undefined;
 };
+
+// A file nobody may write: how Windows' read-only attribute reads in a file's mode.
+const isReadOnly = (mode: number): boolean => (mode & 0o222) === 0;
 
 // No write here follows a link at the file it opens. `O_NOFOLLOW` says so to the open where the platform has it (not
 // Windows, which the lstat before a part's write stands in for); the file a save creates must not exist at all, and
@@ -253,7 +261,7 @@ export const writeFileWhole = async (
         return undefined;
     } catch (error) {
         await rm(temporary, { force: true });
-        const refusal = error instanceof TooLarge ? `too-large` : refusalOf(errnoCode(error));
+        const refusal = error instanceof TooLarge ? `too-large` : refusalOf(errnoCode(error), previous !== undefined && isReadOnly(previous.mode));
         if (refusal !== undefined) {
             return refusal;
         }
@@ -275,7 +283,7 @@ export const writePartAt = async (abs: string, body: ReadableStream<Uint8Array>,
         await streamInto(abs, IN_PLACE, body, cap - offset, offset);
         return undefined;
     } catch (error) {
-        const refusal = error instanceof TooLarge ? `too-large` : refusalOf(errnoCode(error));
+        const refusal = error instanceof TooLarge ? `too-large` : refusalOf(errnoCode(error), isReadOnly(entry.mode));
         if (refusal !== undefined) {
             return refusal;
         }

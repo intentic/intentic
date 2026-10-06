@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 /* The watchdog end to end, in a process of its own: a loop that hangs is killed from the Worker, after one line on
@@ -27,3 +27,47 @@ test("a loop that keeps answering is left running, and the watchdog does not kee
     const result = run(false);
     expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual({ status: 0, stdout: "survived\n", stderr: "" });
 });
+
+// (2026-10-06) A process paused as a whole (a laptop asleep, a VM suspended, here SIGSTOP) wakes with the wall clock
+// far past the last ping while its loop was never stuck: the Worker's first check after the pause must not read that
+// as a hang. Three at once, since which thread's timer runs first after the pause is a race.
+const pausable = `
+import { startWatchdog } from ${JSON.stringify(join(import.meta.dir, "watchdog.ts"))};
+startWatchdog({ pingMs: 200, limitMs: 1_000 });
+process.stdout.write("ready\\n");
+setTimeout(() => {
+    process.stdout.write("survived\\n");
+    process.exit(0);
+}, 6_000);
+`;
+
+const pausedFor = async (ms: number): Promise<{ readonly signal: string | null; readonly stdout: string }> => {
+    const child = spawn(process.execPath, ["-e", pausable], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    child.stdout.setEncoding("utf8");
+    const ready = new Promise<void>((resolve) => {
+        child.stdout.on("data", (chunk: string) => {
+            stdout += chunk;
+            if (stdout.includes("ready")) {
+                resolve();
+            }
+        });
+    });
+    const ended = new Promise<string | null>((resolve) => child.on("exit", (_code, signal) => resolve(signal)));
+    await ready;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    child.kill("SIGSTOP");
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    child.kill("SIGCONT");
+    const signal = await ended;
+    return { signal, stdout };
+};
+
+test("a process paused for longer than the limit is not killed when it wakes", async () => {
+    const runs = await Promise.all([pausedFor(2_500), pausedFor(2_500), pausedFor(2_500)]);
+    expect(runs.map(({ signal, stdout }) => ({ signal, survived: stdout.includes("survived") }))).toEqual([
+        { signal: null, survived: true },
+        { signal: null, survived: true },
+        { signal: null, survived: true },
+    ]);
+}, 20_000);

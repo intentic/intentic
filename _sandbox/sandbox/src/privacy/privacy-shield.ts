@@ -15,6 +15,7 @@ import type { PrivacyVault } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
 import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
 import { createReadingMemo, type ReadingMemo } from "./gateway/request-shield.js";
+import { paintRegions, readingText, regionsFor } from "./image-mask.js";
 import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
 
 // The privacy shield as the rest of the daemon sees it: the owner's policy, the decision whether a turn may run, the
@@ -46,6 +47,10 @@ export interface PrivacyShield {
     // Text for a place that must not hold personal data and never comes back (a push notification): every finding
     // becomes its kind's label, with no token to resolve. Unchanged while the shield is off.
     readonly redactForDisplay: (text: string) => Promise<string>;
+    // A picture for the same places: read on this machine and every finding painted over with its kind's label, and
+    // re-encoded, so no metadata and no other frame goes with it. Undefined when it cannot be read (no reader, bytes
+    // that do not decode), which means it must not go at all. The bytes as they are while the shield is off.
+    readonly redactPictureForDisplay: (data: Buffer) => Promise<Buffer | undefined>;
     readonly learn: (source: string, values: readonly PrivacyKnownValue[]) => Promise<{ added: number; known: number }>;
     readonly forget: (source: string) => Promise<number>;
     readonly sources: () => Promise<PrivacyKnownSource[]>;
@@ -95,6 +100,24 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     const readings = createReadingMemo();
     const trusted = async (policy: PrivacyShieldPolicy, provider: string, conversationId?: string): Promise<boolean> =>
         isTrustedProvider(policy, provider, await deps.capabilities(), conversationId);
+    // What a place that keeps no token shows in place of each finding: its kind, the longest of overlapping ones winning.
+    const displaySpans = async (text: string, policy: PrivacyShieldPolicy): Promise<{ start: number; end: number; label: string }[]> => {
+        const spans = detectPersonalData(text, { classes: new Set(policy.classes), allow: new Set(policy.allow.map(normalizeAllowed)) });
+        await deps.vault.load();
+        const known = deps.vault.matcher().find(text);
+        const all = [
+            ...known.map((hit) => ({ start: hit.start, end: hit.end, label: TOKEN_LABEL[hit.payload.class] })),
+            ...spans.map((span) => ({ start: span.start, end: span.end, label: TOKEN_LABEL[span.class] })),
+        ].toSorted((left, right) => left.start - right.start || right.end - left.end);
+        let last = 0;
+        return all.filter((span) => {
+            if (span.start < last) {
+                return false;
+            }
+            last = span.end;
+            return true;
+        });
+    };
     const masker = async (policy: PrivacyShieldPolicy): Promise<Masker> =>
         createMasker({
             vault: deps.vault,
@@ -138,23 +161,27 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             if (policy.mode !== "on") {
                 return text;
             }
-            const spans = detectPersonalData(text, { classes: new Set(policy.classes), allow: new Set(policy.allow.map(normalizeAllowed)) });
-            await deps.vault.load();
-            const known = deps.vault.matcher().find(text);
-            const all = [
-                ...known.map((hit) => ({ start: hit.start, end: hit.end, label: TOKEN_LABEL[hit.payload.class] })),
-                ...spans.map((span) => ({ start: span.start, end: span.end, label: TOKEN_LABEL[span.class] })),
-            ].toSorted((left, right) => left.start - right.start || right.end - left.end);
             let out = "";
             let last = 0;
-            for (const span of all) {
-                if (span.start < last) {
-                    continue;
-                }
+            for (const span of await displaySpans(text, policy)) {
                 out += `${text.slice(last, span.start)}‹${span.label.toLowerCase().replaceAll("_", " ")}›`;
                 last = span.end;
             }
             return out + text.slice(last);
+        },
+        redactPictureForDisplay: async (data) => {
+            const policy = await deps.policyStore.get();
+            if (policy.mode !== "on") {
+                return data;
+            }
+            const reading = await deps.readers.readImage(data);
+            if (reading === undefined) {
+                return undefined;
+            }
+            // Lettered with the kind alone: the token's own alphabet, and nothing a reader of the page could resolve.
+            const spans = (await displaySpans(readingText(reading.lines), policy)).map(({ start, end, label }) => ({ start, end, token: label }));
+            const painted = await paintRegions(data, regionsFor(reading.lines, spans, reading));
+            return painted === undefined ? undefined : Buffer.from(painted.data, "base64");
         },
         learn: deps.vault.learn,
         forget: deps.vault.forget,
@@ -184,8 +211,10 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     };
 };
 
-// Keys whose strings are structure, not words: ids, kinds and paths a page or a client resolves by.
-const STRUCTURAL_KEYS = new Set(["id", "type", "kind", "path", "published", "source", "url", "name", "tool", "status", "role", "mediaType"]);
+// Keys whose strings are structure, not words: ids and kinds a page or a client resolves by. Not a path or a name: a file
+// is as often called after the person it is about as not, and a public share's own pictures are published under names
+// that hold nothing (share-payload.ts), so redacting them changes nothing a page resolves.
+const STRUCTURAL_KEYS = new Set(["id", "type", "kind", "source", "url", "tool", "status", "role", "mediaType"]);
 
 // Every string a value holds, through `redact`, except the structural ones; for a page leaving this machine whole (a
 // public share), where nothing comes back to restore.

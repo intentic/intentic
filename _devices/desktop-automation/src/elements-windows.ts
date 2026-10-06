@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseElementJson, parseElementTreeJson } from "./parse.js";
+import { psText } from "./powershell.js";
 import { run } from "./run.js";
 import { DesktopError, type ElementAction, type ElementTree, type UiElement } from "./types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
@@ -204,8 +205,8 @@ const runtimeId = (id: string): string => {
 const powershell = (script: string, timeoutMs?: number): Promise<string> =>
     run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `${ADD_HELPER}${script}`], undefined, timeoutMs);
 
-// PowerShell's single-quoted literal: nothing inside is expanded, and a quote is written twice.
-const quoted = (text: string): string => `'${text.replace(/'/g, "''")}'`;
+// Text for a helper's string parameter, as data (powershell.ts): a field's new value is whatever the agent chose.
+const quoted = psText;
 
 // Chromium and every Electron app build their accessibility tree only once a client asks for one, so the first read
 // of such a window answers its title bar and little else; the same read a moment later answers the page. Measured on
@@ -216,6 +217,9 @@ const CHROMIUM_WAKE_MS = 400;
 
 const readTree = async (window: string | undefined): Promise<string> =>
     (await powershell(`[IntenticUia]::Tree(${handle(window)}, ${MAX_NODES})`, TREE_TIMEOUT_MS)).trim();
+
+export const actScript = (window: string, id: string, action: ElementAction, value?: string): string =>
+    `[IntenticUia]::Act(${handle(window)}, ${quoted(runtimeId(id))}, ${quoted(action)}, ${quoted(value ?? "")})`;
 
 export const windowsElements = {
     elements: async (window?: string): Promise<ElementTree> => {
@@ -235,9 +239,7 @@ export const windowsElements = {
     },
 
     elementAct: async (window: string, id: string, action: ElementAction, value?: string): Promise<void> => {
-        const answer = (
-            await powershell(`[IntenticUia]::Act(${handle(window)}, ${quoted(runtimeId(id))}, ${quoted(action)}, ${quoted(value ?? "")})`)
-        ).trim();
+        const answer = (await powershell(actScript(window, id, action, value))).trim();
         if (answer === "ok") {
             return;
         }

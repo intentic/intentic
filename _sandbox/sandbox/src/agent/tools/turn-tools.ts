@@ -31,6 +31,9 @@ export const turnToolsOf = async (
         readonly conversationId?: string | undefined;
         // Whether the persona may drive a browser at all (its `browser` power); signed-in accounts ride their cards.
         readonly anonymousBrowser: boolean;
+        // Whether the persona may run programs (its `shell` power). The sandbox's desktop starts any program, so it is
+        // mounted only with this as well; required, so no arm hands it to a persona with no shell by forgetting to say.
+        readonly shell: boolean;
         // The persona's `extensions` shelf: which extensions' card-less tool servers mount. Undefined means every one;
         // required, so no arm mounts them all by forgetting to say.
         readonly extensions: readonly string[] | undefined;
@@ -46,8 +49,8 @@ export const turnToolsOf = async (
             browserServersOf(granted, services.workspace.root, { routers: services.browserRouters, lease }, turn.anonymousBrowser, turn.conversationId),
         ]);
         // Mounted beside the browsers rather than by browser-tools.ts, since the desktop builds on the browser stack's
-        // display: the same pack brings it, and the same persona power lets the agent put a program on a screen.
-        const desktop = services.desktopServers(lease, turn.anonymousBrowser);
+        // display: the same pack brings it. It needs the persona's browser power and its shell power (desktop-tools.ts).
+        const desktop = services.desktopServers(lease, { browser: turn.anonymousBrowser, shell: turn.shell });
         return {
             tools: [
                 ...services.tools,

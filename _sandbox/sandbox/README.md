@@ -84,8 +84,9 @@ flowchart LR
   stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
   Adding it anew is the update.
 - The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
-  openbox on it, for programs with a window and no other way in. A turn whose persona may drive a browser mounts it as
-  the `desktop` server beside the browser routers (`browserServersOf`), and drives it through
+  openbox on it, for programs with a window and no other way in. A turn whose persona may drive a browser and run programs
+  (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser
+  routers (`browserServersOf`), and drives it through
   [desktop-automation](../../_devices/desktop-automation)'s frames, the same code a connected machine's screenshots go
   through. The owner watches and drives it at `GET /system/desktop-view` (video and XTEST, as the browser view);
   driving it holds it, and the agent's input is refused until they hand it back or stop for 20 s. `GET /system/desktop`
@@ -172,7 +173,9 @@ flowchart LR
   already staged, so what it decides is the half-minute restart, never a download. It holds that restart while an agent
   is mid-turn or landing, a subagent or workflow runs, somebody has the editor on screen and in use (presence's `away`),
   a terminal printed in the last ten minutes (for the first day of waiting), something scheduled is due within ten
-  minutes, the owner paused it, or the release has breaking notes (those always wait for a person). Then it counts down
+  minutes, the owner paused it, or the release has breaking notes (those always wait for a person). It never takes a
+  version the machine already tried and went back from (`/history/update-outcome.json` says restored or rolled back):
+  the staged marker outlives a swap that is undone, and taking it again would loop. Then it counts down
   where any connected page can stop it, and hands the machine the same `update` the button sends, asking the next boot
   to resume what the restart cuts. The owner's switch and pause live in `/history/update-policy.json`; `/info`'s
   `autoUpdate` says where it stands, and the `update` runtime domain tells every page when that moves.
@@ -241,14 +244,16 @@ flowchart LR
   pack, a local name model find with tokens like `⟦PERSON_3⟧`, and restores them in the answer as it streams back, so
   the agent's tools run on real values while the provider reads tokens. An image still goes as an image: its text is
   read on this machine by PaddleOCR ([`@intentic/ocr`](../ocr), the pack's PP-OCRv6 models) and every stretch found to be personal data
-  is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back. A PDF goes as its
+  is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back, and an animation goes
+  as the one frame that was read. A PDF goes as its
   masked text, or is withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
   credentials, so a resumed or handed-off transcript masks to the same bytes. A runtime the gateway cannot stand in
   front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`) before a word is read,
   which the refusal and the chat's strip above the composer both say; the owner can let a provider read one
   conversation as it is (the policy's `conversations`, read by the turn's door and the gateway alike) instead of
   trusting it everywhere. Helper jobs step over such a rung, children stay off runners, and a native push or a public
-  share carries the kind of data instead of the data. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
+  share carries the kind of data instead of the data: a share's pictures are painted over with it, or left out where
+  they cannot be read, and published under numbers rather than their file names. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
   it a dataset's values.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon

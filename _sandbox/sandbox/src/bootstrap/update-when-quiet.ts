@@ -16,7 +16,7 @@ import { lastTerminalActivity } from "../system/idle-stop.js";
 import { connectedCount, peopleAtEditor, subscribePresence } from "../system/presence.js";
 import { type AutoUpdateActivity, type AutoUpdateOffer, createAutoUpdater, holdAutoUpdater } from "../system/updates/auto-update.js";
 import { breakingNotes } from "../system/updates/release-notes.js";
-import { preparingUpdate, stagedUpdate } from "../system/updates/staged-update.js";
+import { preparingUpdate, stagedUpdate, updateOutcome } from "../system/updates/staged-update.js";
 import { fileUpdatePolicy } from "../system/updates/update-policy.js";
 import { fileUpdateSkip } from "../system/updates/update-skip.js";
 import { latestVersion } from "../system/updates/version-check.js";
@@ -46,9 +46,15 @@ const activityOf = async (services: Services): Promise<AutoUpdateActivity> => {
 
 const offerOf = async (services: Services): Promise<AutoUpdateOffer> => {
     const root = services.config.historyRoot;
-    const [staged, preparing, skipped] = await Promise.all([stagedUpdate(root), preparingUpdate(root, Date.now()), fileUpdateSkip(root).skipped()]);
+    const [staged, preparing, skipped, outcome] = await Promise.all([
+        stagedUpdate(root),
+        preparingUpdate(root, Date.now()),
+        fileUpdateSkip(root).skipped(),
+        updateOutcome(root),
+    ]);
     const version = services.info?.version;
-    return { running: version, staged, preparing: preparing !== undefined, latest: latestVersion(), skipped, breaking: breakingNotes(version).length > 0 };
+    const givenUp = outcome !== undefined && (outcome.result === "restored" || outcome.result === "rolled-back") ? outcome.to : undefined;
+    return { running: version, staged, preparing: preparing !== undefined, latest: latestVersion(), skipped, givenUp, breaking: breakingNotes(version).length > 0 };
 };
 
 export const startAutoUpdate = ({ config, traits, role, services, logger, shutdown }: BootPhase): void => {

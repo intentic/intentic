@@ -103,6 +103,7 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "history", prefix: "shell/", category: "state", depth: 0 },
     // Declared state the fallback already names; a rule of their own only to fence them.
     { root: "history", prefix: "session-secret", category: "state", depth: 0, protected: true },
+    { root: "history", prefix: "identity/", category: "state", depth: 0, protected: true },
     { root: "history", prefix: "ssh-hosts/", category: "state", depth: 0, protected: true },
     { root: "history", prefix: "local-cert/", category: "state", depth: 0, protected: true },
     { root: "history", prefix: "translator/", category: "state", depth: 0, protected: true },

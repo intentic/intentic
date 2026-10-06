@@ -36,6 +36,9 @@ export interface PaymentGateDeps extends CardDeps {
     readonly tainted: (conversationId: string) => boolean;
     readonly deadlineMs?: number;
     readonly now?: () => number;
+    // The bound owner, the one person whose click releases a payment: the wallet that pays is theirs. Undefined on a
+    // daemon nobody signs in to, where the one person at it answers.
+    readonly ownerEmail?: () => Promise<string | undefined>;
 }
 
 export interface PaidFetchRequest {
@@ -216,10 +219,17 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
             dailyCapUsd: config.dailyCapUsd,
             ...whyOf(request.why),
         };
+        const owner = await deps.ownerEmail?.();
         card = await raiseRequest(deps, run, {
             kind: "payment_offer",
             onAbort: { kind: "payment_offer", requestId: "", approve: false },
             raised: (requestId) => ({ kind: "payment_offer", requestId, offer }),
+            // Checked against the identity verified on the reply, so another member's click (or a program's) leaves the
+            // card waiting for the owner instead of spending their money.
+            mayAnswer: (caller) =>
+                owner === undefined || caller?.email.toLowerCase() === owner.toLowerCase()
+                    ? undefined
+                    : `Only the owner (${owner}) can approve a payment from this sandbox's wallet.`,
             approves: (reply) => reply.approve,
             signal: request.signal,
             deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,

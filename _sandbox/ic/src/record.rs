@@ -110,8 +110,8 @@ pub struct ChannelRecord {
     pub kept: Vec<Pin>,
     /// A swap in flight or on probation.
     pub swap: Option<Swap>,
-    /// The version the probation watch last went back FROM. The background download never stages it again; a
-    /// person's own update still takes it.
+    /// The version last gone back FROM, by the probation watch or a person's rollback. The background download never
+    /// stages it again; a person's own update still takes it.
     pub rolled_back_from: Option<String>,
     /// When this record was written, in epoch milliseconds: which of two copies (this machine's home and the one
     /// on the sandbox's own /history, see mirror.rs) is newer.

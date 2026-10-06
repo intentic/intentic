@@ -6,7 +6,8 @@ import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabil
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { opt } from "../opt.js";
-import { checkDevCheckout, devSummaryOf, forgetExtensionDev, touchExtensionDev, writeExtensionDev } from "./extension-dev.js";
+import { pathExists } from "@intentic/base/fs";
+import { checkDevCheckout, devSummaryOf, forgetExtensionDev, readExtensionDev, touchExtensionDev, writeExtensionDev } from "./extension-dev.js";
 import { callerConversation, devTargetOf, resolveDevPath, sourceCheckoutOf } from "./extension-dev-source.js";
 import { followExtensionDirs, reconcileListenerProcesses } from "./extension-processes.js";
 import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
@@ -46,6 +47,18 @@ export const createExtensionDevRoutes = (services: Services) => {
             throw new ORPCError("CONFLICT", { message: "it was removed, or let go of its checkout, while this ran" });
         }
         return { id: extension.id, name: extensionIdOf(extension.manifest), dev };
+    };
+    // One install has one dev checkout, so a conversation that pointed it somewhere keeps it: another conversation's
+    // replace, reload or clear is refused, naming the holder, instead of silently taking over its build. A call naming no
+    // conversation (the owner's Extensions tab) is never refused, and a checkout that is gone holds nothing.
+    const refuseOtherHolder = async (id: string, caller: string | undefined): Promise<void> => {
+        const pointer = (await readExtensionDev(root))[id];
+        if (caller === undefined || pointer?.setBy === undefined || pointer.setBy === caller || !(await pathExists(pointer.path))) {
+            return;
+        }
+        throw new ORPCError("PRECONDITION_FAILED", {
+            message: `it already runs from a checkout conversation ${pointer.setBy} set (${pointer.path}); only that conversation can change it, or the owner from the Extensions tab`,
+        });
     };
     // The checkout a set means: the one named, read against the caller's own copy of the workspace, or the one cloned
     // from the address it was installed from.
@@ -100,6 +113,7 @@ export const createExtensionDevRoutes = (services: Services) => {
             }
             const configPath = capability.config.path;
             const conversation = callerConversation(context.headers.get(CONVERSATION_HEADER));
+            await refuseOtherHolder(extension.id, conversation);
             const path = await checkoutFor(extension, capability.config.url, input.path, conversation, configPath);
             const pinned = await readExtensionManifest(extensionRootOf(extensionDir(root, extension.id), configPath));
             if (pinned === undefined) {
@@ -112,13 +126,15 @@ export const createExtensionDevRoutes = (services: Services) => {
             await writeExtensionDev(root, extension.id, {
                 path: checked.checkout ?? path,
                 ...opt("conversation", checked.place?.conversation),
+                ...opt("setBy", conversation),
                 setAt: new Date().toISOString(),
             });
             await rewire(extension.id, false);
             return stateOf(extension.id);
         }),
-        devClear: i.devClear.handler(async ({ input }) => {
+        devClear: i.devClear.handler(async ({ input, context }) => {
             const extension = await targetOf(input.id);
+            await refuseOtherHolder(extension.id, callerConversation(context.headers.get(CONVERSATION_HEADER)));
             const cleared = await forgetExtensionDev(root, extension.id);
             if (cleared) {
                 await rewire(extension.id, false);
@@ -128,8 +144,9 @@ export const createExtensionDevRoutes = (services: Services) => {
         // The rebuild already happened in the checkout; this is the poke that makes everything holding the old build let go
         // of it: running processes restart, the backend host reloads on the new bundle digest, and the touched pointer file
         // tells an open app its list changed.
-        devReload: i.devReload.handler(async ({ input }) => {
+        devReload: i.devReload.handler(async ({ input, context }) => {
             const extension = await targetOf(input.id);
+            await refuseOtherHolder(extension.id, callerConversation(context.headers.get(CONVERSATION_HEADER)));
             if (extension.dev === undefined) {
                 throw new ORPCError("PRECONDITION_FAILED", {
                     message: `${extensionIdOf(extension.manifest)} runs its pinned version, not a source checkout, so there is nothing to reload`,

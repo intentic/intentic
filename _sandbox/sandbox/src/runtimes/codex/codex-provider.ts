@@ -103,6 +103,7 @@ export const planCodexTurn = async (
         turnToolsOf(services, granted, {
             conversationId: input.conversationId,
             anonymousBrowser: persona.powers.browser,
+            shell: persona.powers.shell,
             extensions: persona.powers.extensions,
         }),
     ]);

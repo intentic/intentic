@@ -21,6 +21,13 @@ flowchart LR
 - The pre- and post-processing around the models is pinned to what PaddleOCR 3.7 and OpenCV answer for the same input,
   since a box a pixel off is a different crop for the recognizer. The tests hold those numbers and need no models.
 - Each line carries where every character sits along it, which is what lets the shield paint over a value.
+- The reading runs on a worker thread of its own. onnxruntime-node runs a model synchronously on the thread that calls
+  it, and the arithmetic around it is plain JavaScript: on the daemon's own thread, one 4000 x 3000 photo held its event
+  loop (every conversation, the editor's sockets) for over 30 s. The caller pays for a copy of the pixels.
+- A picture that reads as a few unsure characters is read again upside down, and the way up that reads more is kept,
+  its lines placed back on the picture as it is: a page scanned on its head with no orientation tag to say so read as
+  seven characters of nothing. An animation decodes to its first frame and says how many it has, since the reader never
+  sees the others.
 - Subpath exports keep the cost where it belongs: `./models` asks whether the reader is installed without loading a
   native library, while `./paddle-ocr` and `./raster` bring in onnxruntime-node and sharp.
 - Private: the daemon depends on it for the shield, and the image links its `bin` to `/usr/local/bin/ocr`, which
@@ -31,7 +38,8 @@ and the command it ships ran out of the daemon's `dist/`.)
 
 ## Key files
 
-- [src/paddle-ocr.ts](src/paddle-ocr.ts) — `loadTextReader`, `OcrLine` and `pageText`: detection, recognition, reading order.
+- [src/paddle-ocr.ts](src/paddle-ocr.ts) — `loadTextReader`, `OcrLine` and `pageText`: the reader on its thread, reading order.
+- [src/paddle-ocr-engine.ts](src/paddle-ocr-engine.ts) — the models and what runs around them: detection, recognition, a page upside down.
 - [src/models.ts](src/models.ts) — where the models live and whether they are installed.
 - [src/raster.ts](src/raster.ts) — decoding an image and the OpenCV-matching resamplings.
 - [src/text-detection.ts](src/text-detection.ts) — the detector's input size and the boxes its probability map becomes.

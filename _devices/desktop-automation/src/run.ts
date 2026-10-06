@@ -17,13 +17,21 @@ export const withEnvironment = <T>(env: NodeJS.ProcessEnv, work: () => Promise<T
 // hold a tool call open until something far upstream gave up.
 const TIMEOUT_MS = 15_000;
 
-// `timeoutMs` for the one read that is slow by nature (a big window's accessibility tree).
-export const run = async (command: string, args: readonly string[], install?: string, timeoutMs: number = TIMEOUT_MS): Promise<string> =>
-    await new Promise<string>((resolvePromise, reject) => {
+// What a program wrote, both streams: a few programs (xdotool on a key name it does not know) report on stderr and still exit 0.
+export interface Output {
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+// `timeoutMs` for the one read that is slow by nature (a big window's accessibility tree). `install` is only for a program
+// that is not there: the sandbox turns any error carrying one into "it arrives with the next rebuild", which is false
+// for a program that is installed and merely failed or ran out of time.
+export const runOutput = async (command: string, args: readonly string[], install?: string, timeoutMs: number = TIMEOUT_MS): Promise<Output> =>
+    await new Promise<Output>((resolvePromise, reject) => {
         // A window's element tree runs to megabytes; execFile's 1 MB default would cut it off mid-JSON.
         execFile(command, [...args], { timeout: timeoutMs, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: environment() }, (error, stdout, stderr) => {
             if (error === null) {
-                resolvePromise(stdout);
+                resolvePromise({ stdout, stderr });
                 return;
             }
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -33,13 +41,16 @@ export const run = async (command: string, args: readonly string[], install?: st
             // A kill at the timeout leaves stderr empty and error.message only echoing the command line, which read
             // as an unexplained failure; say what happened.
             if (error.killed === true) {
-                reject(new DesktopError(`"${command}" did not answer within ${timeoutMs / 1_000}s and was stopped.`, install));
+                reject(new DesktopError(`"${command}" did not answer within ${timeoutMs / 1_000}s and was stopped.`));
                 return;
             }
             const said = `${stderr}`.trim();
-            reject(new DesktopError(said === "" ? `"${command}" failed: ${error.message}` : `"${command}" failed: ${said}`, install));
+            reject(new DesktopError(said === "" ? `"${command}" failed: ${error.message}` : `"${command}" failed: ${said}`));
         });
     });
+
+export const run = async (command: string, args: readonly string[], install?: string, timeoutMs?: number): Promise<string> =>
+    (await runOutput(command, args, install, timeoutMs)).stdout;
 
 // Whether a program is on PATH at all, how a backend picks between the tools a desktop MIGHT have, without
 // making the choice by catching a failure from the real action.

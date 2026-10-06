@@ -7,7 +7,6 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
-import { stateRelPath } from "../state-paths.js";
 
 // The sandbox authenticates the end user directly against Google; the platform never holds this credential.
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -57,7 +56,10 @@ export interface OwnerStore {
 
 const OwnerFileSchema = z.object({ email: z.string() });
 
-export const ownerDocument = defineDocument({ path: stateRelPath(".intentic/identity/owner.json"), schema: OwnerFileSchema });
+// On the history volume, off the workspace every turn writes: who owns the sandbox is the daemon's to decide, never a file
+// a member's agent could edit. Until 2026-10-06 it sat at `.intentic/identity/owner.json`; identity-off-workspace.ts
+// brings it over.
+export const ownerDocument = defineDocument({ root: "history", path: "identity/owner.json", schema: OwnerFileSchema });
 
 // The reason a refused request gives when the owner file is what stands in the way: nobody can sign in until a person
 // on the host moves it aside. Machine-readable, so a client can say so instead of asking for another sign-in; nothing
@@ -143,8 +145,11 @@ const MemberSchema = z
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
 // The shape a grant writes. The file schema above checks only the frame, so one bad row is skipped rather than fatal.
+// On the history volume beside the owner file, for the same reason: a roster in the workspace let any member's turn grant
+// its person a tier. Until 2026-10-06 it sat at `.intentic/identity/members.json`.
 export const membersDocument = defineDocument({
-    path: stateRelPath(".intentic/identity/members.json"),
+    root: "history",
+    path: "identity/members.json",
     schema: z.object({ members: z.array(MemberSchema) }),
 });
 
@@ -280,6 +285,18 @@ export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string
 
 // Compare emails case-insensitively because roster writes normalize them.
 const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
+
+// Whether this person holds the operating tier right now: the bound owner, or a maintainer on the roster. Read fresh on
+// every ask, like authorize, so a removal or a re-grade answers no on the very next one.
+export const operatesSandbox =
+    (owner: Pick<OwnerStore, "read">, members: Pick<MembersStore, "list">) =>
+    async (email: string): Promise<boolean> => {
+        const bound = await owner.read();
+        if (bound !== undefined && sameEmail(bound, email)) {
+            return true;
+        }
+        return (await members.list()).some((member) => sameEmail(member.email, email) && roleAtLeast(member.role, "maintainer"));
+    };
 
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;

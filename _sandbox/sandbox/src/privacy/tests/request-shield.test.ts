@@ -110,6 +110,31 @@ test("an image with nothing personal on it goes as it is", async () => {
     expect(tally).toEqual({ counts: {}, images: 0, documents: 0, replacements: [] });
 });
 
+// The reader reads an animation's first frame; the frames after it are as able to carry a number, and were never read.
+test("an animation goes as the one frame that was read, never whole, even with nothing found on it", async () => {
+    const frame = (shade: number): Promise<Buffer> =>
+        sharp({ create: { width: WIDTH, height: HEIGHT, channels: 3, background: { r: shade, g: shade, b: shade } } })
+            .png()
+            .toBuffer();
+    const gif = await sharp([await frame(255), await frame(GREY)], { join: { animated: true } })
+        .gif()
+        .toBuffer();
+    const blank: LocalReaders = {
+        ocr: async () => true,
+        readImage: async () => ({ width: WIDTH, height: HEIGHT, lines: [], frames: 2 }),
+        readPdf: async () => undefined,
+    };
+    const { shield } = shieldWith("mask", blank);
+    const out = await shield.image({ mediaType: "image/gif", data: gif.toString("base64") });
+    if (out === "keep" || !("image" in out)) {
+        throw new Error(`expected the first frame alone, got ${JSON.stringify(out)}`);
+    }
+    const sent = await sharp(Buffer.from(out.image.data, "base64")).metadata();
+    expect(sent.pages ?? 1).toBe(1);
+    // The first frame, white, as it was read.
+    expect(await shadeAt(out.image, 10, 20)).toBe(255);
+});
+
 test("an image that cannot be read is held back rather than sent unchecked", async () => {
     const { shield, tally } = shieldWith("mask", readers(undefined));
     expect(JSON.stringify(await shield.image({ mediaType: "image/png", data: await page() }))).toContain("withheld");

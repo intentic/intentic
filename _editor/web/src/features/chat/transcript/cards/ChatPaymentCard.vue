@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { useRole } from "../../../../client/sandbox/useRole";
 import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";
 import ChatCard from "./ChatCard.vue";
@@ -11,6 +12,9 @@ const t = useT();
 
 const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (answer: CardAnswer) => Promise<void> }>();
 const card = computed(() => props.message.paymentOffer!);
+// The wallet that pays is the owner's, and the sandbox takes a payment's answer from the owner alone
+// (wallet/payment-offer.ts), so anyone else is told whose click it waits for instead of offered one it refuses.
+const { isOwner } = useRole();
 </script>
 
 <template>
@@ -53,7 +57,11 @@ const card = computed(() => props.message.paymentOffer!);
             <span v-else class="text-2xs text-muted">{{ t(`chat.chatMessageView.paymentDidntGoThrough`) }}</span>
         </div>
 
-        <template v-if="card.status === 'pending'" #actions>
+        <div v-if="card.status === 'pending' && !isOwner" class="chat-card-row">
+            <span class="text-2xs text-muted">{{ t(`chat.chatMessageView.paymentOwnerOnly`) }}</span>
+        </div>
+
+        <template v-if="card.status === 'pending' && isOwner" #actions>
             <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'payment_offer', approve: true })">{{
                 t(`chat.chatMessageView.pay2`, { amountUsd: card.offer.amountUsd })
             }}</ChatDecisionButton>

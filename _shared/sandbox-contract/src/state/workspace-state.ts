@@ -330,14 +330,13 @@ const STATE_FILES = [
         why: "Which of the routes each extension DECLARED it has actually called, the evidence behind the permissions list on its row. The one entry here whose empty set is a RATE decision rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring this to the `extensions` query would refetch the whole list every few seconds for a figure nobody is watching change. The tab reads it when it loads, which is when anyone is reading it.",
         portability: "carry",
     },
-    // Holds no credential but stays `identity`, not `carry`: it mirrors the platform's own invite records (the
-    // enforcer's copy, so a grant it never received is never honoured), and review already happens on the Access tab
-    // against the authoritative record. An access list that traveled would let a source sandbox hand itself the
-    // target's ownership.
+    // The roster's address before 2026-10-06 (now the history volume's `identity/members.json`). Holds no credential but
+    // stays `identity`, not `carry`: an access list that traveled would let a source sandbox hand itself the target's
+    // ownership, and a pre-move copy may still sit here.
     {
         path: ".intentic/identity/members.json",
         invalidates: [],
-        why: "Not this view's source at all: SandboxAccess renders the PLATFORM's invite records (apiClient.invite.list), and this file is the daemon's ENFORCED copy, written first so a grant the enforcer never got is never recorded, then never read back. A change here means the two disagreed, which the write order makes fail-closed rather than stale.",
+        why: "Where releases before 2026-10-06 kept the daemon's enforced roster; it now lives on the history volume (`identity/members.json`), off the workspace every turn writes, and nothing reads this copy. Kept declared, locked and never exported, since it may still hold a pre-move roster a rollback reads.",
         portability: "identity",
         note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     },
@@ -457,7 +456,7 @@ const STATE_FILES = [
     {
         path: ".intentic/identity/control-tokens.json",
         invalidates: [],
-        why: "Hashed control tokens (the ACP editor bridge, and anything else driving this sandbox from outside), listed on demand by the owner.",
+        why: "Where releases before 2026-10-06 kept the hashed control tokens; they now live on the history volume (`identity/control-tokens.json`), and nothing reads this copy.",
         portability: "identity",
         backup: false,
         note: "Mint fresh control tokens, the old ones authenticate against the source sandbox.",
@@ -465,7 +464,7 @@ const STATE_FILES = [
     {
         path: ".intentic/identity/owner.json",
         invalidates: [],
-        why: "Bound once on first use; a change here means the sandbox was re-owned, which re-authenticates anyway.",
+        why: "Where releases before 2026-10-06 kept the bound owner; it now lives on the history volume (`identity/owner.json`), and nothing reads this copy.",
         portability: "identity",
     },
     {

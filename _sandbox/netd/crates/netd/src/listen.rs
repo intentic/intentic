@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hyper::service::service_fn;
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use hyper_util::server::conn::auto;
 use netd_wire::{Endpoint, ListenConfig};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -23,8 +23,13 @@ use crate::tls::CertificateSlot;
 // TLS record ContentType "handshake": no HTTP method starts with this byte, which is the whole disambiguation.
 const TLS_HANDSHAKE_BYTE: u8 = 0x16;
 
-// An unclassified connection (a port scanner, a half-open probe) holds its socket no longer than this.
+// An unclassified connection (a port scanner, a half-open probe) holds its socket no longer than this, and a TLS
+// handshake takes no longer than this once begun.
 const FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(10);
+
+// A request head not whole by now is hung up on, as is a keep-alive connection idle this long: hyper's own default,
+// which it applies only given a timer (without one, a head that never ended held its socket for good).
+const HEADER_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Port {
@@ -63,6 +68,8 @@ impl Listeners {
             if let Some((endpoint, accepting)) = self.bound.remove(&port) {
                 tracing::info!(listener = ?port, host = %endpoint.host, port = endpoint.port, "unbinding");
                 accepting.abort();
+                // The listener is the task's: until it has ended, the same port on another host is refused as in use.
+                let _ = accepting.await;
             }
             let Some(endpoint) = wanted else {
                 continue;
@@ -141,9 +148,10 @@ async fn loopback(
     if !certificates.present() {
         return;
     }
-    match acceptor.accept(stream).await {
-        Ok(tls) => serve(netd, Listener::Loopback { tls: true }, tls).await,
-        Err(error) => tracing::debug!(%error, %peer, "a loopback TLS handshake failed"),
+    match tokio::time::timeout(FIRST_BYTE_TIMEOUT, acceptor.accept(stream)).await {
+        Ok(Ok(tls)) => serve(netd, Listener::Loopback { tls: true }, tls).await,
+        Ok(Err(error)) => tracing::debug!(%error, %peer, "a loopback TLS handshake failed"),
+        Err(_) => tracing::debug!(%peer, "a loopback TLS handshake did not finish in time"),
     }
 }
 
@@ -155,7 +163,12 @@ where
         let netd = netd.clone();
         async move { Ok::<_, Infallible>(netd.handle(listener, request).await) }
     });
-    let _ = auto::Builder::new(TokioExecutor::new())
+    let mut builder = auto::Builder::new(TokioExecutor::new());
+    builder
+        .http1()
+        .timer(TokioTimer::new())
+        .header_read_timeout(HEADER_READ_TIMEOUT);
+    let _ = builder
         .serve_connection_with_upgrades(TokioIo::new(stream), service)
         .await;
 }

@@ -299,7 +299,8 @@ pub async fn bound(port: u16) {
     panic!("netd never bound port {port}");
 }
 
-// Node's HTTP: names what it saw, answers `/bench/bytes/<n>` or `?bench=<n>` with n bytes, and echoes `Upgrade: echo`.
+// Node's HTTP: names what it saw, answers `/bench/bytes/<n>` or `?bench=<n>` with n bytes, and echoes `Upgrade: echo`
+// (naming the request-target it saw in `x-node-saw`).
 async fn serve_node_http(path: PathBuf) {
     let _ = std::fs::create_dir_all(path.parent().unwrap());
     let _ = std::fs::remove_file(&path);
@@ -329,6 +330,8 @@ async fn serve_node_http(path: PathBuf) {
                                 .status(StatusCode::SWITCHING_PROTOCOLS)
                                 .header("connection", "upgrade")
                                 .header("upgrade", "echo")
+                                // The request-target as it arrived: a relay must send origin form.
+                                .header("x-node-saw", request.uri().to_string())
                                 .body(Full::new(Bytes::new()))
                                 .unwrap(),
                         );

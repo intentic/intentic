@@ -37,8 +37,16 @@ describe("PESEL", () => {
         expect(found(`9${number}`, "national-id")).toEqual([]);
         expect(found(`${number}7`, "national-id")).toEqual([]);
         expect(found(`a3f${number}e9`, "national-id")).toEqual([]);
-        expect(found(`user_${number}`, "national-id")).toEqual([]);
         expect(found(`0.${number}`, "national-id")).toEqual([]);
+    });
+
+    // Raw JSON text (a tool call's arguments, a log line of JSON) writes a line break as `\n`: the letter after the
+    // backslash belongs to the escape, not to a word the number continues. An underscore joins a number to a file name.
+    test("a number after a JSON escape or beside an underscore is found", () => {
+        const number = pesel(1985, 3, 14);
+        for (const text of [`{"o":"x\\n${number}"}`, `a\\t${number}`, `\\r\\n${number}`, `skan_${number}.pdf`, `user_${number}`, `${number}_old`]) {
+            expect(found(text, "national-id"), text).toEqual([number]);
+        }
     });
 
     test("a sqlite row carries it between pipes", () => {
@@ -168,5 +176,56 @@ describe("payment cards", () => {
     test("timestamps and snowflake ids are not cards", () => {
         const ids = Array.from({ length: 100 }, (_, index) => String(1_727_786_400_000 + index * 104_729)).join("\n");
         expect(found(`${ids}\n1234567890123456789`, "payment-card")).toEqual([]);
+    });
+});
+
+describe("after a JSON escape", () => {
+    // The same `\n` that ends a line in raw JSON text must not glue the next value to an `n`.
+    test("an account number, a card and a NIP right after an escaped line break are found", () => {
+        const account = iban("PL", "109010140000071219812874");
+        const card = luhn("411111111111111");
+        const tax = nip("525000001");
+        const dashedTax = `${tax.slice(0, 3)}-${tax.slice(3, 6)}-${tax.slice(6, 8)}-${tax.slice(8)}`;
+        expect(found(`{"konto":"x\\n${account}"}`, "bank-account")).toEqual([account]);
+        expect(found(`{"konto":"x\\n${account.slice(2)}"}`, "bank-account")).toEqual([account.slice(2)]);
+        expect(found(`{"karta":"x\\t${card}"}`, "payment-card")).toEqual([card]);
+        expect(found(`{"nip":"x\\n${dashedTax}"}`, "tax-id")).toEqual([dashedTax]);
+    });
+});
+
+describe("spellings a detector used to miss", () => {
+    const grouped4 = (digits: string, separator: string): string => digits.match(/.{1,4}/gu)?.join(separator) ?? digits;
+
+    test("an IBAN in lower case, grouped with hyphens, or joined to a file name by underscores is an account", () => {
+        const account = iban("PL", "109010140000071219812874");
+        const dashed = `${account.slice(0, 4)}-${grouped4(account.slice(4), "-")}`;
+        expect(found(`iban ${account.toLowerCase()}`, "bank-account")).toEqual([account.toLowerCase()]);
+        expect(found(`iban ${dashed}`, "bank-account")).toEqual([dashed]);
+        expect(found(`wyciag_${account}_old.pdf`, "bank-account")).toEqual([account]);
+    });
+
+    test("an NRB grouped with hyphens is an account, one separator throughout", () => {
+        const account = nrb("109010140000071219812874");
+        const dashed = `${account.slice(0, 2)}-${grouped4(account.slice(2), "-")}`;
+        expect(found(`nr konta: ${dashed}`, "bank-account")).toEqual([dashed]);
+        expect(found(`nr konta: ${dashed.replace("-", " ")}`, "bank-account")).toEqual([]);
+    });
+
+    test("a PESEL split once by a space or a hyphen is found where it is called a PESEL, and only there", () => {
+        const number = pesel(1985, 3, 14, 4562);
+        for (const separator of [" ", "-"]) {
+            const split = `${number.slice(0, 6)}${separator}${number.slice(6)}`;
+            expect(found(`PESEL: ${split}`, "national-id"), split).toEqual([split]);
+            expect(found(`numery: ${split}`, "national-id"), split).toEqual([]);
+        }
+    });
+
+    // A JSON key names its value however long it is, and in camelCase: the keyword window before a bare number is too
+    // short for `taxIdentificationNumberOfCompany`, and `snippetCount` holds the letters of `nip` without saying it.
+    test("a bare NIP under a JSON key that names a tax number is found, and not under one that only spells its letters", () => {
+        const tax = nip("525000001");
+        expect(found(JSON.stringify({ taxIdentificationNumberOfCompany: tax }), "tax-id")).toEqual([tax]);
+        expect(found(JSON.stringify({ seller_vat_id: tax }), "tax-id")).toEqual([tax]);
+        expect(found(JSON.stringify({ snippetCount: tax }), "tax-id")).toEqual([]);
     });
 });

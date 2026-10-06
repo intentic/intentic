@@ -36,7 +36,10 @@ export const problemLines = (verdict) =>
 // cannot see and which only a per-file count baseline caught before. A finding with no `path:line` anchor, or whose file
 // cannot be read at `root`, keys on its line alone.
 const ANCHOR = /([\w./@-]+\.[a-z]+):(\d+)/;
-export const findingCounts = (verdict, root) => {
+// `renames` maps a path as the working tree now names it to the one the base knew it by, so a file the change only moved
+// keeps the findings it had: they are read as they stood, not as new ones under another name.
+export const findingCounts = (verdict, root, renames = new Map()) => {
+    const asBaseKnew = (line) => [...renames].reduce((text, [now, before]) => text.replaceAll(now, before), line);
     const files = new Map();
     const sourceAt = (path, line) => {
         if (!files.has(path)) {
@@ -57,7 +60,7 @@ export const findingCounts = (verdict, root) => {
             continue;
         }
         const anchor = root === undefined ? null : ANCHOR.exec(line);
-        const key = `${line.replace(LINE_NUMBER, ":#")}\0${anchor === null ? "" : sourceAt(anchor[1], Number(anchor[2]))}`;
+        const key = `${asBaseKnew(line).replace(LINE_NUMBER, ":#")}\0${anchor === null ? "" : sourceAt(anchor[1], Number(anchor[2]))}`;
         counts.set(key, [...(counts.get(key) ?? []), line]);
     }
     return counts;
@@ -84,14 +87,17 @@ export const blindAtBase = (verdict, lentModules) =>
  * `before` is `undefined` when no snapshot could be taken at all; then everything is the caller's, which is the safe
  * direction to be wrong in — one actor is asked about lines it may not have written, rather than everything from here on
  * going unchecked.
+ *
+ * `renames` (optional) names the files the change moved, new path to the base's: a finding that only followed its file is
+ * the same finding.
  */
-export const judgeAgainstBase = (failed, before, root) =>
+export const judgeAgainstBase = (failed, before, root, renames) =>
     failed.map((verdict) => {
         const standing = before?.get(verdict.id);
         // Each key's lines past as many as the base had: a finding the base printed as often is standing, one more is new.
         // A base read without source (no `findings`) is compared by its lines' keys alone, as it was taken.
         const held = standing?.findings ?? (standing === undefined ? undefined : findingCounts({ stderr: [...standing.lines.values()].join("\n"), stdout: "" }));
-        const live = findingCounts(verdict, standing?.findings === undefined ? undefined : root);
+        const live = findingCounts(verdict, standing?.findings === undefined ? undefined : root, renames);
         const unmatched = [...live].flatMap(([key, lines]) => lines.slice(held?.get(key)?.length ?? 0));
         if (standing?.blind === true) {
             return { verdict, added: [], unsure: unmatched };

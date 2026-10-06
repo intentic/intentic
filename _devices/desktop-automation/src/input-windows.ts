@@ -1,4 +1,5 @@
 import { windowsChord } from "./keys.js";
+import { psText } from "./powershell.js";
 import { run } from "./run.js";
 import type { MouseButton, Point, ScrollDirection } from "./types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
@@ -45,6 +46,18 @@ const clickScript = (button: MouseButton): string =>
 // SendKeys reads +^%~(){}[] as syntax; wrapping a literal in braces types it instead of triggering a modifier or group.
 const escapeText = (text: string): string => text.replace(/[+^%~(){}[\]]/g, (character) => `{${character}}`);
 
+// The script that types `text`: newlines become Enter; SendKeys would otherwise drop a literal newline character.
+export const typeScript = (text: string): string => {
+    const parts = text.split(/\r?\n/);
+    const script = parts
+        .map((part, index) => {
+            const send = part === "" ? "" : `[System.Windows.Forms.SendKeys]::SendWait(${psText(escapeText(part))});`;
+            return index < parts.length - 1 ? `${send} [System.Windows.Forms.SendKeys]::SendWait('{ENTER}');` : send;
+        })
+        .join(" ");
+    return `Add-Type -AssemblyName System.Windows.Forms; ${script}`;
+};
+
 export const windowsInput = {
     move: async (to: Point, origin: Point): Promise<void> => await powershell(moveScript(to, origin)),
 
@@ -70,17 +83,7 @@ export const windowsInput = {
             ].join(" "),
         ),
 
-    type: async (text: string): Promise<void> => {
-        // Newlines become Enter; SendKeys would otherwise drop a literal newline character.
-        const parts = text.split(/\r?\n/);
-        const script = parts
-            .map((part, index) => {
-                const send = part === "" ? "" : `[System.Windows.Forms.SendKeys]::SendWait('${escapeText(part).replace(/'/g, "''")}');`;
-                return index < parts.length - 1 ? `${send} [System.Windows.Forms.SendKeys]::SendWait('{ENTER}');` : send;
-            })
-            .join(" ");
-        await powershell(`Add-Type -AssemblyName System.Windows.Forms; ${script}`);
-    },
+    type: async (text: string): Promise<void> => await powershell(typeScript(text)),
 
     key: async (combo: string): Promise<void> => {
         const chord = windowsChord(combo);

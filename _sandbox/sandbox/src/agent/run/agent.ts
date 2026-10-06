@@ -175,11 +175,87 @@ const HEADLESS_SETTINGS: Exclude<NonNullable<Options["settings"]>, string> = {
     ...CLAUDE_INSTRUCTION_FILES,
 };
 
+// The env keys that decide where the CLI sends a model request: its base URLs, the cloud-provider switches that send
+// it to Bedrock, Vertex or Foundry instead, the unix socket it may dial, and the proxies that see every byte of it.
+// A settings file's `env` overrides the process env the daemon hands the CLI, and the user's and the project's
+// settings files are both writable from a turn, so one line there would send the next turn around the privacy
+// shield's gateway, with the turn's credential (2026-10-06, measured on CLI 0.3.289). The flag layer outranks both.
+const ROUTING_ENV = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_UNIX_SOCKET",
+    "CLAUDE_CODE_API_BASE_URL",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+    "CLAUDE_CODE_USE_MANTLE",
+    "CLAUDE_CODE_USE_GATEWAY",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_BASE_URL",
+    "ANTHROPIC_FOUNDRY_BASE_URL",
+    "ANTHROPIC_AWS_BASE_URL",
+    "ANTHROPIC_GOOGLE_CLOUD_BASE_URL",
+    "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+] as const;
+
+// The settings keys whose value is a command the CLI runs on its own, outside every hook and gate: credential and
+// endpoint helpers (apiKeyHelper ran from a project file before any approval) and the launcher prefix. The daemon
+// supplies the turn's credential and endpoint itself, so none of them has anything to do in a turn; empty is unset.
+const UNSET_COMMANDS = {
+    apiKeyHelper: "",
+    awsAuthRefresh: "",
+    awsCredentialExport: "",
+    gcpAuthRefresh: "",
+    otelHeadersHelper: "",
+    proxyAuthHelper: "",
+    processWrapper: "",
+};
+
+// What the flag layer pins over every settings file: each routing key as the daemon's own env for the turn has it
+// (empty where it has none, which the CLI reads as unset), and every command key emptied.
+export const pinnedRouting = (env: Readonly<Record<string, string | undefined>>) => ({
+    env: Object.fromEntries(ROUTING_ENV.map((key) => [key, env[key] ?? ""])),
+    ...UNSET_COMMANDS,
+});
+
+// The env a turn's CLI runs with; also what the flag layer pins its routing keys to (turnSettings).
+const turnEnv = (request: HarnessRequest) => ({
+    ...process.env,
+    // cli-kind capability credentials the shell reads, rebuilt every turn; tmux panes get key names, not
+    // values.
+    ...request.tools.cliEnv,
+    // IS_SANDBOX plus this turn's credential; a custom endpoint withholds the OAuth token for its own bearer.
+    ...harnessEnv(request.credential, { model: request.spec.model }),
+    // Output-cleaner spec/holdout the Bash to tmux-run pipeline reads.
+    ...cleanerEnv(request),
+    // Delegation ceilings this turn overrides, if any, on top of the harness defaults.
+    ...subagentEnv(request),
+    // Checklist tools the prompt advertises and the task list needs; not owner-tunable, see CHECKLIST_ENV.
+    ...CHECKLIST_ENV,
+    // A response the safety classifier stops is the person's to route (retry or another model, from the chat's
+    // card), never a model the CLI swaps in by itself. Its one retry on the same model within the turn stays.
+    ...REFUSAL_ENV,
+    // Where tmux-run talks to tmux: the daemon's namespace, not the turn's, so it starts a server there if
+    // needed.
+    ...(request.spec.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
+    // Whose work this is, for the leftovers sweep; unstamped with no conversation rather than a made-up owner.
+    ...(request.spec.conversationId !== undefined ? workloadStamp(request.spec.conversationId) : {}),
+});
+
 // The flag layer, above the owner's settings.json. Fast mode is asked per session so it never persists sandbox-wide,
 // and omitted rather than false so it never overrides theirs. Unapproved settings hooks switch off every file and
-// plugin hook; the gate and the per-edit checks wired below are SDK callbacks, which still run.
+// plugin hook; the gate and the per-edit checks wired below are SDK callbacks, which still run. Where model requests go
+// and which helper commands run are pinned whatever the files say (pinnedRouting).
 const turnSettings = (request: HarnessRequest): Exclude<NonNullable<Options["settings"]>, string> => ({
     ...HEADLESS_SETTINGS,
+    ...pinnedRouting(turnEnv(request)),
     ...(request.spec.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
     ...(request.policy.settingsHooks?.held === true ? { disableAllHooks: true } : {}),
 });
@@ -352,28 +428,7 @@ const baseOptions = (
         // approved them (guard/hook-approvals.ts).
         settingSources: ["user", "project"],
         settings: turnSettings(request),
-        env: {
-            ...process.env,
-            // cli-kind capability credentials the shell reads, rebuilt every turn; tmux panes get key names, not
-            // values.
-            ...request.tools.cliEnv,
-            // IS_SANDBOX plus this turn's credential; a custom endpoint withholds the OAuth token for its own bearer.
-            ...harnessEnv(request.credential, { model: request.spec.model }),
-            // Output-cleaner spec/holdout the Bash to tmux-run pipeline reads.
-            ...cleanerEnv(request),
-            // Delegation ceilings this turn overrides, if any, on top of the harness defaults.
-            ...subagentEnv(request),
-            // Checklist tools the prompt advertises and the task list needs; not owner-tunable, see CHECKLIST_ENV.
-            ...CHECKLIST_ENV,
-            // A response the safety classifier stops is the person's to route (retry or another model, from the chat's
-            // card), never a model the CLI swaps in by itself. Its one retry on the same model within the turn stays.
-            ...REFUSAL_ENV,
-            // Where tmux-run talks to tmux: the daemon's namespace, not the turn's, so it starts a server there if
-            // needed.
-            ...(request.spec.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
-            // Whose work this is, for the leftovers sweep; unstamped with no conversation rather than a made-up owner.
-            ...(request.spec.conversationId !== undefined ? workloadStamp(request.spec.conversationId) : {}),
-        },
+        env: turnEnv(request),
         // Hooks fire under bypassPermissions and for subagents: tmux wraps every Bash command, installs redirect to the
         // approved overlay, diagnostics type-checks native edits.
         // Each callback timed for perf.jsonl (hook-timing.ts) when the turn says where to report.

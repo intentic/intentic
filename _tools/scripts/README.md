@@ -27,7 +27,7 @@ flowchart LR
   it once as an isolated turn is about to stop and says what it printed back to the model. It runs every check the
   manifest lists on the working tree, files nobody has added to git yet included, and prints only what the change added
   against where HEAD left `main` (or `--base <sha>`), `code` checks judged that way too, so a failure main already
-  carries is charged to no conversation. It exits 1 on an added finding, and 0 when there is none or it cannot judge.
+  carries is charged to no conversation, and neither is a finding that only followed its file to a new path (git's rename detection pairs them). It exits 1 on an added finding, and 0 when there is none or it cannot judge, a fault of its own included. The throwaway worktree it checks the base out in is taken back however the run ends; the next run sweeps the ones a killed run left.
   What a change brought in is read one way (`verify/measure-change.mjs`: oxlint's lines, and the checks judged against
   the change's base with its `Allow:` trailers, which excuse a tidy finding and never a code one).
 - `verify` waits for the sandbox's heavy slot however it is started (`lib/heavy-slot.mjs`), and sizes its workers and

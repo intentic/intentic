@@ -30,6 +30,9 @@ const PointerSchema = z.object({
     path: z.string(),
     // The conversation whose copy it is, when the pointer was set from an isolated turn.
     conversation: z.string().optional(),
+    // The conversation whose shell pointed the install here, which only it (or the owner, from the Extensions tab) may then
+    // reload, clear or replace; absent when the owner set it, or the caller named no conversation.
+    setBy: z.string().optional(),
     setAt: z.string(),
     // Bumped by a reload, which is what tells an open app the list changed.
     reloadedAt: z.string().optional(),
@@ -138,6 +141,12 @@ export interface DevRoots {
     readonly historyRoot: string;
 }
 
+// Whether a path, once every link on it is followed, is still inside `base` (itself already resolved).
+const staysWithin = async (base: string, path: string): Promise<boolean> => {
+    const resolved = await realpath(path).catch(() => undefined);
+    return resolved !== undefined && placeIn(base, resolved) !== undefined;
+};
+
 const listed = (items: readonly string[]): string => items.join("; ");
 
 // Whether a checkout can stand in for an install, and the manifest it runs with if so. `fatal` marks a pointer that
@@ -186,6 +195,16 @@ export const checkDevCheckout = async (
     for (const bundle of [parsed.manifest.entry, parsed.manifest.server]) {
         if (bundle !== undefined && !(await pathExists(join(dir, bundle)))) {
             return { held: `${where} is not built yet (${bundle} is missing): run its build there`, fatal: false, place, checkout: real };
+        }
+        // The checkout is agent-writable, and the daemon reads (and serves) the bundle through any link: one that leaves
+        // the checkout would hand out whatever the daemon can read.
+        if (bundle !== undefined && !(await staysWithin(real, join(dir, bundle)))) {
+            return {
+                held: `${where} has a bundle (${bundle}) that leaves the checkout: a bundle must be a file inside it`,
+                fatal: false,
+                place,
+                checkout: real,
+            };
         }
     }
     return { dir, manifest: parsed.manifest, place, checkout: real };

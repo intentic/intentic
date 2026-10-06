@@ -77,7 +77,9 @@ const freeRoom = (line: OcrLine, lines: readonly OcrLine[], bounds: { readonly w
             before = Math.min(before, own.left - box.right - CLEARANCE);
         }
     }
-    return { before: Math.max(0, before), after: Math.max(0, after) };
+    // A line read upside down starts at the right of its box, so its room before is the picture's room to the right.
+    const room = { before: Math.max(0, before), after: Math.max(0, after) };
+    return line.corners[1].x < line.corners[0].x ? { before: room.after, after: room.before } : room;
 };
 
 interface Stretch {

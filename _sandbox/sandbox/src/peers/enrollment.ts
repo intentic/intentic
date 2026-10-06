@@ -76,12 +76,16 @@ export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => 
         return pairing.payload;
     };
 
+    const burn = async (token: string): Promise<void> => {
+        const digest = sha256Hex(token);
+        await burned?.update((stored) => (stored.digests.includes(digest) ? stored : { digests: [...stored.digests, digest] }));
+    };
+
     const consume = async (token: string): Promise<void> => {
         const replayable = live.get(token)?.replayable === true;
         live.delete(token);
         if (replayable) {
-            const digest = sha256Hex(token);
-            await burned?.update((stored) => (stored.digests.includes(digest) ? stored : { digests: [...stored.digests, digest] }));
+            await burn(token);
         }
     };
 
@@ -111,12 +115,17 @@ export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => 
             if (payload === undefined) {
                 return undefined;
             }
+            // Claimed before anything is awaited: two redemptions of one token in flight together must not both find it
+            // in the map, or a single-use pairing would enroll twice.
+            const replayable = live.get(token)?.replayable === true;
+            live.delete(token);
             // The burn list decides, not the map: a digest already on /history means this in-memory copy is a replay.
             if (await isBurned(token)) {
-                live.delete(token);
                 return undefined;
             }
-            await consume(token);
+            if (replayable) {
+                await burn(token);
+            }
             return payload;
         },
     };

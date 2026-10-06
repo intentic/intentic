@@ -133,6 +133,84 @@ test.each([
     expect(projectInstallsOf(command, "/work/app")).toEqual([]);
 });
 
+// A wrapper, an option's value or a manager's own spelling does not hide an install from the rule that judges it.
+test.each([
+    "bash -c 'npm install x'",
+    `sh -c "pnpm add x"`,
+    "bash -lc 'pnpm install'",
+    "time npm i",
+    "command pnpm install",
+    "exec npm i",
+    "nohup npm i &",
+    "xargs npm install",
+    "xargs -n 1 npm install",
+    "if npm i; then echo ok; fi",
+    "{ npm i; }",
+    "eval 'npm i'",
+    "echo start; `npm i`",
+    "yarn",
+    "yarn --frozen-lockfile",
+    "npm --registry https://r.example.com i x",
+    "npm -w pkg i x",
+    "npm --workspace pkg install x",
+    "yarn workspace foo add bar",
+    "npm --loglevel silent i",
+    "pnpm --reporter silent i",
+    "pnpm -w add x",
+    "pnpm rebuild",
+    "npm rebuild",
+    "npm audit fix",
+    "npm isntall x",
+    "bun a x",
+    "uv add requests",
+    "uv remove requests",
+    "uv pip install requests",
+    "uv --directory svc sync",
+    ".venv/bin/python -m pip install pillow",
+    "source .venv/bin/activate && python3 -m pip install requests",
+])("a project install behind a wrapper or an option is found: %s", (command) => {
+    expect(projectInstallsOf(command, "/work/app")).toHaveLength(1);
+});
+
+test.each([
+    // Nothing is installed.
+    "npm i --dry-run",
+    "pnpm add --help",
+    "npm install -h",
+    "yarn --version",
+    "yarn run build",
+    "yarn test",
+    "uv run pytest",
+    "uv add --dry-run requests",
+    "time pnpm test",
+    "command -v npm",
+    "nohup pnpm dev &",
+    "cargo add serde",
+    // The image's, not a project's.
+    "uv pip install --system requests",
+    "python3 -m pip install requests",
+])("what installs nothing, or installs into the image, is not a project install: %s", (command) => {
+    expect(projectInstallsOf(command, "/work/app")).toEqual([]);
+});
+
+test("python's own pip, and uv's with --system, are image installs like pip itself", () => {
+    expect(classifyImageInstalls("python3 -m pip install requests")).toEqual([{ kind: "pip", tool: "requests" }]);
+    expect(classifyImageInstalls("uv pip install --system requests")).toEqual([{ kind: "pip", tool: "requests" }]);
+    expect(classifyImageInstalls(".venv/bin/python -m pip install requests")).toEqual([]);
+});
+
+// A `cd` in a subshell, a command substitution or before a `popd` does not move the shell for what follows.
+test.each<[string, { dir: string; ecosystem: "node" | "python" }[]]>([
+    ["(cd /tmp/scratch && pnpm install); pnpm install", [{ dir: "/tmp/scratch", ecosystem: "node" }, { dir: "/work/app", ecosystem: "node" }]],
+    ["(cd sub && ls); pnpm install", [{ dir: "/work/app", ecosystem: "node" }]],
+    ["pushd sub && npm i && popd && npm i", [{ dir: "/work/app/sub", ecosystem: "node" }, { dir: "/work/app", ecosystem: "node" }]],
+    ['cd "$(git rev-parse --show-toplevel)" && pnpm install', [{ dir: "/work/app", ecosystem: "node" }]],
+    ["cd $REPO && pnpm install", [{ dir: "/work/app", ecosystem: "node" }]],
+    ["bash -c 'cd sub && npm i'; npm i", [{ dir: "/work/app/sub", ecosystem: "node" }, { dir: "/work/app", ecosystem: "node" }]],
+])("an install is located where its own shell stands: %s", (command, expected) => {
+    expect(projectInstallsOf(command, "/work/app")).toEqual(expected);
+});
+
 test("a project install carried in the current tmux wrapper is still found", () => {
     const wrapped = "/usr/local/bin/tmux-run -c 'pnpm install' agent-abc 'nice bash -c pnpm-install' install";
     expect(projectInstallsOf(wrapped, "/work/app")).toEqual([{ dir: "/work/app", ecosystem: "node" }]);

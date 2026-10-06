@@ -356,8 +356,20 @@ export const createAdmission = (
             return undefined;
         }
         const batch = together(items);
-        const run = await startWith(batch, turnOf(daemon, batch));
+        const person = batch[0]?.voice === "person";
+        let run = await startWith(batch, turnOf(daemon, batch));
+        // A person's words reopen an archived conversation, as they did at the door they were sent through: one booked
+        // for later was archived since (the aged sweep, an older editor), and its time is that person's say-so too.
+        if (run === "archived" && person) {
+            await daemon.agents.clearArchived([conversationId]);
+            run = await startWith(batch, turnOf(daemon, batch));
+        }
         if (run === "archived") {
+            // Never a person's words: they stay in the queue, for whoever opens the conversation to find.
+            if (person) {
+                daemon.logger.warn({ conversationId, messages: batch.length }, "admission: the conversation stays archived, a person's waiting words were kept");
+                return undefined;
+            }
             dropArchived(conversationId, batch);
             return new Map();
         }

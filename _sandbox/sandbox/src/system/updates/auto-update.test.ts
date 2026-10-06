@@ -25,6 +25,7 @@ const offer = (over: Partial<AutoUpdateOffer> = {}): AutoUpdateOffer => ({
     preparing: false,
     latest: "1.5.0",
     skipped: undefined,
+    givenUp: undefined,
     breaking: false,
     ...over,
 });
@@ -57,6 +58,15 @@ describe("takeableVersion", () => {
         // Nothing newer than what runs, or a build that does not know what it runs.
         expect(takeableVersion(offer({ running: "1.5.0" }))).toBeUndefined();
         expect(takeableVersion(offer({ running: undefined }))).toBeUndefined();
+    });
+
+    test("never the version the machine just tried and gave up on, which a newer release replaces", () => {
+        // ic put the previous version back (restored, or rolled back by its probation watch) and left the staged marker:
+        // this daemon is the restored one, and taking it again would restart the sandbox into the same failure.
+        expect(takeableVersion(offer({ givenUp: "1.5.0" }))).toBeUndefined();
+        expect(takeableVersion(offer({ givenUp: "v1.5.0" }))).toBeUndefined();
+        const next: StagedUpdate = { version: "1.6.0", channel: "stable", at: 2 };
+        expect(takeableVersion(offer({ givenUp: "1.5.0", staged: next, latest: "1.6.0" }))).toBe("1.6.0");
     });
 });
 
@@ -226,6 +236,14 @@ describe("createAutoUpdater", () => {
         await tick(1_100);
         expect(await auto.state()).toMatchObject({ phase: "waiting", holds: [{ kind: "people", names: ["Ada"] }] });
         expect(relayed).toEqual([]);
+    });
+
+    test("the version the machine just gave up on is not handed to it again by the daemon it restored", async () => {
+        current = offer({ givenUp: "1.5.0" });
+        const auto = make();
+        await tick(60);
+        expect(relayed).toEqual([]);
+        expect(await auto.state()).toEqual({ enabled: true, phase: "idle", holds: [] });
     });
 
     test("switched off, it waits on nothing and takes nothing", async () => {

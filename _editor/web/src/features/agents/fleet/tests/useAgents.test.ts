@@ -317,6 +317,13 @@ describe("canArchive", () => {
         expect(canArchive({ status: `idle`, attention: none })).toBe(true);
     });
 
+    it("refuses an agent holding a message booked for later: archiving would drop the words when their time comes", () => {
+        expect(canArchive({ status: `idle`, attention: none, queue: { items: [], revision: 1, paused: `scheduled`, until: 90_000 } })).toBe(false);
+        expect(canArchive({ status: `idle`, attention: none, queue: { items: [], revision: 1, paused: `scheduled`, after: `brave-otter-k2` } })).toBe(false);
+        // Words held for a press (a stop, a refusal) wait for that press, wherever the conversation is filed.
+        expect(canArchive({ status: `idle`, attention: none, queue: { items: [], revision: 1, paused: `stopped` } })).toBe(true);
+    });
+
     it("refuses an agent waiting to be told something: archiving would bury the question, not answer it", () => {
         expect(canArchive({ status: `awaiting`, attention: none })).toBe(false);
         expect(canArchive({ status: `running`, attention: { ...none, plan: true } })).toBe(false);

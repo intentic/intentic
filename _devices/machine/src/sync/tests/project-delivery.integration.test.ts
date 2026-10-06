@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -169,6 +169,39 @@ describe("deliverProject", () => {
         expect(await readFile(join(outside, "target.txt"), "utf8")).toBe("theirs\n");
         await expect(lstat(join(outside, "new.ts"))).rejects.toThrow();
         await expect(lstat(join(root, "escape.txt"))).rejects.toThrow();
+    });
+
+    // A disk that ignores case (NTFS, APFS) holds both spellings of a name as ONE file, the way two hard links name one
+    // file here: the same device and inode under either spelling, which is what the delivery asks of the disk.
+    // A case-only rename arrives as the old spelling deleted and the new one added, and must not delete that file.
+    it("never deletes the file a case-only rename keeps, where both spellings are one file", async () => {
+        await put("Readme.md", "# shop\n");
+        await link(join(local, "Readme.md"), join(local, "README.md"));
+        const result = await deliverToFolder(context, delivery([added("README.md", "# shop\n"), deleted("Readme.md", "# shop\n")]));
+        expect(result.applied).toEqual([]);
+        expect(result.already).toEqual(["README.md", "Readme.md"]);
+        expect(await read("README.md")).toBe("# shop\n");
+        expect(await read("Readme.md")).toBe("# shop\n");
+    });
+
+    it("writes a case-only rename that also changed the file as a change of the old spelling's content", async () => {
+        await put("Readme.md", "# shop\n");
+        await link(join(local, "Readme.md"), join(local, "README.md"));
+        const result = await deliverToFolder(context, delivery([added("README.md", "# shop, renamed\n"), deleted("Readme.md", "# shop\n")]));
+        expect(result.conflicts).toEqual([]);
+        expect(result.applied).toEqual(["README.md"]);
+        expect(result.already).toEqual(["Readme.md"]);
+        expect(await read("README.md")).toBe("# shop, renamed\n");
+        expect((await readdir(local)).toSorted()).toEqual(["README.md", "Readme.md"]);
+    });
+
+    // Two files that only share a spelling's case are two files on a disk that keeps case, and each goes as landed.
+    it("deletes a file whose other spelling is a file of its own", async () => {
+        await put("Readme.md", "# old\n");
+        const result = await deliverToFolder(context, delivery([added("README.md", "# new\n"), deleted("Readme.md", "# old\n")]));
+        expect(result.applied).toEqual(["README.md", "Readme.md"]);
+        expect(await read("Readme.md")).toBeUndefined();
+        expect(await read("README.md")).toBe("# new\n");
     });
 
     // The point is the bring-back's own, so the bring-back's own restore undoes a delivery unchanged.

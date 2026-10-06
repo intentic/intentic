@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { baseOf, checksAt, indexWithNewFiles, LINES_PER_CHECK, turnReport } from "./verify-turn.mjs";
+import { baseOf, checksAt, indexWithNewFiles, LINES_PER_CHECK, renamesSince, run, runGuarded, turnReport } from "./verify-turn.mjs";
 
 // The shape _tools/checks/run.mjs emits per check.
 const verdict = (id, gate, { ok = false, measured = true } = {}) => ({ id, file: `${id}.mjs`, gate, ok, measured, stdout: "", stderr: "", ms: 1 });
@@ -161,4 +161,101 @@ test("a --base that is no commit says so and exits 0: a run that cannot judge is
     assert.equal(ran.status, 0);
     assert.equal(ran.stdout, "");
     assert.equal(ran.stderr, "verify-turn: --base no-such-rev is not a commit this clone holds, so nothing is judged\n");
+});
+
+// A moved file keeps its findings: git pairs the new path with the old one, through the index that lists new files too.
+test("the files the change moved are paired with where the base had them, committed or not", () => {
+    const { root, run: git, commit } = repo();
+    const scratch = mkdtempSync(join(tmpdir(), "verify-turn-index-"));
+    try {
+        writeFileSync(join(root, "a.txt"), "one\ntwo\nthree\nfour\n");
+        writeFileSync(join(root, "b.txt"), "five\nsix\nseven\neight\n");
+        const cut = commit("base");
+        git("checkout", "-q", "-b", "agent/x");
+        mkdirSync(join(root, "sub"));
+        // Moved without `git mv`: a deletion and an untracked file to git until the index lists the new one.
+        execFileSync("mv", [join(root, "a.txt"), join(root, "sub/a.txt")]);
+        assert.deepEqual([...renamesSince(root, cut)], []);
+        const index = indexWithNewFiles(root, scratch);
+        assert.deepEqual([...renamesSince(root, cut, { ...process.env, GIT_INDEX_FILE: index })], [["sub/a.txt", "a.txt"]]);
+        git("mv", "b.txt", "sub/b.txt");
+        commit("moved");
+        assert.deepEqual([...renamesSince(root, cut)].toSorted(), [["sub/a.txt", "a.txt"], ["sub/b.txt", "b.txt"]].toSorted());
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+// Exit 1 says "this change added findings"; a run that fell over says nothing about the change.
+test("a run that fails for a fault of its own says so on stderr and exits 0, never as a finding", async () => {
+    const { root, run: git, commit } = repo();
+    const tmp = process.env.TMPDIR;
+    const write = process.stderr.write;
+    let said = "";
+    try {
+        writeFileSync(join(root, "a.txt"), "a\n");
+        commit("base");
+        git("checkout", "-q", "-b", "agent/x");
+        writeFileSync(join(root, "a.txt"), "b\n");
+        // The checks' scratch directory cannot be made.
+        process.env.TMPDIR = join(root, "no-such-dir");
+        await assert.rejects(run(root, []), /ENOENT/);
+        process.stderr.write = (text) => {
+            said += text;
+            return true;
+        };
+        assert.equal(await runGuarded(root, []), 0);
+        assert.match(said, /^verify-turn: could not judge the change \(ENOENT.*\), so nothing is judged\n$/);
+    } finally {
+        process.stderr.write = write;
+        if (tmp === undefined) {
+            delete process.env.TMPDIR;
+        } else {
+            process.env.TMPDIR = tmp;
+        }
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// The whole run over a checkout of its own, with a stand-in for the checks: one that finds a `.bad` file, as printed
+// `  - <path>:1 smell`. A finding main already has stays main's when its file is only moved.
+test("moving a file that already has a finding is not adding one, and a new one is", async () => {
+    const { root, run: git, commit } = repo();
+    const outWrite = process.stdout.write;
+    const errWrite = process.stderr.write;
+    let out = "";
+    const quiet = async (fn) => {
+        process.stdout.write = (text) => ((out += text), true);
+        process.stderr.write = () => true;
+        try {
+            return await fn();
+        } finally {
+            process.stdout.write = outWrite;
+            process.stderr.write = errWrite;
+        }
+    };
+    try {
+        mkdirSync(join(root, "_tools/checks"), { recursive: true });
+        writeFileSync(join(root, "_tools/checks/manifest.mjs"), `export const CHECKS = [{ id: "smell", gate: "tidy" }];\n`);
+        writeFileSync(
+            join(root, "_tools/checks/run.mjs"),
+            `import { spawnSync } from "node:child_process";
+const files = spawnSync("git", ["ls-files"], { encoding: "utf8" }).stdout.split("\\n").filter((file) => file.endsWith(".bad"));
+process.stdout.write(JSON.stringify([{ id: "smell", gate: "tidy", measured: true, ok: files.length === 0, stdout: files.map((file) => "  - " + file + ":1 smell").join("\\n"), stderr: "" }]));\n`,
+        );
+        writeFileSync(join(root, "a.bad"), "one\ntwo\nthree\nfour\n");
+        commit("main already has a finding");
+        git("checkout", "-q", "-b", "agent/x");
+        mkdirSync(join(root, "sub"));
+        git("mv", "a.bad", "sub/a.bad");
+        assert.equal(await quiet(() => run(root, [])), 0);
+        assert.equal(out, "");
+        writeFileSync(join(root, "new.bad"), "x\n");
+        assert.equal(await quiet(() => run(root, [])), 1);
+        assert.match(out, /^✗ smell: new\.bad:1 smell\n/);
+        assert.doesNotMatch(out, /sub\/a\.bad/);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
 });

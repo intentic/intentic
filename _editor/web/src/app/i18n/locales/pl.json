@@ -1696,6 +1696,7 @@
             "pay": "Zapłacić {amountUsd} $ za {assetName}?",
             "pay2": "Zapłać {amountUsd} $",
             "paymentDidntGoThrough": "Płatność nie przeszła: nic nie zostało wydane.",
+            "paymentOwnerOnly": "Tylko właściciel tego sandboxa może zatwierdzić płatność: płaci jego portfel.",
             "placedBy": "Zlecone przez Ciebie",
             "readAsItsOwn": "Czyta jak własne",
             "refused": "Odrzucone",

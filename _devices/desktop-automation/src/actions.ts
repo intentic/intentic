@@ -28,6 +28,10 @@ export const SETTLE_MS = 400;
 // A cap on `wait`, so a mis-typed 600000 cannot hold the machine (and the call) for ten minutes.
 export const MAX_WAIT_MS = 10_000;
 
+// A cap on `scroll`, for the same reason: xdotool clicks the wheel once per notch and is stopped after 15 s, so a model's
+// 100000000 held the call that long and then failed.
+export const MAX_SCROLL_NOTCHES = 50;
+
 export const settle = async (): Promise<void> => await sleep(SETTLE_MS);
 
 const point = (value: readonly [number, number] | undefined, name: string): Point => {
@@ -93,7 +97,7 @@ const pointer = async (screen: Desktop, input: InputCall, pointing: Pointing): P
         case "left_click_drag":
             return await screen.drag(at, await pointing.point(point(input.to, "to"), "The drag target"));
         case "scroll":
-            return await screen.scroll(at, input.direction ?? "down", input.amount ?? 3);
+            return await screen.scroll(at, input.direction ?? "down", Math.min(input.amount ?? 3, MAX_SCROLL_NOTCHES));
         default: {
             const button = CLICK_BUTTON.get(input.action);
             if (button === undefined) {

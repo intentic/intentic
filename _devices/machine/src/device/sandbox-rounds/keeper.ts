@@ -73,6 +73,12 @@ const FixReportSchema = z.object({
 
 const FixAnswerSchema = z.object({ slug: z.string(), report: FixReportSchema });
 export type FixAnswer = z.infer<typeof FixAnswerSchema>;
+export type FixReport = FixAnswer["report"];
+
+// The machine's own report, under `"slug": null`, which ic prints (and exits 1 after) when it found no sandbox to look
+// at. It is a fix that ran: read as an ic that cannot fix, it held every round of the keeper back on the ladder
+// (2026-10-06, omen's log every half hour since 2026-09-30).
+const FixMachineSchema = z.object({ slug: z.null(), report: FixReportSchema });
 
 // A progress line carries a report as it stands, bare or under `report`, with the sandbox it is about when ic says.
 const FixProgressSchema = z.object({
@@ -103,20 +109,31 @@ export const fixProgress = (line: string): FixProgress | undefined => {
     return parsed === undefined ? undefined : { slug: parsed.slug, doing: parsed.report?.doing ?? parsed.doing };
 };
 
-// The final lines of a run, one per sandbox; a progress line, prose, or JSON of another shape is none.
-export const fixAnswers = (output: string): FixAnswer[] =>
+const jsonLines = (output: string): string[] =>
     output
         .split(/\r?\n/)
         .map((line) => line.trim())
-        .filter((line) => line.startsWith("{"))
+        .filter((line) => line.startsWith("{"));
+
+// The final lines of a run, one per sandbox; a progress line, prose, or JSON of another shape is none.
+export const fixAnswers = (output: string): FixAnswer[] =>
+    jsonLines(output)
         .map((line) => lineAs(FixAnswerSchema, line))
         .filter((answer) => answer !== undefined);
+
+// The machine's report of a run that found no sandbox, when it printed one.
+const machineAnswer = (output: string): FixReport | undefined =>
+    jsonLines(output)
+        .map((line) => lineAs(FixMachineSchema, line)?.report)
+        .find((report) => report !== undefined);
 
 const progressCount = (output: string): number => output.split(/\r?\n/).filter((line) => fixProgress(line) !== undefined).length;
 
 // What one run comes to. `unavailable` is an ic that cannot fix at all: one from before `sandbox fix` (clap refuses the
-// verb), or no ic, which runs nothing and prints no JSON. A run that timed out, or said anything in JSON, was a fix.
-export type FixRunReading = { readonly unavailable: string } | { readonly answers: readonly FixAnswer[] };
+// verb), or no ic, which runs nothing and prints no JSON. A run that timed out, or said anything in JSON, was a fix;
+// `machine` is the machine's own report when it found no sandbox.
+export type FixRunReading =
+    { readonly unavailable: string } | { readonly answers: readonly FixAnswer[]; readonly machine?: FixReport };
 
 // Why ic said no: its `error:` line where it printed one (clap's usage text follows it and ends in "try --help"), else
 // its last line.
@@ -130,10 +147,11 @@ const refusalOf = (run: IcRun): string =>
 
 export const readFixRun = (run: IcRun): FixRunReading => {
     const answers = fixAnswers(run.output);
-    if (run.code !== 0 && run.timedOut !== true && answers.length === 0 && progressCount(run.output) === 0) {
+    const machine = machineAnswer(run.output);
+    if (run.code !== 0 && run.timedOut !== true && answers.length === 0 && machine === undefined && progressCount(run.output) === 0) {
         return { unavailable: refusalOf(run) };
     }
-    return { answers };
+    return machine === undefined ? { answers } : { answers, machine };
 };
 
 // ic left the sandbox to the other side of this computer: on Windows, ic on Windows and ic in WSL drive one Docker
@@ -142,17 +160,18 @@ export const readFixRun = (run: IcRun): FixRunReading => {
 const ELSEWHERE = "elsewhere";
 
 // Nothing left to do about it: the keeper waits only after anything else.
-export const settled = (answer: FixAnswer): boolean =>
+export const settled = (answer: Pick<FixAnswer, "report">): boolean =>
     answer.report.outcome === "healthy" || answer.report.outcome === "fixed" || answer.report.outcome === ELSEWHERE;
 
 // ic's exit code for "a restart or a sign-out of this computer finishes it", which no fix can do by itself.
 const EXIT_RESTART = 4;
 
-// What is left on one sandbox, in ic's words: each check that warns or fails, and who can close it.
-const leftLine = (slug: string, check: FixCheck): string => {
+// What is left on one sandbox (or on the machine, with no slug), in ic's words: each check that warns or fails, and who
+// can close it.
+const leftLine = (slug: string | undefined, check: FixCheck): string => {
     const what = `${check.label}: ${check.problem ?? check.state}`;
     if (check.fix === "consent") {
-        return `${what} (needs your yes: \`intentic-machine sandbox fix ${slug}\`)`;
+        return `${what} (needs your yes: \`intentic-machine sandbox fix${slug === undefined ? "" : ` ${slug}`}\`)`;
     }
     return check.remedy === undefined ? what : `${what} (${check.remedy})`;
 };
@@ -165,6 +184,12 @@ export const verdictLine = (answer: FixAnswer): string => {
     const outcome = answer.report.outcome ?? answer.report.stage;
     const left = settled(answer) ? [] : answer.report.checks.filter((check) => check.state === "fail" || check.state === "warn");
     return `keeper ${answer.slug}: ${outcome}${left.length === 0 ? "" : ` — ${left.map((check) => leftLine(answer.slug, check)).join("; ")}`}`;
+};
+
+// The line a machine's report is logged as, when a run found no sandbox and left something on the machine.
+const machineLine = (report: FixReport): string => {
+    const left = report.checks.filter((check) => check.state === "fail" || check.state === "warn");
+    return `keeper: this machine: ${report.outcome ?? report.stage}${left.length === 0 ? "" : ` — ${left.map((check) => leftLine(undefined, check)).join("; ")}`}`;
 };
 
 /* WHICH SANDBOXES RUN HERE. A link names its sandbox by URL; ic knows it by slug. */
@@ -442,6 +467,13 @@ const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log:
     state.unavailable = { failures: 0, until: 0 };
     state.said.delete(":ic");
     const cleared = reading.answers.map((answer) => noteAnswer(state, answer, log, now));
+    // A run that found no sandbox still says how the machine stands: what it left is said once, and waited out.
+    const machineSettled = reading.machine === undefined || settled({ report: reading.machine });
+    if (reading.machine !== undefined && !machineSettled) {
+        sayOnce(state, ":machine", machineLine(reading.machine), log);
+    } else {
+        state.said.delete(":machine");
+    }
     if (run.code === EXIT_RESTART) {
         sayOnce(state, ":restart", "keeper: this computer needs a restart or a sign-out to finish what ic started.", log);
     } else {
@@ -453,7 +485,7 @@ const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log:
         state.said.delete(asked);
         log(`keeper ${asked}: ic gave no verdict (${lastLine(run.output)?.trim() ?? "no output"}) — looking again in ${minutes(wait)}`);
     }
-    return !unanswered && cleared.every(Boolean);
+    return !unanswered && machineSettled && cleared.every(Boolean);
 };
 
 // One run of `ic sandbox fix`, the only one in flight. The sandboxes it acts on are held for its length, so the other

@@ -1,5 +1,11 @@
+import sharp from "sharp";
+import type { OcrLine } from "@intentic/ocr/paddle-ocr";
 import { createMaskMemo, createMasker, excerptAround } from "../masker.js";
+import { redactStrings } from "../privacy-shield.js";
+import type { LocalReaders } from "../readers.js";
 import { tokenOf } from "../tokens.js";
+import { maskJsonText, restoreJsonText } from "../gateway/protocols/json-text.js";
+import { pesel } from "../detect/tests/ids.testing.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 
 // The parts of the shield every exit shares: the masker the gateway walks a request with, the decision whether a turn
@@ -28,11 +34,11 @@ describe("the masker", () => {
         expect((await masker.mask("member ACME-0042-XK renewed")).text).toBe("member ⟦ID_DOCUMENT_1⟧ renewed");
     });
 
-    test("tokens already in a string are left exactly as they are, and a string seen before counts nothing new", async () => {
+    test("token-shaped text already in a string goes out as an escaped literal, and a string seen before counts nothing new", async () => {
         const { privacyShield } = privacySliceFake();
         const masker = createMasker({ vault: privacyShield.vault, policy: { ...POLICY, classes: [...POLICY.classes] }, memo: createMaskMemo() });
         const first = await masker.mask(`⟦PERSON_7⟧ ma PESEL ${PESEL}`);
-        expect(first.text).toBe("⟦PERSON_7⟧ ma PESEL ⟦NATIONAL_ID_1⟧");
+        expect(first.text).toBe(`${tokenOf("LITERAL_PERSON", 7)} ma PESEL ${tokenOf("NATIONAL_ID", 1)}`);
         const second = await masker.mask(`⟦PERSON_7⟧ ma PESEL ${PESEL}`);
         expect(second).toEqual({ text: first.text, counts: {}, found: [] });
     });
@@ -72,11 +78,56 @@ describe("the masker", () => {
         expect(excerptAround("one two three TOKEN four five six", 14, 19, 6)).toBe("…three TOKEN four…");
     });
 
+    // A tool call's arguments go out as raw JSON text, where a line break is `\n`: the PESEL after it, new or already in
+    // the vault, must be masked all the same, and the arguments must still parse and restore to what the model wrote.
+    test("a number right after an escaped line break in a tool call's arguments is masked, new or known", async () => {
+        const { privacyShield } = privacySliceFake();
+        const masker = createMasker({ vault: privacyShield.vault, policy: { ...POLICY, classes: [...POLICY.classes] }, memo: createMaskMemo() });
+        const mask = async (text: string): Promise<string> => (await masker.mask(text)).text;
+        const number = pesel(1985, 3, 14, 4562);
+        for (const args of [JSON.stringify({ command: `cat <<EOF\n${number}\nEOF` }), JSON.stringify({ o: `x\t${number}` })]) {
+            const sent = await maskJsonText(args, mask);
+            expect(sent).not.toContain(number);
+            expect(restoreJsonText(sent, masker.restore)).toBe(args);
+        }
+        // Known to the vault by now, and found there the same way after a different escape.
+        expect(await mask(JSON.stringify({ o: `y\r${number}` }))).not.toContain(number);
+    });
+
     test("an unknown token is restored to itself, never to a guess", async () => {
         const { privacyShield } = privacySliceFake();
         const masker = createMasker({ vault: privacyShield.vault, policy: { ...POLICY, classes: [...POLICY.classes] }, memo: createMaskMemo() });
         await privacyShield.vault.load();
         expect(masker.restore("⟦PERSON_42⟧ and [[EMAIL_9]]")).toBe("⟦PERSON_42⟧ and [[EMAIL_9]]");
+    });
+
+    // A runtime holds only what the gateway restored, so token-shaped text in a request is data: a test fixture, a log the
+    // shield wrote, a token pasted from the activity page. Read back by number, an edit that quoted it would no longer
+    // match its file, and a write would put somebody's real value where the literal stood.
+    test("a token-shaped literal in data comes back as the same literal, never as the vault's value under that number", async () => {
+        const { privacyShield } = privacySliceFake();
+        const masker = createMasker({ vault: privacyShield.vault, policy: { ...POLICY, classes: [...POLICY.classes] }, memo: createMaskMemo() });
+        const name = ["Jan", "Kowalski"].join(" ");
+        const seeded = await masker.mask(`Klient ${name} zamówił`);
+        const token = tokenOf("PERSON", 1);
+        expect(seeded.text).toContain(token);
+        // Built rather than written, so it reads as the literal it is.
+        const loose = `[[${"PERSON"}_1]]`;
+        for (const line of [
+            `expect(masked).toBe("${token} ma PESEL");`,
+            `in either spelling: ${loose}`,
+            `already escaped once: ${tokenOf("LITERAL_PERSON", 1)}`,
+        ]) {
+            const sent = (await masker.mask(line)).text;
+            expect(masker.restore(sent)).toBe(line);
+            expect(masker.restore(sent)).not.toContain(name);
+            // A model quoting what it read writes back what it was sent, and that too is the literal.
+            expect(masker.restore(`old_string: ${sent}`)).toBe(`old_string: ${line}`);
+        }
+        // A token the shield gave out still reads as its value.
+        expect(masker.restore(`Dear ${token}`)).toBe(`Dear ${name}`);
+        // A token-shaped literal nothing could resolve goes as it came.
+        expect((await masker.mask(`label ${tokenOf("FOO", 3)} here`)).text).toBe(`label ${tokenOf("FOO", 3)} here`);
     });
 });
 
@@ -178,4 +229,76 @@ test("a page leaving this machine whole carries the kind of data instead of the 
     expect(await off.privacyShield.redactForDisplay(`PESEL ${PESEL}`)).toBe(`PESEL ${PESEL}`);
     const on = privacySliceFake({ policy: { mode: "on" } });
     expect(await on.privacyShield.redactForDisplay(`Jan Kowalski asked about PESEL ${PESEL}`)).toBe("‹person› asked about PESEL ‹national id›");
+});
+
+// A public share's payload is walked by redactStrings: a file name or a path can hold the data as well as a message can.
+test("a page leaving this machine whole has its paths and names redacted too, while the shield is on", async () => {
+    const on = privacySliceFake({ policy: { mode: "on" } });
+    const payload = {
+        text: `PESEL ${PESEL}`,
+        name: `scan-${PESEL}`,
+        path: `clients/${PESEL}/scan.png`,
+        published: `files/1-${PESEL}.png`,
+        locations: [{ path: `clients/${PESEL}.pdf`, line: 3 }],
+        attachments: [`files/2-${PESEL}.png`],
+        role: "user",
+    };
+    const redacted = JSON.stringify(await redactStrings(payload, on.privacyShield.redactForDisplay));
+    expect(redacted.includes(PESEL)).toBe(false);
+    expect(redacted).toContain(`"role":"user"`);
+});
+
+// A picture on a public page is painted over as an image sent to an untrusted model is, with the kind of data in place
+// of a token, since nothing comes back to resolve one; one that cannot be read is not published at all.
+describe("a picture leaving this machine whole", () => {
+    const WIDTH = 200;
+    const GREY = 128;
+    const picture = async (): Promise<Buffer> =>
+        sharp({ create: { width: WIDTH, height: 40, channels: 3, background: { r: GREY, g: GREY, b: GREY } } })
+            .png()
+            .toBuffer();
+    const line = (text: string): OcrLine => {
+        const chars = [...text];
+        return {
+            text,
+            score: 0.99,
+            corners: [
+                { x: 0, y: 10 },
+                { x: WIDTH, y: 10 },
+                { x: WIDTH, y: 30 },
+                { x: 0, y: 30 },
+            ],
+            chars: chars.map((char, index) => ({ char, from: index / chars.length, to: (index + 1) / chars.length })),
+            column: 1 / chars.length,
+            vertical: false,
+        };
+    };
+    const reading = (text: string): LocalReaders => ({
+        ocr: async () => true,
+        readImage: async () => ({ width: WIDTH, height: 40, lines: [line(text)] }),
+        readPdf: async () => undefined,
+    });
+    const shadeAt = async (image: Buffer, x: number, y: number): Promise<number> => {
+        const { data, info } = await sharp(image).raw().toBuffer({ resolveWithObject: true });
+        return data[(y * info.width + x) * info.channels] ?? -1;
+    };
+
+    test("has its personal data painted over while the shield is on", async () => {
+        const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, readers: reading(`PESEL ${PESEL}`) });
+        const out = await privacyShield.redactPictureForDisplay(await picture());
+        if (out === undefined) {
+            throw new Error("the picture was withheld");
+        }
+        // The label stays as it was; where the number was is white.
+        expect(await shadeAt(out, 10, 20)).toBe(GREY);
+        expect(await shadeAt(out, 150, 11)).toBe(255);
+    });
+
+    test("is withheld when it cannot be read, and goes as it is while the shield is off", async () => {
+        const on = privacySliceFake({ policy: { mode: "on" } });
+        expect(await on.privacyShield.redactPictureForDisplay(await picture())).toBeUndefined();
+        const off = privacySliceFake({ readers: reading(`PESEL ${PESEL}`) });
+        const bytes = await picture();
+        expect(await off.privacyShield.redactPictureForDisplay(bytes)).toBe(bytes);
+    });
 });

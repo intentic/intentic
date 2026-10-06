@@ -23,18 +23,22 @@ export interface DecodedImage {
     readonly format: string;
     // Whether it carried transparency; `rgba` always has an alpha channel.
     readonly hasAlpha: boolean;
+    // How many frames it holds, of which `rgba` is the first: more than one is an animation (a GIF, a WebP), whose other
+    // frames were not decoded.
+    readonly frames: number;
 }
 
 // Undefined for bytes that are not an image sharp can read.
 export const decodeImage = async (data: Buffer): Promise<DecodedImage | undefined> => {
     try {
         const image = sharp(data, { failOn: "none", limitInputPixels: MAX_PIXELS, animated: false });
-        const { format, hasAlpha } = await image.metadata();
+        const { format, hasAlpha, pages } = await image.metadata();
         const { data: pixels, info } = await image.rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
         return {
             rgba: { width: info.width, height: info.height, channels: info.channels, data: new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength) },
             format: format ?? "png",
             hasAlpha: hasAlpha === true,
+            frames: Math.max(1, pages ?? 1),
         };
     } catch {
         // allow(silent-catch): bytes that will not decode are not an image this reader can read, which is its answer.
@@ -178,6 +182,21 @@ export const rotateCounterClockwise = (source: Raster): Raster => {
         }
     }
     return { width: height, height: width, channels, data: out };
+};
+
+// Turned upside down: a picture taken or scanned the wrong way up, with no orientation tag to say so.
+export const rotateHalfTurn = (source: Raster): Raster => {
+    const { width, height, channels, data } = source;
+    const out = new Uint8Array(data.length);
+    const pixels = width * height;
+    for (let index = 0; index < pixels; index += 1) {
+        const from = index * channels;
+        const to = (pixels - 1 - index) * channels;
+        for (let c = 0; c < channels; c += 1) {
+            out[to + c] = data[from + c] ?? 0;
+        }
+    }
+    return { width, height, channels, data: out };
 };
 
 // The size PaddleOCR crops a box to: its longer pair of opposite sides, truncated.

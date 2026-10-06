@@ -212,7 +212,9 @@ export const desktopRouter = (): InProcessServer => ({
     close: () => {},
 });
 
-// A turn's `desktop` mount: offered where the sandbox has a display to give it and the persona may drive a browser,
-// the same power, since both put a program on a screen under the agent's hands.
-export const desktopServersOf = (lease: Pick<TurnLease, "open">, allowed: boolean): AgentTool[] =>
-    allowed && desktopAvailable() ? [lease.open({ name: DESKTOP_SERVER, target: { kind: "browser", router: desktopRouter() } })] : [];
+// A turn's `desktop` mount: offered where the sandbox has a display to give it and the persona holds both the browser
+// shelf and the shell shelf. The browser shelf is the power to put a program on a screen under the agent's hands; the
+// shell shelf is the power to run programs at all, and `open` runs any program with any arguments, and typing into a
+// window it started is a shell by another name. A persona with a browser and no shell must not get one through here.
+export const desktopServersOf = (lease: Pick<TurnLease, "open">, powers: { readonly browser: boolean; readonly shell: boolean }): AgentTool[] =>
+    powers.browser && powers.shell && desktopAvailable() ? [lease.open({ name: DESKTOP_SERVER, target: { kind: "browser", router: desktopRouter() } })] : [];

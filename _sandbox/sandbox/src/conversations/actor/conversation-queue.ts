@@ -123,9 +123,12 @@ export const returned = (queue: TurnQueue, items: readonly Omit<QueuedItem, "rev
     return next(queue, [...back.map((item) => ({ ...item, revision: queue.revision + 1 })), ...queue.items], "refused");
 };
 
-/** Holds what waits, for the reason given; an empty queue has nothing to hold. */
+/**
+ * Holds what waits, for the reason given; an empty queue has nothing to hold. A scheduled hold is the person's own
+ * appointment, which a stop (the one hold made this way) does not undo: it keeps its booking and goes at its time.
+ */
 export const hold = (queue: TurnQueue, reason: QueuePause): TurnQueue =>
-    queue.items.length === 0 || queue.paused === reason ? queue : next(queue, queue.items, reason);
+    queue.items.length === 0 || queue.paused === reason || queue.paused === "scheduled" ? queue : next(queue, queue.items, reason);
 
 /** Lets a held queue go. */
 export const released = (queue: TurnQueue): TurnQueue => (queue.paused === undefined ? queue : next(queue, queue.items, undefined));

@@ -10,6 +10,7 @@ import {
     heardByParent,
     laneOf,
     NO_ATTENTION,
+    scheduledSend,
     turnInFlight,
     unregistered,
 } from "./agentStatus";
@@ -354,9 +355,11 @@ watch(
 // - running/stopping: no, it's the live turn's worktree
 // - draft: no registry entry to archive
 // - awaiting/plan/question/permission: would bury the question
+// - a message booked for later: no, it would reach an archived conversation at its time and be dropped (the sandbox
+//   refuses it too); it goes, is re-timed or is taken back first
 // - error/conflict/stopped/landed/idle: yes
-export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
-    agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
+export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
+    agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent) && !scheduledSend(agent);
 
 // What Clear on the Finished lane files away: every card there the board may archive, less a child whose parent is still
 // at work. That child rides in its parent's tray as the parent's history (board/view/childFold.ts), and filing it alone

@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { capture } from "./screen.js";
+import { capture, pngPath } from "./screen.js";
 
 /* Linux, a Wayland session, and a PATH holding only the screenshot tools a test puts there: which grabbers exist is
    the whole question, so the ambient machine's own must not answer it. */
@@ -45,4 +45,16 @@ test("an installed tool that fails is named with what it said, not reported as n
 test("a device with no screenshot tool is told what to install", async () => {
     process.env["PATH"] = await pathWith({});
     await expect(capture()).rejects.toThrow("No screenshot tool on this device.");
+});
+
+// Two captures started in the same millisecond (parallel tool calls) share a name made of the pid and the clock, so one
+// deletes, or overwrites, the file the other is about to read.
+test("each capture writes to a file of its own, even in the same millisecond", () => {
+    const now = Date.now;
+    Date.now = () => 1_700_000_000_000;
+    try {
+        expect(new Set(Array.from({ length: 50 }, () => pngPath())).size).toBe(50);
+    } finally {
+        Date.now = now;
+    }
 });

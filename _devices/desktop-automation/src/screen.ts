@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,8 @@ import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
 // platform's screenshot program varies; a total failure names what to install. PNG goes to a temp file rather than
 // a pipe, since several tools only write to a path.
 
-const pngPath = (): string => join(tmpdir(), `intentic-desktop-${process.pid}-${Date.now()}.png`);
+// Unique per call: parallel captures in one millisecond would otherwise share a file that the first to finish deletes.
+export const pngPath = (): string => join(tmpdir(), `intentic-desktop-${process.pid}-${Date.now()}-${randomUUID()}.png`);
 
 interface Grabber {
     readonly command: string;

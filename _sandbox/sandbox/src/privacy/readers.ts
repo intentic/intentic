@@ -17,6 +17,8 @@ export interface ImageReading {
     readonly width: number;
     readonly height: number;
     readonly lines: readonly OcrLine[];
+    // More than one: an animation, of which only the first frame was read.
+    readonly frames?: number;
 }
 
 export interface LocalReaders {
@@ -75,7 +77,9 @@ export const createLocalReaders = ({ textReader, installed = () => ocrInstalled(
             return undefined;
         }
         const image = await decodeImage(data);
-        return image === undefined ? undefined : { width: image.rgba.width, height: image.rgba.height, lines: await reader.read(image.rgba) };
+        return image === undefined
+            ? undefined
+            : { width: image.rgba.width, height: image.rgba.height, lines: await reader.read(image.rgba), frames: image.frames };
     };
     return {
         ocr: async () => installed(),

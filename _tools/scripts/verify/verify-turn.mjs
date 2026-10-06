@@ -13,7 +13,8 @@
 // change added.
 //
 // Exits 1 with one line per added finding on stdout. Exits 0 when the change added nothing, and when it cannot judge
-// (no base, a sparse checkout, checks that did not answer, a base it could not check out), saying why on stderr: a run
+// (no base, a sparse checkout, checks that did not answer, a base it could not check out, a fault of its own such as a full
+// disk), saying why on stderr: a run
 // that could not look is no finding about the change.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -124,6 +125,8 @@ export const turnReport = ({ base, verdicts, judged }) => {
     return { out, notes, code: 1 };
 };
 
+const note = (line) => process.stderr.write(`verify-turn: ${line}\n`);
+
 // Why no base could be named.
 const noBase = (baseArg) =>
     baseArg === undefined
@@ -165,13 +168,42 @@ export const indexWithNewFiles = (root, dir) => {
     return added.status === 0 ? copy : undefined;
 };
 
-// Every check once on the tree as it stands, new files included (indexWithNewFiles), or undefined when they did not
-// answer.
-const verdictsNow = (root) => {
+/**
+ * The files the change moved, as a map from where the tree has each now to where `base` had it: git's own rename
+ * detection over the tree as it stands, through the index that lists the new files (`env`, indexWithNewFiles), since a
+ * file moved and not yet added shows as a deletion and an untracked file otherwise. Empty when git cannot answer, which
+ * charges the change with a moved file's findings, the safe direction to be wrong in.
+ */
+export const renamesSince = (root, base, env = process.env) => {
+    const listed = spawnSync("git", ["diff", "-M", "--name-status", "-z", base], { cwd: root, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024 });
+    const renames = new Map();
+    if (listed.status !== 0) {
+        return renames;
+    }
+    const fields = listed.stdout.split("\0");
+    // `R100 <from> <to>`, every other status carries one path.
+    for (let index = 0; index < fields.length; index += 1) {
+        if (/^[RC]/.test(fields[index] ?? "")) {
+            if (fields[index].startsWith("R")) {
+                renames.set(fields[index + 2], fields[index + 1]);
+            }
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    return renames;
+};
+
+// Every check once on the tree as it stands, new files included (indexWithNewFiles), with the files the change moved;
+// undefined when the checks did not answer.
+const verdictsNow = (root, base) => {
     const scratch = mkdtempSync(join(tmpdir(), "verify-turn-"));
     try {
         const index = indexWithNewFiles(root, scratch);
-        return checkVerdicts(root, undefined, index === undefined ? process.env : { ...process.env, GIT_INDEX_FILE: index });
+        const env = index === undefined ? process.env : { ...process.env, GIT_INDEX_FILE: index };
+        const verdicts = checkVerdicts(root, undefined, env);
+        return verdicts === undefined ? undefined : { verdicts, renames: renamesSince(root, base, env) };
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }
@@ -179,32 +211,31 @@ const verdictsNow = (root) => {
 
 // What the change is charged with, from every check's verdict on the tree as it stands: only a check that did not pass
 // is asked again, at the base. Undefined when the base could not be asked.
-const judgeTree = async (root, base, verdicts) => {
+const judgeTree = async (root, base, verdicts, renames) => {
     const failing = verdicts.filter((verdict) => verdict.measured && !verdict.ok);
     const known = failing.length === 0 ? undefined : await checksAt(root, base);
     const asked = failing.filter(({ id }) => known === undefined || known.has(id)).map(({ id }) => id);
     // No check failed, or only checks the base never had: there is nothing to ask the base, and nothing it could miss.
     const before = asked.length === 0 ? new Map() : reportsAt(root, base, asked);
-    return before === undefined ? undefined : sortJudged(root, base, judgeAgainstBase(failing, before, root));
+    return before === undefined ? undefined : sortJudged(root, base, judgeAgainstBase(failing, before, root, renames));
 };
 
-const run = async () => {
-    const root = repoRoot(import.meta.url);
-    const args = process.argv.slice(2);
+// `root` and `args` are the checkout and the command line's arguments; exported so the whole run can be exercised in a
+// checkout of a test's own. Throws only for a fault of its own, which `runGuarded` answers.
+export const run = async (root, args) => {
     const baseArg = args.includes("--base") ? (args[args.indexOf("--base") + 1] ?? "") : undefined;
-    const note = (line) => process.stderr.write(`verify-turn: ${line}\n`);
     const base = baseOf(root, baseArg);
     const why = base === undefined ? noBase(baseArg) : unjudged(root, base);
     if (why !== undefined) {
         note(why);
         return 0;
     }
-    const verdicts = verdictsNow(root);
-    if (verdicts === undefined) {
+    const now = verdictsNow(root, base);
+    if (now === undefined) {
         note("the checks did not answer (node _tools/checks/run.mjs --json), so nothing is judged");
         return 0;
     }
-    const { out, notes, code } = turnReport({ base, verdicts, judged: await judgeTree(root, base, verdicts) });
+    const { out, notes, code } = turnReport({ base, verdicts: now.verdicts, judged: await judgeTree(root, base, now.verdicts, now.renames) });
     for (const line of notes) {
         note(line);
     }
@@ -214,7 +245,21 @@ const run = async () => {
     return code;
 };
 
+/**
+ * `run`, with a fault of the run's own (a full disk, a git that cannot be started) said on stderr and exit 0: a run that
+ * could not look is no finding about the change, and exit 1 is the one answer that says there is one. An uncaught throw
+ * would exit 1 with a stack trace the model is told to fix.
+ */
+export const runGuarded = async (root, args) => {
+    try {
+        return await run(root, args);
+    } catch (error) {
+        note(`could not judge the change (${error instanceof Error ? error.message : String(error)}), so nothing is judged`);
+        return 0;
+    }
+};
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     // `exitCode`, not `exit`: stdout into a pipe drains after the write, and exiting at once could cut the list short.
-    process.exitCode = await run();
+    process.exitCode = await runGuarded(repoRoot(import.meta.url), process.argv.slice(2));
 }

@@ -10,6 +10,7 @@ import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
+import { identityOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
@@ -214,6 +215,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
     [
+        identityOffWorkspaceStep,
         automationsRelocationStep,
         pre1308ImportStep,
         conversationsSchemaStep,

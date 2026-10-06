@@ -87,11 +87,11 @@ describe("xInputOver", () => {
         const lines = driven((input) => input.type("hello\nkey ctrl+w\nworld"));
 
         expect(lines).toEqual([
-            "type --clearmodifiers -- hello\n",
+            "type --clearmodifiers -- 'hello'\n",
             "key --clearmodifiers Return\n",
-            "type --clearmodifiers -- key ctrl+w\n",
+            "type --clearmodifiers -- 'key ctrl+w'\n",
             "key --clearmodifiers Return\n",
-            "type --clearmodifiers -- world\n",
+            "type --clearmodifiers -- 'world'\n",
         ]);
         expect(lines).not.toContain("key ctrl+w\n");
     });
@@ -103,6 +103,30 @@ describe("xInputOver", () => {
 
     // `--` ends the option list, so a password that begins with a dash is typed rather than parsed as a flag.
     test("text that looks like an option is still text", () => {
-        expect(driven((input) => input.type("--window 1"))).toEqual(["type --clearmodifiers -- --window 1\n"]);
+        expect(driven((input) => input.type("--window 1"))).toEqual(["type --clearmodifiers -- '--window 1'\n"]);
+    });
+
+    // `xdotool -` splits a line into words and joins a `type`'s words with nothing between them, so unquoted text lost its
+    // spaces; it also reads a word that begins with `$` as the name of an environment variable, and quits when there is
+    // none. Measured on xdotool 3.20160805 (xev recording what each line typed): inside single quotes a word is
+    // literal, a quote is a word of its own in double quotes, and a `$` that cannot begin a word is a key press.
+    test("text with spaces reaches xdotool as one quoted word, so no space is lost", () => {
+        expect(driven((input) => input.type("hello  world\tend"))).toEqual(["type --clearmodifiers -- 'hello  world\tend'\n"]);
+    });
+
+    test("a dollar sign is pressed as a key, never left where xdotool would read an environment variable", () => {
+        expect(driven((input) => input.type("cost $5 or $HOME"))).toEqual([
+            "type --clearmodifiers -- 'cost '\n",
+            "key --clearmodifiers dollar\n",
+            "type --clearmodifiers -- '5 or '\n",
+            "key --clearmodifiers dollar\n",
+            "type --clearmodifiers -- 'HOME'\n",
+        ]);
+        expect(driven((input) => input.type("$"))).toEqual(["key --clearmodifiers dollar\n"]);
+    });
+
+    test("a single quote is its own double-quoted word, since no escape exists inside quotes", () => {
+        expect(driven((input) => input.type("it's"))).toEqual([`type --clearmodifiers -- 'it' "'" 's'\n`]);
+        expect(driven((input) => input.type("'"))).toEqual([`type --clearmodifiers -- "'"\n`]);
     });
 });

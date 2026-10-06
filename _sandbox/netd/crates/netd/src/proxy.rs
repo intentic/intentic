@@ -47,6 +47,8 @@ const PREVIEW_ROUTE_ROOM: usize = 256;
 
 const TERMINAL_UPGRADES: &str = "a terminal opens as a WebSocket";
 
+const ONE_HOST: &str = "a request names one Host";
+
 pub struct Netd {
     link: &'static Link,
     node: Pool<NodeConnector>,
@@ -106,6 +108,16 @@ impl Netd {
         mut request: Request<Incoming>,
     ) -> Response<Body> {
         strip_netd_headers(request.headers_mut());
+        // Two Hosts name two targets, and a hop after this one may read the other (RFC 9112 §3.2).
+        if request
+            .headers()
+            .get_all(header::HOST)
+            .iter()
+            .nth(1)
+            .is_some()
+        {
+            return plain(StatusCode::BAD_REQUEST, ONE_HOST);
+        }
         let host = host_of(&request);
         // Answered before anything waits for Node: it is how a caller tells a busy or restarting Node from a dead box.
         if vitals::serves(request.uri().path()) && self.target(listener, &host) == Target::Node {
@@ -128,7 +140,7 @@ impl Netd {
         let outbound = Request::from_parts(parts, body::incoming(incoming));
         if upgrade {
             return match self.dial(&destination, outbound.uri().clone()).await {
-                Ok(io) => relay::exchange(io, outbound)
+                Ok(io) => relay::exchange(io, in_origin_form(outbound))
                     .await
                     .unwrap_or_else(|error| bad_gateway(&error.to_string())),
                 Err(error) => bad_gateway(&error.to_string()),
@@ -401,13 +413,14 @@ fn strip_netd_headers(headers: &mut HeaderMap) {
     }
 }
 
-// Rewrites a request for its destination: an h1 request to that address, Host present, hop-by-hop headers gone.
+// Rewrites a request for its destination: an h1 request to that address, Host present, hop-by-hop headers gone. A
+// target naming its authority (h2's `:authority`, an h1 absolute form) was routed by it, so it is the Host sent on,
+// whatever Host the request came with (RFC 9112 §3.2.2).
 fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool) {
-    if !parts.headers.contains_key(header::HOST)
-        && let Some(authority) = parts
-            .uri
-            .authority()
-            .and_then(|authority| HeaderValue::from_str(authority.as_str()).ok())
+    if let Some(authority) = parts
+        .uri
+        .authority()
+        .and_then(|authority| HeaderValue::from_str(authority.as_str()).ok())
     {
         parts.headers.insert(header::HOST, authority);
     }
@@ -464,6 +477,20 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool) {
         .parse()
         .unwrap_or_else(|_| Uri::from_static("http://node/"));
     parts.version = Version::HTTP_11;
+}
+
+// An upgrade rides a connection of its own, whose h1 client writes the target as given (the pool writes origin form
+// itself). An h1 server expects origin form from anything but a proxy, and a dev server matching the target as a path
+// (`ws` with `path`, Vite's HMR) refused the absolute one (2026-10-06). The address was the dial's, and is spent.
+fn in_origin_form(mut request: Request<Body>) -> Request<Body> {
+    let target = request
+        .uri()
+        .path_and_query()
+        .map_or("/", |path| path.as_str())
+        .parse()
+        .unwrap_or_else(|_| Uri::from_static("/"));
+    *request.uri_mut() = target;
+    request
 }
 
 // An IPv6 literal (a dev server bound to `::1` alone) is bracketed in a URI, or the port reads as part of it.

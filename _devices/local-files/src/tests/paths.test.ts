@@ -31,6 +31,19 @@ describe(`segmentsOf`, () => {
     });
 });
 
+// What NTFS did with such names (2026-10-06): `a.txt:ads` resolved as a writable path into a hidden stream of `a.txt`,
+// `a.txt::$DATA` as `a.txt` itself, and `CON` as a file PowerShell then cannot delete.
+describe(`segmentsOf on Windows`, () => {
+    it(`refuses a name Windows cannot hold, and keeps it on other systems`, () => {
+        for (const path of [`src/a.txt:ads`, `src/a.txt::$DATA`, `CON`, `docs/nul.txt`, `src/a.txt.`, `src/a.txt `, `a|b`, `a?b`, `a*b`, `a<b>`, `q"uote`]) {
+            expect(segmentsOf(path, `win32`)).toBeUndefined();
+            expect(segmentsOf(path, `linux`)).toEqual(path.split(`/`));
+        }
+        expect(segmentsOf(`src/console.ts`, `win32`)).toEqual([`src`, `console.ts`]);
+        expect(segmentsOf(`./docs/a.md`, `win32`)).toEqual([`docs`, `a.md`]);
+    });
+});
+
 describe(`cleanRelPath`, () => {
     it(`is the path the grants and events speak in, the root as empty`, () => {
         expect(cleanRelPath(`/docs/a.md`)).toBe(`docs/a.md`);

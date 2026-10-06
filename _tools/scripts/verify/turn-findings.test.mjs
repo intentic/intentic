@@ -111,3 +111,17 @@ test("with the tree to read, a finding is keyed by the source it anchors to, so 
         rmSync(base, { recursive: true, force: true });
     }
 });
+
+test("a finding that only followed its file to a new path is the same finding, not the turn's", () => {
+    const before = "  - _extensions/old/src/locales/en.json: view.next";
+    const moved = "  - _extensions/new/src/locales/en.json: view.next";
+    const renames = new Map([["_extensions/new/src/locales/en.json", "_extensions/old/src/locales/en.json"]]);
+    const base = atBase([verdict("paths", [before])], true);
+    // Told nothing of the move, it reads as a new finding under a new name.
+    assert.deepEqual(judgeAgainstBase([verdict("paths", [moved])], base)[0].added, [moved]);
+    const [judged] = judgeAgainstBase([verdict("paths", [moved])], base, undefined, renames);
+    assert.deepEqual(judged.added, []);
+    // A second finding in the moved file is still the turn's.
+    const extra = "  - _extensions/new/src/locales/en.json: view.other";
+    assert.deepEqual(judgeAgainstBase([verdict("paths", [moved, extra])], base, undefined, renames)[0].added, [extra]);
+});

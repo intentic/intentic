@@ -111,8 +111,11 @@ export const trashedSlugs = (listing: string): string[] =>
 // - it is stopped, or the engine cannot be asked: "keep", since that is a sandbox not started yet (Docker Desktop after
 //   a reboot), which the keeper starts, and the session resumes by itself;
 // - it no longer exists: ic is asked (`localVerdict`). Listed: "keep", a swap moving it under its name. Trashed:
-//   "pause", with that reason. Gone: "gone", the verdict's own path. ic not answering: the sandbox still answering at
-//   its address with an enrollment this machine holds means it lives elsewhere now, so "ssh"; otherwise "pause".
+//   "pause", with that reason. Gone, or ic not answering: the sandbox still answering at its address with an enrollment
+//   this machine holds means it lives elsewhere now, so "ssh"; answering without one, "pause"; silent and gone in ic,
+//   "gone", the verdict's own path; silent while ic does not answer, "pause". (2026-10-06) ic's "gone" used to be
+//   "gone" even while the sandbox answered: its answer lifted the mark at the hourly recheck and ic set it again a
+//   minute later, for as long as the moved sandbox lived.
 export type ContainerState = "serves" | "stopped" | "missing" | "unknown";
 export type DockerStep = "keep" | "ssh" | "pause-missing" | "pause-trashed" | "gone";
 
@@ -131,7 +134,10 @@ export const dockerStep = (args: {
         case "trashed":
             return "pause-trashed";
         case "gone":
-            return "gone";
+            if (!args.answering) {
+                return "gone";
+            }
+            return args.enrolled ? "ssh" : "pause-missing";
         case "unknown":
             return args.enrolled && args.answering ? "ssh" : "pause-missing";
     }

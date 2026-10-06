@@ -1,4 +1,4 @@
-import { lstat, realpath, writeFile } from "node:fs/promises";
+import { lstat, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import {
@@ -301,9 +301,15 @@ interface Landed {
 }
 
 // What the machine merged, written into /work/<name> as the folder now holds it, under the repository's lock like the
-// land's own writes. A path that is not a plain file inside the folder is left alone and said in the log. Answers how
-// many were written.
-const writeMerged = async (deps: ProjectDeliveryDeps, owed: Landed, merged: ProjectDeliveryResult["merged"]): Promise<number> => {
+// land's own writes. A path that is not a plain file inside the folder is left alone and said in the log, and so is one
+// this copy no longer holds as the land sent it (`sent`, the delivery's `next` by path): the merge is of that land's
+// bytes, and written over a later land's it would undo that land here. Answers how many were written.
+const writeMerged = async (
+    deps: ProjectDeliveryDeps,
+    owed: Landed,
+    merged: ProjectDeliveryResult["merged"],
+    sent: ReadonlyMap<string, string | null>,
+): Promise<number> => {
     if (merged.length === 0) {
         return 0;
     }
@@ -315,7 +321,10 @@ const writeMerged = async (deps: ProjectDeliveryDeps, owed: Landed, merged: Proj
         for (const { path, content } of merged) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- see above
             const target = await safeTarget(realRoot, root, path);
-            if (target === undefined) {
+            const landed = sent.get(path);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+            const holds = target === undefined || landed === undefined || landed === null ? undefined : await readFile(target).catch(undefinedIfMissing);
+            if (target === undefined || holds === undefined || !holds.equals(Buffer.from(landed ?? "", "base64"))) {
                 deps.logger.warn(
                     { agentId: owed.agentId, project: owed.project, path },
                     "project delivery: a merged file was not written into the sandbox's copy",
@@ -585,7 +594,8 @@ export const createProjectDelivery = (
         await book.dequeue(owed);
         // The folder already holds them: a copy here that could not be written is said in the log, and the card still
         // says what the folder did.
-        const written = await writeMerged(deps, owed, result?.merged ?? []).catch((cause: unknown) => {
+        const sent = new Map(built.files.map((file) => [file.path, file.next] as const));
+        const written = await writeMerged(deps, owed, result?.merged ?? [], sent).catch((cause: unknown) => {
             deps.logger.warn(
                 { err: cause, agentId: owed.agentId, project: owed.project },
                 "project delivery: the merged files were not written into the sandbox's copy",

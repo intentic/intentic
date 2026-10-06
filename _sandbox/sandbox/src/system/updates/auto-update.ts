@@ -18,8 +18,9 @@ import type { UpdatePolicyFile } from "./update-policy.js";
 // - It hands the machine exactly what the Update button sends, asking the next boot to pick up any turn the restart cuts
 //   (restart-resume.ts), and writes down that it did, so the version that comes up can say it happened by itself.
 // - A release that changes what developers build on (breaking notes) is never taken unasked. Neither is a version the
-//   owner skipped, one whose pre-flight refused this sandbox's files, nor one a newer release overtook (the swap would
-//   pull the moved tag and download after all).
+//   owner skipped, one whose pre-flight refused this sandbox's files, one the machine tried and went back from (its
+//   outcome: restored or rolled back), nor one a newer release overtook (the swap would pull the moved tag and download
+//   after all).
 // - The wait is kept in memory; a restart for any other reason starts it over, which is what the restart was anyway.
 
 // How often the moment is looked for while an update waits. Turns end at their own pace; a few seconds more cost nothing.
@@ -60,6 +61,10 @@ export interface AutoUpdateOffer {
     readonly preparing: boolean;
     readonly latest: string | undefined;
     readonly skipped: string | undefined;
+    // The version the machine last tried and gave up on (its own outcome: restored, or rolled back by the probation
+    // watch), as it named it. The staged marker survives a swap that is undone, and this process is the restored one,
+    // with none of the last try's memory: without this it would hand the machine the same update again.
+    readonly givenUp: string | undefined;
     // Whether any release in the gap takes something away from developers (release-notes.ts breakingNotes).
     readonly breaking: boolean;
 }
@@ -77,6 +82,10 @@ export const takeableVersion = (offer: AutoUpdateOffer): string | undefined => {
     }
     const version = bare(named);
     if (!isNewer(version, bare(running)) || version === offer.skipped) {
+        return undefined;
+    }
+    // The machine just went back from it: the next try is a person's (the card's Try again), never a restart loop.
+    if (offer.givenUp !== undefined && bare(offer.givenUp) === version) {
         return undefined;
     }
     // Overtaken by a newer release: the swap would pull the moved tag and download it, minutes instead of seconds.

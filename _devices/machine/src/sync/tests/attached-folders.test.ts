@@ -243,6 +243,25 @@ describe("folderRefusal", () => {
         expect(folderRefusal(String.raw`C:\USERS\ADA`, String.raw`C:\Users\ada`, "win32")).toContain("is your whole home folder");
     });
 
+    // A distro's folders as Windows reaches them are refused by the distro's own rules: the Windows home says nothing
+    // of whose homes they are, and a distro's system folders are no less the system's for being reached over a share.
+    it("refuses a WSL distro's homes, a whole home in it, its system folders and its mounted disks, as Windows names them", () => {
+        const home = String.raw`C:\Users\ada`;
+        expect(folderRefusal(String.raw`\\wsl.localhost\archlinux\home`, home, "win32")).toContain("holds everyone's home folders");
+        expect(folderRefusal(String.raw`\\wsl.localhost\archlinux\home\ada`, home, "win32")).toContain("is a whole home folder");
+        expect(folderRefusal(String.raw`\\wsl$\Ubuntu\root`, home, "win32")).toContain("is a whole home folder");
+        expect(folderRefusal(String.raw`\\wsl.localhost\archlinux\etc`, home, "win32")).toContain("belongs to the system");
+        expect(folderRefusal(String.raw`\\WSL.LOCALHOST\archlinux\usr\src`, home, "win32")).toContain("belongs to the system");
+        expect(folderRefusal(String.raw`\\wsl.localhost\archlinux\mnt\c`, home, "win32")).toContain("is a whole disk");
+        expect(folderRefusal(String.raw`\\wsl.localhost\archlinux\home\ada\code\shop`, home, "win32")).toBeUndefined();
+    });
+
+    it("refuses the system's folders on whichever drive they are", () => {
+        expect(folderRefusal(String.raw`D:\Windows`, String.raw`C:\Users\ada`, "win32")).toContain("belongs to the system");
+        expect(folderRefusal(String.raw`e:\program files\app`, String.raw`C:\Users\ada`, "win32")).toContain("belongs to the system");
+        expect(folderRefusal(String.raw`D:\Windowsill`, String.raw`C:\Users\ada`, "win32")).toBeUndefined();
+    });
+
     it("lets a project folder through, in a home or anywhere of the owner's", () => {
         expect(folderRefusal("/home/ada/code/shop", "/home/ada", "linux")).toBeUndefined();
         expect(folderRefusal("/var/home/ada/code/shop", "/var/home/ada", "linux")).toBeUndefined();

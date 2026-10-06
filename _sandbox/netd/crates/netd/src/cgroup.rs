@@ -104,18 +104,39 @@ fn renice_children(node: u32, reniced: &mut HashSet<u32>) {
     }
 }
 
-// Down to WORKLOAD_NICE, never back up: a child spawned at 19 (an agent's build) stays at 19. True once the child sits
-// at or below it, so it is not looked at again.
+// Down to WORKLOAD_NICE, never back up: a child spawned at 19 (an agent's build) stays at 19. True once every thread of
+// the child sits at or below it, so it is not looked at again. Thread by thread, since Linux keeps a niceness per thread:
+// a pid alone lowered only the main thread, and by the first look a Node or a build already runs threads of its own,
+// which stayed at the daemon's priority (2026-10-06). Threads started later inherit their starter's.
 fn lower_to_workload(pid: u32) -> bool {
-    let Some(current) = std::fs::read_to_string(format!("/proc/{pid}/stat"))
-        .ok()
-        .and_then(|stat| nice_of(&stat))
-    else {
+    let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else {
         return false;
     };
-    // SAFETY: setpriority on a pid read from procfs; a pid gone since is an error, retried never.
-    current >= WORKLOAD_NICE
-        || unsafe { libc::setpriority(libc::PRIO_PROCESS, pid, WORKLOAD_NICE) } == 0
+    let mut lowered = true;
+    for task in tasks.flatten() {
+        let Some(tid) = task
+            .file_name()
+            .to_str()
+            .and_then(|tid| tid.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let Some(current) = std::fs::read_to_string(task.path().join("stat"))
+            .ok()
+            .and_then(|stat| nice_of(&stat))
+        else {
+            lowered = false;
+            continue;
+        };
+        // SAFETY: setpriority on a thread id read from procfs; one gone since is an error, and the child is looked at
+        // again next tick.
+        if current < WORKLOAD_NICE
+            && unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, WORKLOAD_NICE) } != 0
+        {
+            lowered = false;
+        }
+    }
+    lowered
 }
 
 /// The niceness in a `/proc/<pid>/stat` line: field 19, counted after the `)` that closes the command name, which may
@@ -154,6 +175,64 @@ mod tests {
             Some(19)
         );
         assert_eq!(nice_of("garbage"), None);
+    }
+
+    // Set on the copy of this test binary `every_thread_of_a_child_is_lowered` starts, which then runs only
+    // `a_threaded_child` below.
+    const THREADED_CHILD: &str = "NETD_TEST_THREADED_CHILD";
+
+    // What that copy is: a process running three threads besides its own, as a Node or a build is by netd's first look.
+    #[test]
+    #[ignore = "the child every_thread_of_a_child_is_lowered starts, and only that"]
+    fn a_threaded_child() {
+        if std::env::var_os(THREADED_CHILD).is_none() {
+            return;
+        }
+        let threads: Vec<_> = (0..3)
+            .map(|_| std::thread::spawn(|| std::thread::sleep(Duration::from_secs(30))))
+            .collect();
+        for thread in threads {
+            let _ = thread.join();
+        }
+    }
+
+    fn nices(pid: u32) -> Vec<i32> {
+        std::fs::read_dir(format!("/proc/{pid}/task"))
+            .unwrap()
+            .flatten()
+            .filter_map(|task| std::fs::read_to_string(task.path().join("stat")).ok())
+            .filter_map(|stat| nice_of(&stat))
+            .collect()
+    }
+
+    #[test]
+    fn every_thread_of_a_child_is_lowered() {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "cgroup::tests::a_threaded_child", "--ignored"])
+            .env(THREADED_CHILD, "1")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        // The harness's own thread for the test, and the test's three.
+        let mut before = nices(pid);
+        for _ in 0..500 {
+            if before.len() >= 5 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            before = nices(pid);
+        }
+        let lowered = lower_to_workload(pid);
+        let after = nices(pid);
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(before.len() >= 5, "the child runs its threads: {before:?}");
+        assert!(lowered);
+        assert!(
+            after.iter().all(|nice| *nice >= WORKLOAD_NICE),
+            "every thread at nice {WORKLOAD_NICE} or above, from {before:?}: {after:?}"
+        );
     }
 
     #[test]

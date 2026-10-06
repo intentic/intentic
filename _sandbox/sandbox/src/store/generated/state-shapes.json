@@ -187,6 +187,24 @@
       "since": "v1.312.0"
     }
   ],
+  "history:identity/control-tokens.json": [
+    {
+      "type": "{ tokens: ({ createdAt: number; createdBy?: string; expiresAt?: number; hash: string; id: string; label: string; lastUsedAt?: number; scope: \"editor\" | \"read\" | \"drive\" | \"land\" })[] }",
+      "since": "unreleased"
+    }
+  ],
+  "history:identity/members.json": [
+    {
+      "type": "{ members: ({ areas?: string[]; email: string; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" })[] }",
+      "since": "unreleased"
+    }
+  ],
+  "history:identity/owner.json": [
+    {
+      "type": "{ email: string }",
+      "since": "unreleased"
+    }
+  ],
   "history:member-audience.json": [
     {
       "type": "{ members: Record<string, \"developer\" | \"maker\"> }",
@@ -749,7 +767,7 @@
   ],
   "workspace:.intentic/local/extension-dev.json": [
     {
-      "type": "Record<string, { conversation?: string; path: string; reloadedAt?: string; setAt: string }>",
+      "type": "Record<string, { conversation?: string; path: string; reloadedAt?: string; setAt: string; setBy?: string }>",
       "since": "unreleased"
     }
   ],

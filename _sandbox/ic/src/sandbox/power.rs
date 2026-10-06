@@ -118,6 +118,14 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
     if power == Power::Restart && resume::ask(&container) {
         println!("intentic: {slug}'s agents pick up the turns this restart cuts once it is back.");
     }
+    /* NOTED BEFORE IT IS MADE: the ledger's moment then falls before the daemon start it causes, which is how the
+    probation watch tells a start made through ic from a crash (probation.rs restarts_seen). A start or restart docker
+    refuses still counts as one tried. */
+    match power {
+        Power::Restart => ledger::note(&slug, ledger::RESTART, by == By::Keeper),
+        Power::Start => ledger::note(&slug, ledger::START, by == By::Keeper),
+        Power::Stop => {}
+    }
     // Every container is tried, and what refused is said after: a tunnel that would not stop must not leave the
     // sandbox itself running.
     let refused: Vec<String> = order(power, &container, sidecar)
@@ -128,11 +136,6 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
         bail!("{}", refused.join("\n       "));
     }
     hold(&slug, power == Power::Stop);
-    match power {
-        Power::Restart => ledger::note(&slug, ledger::RESTART, by == By::Keeper),
-        Power::Start => ledger::note(&slug, ledger::START, by == By::Keeper),
-        Power::Stop => {}
-    }
     let done = match power {
         Power::Start => "started",
         Power::Stop => "stopped",

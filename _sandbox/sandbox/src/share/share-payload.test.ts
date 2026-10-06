@@ -77,6 +77,16 @@ describe("an everything share", () => {
         expect(JSON.stringify(messages)).not.toContain(".intentic/");
     });
 
+    // While the privacy shield is on, a file's name is no more public than its contents: a scan called after its
+    // client would publish the client's name in the page's address for it.
+    it("names every published picture by its place alone when the names may not leave", () => {
+        const { messages, pictures } = shareTranscript(conversation, "everything", { keepNames: false });
+        expect(pictures.map((picture) => picture.published)).toEqual(["files/1.png", "files/2.png"]);
+        expect(messages[0]?.attachments).toEqual(["files/1.png"]);
+        expect(messages[1]?.tools?.[0]?.content?.[1]).toEqual({ type: "image", path: "files/2.png" });
+        expect(JSON.stringify({ messages, published: pictures.map((picture) => picture.published) })).not.toMatch(/screenshot|after/u);
+    });
+
     it("carries and redacts the task checklist in everything mode", () => {
         const withTodos: TranscriptRow[] = [
             {

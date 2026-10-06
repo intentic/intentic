@@ -808,12 +808,25 @@ describe("the gate over installs", () => {
         "poetry install",
         "python3 -m venv .venv && .venv/bin/pip install pillow",
         "source .venv/bin/activate && pip install requests",
+        // Behind a wrapper, an option's value or the manager's own spelling.
+        "bash -c 'npm install left-pad'",
+        "time npm i",
+        "xargs npm install",
+        "yarn",
+        "npm --registry https://registry.example.com i x",
+        "uv add requests",
+        "uv pip install requests",
         // Still found inside the tmux wrapper the Bash hook rewrites to.
         "/usr/local/bin/tmux-run -c 'pnpm install' agent-abc 'nice bash -c pnpm-install' install",
     ])("a project install meets the owner's answer: %s", async (command) => {
         const out = await harness({ judge: always("allow"), installs: installsOf({ mode: "never" }) }).run(command);
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
         expect(reasonOf(out)).toContain("turned agent installs off");
+    });
+
+    test.each(["pnpm add --help", "npm i --dry-run", "yarn --version"])("a command that installs nothing is not met with the owner's answer: %s", async (command) => {
+        const out = await harness({ judge: always("allow"), installs: installsOf({ mode: "never" }) }).run(command);
+        expect(out).toEqual({});
     });
 
     test("an allowed install runs, tells the chat where it writes, and tells the model once", async () => {

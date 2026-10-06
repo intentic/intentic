@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use crate::docker;
 use crate::logfile::Log;
 use crate::record::{self, ChannelRecord, Phase, Swap};
+use crate::sandbox::ledger::{self, Ledger};
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
 use crate::sandbox::recreate::{self, Mode, Preflight};
@@ -163,6 +164,9 @@ pub struct Look {
     pub daemon_started: Option<u64>,
     /// How many times the probation has seen that daemon start again (restarts_seen).
     pub daemon_restarts: u32,
+    /// The owner stopped it on purpose (`ic sandbox stop`, or a stop the fix engine saw made outside ic): the record's
+    /// `held`.
+    pub held: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -181,6 +185,11 @@ pub enum Verdict {
 pub fn judge(look: &Look, swap: &Swap, now: u64, grace_ms: u64) -> Verdict {
     let since = now.saturating_sub(swap.at);
     let late = since >= grace_ms;
+    // Stopped on purpose: there is nothing to judge, and going back would start a sandbox its owner stopped. Judged
+    // again once it runs; a probation that ends meanwhile keeps the version (judge_probation).
+    if look.held && !look.running && !look.restarting {
+        return Verdict::Pending;
+    }
     if let Some(error) = &look.boot_failure {
         return Verdict::Fail(format!("the new version could not start: {error}"));
     }
@@ -293,15 +302,28 @@ fn file_json(container: &str, path: &str) -> Option<Value> {
 }
 
 /// The daemon start this look saw, folded into what the probation already knew: a start the watch has not seen
-/// before, after one it had, is a restart. Pure.
-pub fn restarts_seen(swap: &Swap, started: Option<u64>) -> (Option<u64>, u32) {
+/// before, after one it had, is a restart, unless ic started or restarted the sandbox since the start it had seen
+/// (`by_ic`, the ledger's latest; power.rs notes it BEFORE it acts, so it falls between the two starts it explains and
+/// never explains a later one). A person's restart, or the keeper's, is not a crash. Pure.
+pub fn restarts_seen(swap: &Swap, started: Option<u64>, by_ic: Option<u64>) -> (Option<u64>, u32) {
     match (swap.daemon_start, started) {
         (Some(before), Some(now)) if now != before && now >= swap.at => {
-            (Some(now), swap.daemon_restarts + 1)
+            let explained = by_ic.is_some_and(|at| at > before);
+            (Some(now), swap.daemon_restarts + u32::from(!explained))
         }
         (None, Some(now)) => (Some(now), swap.daemon_restarts),
         (known, _) => (known, swap.daemon_restarts),
     }
+}
+
+/// The latest start or restart made through ic (`ic sandbox start|restart`, by a person or the keeper), off the
+/// sandbox's own ledger (ledger.rs), in the container's clock. None when ic has made none.
+pub fn ic_started_at(ledger: &Ledger) -> Option<u64> {
+    [ledger::RESTART, ledger::START]
+        .iter()
+        .filter_map(|kind| ledger.entries.get(*kind).map(|entry| entry.last))
+        .filter(|at| *at > 0)
+        .max()
 }
 
 /// The error the daemon recorded on /history/boot-failure.json, when it recorded it after `since`. `docker cp` reads
@@ -564,7 +586,12 @@ fn judge_probation(
     }
     let now = now_ms();
     let mut seen = look(&container, swap.at);
-    let (daemon_start, daemon_restarts) = restarts_seen(swap, seen.daemon_started);
+    seen.held = record.held;
+    let (daemon_start, daemon_restarts) = restarts_seen(
+        swap,
+        seen.daemon_started,
+        ic_started_at(&ledger::read(&container)),
+    );
     seen.daemon_restarts = daemon_restarts;
     let tracked = Swap {
         daemon_start,
@@ -935,15 +962,24 @@ mod tests {
         let at = 1_000;
         let first = swap(at, None);
         // The first start the watch sees is the baseline, not a restart.
-        assert_eq!(restarts_seen(&first, Some(at + 10)), (Some(at + 10), 0));
+        assert_eq!(
+            restarts_seen(&first, Some(at + 10), None),
+            (Some(at + 10), 0)
+        );
         let known = Swap {
             daemon_start: Some(at + 10),
             ..first.clone()
         };
-        assert_eq!(restarts_seen(&known, Some(at + 10)), (Some(at + 10), 0));
-        assert_eq!(restarts_seen(&known, Some(at + 50)), (Some(at + 50), 1));
+        assert_eq!(
+            restarts_seen(&known, Some(at + 10), None),
+            (Some(at + 10), 0)
+        );
+        assert_eq!(
+            restarts_seen(&known, Some(at + 50), None),
+            (Some(at + 50), 1)
+        );
         // A marker that cannot be read changes nothing.
-        assert_eq!(restarts_seen(&known, None), (Some(at + 10), 0));
+        assert_eq!(restarts_seen(&known, None, None), (Some(at + 10), 0));
         let looping = Look {
             daemon_restarts: 3,
             ..healthy()
@@ -951,6 +987,88 @@ mod tests {
         assert!(
             matches!(judge(&looping, &first, 2 * MIN, 10 * MIN), Verdict::Fail(reason) if reason.contains("3 restarts"))
         );
+    }
+
+    #[test]
+    fn a_sandbox_stopped_on_purpose_during_its_probation_is_waited_for_not_rolled_back() {
+        // `ic sandbox stop` hours into a probation (2026-10 bug hunt): the watch struck the stopped container every
+        // minute, then went back to the parked version and started it, undoing both the update and the stop.
+        let stopped = Look {
+            running: false,
+            held: true,
+            ..Look::default()
+        };
+        assert_eq!(
+            judge(
+                &stopped,
+                &swap(0, Some("reachable")),
+                5 * 60 * MIN,
+                10 * MIN
+            ),
+            Verdict::Pending
+        );
+        // Not even a boot failure from before the stop sends it back while it stands stopped on purpose.
+        let failed_then_stopped = Look {
+            boot_failure: Some("boom".to_string()),
+            ..stopped.clone()
+        };
+        assert_eq!(
+            judge(&failed_then_stopped, &swap(0, None), 5 * 60 * MIN, 10 * MIN),
+            Verdict::Pending
+        );
+        // A container nobody stopped that is not running is still held against it.
+        let down = Look {
+            held: false,
+            ..stopped
+        };
+        assert!(matches!(
+            judge(&down, &swap(0, None), 5 * 60 * MIN, 10 * MIN),
+            Verdict::Strike(_)
+        ));
+    }
+
+    #[test]
+    fn a_start_or_restart_made_through_ic_is_not_a_crash() {
+        // Three restarts by a person or the keeper (each noted in the ledger before it is made) across a probation
+        // used to read as a daemon crash loop and roll a healthy version back (2026-10 bug hunt).
+        let at = 1_000;
+        let mut tracked = Swap {
+            daemon_start: Some(at + 10),
+            ..swap(at, None)
+        };
+        for (restart, started) in [
+            (at + 100, at + 105),
+            (at + 200, at + 203),
+            (at + 300, at + 310),
+        ] {
+            let (start, restarts) = restarts_seen(&tracked, Some(started), Some(restart));
+            tracked = Swap {
+                daemon_start: start,
+                daemon_restarts: restarts,
+                ..tracked
+            };
+        }
+        assert_eq!(tracked.daemon_restarts, 0);
+        // A start after the last one ic made is the daemon's own, and counts.
+        assert_eq!(
+            restarts_seen(&tracked, Some(at + 400), Some(at + 300)),
+            (Some(at + 400), 1)
+        );
+        // So does one with no ic restart at all.
+        assert_eq!(
+            restarts_seen(&tracked, Some(at + 400), None),
+            (Some(at + 400), 1)
+        );
+    }
+
+    #[test]
+    fn the_latest_start_or_restart_made_through_ic_is_read_off_the_ledger() {
+        let ledger = Ledger::default()
+            .noted(ledger::RESTART, 5_000, true)
+            .noted(ledger::START, 7_000, false)
+            .noted("rollback", 9_000, false);
+        assert_eq!(ic_started_at(&ledger), Some(7_000));
+        assert_eq!(ic_started_at(&Ledger::default()), None);
     }
 
     #[test]

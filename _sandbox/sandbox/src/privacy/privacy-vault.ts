@@ -3,14 +3,15 @@ import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
-import { createKnownMatcher, type KnownMatcher } from "./known-matcher.js";
+import { createKnownMatcher, type KnownMatcher, type Spelling, spellingKey } from "./known-matcher.js";
 import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 
 // Which value each token stands for. One vault per workspace, so a value is the same token in every conversation,
 // subagent and provider switch, and a transcript re-sent on resume masks to exactly the bytes it masked to before. It
 // holds the real values, so it lives with the credentials (mode 0600, off the workspace). Every value in it is matched
-// exactly from then on, wherever it appears: a name the detector found once in context is caught again where the
-// context is missing, and a dataset the owner taught is caught whether or not any detector would have found it.
+// from then on, wherever it appears and in every spelling its kind allows (spellingOf): a name the detector found once
+// in context is caught again where the context is missing, and a dataset the owner taught is caught whether or not any
+// detector would have found it.
 
 const VaultEntrySchema = z.object({
     value: z.string(),
@@ -53,7 +54,7 @@ export interface PrivacyVault {
     readonly commit: () => Promise<void>;
     // The value behind a token, by its label and index; undefined for a token this vault never gave out.
     readonly resolve: (label: string, index: string) => string | undefined;
-    // Every value matched exactly, keyed to its token; rebuilt only when the vault changed.
+    // Every value matched in each spelling it allows, keyed to its token; rebuilt only when the vault changed.
     readonly matcher: () => KnownMatcher<VaultHit>;
     // Bumps whenever a matched value is added or retired, so a cached masking knows to look again.
     readonly generation: () => number;
@@ -69,6 +70,22 @@ export interface PrivacyVault {
 const NON_ASCII = /[^\x00-\x7f]/g;
 const escapedForm = (value: string): string | undefined =>
     value.search(NON_ASCII) === -1 ? undefined : value.replace(NON_ASCII, (unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`);
+
+// A token's number as the vault writes it: no sign, no leading zero, never 0.
+const CANONICAL_INDEX = /^[1-9]\d*$/u;
+
+// How a value of a kind may be re-spelled and still be that value (known-matcher.ts): an e-mail address in any case; a
+// value of several words or with a digit in it (a full name, a document or account number) in any case and with its
+// separators anywhere or nowhere; one plain word only as written, since case is all that tells a name from a word.
+const spellingOf = (value: string, kind: PersonalDataClass): Spelling => {
+    if (kind === "email") {
+        return "case";
+    }
+    return /\p{N}/u.test(value) || (value.match(/[\p{L}\p{N}]+/gu) ?? []).length > 1 ? "folded" : "exact";
+};
+
+// The key a value is known by: the same for every spelling of it, so a re-spelled value keeps the token it has.
+const valueKey = (value: string, kind: PersonalDataClass): string => spellingKey(value, spellingOf(value, kind));
 
 // Below this, an exact match is more likely an ordinary word than the value it came from.
 const MIN_MATCHED = 3;
@@ -100,17 +117,35 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     let loading: Promise<void> | undefined;
     const next = new Map<string, number>();
     const byValue = new Map<string, VaultEntry>();
+    // The folded values again, by their folded key alone: `JanKowalski` is one plain word by its own spelling, and still
+    // the full name the vault knows.
+    const byFolded = new Map<string, VaultEntry>();
     const byToken = new Map<string, VaultEntry>();
     let dirty = false;
     let generation = 0;
     let built: { readonly generation: number; readonly matcher: KnownMatcher<VaultHit> } | undefined;
 
     const keyOfEntry = (entry: VaultEntry): string => tokenKey(TOKEN_LABEL[entry.class], entry.index);
+    // Every entry stays by its token, so every token ever given out resolves; by value, one entry stands for every
+    // spelling of it. Two that a vault written before spellings counted holds apart keep the first, unless it was
+    // forgotten and the other was not.
     const index = (entry: VaultEntry): void => {
-        byValue.set(entry.value, entry);
         byToken.set(keyOfEntry(entry), entry);
+        const stands = (standing: VaultEntry | undefined): boolean =>
+            standing === undefined || keyOfEntry(standing) === keyOfEntry(entry) || (standing.retired === true && entry.retired !== true);
+        const key = valueKey(entry.value, entry.class);
+        if (stands(byValue.get(key))) {
+            byValue.set(key, entry);
+        }
+        const folded = spellingKey(entry.value, "folded");
+        if (spellingOf(entry.value, entry.class) === "folded" && stands(byFolded.get(folded))) {
+            byFolded.set(folded, entry);
+        }
     };
-    const snapshot = () => ({ next: Object.fromEntries(next), entries: [...byValue.values()] });
+    // The entry a value is a spelling of: by its own key, else as a folded spelling of a value the vault knows folded.
+    const knownAs = (value: string, kind: PersonalDataClass): VaultEntry | undefined =>
+        byValue.get(valueKey(value, kind)) ?? (kind === "email" ? undefined : byFolded.get(spellingKey(value, "folded")));
+    const snapshot = () => ({ next: Object.fromEntries(next), entries: [...byToken.values()] });
     const allocate = (value: string, kind: PersonalDataClass, extra: Partial<VaultEntry> = {}): VaultEntry => {
         const label = TOKEN_LABEL[kind];
         const nextIndex = next.get(label) ?? 1;
@@ -164,7 +199,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         load,
         tokenFor: (value, kind) => {
             loaded();
-            const existing = byValue.get(value);
+            const existing = knownAs(value, kind);
             if (existing !== undefined) {
                 if (existing.retired === true) {
                     // Found again by a detector after being forgotten: matched again, under the token it already had.
@@ -180,7 +215,8 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             return tokenOf(TOKEN_LABEL[entry.class], entry.index);
         },
         commit,
-        resolve: (label, tokenIndex) => byToken.get(tokenKey(label, Number(tokenIndex)))?.value,
+        // Only as the vault writes a number: `PERSON_01` is a token nobody gave out, not another spelling of `PERSON_1`.
+        resolve: (label, tokenIndex) => (CANONICAL_INDEX.test(tokenIndex) ? byToken.get(tokenKey(label, Number(tokenIndex)))?.value : undefined),
         generation: () => generation,
         matcher: () => {
             loaded();
@@ -191,12 +227,13 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 .filter((entry) => entry.retired !== true && entry.value.length >= MIN_MATCHED)
                 .flatMap((entry) => {
                     const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index) };
+                    const spelling = spellingOf(entry.value, entry.class);
                     const escaped = escapedForm(entry.value);
                     return escaped === undefined
-                        ? [{ value: entry.value, payload: hit }]
+                        ? [{ value: entry.value, payload: hit, spelling }]
                         : [
-                              { value: entry.value, payload: hit },
-                              { value: escaped, payload: hit },
+                              { value: entry.value, payload: hit, spelling },
+                              { value: escaped, payload: hit, spelling },
                           ];
                 });
             built = { generation, matcher: createKnownMatcher(values) };
@@ -211,7 +248,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 if (trimmed.length < MIN_MATCHED) {
                     continue;
                 }
-                const existing = byValue.get(trimmed);
+                const existing = knownAs(trimmed, kind);
                 if (existing === undefined) {
                     allocate(trimmed, kind, { source, at });
                     added += 1;
@@ -223,12 +260,12 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 }
             }
             await commit();
-            return { added, known: [...byValue.values()].filter((entry) => entry.source !== undefined && entry.retired !== true).length };
+            return { added, known: [...byToken.values()].filter((entry) => entry.source !== undefined && entry.retired !== true).length };
         },
         forget: async (source) => {
             await load();
             let forgotten = 0;
-            for (const entry of byValue.values()) {
+            for (const entry of byToken.values()) {
                 if (entry.source === source && entry.retired !== true) {
                     index({ ...entry, retired: true });
                     forgotten += 1;
@@ -244,7 +281,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         sources: async () => {
             await load();
             const bySource = new Map<string, { count: number; at: string }>();
-            for (const entry of byValue.values()) {
+            for (const entry of byToken.values()) {
                 if (entry.source === undefined || entry.retired === true) {
                     continue;
                 }
@@ -255,7 +292,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         },
         counts: async () => {
             await load();
-            const entries = [...byValue.values()];
+            const entries = [...byToken.values()];
             return { tokens: entries.length, known: entries.filter((entry) => entry.source !== undefined && entry.retired !== true).length };
         },
     };

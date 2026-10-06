@@ -453,19 +453,25 @@ const startAndWait = async (config: Config, machine: HostedGateMachine, options:
     return awaitDaemon(config, machine, baseline, checkedIn);
 };
 
+// The version a target that did not come up goes back to: the last good one, unless that is the target itself (the
+// owner going back to the version before an image on trial), when it is the image the machine held. Putting the
+// version that just failed back would leave the machine on it, and the row would forget the one it came from.
+const wayBackFrom = (versions: Versions, targetImage: string): Version => (versions.lastGood.image === targetImage ? versions.held : versions.lastGood);
+
 /* THE MACHINE HOLDS `target` AND IS TO RUN IT: started, its daemon waited for, the row told what came of it. A version
- * that does not come up goes back to the last good one; a wait someone stopped leaves it on trial. */
+ * that does not come up goes back to the last good one (wayBackFrom); a wait someone stopped leaves it on trial. */
 const runAndJudge = async (config: Config, change: HostedChange, versions: Versions, moved: boolean, options: HostedSwitchOptions): Promise<void> => {
     const words = options.words ?? UPDATE_WORDS;
     const { targetImage } = change;
+    const back = wayBackFrom(versions, targetImage);
     let verdict: DaemonVerdict;
     try {
         verdict = await startAndWait(config, change.machine, options);
     } catch (error) {
-        return rollBack(config, change, versions.lastGood, `${words.target} did not start`, error instanceof Error ? error : new Error(String(error)), options);
+        return rollBack(config, change, back, `${words.target} did not start`, error instanceof Error ? error : new Error(String(error)), options);
     }
     if (verdict.kind === `down`) {
-        return rollBack(config, change, versions.lastGood, `${words.target} did not come up`, new Error(verdict.reason), options);
+        return rollBack(config, change, back, `${words.target} did not come up`, new Error(verdict.reason), options);
     }
     if (verdict.kind === `interrupted`) {
         options.logger?.warn(

@@ -9,6 +9,7 @@ import {
     HELD_UNKNOWN,
     ignoreExpression,
     ignoreMatcher,
+    isPortablePath,
     type Listed,
     parseListing,
     type ProjectChange,
@@ -83,6 +84,20 @@ describe("the project ignore list, as Mutagen reads it", () => {
     it("refuses a pattern it cannot match exactly rather than approximating it", () => {
         for (const pattern of ["!keep", "src/*.log", "build/", "a?", "[ab]", "**", "/", "**/build", "**/a/*", "**/a/../b", "a/b"]) {
             expect(() => ignoreExpression(pattern)).toThrow("is not one this agent can match exactly");
+        }
+    });
+});
+
+// What NTFS did with names a Linux sandbox holds (2026-10-06): `notes:extra` failed and left an empty `.notes` behind,
+// `nul` was made and then refused by PowerShell's own delete, `a|b` and `q"uote` could not be made at all.
+describe("isPortablePath", () => {
+    it("refuses on Windows a name Windows cannot hold, whatever its case, and keeps it everywhere else", () => {
+        for (const path of ["notes:extra", "logs/2026-10-06T12:00:00.log", "nul", "src/CON", "aux.ts", "com1.txt", "LPT9", "trail.", "space ", "a|b", 'q"uote', "a<b", "a>b", "a?b", "a*b", "tab\tname"]) {
+            expect(isPortablePath(path, "win32")).toBe(false);
+            expect(isPortablePath(path, "linux")).toBe(true);
+        }
+        for (const path of ["README.md", "src/console.ts", "nullable.ts", "com10.txt", ".env", "a.b.c", "notes/..hidden"]) {
+            expect(isPortablePath(path, "win32")).toBe(true);
         }
     });
 });

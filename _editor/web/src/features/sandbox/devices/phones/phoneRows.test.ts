@@ -38,3 +38,10 @@ test(`the person's pause wins over everything, and a phone never seen says how t
     expect(phoneRowOf(phone({ online: true, lastSeen: 1, facts: facts(true) }))).toMatchObject({ state: `paused`, tone: `warning` });
     expect(phoneRowOf(phone({ wake: `none` }))).toMatchObject({ state: `never paired`, detail: `scan its code from Capabilities` });
 });
+
+test(`a phone the sandbox holds a pairing for is not "never paired" just because it has not connected since a restart`, () => {
+    // The hub remembers nothing across a restart: no lastSeen, no facts, but the enrollment is on disk.
+    expect(phoneRowOf(phone({ paired: true, wake: `ready` }))).toMatchObject({ state: `asleep`, tone: `neutral`, detail: `` });
+    expect(phoneRowOf(phone({ paired: true, wake: `none` }))).toMatchObject({ state: `unreachable`, tone: `warning` });
+    expect(phoneRowOf(phone({ paired: false, wake: `none` }))).toMatchObject({ state: `never paired` });
+});

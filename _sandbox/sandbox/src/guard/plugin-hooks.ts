@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type FrontmatterHooks, frontmatterHooks, undefinedIfCliSeesNothing } from "./frontmatter-hooks.js";
 
@@ -43,8 +43,8 @@ const MANIFEST = join(".claude-plugin", "plugin.json");
 // The suffixes a hooks module and every file it imports are named with; a file named otherwise is never loaded.
 const MODULE_FILE = /\.(?:ts|tsx|jsx|js|mjs|cjs|mts|cts)$/u;
 // Never loaded as plugin code: Claude Code writes the types folder itself as it loads a module, which would otherwise
-// unsettle the approval on every first load.
-const NOT_CODE = new Set([".git", "node_modules"]);
+// unsettle the approval on every first load. Nothing else is skipped: a module can import from `node_modules`, or from
+// `.git`, as well as from any other folder, and an unpinned folder is where an edit after the approval would hide.
 const TYPES_DIR = join(".claude-plugin", "types");
 
 // The hooks files a manifest names besides hooks/hooks.json: one path or a list, relative to the plugin.
@@ -54,20 +54,27 @@ const namedHookFiles = (manifest: unknown, dir: string): string[] => {
     return paths.map((path) => join(dir, path));
 };
 
-// Every module-named file under the plugin, as the namespace names it; a symlinked folder is not followed, so a link
-// back up cannot loop the walk.
-const codeFiles = async (dir: string, readable: (path: string) => string, rel = ""): Promise<string[]> => {
-    const entries = (await readdir(readable(join(dir, rel)), { withFileTypes: true }).catch(undefinedIfCliSeesNothing)) ?? [];
+// Every module-named file under the plugin, as the namespace names it. A symlinked folder is followed, since the CLI
+// resolves an import through it and its code is the module's code; one that leads back to a folder already on the way
+// down is not, so a link back up cannot loop the walk.
+const codeFiles = async (dir: string, readable: (path: string) => string, rel = "", chain: readonly string[] = []): Promise<string[]> => {
+    const here = readable(join(dir, rel));
+    const real = await realpath(here).catch(undefinedIfCliSeesNothing);
+    if (real === undefined || chain.includes(real)) {
+        return [];
+    }
+    const entries = (await readdir(here, { withFileTypes: true }).catch(undefinedIfCliSeesNothing)) ?? [];
     const found = await Promise.all(
         entries.map(async (entry): Promise<string[]> => {
             const path = join(rel, entry.name);
-            if (NOT_CODE.has(entry.name) || path === TYPES_DIR) {
+            if (path === TYPES_DIR) {
                 return [];
             }
-            if (entry.isDirectory()) {
-                return codeFiles(dir, readable, path);
+            const linked = entry.isSymbolicLink() ? await stat(readable(join(dir, path))).catch(undefinedIfCliSeesNothing) : undefined;
+            if (entry.isDirectory() || linked?.isDirectory() === true) {
+                return codeFiles(dir, readable, path, [...chain, real]);
             }
-            const isFile = entry.isFile() || (entry.isSymbolicLink() && (await stat(readable(join(dir, path))).catch(undefinedIfCliSeesNothing))?.isFile() === true);
+            const isFile = entry.isFile() || linked?.isFile() === true;
             return isFile && MODULE_FILE.test(entry.name) ? [join(dir, path)] : [];
         }),
     );

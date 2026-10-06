@@ -165,6 +165,26 @@ it("pays only after the click, and receipts the endpoint's own settlement", asyn
     expect(awaited).toEqual([{ conversationId: "conv-1", kind: "payment_offer" }]);
 });
 
+// The wallet that pays is the owner's, so the card that releases a payment is the owner's to answer: another member's
+// click is refused and leaves the card waiting, as a stranger's would on any card addressed to a person.
+it("takes a payment's approval from the owner alone, leaving the card up for anyone else's click", async () => {
+    const { deps, frames, signed } = fake({ ownerEmail: async () => "ada@example.com" });
+    const pending = gatedPaidFetch(deps, asked());
+    while (frames.length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    const { requestId } = frames[0] as Extract<AgentEvent, { kind: "payment_offer" }>;
+    const approve = { kind: "payment_offer", requestId, approve: true } as const;
+    for (const role of ["maintainer", "collaborator"] as const) {
+        expect(cards.resolve(approve, { email: `${role}@example.com`, role })).toEqual({ refused: "Only the owner (ada@example.com) can approve a payment from this sandbox's wallet." });
+    }
+    expect(cards.resolve(approve)).toEqual({ refused: expect.stringContaining("Only the owner") });
+    expect(signed).toEqual([]);
+    expect(cards.resolve(approve, { email: "ADA@example.com", role: "owner" })).toBe("settled");
+    expect((await pending).status).toBe(200);
+    expect(signed).toHaveLength(1);
+});
+
 it("a skip signs nothing and tells the agent to continue without it", async () => {
     const { deps, frames, signed, ledger } = fake();
     const pending = gatedPaidFetch(deps, asked());

@@ -85,8 +85,9 @@ flowchart LR
   - (2026-10-05) The transport is no longer decided once: the container is asked after on every prepare and every
     minute (`checkContainers` in [`sync/gone-watch.ts`](src/sync/gone-watch.ts)). A stopped container, or an engine that
     does not answer, changes nothing. A container the engine no longer holds is looked up in ic: still listed (a swap
-    moving it) changes nothing; in ic's trash pauses the folder's sync with that reason; in neither is the sandbox gone
-    (below). When ic cannot say and the sandbox still answers at its address, the pairing moves onto ssh; otherwise its
+    moving it) changes nothing; in ic's trash pauses the folder's sync with that reason. When the sandbox still answers
+    at its address, whether ic holds it nowhere or cannot say, it lives elsewhere now and the pairing moves onto ssh
+    (paused instead without an enrollment to ride); in neither and silent, the sandbox is gone (below); otherwise its
     sync is paused until the container is back.
 
   (2026-10-01) Measured on Docker Desktop from Windows and from WSL: a session was up in 2–4 s, against up to 90 s
@@ -349,8 +350,10 @@ object, `{ "ok": false, "error": "<sentence>" }` and exit code 1 on failure, as 
 - It refuses:
   - a name `isProjectDirName` refuses (the sandbox's reserved names included);
   - a folder that is not there;
-  - a whole disk, the home folder or one holding it, `/var/home` or a whole home in it, and the system's folders, as
-    the desktop app does ([`folderRefusal`](src/sync/folders.ts));
+  - a whole disk, the home folder or one holding it, `/var/home` or a whole home in it, and the system's folders (on
+    Windows, on whichever drive), as the desktop app does ([`folderRefusal`](src/sync/folders.ts)). (2026-10-06) A WSL
+    distro's folder named from Windows (`\\wsl.localhost\<distro>\…`, `\\wsl$\…`) is held to the distro's rules: its
+    `/home`, a whole home in it, `/root`, a mounted disk (`/mnt/c`) and its system's folders;
   - a folder that is, holds or sits inside any other pairing's, this environment's or (2026-10-05) another environment
     of this PC's ([`sync/siblings.ts`](src/sync/siblings.ts), as `setup` does);
   - a name already attached for another folder.
@@ -419,7 +422,14 @@ appended to the audit file like every call.
     merged by `git merge-file`, and `merged` with the content when that is clean. A clash is `edited`, and so is
     anything not text, a file the owner deleted, a deletion of a file the owner changed, and a file the owner made
     where the land adds one. No `git` on PATH is `missing-git`;
-  - a link or a non-file on the way is `link`; a non-portable path, or one into any `.git` folder, is `outside`.
+  - a link or a non-file on the way is `link`; a non-portable path, or one into any `.git` folder, is `outside`. On
+    Windows a name Windows cannot hold (`<>:"|?*`, a trailing dot or space, a device name such as `NUL` or `COM1.txt`)
+    is not portable either, and is refused before anything is made for it (2026-10-06: `notes:extra` used to leave an
+    empty `.notes` behind and read as `edited`);
+  - (2026-10-06) a case-only rename (`Readme.md` deleted, `README.md` added) on a disk that holds both spellings as one
+    file (the two lstat to one file) is not a deletion: the addition is planned as a change of the old spelling's
+    content, and the file takes the new spelling once it holds what landed. The old spelling answers as its new one
+    did, `already` or the same conflict.
 - **The restore point** is taken before the first write, with the bring-back's own primitives and shape, and cut to what
   was written, so `sync restore --point <id>` undoes a delivery unchanged. None when nothing is written. A file that
   moved between the plan and its write is the owner's, and is reported `edited` instead. A new file gets the landed
@@ -446,8 +456,11 @@ Two witnesses can say a sandbox is gone ([`sync/gone.ts`](src/sync/gone.ts)); ab
 - **This machine's ic**, only for a sandbox kept here: one its pairing reaches through Docker, or one ic has listed here
   before (the slug is recorded as `icSlug` the first time `ic sandbox list --json` names it; a sandbox whose daemon
   answered on loopback is asked about). It is gone when ic answered its listing and its trash (`ic sandbox list`'s
-  "removed, still recoverable" lines) and neither holds it. Asked every ten minutes, and only on a machine that keeps
-  one of its pairings' sandboxes. An ic that does not answer (Docker Desktop not started yet) concludes nothing.
+  "removed, still recoverable" lines) and neither holds it, while the sandbox's own poll does not answer either. Asked
+  every ten minutes, and only on a machine that keeps one of its pairings' sandboxes. An ic that does not answer (Docker
+  Desktop not started yet) concludes nothing. (2026-10-06) A sandbox that still answers at its address lives on another
+  computer now, whatever ic here says: marked gone on ic's word alone, its answer unmarked it at the hourly recheck and
+  ic marked it again minutes later, for good.
 
 What follows is the same for both ([`sync/gone-watch.ts`](src/sync/gone-watch.ts)):
 
@@ -605,7 +618,9 @@ clock.
   30 at most, and the wait ends when its link comes back. One ic found healthy or fixed while its link stays down is
   asked about again after five minutes, not every ten seconds. The sweep's own cadence stretches on the same ladder
   (never under five minutes) while a sweep leaves something. An ic that cannot fix (one from before `sandbox fix`,
-  which clap refuses with no JSON, or no ic at all) is said once and asked again on the same ladder.
+  which clap refuses with no JSON, or no ic at all) is said once and asked again on the same ladder. A run that found
+  no sandbox at all prints the machine's own report under `"slug": null` and exits 1: that is a fix that ran, not an ic
+  that cannot fix (2026-10-06: read as one, it held every round back), and what it left on the machine is said once.
 
   (2026-10-05) A "fixed" no longer always clears the ladder: the first one after two or more failures within the hour
   keeps it (the next look waits that rung, never under five minutes, and the next failure goes a rung higher), so a
@@ -685,7 +700,10 @@ Every supervisor of this agent restarts it when it exits, and none can tell a hu
 ([`watchdog.ts`](src/watchdog.ts), 2026-10-05). So the agent watches its own event loop from a Worker thread, which has
 a loop of its own: the main loop pings it every five seconds, and after three minutes without a ping the Worker writes
 `event loop stalled for N s; exiting so the supervisor restarts the agent` to the log (straight to fd 2, where every
-supervisor sends it) and kills the process with SIGKILL. That is an unclean exit to every supervisor: systemd's
+supervisor sends it) and kills the process with SIGKILL. Checks of its own held apart by far more than their
+interval (three of them and at least three seconds, at most half the limit) mean the whole process was paused, by a
+sleep, a suspended VM or a clock stepped forward, and start the count again (2026-10-06: the first check after a
+laptop's sleep found the last ping minutes old and killed a healthy agent). That is an unclean exit to every supervisor: systemd's
 `Restart=on-failure` and launchd's `KeepAlive` restart it, on Windows TerminateProcess leaves exit code 1, which the
 launcher passes to the logon task, and the Windows side restarts a distro's agent that stopped. The Worker is made from
 source text, so the compiled binary needs no second file; both it and the SIGKILL were checked under

@@ -69,6 +69,7 @@ const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: r
             turnToolsOf(deps, granted, {
                 conversationId: input.conversationId,
                 anonymousBrowser: persona.powers.browser,
+                shell: persona.powers.shell,
                 extensions: persona.powers.extensions,
             }),
         ),

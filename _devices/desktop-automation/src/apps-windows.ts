@@ -1,4 +1,5 @@
 import { focusRefusal, parseSessionJson, parseWindowsJson } from "./parse.js";
+import { psText } from "./powershell.js";
 import { run } from "./run.js";
 import { DesktopError, type SessionState, type WindowInfo } from "./types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
@@ -136,6 +137,11 @@ export const windowsSession = async (): Promise<SessionState> => {
     return state;
 };
 
+export const launchScript = (target: string): string => `Start-Process -FilePath ${psText(target)};`;
+
+// Text travels as base64 (powershell.ts), which avoids a temp file and has no quote to get out of.
+export const clipboardScript = (text: string): string => `Set-Clipboard -Value ${psText(text)};`;
+
 export const windowsApps = {
     windows: async (): Promise<WindowInfo[]> => parseWindowsJson((await powershell(LIST)).trim()),
 
@@ -189,14 +195,13 @@ export const windowsApps = {
 
     // Start-Process resolves an executable, document, or URL through the shell's own file associations.
     launch: async (target: string): Promise<void> => {
-        await powershell(`Start-Process -FilePath ${JSON.stringify(target)};`);
+        await powershell(launchScript(target));
     },
 
     // -Raw returns a multi-line clipboard as one string instead of an array of lines.
     readClipboard: async (): Promise<string> => await powershell("Get-Clipboard -Raw;"),
 
     writeClipboard: async (text: string): Promise<void> => {
-        // A quoted literal avoids a temp file; single quotes are doubled, PowerShell's own escape.
-        await powershell(`Set-Clipboard -Value '${text.replace(/'/g, "''")}';`);
+        await powershell(clipboardScript(text));
     },
 };

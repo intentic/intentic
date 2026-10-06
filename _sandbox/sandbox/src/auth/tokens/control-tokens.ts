@@ -4,7 +4,6 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
-import { stateRelPath } from "../../state-paths.js";
 import { tokenEquals } from "../auth.js";
 import { routeFloor } from "../role-floor.js";
 
@@ -34,7 +33,9 @@ const StoredTokensSchema = z.object({ tokens: z.array(StoredTokenSchema) });
 type StoredToken = z.infer<typeof StoredTokenSchema>;
 type StoredTokens = z.infer<typeof StoredTokensSchema>;
 
-export const controlTokensDocument = defineDocument({ path: stateRelPath(".intentic/identity/control-tokens.json"), schema: StoredTokensSchema });
+// On the history volume beside the roster: a token file in the workspace let a turn plant a token of its own. Until
+// 2026-10-06 it sat at `.intentic/identity/control-tokens.json`.
+export const controlTokensDocument = defineDocument({ root: "history", path: "identity/control-tokens.json", schema: StoredTokensSchema });
 
 export type ControlTokenSummary = Omit<StoredToken, "hash">;
 
@@ -43,6 +44,8 @@ export interface ResolvedControlToken {
     readonly id: string;
     readonly label: string;
     readonly scope: ControlScope;
+    // Whose authority it carries, when a signed-in person minted it.
+    readonly createdBy?: string;
 }
 
 export interface MintOptions {
@@ -99,7 +102,9 @@ export const fileControlTokens = (path: string): ControlTokens => {
             const hash = sha256Hex(presented);
             // Comparing fixed-length hex digests keeps the comparison timing-safe regardless of input length.
             const entry = (await file.read()).tokens.find((candidate) => tokenEquals(candidate.hash, hash));
-            return entry === undefined || !live(entry, now) ? undefined : { id: entry.id, label: entry.label, scope: entry.scope };
+            return entry === undefined || !live(entry, now)
+                ? undefined
+                : { id: entry.id, label: entry.label, scope: entry.scope, ...(entry.createdBy !== undefined ? { createdBy: entry.createdBy } : {}) };
         },
         touch: async (id, now = Date.now()) => {
             await file.update((stored) => {
@@ -125,6 +130,21 @@ export const fileControlTokens = (path: string): ControlTokens => {
         },
     };
 };
+
+// A token is the authority of whoever minted it, held by a program: it answers only while that person still holds the
+// operating tier, so removing a maintainer, or re-grading them below it, ends their tokens as it ends their sign-in. A
+// token no person minted (a loopback daemon's) answers as before. `operates` is asked per resolve, like the roster.
+export const minterBound = (tokens: ControlTokens, operates: (email: string) => Promise<boolean>): ControlTokens => ({
+    ...tokens,
+    resolve: async (presented, now) => {
+        const token = await tokens.resolve(presented, now);
+        if (token?.createdBy === undefined) {
+            return token;
+        }
+        // An unreadable roster or owner file answers no: a token is never honoured on a standing nobody could check.
+        return (await operates(token.createdBy).catch(() => false)) ? token : undefined;
+    },
+});
 
 // What each scope reaches, derived from each route's floor rather than kept as a second list: `read` sees what a viewer
 // sees, `drive` does what a collaborator does, `land` adds the one irreversible press. A route's own `control` meta

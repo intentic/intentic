@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFile, lstat, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import {
@@ -300,6 +300,94 @@ const backUpWrites = async (place: PointPlace, writes: readonly Write[], conflic
     return kept;
 };
 
+// ONE FILE UNDER TWO SPELLINGS. A disk that ignores case (NTFS, APFS) holds `Readme.md` and `README.md` as one file, and
+// git carries a land's case-only rename as the old spelling deleted and the new one added: delivered as sent, the
+// addition finds the file already there and the deletion then removes it, leaving the folder with neither. Asked of the
+// disk, not guessed from the platform: two delivered paths that differ only in case and lstat to the same file are one
+// file here. The deletion is then not carried out; the addition is planned as a change of what the old spelling held,
+// and the file takes the new spelling once it holds what landed (respell, below).
+const sameFileHere = async (root: string, first: string, second: string): Promise<boolean> => {
+    const entry = async (path: string) =>
+        // allow(silent-catch): a link, a missing file or anything else that is not a plain file is no shared file.
+        await localTarget(root, path).then(lstat, () => undefined).catch(() => undefined);
+    const [one, other] = [await entry(first), await entry(second)];
+    return one !== undefined && other !== undefined && one.isFile() && other.isFile() && one.ino !== 0 && one.dev === other.dev && one.ino === other.ino;
+};
+
+// The delivery with each such deletion taken out, and for each path kept in its place, the old spelling it replaces.
+const withoutCaseRenames = async (root: string, items: readonly Decoded[]): Promise<{ readonly items: readonly Decoded[]; readonly renamed: ReadonlyMap<string, Decoded> }> => {
+    const renamed = new Map<string, Decoded>();
+    const dropped = new Set<Decoded>();
+    for (const gone of items.filter((item) => item.next === null)) {
+        const spelling = gone.file.path.toLowerCase();
+        const kept = items.find((item) => item.next !== null && item.file.path !== gone.file.path && item.file.path.toLowerCase() === spelling && !renamed.has(item.file.path));
+        // oxlint-disable-next-line eslint/no-await-in-loop -- rarely more than one, and each is two lstats
+        if (kept !== undefined && (await sameFileHere(root, gone.file.path, kept.file.path))) {
+            renamed.set(kept.file.path, gone);
+            dropped.add(gone);
+        }
+    }
+    const planned = items.flatMap((item) => {
+        if (dropped.has(item)) {
+            return [];
+        }
+        const gone = renamed.get(item.file.path);
+        // What the folder holds under the old spelling is what the addition changes.
+        return gone === undefined || item.file.kind !== "added" ? [item] : [{ file: { ...item.file, kind: "modified" as const, base: gone.file.base }, base: gone.base, next: item.next }];
+    });
+    return { items: planned, renamed };
+};
+
+// The old spelling of a file put right, once it holds what landed: only its own name, in a folder that holds that name
+// and not the new one. A name left as it was is a cosmetic difference, so a rename the disk refuses changes nothing else.
+const respell = async (root: string, from: string, to: string): Promise<void> => {
+    const [fromParts, toParts] = [from.split("/"), to.split("/")];
+    const [oldName = "", newName = ""] = [fromParts.pop(), toParts.pop()];
+    if (fromParts.join("/") !== toParts.join("/")) {
+        return;
+    }
+    const dir = join(root, ...toParts);
+    try {
+        const names = await readdir(dir);
+        if (names.includes(oldName) && !names.includes(newName)) {
+            await rename(join(dir, oldName), join(dir, newName));
+        }
+    } catch {
+        // allow(silent-catch): the file holds what landed under the old spelling; its name is all that was not put right.
+    }
+};
+
+// Every file planned in the delivery's order, a case-only rename's two paths as one file (withoutCaseRenames), and what
+// puts each renamed file's new spelling in place once the writes are done: only where it holds what landed, or the merge.
+const planAll = async (
+    root: string,
+    items: readonly Decoded[],
+    staging: string,
+    git: () => Promise<string | undefined>,
+): Promise<{ readonly plans: Plan[]; readonly respellAll: (written: ReadonlySet<string>) => Promise<void> }> => {
+    const { items: planned, renamed } = await withoutCaseRenames(root, items);
+    const byPath = new Map<string, Plan>();
+    for (const [at, item] of planned.entries()) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
+        byPath.set(item.file.path, await planFile(root, item, staging, at, git));
+    }
+    // An old spelling comes to what its new one did: kept out with it, or already gone as a file of its own.
+    for (const [kept, gone] of renamed) {
+        const plan = byPath.get(kept);
+        byPath.set(gone.file.path, plan?.outcome === "conflict" ? conflict(gone.file.path, plan.reason) : { path: gone.file.path, outcome: "already" });
+    }
+    const respellAll = async (written: ReadonlySet<string>): Promise<void> => {
+        for (const [kept, gone] of renamed) {
+            const outcome = byPath.get(kept)?.outcome;
+            if (outcome === "already" || outcome === "merged-in-place" || written.has(kept)) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one rename at a time
+                await respell(root, gone.file.path, kept);
+            }
+        }
+    };
+    return { plans: items.flatMap((item) => byPath.get(item.file.path) ?? []), respellAll };
+};
+
 // `git` on PATH, if it answers.
 const gitOnPath = async (): Promise<string | undefined> => ((await runProcess("git", ["--version"], { timeoutMs: 10_000 })).status === 0 ? "git" : undefined);
 
@@ -309,16 +397,13 @@ const deliverHeld = async (context: DeliveryContext, delivery: ProjectDelivery, 
     const durability = context.durability ?? realDurability;
     let git: Promise<string | undefined> | undefined;
     const askGit = async (): Promise<string | undefined> => await (git ??= (context.git ?? gitOnPath)());
-    const plans: Plan[] = [];
-    for (const [at, item] of items.entries()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
-        plans.push(await planFile(root, item, staging, at, askGit));
-    }
+    const { plans, respellAll } = await planAll(root, items, staging, askGit);
     const conflicts = plans.flatMap((plan) => (plan.outcome === "conflict" ? [{ path: plan.path, reason: plan.reason }] : []));
     const already = plans.flatMap((plan) => (plan.outcome === "already" ? [plan.path] : []));
     const mergedInPlace = plans.flatMap((plan) => (plan.outcome === "merged-in-place" ? [{ path: plan.path, content: plan.content.toString("base64") }] : []));
     const writes = plans.filter((plan): plan is Write => plan.outcome === "write" || plan.outcome === "remove");
     if (writes.length === 0) {
+        await respellAll(new Set());
         return { folder: root, applied: [], merged: mergedInPlace, already, conflicts };
     }
     // THE RESTORE POINT, before anything here is touched: each file about to be overwritten or deleted copied into it,
@@ -342,6 +427,7 @@ const deliverHeld = async (context: DeliveryContext, delivery: ProjectDelivery, 
     }
     // What a restore can undo is what happened: the point is cut to the entries that were written.
     await writeManifest(stateDir, key, { ...manifest, entries: done.map(({ entry }) => entry) });
+    await respellAll(new Set(done.map(({ plan }) => plan.path)));
     const merged = done.flatMap(({ plan }) => (plan.outcome === "write" && plan.merged !== undefined ? [{ path: plan.path, content: plan.merged.toString("base64") }] : []));
     return {
         // A point that holds nothing is never named: retention clears it (restore-points.ts).

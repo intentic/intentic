@@ -139,7 +139,7 @@ const phoneScopesOf = async (services: Pick<Services, "capabilities">, id: strin
 
 // The owner's view of their phones: manifest capabilities plus what the hub can say right now, and whether each can be
 // woken. Enrollment state (added-but-unpaired vs paired-but-asleep) stays distinguishable through `online`/`lastSeen`.
-export const phoneSummaries = async (services: Pick<Services, "capabilities" | "phoneHub" | "phoneWake">): Promise<PhoneSummary[]> =>
+export const phoneSummaries = async (services: Pick<Services, "capabilities" | "phoneHub" | "phoneWake" | "phones">): Promise<PhoneSummary[]> =>
     await Promise.all(
         (await services.capabilities.list()).flatMap((capability) =>
             capability.kind !== "phone"
@@ -152,6 +152,7 @@ export const phoneSummaries = async (services: Pick<Services, "capabilities" | "
                               id: capability.id,
                               platform: capability.config.platform,
                               online: state.online,
+                              paired: await services.phones.enrolled(capability.id),
                               wake: await services.phoneWake.state(capability.id, state.facts),
                               ...(state.announced === undefined ? {} : { version: state.announced.version }),
                               ...(state.facts === undefined ? {} : { facts: state.facts }),

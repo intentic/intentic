@@ -225,6 +225,24 @@ test("the machine's merges land in the sandbox's copy too, and the card says wha
     expect(await queue()).toEqual([]);
 });
 
+// The merge is of what this land wrote. A later land that rewrote the file here while the machine merged is not undone.
+test("a merge is not written over a file the sandbox's copy changed since the land it was made for", async () => {
+    const repo = await repository();
+    const later = "one\ntwo\nlater\n";
+    const machine = machineAt({
+        answer: async () => {
+            // Another conversation lands on the same file while this delivery is under way.
+            await writeFile(join(repo.dir, "mod.txt"), later);
+            await sh(repo.dir, "commit", "-q", "-am", "later");
+            return { ...delivered(), merged: [{ path: "mod.txt", content: b64("zero\none\ntwo\n") }] };
+        },
+    });
+    const { land, treeChanged } = harness(repo, machine);
+    await land(repo.from, repo.tip);
+    expect(await readFile(join(repo.dir, "mod.txt"), "utf8")).toBe(later);
+    expect(treeChanged).toEqual([]);
+});
+
 test("a merge naming a path outside the folder, or into its .git, is not written here", async () => {
     const repo = await repository();
     const machine = machineAt({

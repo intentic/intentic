@@ -32,5 +32,11 @@ export const tokenPattern = (): RegExp => new RegExp(TOKEN_SOURCE, "gu");
 // The canonical key a token is stored under, whichever brackets the model wrote it in.
 export const tokenKey = (label: string, index: string | number): string => `${label}_${String(index)}`;
 
+// A token-shaped literal that arrives in data (a test fixture, a log the shield itself wrote, a token a model made up and
+// a runtime kept) was not given out for anything in that text, whatever its number says: a runtime only ever holds what
+// the gateway restored. It goes to the provider with this in front of its label, and restoring takes exactly one off
+// again, so the literal comes back as itself and never as the value the vault holds under that number.
+export const LITERAL_PREFIX = "LITERAL_";
+
 // The longest a token can be written, so a stream can hold back an unfinished one without holding back prose.
 export const TOKEN_MAX_LENGTH = 48;

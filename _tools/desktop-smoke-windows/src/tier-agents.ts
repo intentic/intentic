@@ -3,7 +3,7 @@
 // missing shared agent-auth volume stands the turn down instead of failing it.
 
 import { randomUUID } from "node:crypto";
-import { LOCAL_PORT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, LOCAL_PORT } from "@intentic/constants";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -26,7 +26,8 @@ export interface AgentsTierOptions {
 const PROMPT = `Reply with exactly the word: ready`;
 const EXPECTED = `ready`;
 
-const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/identity/control-tokens.json`;
+// The daemon's control-token store (auth/tokens/control-tokens.ts), on the history volume since 2026-10-06.
+const STORE_PATH = `${HISTORY_ROOT}/identity/control-tokens.json`;
 
 // sha256 computed inside the container, matching its own code. Reports which step failed (hashing vs writing) rather
 // than a bare false, since the two fail for different reasons.

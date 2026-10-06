@@ -3,7 +3,8 @@ import { requires } from "@intentic/testing/requires";
 import { z } from "zod";
 import { releaseDisplay } from "../browser/cast/display.js";
 import { DESKTOP_KEY, desktopAvailable, ownerDriving, ownerHandedBack } from "./agent-desktop.js";
-import { desktopRouter } from "./desktop-tools.js";
+import type { TurnLease } from "../agent/tools/turn-mounts.js";
+import { desktopRouter, desktopServersOf } from "./desktop-tools.js";
 
 /* The sandbox's own desktop through its MCP router, the way the daemon's door calls it: a real Xvfb, a real capture
    and real input. Needs the browser pack's Xvfb, ffmpeg and xdotool. */
@@ -85,5 +86,27 @@ describe.skipIf(!x11.runs)(x11.title("the sandbox's desktop"), () => {
             listing = text(await call("list_windows"));
         }
         expect(listing).toMatch(/\[\S+\] Xmessage, xmessage/);
+    });
+});
+
+// `open` starts any program with any arguments, and typing into a window it started is a shell: the desktop is a shell
+// by another name, so a persona whose `shell` shelf is shut must not be handed it because its `browser` shelf is open.
+// (`sh -c touch${IFS}/tmp/x` through `open` ran, measured with the persona-less desktop tool.)
+describe.skipIf(!x11.runs)(x11.title("who is handed the sandbox's desktop"), () => {
+    const mounted = (powers: { readonly browser: boolean; readonly shell: boolean }): string[] => {
+        const opened: string[] = [];
+        const lease = { open: (mount: { readonly name: string }) => (opened.push(mount.name), { name: mount.name }) } as unknown as Pick<TurnLease, "open">;
+        desktopServersOf(lease, powers);
+        return opened;
+    };
+
+    test("a persona with a browser and a shell is handed it", () => {
+        expect(mounted({ browser: true, shell: true })).toEqual(["desktop"]);
+    });
+
+    test("a persona with a browser and no shell is not, and neither is one with a shell and no browser", () => {
+        expect(mounted({ browser: true, shell: false })).toEqual([]);
+        expect(mounted({ browser: false, shell: true })).toEqual([]);
+        expect(mounted({ browser: false, shell: false })).toEqual([]);
     });
 });

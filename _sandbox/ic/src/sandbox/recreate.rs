@@ -800,11 +800,12 @@ fn recreate(
         // Applied by this very recreate, so no longer waiting; a failed swap rewinds the record and gets it back.
         desired: None,
         swap: Some(swap.clone()),
-        // A person moving onto the version the watch once went back from has chosen it again.
-        rolled_back_from: saved
-            .rolled_back_from
-            .clone()
-            .filter(|given_up| Some(given_up) != target_version.as_ref()),
+        rolled_back_from: gone_back_from(
+            &mode,
+            saved.rolled_back_from.as_ref(),
+            left_version.as_ref(),
+            target_version.as_ref(),
+        ),
         // Started by this very recreate, so no longer stopped on purpose; the report key outlives any image.
         held: false,
         report_key: saved.report_key.clone(),
@@ -1480,6 +1481,25 @@ fn rewind_record(slug: &str, saved: &ChannelRecord) {
     mirror::push(slug);
 }
 
+/// The version a swap leaves the record remembering as gone back from, which an unattended prepare never downloads
+/// again (`rolled_back_from`): the version a rollback leaves, as the probation watch's own going back remembers it, so
+/// a rollback onto a release tag (which follows the registry again) does not have the very version it fled staged and
+/// installed behind the owner's back. A person moving onto the version once gone back from has chosen it again. Pure.
+fn gone_back_from(
+    mode: &Mode,
+    saved: Option<&String>,
+    left: Option<&String>,
+    target: Option<&String>,
+) -> Option<String> {
+    let remembered = match mode {
+        Mode::Rollback { .. } => left.or(saved),
+        _ => saved,
+    };
+    remembered
+        .filter(|given_up| Some(*given_up) != target)
+        .cloned()
+}
+
 /// Whether this container follows the official registry — the question an UNATTENDED prepare asks before
 /// touching anything. Judged from the run contract's own stamps (index.ts writes both at `docker run`; the
 /// agent can write neither): the base the overlay extends when the container is an overlay build, else the
@@ -1512,6 +1532,42 @@ fn follows_registry(current_base: Option<&str>, sandbox_image: Option<&str>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rollback_remembers_the_version_it_left_so_no_background_download_brings_it_back() {
+        // A rollback onto a release tag (a pruned pin, `--to <version>`) follows the registry again, and the unattended
+        // prepare then staged the very version just left for the daemon to install by itself (2026-10 bug hunt).
+        let left = "1.3.0".to_string();
+        let target = "1.2.0".to_string();
+        let rollback = Mode::Rollback { to: None };
+        assert_eq!(
+            gone_back_from(&rollback, None, Some(&left), Some(&target)),
+            Some(left.clone())
+        );
+        // An update keeps what the record said, and forgets it once that version is chosen again.
+        let update = Mode::Update {
+            channel: None,
+            force: false,
+        };
+        assert_eq!(
+            gone_back_from(
+                &update,
+                Some(&left),
+                Some(&target),
+                Some(&"1.4.0".to_string())
+            ),
+            Some(left.clone())
+        );
+        assert_eq!(
+            gone_back_from(&update, Some(&left), Some(&target), Some(&left)),
+            None
+        );
+        // A rollback whose left version could not be named keeps the record's.
+        assert_eq!(
+            gone_back_from(&rollback, Some(&left), None, Some(&target)),
+            Some(left)
+        );
+    }
 
     fn saved(current: Option<&str>, previous: Option<&str>) -> record::ChannelRecord {
         record::ChannelRecord {

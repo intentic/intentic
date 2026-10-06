@@ -287,6 +287,25 @@ describe("a sandbox said to be gone", () => {
         await checkKeptHere(fate, (await readState()).pairings, new Set(), async () => listed);
         expect((await readState()).pairings.find((pairing) => pairing.sandboxId === KEPT)?.goneSince).toBeUndefined();
     });
+
+    // (2026-10-06) A sandbox that moved to another computer keeps its address: ic here holds it nowhere, yet it answers.
+    // Marked gone on ic's word, it was unmarked by its own answer at the hourly recheck and marked again minutes later,
+    // for ever. Its answer outweighs this machine's ic.
+    it("is not gone on this machine's word while the sandbox still answers at its address", async () => {
+        const mutagen = await fakeMutagen();
+        const { said, fate } = await seams(mutagen.path);
+        await checkKeptHere(fate, (await readState()).pairings, new Set([KEPT]), async () => ({ listed: ["sandbox-0738cd6b5027"], trashed: [] }));
+        expect((await readState()).pairings.find((pairing) => pairing.sandboxId === KEPT)?.icSlug).toBe("sandbox-0738cd6b5027");
+
+        const empty = async () => ({ listed: [], trashed: [] });
+        await checkKeptHere(fate, (await readState()).pairings, new Set(), empty, (sandboxId) => sandboxId === KEPT);
+        expect((await readState()).pairings.find((pairing) => pairing.sandboxId === KEPT)?.goneSince).toBeUndefined();
+        expect(said).toEqual([]);
+
+        // Once it stops answering as well, ic's word stands.
+        await checkKeptHere(fate, (await readState()).pairings, new Set(), empty, () => false);
+        expect((await readState()).pairings.find((pairing) => pairing.sandboxId === KEPT)).toMatchObject({ goneBy: "local" });
+    });
 });
 
 describe("a docker pairing whose container went away", () => {
@@ -333,6 +352,14 @@ describe("a docker pairing whose container went away", () => {
         const { pairing, said } = await run("missing", {}, true);
         expect(pairing?.transport).toBeUndefined();
         expect(pairing?.container).toBeUndefined();
+        expect(said.join("\n")).toContain("moves to ssh");
+    });
+
+    // (2026-10-06) Moved to another computer: ic here holds it nowhere, and it answers at its address from there.
+    it("moves onto ssh rather than marking it gone when ic holds it nowhere but the sandbox still answers", async () => {
+        const { pairing, said } = await run("missing", { listed: [], trashed: [] }, true);
+        expect(pairing?.goneSince).toBeUndefined();
+        expect(pairing?.transport).toBeUndefined();
         expect(said.join("\n")).toContain("moves to ssh");
     });
 

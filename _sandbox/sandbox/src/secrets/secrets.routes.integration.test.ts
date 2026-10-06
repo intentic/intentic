@@ -249,3 +249,32 @@ test("secrets.set refuses a value holding all three quote characters, as a bad r
     // Refused before the write: the store is untouched, not half-rewritten.
     expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY"]);
 });
+
+// A gate names exactly who may release a credential, and the owner writes it alone because a maintainer is who it may
+// be written about. Revealing the value is releasing it to a person, so the gate holds there too: the operating tier
+// reads every ungated value, and a gated one only when it is among the approvers.
+test("secrets.reveal holds a gated credential to its approvers, and inventory says who may", async () => {
+    const as = (email: string, role: "owner" | "maintainer") => {
+        const svc = services({ auth: { authorize: async () => proven(email, role), authorizeOwner: rejectForbidden } });
+        return { svc, client: clientFor(createApp(svc), { bearer: email }) };
+    };
+    const seed = async (svc: ReturnType<typeof services>): Promise<void> => {
+        await svc.sandboxSecrets.set("STRIPE_KEY", "sk_live_gated");
+        await svc.sandboxSecrets.set("SENTRY_DSN", "https://ungated");
+        await svc.credentialGates.set({ kind: "secret", subject: "STRIPE_KEY", approvers: ["ada@example.com"], scope: "use" });
+    };
+    const revealable = async (client: ReturnType<typeof clientFor>): Promise<Record<string, boolean>> =>
+        Object.fromEntries((await client.secrets.inventory()).entries.filter((entry) => entry.kind === "env").map((entry) => [entry.key, entry.revealable]));
+
+    const maintainer = as("max@example.com", "maintainer");
+    await seed(maintainer.svc);
+    expect(await errorCode(maintainer.client.secrets.reveal({ key: "STRIPE_KEY" }))).toBe("FORBIDDEN");
+    expect(await maintainer.client.secrets.reveal({ key: "SENTRY_DSN" })).toEqual({ value: "https://ungated" });
+    expect(await revealable(maintainer.client)).toEqual({ STRIPE_KEY: false, SENTRY_DSN: true });
+
+    const approver = as("ADA@example.com", "owner");
+    await seed(approver.svc);
+    expect(await approver.client.secrets.reveal({ key: "STRIPE_KEY" })).toEqual({ value: "sk_live_gated" });
+    expect(await revealable(approver.client)).toEqual({ STRIPE_KEY: true, SENTRY_DSN: true });
+});
+

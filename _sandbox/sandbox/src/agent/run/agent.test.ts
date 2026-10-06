@@ -5,7 +5,7 @@ import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSc
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRequest, runAgent } from "./agent.js";
+import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRequest, pinnedRouting, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
@@ -2387,10 +2387,16 @@ test("the bundled CLI-only skills and AGENTS.md loader are off on every turn, fa
     const instructionFiles = { pluginConfigs: { "agents-md@builtin": { options: { instructionFiles: "claude-md" } } } };
 
     await collect(request, capture);
-    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, ...instructionFiles });
+    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, ...instructionFiles, ...pinnedRouting(captured.at(-1)?.env ?? {}) });
 
     await collect({ ...request, spec: { ...request.spec, fast: true } }, capture);
-    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, ...instructionFiles, fastMode: true, fastModePerSessionOptIn: true });
+    expect(captured.at(-1)?.settings).toEqual({
+        skillOverrides: hidden,
+        ...instructionFiles,
+        ...pinnedRouting(captured.at(-1)?.env ?? {}),
+        fastMode: true,
+        fastModePerSessionOptIn: true,
+    });
 });
 
 // The flag layer is the one place the CLI takes disableAllHooks from without the workspace's own files overriding it;
@@ -2413,6 +2419,58 @@ test("a turn whose settings hooks the owner has not approved runs with every hoo
     expect(captured.at(-1)?.settings).not.toHaveProperty("disableAllHooks");
     // The CLI applies a settings edit live, so a turn whose hooks run keeps them to the set it started with.
     expect(Object.keys(captured.at(-1)?.hooks ?? {})).toContain("ConfigChange");
+});
+
+// A settings file's `env` outranks the env the daemon starts the CLI with, and the user's and the project's settings are
+// writable from a turn: measured on CLI 0.3.289, `{"env":{"ANTHROPIC_BASE_URL":…},"apiKeyHelper":…}` in the project's
+// file sent the turn's requests, credential and all, past the privacy shield's gateway, and ran the helper unasked. The
+// flag layer outranks both files, so the daemon's own routing is pinned there and every helper command emptied.
+test("the flag layer pins where model requests go to the daemon's own env and empties every helper command", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        // SAFETY: a result frame is all this test's turns are asked to stream.
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    stubEnv("HTTPS_PROXY", "http://egress.internal:3128");
+    stubEnv("HTTP_PROXY", undefined);
+    stubEnv("CLAUDE_CODE_USE_BEDROCK", undefined);
+    const gateway = "http://127.0.0.1:8790/privacy/gateway/session.sig";
+
+    await collect({ ...request, credential: { kind: "claude-oauth", token: "tok-1", gateway } }, capture);
+    // Where the daemon sends the turn, the same in the flag layer as in the process env it hands the CLI; what the daemon
+    // leaves unset is pinned empty, which the CLI reads as unset, so no file can switch a provider or a proxy on.
+    expect(captured.at(-1)?.env?.["ANTHROPIC_BASE_URL"]).toBe(gateway);
+    expect(captured.at(-1)?.settings).toMatchObject({
+        env: {
+            ANTHROPIC_BASE_URL: gateway,
+            HTTPS_PROXY: "http://egress.internal:3128",
+            HTTP_PROXY: "",
+            CLAUDE_CODE_USE_BEDROCK: "",
+            ANTHROPIC_UNIX_SOCKET: "",
+            ANTHROPIC_BEDROCK_BASE_URL: "",
+        },
+        apiKeyHelper: "",
+        awsAuthRefresh: "",
+        awsCredentialExport: "",
+        gcpAuthRefresh: "",
+        otelHeadersHelper: "",
+        proxyAuthHelper: "",
+        processWrapper: "",
+    });
+    // No credential ever rides the flag layer: the daemon's own stays in the process env.
+    expect(JSON.stringify(captured.at(-1)?.settings)).not.toContain("tok-1");
+
+    // A routed endpoint is pinned as the endpoint, and a held turn keeps the pins beside its hooks switched off.
+    await collect(
+        {
+            ...request,
+            policy: { ...request.policy, settingsHooks: { held: true } },
+            credential: { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "router-key" },
+        },
+        capture,
+    );
+    expect(captured.at(-1)?.settings).toMatchObject({ disableAllHooks: true, apiKeyHelper: "", env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8788" } });
 });
 
 // Fast mode can decline silently for reasons the composer can't see (plan, model, pool, endpoint); without this frame,

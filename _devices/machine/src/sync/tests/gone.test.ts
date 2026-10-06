@@ -103,7 +103,13 @@ describe("dockerStep", () => {
         // Listed: a swap is moving it under its name.
         expect(dockerStep({ ...missing, local: "here" })).toBe("keep");
         expect(dockerStep({ ...missing, local: "trashed" })).toBe("pause-trashed");
-        expect(dockerStep({ ...missing, local: "gone" })).toBe("gone");
+        expect(dockerStep({ ...missing, local: "gone", answering: false })).toBe("gone");
+    });
+
+    // (2026-10-06) ic here holding it nowhere while it answers at its address is a sandbox that moved, not one gone.
+    it("reads ic's \"gone\" as a move while the sandbox still answers", () => {
+        expect(dockerStep({ ...missing, local: "gone" })).toBe("ssh");
+        expect(dockerStep({ ...missing, local: "gone", enrolled: false })).toBe("pause-missing");
     });
 
     it("moves onto ssh only for a sandbox that still answers at its address, with an enrollment to ride", () => {

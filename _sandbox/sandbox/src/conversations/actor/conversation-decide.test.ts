@@ -4,7 +4,7 @@ import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { ASK_MAX_CHARS, type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
-import { hold, joined, NO_QUEUE } from "./conversation-queue.js";
+import { hold, joined, NO_QUEUE, scheduled } from "./conversation-queue.js";
 import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type ParkedCard, type StopEnding } from "./conversation-state.js";
 
 // Every transition the conversation's one writer makes, as a table: the state an event meets, what it leaves, the
@@ -48,6 +48,7 @@ const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI passes", intervalSeconds
 // A person's message waiting for the next turn, and the queue holding it.
 const QUEUED = { id: "m-1", voice: "person", queuedAt: 900, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
 const WAITING = joined(NO_QUEUE, QUEUED);
+const BOOKED = scheduled(NO_QUEUE, QUEUED, { until: 90_000 });
 // What a settling turn showed of its own work, as settle-turn.ts notes it just ahead of the settle that files it.
 const PROOF: TurnProof = { at: 4_000, verification: "failing", check: "pnpm test" };
 const LATER_PROOF: TurnProof = { at: 4_500, verification: "verified", check: "pnpm test" };
@@ -789,6 +790,13 @@ const rows: readonly Row[] = [
         event: { kind: "stop", ending: "stopped" },
         to: { ...running({ stopping: "stopped" }), queue: hold(WAITING, "stopped") },
         effects: [{ kind: "queue-written", queue: hold(WAITING, "stopped") }, { kind: "persist" }, { kind: "broadcast" }],
+    },
+    {
+        name: "a stop leaves a scheduled send booked: it goes at its time, not never",
+        from: { ...running(), queue: BOOKED },
+        event: { kind: "stop", ending: "stopped" },
+        to: { ...running({ stopping: "stopped" }), queue: BOOKED },
+        effects: [{ kind: "broadcast" }],
     },
     {
         name: "a begin that opens a new entry writes onto it what already waits: a message sent while the first turn started",

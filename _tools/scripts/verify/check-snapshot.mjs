@@ -4,9 +4,9 @@
 // that earlier commit to run them in again. This is that pair.
 // turn-findings.mjs reads the two answers against each other; nothing here interprets them.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { constants as osConstants, tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { git } from "../lib/git.mjs";
 import { blindAtBase, findingCounts, problemLines } from "./turn-findings.mjs";
 
@@ -101,20 +101,89 @@ const lendModules = (from, to) => {
     return { links, lent: links.includes(join(to, "node_modules")) };
 };
 
+const SNAPSHOT_PREFIX = "verify-snapshot-";
+// Longer than any run is allowed to take, so a worktree this old belongs to a run that is gone.
+const STALE_AFTER_MS = 30 * 60 * 1000;
+
+/**
+ * Takes back the snapshots a run that was killed left behind: worktrees registered in this repository whose throwaway
+ * directory (`verify-snapshot-*` under the temp dir) is older than `maxAgeMs`. A run that is killed (a turn's check
+ * that ran out of time, a CI job cancelled) never reaches its `finally`; the next run to take a snapshot clears what it
+ * left, in every conversation's checkout, since they share one repository. Returns how many it removed.
+ */
+export const sweepSnapshots = (root, now = Date.now(), maxAgeMs = STALE_AFTER_MS) => {
+    const listed = git(root, "worktree", "list", "--porcelain") ?? "";
+    let removed = 0;
+    for (const line of listed.split("\n")) {
+        const path = line.startsWith("worktree ") ? line.slice("worktree ".length) : undefined;
+        const parent = path === undefined ? undefined : dirname(path);
+        if (path === undefined || parent === undefined || basename(path) !== "before" || !basename(parent).startsWith(SNAPSHOT_PREFIX)) {
+            continue;
+        }
+        let age;
+        try {
+            age = now - statSync(parent).mtimeMs;
+        } catch {
+            // allow(silent-catch): a directory already gone is taken back by the prune below
+            age = Infinity;
+        }
+        if (age > maxAgeMs) {
+            git(root, "worktree", "remove", "--force", path);
+            rmSync(parent, { recursive: true, force: true });
+            removed += 1;
+        }
+    }
+    if (removed > 0) {
+        git(root, "worktree", "prune");
+    }
+    return removed;
+};
+
+// The snapshots this process holds right now, each by the function that takes it back. A termination signal ends the
+// process through `exit`, whose handler takes back whatever its `finally` did not get to.
+const held = new Set();
+let guarding = false;
+const guardSnapshots = () => {
+    if (guarding) {
+        return;
+    }
+    guarding = true;
+    process.on("exit", () => {
+        for (const release of [...held]) {
+            release();
+        }
+    });
+    for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+        process.once(signal, () => process.exit(128 + osConstants.signals[signal]));
+    }
+};
+
 /**
  * What each of `ids` said at `rev`, keyed by check id, for turn-findings.mjs to read the live run against.
  *
  * Checks out `rev` in its own worktree (not a stash, which would mutate the tree the caller is standing in) — `--detach`,
  * since nothing here needs a branch. `undefined` when the snapshot couldn't be taken, in which case the caller counts
- * every problem as its own: the safe direction to be wrong in.
+ * every problem as its own: the safe direction to be wrong in. The worktree is taken back however the run ends: after the
+ * check, on a termination signal, or by the next run's sweep when the process was killed outright.
  */
 export const reportsAt = (root, rev, ids) => {
     if (ids.length === 0 || git(root, "rev-parse", "-q", "--verify", rev) === undefined) {
         return undefined; // nothing askable, or a rev this checkout does not have: there is no "before" to compare against
     }
-    const parent = mkdtempSync(join(tmpdir(), "verify-snapshot-"));
+    sweepSnapshots(root);
+    guardSnapshots();
+    const parent = mkdtempSync(join(tmpdir(), SNAPSHOT_PREFIX));
     const snapshot = join(parent, "before");
     let borrowed = { links: [], lent: false };
+    const release = () => {
+        held.delete(release);
+        for (const link of borrowed.links) {
+            rmSync(link, { force: true }); // unlinks the link itself: node's rm reads it with lstat and never walks through one
+        }
+        git(root, "worktree", "remove", "--force", snapshot);
+        rmSync(parent, { recursive: true, force: true });
+    };
+    held.add(release);
     try {
         if (git(root, "worktree", "add", "--detach", snapshot, rev) === undefined) {
             return undefined;
@@ -131,10 +200,6 @@ export const reportsAt = (root, rev, ids) => {
                   ]),
               );
     } finally {
-        for (const link of borrowed.links) {
-            rmSync(link, { force: true }); // unlinks the link itself: node's rm reads it with lstat and never walks through one
-        }
-        git(root, "worktree", "remove", "--force", snapshot);
-        rmSync(parent, { recursive: true, force: true });
+        release();
     }
 };

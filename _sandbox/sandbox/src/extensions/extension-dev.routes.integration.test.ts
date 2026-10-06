@@ -202,6 +202,35 @@ test("from an isolated conversation, its own copy of the checkout is the one run
     ]);
 });
 
+test("a conversation that holds an install's dev checkout is not replaced, reloaded or cleared by another", async () => {
+    const { workspace, historyRoot, app, client } = await setup();
+    const ownA = join(worktreesRootOf(historyRoot), "conv-a", "extensions", "maintenance");
+    const ownB = join(worktreesRootOf(historyRoot), "conv-b", "extensions", "maintenance");
+    await checkoutAt(ownA);
+    await checkoutAt(ownB);
+    const a = clientAs(app, "conv-a");
+    const b = clientAs(app, "conv-b");
+    await a.extensions.devSet({ id: ID });
+
+    for (const attempt of [() => b.extensions.devSet({ id: ID }), () => b.extensions.devReload({ id: ID }), () => b.extensions.devClear({ id: ID })]) {
+        await attempt().then(
+            () => {
+                throw new Error("another conversation changed a checkout it does not hold");
+            },
+            (error: Error & { code?: string }) => {
+                expect(error.code).toBe("PRECONDITION_FAILED");
+                expect(error.message).toContain("conv-a");
+            },
+        );
+    }
+    expect((await readExtensionDev(workspace.root))[ID]).toMatchObject({ path: ownA, conversation: "conv-a" });
+
+    // The holder moves it freely; the owner (no conversation behind the call) can always let go; then it is free to take.
+    await a.extensions.devReload({ id: ID });
+    await client.extensions.devClear({ id: ID });
+    expect((await b.extensions.devSet({ id: ID })).dev).toMatchObject({ conversation: "conv-b" });
+});
+
 test("with no checkout of its source, it refuses and says what to clone where", async () => {
     const { client } = await setup();
     expect(await errorCode(client.extensions.devSet({ id: "maintenance" }))).toBe("PRECONDITION_FAILED");

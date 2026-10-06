@@ -185,6 +185,9 @@ pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<Re
     if path.parent().is_none() {
         return Some(Refusal::Disk);
     }
+    if let Some(inside) = inside_distro(&path.display().to_string()) {
+        return distro_refusal(&inside).or_else(|| nested(path, taken));
+    }
     if home == Some(path) {
         return Some(Refusal::Home);
     }
@@ -204,34 +207,80 @@ pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<Re
         Some(_) => return nested(path, taken),
         None => {}
     }
-    let system: &[&str] = if cfg!(windows) {
-        &[
-            r"C:\Windows",
-            r"C:\Program Files",
-            r"C:\Program Files (x86)",
-            r"C:\ProgramData",
-        ]
+    let system = if cfg!(windows) {
+        windows_system(&path.display().to_string())
     } else {
-        &[
-            "/bin",
-            "/boot",
-            "/dev",
-            "/etc",
-            "/lib",
-            "/proc",
-            "/sbin",
-            "/sys",
-            "/usr",
-            "/var",
-            "/System",
-            "/Library",
-            "/Applications",
-        ]
+        POSIX_SYSTEM
+            .iter()
+            .any(|root| path.starts_with(format!("/{root}")))
     };
-    if system.iter().any(|root| path.starts_with(root)) {
+    if system {
         return Some(Refusal::System);
     }
     nested(path, taken)
+}
+
+/// The system's own folders on a Linux or macOS disk, by their name under `/`.
+const POSIX_SYSTEM: [&str; 13] = [
+    "bin",
+    "boot",
+    "dev",
+    "etc",
+    "lib",
+    "proc",
+    "sbin",
+    "sys",
+    "usr",
+    "var",
+    "System",
+    "Library",
+    "Applications",
+];
+
+/// (2026-10-06) Whether a Windows path is in one of the system's folders, on whichever drive it is: a second disk can
+/// hold a Windows install too. Read off the text, case folded, so the rule is checkable from any host.
+fn windows_system(shown: &str) -> bool {
+    let bytes = shown.as_bytes();
+    if bytes.len() < 4 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' || bytes[2] != b'\\' {
+        return false;
+    }
+    let first = shown[3..].split('\\').next().unwrap_or_default();
+    [
+        "windows",
+        "program files",
+        "program files (x86)",
+        "programdata",
+    ]
+    .contains(&first.to_ascii_lowercase().as_str())
+}
+
+/// (2026-10-06) The Linux path inside a WSL distro of a folder Windows names `\\wsl.localhost\<distro>\…` (or
+/// `\\wsl$\…`), `/` for the distro itself; nothing for any other path. The Windows home says nothing of whose the
+/// distro's homes are, so such a folder is held to the distro's own rules ([`distro_refusal`]).
+fn inside_distro(shown: &str) -> Option<String> {
+    let lower = shown.to_ascii_lowercase();
+    let prefix = [r"\\wsl.localhost\", r"\\wsl$\"]
+        .into_iter()
+        .find(|prefix| lower.starts_with(prefix))?;
+    let inside = shown[prefix.len()..]
+        .split_once('\\')
+        .map_or("", |(_, inside)| inside);
+    let parts: Vec<&str> = inside.split('\\').filter(|part| !part.is_empty()).collect();
+    Some(format!("/{}", parts.join("/")))
+}
+
+/// Why a folder at `inside` in a distro cannot become a project: a whole mounted disk (`/mnt/c`), its homes, a whole
+/// home in them or root's, and its system's folders, as this app refuses them on Linux.
+fn distro_refusal(inside: &str) -> Option<Refusal> {
+    let parts: Vec<&str> = inside.split('/').filter(|part| !part.is_empty()).collect();
+    match parts.as_slice() {
+        [] | ["mnt"] | ["mnt", _] => Some(Refusal::Disk),
+        ["home"] | ["var", "home"] => Some(Refusal::Homes),
+        ["home", _] | ["var", "home", _] | ["root"] => Some(Refusal::AHome),
+        ["home", ..] | ["var", "home", ..] => None,
+        [first, ..] if POSIX_SYSTEM.contains(first) => Some(Refusal::System),
+        _ => None,
+    }
 }
 
 /// Why `path` cannot become a project for being inside or around one that already is.
@@ -1426,6 +1475,35 @@ mod tests {
         let taken = [PathBuf::from("/var/home/me/code/app")];
         assert!(refusal(Path::new("/var/home/me/code/app/web"), None, &taken).is_some());
         assert!(refusal(Path::new("/var/home/me/code"), None, &taken).is_some());
+    }
+
+    /// A WSL distro's folder as Windows names it is held to the distro's own rules: its homes, a whole home in it, a
+    /// mounted disk and its system's folders, whatever the Windows home is. Read off the text, so checkable anywhere.
+    #[test]
+    fn a_wsl_distro_s_homes_and_system_folders_are_refused_as_windows_names_them() {
+        let home = Path::new(r"C:\Users\me");
+        for (path, refused) in [
+            (r"\\wsl.localhost\arch\home", Some(Refusal::Homes)),
+            (r"\\wsl.localhost\arch\home\me", Some(Refusal::AHome)),
+            (r"\\wsl$\Ubuntu\root", Some(Refusal::AHome)),
+            (r"\\wsl.localhost\arch\etc", Some(Refusal::System)),
+            (r"\\WSL.LOCALHOST\arch\usr\src", Some(Refusal::System)),
+            (r"\\wsl.localhost\arch\mnt\c", Some(Refusal::Disk)),
+            (r"\\wsl.localhost\arch\home\me\code\shop", None),
+        ] {
+            assert_eq!(refusal(Path::new(path), Some(home), &[]), refused, "{path}");
+        }
+    }
+
+    #[test]
+    fn the_system_s_folders_are_refused_on_whichever_drive_they_are() {
+        assert!(windows_system(r"C:\Windows\System32"));
+        assert!(windows_system(r"D:\Windows"));
+        assert!(windows_system(r"e:\program files\app"));
+        assert!(windows_system(r"C:\ProgramData"));
+        assert!(!windows_system(r"D:\Windowsill"));
+        assert!(!windows_system(r"D:\work\shop"));
+        assert!(!windows_system("/usr"));
     }
 
     /// Every refusal is said, natively, as it always was, and drawn by the dialog by its kind.

@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openFile, readWindow, sha256Text, writeFileWhole, writePartAt } from "../files.js";
+import { openFile, readWindow, refusalOf, sha256Text, writeFileWhole, writePartAt } from "../files.js";
 
 let dir: string;
 beforeEach(() => {
@@ -106,6 +106,18 @@ const bodyOf = (bytes: number): ReadableStream<Uint8Array> => {
         },
     });
 };
+
+// What Windows answered on a real NTFS disk (2026-10-06): a rename over a read-only file fails with EPERM, the code it
+// also gives for a file another program holds open. Only the file's own read-only bit tells the two apart.
+describe(`why a save was refused`, () => {
+    it(`calls a read-only file denied on Windows, and one another program holds busy`, () => {
+        expect(refusalOf(`EPERM`, true, `win32`)).toBe(`denied`);
+        expect(refusalOf(`EPERM`, false, `win32`)).toBe(`busy`);
+        expect(refusalOf(`EBUSY`, true, `win32`)).toBe(`busy`);
+        expect(refusalOf(`EPERM`, false, `linux`)).toBe(`denied`);
+        expect(refusalOf(`EACCES`, true, `linux`)).toBe(`denied`);
+    });
+});
 
 describe(`writing never follows a link`, () => {
     // The save lands by rename, which replaces the link itself: whatever it pointed at is never opened.

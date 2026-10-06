@@ -1181,6 +1181,7 @@
             "pay": "{amountUsd} $ für {assetName} zahlen?",
             "pay2": "{amountUsd} $ zahlen",
             "paymentDidntGoThrough": "Die Zahlung ging nicht durch: es wurde nichts ausgegeben.",
+            "paymentOwnerOnly": "Nur der Eigentümer dieser Sandbox kann eine Zahlung freigeben: Die Wallet, die bezahlt, gehört ihm.",
             "placedBy": "Von Ihnen veranlasst",
             "readAsItsOwn": "Gilt als eigene Worte",
             "refused": "Abgelehnt",

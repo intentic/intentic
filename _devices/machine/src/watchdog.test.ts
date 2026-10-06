@@ -1,4 +1,4 @@
-import { stallLine, stalledFor, WATCHDOG_PING_MS, WATCHDOG_STALL_MS } from "./watchdog.js";
+import { pausedAcross, stallLine, stalledFor, WATCHDOG_PING_MS, WATCHDOG_STALL_MS } from "./watchdog.js";
 
 const NOW = 1_800_000_000_000;
 
@@ -20,4 +20,20 @@ test("the line it leaves says what happened, timestamped like every other line o
     expect(stallLine(181, new Date(NOW))).toBe(
         `[${new Date(NOW).toISOString()}] event loop stalled for 181 s; exiting so the supervisor restarts the agent\n`,
     );
+});
+
+// A sleep holds the Worker's own checks apart too, which a hung main loop never does: that gap restarts the count.
+test("checks held far apart are a pause of the whole process, not a hang; a late timer is neither", () => {
+    const paused = (gapMs: number, checkMs = WATCHDOG_PING_MS, limitMs = WATCHDOG_STALL_MS): boolean => pausedAcross(NOW - gapMs, NOW, checkMs, limitMs);
+    expect(paused(4 * 60_000)).toBe(true);
+    expect(paused(15_000)).toBe(true);
+    expect(paused(5_000)).toBe(false);
+    expect(paused(14_000)).toBe(false);
+    // Short intervals still need three seconds, so a busy machine's jitter is not a pause...
+    expect(paused(2_000, 50, 60_000)).toBe(false);
+    // ...unless the limit is shorter than that: any pause long enough to reach the limit is one.
+    expect(paused(500, 200, 1_000)).toBe(true);
+    expect(paused(400, 200, 1_000)).toBe(false);
+    // A clock that stepped back is not a pause.
+    expect(pausedAcross(NOW + 60_000, NOW, WATCHDOG_PING_MS, WATCHDOG_STALL_MS)).toBe(false);
 });

@@ -16,8 +16,8 @@ import { tokenEquals, type VerifiedIdentity } from "../auth.js";
 import { rpIdOf } from "../browser-origins.js";
 import { ACCEPTED_ALGORITHMS, base64url, verifyAuthentication, verifyRegistration } from "./webauthn.js";
 
-// Passkeys registered with this sandbox, on the daemon's JSON substrate beside members.json: the same trust class,
-// since a passkey admits its holder. The file holds public keys, the owner's require-a-passkey switch and the hashes
+// Passkeys registered with this sandbox, on the daemon's JSON substrate: the roster's trust class, since a passkey
+// admits its holder. The file holds public keys, the owner's require-a-passkey switch and the hashes
 // of their recovery codes; nothing in it can sign in by itself.
 
 const StoredCredentialSchema = z.object({

@@ -30,9 +30,12 @@ export interface SharePicture {
 }
 
 // Workspace path → published name, minted once per distinct path. Numbered because two paths can share a basename; the
-// basename itself is kept for readability, sanitized to the share id's alphabet.
+// basename itself is kept for readability, sanitized to the share id's alphabet, unless names may not leave (the privacy
+// shield is on): then the number alone, and the extension of what the shield publishes, a JPEG or a PNG (privacy-shield.ts).
 class Pictures {
     private readonly byPath = new Map<string, string>();
+
+    constructor(private readonly keepNames: boolean) {}
 
     published(path: string): string | undefined {
         if (!isPicture(path)) {
@@ -43,7 +46,10 @@ class Pictures {
             return already;
         }
         const base = (path.split("/").pop() ?? "picture").toLowerCase().replace(/[^a-z0-9.-]+/g, "-");
-        const published = `${SHARE_FILES_DIR}/${this.byPath.size + 1}-${base}`;
+        const number = this.byPath.size + 1;
+        const published = this.keepNames
+            ? `${SHARE_FILES_DIR}/${number}-${base}`
+            : `${SHARE_FILES_DIR}/${number}${/\.jpe?g$/iu.test(path) ? ".jpg" : ".png"}`;
         this.byPath.set(path, published);
         return published;
     }
@@ -91,8 +97,13 @@ export interface SharedTranscript {
     readonly pictures: readonly SharePicture[];
 }
 
-export const shareTranscript = (messages: readonly TranscriptRow[], detail: ShareDetail): SharedTranscript => {
-    const pictures = new Pictures();
+export interface ShareOptions {
+    // Whether a published picture keeps its file's name; false while the privacy shield is on.
+    readonly keepNames?: boolean;
+}
+
+export const shareTranscript = (messages: readonly TranscriptRow[], detail: ShareDetail, options: ShareOptions = {}): SharedTranscript => {
+    const pictures = new Pictures(options.keepNames ?? true);
     const shared = messages.map((message): TranscriptRow => {
         const base: TranscriptRow = {
             role: message.role,

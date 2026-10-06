@@ -28,6 +28,15 @@ export const WATCHDOG_STALL_MS = 3 * 60_000;
 export const stalledFor = (lastPing: number, now: number, limitMs: number): number | undefined =>
     now - lastPing >= limitMs ? Math.round((now - lastPing) / 1000) : undefined;
 
+// Whether the Worker's own checks were held apart by far more than their interval: then the whole process was paused
+// (a laptop asleep, a suspended VM, a clock stepped forward), not its main loop alone, and the time since the last ping
+// says nothing about a hang. The Worker starts the count again from then. Three intervals and at least three seconds, so
+// a busy machine's late timer is not mistaken for one, but never more than half the limit, so every pause long enough to
+// reach the limit is seen as one. Pure, and self-contained: it runs inside the Worker as source text. (2026-10-06: the
+// first check after a sleep found the last ping minutes old and killed a healthy agent.)
+export const pausedAcross = (previousCheck: number, now: number, checkMs: number, limitMs: number): boolean =>
+    now - previousCheck >= Math.min(Math.max(checkMs * 3, 3000), limitMs / 2);
+
 // The line the Worker writes before it ends the process, with the timestamp every other line of the log carries.
 export const stallLine = (seconds: number, at: Date): string =>
     `[${at.toISOString()}] event loop stalled for ${seconds} s; exiting so the supervisor restarts the agent\n`;
@@ -40,10 +49,15 @@ const { parentPort, workerData } = require("node:worker_threads");
 const { writeSync } = require("node:fs");
 const stalledFor = ${stalledFor.toString()};
 const stallLine = ${stallLine.toString()};
+const pausedAcross = ${pausedAcross.toString()};
 let last = Date.now();
+let checked = last;
 parentPort.on("message", () => { last = Date.now(); });
 setInterval(() => {
-    const seconds = stalledFor(last, Date.now(), workerData.limitMs);
+    const now = Date.now();
+    if (pausedAcross(checked, now, workerData.checkMs, workerData.limitMs)) last = now;
+    checked = now;
+    const seconds = stalledFor(last, now, workerData.limitMs);
     if (seconds === undefined) return;
     try { writeSync(2, stallLine(seconds, new Date())); } catch { /* allow(silent-catch): a log that will not take the line must not keep a hung agent alive */ }
     process.kill(process.pid, "SIGKILL");

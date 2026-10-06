@@ -67,8 +67,18 @@ export const ignoreMatcher = (patterns: readonly string[]): ((path: string) => b
 };
 
 // A path either side may carry: relative, forward-slashed, no empty, `.` or `..` segment, no backslash (a name that holds
-// one on Linux has no spelling on Windows, nor in this format). Anything else is left out of both listings.
-export const isPortablePath = (path: string): boolean => isSafeRelativePath(path) && !/^[a-z]:/i.test(path);
+// one on Linux has no spelling on Windows, nor in this format). Anything else is left out of both listings. On Windows,
+// also no name Windows cannot hold (`windowsHolds`): such a path is refused before anything is made for it.
+export const isPortablePath = (path: string, platform: NodeJS.Platform = process.platform): boolean =>
+    isSafeRelativePath(path) && !/^[a-z]:/i.test(path) && (platform !== "win32" || path.split("/").every(windowsHolds));
+
+// (2026-10-06) Whether Windows can hold a name: none of `<>:"|?*` or a control character (a colon names an alternate
+// data stream of another file), no trailing dot or space (which Windows drops), and no device name (`CON`, `NUL`,
+// `COM1`…, with or without an extension). Measured on NTFS: `notes:extra` left an empty `.notes` beside it, and `nul`
+// was made through a long path and then refused by PowerShell's own delete. local-files' paths.ts holds the same rule.
+const WINDOWS_FORBIDDEN = /[<>:"|?*\u0000-\u001f]/;
+const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
+const windowsHolds = (name: string): boolean => !WINDOWS_FORBIDDEN.test(name) && !/[. ]$/.test(name) && !WINDOWS_DEVICE.test(name);
 
 const HASH = /^[0-9a-f]{64}$/;
 

@@ -351,6 +351,50 @@ describe("the conversation's queue", () => {
         gates[1]?.();
     });
 
+    // A Stop ends the turn that runs, and holds what waited behind it for a press; a message booked for a time or another
+    // agent's land is the person's own appointment, which it leaves alone.
+    it("keeps a send booked while a turn runs when that turn is stopped, and lets it go at its time", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-stop-at", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        const at = Date.now() + 60 * 60 * 1000;
+        await client.agent.run({ prompt: "then tag it", conversationId: "conv-stop-at", agent: "grok", sendAt: at });
+
+        expect(await client.agent.stop({ conversationId: "conv-stop-at", live: true })).toEqual({ stopped: true });
+        await collect(await client.agent.attach({ conversationId: "conv-stop-at" }));
+        expect(await queueOf(client, "conv-stop-at")).toMatchObject({ items: [{ text: "then tag it" }], paused: "scheduled", until: at });
+
+        const pass = createTurnResumeScheduler(turns);
+        await pass.tick(at - 1);
+        expect(gates).toHaveLength(1);
+        await pass.tick(at);
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("then tag it");
+        gates[1]?.();
+    });
+
+    // The archive refuses a conversation holding a booked message, but one filed away by any other road (the aged sweep
+    // reads the same rule, an older editor does not) must not lose the person's words when their time comes: the booking
+    // is their say-so, as their message was, and reopens the conversation.
+    it("starts a booked message's turn in a conversation archived since, rather than dropping the person's words", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-filed-at", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-filed-at" }));
+        const at = Date.now() + 60 * 60 * 1000;
+        await client.agent.run({ prompt: "then tag it", conversationId: "conv-filed-at", agent: "grok", sendAt: at });
+        await turns.agents.setArchived(["conv-filed-at"], Date.now());
+
+        await createTurnResumeScheduler(turns).tick(at);
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("then tag it");
+        expect((await client.agents.archived()).agents).toEqual([]);
+        gates[1]?.();
+    });
+
     // Work that builds on another agent's waits for that agent's work to be in the workspace: here a conversation in the
     // shared tree, whose work is there as soon as its turn ends clean.
     it("holds a message until the conversation it waits for has finished with its work in, and lets it go then", async () => {

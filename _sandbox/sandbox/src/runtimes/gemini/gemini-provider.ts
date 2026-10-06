@@ -104,6 +104,7 @@ export const planGeminiTurn = async (
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
         anonymousBrowser: context.persona?.powers.browser ?? true,
+        shell: context.persona?.powers.shell ?? true,
         extensions: context.persona?.powers.extensions,
     });
     return armPlan(

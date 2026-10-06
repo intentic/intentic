@@ -132,6 +132,17 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
 
     // Signs every browser session cookie; carrying it would let the holder mint sessions against the target.
     { path: "session-secret", portability: "identity", note: "Sign in again, the target signs its own sessions." },
+    // Who owns this sandbox, who else may reach it and at what tier, and the hashed control tokens programs present:
+    // the daemon's to decide, so kept off the workspace every turn writes (auth/members/identity-off-workspace.ts moved
+    // them from `.intentic/identity/` on 2026-10-06). An access list that traveled would let a source sandbox hand
+    // itself the target's ownership, and a token authenticates against the sandbox that minted it.
+    { path: "identity/owner.json", portability: "identity", note: "The target is bound by its own owner's first sign-in." },
+    {
+        path: "identity/members.json",
+        portability: "identity",
+        note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
+    },
+    { path: "identity/control-tokens.json", portability: "identity", note: "Mint fresh control tokens, the old ones authenticate against the source sandbox." },
     {
         path: "browser-access-disabled",
         portability: "identity",

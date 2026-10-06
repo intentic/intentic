@@ -68,6 +68,16 @@ describe("a conversation's queue", () => {
         expect(removed(booked, "m1", 1).queue).toEqual({ items: [], revision: 2 });
     });
 
+    // A booking is the person's own appointment: a stop ends the running turn, and the agent must not carry on by itself,
+    // but it says nothing about a message the person booked for later.
+    it("keeps a scheduled hold, and its booking, through a stop", () => {
+        const byTime = scheduled(NO_QUEUE, message("m1", "one"), { until: 5_000 });
+        expect(hold(byTime, "stopped")).toBe(byTime);
+        const after = { conversationId: "brave-otter-k2", since: 4_000 };
+        const byLand = scheduled(NO_QUEUE, message("m1", "one"), { after });
+        expect(hold(byLand, "stopped")).toBe(byLand);
+    });
+
     it("holds a send for another conversation's land, shows only which one, and takes the newest booking whole", () => {
         const after = { conversationId: "brave-otter-k2", since: 4_000 };
         const waitingOn = scheduled(NO_QUEUE, message("m1", "one"), { after });

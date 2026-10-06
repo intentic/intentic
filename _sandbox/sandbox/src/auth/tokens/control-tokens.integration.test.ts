@@ -23,7 +23,7 @@ test("resolve answers with the scope and label the token was minted at, per toke
     const editor = await store.mint("zed", "editor");
     const ci = await store.mint("github actions", "drive", { createdBy: "owner@example.com" });
     expect((await store.resolve(editor.token))?.scope).toBe("editor");
-    expect(await store.resolve(ci.token)).toEqual({ id: ci.id, label: "github actions", scope: "drive" });
+    expect(await store.resolve(ci.token)).toEqual({ id: ci.id, label: "github actions", scope: "drive", createdBy: "owner@example.com" });
 });
 
 test("an expired token resolves to nothing, and its row still lists so the owner can see and revoke it", async () => {

@@ -34,10 +34,14 @@ const ensureViewer = async (workspaceRoot: string, source: string): Promise<void
     await cp(source, target, { recursive: true, force: true });
 };
 
+// What is published of a picture's bytes, or undefined to publish nothing of it: the privacy shield's painted copy while
+// it is on.
+export type PictureFilter = (bytes: Buffer) => Promise<Buffer | undefined>;
+
 // Copies pictures out of the workspace, never links: a linked path would ask a recipient's browser for a file only this
-// machine can reach. Anything that can't be copied is skipped, not failed; the card then draws the picture's path as
-// text.
-const copyPictures = async (workspaceRoot: string, dir: string, pictures: readonly SharePicture[]): Promise<void> => {
+// machine can reach. Anything that can't be copied, or that the filter withholds, is skipped, not failed; the card then
+// draws the picture's path as text.
+const copyPictures = async (workspaceRoot: string, dir: string, pictures: readonly SharePicture[], filter?: PictureFilter): Promise<void> => {
     for (const picture of pictures) {
         // Agent-chosen path, resolved against the workspace root and refused if it lands outside, like any other.
         const source = resolveWithin(workspaceRoot, picture.source);
@@ -49,8 +53,16 @@ const copyPictures = async (workspaceRoot: string, dir: string, pictures: readon
             continue;
         }
         const target = join(dir, picture.published);
-        await mkdir(dirname(target), { recursive: true });
-        await cp(source, target, { force: true });
+        if (filter === undefined) {
+            await mkdir(dirname(target), { recursive: true });
+            await cp(source, target, { force: true });
+            continue;
+        }
+        const published = await filter(await readFile(source));
+        if (published !== undefined) {
+            await mkdir(dirname(target), { recursive: true });
+            await writeFile(target, published);
+        }
     }
 };
 
@@ -63,6 +75,7 @@ export const publishShare = async (
     id: string,
     payload: SharePayload,
     pictures: readonly SharePicture[],
+    filter?: PictureFilter,
 ): Promise<void> => {
     const template = await readFile(join(viewer, "index.html"), "utf8");
     // Built before anything is written, so a template this daemon can't fill leaves the previous share untouched.
@@ -71,7 +84,7 @@ export const publishShare = async (
     const dir = shareDir(workspaceRoot, id);
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
-    await copyPictures(workspaceRoot, dir, pictures);
+    await copyPictures(workspaceRoot, dir, pictures, filter);
     await writeFile(join(dir, "index.html"), page);
 };
 

@@ -1146,7 +1146,7 @@ const standingSweeps = async (
         await guard(
             say,
             "asking this machine's ic which sandboxes it keeps",
-            async () => await checkKeptHere(fate, (await readState()).pairings, reachedLocally(dialed)),
+            async () => await checkKeptHere(fate, (await readState()).pairings, reachedLocally(dialed), undefined, answeringOf(tracking)),
         );
     }
 };

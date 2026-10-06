@@ -20,6 +20,17 @@ const thingsDocument = defineDocument({
 });
 
 describe("pairings", () => {
+    // Redemption awaits the burn list, so two requests carrying one code can be in flight together; a single-use
+    // pairing is spent by whichever claims it first, never by both.
+    it("spends a pairing once when two redemptions race for it, replayable or not", async () => {
+        const pending = pairings<string>(burnsIn(root()));
+        for (const replayable of [false, true]) {
+            const { token } = pending.mint("laptop", { replayable });
+            const answers = await Promise.all([pending.redeem(token), pending.redeem(token), pending.redeem(token)]);
+            expect(answers.filter((answer) => answer !== undefined)).toEqual(["laptop"]);
+        }
+    });
+
     // `replayable` is a parameter, not a convention: a token that only ever lived in this process is unreplayable once
     // it leaves the map, so recording its digest would cost a file for security it already has.
     it("leaves no trace of a pairing that never left this process", async () => {

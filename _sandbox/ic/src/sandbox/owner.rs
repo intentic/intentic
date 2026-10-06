@@ -5,14 +5,29 @@ use crate::util::{bail, Result};
 
 /* `ic sandbox reset-owner <slug>` — the way back in when the sandbox's owner file cannot be read.
 
-The daemon refuses every sign-in while `.intentic/identity/owner.json` exists and cannot be read (a file truncated by a
+The daemon refuses every sign-in while its owner file exists and cannot be read (a file truncated by a
 power loss, a permission an image change broke): treating it as absent would let the next identity to arrive claim the
 sandbox. Nothing inside the sandbox can fix that, since fixing it needs a sign-in. This moves the unreadable file aside,
 kept beside it for a person to inspect, so the owner's next sign-in binds again the way the first one did, still checked
 against the owner this sandbox was set up for. It runs on the machine that runs the sandbox, which is the proof of
 ownership a locked-out owner still has. */
 
-const OWNER_FILE: &str = "/work/.intentic/identity/owner.json";
+// Where the daemon keeps it: on the history volume since 2026-10-06, off the workspace every turn writes, and in the
+// workspace before that. The first that exists is the one the running daemon reads: a daemon from before the move has
+// only the workspace one, and a later one reads the history copy even where the workspace still holds the old one.
+const HISTORY_OWNER_FILE: &str = "identity/owner.json";
+const WORKSPACE_OWNER_FILE: &str = "/work/.intentic/identity/owner.json";
+
+fn owner_file(container: &str) -> Option<String> {
+    let history = docker::container_env_value(container, "HISTORY_ROOT")
+        .unwrap_or_else(|| "/history".to_string());
+    [
+        format!("{}/{HISTORY_OWNER_FILE}", history.trim_end_matches('/')),
+        WORKSPACE_OWNER_FILE.to_string(),
+    ]
+    .into_iter()
+    .find(|path| docker::exec_ok(container, &["test", "-e", path.as_str()]))
+}
 
 pub fn run(slug: String, yes: bool) -> Result<()> {
     docker::require_daemon()?;
@@ -24,12 +39,12 @@ pub fn run(slug: String, yes: bool) -> Result<()> {
     if docker::inspect(&container, "{{.State.Running}}").as_deref() != Some("true") {
         bail!("{slug} is not running — start it first (ic sandbox start {slug}), then run this again.");
     }
-    if !docker::exec_ok(&container, &["test", "-e", OWNER_FILE]) {
+    let Some(owner_file) = owner_file(&container) else {
         println!("intentic: {slug} has no owner file, so its owner's next sign-in already binds it. Nothing was changed.");
         return Ok(());
-    }
+    };
     // A file that reads is a working sign-in: moving it aside would only hand the sandbox to whoever signs in next.
-    if docker::exec_capture(&container, &["cat", OWNER_FILE])
+    if docker::exec_capture(&container, &["cat", owner_file.as_str()])
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
         .is_some_and(|owner| owner["email"].is_string())
     {
@@ -63,9 +78,9 @@ pub fn run(slug: String, yes: bool) -> Result<()> {
             return Ok(());
         }
     }
-    let aside = format!("{OWNER_FILE}.unreadable-{}", now_ms());
-    if !docker::exec_ok(&container, &["mv", OWNER_FILE, &aside]) {
-        bail!("could not move {OWNER_FILE} aside inside {container}.");
+    let aside = format!("{owner_file}.unreadable-{}", now_ms());
+    if !docker::exec_ok(&container, &["mv", owner_file.as_str(), aside.as_str()]) {
+        bail!("could not move {owner_file} aside inside {container}.");
     }
     println!("intentic: the unreadable owner file is kept as {aside}.");
     println!("          Sign in again as this sandbox's owner: the first sign-in binds it, as it did when it was set up.");

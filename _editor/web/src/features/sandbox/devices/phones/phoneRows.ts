@@ -15,12 +15,15 @@ export interface PhoneRow {
 
 export const phoneRowOf = (phone: PhoneSummary): PhoneRow => {
     const facts = phone.facts;
+    // What the hub remembers is empty after a restart, so only the sandbox's own record of a pairing says "never paired";
+    // a daemon too old to send it leaves the old reading, from what the phone has said.
+    const unpaired = phone.paired === undefined ? phone.lastSeen === undefined && facts === undefined : !phone.paired;
     const state: PhoneRow[`state`] =
         facts?.paused === true
             ? `paused`
             : phone.online
               ? `connected`
-              : phone.lastSeen === undefined && facts === undefined
+              : unpaired
                 ? `never paired`
                 : phone.wake === `ready`
                   ? `asleep`

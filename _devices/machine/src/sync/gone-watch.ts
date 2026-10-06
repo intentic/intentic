@@ -120,13 +120,16 @@ const bySandbox = (pairings: readonly Pairing[]): Map<string, Pairing[]> => {
 // ASKING THIS MACHINE'S ic about the sandboxes that may be kept here: one it reaches through Docker, one ic listed
 // before, or one whose daemon answered on this machine's loopback this pass (`local`). Only those: for any other, ic's
 // silence says nothing. A sandbox ic lists is recorded as kept here (`icSlug`), which is what lets its later absence
-// count; one kept here that ic's listing and trash both lack is gone. Nothing when no pairing qualifies, so a machine
-// syncing only hosted sandboxes never runs ic for this.
+// count; one kept here that ic's listing and trash both lack is gone, unless it still answers at its address
+// (`answering`, its own poll): then it lives on another computer now, and its answer is the better witness (2026-10-06:
+// marked gone on ic's word, it was unmarked by that answer each hour and marked again, for ever). Nothing when no
+// pairing qualifies, so a machine syncing only hosted sandboxes never runs ic for this.
 export const checkKeptHere = async (
     seams: FateSeams,
     pairings: readonly Pairing[],
     local: ReadonlySet<string>,
     read: () => Promise<LocalSandboxes> = readLocalSandboxes,
+    answering: (sandboxId: string) => boolean = () => false,
 ): Promise<void> => {
     const asked = [...bySandbox(pairings)].filter(([sandboxId, held]) => local.has(sandboxId) || held.some(keptHere));
     if (asked.length === 0) {
@@ -151,7 +154,7 @@ export const checkKeptHere = async (
                 // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
                 await sandboxAnswered(seams, sandboxId);
             }
-        } else if (verdict === "gone" && held.some(keptHere)) {
+        } else if (verdict === "gone" && held.some(keptHere) && !answering(sandboxId)) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
             await sandboxSaidGone(seams, sandboxId, "local");
         }

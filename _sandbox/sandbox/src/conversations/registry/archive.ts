@@ -122,6 +122,12 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
         if (id === undefined || entry === undefined) {
             return;
         }
+        // A message booked for later goes out by itself at its time, into a conversation it would find archived: the
+        // person's words would be lost. It stays on the board until they send it, re-time it or take it back.
+        if (entry.queue?.paused === "scheduled" && entry.queue.items.length > 0) {
+            refused[index] = { id, reason: "a message is scheduled to send in it: send it now or take it back first" };
+            return;
+        }
         // A workspace conversation has no checkout to retire; archiving it is only the registry's presentation change.
         if (!isIsolated(entry)) {
             done[index] = id;

@@ -658,4 +658,23 @@ describe(`going back`, () => {
         await switchHostedImage(config, MACHINE, { ...target(), image: OLD }, { start: true, logger, record, words: ROLLBACK_WORDS });
         expect(row).toMatchObject({ previousImage: NEW, unprovenImage: null });
     });
+
+    // The version before an image on trial is both what the rollback moves to and the "last good" one: when it does not
+    // come up, the machine goes back to the image it held, not onto the version that just failed (2026-10 bug hunt).
+    it(`puts the image it held back when the version before an image on trial does not come up`, async () => {
+        const fly = seeded(`stopped`);
+        machineOf(fly).config = { ...target() };
+        fly.commands.answer = machineAnswers({
+            health: (_asked, machine) => (machine.config[`image`] === OLD ? NO_HEALTH : healthAnswer({ boot: { ready: true }, state: { journal: `none` } })),
+        });
+        const { record, row } = fakeGateRecord({ unprovenImage: NEW, previousImage: OLD });
+        const kept = await switchHostedImage(config, MACHINE, { ...target(), image: OLD }, { start: true, logger, record, words: ROLLBACK_WORDS }).catch(
+            (error: unknown) => error,
+        );
+        expect(kept).toBeInstanceOf(HostedImageKept);
+        expect(kept).toMatchObject({ reason: `rolled-back`, running: true, message: expect.stringMatching(/^the earlier version did not come up, so the sandbox was put back on the version it had/u) });
+        expect(machineOf(fly)).toMatchObject({ state: `started`, config: { image: NEW } });
+        // Nothing was learned about either version: the way back and the trial stand as they were.
+        expect(row).toMatchObject({ previousImage: OLD, unprovenImage: NEW });
+    });
 });

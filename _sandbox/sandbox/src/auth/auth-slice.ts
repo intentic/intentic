@@ -10,6 +10,7 @@ import {
     fileMembersStore,
     fileOwnerStore,
     membersDocument,
+    operatesSandbox,
     type MembersStore,
     ownerDocument,
     ownerResetCommand,
@@ -25,7 +26,7 @@ import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
 import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
 import { createSessions, type MintedSession } from "./session.js";
-import { type ControlTokens, controlTokensDocument, fileControlTokens } from "./tokens/control-tokens.js";
+import { type ControlTokens, controlTokensDocument, fileControlTokens, minterBound } from "./tokens/control-tokens.js";
 import { type DoorTokens, doorTokensDocument, fileDoorTokens } from "./tokens/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./tokens/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./tokens/ws-tickets.js";
@@ -69,7 +70,7 @@ export interface AuthSlice {
         | undefined;
 }
 
-// The sandbox as passkey relying party: the store beside members.json, the ceremonies the routes drive, and the view
+// The sandbox as passkey relying party: its passkey store, the ceremonies the routes drive, and the view
 // of the store the authorizer's require-passkey policy reads.
 const passkeysOf = (
     config: Config,
@@ -120,10 +121,10 @@ const noticedOwnerStore = (store: OwnerStore, logger: Pick<Logger, "error">, con
 
 // Builds the auth slice from config; loopback (no Google client id) leaves `auth` undefined, so every route is open.
 export const createAuthSlice = (config: Config, workspaceRoot: string, logger: Pick<Logger, "error">): AuthSlice => {
-    const members = fileMembersStore(join(workspaceRoot, membersDocument.path));
+    const members = fileMembersStore(join(config.historyRoot, membersDocument.path));
     const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, workspaceRoot);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
-    const ownerStore = noticedOwnerStore(fileOwnerStore(join(workspaceRoot, ownerDocument.path)), logger, config.connectToken);
+    const ownerStore = noticedOwnerStore(fileOwnerStore(join(config.historyRoot, ownerDocument.path)), logger, config.connectToken);
     // Read once now, so a file that cannot be read is said at boot rather than at the owner's first refused sign-in.
     // allow(silent-catch): the read exists only for the notice above; every sign-in reads the file again.
     void ownerStore.read().catch(() => undefined);
@@ -166,7 +167,7 @@ export const createAuthSlice = (config: Config, workspaceRoot: string, logger: P
         mediaTickets: createMediaTickets(),
         panelToken: randomBytes(32).toString("hex"),
         agentToken: randomBytes(32).toString("hex"),
-        controlTokens: fileControlTokens(join(workspaceRoot, controlTokensDocument.path)),
+        controlTokens: minterBound(fileControlTokens(join(config.historyRoot, controlTokensDocument.path)), operatesSandbox(ownerStore, members)),
         doorTokens: fileDoorTokens(join(workspaceRoot, doorTokensDocument.path)),
         passkeys,
         passkeyCeremonies,

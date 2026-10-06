@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PERSONAL_DATA_CLASSES } from "@intentic/sandbox-contract";
 import { requires } from "@intentic/testing/requires";
+import sharp from "sharp";
 import { pesel } from "../detect/tests/ids.testing.js";
 import { ocrInstalled, ocrModelDir } from "@intentic/ocr/models";
 import { loadTextReader } from "@intentic/ocr/paddle-ocr";
@@ -11,6 +12,7 @@ import { paintRegions, readingText, regionsFor } from "../image-mask.js";
 import { createMaskMemo, createMasker } from "../masker.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 import { createLocalReaders } from "../readers.js";
+import { createReadingMemo, emptyTally, maskingShield } from "../gateway/request-shield.js";
 import { installed, pdfWith } from "./pages.testing.js";
 
 // An image masked the way the gateway masks one, then read again by the same reader: what an untrusted provider's model
@@ -61,4 +63,94 @@ test.skipIf(!ocr.runs)(ocr.title("a masked image read again holds the token wher
         await reader?.release();
         await rm(dir, { recursive: true, force: true });
     }
+});
+
+// What an untrusted provider is sent of a picture the reader does not read the right way up, or does not read whole: the
+// gateway's own walk (maskingShield), then the picture it would send read again.
+describe("a picture the reader would not read as it is", () => {
+    const value = pesel(1985, 3, 14);
+    let reader: Awaited<ReturnType<typeof loadTextReader>>;
+    let dir: string;
+    beforeAll(async () => {
+        if (!ocr.runs) {
+            return;
+        }
+        reader = await loadTextReader();
+        dir = await mkdtemp(join(tmpdir(), "privacy-mask-"));
+    });
+    afterAll(async () => {
+        await reader?.release();
+        if (dir !== undefined) {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+    // The page as pdftoppm draws it at 100 dpi: 850 x 1100, the line in its upper left.
+    const drawn = async (): Promise<Buffer> => {
+        await writeFile(join(dir, "page.pdf"), pdfWith(`PESEL: ${value} Faktura 12/2026`));
+        execFileSync("pdftoppm", ["-r", "100", "-png", "-singlefile", join(dir, "page.pdf"), join(dir, "page")]);
+        return readFile(join(dir, "page.png"));
+    };
+    const sent = async (data: Buffer, mediaType: string): Promise<Buffer> => {
+        const { privacyShield } = privacySliceFake();
+        const masker = createMasker({
+            vault: privacyShield.vault,
+            policy: { classes: [...PERSONAL_DATA_CLASSES], allow: [], names: "dictionary" },
+            memo: createMaskMemo(),
+        });
+        const shield = maskingShield({
+            masker,
+            readers: createLocalReaders({ textReader: async () => reader }),
+            readings: createReadingMemo(),
+            images: "mask",
+            tally: emptyTally(),
+        });
+        const out = await shield.image({ mediaType, data: data.toString("base64") });
+        if (out === "keep") {
+            return data;
+        }
+        if (!("image" in out)) {
+            throw new Error(`the picture was withheld: ${out.text}`);
+        }
+        return Buffer.from(out.image.data, "base64");
+    };
+    // No run of the number survives, not even four of its digits in a row.
+    const runsOf = (text: string): string[] =>
+        Array.from({ length: value.length - 3 }, (_, at) => value.slice(at, at + 4)).filter((run) => text.includes(run));
+
+    test.skipIf(!ocr.runs)(ocr.title("a page upside down, with no tag to say so, goes with the number painted over"), async () => {
+        const upsideDown = await sharp(await drawn())
+            .rotate(180)
+            .png()
+            .toBuffer();
+        const out = await sent(upsideDown, "image/png");
+        expect(out.equals(upsideDown)).toBe(false);
+        // Read again the right way up, which the reader reads best.
+        const again = await createLocalReaders({ textReader: async () => reader }).readImage(
+            await sharp(out)
+                .rotate(180)
+                .png()
+                .toBuffer(),
+        );
+        const text = readingText(again?.lines ?? []);
+        expect(text).toContain("Faktura");
+        expect(runsOf(text)).toEqual([]);
+    });
+
+    test.skipIf(!ocr.runs)(ocr.title("an animation whose number is on a later frame goes as the frame that was read"), async () => {
+        const page = await drawn();
+        const { width = 0, height = 0 } = await sharp(page).metadata();
+        const blank = await sharp({ create: { width, height, channels: 3, background: "#ffffff" } })
+            .png()
+            .toBuffer();
+        const gif = await sharp([blank, page], { join: { animated: true } })
+            .gif()
+            .toBuffer();
+        const out = await sent(gif, "image/gif");
+        expect((await sharp(out, { animated: true }).metadata()).pages ?? 1).toBe(1);
+        const frames = await sharp(out, { animated: true })
+            .png()
+            .toBuffer();
+        const again = await createLocalReaders({ textReader: async () => reader }).readImage(frames);
+        expect(runsOf(readingText(again?.lines ?? []))).toEqual([]);
+    });
 });

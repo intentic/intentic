@@ -30,6 +30,28 @@ const WHEEL_MAX = 12;
 // xdotool speaks lines; anything that could carry a newline is split before it gets here, so a command can't be forged.
 const line = (parts: readonly (string | number)[]): string => `${parts.join(" ")}\n`;
 
+// One line of text as the lines that type it. `xdotool -` is not an argv: it splits a line into words, joins a `type`'s
+// words with nothing between them (so every space vanishes), and reads a word that begins with `$` as the name of an
+// environment variable (quitting when there is none). Measured on xdotool 3.20160805 with xev recording what each line
+// typed: inside single quotes a word is literal, whatever it holds but a single quote, which has no escape and so is a
+// double-quoted word of its own, and a `$` is pressed as a key where it could begin a word. `--` ends the option list,
+// so text that starts with a dash is typed rather than parsed.
+const typedLines = (text: string): string[] =>
+    text.split("$").flatMap((run, index) => {
+        const typed =
+            run === ""
+                ? []
+                : [
+                      line([
+                          "type",
+                          "--clearmodifiers",
+                          "--",
+                          ...run.split("'").flatMap((piece, at) => [...(at > 0 ? [`"'"`] : []), ...(piece === "" ? [] : [`'${piece}'`])]),
+                      ]),
+                  ];
+        return index === 0 ? typed : [line(["key", "--clearmodifiers", "dollar"]), ...typed];
+    });
+
 // Gestures over any writer, separate from the process that usually receives them: what matters here is the text itself
 // (button numbers, wheel presses, never forging a command from a newline), none of which needs owning a child process.
 export const xInputOver = (write: (command: string) => void, stop: () => void): XInput => {
@@ -65,10 +87,7 @@ export const xInputOver = (write: (command: string) => void, stop: () => void): 
                 if (index > 0) {
                     write(line(["key", "--clearmodifiers", "Return"]));
                 }
-                if (part !== "") {
-                    // `--` ends the option list, so text that starts with a dash is typed rather than parsed.
-                    write(line(["type", "--clearmodifiers", "--", part]));
-                }
+                typedLines(part).forEach(write);
             });
         },
         stop,

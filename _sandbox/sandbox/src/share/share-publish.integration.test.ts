@@ -53,6 +53,32 @@ it("publishes a page, its pictures, and one copy of the viewer every share loads
     expect(await exists(join(shareRoot(root), "_viewer/assets/index.js"))).toBe(true);
 });
 
+// While the privacy shield is on, what is published of a picture is what the shield made of it: painted over, or
+// nothing at all where it could not be read.
+it("publishes a picture as the shield answers for it, and not at all where it answers nothing", async () => {
+    const [root, dist] = await Promise.all([workspace(), viewer()]);
+    await writeFile(join(root, ".intentic/records/artifacts/browser/unreadable.png"), "NOT-AN-IMAGE");
+    const seen: string[] = [];
+    await publishShare(
+        root,
+        dist,
+        "chat-7a8b",
+        payload(),
+        [
+            { source: ".intentic/records/artifacts/browser/after.png", published: "files/1.png" },
+            { source: ".intentic/records/artifacts/browser/unreadable.png", published: "files/2.png" },
+        ],
+        async (bytes) => {
+            seen.push(bytes.toString("utf8"));
+            return bytes.toString("utf8") === "PNG-BYTES" ? Buffer.from("PAINTED") : undefined;
+        },
+    );
+    const share = join(shareRoot(root), "chat-7a8b");
+    expect(seen).toEqual(["PNG-BYTES", "NOT-AN-IMAGE"]);
+    expect(await readFile(join(share, "files/1.png"), "utf8")).toBe("PAINTED");
+    expect(await exists(join(share, "files/2.png"))).toBe(false);
+});
+
 // A share is a snapshot re-taken under the same id; a second write must not leave the first one's leftovers.
 it("re-sharing replaces what was there, pictures included", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);

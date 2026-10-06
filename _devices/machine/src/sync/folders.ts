@@ -83,17 +83,51 @@ export const folderRefusal = (folder: string, home: string | undefined, platform
     if (home !== undefined && within(home, resolved, platform)) {
         return `${folder} holds your home folder. Pick the folder of one project in it.`;
     }
+    // (2026-10-06) A WSL distro's folder as Windows reaches it is held to the distro's own rules below, with its homes
+    // refused by shape: the Windows home says nothing of whose they are.
+    const inDistro = platform === "win32" ? WSL_SHARE.exec(resolved)?.groups?.["inside"] : undefined;
+    if (inDistro !== undefined) {
+        return distroRefusal(folder, inDistro.replaceAll("\\", "/"));
+    }
     // Fedora Atomic keeps the homes under `/var/home` (`/home` links to it): a folder in somebody's home there is theirs,
     // whatever the rule for `/var` below says.
     if (platform !== "win32" && within(resolved, "/var/home", platform)) {
-        const depth = posix.relative("/var/home", resolved).split("/").filter((part) => part !== "").length;
-        if (depth === 0) {
-            return `${folder} holds everyone's home folders. Pick the folder of one project in yours.`;
-        }
-        return depth === 1 ? `${folder} is a whole home folder. Pick the folder of one project in it.` : undefined;
+        return homesRefusal(folder, resolved, "/var/home");
     }
-    const system = platform === "win32" ? WINDOWS_SYSTEM_FOLDERS : POSIX_SYSTEM_FOLDERS;
+    // (2026-10-06) The system's folders on whichever drive the folder is: a second disk can hold a Windows install too.
+    const system = platform === "win32" ? WINDOWS_SYSTEM_FOLDERS.map((name) => `${resolved.slice(0, 2)}\\${name}`) : POSIX_SYSTEM_FOLDERS;
     return system.some((root) => within(resolved, root, platform)) ? `${folder} belongs to the system. Pick a folder of your own.` : undefined;
+};
+
+// A folder in a folder of homes (`homes`, which `resolved` is or is inside): the homes' own folder and a whole home in it
+// are refused, a folder in somebody's home is theirs.
+const homesRefusal = (folder: string, resolved: string, homes: string): string | undefined => {
+    const depth = posix.relative(homes, resolved).split("/").filter((part) => part !== "").length;
+    if (depth === 0) {
+        return `${folder} holds everyone's home folders. Pick the folder of one project in yours.`;
+    }
+    return depth === 1 ? `${folder} is a whole home folder. Pick the folder of one project in it.` : undefined;
+};
+
+// `\\wsl.localhost\<distro>\…` (or `\\wsl$\…`), with the path inside the distro, its leading backslash kept.
+const WSL_SHARE = /^\\\\wsl(?:\.localhost|\$)\\[^\\]+(?<inside>\\.*)$/i;
+
+// A folder inside a distro, `inside` its Linux path: a whole mounted disk (`/mnt/c`), its homes and root's home, and its
+// system's folders, as `folderRefusal` refuses them on Linux.
+const distroRefusal = (folder: string, inside: string): string | undefined => {
+    const resolved = posix.resolve(inside);
+    for (const homes of ["/home", "/var/home"]) {
+        if (within(resolved, homes, "linux")) {
+            return homesRefusal(folder, resolved, homes);
+        }
+    }
+    if (resolved === "/root") {
+        return `${folder} is a whole home folder. Pick the folder of one project in it.`;
+    }
+    if (within(resolved, "/mnt", "linux") && posix.relative("/mnt", resolved).split("/").filter((part) => part !== "").length <= 1) {
+        return `${folder} is a whole disk. Pick the folder of one project in it.`;
+    }
+    return POSIX_SYSTEM_FOLDERS.some((root) => within(resolved, root, "linux")) ? `${folder} belongs to the system. Pick a folder of your own.` : undefined;
 };
 
 // Whether `inner` is `outer` or inside it, by the platform's own comparison.
@@ -104,5 +138,6 @@ const within = (inner: string, outer: string, platform: NodeJS.Platform): boolea
 };
 
 // The desktop app's own lists (project.rs), kept in step with it.
-const WINDOWS_SYSTEM_FOLDERS: readonly string[] = [String.raw`C:\Windows`, String.raw`C:\Program Files`, String.raw`C:\Program Files (x86)`, String.raw`C:\ProgramData`];
+// Windows' by name, on the drive of the folder asked about.
+const WINDOWS_SYSTEM_FOLDERS: readonly string[] = ["Windows", "Program Files", "Program Files (x86)", "ProgramData"];
 const POSIX_SYSTEM_FOLDERS: readonly string[] = ["/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/sbin", "/sys", "/usr", "/var", "/System", "/Library", "/Applications"];

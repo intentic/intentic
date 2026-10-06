@@ -21,8 +21,8 @@ export const within = (root: string, abs: string, rules: PlatformPath = hostPath
 
 // The path's segments once it is known not to leave the root by spelling alone; undefined when it tries to. A
 // backslash is refused rather than read: it is a separator on Windows and a name character elsewhere, and a path that
-// means two things is not one to guess at.
-export const segmentsOf = (path: string): readonly string[] | undefined => {
+// means two things is not one to guess at. On Windows, so is a name Windows cannot hold (`windowsHolds`).
+export const segmentsOf = (path: string, platform: NodeJS.Platform = process.platform): readonly string[] | undefined => {
     if (path.includes(`\0`) || path.includes(`\\`)) {
         return undefined;
     }
@@ -30,8 +30,16 @@ export const segmentsOf = (path: string): readonly string[] | undefined => {
     if (segments.includes(`..`) || /^[A-Za-z]:$/.test(segments[0] ?? ``)) {
         return undefined;
     }
-    return segments;
+    return platform === `win32` && !segments.every(windowsHolds) ? undefined : segments;
 };
+
+// (2026-10-06) Whether Windows can hold a name: none of `<>:"|?*` or a control character, no trailing dot or space, and
+// no device name (`CON`, `NUL`, `COM1`…, with or without an extension). Measured on NTFS: `a.txt:ads` resolved to a
+// hidden stream of `a.txt`, `a.txt::$DATA` to `a.txt` itself, and a file made as `nul` could not be deleted by
+// PowerShell. The machine agent's project-files.ts holds the same rule.
+const WINDOWS_FORBIDDEN = /[<>:"|?*\u0000-\u001f]/;
+const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
+const windowsHolds = (name: string): boolean => !WINDOWS_FORBIDDEN.test(name) && !/[. ]$/.test(name) && !WINDOWS_DEVICE.test(name);
 
 // The root-relative spelling of a path, `""` for the root: the key every grant and event speaks in.
 export const cleanRelPath = (path: string): string | undefined => segmentsOf(path)?.join(`/`);

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { PRIVACY_EXCERPT_REACH, type PersonalDataClass, type PrivacyReplacement, type PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import { detectPersonalData, normalizeAllowed, type PersonalDataSpan } from "./detect/detect.js";
 import type { PrivacyVault, VaultHit } from "./privacy-vault.js";
-import { tokenPattern } from "./tokens.js";
+import { LITERAL_PREFIX, TOKEN_LABEL, TOKEN_SOURCE, tokenPattern } from "./tokens.js";
 
 // One string bound for an untrusted provider, masked: every value the vault already holds, then whatever the detectors
 // (and the local name model, where installed) find, each replaced by its token. A request re-sends its whole
@@ -119,8 +119,21 @@ const chooseSpans = (candidates: readonly Candidate[]): Candidate[] => {
     return chosen;
 };
 
-// Tokens already in a string (the model's own words, re-sent) are left exactly as they are and nothing is looked for
-// inside them.
+// Labels a token can be restored by, and the escaped ones, whose prefix restoring takes off.
+const RESTORABLE_LABELS: ReadonlySet<string> = new Set(Object.values(TOKEN_LABEL));
+const restorable = (label: string): boolean => RESTORABLE_LABELS.has(label) || label.startsWith(LITERAL_PREFIX);
+
+// A token-shaped literal in what a request carries, as the provider is sent it: escaped (tokens.ts, LITERAL_PREFIX) when
+// restoring could otherwise read it, else exactly as it was, since nothing would ever resolve it.
+const WHOLE_TOKEN = new RegExp(`^(?:${TOKEN_SOURCE})$`, "u");
+const escapedLiteral = (token: string): string => {
+    const [, label, , looseLabel] = WHOLE_TOKEN.exec(token) ?? [];
+    const open = label === undefined ? "[[" : "⟦";
+    return restorable(label ?? looseLabel ?? "") ? `${open}${LITERAL_PREFIX}${token.slice(open.length)}` : token;
+};
+
+// Token-shaped text already in a string is data: a runtime holds only what the gateway restored, so it was never given
+// out for what it stands beside. Nothing is looked for inside it, and the first masking escapes it (escapedLiteral).
 const segmentsAroundTokens = (text: string): { readonly text: string; readonly token: boolean }[] => {
     const parts: { text: string; token: boolean }[] = [];
     let last = 0;
@@ -270,7 +283,7 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
             let masked = "";
             if (remembered === undefined) {
                 for (const part of segmentsAroundTokens(text)) {
-                    masked += part.token ? part.text : apply(part.text, await spansOf(part.text), counts, placed, masked.length);
+                    masked += part.token ? escapedLiteral(part.text) : apply(part.text, await spansOf(part.text), counts, placed, masked.length);
                 }
             } else {
                 masked = remaskKnown(remembered.text, counts, placed);
@@ -323,6 +336,10 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
         restore: (text) =>
             text.includes("⟦") || text.includes("[[")
                 ? text.replace(tokenPattern(), (whole, label?: string, index?: string, looseLabel?: string, looseIndex?: string) => {
+                      // An escaped literal comes back as the literal it was: one prefix off, whatever follows it.
+                      if ((label ?? looseLabel ?? "").startsWith(LITERAL_PREFIX)) {
+                          return whole.replace(LITERAL_PREFIX, "");
+                      }
                       const resolved =
                           label !== undefined && index !== undefined
                               ? vault.resolve(label, index)

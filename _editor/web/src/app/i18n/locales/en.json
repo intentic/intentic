@@ -1696,6 +1696,7 @@
             "pay": "Pay ${amountUsd} {assetName}?",
             "pay2": "Pay ${amountUsd}",
             "paymentDidntGoThrough": "The payment didn't go through: nothing was spent.",
+            "paymentOwnerOnly": "Only this sandbox's owner can approve a payment: the wallet that pays is theirs.",
             "placedBy": "Placed by you",
             "readAsItsOwn": "Read as its own",
             "refused": "Refused",

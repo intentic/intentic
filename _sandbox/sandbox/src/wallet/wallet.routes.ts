@@ -68,6 +68,8 @@ export const createWalletRoutes = (services: Services) => ({
                 sign: (request) => relayWalletSign(services.config, request),
                 ...cardDeps(services),
                 tainted: conversationTainted,
+                // Only where people sign in: a loopback daemon's replies carry nobody, and its one person answers.
+                ...(services.auth !== undefined ? { ownerEmail: services.ownerEmail } : {}),
             },
             {
                 url,

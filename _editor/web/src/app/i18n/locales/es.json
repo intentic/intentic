@@ -1189,6 +1189,7 @@
             "pay": "¿Pagar {amountUsd} $ por {assetName}?",
             "pay2": "Pagar {amountUsd} $",
             "paymentDidntGoThrough": "El pago no se completó: no se ha gastado nada.",
+            "paymentOwnerOnly": "Solo el propietario de este sandbox puede aprobar un pago: el monedero que paga es el suyo.",
             "placedBy": "Lo has puesto tú",
             "readAsItsOwn": "Lo lee como suyo",
             "refused": "Rechazado",

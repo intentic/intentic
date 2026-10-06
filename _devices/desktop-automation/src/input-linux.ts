@@ -1,5 +1,5 @@
 import { wtypeArgs, xdotoolChord } from "./keys.js";
-import { has, run } from "./run.js";
+import { has, run, runOutput } from "./run.js";
 import { isWayland } from "./screen.js";
 import { DesktopError, type MouseButton, type Point, type ScrollDirection } from "./types.js";
 
@@ -20,6 +20,10 @@ const wayland = (): boolean => isWayland();
 
 const xdotool = (args: readonly string[]): Promise<string> => run("xdotool", args, XDOTOOL_INSTALL);
 const ydotool = (args: readonly string[]): Promise<string> => run("ydotool", args, YDOTOOL_INSTALL);
+
+// xdotool answers a key name it does not know on stderr ("No such key name 'X'. Ignoring it.") and exits 0, so without
+// this the press of it is reported as done.
+export const unknownKeyIn = (stderr: string): string | undefined => /No such key name '([^']*)'/.exec(stderr)?.[1];
 
 export const linuxInput = {
     move: async (to: Point): Promise<void> => {
@@ -97,7 +101,11 @@ export const linuxInput = {
             // ydotool's `key` wants keycodes, not names, so this reports the gap rather than mistranslating it.
             throw new DesktopError("Pressing key combinations on Wayland needs wtype.", WTYPE_INSTALL);
         }
-        await xdotool(["key", "--clearmodifiers", xdotoolChord(combo)]);
+        const { stderr } = await runOutput("xdotool", ["key", "--clearmodifiers", xdotoolChord(combo)], XDOTOOL_INSTALL);
+        const unknown = unknownKeyIn(stderr);
+        if (unknown !== undefined) {
+            throw new DesktopError(`"${unknown}" is not a key this desktop knows, so nothing was pressed. Name it as a letter, a digit, F1–F12, or an X11 key name like Return, Tab, Escape, Page_Up.`);
+        }
     },
 
     scroll: async (at: Point, direction: ScrollDirection, amount: number): Promise<void> => {

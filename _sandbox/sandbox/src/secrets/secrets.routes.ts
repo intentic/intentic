@@ -10,8 +10,8 @@ import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import type { CredentialGate, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { authorizeMaintainer, bearerFrom, ForbiddenError } from "../auth/auth.js";
-import { secretsContract } from "@intentic/sandbox-contract";
+import { authorizeMaintainer, bearerFrom, type Caller, ForbiddenError } from "../auth/auth.js";
+import { roleAtLeast, secretsContract } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../state-paths.js";
@@ -96,6 +96,24 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             throw new ORPCError("UNAUTHORIZED");
         }
     };
+    // Whether this caller may see a value in the clear: reveal is the operating tier's (ensureMaintainer), and a gated
+    // credential is held to its approvers there as at every other release, since a maintainer is exactly who a gate may
+    // be written about. A loopback daemon has one person, who answers for everything.
+    const mayReveal = (identity: Caller | undefined, gate: CredentialGate | undefined): boolean => {
+        if (services.auth === undefined) {
+            return true;
+        }
+        if (identity === undefined || !roleAtLeast(identity.role, "maintainer")) {
+            return false;
+        }
+        return gate === undefined || gate.approvers.some((approver) => approver.toLowerCase() === identity.email.toLowerCase());
+    };
+    const refuseUnlessReleasable = async (identity: Caller | undefined, kind: CredentialGate["kind"], subject: string): Promise<void> => {
+        const gate = (await services.credentialGates.list()).find((entry) => entry.kind === kind && entry.subject === subject);
+        if (!mayReveal(identity, gate)) {
+            throw new ORPCError("FORBIDDEN", { message: `Only ${gate?.approvers.join(", ") ?? "an approver"} can see "${subject}": it is gated.` });
+        }
+    };
     // Everybody who could be named an approver: the owner plus the Access roster, less its guests, who never see a gate
     // and so could never release one. Checked against, so a typo'd address cannot produce a credential nobody can ever
     // release.
@@ -168,7 +186,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             }
             return { ok: true } as const;
         }),
-        inventory: i.inventory.handler(async () => {
+        inventory: i.inventory.handler(async ({ context }) => {
             const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards] = await Promise.all([
                 // A display surface: one unparseable repo file costs its own rows, said in the log, not the whole panel.
                 existsSync(desiredState())
@@ -223,10 +241,12 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 const withHosts =
                     hostGuard === undefined ? entry : { ...entry, hosts: { guard: hostGuard.guard, list: hostGuard.hosts, source: hostGuard.source } };
                 const withGate = gate === undefined ? withHosts : { ...withHosts, gate: { approvers: gate.approvers, scope: gate.scope } };
+                // Revealable says what this caller's Reveal would get: a gated row is only its approvers'.
+                const readable = withGate.revealable && !mayReveal(context.identity, gate) ? { ...withGate, revealable: false } : withGate;
                 return use === undefined
-                    ? withGate
+                    ? readable
                     : {
-                          ...withGate,
+                          ...readable,
                           lastUse: {
                               at: use.at,
                               lane: use.lane,
@@ -257,9 +277,12 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 const field = secretField(capability, await contributionRegistry(services));
                 const value = field === undefined ? undefined : (capability.config as Record<string, string>)[field];
                 if (value !== undefined) {
+                    await refuseUnlessReleasable(context.identity, "capability", input.key);
                     return { value };
                 }
             }
+            // Every other store answers to a secret of this name.
+            await refuseUnlessReleasable(context.identity, "secret", input.key);
             const keptValue = await services.sandboxSecrets.get(input.key);
             if (keptValue !== undefined) {
                 return { value: keptValue };
