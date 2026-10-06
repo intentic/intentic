@@ -53,11 +53,20 @@ pub struct NodeVitals {
     pub restarts: u32,
 }
 
-/// The vitals of `container`'s daemon. None from a container with no netd to ask (an image from before it) or one not
-/// answering at all yet.
+/// Where netd also writes its vitals in the container (browser-wire's VITALS_FILE), for when its address answers
+/// nothing: a daemon that died before it named netd's ports.
+const VITALS_FILE: &str = "/run/intentic/vitals.json";
+
+/// The vitals of `container`'s daemon: netd's answer on its address, else the file netd keeps them in. None from a
+/// container with no netd to ask (an image from before it), or one whose netd predates the file and listens on
+/// nothing.
 pub fn vitals(container: &str) -> Option<NodeVitals> {
-    let body = docker::exec_capture(container, &["curl", "-sf", "-m", "5", VITALS_URL])?;
-    read_vitals(&body)
+    docker::exec_capture(container, &["curl", "-sf", "-m", "5", VITALS_URL])
+        .and_then(|body| read_vitals(&body))
+        .or_else(|| {
+            docker::exec_capture(container, &["cat", VITALS_FILE])
+                .and_then(|body| read_vitals(&body))
+        })
 }
 
 /// The vitals document → what the waits read of it. Pure. Anything without both fields is no answer.
@@ -80,9 +89,9 @@ pub fn crash_loop(vitals: &NodeVitals) -> Option<String> {
     })
 }
 
-/// A crash loop read off the container's own log, for a daemon that dies before it ever reaches netd: netd binds no
-/// port until its daemon names them, so such a container has no vitals to ask, and netd's log line is the only count of
-/// its restarts. The last ten minutes, as netd's own count is.
+/// A crash loop read off the container's own log, for a daemon that dies before it ever reaches netd, under a netd from
+/// before its vitals file: netd binds no port until its daemon names them, so that container has no vitals to give, and
+/// netd's log line is the only count of its restarts. The last ten minutes, as netd's own count is.
 pub fn crash_loop_in_logs(container: &str) -> Option<String> {
     crashes_in(&docker::stderr_since(container, "10m")?)
 }
@@ -134,6 +143,17 @@ pub enum Silent {
     Failed(String),
     /// Nothing answered within the wait, which ran this many seconds.
     Quiet(u64),
+}
+
+impl Silent {
+    /// Why, as the end of a sentence about a daemon put back ("it does not come up either: …").
+    pub fn describe(&self) -> String {
+        match self {
+            Silent::Crashing(looping) => format!("its daemon keeps crashing: {looping}"),
+            Silent::Failed(error) => format!("it could not start: {error}"),
+            Silent::Quiet(secs) => format!("it did not answer within {secs}s"),
+        }
+    }
 }
 
 /// The first answer of `container`'s `/health`, or why none came.
@@ -390,6 +410,7 @@ mod tests {
             vitals["path"],
             VITALS_URL.trim_start_matches("http://localhost:8787")
         );
+        assert_eq!(vitals["file"], VITALS_FILE);
         let body = &vitals["body"];
         assert_eq!(body["properties"]["node"]["$ref"], "#/$defs/NodeLink");
         assert_eq!(body["properties"]["restarts"]["type"], "integer");

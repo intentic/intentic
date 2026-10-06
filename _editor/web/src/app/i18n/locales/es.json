@@ -2495,7 +2495,11 @@
             "cantReadLogAt": "Ahora mismo no se puede leer el registro; la compilación en sí no se ve afectada. {hiccup}",
             "fullOutputIn": "La salida completa está en",
             "layerOf": "capa {done} de {total}",
+            "lostContact": "Esta página perdió el contacto con tu sandbox mientras se reiniciaba.",
+            "lostContactGaveUp": "Esta página ha dejado de intentarlo. Cómo terminó la reconstrucción queda registrado en la máquina que la ejecutó.",
+            "lostContactRetrying": "Cómo terminó la reconstrucción queda registrado en la máquina que la ejecuta. Esta página sigue intentándolo y retoma la reconstrucción si tu sandbox responde.",
             "onDevice": "en ese dispositivo.",
+            "outcomeOnMachine": "Consúltalo en la máquina que ejecuta la reconstrucción",
             "rebuildStoppedReportingNever": "Esa reconstrucción dejó de informar y nunca dijo cómo terminó.",
             "waitingFirstLineDevice": "Esperando la primera línea de ese dispositivo…"
         },

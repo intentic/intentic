@@ -8,6 +8,7 @@ mod link;
 mod listen;
 mod proxy;
 mod quic;
+mod remember;
 mod route;
 mod standing;
 mod supervise;
@@ -40,6 +41,12 @@ use crate::vitals::Vitals;
 
 const USAGE: &str = "usage: intentic-netd [--run-dir DIR] -- NODE_COMMAND [ARGS...]";
 
+// netd's run directory unless `--run-dir` names another: its sockets, the config it remembers, its vitals file.
+const RUN_DIR: &str = "/run/intentic";
+
+// The vitals file's name in the run directory, which is browser-wire's VITALS_FILE under the default one.
+const VITALS_FILE_NAME: &str = "vitals.json";
+
 fn main() -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -55,7 +62,7 @@ fn main() -> ExitCode {
     };
     let (options, node) = (&arguments[..split], &arguments[split + 1..]);
     let run_dir = match options {
-        [] => PathBuf::from("/run/intentic"),
+        [] => PathBuf::from(RUN_DIR),
         [flag, dir] if flag == "--run-dir" => PathBuf::from(dir),
         _ => {
             eprintln!("{USAGE}");
@@ -83,6 +90,9 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         tracing::error!(%error, dir = %run_dir.display(), "could not prepare the run directory");
         return 1;
     }
+    // An earlier netd's vitals say nothing of this one's daemon, and a host reading them as this one's could take a crash
+    // loop that ended with the last start for the current one: gone before anything else, rewritten once Vitals runs.
+    let _ = std::fs::remove_file(run_dir.join(VITALS_FILE_NAME));
     let control = run_dir.join("netd.sock");
     let http = run_dir.join("node.sock");
 
@@ -109,6 +119,9 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     let pinging = vitals.clone();
     tokio::spawn(async move { pinging.keep_pinging().await });
     let greeting = vitals.clone();
+    let recording = vitals.clone();
+    let vitals_file = run_dir.join(VITALS_FILE_NAME);
+    tokio::spawn(async move { recording.keep_written(&vitals_file).await });
 
     let (config_sender, config) = watch::channel(None);
     let terminals = Terminals::new(Hubs::new(Tmux::default()));
@@ -140,20 +153,45 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         }
     };
 
+    // What the last Node said, applied before this one says anything (remember.rs): a Node that never gets that far
+    // still leaves a sandbox that answers, with its vitals and netd's own "restarting".
+    let mut memory = remember::Memory::open(&run_dir);
+    let last = memory.held().clone();
+    if last != remember::Remembered::default() {
+        tracing::info!("serving as the daemon last configured it, until it says otherwise");
+    }
+    if let Some(certificate) = last.certificate.as_ref()
+        && let Err(error) = tls::apply(&certificates, Some(certificate))
+    {
+        tracing::warn!(%error, "the remembered loopback certificate is unusable");
+    }
+    if let Some(listen) = last.listen {
+        config_sender.send_replace(Some(Arc::new(listen.clone())));
+        listeners.apply(&listen).await;
+    }
+    if last.tunnel.is_some() {
+        tunnel.lock().await.configure(last.tunnel);
+    }
+
     let applying = tunnel.clone();
     tokio::spawn(async move {
         while let Some(message) = pushed.recv().await {
             match message {
                 Pushed::Listen(listen) => {
+                    memory.listen(&listen);
                     config_sender.send_replace(Some(Arc::new(listen.clone())));
                     listeners.apply(&listen).await;
                 }
                 Pushed::Certificate(certificate) => {
+                    memory.certificate(certificate.as_ref());
                     if let Err(error) = tls::apply(&certificates, certificate.as_ref()) {
                         tracing::error!(%error, "the loopback certificate is unusable; keeping the one held");
                     }
                 }
-                Pushed::Tunnel(wanted) => applying.lock().await.configure(wanted),
+                Pushed::Tunnel(wanted) => {
+                    memory.tunnel(wanted.as_ref());
+                    applying.lock().await.configure(wanted);
+                }
                 Pushed::Hello => {
                     applying.lock().await.report_again();
                     if let Some(feed) = &feed {
@@ -232,4 +270,18 @@ fn instance_id() -> String {
         bytes = mixed.to_be_bytes();
     }
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Hosts read the file where browser-wire says netd writes it, which is only true of the default run directory.
+    #[test]
+    fn the_vitals_file_is_where_browser_wire_says_it_is() {
+        assert_eq!(
+            std::path::Path::new(RUN_DIR).join(VITALS_FILE_NAME),
+            std::path::Path::new(browser_wire::VITALS_FILE)
+        );
+    }
 }

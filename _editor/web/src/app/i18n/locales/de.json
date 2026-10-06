@@ -2485,7 +2485,11 @@
             "cantReadLogAt": "Das Protokoll kann gerade nicht gelesen werden — der Build selbst ist davon nicht betroffen. {hiccup}",
             "fullOutputIn": "Die vollständige Ausgabe liegt in",
             "layerOf": "Schicht {done} von {total}",
+            "lostContact": "Diese Seite hat die Verbindung zu Ihrer Sandbox verloren, während sie neu startete.",
+            "lostContactGaveUp": "Diese Seite versucht es nicht mehr. Wie der Neubau ausgegangen ist, steht auf dem Rechner, der ihn ausgeführt hat.",
+            "lostContactRetrying": "Wie der Neubau ausgegangen ist, steht auf dem Rechner, der ihn ausführt. Diese Seite versucht es weiter und nimmt den Neubau wieder auf, sobald Ihre Sandbox antwortet.",
             "onDevice": "auf diesem Gerät.",
+            "outcomeOnMachine": "Lesen Sie es auf dem Rechner nach, der den Neubau ausführt",
             "rebuildStoppedReportingNever": "Dieser Neubau hat aufgehört zu berichten und nie gesagt, wie er endete.",
             "waitingFirstLineDevice": "Warten auf die erste Zeile von diesem Gerät…"
         },

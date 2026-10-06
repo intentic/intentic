@@ -2485,7 +2485,11 @@
             "cantReadLogAt": "Impossible de lire le journal pour le moment — la construction elle-même n'est pas affectée. {hiccup}",
             "fullOutputIn": "La sortie complète est dans",
             "layerOf": "couche {done} sur {total}",
+            "lostContact": "Cette page a perdu le contact avec votre sandbox pendant son redémarrage.",
+            "lostContactGaveUp": "Cette page a cessé d'essayer. L'issue de la reconstruction est enregistrée sur la machine qui l'a exécutée.",
+            "lostContactRetrying": "L'issue de la reconstruction est enregistrée sur la machine qui l'exécute. Cette page continue d'essayer et reprend le suivi de la reconstruction dès que votre sandbox répond.",
             "onDevice": "sur cet appareil.",
+            "outcomeOnMachine": "Consultez-la sur la machine qui exécute la reconstruction",
             "rebuildStoppedReportingNever": "Cette reconstruction a cessé de rendre compte, et n'a jamais dit comment elle s'est terminée.",
             "waitingFirstLineDevice": "En attente de la première ligne de cet appareil…"
         },

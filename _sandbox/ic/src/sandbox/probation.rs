@@ -674,7 +674,9 @@ fn unpark(container: &str, parked: &str) {
 
 /// Go back to the version the swap left: the parked container when it is still here (seconds, nothing downloaded or
 /// built), else a rollback to the pinned image. The record becomes what it was before the swap, remembering which
-/// version was given up on, and the sandbox is told why.
+/// version was given up on, and the sandbox is told why. The container put back is waited for as a swap's new one is
+/// (a rollback's own flow waits for its own), so what the owner is told is where the sandbox stands, not where it was
+/// meant to be.
 fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &str) -> Result<()> {
     let container = container_of(slug);
     let parked = parked_of(slug);
@@ -688,6 +690,7 @@ fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &st
         docker::logs_into(&container, "500", &log);
     }
     let before = record::read_before(slug).ok().flatten();
+    let mut down = None;
     if docker::container_exists(&parked) {
         unpark(&container, &parked);
         let restored = ChannelRecord {
@@ -697,6 +700,11 @@ fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &st
         };
         record::write(slug, &restored)?;
         record::remove_before(slug);
+        if let Err(silent) = crate::health::first_answer(&container) {
+            log.section(&format!("restored container logs ({container})"));
+            docker::logs_into(&container, "500", &log);
+            down = Some(silent.describe());
+        }
     } else {
         // No parked container: the pin the swap recorded is the way back, through the ordinary rollback flow.
         settle(slug, record, false)?;
@@ -715,6 +723,7 @@ fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &st
         )?;
     }
     mirror::push(slug);
+    let said = went_back_because(reason, down.as_deref());
     outcome::write(
         &container,
         &Outcome {
@@ -722,17 +731,27 @@ fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &st
             verb: "watch",
             from: swap.from.as_deref(),
             to: swap.to.as_deref(),
-            reason: Some(reason),
+            reason: Some(&said),
             log: Some(&log.path),
             keep_until: None,
         },
     );
     crate::ui::warn(&format!(
-        "{slug}: went back from {} — {reason}. Log: {}",
+        "{slug}: went back from {} — {said}. Log: {}",
         swap.to.as_deref().unwrap_or("the new version"),
         log.path.display()
     ));
     Ok(())
+}
+
+/// Why the watch went back, and, when the version put back does not come up either, that too. Pure.
+fn went_back_because(reason: &str, down: Option<&str>) -> String {
+    match down {
+        None => reason.to_string(),
+        Some(why) => format!(
+            "{reason}; the version put back does not come up either: {why} (`ic sandbox doctor` checks every layer between here and it)"
+        ),
+    }
 }
 
 /// The probation is over and the new version stays: let the parked container go, drop the pins nothing names any
@@ -994,6 +1013,21 @@ mod tests {
         };
         assert!(
             matches!(judge(&looping, &first, 2 * MIN, 10 * MIN), Verdict::Fail(reason) if reason.contains("3 restarts"))
+        );
+    }
+
+    #[test]
+    fn going_back_says_when_the_version_put_back_does_not_come_up_either() {
+        assert_eq!(
+            went_back_because("the new version kept crashing (3 restarts)", None),
+            "the new version kept crashing (3 restarts)"
+        );
+        assert_eq!(
+            went_back_because(
+                "the new version kept crashing (3 restarts)",
+                Some("it did not answer within 480s")
+            ),
+            "the new version kept crashing (3 restarts); the version put back does not come up either: it did not answer within 480s (`ic sandbox doctor` checks every layer between here and it)"
         );
     }
 

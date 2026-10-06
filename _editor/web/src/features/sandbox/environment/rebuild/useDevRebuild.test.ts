@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract";
-import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, freshImport } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // A rebuild runs on another machine, detached, and ends by replacing the container this page is talking to. What is
@@ -11,7 +11,10 @@ import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 const runDeviceCommand = jest.fn();
 jest.mock(`../../devices/useDevices`, () => ({ runDeviceCommand }));
 
-const { rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
+const { OUT_OF_CONTACT_MS, outOfContact, rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
+// The same module evaluated a second time: the page after a reload, its memory gone and this browser's storage intact.
+// Imported here rather than inside the test that reloads, so the load is not charged to that test's clock.
+const reloaded = await freshImport<typeof import("./useDevRebuild")>(`./useDevRebuild`, import.meta.url);
 
 const HOST = `laptop`;
 // The daemon hands back the command's stdout as `message`; `output` is the raw fenced answer, which must never be read
@@ -21,6 +24,8 @@ const log = (quiet: string, ...lines: readonly string[]): { ok: true; refused: f
     return { ok: true, refused: false, message: stdout, output: `Exit code 0 (success).\n--- stdout ---\n${stdout}` };
 };
 const started = { ok: true, refused: false, message: `The rebuild is running on that device.` };
+// What a read rides when the daemon carrying it is the container being swapped: no answer at all.
+const severed = new TypeError(`Failed to fetch`);
 // A read the machine took and then killed at its deadline: `refused` false, because it is this attempt running out of
 // time rather than the device turning the command away. The machine's own sentence, verbatim.
 const killed = {
@@ -204,6 +209,9 @@ it(`gives up once the machine has gone unheard-from for as long as a quiet log w
     await nextPoll(180);
     expect(run.phase).toBe(`lost`);
     expect(run.trouble).toContain(`killed after 60s`);
+    // Ended by silence, but long before the restart step: a machine too busy to answer, not a swap that never came back.
+    expect(run.unheard).toBe(true);
+    expect(outOfContact(run, Date.now())).toBe(false);
 });
 
 // Its "Run commands" switch went off mid-build, or the checkout moved out of that door's reach. The build is still out
@@ -309,4 +317,136 @@ it(`keeps a settled run until it is dismissed, and refuses to dismiss a live one
     follower.dismiss();
     expect(follower.run.phase).toBe(`idle`);
     expect(follower.run.lines).toEqual([]);
+});
+
+// THE RESTART STEP GONE SILENT. The swap takes down the daemon every read rides, so a silence there is the sandbox's own,
+// and a healthy one is back inside half a minute. Past the patience the lane and the gate give a restart, the card stops
+// promising a reconnect: on 2026-10-06 it kept promising for eighteen minutes over a daemon that crash-looped.
+it(`calls the restart step out of contact at two minutes unheard, and not a millisecond before`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#18 exporting to image`));
+    const { run } = useDevRebuild(slug);
+    const begun = Date.now();
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(1);
+    expect(run.phase).toBe(`restarting`);
+    expect(run.stage).toBe(`swap`);
+    // The last read that landed is the one a poll before the daemon went.
+    expect(run.heardAt).toBe(begun + POLL_MS);
+
+    expect(OUT_OF_CONTACT_MS).toBe(120_000);
+    expect(outOfContact(run, begun + POLL_MS + OUT_OF_CONTACT_MS - 1)).toBe(false);
+    expect(outOfContact(run, begun + POLL_MS + OUT_OF_CONTACT_MS)).toBe(true);
+});
+
+// Before the swap a silence is a machine busy with the very build being read about, which says nothing about the build.
+it(`never calls a build out of contact before its restart step, however long the machine has gone unheard`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#12 [builder 4/9] RUN pnpm install`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockResolvedValue(killed);
+    await nextPoll(150);
+    expect(run.phase).toBe(`building`);
+    expect(run.stage).toBe(`image`);
+    expect(outOfContact(run, Date.now())).toBe(false);
+});
+
+// Out of contact ends the promise, not the follow: a slow first boot is still a boot, and the first read that lands is
+// the card's way back.
+it(`keeps asking once the restart is out of contact, and is back on the first read that lands`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#18 exporting to image`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(40);
+    expect(outOfContact(run, Date.now())).toBe(true);
+    const asked = runDeviceCommand.mock.calls.length;
+    await nextPoll(3);
+    expect(runDeviceCommand).toHaveBeenCalledTimes(asked + 3);
+
+    runDeviceCommand.mockResolvedValue(log(`3`, `#18 exporting to image`, `intentic: waiting for the new sandbox to answer`));
+    await nextPoll(1);
+    expect(run.phase).toBe(`building`);
+    expect(run.heardAt).toBe(Date.now());
+    expect(outOfContact(run, Date.now())).toBe(false);
+
+    runDeviceCommand.mockResolvedValue(log(`1`, `intentic: the new sandbox is up`, `${DEV_REBUILD_EXIT_MARK} 0`));
+    await nextPoll(1);
+    expect(run.phase).toBe(`done`);
+    expect(outOfContact(run, Date.now())).toBe(false);
+});
+
+// The silence ceiling still ends it, and the run it leaves remembers that it was the restart that went unheard.
+it(`settles a restart that never answers as lost, and as out of contact`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#18 exporting to image`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(225);
+    expect(run.phase).toBe(`restarting`);
+    await nextPoll(2);
+    expect(run.phase).toBe(`lost`);
+    expect(run.unheard).toBe(true);
+    expect(outOfContact(run, Date.now())).toBe(true);
+    expect(localStorage.getItem(`intentic.devRebuild.${slug}`)).toBeNull();
+});
+
+// A RELOAD IS NOT A NEW SILENCE. The tab that reloads mid-swap is the one most likely to, and before this it painted a
+// fresh "Restarting onto it" and granted the swap another fifteen minutes each time.
+it(`resumes a reload in the restart step on the silence it already had, not a fresh one`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `intentic: starting the new container`));
+    const before = useDevRebuild(slug);
+    await before.start(HOST);
+    await nextPoll(1);
+    runDeviceCommand.mockRejectedValue(severed);
+    // Five minutes into a swap that never came back.
+    await nextPoll(75);
+    const { heardAt, stageAt } = before.run;
+
+    const after = reloaded.useDevRebuild(slug);
+    expect(after.run.phase).toBe(`idle`);
+    after.adopt(HOST);
+    expect(after.run.stage).toBe(`swap`);
+    expect(after.run.heardAt).toBe(heardAt);
+    expect(after.run.stageAt).toEqual(stageAt);
+    // Out of contact from the first paint, before any read has had the chance to fail again.
+    expect(reloaded.outOfContact(after.run, Date.now())).toBe(true);
+
+    // And the ceiling counts from that same silence: a poll or two past ten minutes on, where a fresh one would have
+    // had fifteen.
+    await nextPoll(148);
+    expect(after.run.phase).toBe(`restarting`);
+    await nextPoll(4);
+    expect(after.run.phase).toBe(`lost`);
+    expect(reloaded.outOfContact(after.run, Date.now())).toBe(true);
+});
+
+// Before the restart step a tab closed mid-build says nothing about the build, so a reload there dates contact from the
+// moment it starts asking again — as it always has.
+it(`dates contact afresh for a reload that comes before the restart step`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#12 [builder 4/9] RUN pnpm install`));
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+    runDeviceCommand.mockResolvedValue(killed);
+    await nextPoll(75);
+
+    const after = reloaded.useDevRebuild(slug);
+    after.adopt(HOST);
+    expect(after.run.stage).toBe(`compile`);
+    expect(after.run.heardAt).toBe(Date.now());
+    expect(reloaded.outOfContact(after.run, Date.now())).toBe(false);
 });

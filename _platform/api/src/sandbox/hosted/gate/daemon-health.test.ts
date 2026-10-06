@@ -2,7 +2,17 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "@intentic/testing/fly-fake";
 import type { Config } from "../../../config.js";
 import { healthAnswer, machineAnswers, NO_HEALTH } from "../../../testing.js";
-import { awaitDaemon, baselineOf, crashLoopOf, DAEMON_HEALTH_COMMAND, DAEMON_VITALS_COMMAND, HEALTH_POLL_MS, READY_BUDGET_MS, readDaemonHealth } from "./daemon-health.js";
+import {
+    awaitDaemon,
+    baselineOf,
+    crashLoopOf,
+    DAEMON_HEALTH_COMMAND,
+    DAEMON_VITALS_COMMAND,
+    DAEMON_VITALS_FILE_COMMAND,
+    HEALTH_POLL_MS,
+    READY_BUDGET_MS,
+    readDaemonHealth,
+} from "./daemon-health.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 /* The poll's pause is two seconds of real time in production; the wait is bounded by a count of looks as well. */
@@ -142,6 +152,23 @@ describe(`waiting for the daemon`, () => {
             { command: [...DAEMON_VITALS_COMMAND], timeout: 10 },
         ]);
         expect(DAEMON_VITALS_COMMAND.at(-1)).toBe(`http://localhost:8787/system/vitals`);
+    });
+
+    // A daemon that dies before it names netd's ports leaves netd listening on nothing: its file is netd's word then.
+    it(`reads netd's vitals file when its address answers nothing, and goes back on what it says`, async () => {
+        const fly = started();
+        const looping = { exit_code: 0, stdout: JSON.stringify({ node: `restarting`, lagMs: null, restarts: 4, uptimeS: 30, pressure: null }), stderr: `` };
+        fly.commands.answer = machineAnswers({ health: () => NO_HEALTH, vitalsFile: () => looping });
+        await expect(awaitDaemon(config, MACHINE, await baselineOf(config, MACHINE), undefined)).resolves.toEqual({
+            kind: `down`,
+            reason: `its daemon kept crashing: netd restarted it 4 times in ten minutes`,
+        });
+        expect(fly.called(`POST`, `/machines/m1/exec`).map((call) => call.body)).toEqual([
+            { command: [...DAEMON_HEALTH_COMMAND], timeout: 10 },
+            { command: [...DAEMON_VITALS_COMMAND], timeout: 10 },
+            { command: [...DAEMON_VITALS_FILE_COMMAND], timeout: 10 },
+        ]);
+        expect(DAEMON_VITALS_FILE_COMMAND).toEqual([`/bin/cat`, `/run/intentic/vitals.json`]);
     });
 
     it(`keeps a daemon still booting when the budget ends with its journal never open, as ic keeps a slow boot`, async () => {

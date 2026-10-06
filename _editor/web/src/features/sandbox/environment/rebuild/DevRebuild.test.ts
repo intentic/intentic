@@ -33,7 +33,7 @@ jest.mock(`../../overview/useSandboxSettings`, () => ({ useSandboxSettings: () =
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.
-const { useDevRebuild } = await import("./useDevRebuild");
+const { OUT_OF_CONTACT_MS, useDevRebuild } = await import("./useDevRebuild");
 
 let app: App | undefined;
 
@@ -63,6 +63,8 @@ const log = (quiet: string, ...lines: readonly string[]): { ok: true; message: s
 const started = { ok: true, message: `The rebuild is running on that device.` };
 
 const POLL_MS = 4_000;
+// The silence ceiling that ends a follow for good: useDevRebuild.ts ABANDON_S.
+const ABANDON_MS = 15 * 60_000;
 const settleUi = async (ms = 0): Promise<void> => {
     await advanceTimersByTimeAsync(ms);
     await nextTick();
@@ -406,4 +408,121 @@ it(`reports how a rebuild ended to a page that was reloaded while it ran`, async
     await settleUi();
 
     expect(el.textContent).toContain(`Rebuilt from your checkout in 7m`);
+});
+
+// THE RESTART THAT NEVER CAME BACK. On 2026-10-06 the new daemon crash-looped, and this card said "Restarting onto it /
+// reconnects on its own" for eighteen minutes while the machine that ran the rebuild already held the answer in its
+// log. Nothing else can reach that machine from here — its agent rides the same daemon — so the card names the lines
+// that read the answer there.
+const LOST_CONTACT = `This page lost contact with your sandbox while it was restarting.`;
+const STILL_TRYING = `How the rebuild ended is recorded on the machine that runs it. This page keeps trying, and picks the rebuild back up if your sandbox answers.`;
+const STOPPED_TRYING = `This page has stopped trying. How the rebuild ended is recorded on the machine that ran it.`;
+const RECONNECTS = `Your sandbox is restarting on the new image. This page reconnects on its own.`;
+const READ_THERE = `Read it on the machine that runs the rebuild`;
+
+const outcomeLines = (slug: string): string => `tail -n 40 ${devRebuildLogPath(slug)}\nic sandbox logs ${slug}\nic sandbox doctor ${slug}`;
+// The code block under a label, read as the text it would copy.
+const codeUnder = (label: string): string | undefined =>
+    [...document.querySelectorAll(`.ui-code`)].find((block) => block.textContent?.startsWith(label))?.querySelector(`pre`)?.textContent ?? undefined;
+
+// Into the restart step, then the daemon goes: the last read that lands is the one the follow starts with.
+const severedMidSwap = async (slug: string): Promise<HTMLElement> => {
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#18 exporting to image`));
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi();
+    runDeviceCommand.mockRejectedValue(new TypeError(`Failed to fetch`));
+    return el;
+};
+
+it(`stops promising a reconnect once the restart has gone unheard for two minutes, and says where the ending is`, async () => {
+    const slug = nextSlug();
+    const el = await severedMidSwap(slug);
+
+    // A poll short of the patience: still the swap a healthy restart is.
+    await settleUi(OUT_OF_CONTACT_MS - POLL_MS);
+    expect(el.textContent).toContain(`Restarting onto it`);
+    expect(el.textContent).toContain(RECONNECTS);
+    expect(el.textContent).not.toContain(LOST_CONTACT);
+    expect(codeUnder(READ_THERE)).toBeUndefined();
+
+    await settleUi(2 * POLL_MS);
+    expect(el.textContent).toContain(LOST_CONTACT);
+    expect(el.textContent).toContain(STILL_TRYING);
+    expect(el.textContent).not.toContain(RECONNECTS);
+    expect(codeUnder(READ_THERE)).toBe(outcomeLines(slug));
+    // No spinner claims the step is still going; the step this page lost sight of says it does not know.
+    expect(el.querySelectorAll(`[data-spin]`)).toHaveLength(0);
+    expect(el.querySelectorAll(`[data-icon="question-circle"]`)).toHaveLength(1);
+    // Not a failure yet, so the log stays where the reader left it.
+    expect(el.textContent).not.toContain(`#18 exporting to image`);
+
+    // And the follow goes on underneath.
+    const asked = runDeviceCommand.mock.calls.length;
+    await settleUi(3 * POLL_MS);
+    expect(runDeviceCommand).toHaveBeenCalledTimes(asked + 3);
+});
+
+it(`picks the rebuild back up when the sandbox answers again`, async () => {
+    const slug = nextSlug();
+    const el = await severedMidSwap(slug);
+    await settleUi(OUT_OF_CONTACT_MS + POLL_MS);
+    expect(el.textContent).toContain(LOST_CONTACT);
+
+    runDeviceCommand.mockResolvedValue(log(`2`, `#18 exporting to image`, `intentic: waiting for the new sandbox to answer`));
+    await settleUi(POLL_MS);
+    expect(el.textContent).not.toContain(LOST_CONTACT);
+    expect(codeUnder(READ_THERE)).toBeUndefined();
+    expect(el.textContent).toContain(RECONNECTS);
+    expect(el.textContent).toContain(`waiting for the new sandbox to answer`);
+    expect(el.querySelectorAll(`[data-spin]`)).toHaveLength(1);
+
+    runDeviceCommand.mockResolvedValue(log(`1`, `intentic: the new sandbox is up`, `${DEV_REBUILD_EXIT_MARK} 0`));
+    await settleUi(POLL_MS);
+    expect(el.textContent).toContain(`You're running the new image.`);
+    expect(el.textContent).not.toContain(LOST_CONTACT);
+});
+
+// The ceiling still ends the follow, and what it leaves on the card is the same way to the answer — not the sentence
+// for a log that went quiet, which is not what happened.
+it(`settles a restart that never answered as lost contact, with the same way to the ending`, async () => {
+    const slug = nextSlug();
+    const el = await severedMidSwap(slug);
+    await settleUi(ABANDON_MS + 2 * POLL_MS);
+
+    expect(el.textContent).toContain(LOST_CONTACT);
+    expect(el.textContent).toContain(STOPPED_TRYING);
+    expect(el.textContent).not.toContain(STILL_TRYING);
+    expect(el.textContent).not.toContain(`That rebuild stopped reporting`);
+    expect(el.textContent).not.toContain(`Nothing has been written to its log`);
+    expect(codeUnder(READ_THERE)).toBe(outcomeLines(slug));
+    expect(buttonSaying(`Dismiss`)).toBeInstanceOf(HTMLButtonElement);
+
+    const asked = runDeviceCommand.mock.calls.length;
+    await settleUi(3 * POLL_MS);
+    expect(runDeviceCommand).toHaveBeenCalledTimes(asked);
+});
+
+// A reload mid-swap wipes the page's memory and keeps this browser's storage. A second sandbox handed the first one's
+// storage is that page exactly: a run nothing here remembers, beside the record the follow left.
+it(`paints a reload in the restart step as the silence it already was, not a fresh restart`, async () => {
+    const slug = nextSlug();
+    await severedMidSwap(slug);
+    await settleUi(3 * 60_000);
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+
+    const reloadedAs = nextSlug();
+    const own = `intentic.devRebuild.${slug}`;
+    for (const key of Object.keys(localStorage).filter((name) => name === own || name.startsWith(`${own}.`))) {
+        localStorage.setItem(`intentic.devRebuild.${reloadedAs}${key.slice(own.length)}`, localStorage.getItem(key) ?? ``);
+    }
+    const el = mount({ slug: reloadedAs, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    await nextTick();
+
+    // From the first paint, before any read has had the chance to fail again.
+    expect(el.textContent).toContain(LOST_CONTACT);
+    expect(el.textContent).not.toContain(RECONNECTS);
+    expect(codeUnder(READ_THERE)).toBe(outcomeLines(reloadedAs));
 });

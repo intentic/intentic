@@ -1512,13 +1512,7 @@ fn restore_parked(
         Err(silent) => {
             log.section(&format!("restored container logs ({container})"));
             docker::logs_into(container, "500", log);
-            Restored::Down(match silent {
-                health::Silent::Crashing(looping) => {
-                    format!("its daemon keeps crashing: {looping}")
-                }
-                health::Silent::Failed(error) => format!("it could not start: {error}"),
-                health::Silent::Quiet(secs) => format!("it did not answer within {secs}s"),
-            })
+            Restored::Down(silent.describe())
         }
     }
 }

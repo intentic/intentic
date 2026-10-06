@@ -323,6 +323,7 @@
       "title": "SandboxVitals",
       "type": "object"
     },
+    "file": "/run/intentic/vitals.json",
     "path": "/system/vitals"
   },
   "webTransport": {

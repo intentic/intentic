@@ -69,7 +69,8 @@ flowchart LR
 - **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version
   that never answers, never commits its state journal, reports its conversion failed, or keeps crashing is undone at
   once. Crashing is netd's word (`health.rs`): three restarts of the daemon in ten minutes with it down again, read off
-  netd's vitals, or off netd's own log for a daemon that died before netd listened on anything; docker's restart count
+  netd's vitals on its address, else off the file netd keeps them in (`/run/intentic/vitals.json`), else off netd's
+  own log for a netd from before the file; docker's restart count
   never sees them, since netd is PID 1. The container put back is then waited for the same way, and the flow ends on
   where the sandbox stands: a dev sandbox's previous container runs the same compiled checkout as the new one, so when
   neither comes up, the message names that code and the two commands that fix it. (2026-10-06: a swap onto a daemon

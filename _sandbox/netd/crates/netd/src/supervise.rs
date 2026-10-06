@@ -41,14 +41,25 @@ const LEFTOVER_GRACE: Duration = Duration::from_secs(1);
 pub struct Restarts {
     recent: Mutex<VecDeque<Instant>>,
     ever: AtomicBool,
+    // Raised by every restart, for whoever writes the count down (vitals.rs `keep_written`).
+    recorded: tokio::sync::Notify,
 }
 
 impl Restarts {
     pub fn record(&self, at: Instant) {
         self.ever.store(true, Ordering::Relaxed);
-        let mut recent = self.recent.lock().expect("restarts poisoned");
-        forget_before(&mut recent, at);
-        recent.push_back(at);
+        {
+            let mut recent = self.recent.lock().expect("restarts poisoned");
+            forget_before(&mut recent, at);
+            recent.push_back(at);
+        }
+        // A permit is kept when nobody waits yet, so a restart between two waits is not missed.
+        self.recorded.notify_one();
+    }
+
+    /// Returns once a restart was recorded since the last return.
+    pub async fn recorded(&self) {
+        self.recorded.notified().await;
     }
 
     /// How many restarts fall within `RESTART_WINDOW` of `now`.

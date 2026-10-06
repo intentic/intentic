@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { parseVitals, VITALS_PATH } from "@intentic/sandbox-contract";
+import { parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Config } from "../../../config.js";
 import { MINUTE_MS } from "../../../durations.js";
@@ -18,8 +18,9 @@ import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly
  *   after an open journal is netd restarting a daemon that fell over mid-conversion;
  * - the machine exits with an error, whether Fly restarts it (on-failure, three times, then stopped) or not, or reads
  *   stopped with no exit to explain it;
- * - netd, asked while `/health` is silent, says it has restarted a crashed daemon three times in ten minutes and the
- *   daemon is down again: netd is the machine's PID 1, so a daemon crashing on every start never exits the machine;
+ * - netd, asked while `/health` is silent (on its address, else in the vitals file it keeps for a daemon that died
+ *   before naming netd's ports), says it has restarted a crashed daemon three times in ten minutes and the daemon is
+ *   down again: netd is the machine's PID 1, so a daemon crashing on every start never exits the machine;
  * - the sandbox does not check in with the platform within the budget.
  * A stop someone asked Fly for (a suspension, an operator, the abuse watch) or a clean exit (the daemon's idle-stop)
  * says nothing about the version: when the machine stays down after one, the wait reports it interrupted, and the gate
@@ -34,8 +35,9 @@ import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly
 // its path, like the planner's node, so nothing rests on how Fly's exec resolves a bare name.
 export const DAEMON_HEALTH_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787/health`] as const;
 // netd's own vitals (browser-wire's SandboxVitals), which it answers whatever state the daemon is in once the daemon has
-// reached it; a daemon that never did leaves netd listening on nothing, and only the budget then speaks for it.
+// reached it. A daemon that never did leaves netd listening on nothing, and the file netd keeps them in is read instead.
 export const DAEMON_VITALS_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787${VITALS_PATH}`] as const;
+export const DAEMON_VITALS_FILE_COMMAND = [`/bin/cat`, VITALS_FILE] as const;
 // Restarts that make a crash loop: the editor's (diagnose.ts CRASH_LOOP_RESTARTS) and ic's (health.rs) both.
 const CRASH_LOOP_RESTARTS = 3;
 const HEALTH_EXEC_SECONDS = 10;
@@ -161,13 +163,19 @@ const askHealth = async (config: Config, machine: DaemonMachine): Promise<Daemon
     return answer === undefined || answer.exitCode !== 0 ? undefined : readDaemonHealth(answer.stdout);
 };
 
-// Asks netd whether the daemon keeps crashing; undefined when it does not, or nothing readable answered.
-const askCrashLoop = async (config: Config, machine: DaemonMachine): Promise<string | undefined> => {
+// One exec's stdout, or undefined when Fly refused it or the command failed.
+const execOut = async (config: Config, machine: DaemonMachine, command: readonly string[]): Promise<string | undefined> => {
     // allow(silent-catch): an exec Fly refuses says nothing of the daemon; the budget still decides what silence means
-    const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, DAEMON_VITALS_COMMAND, HEALTH_EXEC_SECONDS).catch(
-        () => undefined,
-    );
-    return answer === undefined || answer.exitCode !== 0 ? undefined : crashLoopOf(answer.stdout);
+    const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, command, HEALTH_EXEC_SECONDS).catch(() => undefined);
+    return answer === undefined || answer.exitCode !== 0 ? undefined : answer.stdout;
+};
+
+// Asks netd whether the daemon keeps crashing, on its address and else in its file; undefined when it does not, or
+// nothing readable answered (a netd from before the file, listening on nothing).
+const askCrashLoop = async (config: Config, machine: DaemonMachine): Promise<string | undefined> => {
+    const answered = await execOut(config, machine, DAEMON_VITALS_COMMAND);
+    const vitals = answered ?? (await execOut(config, machine, DAEMON_VITALS_FILE_COMMAND));
+    return vitals === undefined ? undefined : crashLoopOf(vitals);
 };
 
 // One look at the machine and its daemon; a verdict when this look decides one.

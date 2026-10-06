@@ -3,7 +3,14 @@ import { router } from "../../../router";
 import { type NotificationInput, useNotifications } from "../../../workbench/notifications/notifications";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useHostHolding } from "../devices/useDevices";
-import { type DevRebuildPhase, type DevRebuildRun, rebuildRunning, rebuildSeconds, useDevRebuild } from "../environment/rebuild/useDevRebuild";
+import {
+    type DevRebuildPhase,
+    type DevRebuildRun,
+    outOfContact,
+    rebuildRunning,
+    rebuildSeconds,
+    useDevRebuild,
+} from "../environment/rebuild/useDevRebuild";
 import { useSandboxVersion } from "../overview/version/useSandboxVersion";
 import { SANDBOX_DEFAULT_SECTION } from "../sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";
@@ -32,6 +39,10 @@ const openEnvironment = (): void => {
 };
 
 const failureTitle = (run: DevRebuildRun): string => {
+    // The card's own words for a swap that never answered: the log did not go quiet, this page lost its way to it.
+    if (outOfContact(run, Date.now())) {
+        return t(`sandbox.devRebuildProgress.lostContact`);
+    }
     if (run.phase === `lost`) {
         return t(`sandbox.restartWatch.rebuildLost`);
     }

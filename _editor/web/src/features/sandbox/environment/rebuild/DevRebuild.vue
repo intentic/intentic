@@ -202,7 +202,7 @@ const checkout = computed(() => {
 
             <!-- The whole state of a detached build, drawn as the three things it does; the log lives inside it,
                  behind a toggle, because for most of a rebuild it is the one thing nobody needs. -->
-            <DevRebuildProgress v-if="following" :run="run" :elapsed="elapsed" :log-path="logPath" @dismiss="dismiss" />
+            <DevRebuildProgress v-if="following" :run="run" :elapsed="elapsed" :log-path="logPath" :slug="slug" @dismiss="dismiss" />
 
             <ConfirmDialog
                 :open="confirming"

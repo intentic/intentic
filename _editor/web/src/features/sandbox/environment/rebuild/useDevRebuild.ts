@@ -1,10 +1,11 @@
 import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
+import { z } from "zod";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
 import { runDeviceCommand } from "../../devices/useDevices";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
+import { expectRestart, RESTART_PATIENCE_MS, type RestartQuiet } from "../../live/sandboxRestart";
 import { removeStoredValue, storedValue, storeValue } from "../../../../lib/browserStorage";
 import { beginHubWork, hubWorkKey } from "../../../../workbench/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
@@ -44,8 +45,11 @@ export interface DevRebuildRun {
     // When the log was last READ, which is a fact about this browser's contact with the machine and not about the
     // build: it is what the follow gives up on, since a read that keeps failing leaves `quietFor` frozen at whatever
     // the last good read said. Set when a follow begins as well as on every read, so contact is dated from the moment
-    // this browser started asking rather than from a marker that may be an hour old.
+    // this browser started asking rather than from a marker that may be an hour old — except in the restart step,
+    // whose silence is the sandbox's own and is carried across a reload (see `restartKey`).
     heardAt: number | undefined;
+    /** A `lost` run ended by nothing being heard for the silence ceiling, rather than by anything the machine said. */
+    unheard: boolean;
     /** Which of the three things a rebuild does it is on. Only ever advances: see devRebuildStages.ts. */
     stage: DevRebuildStage;
     /** When each stage was first seen, so the card can time a step it watched begin. */
@@ -60,6 +64,28 @@ export interface DevRebuildRun {
 
 const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
 export const rebuildRunning = (phase: DevRebuildPhase): boolean => LIVE.has(phase);
+
+// HOW LONG THE RESTART STEP MAY GO UNHEARD-FROM BEFORE THE CARD STOPS PROMISING A RECONNECT. The patience the lane and
+// the gate already give a restart this browser asked for (sandboxRestart.ts), so the card does not keep saying
+// "reconnects on its own" after every other surface has stopped saying it. A healthy swap is back in about half a
+// minute — the confirmation promises ~30s, and a poll every four seconds hears it at once — so two minutes of nothing
+// is well past one. It is not a verdict: `ic` itself gives a slow first boot up to eight minutes (health.rs,
+// ANSWER_BUDGET), so what ends here is the promise and not the follow. The polls go on, and the first read that lands
+// puts the card straight back; only ABANDON_S stops them.
+export const OUT_OF_CONTACT_MS = RESTART_PATIENCE_MS;
+
+/**
+ * Whether this run lost contact in its restart step: in the swap, which takes down the daemon every read rides, with
+ * no read landing for OUT_OF_CONTACT_MS. On 2026-10-06 the new daemon crash-looped and the card said "Restarting onto
+ * it" for eighteen minutes while the machine's log already held the answer. A run the silence ceiling then ended still
+ * counts, so `lost` can say it was this rather than a log that went quiet.
+ */
+export const outOfContact = (run: DevRebuildRun, now: number): boolean => {
+    if (run.stage !== `swap` || run.heardAt === undefined) {
+        return false;
+    }
+    return rebuildRunning(run.phase) ? now - run.heardAt >= OUT_OF_CONTACT_MS : run.phase === `lost` && run.unheard;
+};
 
 /** Seconds a settled run took; undefined for one adopted mid-flight, whose start nothing here ever saw. */
 export const rebuildSeconds = (run: DevRebuildRun): number | undefined =>
@@ -83,6 +109,56 @@ const PROBE_AGAIN_MS = 30_000;
 
 const markerKey = (slug: string): string => `intentic.devRebuild.${slug}`;
 
+// THE RESTART STEP'S SILENCE, KEPT ACROSS A RELOAD. Anywhere else a reload re-dates contact from the moment this browser
+// starts asking again, since a tab closed mid-build says nothing about the build. The restart is the exception: there
+// the silence IS the sandbox, the daemon these reads ride being the thing replaced, so a reload twenty minutes into a
+// swap that never came back must not paint a fresh "Restarting onto it" and hand it another fifteen. A key beside the
+// marker rather than a new shape for it, so a page from either side of the swap still reads the marker as a number.
+const restartKey = (slug: string): string => `${markerKey(slug)}.restart`;
+
+interface RestartRecord {
+    readonly heardAt: number;
+    readonly stageAt: Partial<Record<DevRebuildStage, number>>;
+}
+
+// What a stored record must hold to be read at all: storage outlives every version of this page, so it is parsed
+// rather than trusted. `image` is absent for a swap the log reached without docker ever printing in its tail.
+const RestartRecordSchema = z.object({
+    heardAt: z.number(),
+    stageAt: z.object({ image: z.number().optional(), swap: z.number() }),
+});
+
+const keepRestart = (run: DevRebuildRun, slug: string): void => {
+    if (run.stage !== `swap` || run.heardAt === undefined || !rebuildRunning(run.phase)) {
+        return;
+    }
+    const record: RestartRecord = { heardAt: run.heardAt, stageAt: run.stageAt };
+    storeValue(restartKey(slug), JSON.stringify(record));
+};
+
+// A record older than the run it sits beside belongs to a rebuild before it, and is no record of this one.
+const restartOf = (slug: string, startedAt: number): RestartRecord | undefined => {
+    const text = storedValue(restartKey(slug));
+    if (text === undefined) {
+        return undefined;
+    }
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        // allow(silent-catch): a half-written or hand-edited record is no record at all; the reload dates contact afresh.
+        return undefined;
+    }
+    const record = RestartRecordSchema.safeParse(value).data;
+    if (record === undefined || record.heardAt < startedAt || record.stageAt.swap < startedAt) {
+        return undefined;
+    }
+    const { image, swap } = record.stageAt;
+    // An image step dated before the run began is the same stale record's, and draws no number rather than a wrong one.
+    const stageAt = image !== undefined && image >= startedAt ? { compile: startedAt, image, swap } : { compile: startedAt, swap };
+    return { heardAt: record.heardAt, stageAt };
+};
+
 const idle = (): DevRebuildRun => ({
     phase: "idle",
     startedAt: undefined,
@@ -92,6 +168,7 @@ const idle = (): DevRebuildRun => ({
     quietFor: undefined,
     trouble: undefined,
     heardAt: undefined,
+    unheard: false,
     stage: "compile",
     stageAt: {},
     detail: undefined,
@@ -203,6 +280,7 @@ const settle = (run: DevRebuildRun, slug: string, phase: DevRebuildPhase, troubl
         fill(run, 1);
     }
     removeStoredValue(markerKey(slug));
+    removeStoredValue(restartKey(slug));
     stop(slug);
     unmark(slug);
 };
@@ -280,9 +358,11 @@ const poll = async (slug: string, hostId: string): Promise<void> => {
     // Nothing heard from the machine at all for this long — reads killed at their deadline, a device reported away, a
     // daemon that never came back from the swap — is no longer a build being followed, whatever the last read said.
     if (Date.now() - (run.heardAt ?? Date.now()) > ABANDON_S * 1_000) {
+        run.unheard = true;
         settle(run, slug, "lost", run.trouble);
         return;
     }
+    keepRestart(run, slug);
     // No wall-clock ceiling on the follow: a log still growing after two hours is a slow build, not a lost one, and
     // this repo's own rebuild has taken that long on a laptop. What ends a follow is the exit mark arriving, or one of
     // the two silences above — never how long a reader has been waiting.
@@ -355,6 +435,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         Object.assign(run, idle(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now(), stageAt: { compile: Date.now() } });
         mark(slug);
         storeValue(markerKey(slug), String(run.startedAt));
+        removeStoredValue(restartKey(slug));
         now.value = Date.now();
         try {
             const result = await runDeviceCommand(hostId, `dev-rebuild`);
@@ -377,7 +458,19 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         }
         const marker = Number(storedValue(markerKey(slug)) ?? Number.NaN);
         if (Number.isFinite(marker) && Date.now() - marker < MARKER_GOOD_FOR_MS) {
-            Object.assign(run, idle(), { phase: "building", startedAt: marker, heardAt: Date.now(), stageAt: { compile: marker } });
+            // A reload in the restart step resumes that step on the clock it already had: the same silence, still
+            // counting, rather than a fresh one.
+            const restart = restartOf(slug, marker);
+            Object.assign(run, idle(), {
+                phase: "building",
+                startedAt: marker,
+                heardAt: restart?.heardAt ?? Date.now(),
+                stageAt: restart?.stageAt ?? { compile: marker },
+            });
+            if (restart !== undefined) {
+                reach(run, "swap");
+                fill(run, stageStart("swap"));
+            }
             mark(slug);
             follow(slug, hostId);
             return;

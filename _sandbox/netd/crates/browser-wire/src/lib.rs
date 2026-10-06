@@ -16,6 +16,12 @@ pub const TERMINAL_UPGRADE: &str = "websocket";
 /// forwarded to Node.
 pub const VITALS_PATH: &str = "/system/vitals";
 
+/// Where netd also writes its [`SandboxVitals`] inside the container, whenever they change and once a minute, for a
+/// host that reaches the container but not its address (`ic` through `docker exec`, the platform through Fly's exec):
+/// a daemon that dies before it names netd's ports leaves netd listening on nothing, and this file is then the only
+/// place its restarts are counted. Under netd's default run directory, root's alone.
+pub const VITALS_FILE: &str = "/run/intentic/vitals.json";
+
 /// Where a browser opens its WebTransport session, on the address of the sandbox the session's streams reach; the edge
 /// answers it, never the sandbox.
 pub const WEBTRANSPORT_PATH: &str = "/system/transport";
@@ -223,6 +229,7 @@ mod tests {
             },
             "vitals": {
                 "path": VITALS_PATH,
+                "file": VITALS_FILE,
                 "body": schema::<SandboxVitals>(),
             },
             "webTransport": {

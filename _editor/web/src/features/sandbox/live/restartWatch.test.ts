@@ -19,6 +19,7 @@ const run = (over: Partial<DevRebuildRun> = {}): DevRebuildRun => ({
     quietFor: 0,
     trouble: undefined,
     heardAt: 217_000,
+    unheard: false,
     stage: `swap`,
     stageAt: { compile: 1_000, image: 40_000, swap: 200_000 },
     detail: undefined,
@@ -44,6 +45,13 @@ describe(`what a settled rebuild is worth saying`, () => {
 
     it(`says a rebuild stopped reporting rather than calling it finished`, () => {
         expect(rebuildReceipt(`building`, run({ phase: `lost`, exitCode: undefined }))?.title).toContain(`stopped reporting`);
+    });
+
+    // A swap that never answered is not a log that went quiet: the receipt says what the card says.
+    it(`says the page lost contact when the restart it was waiting on never answered`, () => {
+        const receipt = rebuildReceipt(`restarting`, run({ phase: `lost`, exitCode: undefined, unheard: true }));
+        expect(receipt?.title).toBe(`This page lost contact with your sandbox while it was restarting.`);
+        expect(receipt?.tone).toBe(`problem`);
     });
 
     it(`counts no clock for a build adopted mid-flight, whose start nothing here saw`, () => {

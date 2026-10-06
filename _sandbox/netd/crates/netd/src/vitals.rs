@@ -38,6 +38,10 @@ const STUCK_AFTER: Duration = Duration::from_secs(5 * 60);
 // Node hung at boot is still found within minutes rather than never.
 const HELLO_DEADLINE: Duration = Duration::from_secs(3 * 60);
 
+// How often the vitals file is written when nothing else changed it: the restart count is a window that empties as it
+// ages, and a reader holds whatever was written last.
+const REWRITE_EVERY: Duration = Duration::from_secs(60);
+
 // The container's own cgroup: its pressure covers everything in the box, the daemon and its workload alike.
 const CGROUP_ROOT: &str = "/sys/fs/cgroup";
 
@@ -168,6 +172,40 @@ impl Vitals {
             pressure: pressure(&self.cgroup),
             tunnel: self.tunnel.vitals(now),
         }
+    }
+
+    /// Writes the vitals to `path` (browser-wire's `VITALS_FILE`) whenever they change, a restart or Node's link
+    /// coming up or going down, and once a minute besides. Whole and then renamed into place, so a reader never sees
+    /// half of one. For a host that reaches the container but not its address: a daemon that dies before it names
+    /// netd's ports leaves netd listening on nothing (2026-10-06). Never returns.
+    pub async fn keep_written(&self, path: &Path) {
+        let mut link = self.link.state();
+        let mut tick = tokio::time::interval(REWRITE_EVERY);
+        tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        tick.tick().await;
+        let mut warned = false;
+        loop {
+            if let Err(error) = self.write(path) {
+                // Once: a run directory that cannot be written stays so, and the route still answers.
+                if !warned {
+                    tracing::warn!(%error, path = %path.display(), "could not write the vitals file");
+                    warned = true;
+                }
+            }
+            tokio::select! {
+                _ = tick.tick() => {}
+                () = self.restarts.recorded() => {}
+                // The link is the process's own and never dropped, so an error here cannot happen; a tick still ends it.
+                _ = link.changed() => {}
+            }
+        }
+    }
+
+    fn write(&self, path: &Path) -> std::io::Result<()> {
+        let json = serde_json::to_vec(&self.read()).expect("vitals always serialize");
+        let partial = path.with_extension("json.partial");
+        std::fs::write(&partial, json)?;
+        std::fs::rename(&partial, path)
     }
 
     /// The route's answer: the vitals to a GET, a preflight's to OPTIONS. Any origin may read it and nothing may cache
@@ -506,6 +544,46 @@ mod tests {
         asked_ping(&mut reader).await;
         assert!(timeout(LIMIT * 3, stuck.changed()).await.is_ok());
         assert!(answered.elapsed() >= LIMIT);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The file a host reads when it cannot reach the address: written at once, and again on each restart, with the count
+    // the route would answer.
+    #[tokio::test]
+    async fn the_vitals_are_written_down_and_written_again_on_every_restart() {
+        let dir = std::env::temp_dir().join(format!("netd-vitals-file-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("vitals.json");
+        let (pushed, _received) = mpsc::unbounded_channel();
+        let link: &'static Link = Box::leak(Box::new(Link::new(pushed)));
+        let restarts = Arc::new(Restarts::default());
+        let vitals = Arc::new(Vitals::new(link, restarts.clone(), Arc::default()));
+        let writing = vitals.clone();
+        let file = path.clone();
+        tokio::spawn(async move { writing.keep_written(&file).await });
+        let read = |path: &Path| -> Option<SandboxVitals> {
+            serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+        };
+        let settled = |want: u32| {
+            let path = path.clone();
+            async move {
+                for _ in 0..100 {
+                    if read(&path).is_some_and(|vitals| vitals.restarts == want) {
+                        return read(&path);
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                read(&path)
+            }
+        };
+        let first = settled(0).await.expect("written at once");
+        assert_eq!((first.node, first.restarts), (NodeLink::Starting, 0));
+        for _ in 0..3 {
+            restarts.record(Instant::now());
+        }
+        let looping = settled(3).await.expect("written again");
+        assert_eq!((looping.node, looping.restarts), (NodeLink::Restarting, 3));
+        assert!(!path.with_extension("json.partial").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

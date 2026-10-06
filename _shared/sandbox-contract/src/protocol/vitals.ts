@@ -13,6 +13,11 @@ export type { NodeLink, Pressure, SandboxVitals };
 // `netd: true` in raw-routes.ts, so the daemon serves none.
 export const VITALS_PATH = "/system/vitals";
 
+// Where netd also writes them inside the container, for a host that reaches the container but not its address (the
+// platform through Fly's exec): a daemon that dies before it names netd's ports leaves netd listening on nothing, and
+// this file is then the only count of its restarts. browser-wire's VITALS_FILE.
+export const VITALS_FILE = "/run/intentic/vitals.json";
+
 // Every state, so a new one in the Rust enum fails this file's typecheck until it is read here too.
 const NODE_LINKS = { starting: "starting", up: "up", restarting: "restarting" } as const satisfies { readonly [K in NodeLink]: K };
 

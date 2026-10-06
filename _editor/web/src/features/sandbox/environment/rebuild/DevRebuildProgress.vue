@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { DeviceRunLog, formatElapsed, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
+import { Code, commandLang, DeviceRunLog, formatElapsed, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { DEV_REBUILD_STEPS, type DevRebuildStage, stageStart } from "./devRebuildStages";
-import { type DevRebuildRun, rebuildRunning } from "./useDevRebuild";
+import { type DevRebuildRun, outOfContact, rebuildRunning } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
 // A REBUILD DRAWN AS THE THREE THINGS IT DOES, not as a wall of somebody else's build output. The log is what a reader
@@ -19,6 +19,8 @@ const props = defineProps<{
     elapsed: number | undefined;
     /** Where the machine wrote the whole thing, for a reader whose rebuild never came back. */
     logPath: string;
+    /** The sandbox's name as `ic` knows it on that machine, for the lines that read the outcome there. */
+    slug: string;
 }>();
 
 defineEmits<{ dismiss: [] }>();
@@ -26,7 +28,11 @@ defineEmits<{ dismiss: [] }>();
 const live = computed(() => rebuildRunning(props.run.phase));
 const now = useNow(() => live.value);
 
-type StepState = "done" | "running" | "pending" | "stopped";
+// The restart step gone unheard-from past the patience a swap gets. From here the card stops promising a reconnect it
+// cannot see coming and says where the ending is written instead, while the follow keeps asking underneath.
+const unheard = computed(() => outOfContact(props.run, now.value));
+
+type StepState = "done" | "running" | "pending" | "stopped" | "unheard";
 
 const rankOf = (stage: DevRebuildStage): number => DEV_REBUILD_STEPS.findIndex((step) => step.key === stage);
 
@@ -41,6 +47,10 @@ const stateOf = (stage: DevRebuildStage): StepState => {
     }
     if (here > at) {
         return `pending`;
+    }
+    // Not known to be going, nor known to have stopped: the step this page lost sight of.
+    if (unheard.value) {
+        return `unheard`;
     }
     // Where it got to and stopped: not finished, and not still going either.
     return live.value ? `running` : `stopped`;
@@ -73,8 +83,20 @@ const steps = computed(() =>
     })),
 );
 
-const ICONS: Record<StepState, IconName> = { done: `check-circle`, running: `spinner`, pending: `circle`, stopped: `exclamation-triangle` };
-const TONES: Record<StepState, string> = { done: `text-success`, running: `text-info`, pending: `text-muted`, stopped: `text-warning` };
+const ICONS: Record<StepState, IconName> = {
+    done: `check-circle`,
+    running: `spinner`,
+    pending: `circle`,
+    stopped: `exclamation-triangle`,
+    unheard: `question-circle`,
+};
+const TONES: Record<StepState, string> = {
+    done: `text-success`,
+    running: `text-info`,
+    pending: `text-muted`,
+    stopped: `text-warning`,
+    unheard: `text-warning`,
+};
 
 const elapsedLabel = computed(() => (props.elapsed === undefined ? undefined : formatElapsed(props.elapsed)));
 
@@ -93,7 +115,7 @@ const heading = computed(() => t(`sandbox.useDevRebuild.rebuildingFromCheckout`)
 // The one sentence about THIS sandbox, which flips at the swap: up to it the build costs the reader nothing, and from
 // it their workspace is the thing that went away.
 const cost = computed(() => {
-    if (!live.value) {
+    if (!live.value || unheard.value) {
         return undefined;
     }
     return props.run.stage === `swap` ? t(`sandbox.devRebuildProgress.restartingOnNewImage`) : t(`sandbox.devRebuildProgress.keepsWorking`);
@@ -115,6 +137,10 @@ const failure = computed<NoticeModel | undefined>(() => {
                 : t(`sandbox.devRebuildProgress.failedOnDevice`, { code: props.run.exitCode });
         return { tone: `warning`, title, ...(props.run.trouble === undefined ? {} : { detail: props.run.trouble }) };
     }
+    if (props.run.phase === `lost` && unheard.value) {
+        const said = [t(`sandbox.devRebuildProgress.lostContactGaveUp`), props.run.trouble].filter((line) => line !== undefined).join(`\n`);
+        return { tone: `warning`, title: t(`sandbox.devRebuildProgress.lostContact`), detail: said };
+    }
     if (props.run.phase === `lost`) {
         return {
             tone: `warning`,
@@ -125,12 +151,28 @@ const failure = computed<NoticeModel | undefined>(() => {
     return undefined;
 });
 
+// Still following, still unheard-from: the same words while the polls go on, and no log thrown open — this is not a
+// failure until something says so.
+const adrift = computed<NoticeModel | undefined>(() =>
+    live.value && unheard.value
+        ? { tone: `warning`, title: t(`sandbox.devRebuildProgress.lostContact`), detail: t(`sandbox.devRebuildProgress.lostContactRetrying`) }
+        : undefined,
+);
+const notice = computed(() => failure.value ?? adrift.value);
+
+// WHERE THE ENDING IS, once this page cannot read it: the build's own log, which `ic` finishes with its verdict on the
+// swap; the new container's log, which says why it would not come up; and `ic`'s diagnosis of both. All on the machine
+// that runs the rebuild, which wrote the ending down whether or not anyone here was listening — there is no other way
+// to it, since the machine agent reaches this sandbox through the same daemon. Spelled bare, as deviceFallback.ts
+// spells them: ic's installer puts it on the PATH.
+const outcomeCommands = computed(() => [`tail -n 40 ${props.logPath}`, `ic sandbox logs ${props.slug}`, `ic sandbox doctor ${props.slug}`].join(`\n`));
+
 // A docker layer builds for minutes without printing anything, so a still pane is not evidence of a stuck build — but
 // after a while it is worth saying which of the two this is, rather than leaving the reader to guess.
 const QUIET_AFTER_S = 90;
 const quiet = computed(() => {
     const seconds = props.run.quietFor ?? 0;
-    return props.run.phase === `building` && seconds > QUIET_AFTER_S
+    return props.run.phase === `building` && !unheard.value && seconds > QUIET_AFTER_S
         ? t(`sandbox.devRebuildProgress.quietFor`, { minutes: Math.round(seconds / 60) })
         : undefined;
 });
@@ -197,7 +239,17 @@ const logLabel = computed(() => (showLog.value ? t(`sandbox.devRebuildProgress.h
 
         <p v-if="cost" class="text-2xs text-muted">{{ cost }}</p>
 
-        <Notice v-if="failure" :of="failure" class="text-2xs" />
+        <div v-if="notice" class="flex flex-col gap-1.5">
+            <Notice :of="notice" class="text-2xs" />
+            <!-- Under the notice, not inside it: the notice is the reason, these are the way to the answer. -->
+            <Code
+                v-if="unheard"
+                :code="outcomeCommands"
+                :lang="commandLang(`unix`)"
+                :label="t(`sandbox.devRebuildProgress.outcomeOnMachine`)"
+                :wrap="true"
+            />
+        </div>
         <p v-else-if="done" class="flex items-center gap-2 text-2xs text-muted">
             <Icon name="check-circle" class="shrink-0 text-success" />
             <span>{{ done }}</span>

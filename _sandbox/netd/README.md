@@ -59,12 +59,22 @@ flowchart LR
   and still attach, though their local grid can differ; newer editors fall back to local fitting with older netd versions.)
   A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
+- Every address netd has is Node's word: its ports, the loopback certificate and the tunnel, sent over the control
+  socket. netd writes the last of each down (`remember.rs`, `last-config.json` in the run directory, 0600) and applies
+  them again when it starts, before any Node has spoken, and the next Node's word replaces them. A container whose
+  daemon dies before it speaks (a module it cannot load) used to answer nobody at all, its vitals included, and its
+  owner watched a spinner; restarted, it now answers on its ports and over its tunnel with the vitals that say it is
+  crashing and netd's own "restarting" (2026-10-06). The file lives on the container's own filesystem, so it survives a
+  restart and goes with a recreate, where the new container's first Node is the first word. It holds the tunnel's
+  grant and the loopback key, neither reaching further than it did: the grant is in netd's own environment, the
+  container's, which only root reads, and the key in the daemon's certificate store.
 - The sandbox's proof of life is netd's too: `GET /system/vitals` on the daemon's host (`vitals.rs`) is answered
-  before anything waits for Node, whether Node has not said hello yet, is up, or is being restarted, once Node has
-  named netd's ports: netd binds none until Node's first config. A Node that dies before that (a module it cannot
-  load) leaves netd listening on nothing, and netd's log line for each restart, `the daemon crashed; restarting it`,
-  is then the only count of them; `ic`'s swap and probation, `dev-restart.sh` and `smoke-image.sh` read it there
-  (2026-10-06), and the vitals everywhere else. It reports Node's
+  before anything waits for Node, whether Node has not said hello yet, is up, or is being restarted, on whichever
+  ports netd holds. netd also writes them to `/run/intentic/vitals.json` (browser-wire's `VITALS_FILE`) on every
+  restart, every change of Node's link and once a minute, for a host that reaches the container but not its address:
+  a fresh container whose daemon dies before naming netd's ports has no address to ask, and `ic`'s swap and probation
+  and the hosted gate read the file there (2026-10-06). A netd from before the file is read off its log line instead,
+  `the daemon crashed; restarting it`, as `dev-restart.sh` and `smoke-image.sh` do. It reports Node's
   link (`starting`, `up`, `restarting`), its lag, how many times netd restarted it in the last 10 minutes, the
   container's uptime, cgroup v2's `some avg10` pressure for cpu, memory and io, and the tunnel (`tunnel`: whether it is
   held, dialling, held by another copy and where, or deleted, whether QUIC is held, and how many times a held tunnel
