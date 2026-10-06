@@ -209,6 +209,26 @@ describe(`the chat's queue`, () => {
         expect(chat.queue.value).toEqual(waiting(1, `and the docs`));
     });
 
+    // Each message carries its own booking (2026-10-06): read off the card whole, every message with its own time, and
+    // the queue's own fields as the soonest of them.
+    it(`keeps each waiting message's own booking as the card carries it`, async () => {
+        const chat = new Conversation(`a`);
+        attach(chat);
+        const booked: ConversationQueue = {
+            items: [
+                { id: `m-1`, text: `do the thing`, voice: `person`, queuedAt: 1_000, revision: 1, until: 9_000 },
+                { id: `m-2`, text: `second thing`, voice: `person`, queuedAt: 1_000, revision: 2, until: 5_000 },
+            ],
+            revision: 2,
+            paused: `scheduled`,
+            until: 5_000,
+        };
+        roster.value = { a: { status: `idle`, queue: booked } };
+        await nextTick();
+
+        expect(chat.queue.value).toEqual(booked);
+    });
+
     // This window's own change was answered with a newer queue than the card it has yet to receive.
     it(`never goes back to an older copy than the one a change here was answered with`, async () => {
         const chat = new Conversation(`a`);

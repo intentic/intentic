@@ -88,7 +88,10 @@ export interface ComposerWords {
     readonly followsWaiting?: boolean;
     /** When a message booked for later goes, as its pill says it (a time, or after which agent lands); `later` only. */
     readonly later?: string;
-    /** This chat already holds a scheduled message, which an ordinary send lets go with it. */
+    /**
+     * This chat already holds a scheduled message, which an ordinary send lets go with it: only on a sandbox that books
+     * the whole queue at once. One that books each message keeps every booking on its time.
+     */
     readonly heldGoesToo?: boolean;
 }
 

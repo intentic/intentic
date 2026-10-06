@@ -122,7 +122,10 @@ it(`says when a booked message goes, and that an ordinary send takes what is sch
     });
     expect(placeholderFor(`later`, WORDS)).toBe(`Write the message to schedule…`);
     expect(sendHintFor(`idle`, WORDS)).toBe(`Send`);
+    // Said only for a sandbox that books the whole queue, where an ordinary send lets a booking go too (composerSend.ts);
+    // one that books each message keeps every booking on its time, and the plain hint stands.
     expect(sendHintFor(`idle`, { ...WORDS, heldGoesToo: true })).toEqual({ title: `Send`, note: `What is scheduled in this chat goes now too.` });
+    expect(sendHintFor(`idle`, { ...WORDS, heldGoesToo: false })).toBe(`Send`);
 });
 
 it(`gives every intent its own sentence in both slots`, () => {

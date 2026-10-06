@@ -5,7 +5,7 @@ import { recordConversationPrompt, recordPrompt } from "../../sessions/transcrip
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
 import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD } from "./conversation-holdings.js";
-import { type Booking, bookingOf, NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
+import { type Booking, bookingOfItem, NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
 
 // One actor per conversation, each holding the conversation's state and applying events to it through `decide`, the
@@ -83,8 +83,8 @@ export interface ConversationActors {
     readonly turnActive: (conversationId: string) => boolean;
     // Every held turn, first recorded first (a re-record keeps its place); a snapshot, since the pass moves what it reads.
     readonly stranded: () => readonly Stranded[];
-    // Every queue holding a person's scheduled send, with what it waits for: what the resume pass lets go when that comes.
-    // Read off the actors, which every conversation with anything waiting has once boot has drained the queues it kept.
+    // Every person's scheduled send waiting in a queue, one per message, with what it waits for: what the resume pass lets
+    // go when that comes. Read off the actors, which every conversation with anything waiting has once boot has drained the queues it kept.
     readonly booked: () => readonly Booked[];
     // One kind of what conversations hold beside their state, each conversation's share on its actor.
     readonly holdings: <V>(kind: Holding<V>) => Holdings<V>;
@@ -97,6 +97,8 @@ export interface ConversationActors {
 
 export interface Booked {
     readonly conversationId: string;
+    // The booked message's id, which the release names, so only it goes and every other booking keeps its time.
+    readonly id: string;
     readonly booking: Booking;
 }
 
@@ -146,14 +148,16 @@ const archivedIn =
     (id: string): boolean =>
         refusesArchived(books.entry(id));
 
-// The scheduled queues among the actors, each with what it waits for (ConversationActors.booked).
+// The booked messages among the actors' queues, each with what it waits for (ConversationActors.booked).
 const bookedIn =
     (actors: ReadonlyMap<string, Actor>) =>
     (): readonly Booked[] =>
-        [...actors].flatMap(([conversationId, { state }]) => {
-            const booking = state.queue.paused === "scheduled" ? bookingOf(state.queue) : undefined;
-            return booking === undefined ? [] : [{ conversationId, booking }];
-        });
+        [...actors].flatMap(([conversationId, { state }]) =>
+            state.queue.items.flatMap((item) => {
+                const booking = bookingOfItem(item);
+                return booking === undefined ? [] : [{ conversationId, id: item.id, booking }];
+            }),
+        );
 
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
     const actors = new Map<string, Actor>();

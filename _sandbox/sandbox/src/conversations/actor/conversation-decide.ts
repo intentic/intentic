@@ -178,13 +178,14 @@ export type ConversationEvent =
     | { readonly kind: "workflow-shown"; readonly workflow: NonNullable<AgentSummary["workflow"]> }
     // A message joins the queue: it arrived while a turn that could not take it ran, or behind others waiting.
     | { readonly kind: "queue-joined"; readonly item: Omit<QueuedItem, "revision"> }
-    // A person's scheduled send joins the queue, and everything in it waits by `booking`: until an instant (a time they
-    // chose, a spent allowance's reopen), or until another conversation's work lands. `opening` is the conversation's
+    // A person's scheduled send joins the queue booked by `booking`, its own and no other message's: until an instant (a
+    // time they chose, a spent allowance's reopen), or until another conversation's work lands. `opening` is the conversation's
     // own opening, for a message that opens it: its entry is written with the booking, so the card and the queue are on
     // record from the press, as a turn's `begin` would have put them.
     | { readonly kind: "queue-scheduled"; readonly item: Omit<QueuedItem, "revision">; readonly booking: Booking; readonly opening?: BeginTurn }
-    // What already waits is held by another booking, whatever held it before; answers whether anything waits.
-    | { readonly kind: "queue-rescheduled"; readonly booking: Booking }
+    // The waiting messages `ids` names (every one, when it names none) are booked anew, whatever held them before;
+    // answers whether every one named waits (anything at all, when none are named).
+    | { readonly kind: "queue-rescheduled"; readonly booking: Booking; readonly ids?: readonly string[] }
     // A turn delivered these waiting messages: it started with them, or they were said into it.
     | { readonly kind: "queue-taken"; readonly ids: readonly string[] }
     // A refusal at the door handed these back: at the head again, held.
@@ -192,8 +193,9 @@ export type ConversationEvent =
     // Somebody took one back, or reworded it, as it read at `revision`; answers what the change found.
     | { readonly kind: "queue-removed"; readonly id: string; readonly revision: number }
     | { readonly kind: "queue-edited"; readonly id: string; readonly revision: number; readonly text: string }
-    // A held queue is let go, what a person waits with pointed at who the press names to serve it.
-    | { readonly kind: "queue-released"; readonly routing?: ResumeRouting }
+    // A held queue is let go, with the bookings of the messages `ids` names (every one's, when it names none), what a
+    // person waits with pointed at who the press names to serve it.
+    | { readonly kind: "queue-released"; readonly routing?: ResumeRouting; readonly ids?: readonly string[] }
     // Whether the daemon can keep the settled turn's cache warm, and on how many refreshes.
     | { readonly kind: "keepable-noted"; readonly keepable: { readonly budget: number } | undefined }
     // The prompt cache is to be kept warm until `until`; a second arming moves the deadline and keeps the count.
@@ -770,7 +772,12 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
         return event.opening === undefined ? booked : { ...booked, effects: [{ kind: "entry-booked", turn: event.opening }, ...booked.effects] };
     },
     "queue-rescheduled": (state, event) => {
-        const queue = rescheduled(state.queue, event.booking);
+        const { ids } = event;
+        // A message named that no longer waits has gone or was taken back: nothing is re-timed in its place.
+        if (ids !== undefined && !ids.every((id) => state.queue.items.some((item) => item.id === id))) {
+            return unchanged(state, false);
+        }
+        const queue = rescheduled(state.queue, event.booking, ids);
         return withQueue(state, queue, queue.items.length > 0);
     },
     "queue-taken": (state, event) => withQueue(state, taken(state.queue, event.ids), undefined),
@@ -784,7 +791,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
         return withQueue(state, queue, change);
     },
     "queue-released": (state, event) =>
-        withQueue(state, released(event.routing === undefined ? state.queue : rerouted(state.queue, event.routing)), undefined),
+        withQueue(state, released(event.routing === undefined ? state.queue : rerouted(state.queue, event.routing, event.ids), event.ids), undefined),
     "keepable-noted": (state, event) =>
         state.turn.keepable?.budget === event.keepable?.budget
             ? unchanged(state, undefined)

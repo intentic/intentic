@@ -181,6 +181,8 @@ export const useComposerSend = (host: SendHost) => {
     });
     // The pane's words, plus what only a scheduled send says: when, and whether a turn already waiting goes ahead of it.
     const words = computed<ComposerWords>(() => {
+        // Only a sandbox that books the whole queue lets a booking go with an ordinary send (`scheduled` is a hold only
+        // there, bookings.ts holdOfQueue); one that books each message keeps every booking on its time.
         const base: ComposerWords = { ...host.words.value, heldGoesToo: view.queuePaused.value === `scheduled` };
         const picked = later.value;
         const own: ComposerWords = picked === undefined ? base : { ...base, later: laterLabel(picked, paneNow.value, host.titleOf) };
@@ -207,7 +209,8 @@ export const useComposerSend = (host: SendHost) => {
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
         pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
         queued: queued.value.length,
-        queueScheduled: view.queuePaused.value === `scheduled`,
+        // Everything waiting is booked for later: a bare press then has nothing it may send now.
+        queueScheduled: view.waiting.value.length === 0 && view.bookedGroups.value.length > 0,
         connected: connected.value,
         spentUntil: spentUntil.value,
         later: later.value !== undefined,

@@ -41,9 +41,21 @@ describe(`the agents a message can wait for`, () => {
 
     it(`never lists itself, a spawned child, another sandbox's, an archived one, one waiting for it, or one the daemon has no record of`, () => {
         const waitsForSelf = { items: [{ id: `m1`, text: `after`, voice: `person` as const, queuedAt: 1, revision: 1 }], revision: 1, paused: `scheduled` as const, after: `self` };
+        // Each message carries its own booking: one waiting for `self` behind a sooner time, where the queue's own field
+        // names only that time.
+        const behindATime = {
+            items: [
+                { id: `m1`, text: `first`, voice: `person` as const, queuedAt: 1, revision: 1, until: 9_000 },
+                { id: `m2`, text: `after`, voice: `person` as const, queuedAt: 1, revision: 2, after: `self` },
+            ],
+            revision: 2,
+            paused: `scheduled` as const,
+            until: 9_000,
+        };
         const fleet = [
             agent(`self`),
             agent(`circular`, { status: `idle`, queue: waitsForSelf }),
+            agent(`circular-later`, { status: `idle`, queue: behindATime }),
             agent(`child`, { startedBy: `agent:parent-id` }),
             agent(`elsewhere`, { sandboxId: `box-2` }),
             agent(`archived`, { archivedAt: 5 }),

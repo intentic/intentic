@@ -8,6 +8,7 @@ import { cancelWatchersFor } from "../../agent/verification/watchers.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import type { ResourceReaper } from "../../system/boot/reaper.js";
 import type { ConversationActors } from "../actor/conversation-actors.js";
+import { isBooked } from "../actor/conversation-queue.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import { isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -124,7 +125,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
         }
         // A message booked for later goes out by itself at its time, into a conversation it would find archived: the
         // person's words would be lost. It stays on the board until they send it, re-time it or take it back.
-        if (entry.queue?.paused === "scheduled" && entry.queue.items.length > 0) {
+        if ((entry.queue?.items ?? []).some(isBooked)) {
             refused[index] = { id, reason: "a message is scheduled to send in it: send it now or take it back first" };
             return;
         }

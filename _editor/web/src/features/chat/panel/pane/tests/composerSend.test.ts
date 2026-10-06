@@ -140,6 +140,7 @@ describe(`a scheduled send`, () => {
         expect(chat.draft.value).toBe(``);
     });
 
+    // A queue booked as a whole, as a sandbox older than per-message bookings holds it.
     it(`does not let a scheduled queue go on an empty press: the button reads as a time, not as now`, () => {
         const { chat, say, send } = composerOf(inHalfAnHour());
         chat.queue.value = {
@@ -152,6 +153,30 @@ describe(`a scheduled send`, () => {
         expect(send.canSend.value).toBe(false);
         send.submit();
         expect(say).not.toHaveBeenCalled();
+    });
+
+    // A sandbox that books each message keeps every booking on its time through an ordinary send (2026-10-06), so Send
+    // promises nothing about them; an empty press still has nothing it may send now.
+    it(`keeps quiet about a message booked on its own, which an ordinary send leaves on its time`, () => {
+        const { chat, say, send } = composerOf();
+        const until = Date.now() + 60_000;
+        chat.queue.value = {
+            items: [{ id: `m1`, text: `ship it`, voice: `person`, queuedAt: 1, revision: 1, until }],
+            revision: 1,
+            paused: `scheduled`,
+            until,
+        };
+
+        expect(send.canSend.value).toBe(false);
+        send.submit();
+        expect(say).not.toHaveBeenCalled();
+        chat.draft.value = `and the docs`;
+        expect(send.intent.value).toBe(`idle`);
+        expect(send.sendHint.value).toBe(`Send`);
+
+        // From a sandbox that books the whole queue, the same send lets the booking go too, and says so first.
+        chat.queue.value = { items: [{ id: `m1`, text: `ship it`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 1, paused: `scheduled`, until };
+        expect(send.sendHint.value).toEqual({ title: `Send`, note: `What is scheduled in this chat goes now too.` });
     });
 
     it(`leaves its time-labelled button shut on an empty box; Enter continues as the strip's Continue does`, () => {

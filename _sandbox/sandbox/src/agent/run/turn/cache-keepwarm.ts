@@ -17,6 +17,7 @@ import type { Services } from "../../../composition.js";
 import { deadlineKind, deadlines, type Deadlines } from "../../../conversations/actor/conversation-deadline.js";
 import { startAnchor } from "../../../conversations/worktrees/isolation.js";
 import type { Holding } from "../../../conversations/actor/conversation-holdings.js";
+import { holdOf, waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { opt } from "../../../opt.js";
 import type { ProviderDeps } from "../../../runtimes/runtime-table.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
@@ -346,8 +347,9 @@ export const tendKeepWarm = async (deps: KeepWarmDeps, conversationId: string, n
         dropKeepWarm(deps, conversationId);
         return;
     }
-    // Something is about to run on it, whose own requests keep the cache; a paused queue runs nothing until a press.
-    if (state.phase.kind !== "idle" || (state.queue.items.length > 0 && state.queue.paused === undefined)) {
+    // Something is about to run on it, whose own requests keep the cache; a held queue runs nothing until a press, and a
+    // booked message nothing until its time.
+    if (state.phase.kind !== "idle" || (waitingOf(state.queue).length > 0 && holdOf(state.queue) === undefined)) {
         schedule(deps, conversationId, now + BUSY_RETRY_MS, now);
         return;
     }

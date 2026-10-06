@@ -25,7 +25,8 @@ export const unwaitable = (services: Pick<Services, "agents" | "conversations">,
     if (worktreeOf(entry)?.parent !== undefined) {
         return "that agent's work lands into the agent that started it: wait for that one instead";
     }
-    if (services.conversations.queued(id).after?.conversationId === waiter) {
+    // Any message of its booked for after the asker's work: each message carries its own booking.
+    if (services.conversations.queued(id).items.some((item) => item.after?.conversationId === waiter)) {
         return "that conversation already waits for this one's work: one of the two has to go first";
     }
     return undefined;

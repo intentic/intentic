@@ -3,7 +3,7 @@ import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import type { FailedEnding } from "../registry/agents-store.js";
-import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
+import { holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
 
 // One conversation's in-memory life as a value: which phase it is in, what its live turn has measured, and the
 // leases and records that outlive a turn. Only conversation-decide.ts writes it, one event at a time; everything else
@@ -220,9 +220,9 @@ export const activityLive = (state: ConversationState): boolean => state.phase.k
 /**
  * Whether the conversation runs again by itself, with nobody pressing anything: a watch is armed on it (its own, or one
  * a job its turn left running was handed to as that turn closed), or words the sandbox or an agent sent wait in a queue
- * nothing holds. Read from what the conversation holds, never predicted: the turn's close arms every wake before its land
+ * nothing holds (a booked one waits on its own time, not a wake). Read from what the conversation holds, never predicted: the turn's close arms every wake before its land
  * asks, so there is no job left whose wake is still to come. The one reading status, fixStance and the card share
  * (AgentSummary.awaitingWake).
  */
 export const awaitingWake = (state: ConversationState): boolean =>
-    state.watches.length > 0 || (state.queue.paused === undefined && state.queue.items.some((item) => item.voice !== "person"));
+    state.watches.length > 0 || (holdOf(state.queue) === undefined && waitingOf(state.queue).some((item) => item.voice !== "person"));

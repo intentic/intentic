@@ -1,6 +1,6 @@
 import type { AgentWatch } from "@intentic/sandbox-contract";
 import { awaitingWake, type ConversationState, idleConversation, type ParkedCard } from "./conversation-state.js";
-import type { QueuedItem } from "./conversation-queue.js";
+import { type QueuedItem, scheduled } from "./conversation-queue.js";
 import { conversationStatus, permissionAskOf } from "./conversation-status.js";
 
 // A settled conversation's status, read from its state and branch: `ready` claims the work is finished and awaits a
@@ -50,6 +50,15 @@ describe("awaiting a wake", () => {
     test("is not a person's waiting message, nor anything in a held queue", () => {
         expect(awaitingWake(waiting("person"))).toBe(false);
         expect(awaitingWake(waiting("sandbox", true))).toBe(false);
+    });
+
+    // A person's booked message is no hold on the sandbox's own words: they still go when the conversation is free.
+    test("is the sandbox's words beside a person's booked message, which holds nothing", () => {
+        const sandbox = waiting("sandbox");
+        const booked = scheduled(sandbox.queue, { id: "b1", voice: "person", queuedAt: 2, turn: { prompt: "later", conversationId: "c1" } }, { until: 9_000 });
+        expect(booked.paused).toBe("scheduled");
+        expect(awaitingWake({ ...sandbox, queue: booked })).toBe(true);
+        expect(awaitingWake({ ...sandbox, queue: { ...booked, items: booked.items.filter((item) => item.id === "b1") } })).toBe(false);
     });
 });
 

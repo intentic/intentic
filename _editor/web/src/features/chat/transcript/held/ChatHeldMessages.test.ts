@@ -275,7 +275,9 @@ describe(`the other holds, drawn the same way`, () => {
 });
 
 // The composer's scheduled send, booked for when a spent allowance reopens: the reader's own choice, so it reads as a
-// booking with its time, not as a message that failed, and its one press sends it sooner.
+// booking with its time, not as a message that failed, and its one press sends it sooner. These queues are booked as a
+// whole, the queue's `until` or `after` and none on the message, as a sandbox older than per-message bookings keeps them:
+// drawn exactly as before, every message under the queue's one booking.
 describe(`a scheduled send`, () => {
     it(`reads as scheduled with the time it goes, with no warning and nothing about a refusal`, async () => {
         const until = Date.now() + 40 * 60 * 1_000 + 30_000;
@@ -285,6 +287,22 @@ describe(`a scheduled send`, () => {
         expect(element.querySelector(`.chat-surface-held`)?.textContent?.trim()).toBe(`We should be consistent and always use the same icon for "attention".`);
         expect(statusLine(element)).toMatch(/^Scheduled · sends in about 4[01] min$/u);
         expect(element.querySelector(`.text-warning`)).toBeNull();
+    });
+
+    it(`draws every message of a queue booked as a whole under its one line, with one Change and one Send now`, async () => {
+        const until = Date.now() + 40 * 60 * 1_000 + 30_000;
+        const chat = chatHolding({ items: [held({ attachments: [] }), held({ id: `m2`, text: `and the docs`, attachments: [] })], paused: `scheduled`, until }, SENT);
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat);
+        await nextTick();
+
+        expect(element.querySelectorAll(`.chat-surface-held`)).toHaveLength(2);
+        expect(element.querySelectorAll(`[role="status"]`)).toHaveLength(1);
+        expect(statusLine(element)).toMatch(/^Scheduled · sends in about 4[01] min$/u);
+        expect(pressNamed(element, `Change`)).toHaveLength(1);
+        pressNamed(element, `Send now`)[0]!.click();
+        // Both named; the client sends an older sandbox no ids (turnClient.test.ts), and it lets its whole queue go.
+        expect(resume.mock.calls).toEqual([[[`m1`, `m2`]]]);
     });
 
     it(`offers Send now, which lets it go before its time, saying the allowance may still refuse it`, async () => {
@@ -324,5 +342,57 @@ describe(`a scheduled send`, () => {
         await nextTick();
 
         expect(statusLine(element)).toBe(`Scheduled · sends in a moment`);
+    });
+});
+
+// Each message carries its own booking (2026-10-06): the queue once held one for all of them, so booking a second
+// message re-timed the first and both bubbles said the second's time. Each booked message now reads its own time,
+// with its own Change and Send now, and a Stop's hold beside them keeps its one line and its one press.
+describe(`messages booked each on its own`, () => {
+    const HOUR = 60 * 60 * 1_000;
+    const lines = (element: HTMLElement): string[] =>
+        [...element.querySelectorAll(`[role="status"]`)].map((line) => [...line.children].map((part) => part.textContent?.trim() ?? ``).join(` `));
+
+    it(`reads each booked message's own time, with its own Change and Send now`, async () => {
+        const soon = Date.now() + 40 * 60 * 1_000 + 30_000;
+        const late = Date.now() + 24 * HOUR;
+        const chat = chatHolding(
+            {
+                items: [held({ id: `m1`, text: `do the thing`, attachments: [], until: soon }), held({ id: `m2`, text: `second thing`, attachments: [], until: late })],
+                paused: `scheduled`,
+                until: soon,
+            },
+            SENT,
+        );
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat);
+        await nextTick();
+
+        const [first, second] = lines(element);
+        expect(first).toMatch(/^Scheduled · sends in about 4[01] min$/u);
+        expect(second).toMatch(/^Scheduled · sends .+$/u);
+        expect(second).not.toBe(first);
+        expect(pressNamed(element, `Change`)).toHaveLength(2);
+        expect(pressNamed(element, `Send now`)).toHaveLength(2);
+        pressNamed(element, `Send now`)[1]!.click();
+        expect(resume.mock.calls).toEqual([[[`m2`]]]);
+    });
+
+    it(`holds a stopped message on its own line beside a booked one, and Resume lets only the stopped one go`, async () => {
+        const chat = chatHolding(
+            {
+                items: [held({ id: `m1`, text: `and the docs`, attachments: [] }), held({ id: `m2`, text: `then tag it`, attachments: [], until: Date.now() + HOUR })],
+                paused: `stopped`,
+            },
+            [...SENT, { id: 3, role: `notice`, text: `Stopped.` }],
+        );
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat);
+        await nextTick();
+
+        expect(lines(element)).toEqual([`Not sent · The turn was stopped`, expect.stringMatching(/^Scheduled · sends in about (59|60) min$/u)]);
+        expect([...element.querySelectorAll(`.chat-surface-held`)].map((bubble) => bubble.textContent?.trim())).toEqual([`and the docs`, `then tag it`]);
+        pressNamed(element, `Send now`)[0]!.click();
+        expect(resume.mock.calls).toEqual([[[`m1`]]]);
     });
 });

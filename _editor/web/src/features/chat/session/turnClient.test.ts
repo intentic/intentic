@@ -551,7 +551,7 @@ describe(`saying something`, () => {
         expect(client.streaming.value).toBe(false);
         expect(host.transcript.messages.value).toEqual([]);
         expect(host.queue.value).toMatchObject({
-            items: [{ text: `ship it`, attachments: [FILE.path], voice: `person`, revision: 1 }],
+            items: [{ text: `ship it`, attachments: [FILE.path], voice: `person`, revision: 1, until: at }],
             revision: 1,
             paused: `scheduled`,
             until: at,
@@ -572,8 +572,9 @@ describe(`saying something`, () => {
         ]);
         expect(attach).not.toHaveBeenCalled();
         expect(host.title.value).toBe(deriveTitle(`ship it after the auth refactor`));
-        expect(host.queue.value).toMatchObject({ items: [{ text: `ship it after the auth refactor` }], paused: `scheduled`, after: `brave-otter` });
+        expect(host.queue.value).toMatchObject({ items: [{ text: `ship it after the auth refactor`, after: `brave-otter` }], paused: `scheduled`, after: `brave-otter` });
         expect(host.queue.value).not.toHaveProperty(`until`);
+        expect(host.queue.value?.items[0]).not.toHaveProperty(`until`);
     });
 
     // A sandbox from before bookings could open a chat has nothing to hold one on: it goes the ordinary way, drawn as any send is.
@@ -588,6 +589,7 @@ describe(`saying something`, () => {
         expect(run.mock.calls.map(([body]) => body.sendAt)).toEqual([undefined]);
     });
 
+    // A queue booked as a whole: what a sandbox older than per-message bookings holds, re-timed whole as it always was.
     it(`re-times what waits through the queue's own door, and follows a turn it let go at once`, async () => {
         const { client, host } = clientOf();
         host.queue.value = { ...WAITING, paused: `scheduled`, until: Date.now() + 60_000 };
@@ -603,6 +605,80 @@ describe(`saying something`, () => {
         attach.mockImplementation(async () => attached(`r9`, 6_000, `and the docs`));
         expect(await client.reschedule({ sendAt: Date.now() - 1 })).toBe(true);
         expect(attach).toHaveBeenCalledTimes(1);
+    });
+
+    // Each message carries its own booking (2026-10-06): the queue once held one, so a second booking re-timed the first.
+    // This window's mirror at the ack books the new message alone, as the daemon does, and reads the soonest for the queue.
+    it(`books a second scheduled send on its own time, leaving the first on its own`, async () => {
+        const { client, host } = clientOf();
+        host.registered.value = true;
+        answers({ delivered: `queued` }, { delivered: `queued` });
+        const soon = Date.now() + 60 * 60 * 1_000;
+        const late = soon + 24 * 60 * 60 * 1_000;
+
+        await client.schedule(`do the thing`, { sendAt: soon });
+        await client.schedule(`second thing`, { sendAt: late });
+
+        expect(host.queue.value?.items.map(({ text, until }) => ({ text, until }))).toEqual([
+            { text: `do the thing`, until: soon },
+            { text: `second thing`, until: late },
+        ]);
+        expect(host.queue.value).toMatchObject({ paused: `scheduled`, until: soon });
+    });
+
+    // A sandbox that books each message names them in Change and Send now; an older one would act on the whole queue
+    // whatever it was sent, so it is sent no ids, and nothing it did not do is promised.
+    it(`names the messages a re-time or a release acts on, only to a sandbox that books each message on its own`, async () => {
+        const { client, host } = clientOf();
+        const at = Date.now() + 60 * 60 * 1_000;
+        const perMessage: ConversationQueue = {
+            items: [
+                { id: `m-a`, text: `write the guide`, voice: `person`, queuedAt: 1_000, revision: 1, until: at },
+                { id: `m-b`, text: `then tag it`, voice: `person`, queuedAt: 1_000, revision: 2, until: at + 1_000 },
+            ],
+            revision: 2,
+            paused: `scheduled`,
+            until: at,
+        };
+        host.queue.value = perMessage;
+        queueSchedule.mockImplementation(async () => ({ ...perMessage, revision: 3 }));
+        queueResume.mockImplementation(async () => ({}));
+
+        await client.reschedule({ sendAt: at + 5_000 }, [`m-a`]);
+        await client.resume([`m-b`]);
+
+        expect(queueSchedule.mock.calls.map(([input]) => input)).toEqual([{ conversationId: `c1`, sendAt: at + 5_000, ids: [`m-a`] }]);
+        expect(queueResume.mock.calls.map(([input]) => input.ids)).toEqual([[`m-b`]]);
+
+        queueSchedule.mockClear();
+        queueResume.mockClear();
+        const legacy: ConversationQueue = { ...WAITING, paused: `scheduled`, until: at };
+        host.queue.value = legacy;
+        queueSchedule.mockImplementation(async () => ({ ...legacy, revision: 2, until: at + 5_000 }));
+        await client.reschedule({ sendAt: at + 5_000 }, [`m-wait`]);
+        await client.resume([`m-wait`]);
+
+        expect(queueSchedule.mock.calls.map(([input]) => input)).toEqual([{ conversationId: `c1`, sendAt: at + 5_000 }]);
+        expect(queueResume.mock.calls.map(([input]) => Object.keys(input).toSorted())).toEqual([[`conversationId`, `routing`]]);
+    });
+
+    // Resume answers a Stop or a refusal: what it held goes, and a message booked for later stays on its time.
+    it(`lets a stop's hold go without the bookings beside it, naming only the messages it held`, async () => {
+        const { client, host } = clientOf();
+        const at = Date.now() + 60 * 60 * 1_000;
+        host.queue.value = {
+            items: [
+                { id: `m-held`, text: `and the docs`, voice: `person`, queuedAt: 1_000, revision: 1 },
+                { id: `m-later`, text: `then tag it`, voice: `person`, queuedAt: 1_000, revision: 2, until: at },
+            ],
+            revision: 3,
+            paused: `stopped`,
+        };
+        queueResume.mockImplementation(async () => ({}));
+
+        await client.resume();
+
+        expect(queueResume.mock.calls.map(([input]) => input.ids)).toEqual([[`m-held`]]);
     });
 
     it(`sends a nudge behind a waiting nudge nowhere, and anything else as ever`, async () => {

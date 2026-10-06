@@ -34,6 +34,11 @@ const rank = (agent: FleetAgent): number => {
     return agent.status === `ready` || agent.status === `conflict` ? 1 : 2;
 };
 
+// Whether any of an agent's waiting messages is booked for after `self`'s work: each carries its own booking, and the
+// queue's own `after` is only the soonest (bookings.ts), or every message's on a sandbox that books the whole queue.
+const waitsFor = (agent: FleetAgent, self: string): boolean =>
+    agent.queue?.after === self || (agent.queue?.items ?? []).some((item) => item.after === self);
+
 /**
  * The agents a message in conversation `self` can wait for: this sandbox's, live, not this one, not a spawned child
  * (whose work lands into its parent, which is the one to wait for), not one already waiting for this one (neither would
@@ -49,7 +54,7 @@ export const waitTargets = (agents: readonly FleetAgent[], self: string, sandbox
                 agent.archivedAt === undefined &&
                 !unregistered(agent.status) &&
                 parentOf(agent.startedBy) === undefined &&
-                agent.queue?.after !== self &&
+                !waitsFor(agent, self) &&
                 pending(agent),
         )
         .toSorted((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt)

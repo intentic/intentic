@@ -75,6 +75,9 @@ describe("archivable", () => {
         // A message booked for later, or held, is work still to come: archiving would drop it.
         const waiting = { items: [{ id: "m1", text: "after the auth refactor lands", voice: "person" as const, queuedAt: 1, revision: 1 }], revision: 1 };
         expect(archivable(card({ status: "idle", queue: { ...waiting, paused: "scheduled", after: "brave-otter" } }))).toBe(false);
+        // Booked on the message itself, as every window now reads it.
+        const booked = { items: waiting.items.map((item) => ({ ...item, until: 9_000 })), revision: 1, paused: "scheduled" as const, until: 9_000 };
+        expect(archivable(card({ status: "idle", queue: booked }))).toBe(false);
         expect(archivable(card({ status: "idle", queue: { ...waiting, paused: "stopped" } }))).toBe(false);
         expect(archivable(card({ status: "idle", queue: { items: [], revision: 2 } }))).toBe(true);
     });
@@ -160,6 +163,10 @@ describe("archiveAgents", () => {
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const item = { id: "m-1", voice: "person", queuedAt: 3_000, turn: { conversationId: "c1", prompt: "then tag it", messageId: "m-1" } } as const;
         await conversations.send("c1", { kind: "queue-scheduled", item, booking: { until: 90_000 } }, 3_000).settled;
+        // A message sent the ordinary way since goes on its own; the booked one still waits for its time.
+        const now = { ...item, id: "m-2", turn: { ...item.turn, prompt: "and the docs", messageId: "m-2" } } as const;
+        await conversations.send("c1", { kind: "queue-joined", item: now }, 4_000).settled;
+        await conversations.send("c1", { kind: "queue-taken", ids: ["m-2"] }, 4_500).settled;
         const { worktrees, retire } = stubWorktrees();
 
         const { archived, failed } = await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1"], 9_000);

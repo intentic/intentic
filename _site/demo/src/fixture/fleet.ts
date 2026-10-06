@@ -672,6 +672,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
                     voice: `person`,
                     queuedAt: now - minutes(3),
                     revision: 1,
+                    after: FEATURED_AGENT_ID,
                 },
             ],
             revision: 1,

@@ -158,6 +158,34 @@ describe("sqliteAgentsStore", () => {
         expect(store.load()).toEqual([conversationEntry({ id: "q", queue: queued("pipeline-fix") })]);
     });
 
+    // Up to 2026-10-06 a queue held one booking for every message in it; each message now carries its own. A record
+    // written before that reads back with the one booking copied onto each message it held, so nothing goes earlier.
+    it("a queue booked as a whole, as records before per-message bookings kept it, reads back with each message booked", () => {
+        const { db, store } = fresh();
+        const item = (id: string) => ({ id, voice: "person" as const, queuedAt: 3, revision: 1, turn: { conversationId: "q", prompt: `say ${id}` } });
+        const after = { conversationId: "brave-otter-k2", since: 2 };
+        const legacy = { items: [item("m1"), item("m2")], revision: 2, paused: "scheduled" as const, until: 90_000 };
+        const legacyAfter = { items: [item("m1")], revision: 1, paused: "scheduled" as const, after };
+        for (const [id, queue] of [["q", legacy], ["l", legacyAfter]] as const) {
+            const { id: _id, ...record } = conversationEntry({ id });
+            db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run(id, JSON.stringify({ ...record, queue }));
+        }
+
+        expect(store.load()).toEqual([
+            conversationEntry({
+                id: "q",
+                queue: {
+                    ...legacy,
+                    items: [
+                        { ...item("m1"), until: 90_000 },
+                        { ...item("m2"), until: 90_000 },
+                    ],
+                },
+            }),
+            conversationEntry({ id: "l", queue: { ...legacyAfter, items: [{ ...item("m1"), after }] } }),
+        ]);
+    });
+
     it("removing a conversation takes every row keyed by it in every table, and nobody else's", () => {
         const { db, store } = fresh();
         store.save([isolatedAgent([{ repo: "root", base: "a" }], { id: "gone" }), isolatedAgent([{ repo: "root", base: "a" }], { id: "kept" })]);

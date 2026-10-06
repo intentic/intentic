@@ -18,10 +18,11 @@ import {
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
-import { at, CHECK_SETTLES, mapValue } from "../../store/evolution/conversions.js";
+import { at, CHECK_SETTLES, type JsonObject, mapValue, transform } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
+import { opt } from "../../opt.js";
 
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
 // whose invariants are their types. Runtime-only state (status, attention, activity) lives in the conversation's actor,
@@ -217,6 +218,14 @@ export const PersistedAgentSchema = z.object({
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 
+// A queue as records before per-message bookings kept a scheduled one: the booking on the queue, none on its messages.
+type LegacyBookedQueue = JsonObject & {
+    readonly paused: "scheduled";
+    readonly until?: number;
+    readonly after?: JsonObject;
+    readonly items: readonly JsonObject[];
+};
+
 // The `record` column of a `conversation` row, read back with its id and its checkout's repo rows grafted on: a stored
 // document like any file, so its shape is frozen and a change to it ships with its conversion here. Not a file the boot
 // step can find (a column of conversations.db), so it converts on every read.
@@ -229,6 +238,25 @@ export const conversationRecordDocument = defineDocument({
         // The pre-push fix's model role, retired with the push checks on 2026-09-28: a turn queued on it runs on the
         // nearest role that remains, the pipeline fix, which likewise starts only when somebody presses for it.
         at("queue.items.*.turn", mapValue("runRole", { "pre-push-fix": "pipeline-fix" })),
+        // 2026-10-06: a queue held one booking for every message in it (`paused: "scheduled"` with the queue's `until` or
+        // `after`), so booking a second message re-timed the first. Each message now carries its own; a queue booked as
+        // a whole gives that one booking to every message it held, which is when each of them was to go. The queue-level
+        // fields stay, as the soonest booking an older build still reads.
+        at(
+            "queue",
+            transform(
+                "gives every message of a queue booked as a whole that booking as its own",
+                (queue: JsonObject): queue is LegacyBookedQueue =>
+                    queue["paused"] === "scheduled" &&
+                    (Object.hasOwn(queue, "until") || Object.hasOwn(queue, "after")) &&
+                    Array.isArray(queue["items"]) &&
+                    !queue["items"].some((item) => item instanceof Object && (Object.hasOwn(item, "until") || Object.hasOwn(item, "after"))),
+                (queue: LegacyBookedQueue) => ({
+                    ...queue,
+                    items: queue.items.map((item) => ({ ...item, ...opt("until", queue.until), ...opt("after", queue.after) })),
+                }),
+            ),
+        ),
     ],
 });
 

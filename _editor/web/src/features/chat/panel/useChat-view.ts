@@ -24,6 +24,7 @@ import { loadProviderModels } from "../models/useChat-catalog";
 import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
 import { waitKindOf } from "./pane/pendingDecision";
+import { bookedGroups, holdOfQueue, unbookedOf } from "../composer/later/bookings";
 
 // The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
 // the fleet store; a view handed none reads only what its own window saw.
@@ -56,6 +57,17 @@ const waitingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | u
     return { waitsOn, waitingOnYou: computed(() => waitsOn.value !== undefined) };
 };
 
+// What waits in the conversation's queue for its next turn, the same in every window, and why it is held if it is.
+// `queued` is all of it; `waiting` what no booking holds back, which `queuePaused` holds (a Stop, a refusal; `scheduled`
+// only from a sandbox that books the whole queue); `bookedGroups` the messages booked for later, each group on its own
+// time (bookings.ts).
+const queueReadings = (conversation: ComputedRef<Conversation>) => ({
+    queued: computed<readonly QueuedMessage[]>(() => conversation.value.queue.value?.items ?? []),
+    waiting: computed(() => unbookedOf(conversation.value.queue.value)),
+    queuePaused: computed(() => holdOfQueue(conversation.value.queue.value)),
+    bookedGroups: computed(() => bookedGroups(conversation.value.queue.value)),
+});
+
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
 // `active`, since the floating window shows several conversations at once.
 export const conversationView = (conversation: ComputedRef<Conversation>, cardOf?: CardOf) => ({
@@ -80,12 +92,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // The standing version of continueTurn is not here: it is this conversation's answer to the ending's one question
     // (turnBreak.ts), owned by the daemon and read through the agent roster, so it survives this tab closing and
     // cannot disagree with the same switch on the board.
-    // What waits in the conversation's queue for its next turn, the same in every window, and why it is held if it is;
-    // and whether the running turn can actually take words right now.
-    queued: computed<readonly QueuedMessage[]>(() => conversation.value.queue.value?.items ?? []),
-    queuePaused: computed(() => conversation.value.queue.value?.paused),
+    ...queueReadings(conversation),
     ...failureView(conversation, cardOf),
     ...waitingView(conversation, cardOf),
+    // Whether the running turn can actually take words right now.
     steerable: computed(() => conversation.value.selection.steerable.value),
     // What this conversation's runtime can do, from the contract's declared record.
     capabilities: computed(() => conversation.value.selection.capabilities.value),
@@ -193,7 +203,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // The queue's doors, each acting on the message as this window read it, and letting a held queue go.
     unqueue: (message: QueuedMessage): Promise<boolean> => conversation.value.turn.unqueue(message),
     reword: (message: QueuedMessage, text: string): Promise<boolean> => conversation.value.turn.reword(message, text),
-    resumeQueue: (): Promise<void> => conversation.value.turn.resume(),
+    resumeQueue: (ids?: readonly string[]): Promise<void> => conversation.value.turn.resume(ids),
     // Forks the conversation at `cut` (the index of the first message below the line) into a fresh tab, leaving the
     // source untouched. A cut above a user message reopens that prompt in the new composer instead of sending it.
     forkAt: (cut: number, files: ForkLink["files"]): Conversation | undefined => {

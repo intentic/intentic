@@ -410,10 +410,16 @@ export const QueueResumeSchema = z.object({
     routing: ResumeRoutingSchema.optional().describe(
         "Who serves the turn the waiting messages start, when the conversation has been re-pointed since they were queued: the usual answer to a refusal that held them. Leave it out to send them as they were queued.",
     ),
+    ids: z
+        .array(z.string().min(1))
+        .optional()
+        .describe(
+            "Which waiting messages to let go: a booked message named here goes now, and any held message goes with it. Leave it out to let every waiting message go, booked or held.",
+        ),
 });
 export type QueueResume = z.infer<typeof QueueResumeSchema>;
-// Re-times what a conversation's queue holds: the same messages, booked for another instant or for after another
-// conversation's work lands. One of the two, never both, since a hold waits on exactly one thing.
+// Re-times what a conversation's queue holds: the same messages (or only those `ids` names), booked for another instant
+// or for after another conversation's work lands. One of the two, never both, since a booking waits on exactly one thing.
 export const QueueScheduleSchema = z
     .object({
         conversationId: z.string().min(1).describe("Whose queue."),
@@ -426,6 +432,10 @@ export const QueueScheduleSchema = z
         sendAfter: ConversationIdSchema.optional().describe(
             "Send what waits once that conversation has finished and all of its work has landed in the workspace, instead. Sent now when it has nothing running and nothing left to land.",
         ),
+        ids: z
+            .array(z.string().min(1))
+            .optional()
+            .describe("Which waiting messages to re-time; every other keeps its own booking. Leave it out to re-time every waiting message."),
     })
     .refine((input) => (input.sendAt === undefined) !== (input.sendAfter === undefined), {
         message: "name exactly one of sendAt and sendAfter",

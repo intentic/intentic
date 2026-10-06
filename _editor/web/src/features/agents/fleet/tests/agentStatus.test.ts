@@ -1094,6 +1094,21 @@ describe("a conversation with messages booked for later", () => {
         expect(standingChip({ ...waiting, status: `conflict`, unread: false }, titleOf)?.label).toBe(attentionReason({ ...waiting, status: `conflict` }));
     });
 
+    // A Stop holds the messages with no booking, and the queue's own field says `stopped` then: the booked messages beside
+    // them, each carrying its own time, still make it a conversation that runs again by itself.
+    it("reads each message's own booking when a stop's hold stands beside it, at the soonest of them", () => {
+        const items = [{ until: at + 60_000 }, {}, { until: at }];
+        const stopped: AgentStanding = { status: `idle`, attention: none, queue: { paused: `stopped`, items } };
+        expect(scheduledSend(stopped)).toBe(true);
+        expect(laneOf(stopped)).toBe(`active`);
+        expect(scheduledWhen(stopped)).toBe(formatWhen(at));
+        expect(standingFrom(stopped).queue).toEqual({ paused: `scheduled`, until: at });
+        const onLand: AgentStanding = { status: `idle`, attention: none, queue: { paused: `refused`, items: [{}, { after: `brave-otter` }] } };
+        expect(scheduledWhen(onLand)).toBe(`After another agent lands`);
+        // Nothing booked: the stop is all there is, a person's to lift.
+        expect(scheduledSend({ queue: { paused: `stopped`, items: [{}] } })).toBe(false);
+    });
+
     it("keeps the hold, and only the hold, on a standing that outlives its card", () => {
         expect(standingFrom(timed).queue).toEqual({ paused: `scheduled`, until: at });
         expect(standingFrom(waiting).queue).toEqual({ paused: `scheduled`, after: `brave-otter` });

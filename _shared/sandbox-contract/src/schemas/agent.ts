@@ -509,6 +509,13 @@ export const QueuedMessageSchema = z.object({
         .int()
         .nonnegative()
         .describe("The queue's revision when this message was last written. An edit or a removal names it, and is refused if the message has changed since."),
+    until: z
+        .number()
+        .optional()
+        .describe("When this message goes out by itself, in milliseconds: it was scheduled for that time. Each message keeps its own booking."),
+    after: ConversationIdSchema.optional().describe(
+        "The conversation whose finished work must land before this message goes out by itself, in place of `until`.",
+    ),
 });
 export type QueuedMessage = z.infer<typeof QueuedMessageSchema>;
 // Why a queue holds its messages rather than letting them go when the conversation is free.
@@ -520,14 +527,14 @@ export const ConversationQueueSchema = z.object({
     items: z.array(QueuedMessageSchema).describe("What waits, in the order it goes out."),
     revision: z.number().int().nonnegative().describe("Moves with every change to the queue, so of two copies the higher is the newer."),
     paused: QueuePauseSchema.optional().describe(
-        "Why nothing goes out by itself: somebody stopped the turn, the turn these messages started was refused before it ran, or they were scheduled for a time or for after another conversation's work lands. Resuming lets them go, and so does sending another message.",
+        "Why the messages with no booking of their own do not go out by themselves: somebody stopped the turn, or the turn they started was refused before it ran. Resuming lets them go, and so does sending another message. `scheduled` holds nothing: it says messages are booked, and `until` or `after` is the soonest of their bookings, for clients older than per-message bookings. When any message carries its own `until` or `after`, read those instead.",
     ),
     until: z
         .number()
         .optional()
-        .describe("When scheduled messages go out by themselves, in milliseconds. Only on a queue paused as `scheduled`."),
+        .describe("The soonest booked message's time, in milliseconds. Only on a queue paused as `scheduled`; each message carries its own."),
     after: ConversationIdSchema.optional().describe(
-        "The conversation whose finished work must land before scheduled messages go out by themselves. Only on a queue paused as `scheduled`, in place of `until`.",
+        "The conversation the first booked message waits for, when none waits for a time. Only on a queue paused as `scheduled`, in place of `until`.",
     ),
 });
 export type ConversationQueue = z.infer<typeof ConversationQueueSchema>;

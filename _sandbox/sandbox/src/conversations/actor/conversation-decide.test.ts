@@ -4,7 +4,7 @@ import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { ASK_MAX_CHARS, type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
-import { hold, joined, NO_QUEUE, scheduled } from "./conversation-queue.js";
+import { hold, joined, NO_QUEUE, released, rescheduled, scheduled } from "./conversation-queue.js";
 import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type ParkedCard, type StopEnding } from "./conversation-state.js";
 
 // Every transition the conversation's one writer makes, as a table: the state an event meets, what it leaves, the
@@ -49,6 +49,9 @@ const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI passes", intervalSeconds
 const QUEUED = { id: "m-1", voice: "person", queuedAt: 900, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
 const WAITING = joined(NO_QUEUE, QUEUED);
 const BOOKED = scheduled(NO_QUEUE, QUEUED, { until: 90_000 });
+// A booked message with an unbooked one waiting beside it: what a Stop holds, and what it leaves on its time.
+const LATER = { ...QUEUED, id: "m-2", turn: { ...QUEUED.turn, prompt: "then tag it", messageId: "m-2" } } as const;
+const MIXED = joined(scheduled(NO_QUEUE, LATER, { until: 90_000 }), QUEUED);
 // What a settling turn showed of its own work, as settle-turn.ts notes it just ahead of the settle that files it.
 const PROOF: TurnProof = { at: 4_000, verification: "failing", check: "pnpm test" };
 const LATER_PROOF: TurnProof = { at: 4_500, verification: "verified", check: "pnpm test" };
@@ -797,6 +800,36 @@ const rows: readonly Row[] = [
         event: { kind: "stop", ending: "stopped" },
         to: { ...running({ stopping: "stopped" }), queue: BOOKED },
         effects: [{ kind: "broadcast" }],
+    },
+    {
+        name: "a stop holds the message waiting unbooked and leaves the booked one beside it on its time",
+        from: { ...running(), queue: MIXED },
+        event: { kind: "stop", ending: "stopped" },
+        to: { ...running({ stopping: "stopped" }), queue: hold(MIXED, "stopped") },
+        effects: [{ kind: "queue-written", queue: hold(MIXED, "stopped") }, { kind: "persist" }, { kind: "broadcast" }],
+    },
+    {
+        name: "a re-time naming a message that no longer waits changes nothing, and says so",
+        from: { ...idle(), queue: MIXED },
+        event: { kind: "queue-rescheduled", booking: { until: 95_000 }, ids: ["m-2", "m-gone"] },
+        to: { ...idle(), queue: MIXED },
+        effects: [],
+        reply: false,
+    },
+    {
+        name: "a re-time naming one message books that one, and the other keeps its own",
+        from: { ...idle(), queue: MIXED },
+        event: { kind: "queue-rescheduled", booking: { until: 95_000 }, ids: ["m-1"] },
+        to: { ...idle(), queue: rescheduled(MIXED, { until: 95_000 }, ["m-1"]) },
+        effects: [{ kind: "queue-written", queue: rescheduled(MIXED, { until: 95_000 }, ["m-1"]) }, { kind: "persist" }, { kind: "broadcast" }],
+        reply: true,
+    },
+    {
+        name: "a release naming one booked message lets only that one go",
+        from: { ...idle(), queue: MIXED },
+        event: { kind: "queue-released", ids: ["m-2"] },
+        to: { ...idle(), queue: released(MIXED, ["m-2"]) },
+        effects: [{ kind: "queue-written", queue: released(MIXED, ["m-2"]) }, { kind: "persist" }, { kind: "broadcast" }],
     },
     {
         name: "a begin that opens a new entry writes onto it what already waits: a message sent while the first turn started",

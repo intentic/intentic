@@ -85,7 +85,7 @@ export type Unsteered = { readonly why: string } | { readonly invalid: string };
 export type Unsaid = { readonly invalid: string } | { readonly why: string };
 
 // What a reschedule did: booked what waits (`booked`), let it go because what it would wait for has already come
-// (`released`), found nothing waiting (`missing`), or was asked to wait for a conversation that cannot land (`invalid`).
+// (`released`), found nothing waiting or a message it named gone (`missing`), or was asked to wait for a conversation that cannot land (`invalid`).
 export type Rescheduled = "booked" | "released" | "missing" | { readonly invalid: string };
 
 // Words for a conversation from whoever speaks, and the turn they start should they start one.
@@ -144,9 +144,11 @@ export interface TurnStarter {
     // Changes to what waits, each refused as stale when the message changed since it was read.
     readonly unqueue: (ref: QueuedMessageRef) => Promise<QueueChange>;
     readonly reword: (edit: QueueEdit) => Promise<QueueChange>;
-    // Lets a held queue go, re-routed where the press names who serves it.
+    // Lets a held queue go, with the bookings of the messages it names (every one's when it names none), re-routed where
+    // the press names who serves it.
     readonly release: (resume: QueueResume) => Promise<QueueResumed>;
-    // Books what waits for another instant or for after another conversation's work lands; what that leaves waiting,
+    // Books what waits (only the messages it names, when it names any) for another instant or for after another
+    // conversation's work lands; what that leaves waiting,
     // or why it could not (nothing waits, or the conversation to wait for cannot land anything).
     readonly reschedule: (schedule: QueueSchedule) => Promise<Rescheduled>;
     // An answer to a card some turn is parked on: `missing` for no such card, `refused` for one addressed elsewhere.

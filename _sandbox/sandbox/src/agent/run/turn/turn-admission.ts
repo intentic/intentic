@@ -4,7 +4,7 @@ import { keyedLock } from "@intentic/base/async";
 import { MENTION_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
-import type { Booking, QueuedItem } from "../../../conversations/actor/conversation-queue.js";
+import { type Booking, holdOf, type QueuedItem, waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { windowShut } from "../../../conversations/actor/conversation-state.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
 import { unwaitable, workLanded } from "../../../conversations/land/work-landed.js";
@@ -328,18 +328,19 @@ export const createAdmission = (
     };
 
     // Whether anything waiting may go out now: a hold keeps it, and so does a recovery the daemon runs by itself or a rewind
-    // restoring files, either of which goes first.
+    // restoring files, either of which goes first. A booked message is not waiting: it goes at its own time (turn-resume.ts).
     const held = (conversationId: string): boolean => {
         const daemon = services();
         const queue = daemon.conversations.queued(conversationId);
-        return queue.items.length === 0 || queue.paused !== undefined || goesFirst(daemon, conversationId);
+        return waitingOf(queue).length === 0 || holdOf(queue) !== undefined || goesFirst(daemon, conversationId);
     };
 
     // The next of the queue out: its head said into the live turn where that turn takes words, else one turn of what rides
-    // together. Answers what it delivered, by message id; undefined when nothing could go.
+    // together. Booked messages stay where they are, for their own time. Answers what it delivered, by message id;
+    // undefined when nothing could go.
     const step = async (conversationId: string): Promise<ReadonlyMap<string, MessageReceipt> | undefined> => {
         const daemon = services();
-        const { items } = daemon.conversations.queued(conversationId);
+        const items = waitingOf(daemon.conversations.queued(conversationId));
         const [head] = items;
         const live = liveRunOf(daemon.conversations, conversationId);
         if (head === undefined) {
@@ -441,8 +442,9 @@ export const createAdmission = (
             services().logger.info({ conversationId, voice: item.voice }, "admission: the conversation is archived, the sandbox's words go nowhere");
             return ARCHIVED;
         }
+        // Only a booked message waiting is nothing ahead of this one: it goes at its own time, and this one now.
         const queue = services().conversations.queued(conversationId);
-        const now = queue.items.length === 0 && queue.paused === undefined ? await deliverNow(item) : undefined;
+        const now = waitingOf(queue).length === 0 && holdOf(queue) === undefined ? await deliverNow(item) : undefined;
         if (now !== undefined) {
             return now;
         }
@@ -475,8 +477,8 @@ export const createAdmission = (
         }
     };
 
-    // Holds the message and what waits with it by the booking, opening the conversation's entry when this message is
-    // the first it gets, so the card and the queue are on record from the press.
+    // Books the message by its own booking, every other waiting message left as it was, opening the conversation's entry
+    // when this message is the first it gets, so the card and the queue are on record from the press.
     const book = async (item: Omit<QueuedItem, "revision">, booking: Booking): Promise<MessageReceipt | Unsaid> => {
         const daemon = services();
         const { conversationId } = item.turn;
@@ -541,19 +543,22 @@ export const createAdmission = (
             inTurn(conversationId, async () => services().conversations.send(conversationId, { kind: "queue-removed", id, revision }).reply),
         reword: ({ conversationId, id, revision, text }) =>
             inTurn(conversationId, async () => services().conversations.send(conversationId, { kind: "queue-edited", id, revision, text }).reply),
-        release: ({ conversationId, routing }) =>
+        // The hold let go, with the bookings of the messages named (every one's when none are), and what can go goes.
+        release: ({ conversationId, routing, ids }) =>
             inTurn(conversationId, async () => {
-                services().conversations.send(conversationId, { kind: "queue-released", ...opt("routing", routing) });
+                services().conversations.send(conversationId, { kind: "queue-released", ...opt("routing", routing), ...opt("ids", ids) });
                 const delivered = await deliver(conversationId);
                 kept(conversationId, delivered);
                 return opt("run", [...delivered.values()].find((receipt) => receipt.delivered === "started")?.run);
             }),
-        // What waits, booked anew: held by whatever held it before or by nothing (messages behind a running turn), it now
-        // waits for this. Nothing left to wait for lets it go now, as a release would.
-        reschedule: ({ conversationId, sendAt, sendAfter }) =>
+        // What waits, booked anew (only the messages named, when any are): held by whatever held it before or by nothing
+        // (messages behind a running turn), it now waits for this. Nothing left to wait for lets it go now, as a release
+        // would. A message named that no longer waits is missing, and nothing is re-timed in its place.
+        reschedule: ({ conversationId, sendAt, sendAfter, ids }) =>
             inTurn(conversationId, async () => {
                 const daemon = services();
-                if (daemon.conversations.queued(conversationId).items.length === 0) {
+                const { items } = daemon.conversations.queued(conversationId);
+                if (items.length === 0 || (ids !== undefined && !ids.every((id) => items.some((item) => item.id === id)))) {
                     return "missing";
                 }
                 const booking = bookingOfAsk(daemon, { conversationId, sendAt, sendAfter }, Date.now());
@@ -561,11 +566,11 @@ export const createAdmission = (
                     return { invalid: "invalid" in booking ? booking.invalid : booking.why };
                 }
                 if (booking === undefined) {
-                    daemon.conversations.send(conversationId, { kind: "queue-released" });
+                    daemon.conversations.send(conversationId, { kind: "queue-released", ...opt("ids", ids) });
                     kept(conversationId, await deliver(conversationId));
                     return "released";
                 }
-                return daemon.conversations.send(conversationId, { kind: "queue-rescheduled", booking }).reply ? "booked" : "missing";
+                return daemon.conversations.send(conversationId, { kind: "queue-rescheduled", booking, ...opt("ids", ids) }).reply ? "booked" : "missing";
             }),
     };
 };

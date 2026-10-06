@@ -93,7 +93,18 @@ describe("whether a conversation can be waited for", () => {
         expect(unwaitable(readers({ ...finished, archivedAt: 1 }), "first", "next")).toBe("that conversation is archived, so nothing of it will land");
         const child = { ...finished, placement: { ...finished.placement, parent: "parent" } };
         expect(unwaitable(readers(child), "first", "next")).toBe("that agent's work lands into the agent that started it: wait for that one instead");
-        const waitsForNext: TurnQueue = { ...NO_QUEUE, items: [], revision: 1, paused: "scheduled", after: { conversationId: "next", since: 1 } };
+        // Each message carries its own booking: one booked for a time ahead of it does not hide the one waiting for "next".
+        const message = (id: string) => ({ id, voice: "person" as const, queuedAt: 1, revision: 1, turn: { conversationId: "first", prompt: id } });
+        const waitsForNext: TurnQueue = {
+            ...NO_QUEUE,
+            items: [
+                { ...message("m1"), until: 9_000 },
+                { ...message("m2"), after: { conversationId: "next", since: 1 } },
+            ],
+            revision: 2,
+            paused: "scheduled",
+            until: 9_000,
+        };
         expect(unwaitable(readers(finished, { queue: waitsForNext }), "first", "next")).toBe(
             "that conversation already waits for this one's work: one of the two has to go first",
         );

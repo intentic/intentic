@@ -8,8 +8,9 @@ import type { ChatMessage } from "../transcript";
 // sent, and one press, instead of a notice, a bar and a card that each said part of it.
 
 /**
- * Why what waits is held, in the chat's words: low memory, another refusal at the door, a stop, or a scheduled send
- * waiting for a spent allowance to reopen (the one hold the reader asked for, and the one that ends by itself).
+ * Why a message waits, in the chat's words: low memory, another refusal at the door, a stop, or a scheduled send
+ * booked for its own time (the one the reader asked for, and the one that ends by itself; each booked message has its
+ * own, ChatHeldBooking).
  */
 export type HoldReason = `memory` | `refused` | `stopped` | `scheduled`;
 
@@ -37,13 +38,14 @@ const lastSaid = (messages: readonly ChatMessage[]): ChatMessage | undefined => 
 const standing = (messages: readonly ChatMessage[], message: ChatMessage): boolean => lastSaid(messages)?.id === message.id;
 
 /**
- * The pane's held queue: whether anything is held, the low-memory row it is about, and why. The row is the
- * transcript's last only while the queue still holds its words, which is when the held message's own line says it,
- * so the transcript draws it there and not a second time as a notice.
+ * The pane's held queue: whether a Stop or a refusal holds the messages no booking holds back, the low-memory row it is
+ * about, and why. The row is the transcript's last only while the queue still holds its words, which is when the held
+ * message's own line says it, so the transcript draws it there and not a second time as a notice. Booked messages are
+ * not this hold's: each group of them has its own line (useChat-view's bookedGroups).
  */
 export const useHeldQueue = () => {
-    const { conversation, messages, queued, queuePaused, lastFailure } = usePaneView();
-    const held = computed(() => queuePaused.value !== undefined && queued.value.length > 0);
+    const { messages, waiting, queuePaused, lastFailure } = usePaneView();
+    const held = computed(() => (queuePaused.value === `stopped` || queuePaused.value === `refused`) && waiting.value.length > 0);
     const notice = computed(() => {
         const last = lastSaid(messages.value);
         return held.value && queuePaused.value === `refused` && last !== undefined && isMemoryHold(last) && last.sandboxHeld !== true ? last : undefined;
@@ -51,10 +53,7 @@ export const useHeldQueue = () => {
     // A chat opened a minute after the refusal has no row for it (a turn that ran nothing is never recorded), so the
     // board's card is the one place left that says it was memory: its failure, which the next run clears.
     const cardMemory = computed(() => (queuePaused.value === `refused` && lastFailure.value?.code === `sandbox-memory-low` ? lastFailure.value : undefined));
-    const reason = computed<HoldReason>(() => {
-        if (queuePaused.value === `scheduled`) {
-            return `scheduled`;
-        }
+    const reason = computed<Exclude<HoldReason, `scheduled`>>(() => {
         if (notice.value !== undefined || cardMemory.value !== undefined) {
             return `memory`;
         }
@@ -65,10 +64,7 @@ export const useHeldQueue = () => {
         const said = notice.value?.text ?? cardMemory.value?.text;
         return said === undefined ? undefined : memoryReading(said);
     });
-    // When a scheduled send goes by itself (ms), or whose landed work it waits for; only while the queue is scheduled.
-    const until = computed(() => (queuePaused.value === `scheduled` ? conversation.value.queue.value?.until : undefined));
-    const after = computed(() => (queuePaused.value === `scheduled` ? conversation.value.queue.value?.after : undefined));
-    return { held, notice, reason, detail, until, after };
+    return { held, notice, reason, detail };
 };
 
 /**

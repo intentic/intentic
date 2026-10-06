@@ -21,6 +21,7 @@ import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandbox
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { TurnBooking } from "../composer/later/sendLater";
+import { holdOfQueue, perMessage, queueFromMessages, unbookedOf } from "../composer/later/bookings";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { repointedPickUp } from "../run/pickUp";
@@ -245,7 +246,7 @@ export class TurnClient {
         const queue = this.host.queue.value;
         if (repeatsNudge({ text: trimmed, attachments }, queue?.items.at(-1))) {
             // The same nudge pressed again lets a held queue go rather than saying it twice.
-            if (queue?.paused !== undefined) {
+            if (holdOfQueue(queue) !== undefined) {
                 await this.resume();
             }
             return;
@@ -289,12 +290,17 @@ export class TurnClient {
 
     /**
      * Books what waits in the conversation's queue for another moment, whatever held it: what the held messages' Change
-     * does. Refused when nothing waits any more or the agent to wait for cannot land, which the error line says.
+     * does, for the messages it names. Refused when nothing waits any more or the agent to wait for cannot land, which the
+     * error line says. The ids go only to a sandbox that books each message on its own (bookings.ts): an older one would
+     * re-time the whole queue whatever it was sent, as it always did.
      */
-    async reschedule(booking: TurnBooking): Promise<boolean> {
+    async reschedule(booking: TurnBooking, ids?: readonly string[]): Promise<boolean> {
         const { host } = this;
         host.error.value = null;
-        const left = await orRefusal(sandboxRpc.agent.queueSchedule({ conversationId: host.conversationId, ...booking }, { context: { at: host.box.value } }));
+        const named = ids !== undefined && perMessage(host.queue.value) ? { ids: [...ids] } : {};
+        const left = await orRefusal(
+            sandboxRpc.agent.queueSchedule({ conversationId: host.conversationId, ...booking, ...named }, { context: { at: host.box.value } }),
+        );
         const heard = this.heard(left);
         // What it waited for had already come, so it went out as a turn: this window follows it.
         if (heard && !(left instanceof SandboxHttpError) && left.items.length === 0) {
@@ -603,9 +609,17 @@ export class TurnClient {
         if (message.attachments.length > 0) {
             item.attachments = [...message.attachments];
         }
-        // The newest booking holds the whole queue, as the daemon's does: an instant or an agent to wait for, never both.
+        // An instant or an agent to wait for, never both.
         const waitsFor = booking.sendAfter === undefined ? { until: booking.sendAt } : { after: booking.sendAfter };
-        host.queue.value = { items: [...held.items, item], revision, paused: `scheduled`, ...waitsFor };
+        // A queue booked as a whole came from a sandbox older than per-message bookings: the newest booking holds all of
+        // it there, as that sandbox's own queue will say.
+        if (held.paused === `scheduled` && !perMessage(held)) {
+            host.queue.value = { items: [...held.items, item], revision, paused: `scheduled`, ...waitsFor };
+            return;
+        }
+        // Otherwise the message carries its own booking, and every other keeps its own.
+        const hold = holdOfQueue(held);
+        host.queue.value = queueFromMessages([...held.items, { ...item, ...waitsFor }], revision, hold === `scheduled` ? undefined : hold);
     }
 
     // Where a sent turn's request or stream threw. A user-initiated Stop aborts the fetch, which is expected, not an error
@@ -660,8 +674,9 @@ export class TurnClient {
         for (const settled of waiters) {
             settled();
         }
+        // Only what nothing holds goes: a booked message waits for its own time, a held one for a press.
         const queue = host.queue.value;
-        if (phase.kind === `running` && (queue?.items.length ?? 0) > 0 && queue?.paused === undefined) {
+        if (phase.kind === `running` && unbookedOf(queue).length > 0 && holdOfQueue(queue) === undefined) {
             void this.followQueued(phase.run);
         }
         this.message = undefined;
@@ -744,14 +759,18 @@ export class TurnClient {
     }
 
     // Lets the conversation's held queue go, on the pick the composer holds now: what a fixed failure, a reconnected
-    // account or a press on the held queue means. A turn it starts is followed here.
-    async resume(): Promise<void> {
+    // account or a press on the held queue means. A turn it starts is followed here. Named messages (a booked one's Send
+    // now) go, and from a sandbox that books each message, a press naming none lets go only what the hold kept: every
+    // booking stays on its time. An older sandbox is sent no ids, and lets its whole queue go, as it always did.
+    async resume(ids?: readonly string[]): Promise<void> {
         const { host } = this;
         host.error.value = null;
         const settings = host.selection.turnSettings();
+        const queue = host.queue.value;
+        const named = perMessage(queue) ? { ids: [...(ids ?? unbookedOf(queue).map((item) => item.id))] } : {};
         const released = await orRefusal(
             sandboxRpc.agent.queueResume(
-                { conversationId: host.conversationId, routing: heldRouting(settings, host.session.value, {}) },
+                { conversationId: host.conversationId, routing: heldRouting(settings, host.session.value, {}), ...named },
                 { context: { at: host.box.value } },
             ),
         );

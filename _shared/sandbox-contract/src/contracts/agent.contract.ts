@@ -112,7 +112,7 @@ export const agentContract = {
             path: "/agent/queue/resume",
             summary: "Let waiting messages go",
             description:
-                "Releases a queue held after a stop or a refusal: what waits goes out now as one turn when nothing is running, or after the running turn otherwise. Name who serves that turn when the conversation has been re-pointed since the messages were queued.",
+                "Releases a queue held after a stop or a refusal: what waits goes out now as one turn when nothing is running, or after the running turn otherwise. Name who serves that turn when the conversation has been re-pointed since the messages were queued. Name messages by id to let only those go (a scheduled one now, ahead of its time), leaving every other booking on its time.",
         })
         .meta({ floor: "collaborator", guest: true })
         .input(QueueResumeSchema)
@@ -124,7 +124,7 @@ export const agentContract = {
             path: "/agent/queue/schedule",
             summary: "Reschedule waiting messages",
             description:
-                "Books what waits in the conversation's queue to go out by itself at another instant, or once another conversation has finished and its work has landed, holding it until then. Works on a queue that is held for any reason, or on messages waiting behind a running turn. A time already past, or a conversation with nothing left to land, lets them go now.",
+                "Books what waits in the conversation's queue to go out by itself at another instant, or once another conversation has finished and its work has landed, holding it until then. Works on a queue that is held for any reason, or on messages waiting behind a running turn. Name messages by id to re-time only those; every other keeps its own booking. A time already past, or a conversation with nothing left to land, lets them go now.",
         })
         .meta({ floor: "collaborator", guest: true })
         .input(QueueScheduleSchema)

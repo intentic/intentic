@@ -72,29 +72,41 @@ export interface AgentStanding {
     readonly queue?: QueueHold | undefined;
 }
 
-// The part of a conversation's queue the board reads: why it holds, and what a scheduled hold waits for.
+// The part of a conversation's queue the board reads: why it holds, and what a scheduled hold waits for. A queue-level
+// `scheduled` with its `until` or `after` is the soonest booked message's; a Stop's or a refusal's hold on the messages
+// with no booking takes that place, so each message's own booking (`items`, from sandboxes that book each message on its
+// own) is read then.
 export interface QueueHold {
     readonly paused?: QueuePause | undefined;
     readonly until?: number | undefined;
     readonly after?: string | undefined;
+    readonly items?: readonly { readonly until?: number | undefined; readonly after?: string | undefined }[] | undefined;
 }
+
+// The soonest booking a queue holds, as a scheduled hold: the queue's own while it reads `scheduled`, else the earliest
+// message's time, else the first message waiting on a land; undefined when nothing is booked. One thing, never both.
+const soonestHold = (queue: QueueHold | undefined): QueueHold | undefined => {
+    if (queue?.paused === `scheduled`) {
+        if (queue.after !== undefined) {
+            return { paused: `scheduled`, after: queue.after };
+        }
+        return queue.until === undefined ? { paused: `scheduled` } : { paused: `scheduled`, until: queue.until };
+    }
+    const items = queue?.items ?? [];
+    const instants = items.flatMap((item) => (item.until === undefined ? [] : [item.until]));
+    if (instants.length > 0) {
+        return { paused: `scheduled`, until: Math.min(...instants) };
+    }
+    const after = items.find((item) => item.after !== undefined)?.after;
+    return after === undefined ? undefined : { paused: `scheduled`, after };
+};
 
 // Messages booked to go by themselves (sendLater.ts, or a spent allowance's reopen): the conversation runs again with
 // nobody pressing anything, so it is not finished, and nothing is owed by the reader for it to.
-export const scheduledSend = (agent: Pick<AgentStanding, "queue">): boolean => agent.queue?.paused === `scheduled`;
+export const scheduledSend = (agent: Pick<AgentStanding, "queue">): boolean => soonestHold(agent.queue) !== undefined;
 
 // The scheduled hold alone, copied for a standing that outlives its card (standingFrom); undefined for any other queue.
-const scheduledHold = (agent: Pick<AgentStanding, "queue">): QueueHold | undefined => {
-    if (!scheduledSend(agent)) {
-        return undefined;
-    }
-    // A scheduled hold waits on exactly one thing: another agent's land, or an instant.
-    const { until, after } = agent.queue ?? {};
-    if (after !== undefined) {
-        return { paused: `scheduled`, after };
-    }
-    return until === undefined ? { paused: `scheduled` } : { paused: `scheduled`, until };
-};
+const scheduledHold = (agent: Pick<AgentStanding, "queue">): QueueHold | undefined => soonestHold(agent.queue);
 
 // A spent allowance, not a failure to fix: nothing broken, and it comes back. Read off `failureCode` rather than
 // the provider's own sentence, which varies per provider; the code is the daemon's own classification
@@ -1026,8 +1038,8 @@ export const standingChip = (
 // for work waiting on another agent's land, that agent named by its card when one does (`titleOf`). Undefined for a
 // conversation nothing is booked on.
 export const scheduledWhen = (agent: Pick<AgentStanding, "queue">, titleOf?: (conversationId: string) => string | undefined): string | undefined => {
-    const hold = agent.queue;
-    if (!scheduledSend(agent) || hold === undefined) {
+    const hold = soonestHold(agent.queue);
+    if (hold === undefined) {
         return undefined;
     }
     if (hold.after !== undefined) {

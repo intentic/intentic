@@ -83,6 +83,8 @@ describe(`a pick on the wire, and back`, () => {
         expect(bookingOf({ kind: `after`, conversationId: `brave-otter` })).toEqual({ sendAfter: `brave-otter` });
     });
 
+    // The queue's own fields: every message's booking from a sandbox that books the whole queue, the soonest message's
+    // from one that books each (bookings.test.ts has the messages' own).
     it(`reads a scheduled queue's hold back as the pick that re-times it, and nothing from any other hold`, () => {
         expect(laterOfQueue({ paused: `scheduled`, until: 5_000 })).toEqual({ kind: `at`, at: 5_000 });
         expect(laterOfQueue({ paused: `scheduled`, after: `brave-otter` })).toEqual({ kind: `after`, conversationId: `brave-otter` });

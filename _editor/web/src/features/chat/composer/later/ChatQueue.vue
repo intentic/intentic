@@ -10,10 +10,11 @@ import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 // What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with
 // each message's own doors (reword, take back). A HELD queue is not drawn here: nothing goes by itself then, so its
-// messages stand at the transcript's foot as the prompts that did not go out (ChatHeldMessages).
+// messages stand at the transcript's foot as the prompts that did not go out (ChatHeldMessages). Nor is a message booked
+// for later, which stands there too, with the time it goes.
 
 const t = useT();
-const { queued, queuePaused, streaming, awaitingDecision, unqueue, reword, resumeQueue } = usePaneView();
+const { waiting, queuePaused, streaming, awaitingDecision, unqueue, reword, resumeQueue } = usePaneView();
 
 // What happens to what waits: a parked turn takes it once answered, a running one ends first.
 const hint = computed(() => {
@@ -53,9 +54,9 @@ const save = async (message: QueuedMessage): Promise<void> => {
 
 <template>
     <!-- Outside the transcript until the agent receives them; every window shows the same list. -->
-    <div v-if="queued.length > 0 && queuePaused === undefined" class="flex flex-col gap-1">
+    <div v-if="waiting.length > 0 && queuePaused === undefined" class="flex flex-col gap-1">
         <div
-            v-for="message in queued"
+            v-for="message in waiting"
             :key="message.id"
             class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2"
         >

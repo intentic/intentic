@@ -262,7 +262,9 @@ export const createAgentRoutes = (services: Services) => {
             own(context, input.conversationId);
             const outcome = await services.turns.reschedule(input);
             if (outcome === "missing") {
-                throw new ORPCError("NOT_FOUND", { message: "Nothing waits in that conversation's queue to schedule: it has gone out, or was taken back." });
+                throw new ORPCError("NOT_FOUND", {
+                    message: "Nothing you named waits in that conversation's queue to schedule: it has gone out, or was taken back.",
+                });
             }
             if (outcome !== "booked" && outcome !== "released") {
                 throw new ORPCError("BAD_REQUEST", { message: outcome.invalid });
