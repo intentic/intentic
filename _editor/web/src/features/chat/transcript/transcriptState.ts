@@ -1,4 +1,4 @@
-import type { AttachFrame, TranscriptPatch } from "@intentic/sandbox-contract";
+import { type AttachFrame, REQUEST_FIELDS, type TranscriptPatch } from "@intentic/sandbox-contract";
 import { appendToolThinking, upsertTool } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
 
@@ -97,12 +97,39 @@ const baseFor = (messages: readonly ChatMessage[], run: string, drawn: number | 
     return drawnAt >= 0 ? drawnAt : messages.length;
 };
 
+// The ids of the cards a row holds.
+const cardIds = (message: Omit<ChatMessage, "id">): string[] => REQUEST_FIELDS.flatMap((field) => message[field]?.requestId ?? []);
+
+/* ONE CARD, ONE PLACE. A card is answered by its id, so a head that holds one this window already shows above the run
+   is that same card moved, never a second: it leaves the row it stood on, and a row it alone made goes with it. The
+   daemon brings a parked run back under its own id (turn-resume.ts, carriedRun), which never comes here; an older
+   daemon's new run telling the parked prompt again did, and drew the card twice, answerable twice. */
+const withoutCards = (messages: readonly ChatMessage[], raised: ReadonlySet<string>): ChatMessage[] =>
+    messages.flatMap((message) => {
+        if (!cardIds(message).some((id) => raised.has(id))) {
+            return [message];
+        }
+        const stripped: ChatMessage = { ...message };
+        for (const field of REQUEST_FIELDS) {
+            const card = stripped[field];
+            if (card !== undefined && raised.has(card.requestId)) {
+                delete stripped[field];
+            }
+        }
+        const said =
+            stripped.text.length > 0 ||
+            (stripped.thinking?.length ?? 0) > 0 ||
+            (stripped.tools?.length ?? 0) > 0 ||
+            (stripped.todos?.length ?? 0) > 0;
+        return said || cardIds(stripped).length > 0 ? [stripped] : [];
+    });
+
 /* TAKE A RUN'S ROWS, WHOLE, from where that run begins: everything below the base is this run's and the head is the
    authority on it, so a transcript that somehow ended up holding the run twice is repaired by the next attach rather
    than carried forward. */
 export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: number): TranscriptState => {
     const base = baseFor(state.messages, head.run, drawn);
-    const kept = state.messages.slice(0, base);
+    const kept = withoutCards(state.messages.slice(0, base), new Set(head.rows.flatMap(cardIds)));
     let nextId = state.nextId;
     const rows = head.rows.map((row, index): ChatMessage => {
         const existing = state.messages[base + index];
@@ -113,7 +140,7 @@ export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: numb
         nextId += 1;
         return { ...row, id };
     });
-    return { messages: [...kept, ...rows], nextId, pending: undefined, attached: { run: head.run, base } };
+    return { messages: [...kept, ...rows], nextId, pending: undefined, attached: { run: head.run, base: kept.length } };
 };
 
 /** Applies one daemon change to the attached run's rows. */

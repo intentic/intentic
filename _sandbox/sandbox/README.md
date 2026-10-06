@@ -216,6 +216,13 @@ flowchart LR
   cut turns interrupted. A parked turn whose cards cannot come back is given up after three boots.
   `/run/intentic/work.json` adds `bootedAt`, `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt`
   beside `liveTurns` and `at`, so the host's keeper sees the storm too.
+- A turn parked on a person comes back after a restart as the same run (2026-10-06): while a card is up, the turn
+  journal's `run` column holds the run's id and the rows it has drawn (`agent/run/turn/turn-journal.ts`), and the boot
+  carries that run on with its own id, start time and rows, raising each card again on the row it already had
+  (`turn-resume.ts` `carriedRun`). Before this, the boot started a new run that sent the prompt again. A window still
+  showing the old run drew the prompt and the card a second time, so the question could be answered twice, and the
+  record lost the work done before the question. The answer's own turn gets a new message id. A card nothing will
+  raise again is recorded as cancelled, never left pending.
 - Housekeeping runs on one clock that remembers across restarts (`system/chore-clock.ts`, `/history/chore-clock.json`,
   wired in `bootstrap/boot-chores.ts`; 2026-10-05): git maintenance hourly (a stale `maintenance.lock` is now named
   and cleared instead of skipping silently), stale git locks and temp packs at boot and hourly with no git running,

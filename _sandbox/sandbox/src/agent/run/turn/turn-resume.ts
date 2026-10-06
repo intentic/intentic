@@ -5,13 +5,17 @@ import {
     type AgentTurn,
     type ParkedRequest,
     breakArmed,
+    cancelledRequests,
+    isAwaitingDecision,
     profileOf,
+    REQUEST_FIELDS,
     RESUME_NOTES,
     type ResumeReason,
     type ResumeRouting,
     RETRY_LADDER_TRIES,
     retryLadderDelay,
     type TodoItem,
+    type TranscriptRow,
     type TurnBreak,
     type TurnBreakPolicy,
     withoutResumeNote,
@@ -33,7 +37,7 @@ import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpen
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
 import { sessionFor } from "./turn-admission.js";
-import { startTurnRun, type TurnRun } from "./turn-runs.js";
+import { type RunOptions, startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import type { Booked } from "../../../conversations/actor/conversation-actors.js";
 import { type Booking, bookingOfItem, waitingOf } from "../../../conversations/actor/conversation-queue.js";
@@ -290,7 +294,7 @@ export const startConversationTurn = async (
     services: Services,
     body: TurnStarter["stream"],
     sent: TurnInput & { readonly conversationId: string },
-    { attempts = 0, senderKeeps = false }: StartOptions = {},
+    { attempts = 0, senderKeeps = false, continues }: StartOptions & Pick<RunOptions, "continues"> = {},
 ): Promise<TurnRun | BeginRefusal> => {
     // Routed on the way in (idempotent): the one path every detached turn starts through names its provider and loop,
     // after the run role or persona pin had the chance to, since a pin fills only what the turn left unnamed.
@@ -302,6 +306,7 @@ export const startConversationTurn = async (
         journalled: true,
         before: transcriptOpen,
         opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
+        ...opt("continues", continues),
         transcript: (rows, steerRows) => recordTurnTranscript(services, turn, rows, steerRows),
         attempts,
         observer: {
@@ -626,18 +631,48 @@ const sessionAccount = (services: Services, conversationId: string): { account?:
     return account === undefined ? {} : { account };
 };
 
-// Restores parked requests verbatim under their original request ids, via a placeholder turn on the ordinary start path.
-// The answer's turn starts on the journalled session only after the placeholder fully unwinds and releases the mutex.
-// Answers the refusal when no placeholder could start (an archived conversation, a live turn already holding it).
+// A card in a carried-on run's rows that nothing will raise again, frozen as nobody's decision, as the run's end would
+// have frozen it: its waiter died with the daemon, so an answer to it would go nowhere.
+const frozenUnlessRaised = (row: TranscriptRow, raised: ReadonlySet<string>): TranscriptRow => {
+    if (!isAwaitingDecision(row)) {
+        return row;
+    }
+    const stale = Object.fromEntries(
+        REQUEST_FIELDS.flatMap((field) => {
+            const card = row[field];
+            return card?.status === "pending" && !raised.has(card.requestId) ? [[field, card]] : [];
+        }),
+    );
+    return { ...row, ...cancelledRequests(stale) };
+};
+
+/* A PARKED RUN COMES BACK AS ITSELF. It carries on under the id, the start and the rows it had when the daemon died,
+   so every copy of it agrees: a window that was showing it redraws it in place (its rows are found by that id), the
+   record it settles into holds what it did before it asked, and the prompt keeps the time it was sent. A new run that
+   told the prompt again drew the prompt and the card a second time beneath the first, answerable twice, and the record
+   kept neither the work nor the hour (2026-10-06). An entry an older build journalled holds no rows: that run opens on
+   its prompt again, still at the time it was sent. */
+const carriedRun = (services: Services, entry: JournalledTurn): NonNullable<RunOptions["continues"]> => {
+    const raised = new Set((entry.parked ?? []).map((request) => request.requestId));
+    const rows = entry.run?.rows?.map((row) => frozenUnlessRaised(row, raised)) ?? openingRows(entry.turn, services.workspace.root, entry.startedAt);
+    return { id: entry.run?.id ?? crypto.randomUUID(), startedAt: entry.startedAt, rows };
+};
+
+// Restores parked requests verbatim under their original request ids, via a placeholder turn on the ordinary start path
+// that carries on the parked run itself (carriedRun). The answer's turn starts on the journalled session only after the
+// placeholder fully unwinds and releases the mutex. Answers the refusal when no placeholder could start (an archived
+// conversation, a live turn already holding it).
 const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): Promise<string | undefined> => {
     const conversationId = entry.turn.conversationId;
     const requests = entry.parked ?? [];
     const sessionId = entry.sessionId ?? entry.turn.sessionId;
     // Set before the placeholder returns, read after its run unwinds; a closure since the pump owns the generator.
     let followUp: (AgentTurn & { conversationId: string }) | undefined;
-    // Unlike resumedTurn (which repeats the original prompt), this turn's prompt is the user's answer itself.
+    // Unlike resumedTurn (which repeats the original prompt), this turn's prompt is the user's answer itself: a message of
+    // its own, so it leaves the prompt's id behind, which names the parked run's opening row and nothing else.
+    const { messageId: _prompt, ...asked } = entry.turn;
     const resumed = (answer: string, mode?: AgentTurn["permissionMode"]): TurnInput & { conversationId: string } => ({
-        ...entry.turn,
+        ...asked,
         prompt: withResumeNote(answer, RESUME_NOTES.answered),
         resume: "answered",
         ...(sessionId !== undefined ? { sessionId } : {}),
@@ -752,7 +787,10 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
         }
     };
     // Rehydration spends nothing, and is the sandbox's own; attempts pass through so the journal stays honest about what ran.
-    const run = await startConversationTurn(services, placeholder, withRuntimeDefaults(entry.turn), { attempts: entry.attempts });
+    const run = await startConversationTurn(services, placeholder, withRuntimeDefaults(entry.turn), {
+        attempts: entry.attempts,
+        continues: carriedRun(services, entry),
+    });
     if (typeof run === "string") {
         // A live turn already owns the conversation, superseding the park as a hand retry would; or nobody reopened it.
         return run;
@@ -804,7 +842,10 @@ const restoreParked = async (services: Services, entry: JournalledTurn): Promise
 // Gives a parked turn up for good: its cards are not coming back, and its conversation's record says it was cut.
 const settleParked = async (services: Services, entry: JournalledTurn, reason: string): Promise<void> => {
     const { conversationId } = entry.turn;
-    const recorded = await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt).catch(() => false);
+    // The rows it journalled while it waited are what it had drawn; the provider's store is asked only without them.
+    const recorded = await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt, {
+        drawn: entry.run?.rows,
+    }).catch(() => false);
     await consumeEntry(services, entry);
     services.logger.warn(
         { conversationId, reason, attempts: entry.attempts, recorded },
@@ -859,7 +900,7 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
         // The cut turn never settled, so nothing recorded it, and the re-run's prompt carries the restart note, which
         // records a notice where the user's bubble would be: written here, before the re-run, or the message is gone
         // from the record (and from the receipts seeded off it). A failed write keeps the entry, attempt unspent.
-        if (!(await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt, true))) {
+        if (!(await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt, { resuming: true }))) {
             services.logger.warn(
                 { conversationId: entry.turn.conversationId },
                 "interrupted turn transcript could not be written before its re-run; journal entry was retained",

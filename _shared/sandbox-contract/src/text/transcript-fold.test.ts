@@ -546,6 +546,28 @@ describe("foldTurn", () => {
         ]);
     });
 
+    // A run carried on after a restart opens on the rows it had drawn and raises its parked cards again (turn-resume.ts,
+    // carriedRun): each lands on the row it already stands on, and settles there, never drawn a second time beneath.
+    it("puts a card raised again under an id its opening holds back where it stands, and settles it there", () => {
+        const plan = { requestId: "p1", text: "1. ship", status: "pending" as const };
+        const question = { requestId: "q1", questions: [], status: "pending" as const };
+        const opening: TranscriptRow[] = [
+            ...openingOf("go"),
+            { role: "assistant", text: "Here is the plan.", plan },
+            { role: "assistant", text: "", question },
+        ];
+        const events: AgentEvent[] = [
+            { kind: "plan", requestId: "p1", text: "1. ship" },
+            { kind: "question", requestId: "q1", questions: [] },
+            { kind: "resolved", requestId: "q1", reply: { kind: "question", requestId: "q1", answers: { "Which?": ["A"] } } },
+            { kind: "resolved", requestId: "p1" },
+        ];
+        expect(foldTurn(opening, events).slice(1)).toEqual([
+            { role: "assistant", text: "Here is the plan.", plan: { ...plan, status: "cancelled" } },
+            { role: "assistant", text: "", question: { ...question, status: "answered", answers: { "Which?": ["A"] } } },
+        ]);
+    });
+
     it("keeps the prose that led up to a card in the card's own row, and folds a repeated plan into its prose", () => {
         const document = { path: "docs/plan.md", title: "Plan", markdown: "# Plan\n\n1. do it" };
         const events: AgentEvent[] = [

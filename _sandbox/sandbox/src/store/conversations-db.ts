@@ -77,7 +77,13 @@ CREATE TABLE IF NOT EXISTS fire_journal (
 `;
 
 // Every schema change after the baseline, in order; the database's `user_version` says how many it has taken.
-export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [];
+export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [
+    {
+        // The run a turn in flight is, and while it is parked on a person the rows it drew (turn-journal.ts).
+        describe: "adds turn_journal.run",
+        up: (db) => db.exec("ALTER TABLE turn_journal ADD COLUMN run TEXT CHECK (run IS NULL OR json_valid(run))"),
+    },
+];
 
 // The upgrade runs in the boot step (store/evolution/state-convergence.ts), under its journal, with the database and its sidecars
 // copied aside first, so a rolled-back build gets back the file it knew. Opening the database below takes any step

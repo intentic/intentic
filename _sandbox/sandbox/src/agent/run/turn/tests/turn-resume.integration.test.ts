@@ -957,6 +957,26 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
     ]);
 });
 
+// The provider's store keeps an ask with no answer as a card still up; its waiter died with the daemon.
+test("an interrupted turn's card is recorded as nobody's decision, never as one still waiting", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const base = await journalServices(root, false);
+    const services = unstubbed<Services>("services", {
+        ...base,
+        sessions: unstubbed<Services["sessions"]>("sessions", {
+            readTail: async () => [
+                { role: "user", text: "finish the report" },
+                { role: "assistant", text: "", question: { requestId: "toolu_1", questions: [], status: "pending" } },
+            ],
+        }),
+    });
+    await services.turnJournal.recordTurn(journalled("rs-asked", { sessionId: "s-partial" }));
+
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    expect((await fileTranscriptRecord(root).read("rs-asked"))[1]?.question?.status).toBe("cancelled");
+});
+
 // A re-run journals its own prompt, which opens with the resume note; cut again, the session's first user row is that
 // note and the repeated request, which is no new message from anyone.
 test("a re-run cut by a second restart records its notice, not its repeated prompt as a user bubble", async () => {
@@ -1216,6 +1236,84 @@ test("answering the restored question resumes with the picks, worded as a live a
     await settle(services, "pk-q");
 });
 
+// 2026-10-06: a restart while a question was up brought the turn back as a new run that told its prompt again, so a window
+// still showing the run drew the prompt and the card a second time beneath it, both answerable, and the record kept
+// neither what the turn had done before it asked nor the hour the prompt was sent.
+test("a parked run comes back as itself: its id, its start and its rows, the card raised again where it stood", async () => {
+    const root = mkdtempSync(join(tmpdir(), "parked-"));
+    const { services, observed } = await parkedServices(root);
+    const asked = questionRequest("r-same");
+    const card = { requestId: "r-same", questions: asked.kind === "question" ? asked.questions : [], status: "pending" as const };
+    const prompt: TranscriptRow = { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report", run: "run-parked" };
+    const work: TranscriptRow = { role: "assistant", text: "Typecheck passed.", run: "run-parked" };
+    const raised: TranscriptRow = { role: "assistant", text: "", question: card, run: "run-parked" };
+    const drawn = [prompt, work, raised];
+    await services.turnJournal.recordTurn(parkedEntry("pk-same", [asked], { run: { id: "run-parked", rows: drawn } }));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
+    await cardsUp(observed, "question");
+
+    // A window showing run-parked finds its rows by that id and redraws them in place; three rows, not five.
+    const carried = turnRunOf(services.conversations, "pk-same");
+    expect(carried?.id).toBe("run-parked");
+    expect(carried?.startedAt).toBe(10_000);
+    expect(carried?.rows).toEqual(drawn);
+    // A second restart finds the same run, rows and all, to bring back again.
+    await waitFor(async () => {
+        const [entry] = await services.turnJournal.list();
+        expect(entry?.kind === "turn" ? entry.run : undefined).toEqual({ id: "run-parked", rows: drawn });
+    }, SETTLES);
+
+    expect(services.cards.resolve({ kind: "question", requestId: "r-same", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    const record = fileTranscriptRecord(root);
+    await waitFor(async () => expect(await record.read("pk-same")).toHaveLength(4), SETTLES);
+    const [recordedPrompt, recordedWork, answered, answer] = await record.read("pk-same");
+    // What it did before it asked, the prompt at the hour it was sent, and the card answered once, where it stood.
+    expect([recordedPrompt, recordedWork]).toEqual([prompt, work]);
+    expect(answered).toEqual({ ...raised, question: { ...card, status: "answered", answers: { "Deploy now?": ["Yes"] } } });
+    // The answer is a message of its own, never wearing the prompt's id.
+    expect(answer).toMatchObject({ role: "user", messageId: expect.any(String) });
+    expect(answer?.messageId).not.toBe("m-report");
+});
+
+test("a carried run's card that nothing raises again is frozen as nobody's decision, not left to answer into nothing", async () => {
+    const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    const asked = questionRequest("r-up");
+    const drawn: TranscriptRow[] = [
+        { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report", run: "run-two" },
+        {
+            role: "assistant",
+            text: "",
+            browserHelp: { requestId: "r-browser", session: "s-browser", account: "github", message: "Solve the captcha", status: "pending" },
+            run: "run-two",
+        },
+    ];
+    await services.turnJournal.recordTurn(parkedEntry("pk-stale", [asked], { run: { id: "run-two", rows: drawn } }));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+    await cardsUp(observed, "question");
+
+    const rows = turnRunOf(services.conversations, "pk-stale")?.rows ?? [];
+    expect(rows[1]?.browserHelp?.status).toBe("cancelled");
+    expect(rows[2]?.question).toMatchObject({ requestId: "r-up", status: "pending" });
+    expect(services.conversations.abort("pk-stale")).toBe(true);
+    await settle(services, "pk-stale");
+});
+
+// An entry an older build journalled carries no run: it opens on its prompt again, still at the hour it was sent.
+test("a parked turn journalled without its run opens on its prompt at the time it was sent", async () => {
+    const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    await services.turnJournal.recordTurn(parkedEntry("pk-old", [questionRequest("r-old")]));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+    await cardsUp(observed, "question");
+
+    const run = turnRunOf(services.conversations, "pk-old");
+    expect(run?.startedAt).toBe(10_000);
+    expect(run?.rows[0]).toMatchObject({ role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" });
+    expect(services.conversations.abort("pk-old")).toBe(true);
+    await settle(services, "pk-old");
+});
+
 test("dismissing the restored question ends the turn quietly, exactly as a live dismissal does", async () => {
     const { services, observed, resuming } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-dis", [questionRequest("r-dis")]));
@@ -1291,6 +1389,26 @@ test("a parked turn refused at every boot is given up once its tries are spent, 
     expect(observed).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
     expect((await fileTranscriptRecord(root).read("pk-spent")).at(-1)).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
+});
+
+// Given up, it records what it had drawn, as journalled while it waited, and the card it was waiting on stands as
+// nobody's decision: left pending, the record would offer an answer that goes nowhere.
+test("a parked turn given up records the rows it had drawn, its card frozen as nobody's decision", async () => {
+    const root = mkdtempSync(join(tmpdir(), "parked-"));
+    const { services } = await parkedServices(root);
+    const asked = questionRequest("r-given");
+    const card = { requestId: "r-given", questions: asked.kind === "question" ? asked.questions : [], status: "pending" as const };
+    const opened: TranscriptRow = { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report", run: "run-given" };
+    const asking: TranscriptRow = { role: "assistant", text: "Two chapters in.", question: card, run: "run-given" };
+    await services.turnJournal.recordTurn(
+        parkedEntry("pk-given", [asked], { attempts: MAX_PARKED_RESTORES, run: { id: "run-given", rows: [opened, asking] } }),
+    );
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    const [prompt, work, notice] = await fileTranscriptRecord(root).read("pk-given");
+    expect(prompt).toEqual(opened);
+    expect(work).toEqual({ ...asking, question: { ...card, status: "cancelled" } });
+    expect(notice).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
 });
 
 test("a parked turn its conversation refuses spends a try, and comes back at the next boot until the tries run out", async () => {

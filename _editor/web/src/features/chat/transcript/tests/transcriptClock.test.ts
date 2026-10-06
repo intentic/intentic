@@ -275,6 +275,68 @@ it(`keeps a live run's patches on target after an older page is prepended`, () =
     expect(clock.messages.value.map((message) => message.text)).toEqual([`an earlier question`, `an earlier answer`, `hi`, ANSWER]);
 });
 
+// A restart while a question was up: the daemon brings the parked run back under its own id with the rows it had drawn
+// (turn-resume.ts, carriedRun), so a window that was showing it redraws it where it stood rather than beneath.
+const QUESTION: NonNullable<TranscriptRow["question"]> = {
+    requestId: `r-1`,
+    questions: [{ question: `Rebuild now?`, header: `Rebuild`, multiSelect: false, options: [] }],
+    status: `pending`,
+};
+it(`redraws a parked run brought back under its own id in place: its prompt and its card once`, () => {
+    const clock = new TranscriptClock(() => {});
+    const drawn: TranscriptRow[] = [
+        { role: `user`, text: `continue`, sentAt: 1_000, messageId: `m-1` },
+        { role: `assistant`, text: `Typecheck passed.` },
+        { role: `assistant`, text: ``, question: QUESTION },
+    ];
+    clock.adopt(head(drawn).rows.map((row, index) => ({ ...row, id: index + 1 })));
+
+    clock.attachRun(head(drawn));
+
+    expect(clock.messages.value.map((message) => message.id)).toEqual([1, 2, 3]);
+    expect(clock.messages.value.filter((message) => message.question !== undefined)).toHaveLength(1);
+});
+
+// An older daemon brought it back as a new run that raised the same card again: a card is answered by its id, so it is
+// one card, and it stands where the head puts it, not twice with two Submit buttons.
+it(`moves a card another run raises again off the row it stood on`, () => {
+    const clock = new TranscriptClock(() => {});
+    clock.adopt([
+        { id: 1, role: `user`, text: `continue`, sentAt: 1_000, messageId: `m-1`, run: `run-1` },
+        { id: 2, role: `assistant`, text: `Typecheck passed.`, run: `run-1` },
+        { id: 3, role: `assistant`, text: `One thing first.`, question: QUESTION, run: `run-1` },
+        { id: 4, role: `assistant`, text: ``, plan: { requestId: `r-2`, text: `1. Ship`, status: `pending` }, run: `run-1` },
+        { id: 5, role: `assistant`, text: ``, question: QUESTION, run: `run-1` },
+    ]);
+
+    clock.attachRun(
+        head(
+            [
+                { role: `user`, text: `continue`, sentAt: 2_000, messageId: `m-1` },
+                { role: `assistant`, text: ``, question: QUESTION },
+            ],
+            `run-2`,
+        ),
+    );
+
+    const rows = clock.messages.value;
+    expect(rows.filter((message) => message.question?.requestId === `r-1`).map((message) => message.run)).toEqual([`run-2`]);
+    // The words the card shared a row with stay; a row the card alone made goes with it; another card is left alone.
+    expect(rows.map((message) => message.text)).toEqual([`continue`, `Typecheck passed.`, `One thing first.`, ``, `continue`, ``]);
+    expect(rows[3]?.plan?.requestId).toBe(`r-2`);
+    // Patches index from where the attached run's rows now start.
+    clock.push(
+        {
+            kind: `patch`,
+            seq: 1,
+            patch: { op: `replace`, index: 1, row: { role: `assistant`, text: ``, question: { ...QUESTION, status: `answered` } } },
+        },
+        TURN,
+    );
+    paint();
+    expect(clock.messages.value.at(-1)?.question?.status).toBe(`answered`);
+});
+
 // A row the daemon replaces whole already holds every word this window was still revealing for it, so the
 // buffer for that row is dropped rather than typed on top of text that already contains it.
 it(`drops the typewriter's buffer for a row the daemon replaced whole`, () => {

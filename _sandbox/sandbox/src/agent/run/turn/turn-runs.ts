@@ -108,7 +108,6 @@ class Mailbox<T> {
 }
 
 export class TurnRun implements LiveRun {
-    readonly id = crypto.randomUUID();
     // Whether the turn journal holds it; the unjournalled door (a loop's iteration) says otherwise as it starts it.
     journalled = true;
     private finishedAt: number | undefined;
@@ -121,9 +120,13 @@ export class TurnRun implements LiveRun {
     private waiters: (() => void)[] = [];
 
     constructor(
-        // The user's message the turn opens with, or the notice standing in for a repeated one.
+        // The user's message the turn opens with, or the notice standing in for a repeated one; for a run carried on
+        // after a restart, everything it had drawn.
         opening: readonly TranscriptRow[],
         readonly startedAt = Date.now(),
+        // Minted here, unless this run carries on one a restart cut (RunOptions.continues): a window showing that run
+        // finds it by this id and redraws it in place, where a new id would draw it a second time beneath.
+        readonly id: string = crypto.randomUUID(),
     ) {
         this.fold = new TranscriptFold(opening);
     }
@@ -288,6 +291,9 @@ export interface RunOptions {
     readonly journalled?: boolean;
     // What the transcript opens with, at start time; built by whoever holds the prompt (turn-transcript.ts).
     readonly opening?: (startedAt: number) => readonly TranscriptRow[];
+    // The run a restart cut while it waited on a person, carried on as itself (turn-resume.ts, rehydrateParkedTurn): its
+    // id, its start, and the rows it had drawn, which stand in for `opening`. Absent, the run is a new one.
+    readonly continues?: { readonly id: string; readonly startedAt: number; readonly rows: readonly TranscriptRow[] };
     // Where the settled turn's durable transcript is written down (sessions/transcript-record.ts).
     readonly transcript?: (rows: readonly TranscriptRow[], steerRows: readonly number[]) => Promise<unknown>;
     // Side-channel prep that must precede the provider; its failure may cost persistence, never the turn itself.
@@ -314,13 +320,19 @@ const bookedRerun = (event: Extract<AgentEvent, { kind: "error" }>): { readonly 
     return event.nextAt === undefined ? {} : { at: event.nextAt };
 };
 
+// A run of its own, opening on what `opening` builds for the instant it starts.
+const newRun = (opening: RunOptions["opening"]): TurnRun => {
+    const startedAt = Date.now();
+    return new TurnRun(opening?.(startedAt) ?? [], startedAt);
+};
+
 // Starts a detached run for the conversation's turn, or names why not: one is live, or it is archived, which leaves no
 // run behind. A thrown turn folds into the transcript as an error, so followers see it settle.
 export function startTurnRun(
     deps: RunDeps,
     turnFn: TurnStarter["stream"],
     sent: TurnInput & { readonly conversationId: string },
-    { observer, journalled = false, opening, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
+    { observer, journalled = false, opening, continues, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
 ): TurnRun | BeginRefusal {
     // Routed on the way in (idempotent), for a caller that starts a run without the port.
     const input: RoutedTurn & { readonly conversationId: string } = withRuntimeDefaults(sent);
@@ -331,8 +343,7 @@ export function startTurnRun(
     if (runs.get(input.conversationId)?.done === false) {
         return "busy";
     }
-    const startedAt = Date.now();
-    const run = new TurnRun(opening?.(startedAt) ?? [], startedAt);
+    const run = continues === undefined ? newRun(opening) : new TurnRun(continues.rows, continues.startedAt, continues.id);
     run.journalled = journalled;
     runs.hold(input.conversationId, input.conversationId, run);
     const provider = input.agent;
@@ -347,6 +358,7 @@ export function startTurnRun(
     // Journal entry's live fields; snapshotted synchronously so a rewrite always carries all of them.
     let sessionId: string | undefined;
     const parked: ParkedRequest[] = [];
+    // While a card is up the run's rows ride along, the only copy of them a restart leaves; once none is, they are let go.
     const journalEntry = (): void =>
         journal({
             kind: "journalled",
@@ -357,6 +369,8 @@ export function startTurnRun(
                 attempts,
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 ...(parked.length > 0 ? { parked: [...parked] } : {}),
+                // Cloned: the fold goes on changing the cards these rows share with it, under a write still queued.
+                run: { id: run.id, ...opt("rows", parked.length > 0 ? structuredClone([...run.rows]) : undefined) },
             },
         });
     journalEntry();
@@ -398,29 +412,35 @@ export function startTurnRun(
                     const awaiting = event.kind;
                     tell((target) => target.awaiting(awaiting));
                 }
+                // Whether this frame changes what the journal entry says; it is rewritten once the frame is folded, so
+                // the rows it carries already show the card raised or settled.
+                let rejournal = false;
                 // Restorable cards ride the journal entry while up (handovers excluded) and come off as each resolves.
                 if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
                     parked.push(event);
-                    journalEntry();
+                    rejournal = true;
                 }
                 if (event.kind === "resolved") {
                     const held = parked.findIndex((card) => card.requestId === event.requestId);
                     if (held !== -1) {
                         parked.splice(held, 1);
-                        journalEntry();
+                        rejournal = true;
                     }
                 }
                 // Session the provider minted, folded into the journal entry once known; a resume without it starts
                 // over.
                 if (event.kind === "session") {
                     sessionId = event.sessionId;
-                    journalEntry();
+                    rejournal = true;
                 }
                 if (event.kind === "error") {
                     failure = event.message;
                     rerun = bookedRerun(event);
                 }
                 run.push(event);
+                if (rejournal) {
+                    journalEntry();
+                }
             }
         } catch (error) {
             // An abort is /agent/stop, not a failure. Detected by name: DOMException AbortError doesn't extend Error.

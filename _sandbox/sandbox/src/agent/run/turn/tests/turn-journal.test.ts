@@ -83,7 +83,7 @@ describe("sqliteTurnJournal", () => {
         await journal.recordTurn(turn());
         expect(await journal.list()).toEqual([turn()]);
         expect(db.rowsOf("c-2")["turn_journal"]).toEqual([
-            { conversation_id: "c-2", started_at: 5, attempts: 0, turn: {}, session_id: null, parked: null },
+            { conversation_id: "c-2", started_at: 5, attempts: 0, turn: {}, session_id: null, parked: null, run: null },
         ]);
     });
 

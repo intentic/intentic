@@ -1,7 +1,15 @@
-import { AgentOriginSchema, AgentTurnSchema, ParkedRequestSchema, RESUME_NOTES, type ResumeReason } from "@intentic/sandbox-contract";
+import {
+    AgentOriginSchema,
+    AgentTurnSchema,
+    ParkedRequestSchema,
+    RESUME_NOTES,
+    type ResumeReason,
+    TranscriptRowSchema,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Services } from "../../../composition.js";
 import type { ConversationsDb } from "../../../store/conversations-db.js";
+import { opt } from "../../../opt.js";
 
 // Persists what's needed to re-run an in-flight turn: process-local state (the run, steering, approval bridge) dies
 // with the container, though frames and transcript survive elsewhere. A turn and an automation fire replay differently,
@@ -24,6 +32,12 @@ const JournalledInputSchema = z.intersection(
 // OOM forever.
 const inFlightSince = { startedAt: z.number(), attempts: z.number() };
 
+// The run itself, so a turn parked on a person comes back AS that run rather than a new one telling it again: its id,
+// which every row it drew is stamped with and which a window already showing it redraws in place (transcriptState.ts
+// attachRun), and, while it is parked, the rows it had drawn, which no other store holds until it settles.
+const JournalledRunSchema = z.object({ id: z.string(), rows: z.array(TranscriptRowSchema).optional() });
+export type JournalledRun = z.infer<typeof JournalledRunSchema>;
+
 const JournalledTurnSchema = z.object({
     ...inFlightSince,
     kind: z.literal("turn"),
@@ -32,6 +46,8 @@ const JournalledTurnSchema = z.object({
     sessionId: z.string().optional(),
     // Parked cards, restored at boot so a turn waiting on the user isn't re-run; handover cards never appear here.
     parked: z.array(ParkedRequestSchema).optional(),
+    // Absent on an entry an older build wrote, or one whose run this build cannot read: its cards still come back.
+    run: JournalledRunSchema.optional(),
 });
 export type JournalledTurn = z.infer<typeof JournalledTurnSchema>;
 
@@ -107,6 +123,8 @@ interface TurnRow {
     readonly turn: string;
     readonly session_id: string | null;
     readonly parked: string | null;
+    // Absent from a row read off a database an older build still has open.
+    readonly run?: string | null;
 }
 
 interface FireRow {
@@ -121,9 +139,9 @@ interface FireRow {
 
 export const turnJournalRows = ({ db }: ConversationsDb): TurnJournalRows => {
     const upsert = db.prepare(`
-        INSERT INTO turn_journal(conversation_id, started_at, attempts, turn, session_id, parked) VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO turn_journal(conversation_id, started_at, attempts, turn, session_id, parked, run) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(conversation_id) DO UPDATE SET started_at = excluded.started_at, attempts = excluded.attempts,
-            turn = excluded.turn, session_id = excluded.session_id, parked = excluded.parked
+            turn = excluded.turn, session_id = excluded.session_id, parked = excluded.parked, run = excluded.run
     `);
     const remove = db.prepare("DELETE FROM turn_journal WHERE conversation_id = ?");
     return {
@@ -135,12 +153,34 @@ export const turnJournalRows = ({ db }: ConversationsDb): TurnJournalRows => {
                 JSON.stringify(entry.turn),
                 entry.sessionId ?? null,
                 entry.parked === undefined ? null : JSON.stringify(entry.parked),
+                // Stamped with the start it belongs to: a build that does not write this column leaves it standing
+                // under the next turn's start, and a later read must not take it for that turn's (runOf).
+                entry.run === undefined ? null : JSON.stringify({ ...entry.run, startedAt: entry.startedAt }),
             );
         },
         deleteTurn: (conversationId) => {
             remove.run(conversationId);
         },
     };
+};
+
+// The run a row names, read on its own so a run this build cannot read costs only itself, never the entry: rows that no
+// longer parse leave the id, and a column stamped with another start belongs to a turn before this one.
+const StoredRunSchema = z.object({ id: z.string(), startedAt: z.number(), rows: z.unknown().optional() });
+const runOf = (row: TurnRow): JournalledRun | undefined => {
+    if (row.run === undefined || row.run === null) {
+        return undefined;
+    }
+    const stored = StoredRunSchema.safeParse(JSON.parse(row.run));
+    if (!stored.success || stored.data.startedAt !== row.started_at) {
+        return undefined;
+    }
+    const run: JournalledRun = { id: stored.data.id };
+    const rows = z.array(TranscriptRowSchema).safeParse(stored.data.rows);
+    if (stored.data.rows !== undefined && rows.success) {
+        run.rows = rows.data;
+    }
+    return run;
 };
 
 // A row this build can no longer read is skipped, never deleted: nothing here is worth a resume that runs blind.
@@ -152,6 +192,7 @@ const turnOf = (row: TurnRow): JournalledTurn[] => {
         turn: JSON.parse(row.turn),
         ...(row.session_id === null ? {} : { sessionId: row.session_id }),
         ...(row.parked === null ? {} : { parked: JSON.parse(row.parked) }),
+        ...opt("run", runOf(row)),
     });
     return parsed.success ? [parsed.data] : [];
 };

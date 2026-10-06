@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
     type AgentTurn,
+    cancelledRequests,
     capabilitiesOf,
+    isAwaitingDecision,
     noticeCode,
     resumeNoticeRow,
     type TranscriptRow,
@@ -195,24 +197,29 @@ const interruptedTurnRows = async (
     return [resume?.kind === "notice" ? resumeNoticeRow(resume) : { ...opening, sentAt, messageId: messageIdOf(turn) }, ...rest];
 };
 
-// Writes a turn the daemon died under, at the boot that still finds its journal entry (turn-resume.ts); prefers
-// recovered session rows over the prompt-alone fallback used when nothing is recoverable. Never throws; a failed write
-// keeps the journal entry for the next boot. `resuming`: the boot re-runs it next, whose own `restart` notice says what
-// happened, so the interruption's notice would only contradict it; the turn's rows are still owed, since the re-run's
-// prompt carries a resume note and records no user bubble of its own (openingRows).
+// A card on a turn that died: its waiter went with the daemon, so it is nobody's decision, as a run's own end freezes it
+// (TranscriptFold.finish); left pending, the record would offer an answer that goes nowhere, for ever.
+const frozenCards = (row: TranscriptRow): TranscriptRow => (isAwaitingDecision(row) ? { ...row, ...cancelledRequests(row) } : row);
+
+// Writes a turn the daemon died under, at the boot that still finds its journal entry (turn-resume.ts); prefers the rows
+// the run journalled while it waited on a person (`drawn`), then recovered session rows, over the prompt-alone fallback
+// used when nothing is recoverable. Never throws; a failed write keeps the journal entry for the next boot. `resuming`:
+// the boot re-runs it next, whose own `restart` notice says what happened, so the interruption's notice would only
+// contradict it; the turn's rows are still owed, since the re-run's prompt carries a resume note and records no user
+// bubble of its own (openingRows).
 export const recordInterruptedTurn = async (
     services: Pick<Services, "transcripts" | "sessions" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     // Session the dead turn last reported, off its journal entry; the registry entry may never have gotten it.
     sessionId: string | undefined,
     sentAt: number,
-    resuming = false,
+    { resuming = false, drawn }: { readonly resuming?: boolean; readonly drawn?: readonly TranscriptRow[] | undefined } = {},
 ): Promise<boolean> => {
-    const recovered = await interruptedTurnRows(services, turn, sessionId, sentAt);
+    const recovered = drawn ?? (await interruptedTurnRows(services, turn, sessionId, sentAt));
     const written = recovered.length > 0 ? recovered : openingRows(turn, services.workspace.root, sentAt);
     const closing: TranscriptRow[] = resuming ? [] : [{ role: "notice", text: RESTART_INTERRUPTED, noticeCode: noticeCode({ code: "restartInterrupted" }) }];
     try {
-        await services.transcripts.append(transcriptAgentOf(turn), [...written, ...closing]);
+        await services.transcripts.append(transcriptAgentOf(turn), [...written.map(frozenCards), ...closing]);
         return true;
     } catch (error) {
         services.logger.warn({ err: error, conversationId: turn.conversationId }, "interrupted turn: transcript append failed");

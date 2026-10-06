@@ -339,8 +339,16 @@ export class TranscriptFold {
     private unrun = false;
 
     constructor(opening: readonly TranscriptRow[]) {
-        for (const row of opening) {
+        for (const [index, row] of opening.entries()) {
             this.rows.push(row);
+            // A run carried on after a restart opens on the cards it had raised, which it raises again: each is found
+            // where it stands, so the frame that re-raises it, and the one that settles it, land on that row.
+            for (const field of REQUEST_FIELDS) {
+                const requestId = row[field]?.requestId;
+                if (requestId !== undefined) {
+                    this.parked.set(requestId, index);
+                }
+            }
         }
         const opener = this.rows.findIndex((row) => row.role === "user");
         this.opener = opener === -1 ? undefined : opener;
@@ -475,7 +483,8 @@ export class TranscriptFold {
             case "plan": {
                 // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);
-                const consumes = this.bubble === undefined && restates(adjacent, event.text);
+                // A plan raised again already has its row (park), and takes nobody's words a second time.
+                const consumes = this.bubble === undefined && !this.parked.has(event.requestId) && restates(adjacent, event.text);
                 if (consumes && adjacent !== undefined) {
                     adjacent.text = "";
                 }
@@ -819,6 +828,13 @@ export class TranscriptFold {
     // A card takes the open bubble and closes it; `into` reuses an existing row (a plan's own prose) instead of opening
     // a new one.
     private park(requestId: string, cards: TranscriptRequests, into?: number): TranscriptPatch[] {
+        // One card is one row: raised again under the id it already holds, it is put back where it stands, never drawn
+        // a second time beneath.
+        const standing = this.parked.get(requestId);
+        if (standing !== undefined) {
+            Object.assign(this.rows[standing]!, cards);
+            return [this.replace(standing)];
+        }
         const [index, opened] = into === undefined ? this.open() : [into, []];
         Object.assign(this.rows[index]!, cards);
         this.bubble = undefined;
