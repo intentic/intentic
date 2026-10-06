@@ -109,12 +109,17 @@ overrides:
   # breaks are deep-Map merging plus two type renames, neither of which either consumer touches — both merge
   # plain option objects.
   deepmerge-ts: 8.0.2
+  # miniflare (wrangler's local runtime) pins sharp and ws exactly, a patch or minor behind what the rest of the
+  # tree resolves, so without these it carries a second copy of each, one of them a native image library. Same
+  # majors; drop them once miniflare's own pins catch up with the catalog.
+  "miniflare>sharp": 0.35.5
+  "miniflare>ws": 8.22.0
   # Oxlint's JS plugin ABI is explicitly NOT semver-stable — the docs say so — so every copy of
   # @oxlint/plugins in the tree has to be the one `oxlint` itself was built against, or the config fails to
   # load before a single file is linted. oxlint-plugin-complexity asks for ^1.73.0, which floats to 1.80 on its
   # own; this holds it at the catalog pin instead.
   # ponytail: bump together with oxlint.
-  "@oxlint/plugins": 1.85.0
+  "@oxlint/plugins": 1.87.0
 
 # 1440 IS ALSO PNPM'S OWN DEFAULT, and stating it is not redundant: `minimumReleaseAgeStrict` defaults to true
 # only when the age is set explicitly, false when it is inherited. So the pair below is today's behaviour
@@ -130,7 +135,6 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - imapflow@2.0.7
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.289'
   - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.289'
   - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.289'
@@ -141,11 +145,6 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.289'
   - '@anthropic-ai/claude-agent-sdk@0.3.289'
   - image-size@2.0.4
-  - '@intlify/core-base@11.4.12'
-  - '@intlify/devtools-types@11.4.12'
-  - '@intlify/message-compiler@11.4.12'
-  - '@intlify/shared@11.4.12'
-  - vue-i18n@11.4.12
   - '@opencode-ai/sdk@1.18.34'
   - '@cursor/sdk-darwin-arm64@1.0.35'
   - '@cursor/sdk-darwin-x64@1.0.35'
@@ -153,21 +152,33 @@ minimumReleaseAgeExclude:
   - '@cursor/sdk-linux-x64@1.0.35'
   - '@cursor/sdk-win32-x64@1.0.35'
   - '@cursor/sdk@1.0.35'
-  - '@turbo/darwin-64@2.11.4'
-  - '@turbo/darwin-arm64@2.11.4'
-  - '@turbo/linux-64@2.11.4'
-  - '@turbo/linux-arm64@2.11.4'
-  - '@turbo/windows-64@2.11.4'
-  - '@turbo/windows-arm64@2.11.4'
-  - '@vitest/mocker@5.0.2'
-  - '@vitest/spy@5.0.2'
-  - miniflare@5.20260923.0-alpha
-  - posthog-js@1.434.14
-  - turbo@2.11.4
   - undici@6.29.0
-  - vitest@5.0.2
-  - wrangler@4.140.0
   - monaco-editor-core@0.57.0
+  - "@oxlint/binding-android-arm-eabi@1.87.0"
+  - "@oxlint/binding-android-arm64@1.87.0"
+  - "@oxlint/binding-darwin-arm64@1.87.0"
+  - "@oxlint/binding-darwin-x64@1.87.0"
+  - "@oxlint/binding-freebsd-x64@1.87.0"
+  - "@oxlint/binding-linux-arm-gnueabihf@1.87.0"
+  - "@oxlint/binding-linux-arm-musleabihf@1.87.0"
+  - "@oxlint/binding-linux-arm64-gnu@1.87.0"
+  - "@oxlint/binding-linux-arm64-musl@1.87.0"
+  - "@oxlint/binding-linux-ppc64-gnu@1.87.0"
+  - "@oxlint/binding-linux-riscv64-gnu@1.87.0"
+  - "@oxlint/binding-linux-riscv64-musl@1.87.0"
+  - "@oxlint/binding-linux-s390x-gnu@1.87.0"
+  - "@oxlint/binding-linux-x64-gnu@1.87.0"
+  - "@oxlint/binding-linux-x64-musl@1.87.0"
+  - "@oxlint/binding-openharmony-arm64@1.87.0"
+  - "@oxlint/binding-win32-arm64-msvc@1.87.0"
+  - "@oxlint/binding-win32-ia32-msvc@1.87.0"
+  - "@oxlint/binding-win32-x64-msvc@1.87.0"
+  - "@oxlint/plugins@1.87.0"
+  - "@posthog/core@1.56.0"
+  - mailparser@3.9.36
+  - marked@18.1.0
+  - oxlint@1.87.0
+  - posthog-js@1.436.1
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -212,7 +223,7 @@ catalogPrune: true
 # Version conflicts are resolved to the newest compatible release. Held to a single copy per package, which is
 # what lets the overrides above dedupe rather than add.
 catalog:
-  "@agentclientprotocol/sdk": 1.5.0
+  "@agentclientprotocol/sdk": 1.7.0
   "@anthropic-ai/claude-agent-sdk": 0.3.289
   "@astrojs/check": 0.9.10
   "@astrojs/sitemap": 3.7.4
@@ -229,8 +240,8 @@ catalog:
   "@cursor/sdk": 1.0.35
   "@dagrejs/dagre": 3.1.1
   "@discordjs/voice": 0.19.2
-  "@hono/node-server": 2.1.1
-  "@hono/otel": 1.1.2
+  "@hono/node-server": 2.1.3
+  "@hono/otel": 1.2.0
   "@huggingface/hub": 2.17.5
   "@huggingface/transformers": 4.3.0
   "@openai/codex-sdk": 0.160.0
@@ -249,8 +260,8 @@ catalog:
   "@orpc/openapi-client": 1.15.4
   "@orpc/server": 1.15.4
   # The plugin API the vendored anti-slop rules compile against, pinned to `oxlint` — see the override above.
-  "@oxlint/plugins": 1.85.0
-  "@playwright/mcp": 0.0.82
+  "@oxlint/plugins": 1.87.0
+  "@playwright/mcp": 0.0.83
   "@playwright/test": 1.63.0
   # Held on the PrimeVue 4 line on purpose: PrimeVue 5 (and @primeuix/themes 3, which it pairs with) left MIT for
   # the commercial "PrimeUI License": a licence key checked by @primeui/license-manager, a revenue/headcount cap on
@@ -263,28 +274,28 @@ catalog:
   "@prisma/client": 7.10.0
   "@puristic/env": 1.6.1
   "@semantic-release/exec": 7.1.0
-  "@shikijs/langs": 4.4.3
-  "@shikijs/monaco": 4.4.3
-  "@shikijs/themes": 4.4.3
-  "@slack/socket-mode": 3.0.1
-  "@slack/web-api": 8.1.1
+  "@shikijs/langs": 4.5.0
+  "@shikijs/monaco": 4.5.0
+  "@shikijs/themes": 4.5.0
+  "@slack/socket-mode": 3.1.0
+  "@slack/web-api": 8.2.0
   "@stricli/core": 1.3.0
   # Mutation testing, behind the `test-strength` chore and opted into by stryker.conf.mjs at the repo root. A real
   # dependency rather than `pnpm dlx`: under dlx Stryker resolves its plugins from the working directory and finds none.
   "@stryker-mutator/core": 10.0.0
   "@tailwindcss/vite": 4.3.3
-  "@tanstack/query-persist-client-core": 5.103.2
-  "@tanstack/vue-query": 5.103.2
+  "@tanstack/query-persist-client-core": 5.104.1
+  "@tanstack/vue-query": 5.104.1
   "@tauri-apps/api": 2.11.1
   "@tauri-apps/cli": 2.11.5
   "@tauri-apps/plugin-dialog": 2.7.3
   "@types/bun": 1.4.2
-  "@types/mailparser": 3.4.6
-  "@types/node": 24.13.6
+  "@types/mailparser": 3.9.0
+  "@types/node": 24.19.1
   "@types/pg": 8.23.1
   "@types/ssh2": 1.15.6
   "@types/web-push": 3.6.4
-  "@types/ws": 8.18.1
+  "@types/ws": 8.18.2
   "@typescript/native-preview": 7.0.0-dev.20260707.2
   "@vitejs/plugin-vue": 6.0.9
   "@vue-flow/core": 1.48.2
@@ -304,7 +315,7 @@ catalog:
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
   bcryptjs: 3.0.3
-  better-auth: 1.7.6
+  better-auth: 1.7.7
   bun: 1.4.2
   chokidar: 5.0.0
   croner: 10.0.1
@@ -321,12 +332,12 @@ catalog:
   # fileq's zip surgeon: pptx slide parts out, binary test fixtures built in code.
   fflate: 0.8.3
   file-type: 22.1.1
-  hono: 4.13.9
+  hono: 4.13.13
   idb-keyval: 6.3.0
   # fileq's image dimensions, header-only (no pixel decode, no native code).
   image-size: 2.0.4
-  ignore: 7.0.10
-  imapflow: 2.0.7
+  ignore: 7.0.12
+  imapflow: 2.2.5
   jose: 6.2.12
   # Held on 29: jsdom 30's window fails its own EventTarget brand check under bun's `vm` ("'addEventListener' called
   # on an object that is not a valid instance of EventTarget" from _tools/testing/src/dom.ts), while the same code
@@ -335,11 +346,11 @@ catalog:
   # Types only, and pinned to what @orpc/openapi itself resolves: it is the JSON Schema dialect oRPC's
   # generator declares in its own signatures, so a converter feeding that generator has to speak the same one.
   json-schema-typed: 8.0.2
-  knip: 6.38.0
-  mailparser: 3.9.28
+  knip: 6.39.0
+  mailparser: 3.9.36
   # fileq's docx deriver: docx → semantic HTML, which webq's markdown writer then renders.
-  mammoth: 1.12.3
-  marked: 18.0.14
+  mammoth: 1.13.0
+  marked: 18.1.0
   # fileq's audio/video deriver: duration, codec facts and tags without decoding a frame.
   music-metadata: 11.16.1
   # The Opus decoder for received Discord voice (the gateway decodes packets to PCM for whisper; it never sends
@@ -354,21 +365,21 @@ catalog:
   # The privacy shield's text reader (src/ocr/) runs PP-OCRv6 with it directly. The same pin as
   # @huggingface/transformers' own, so the daemon carries one runtime, not two.
   onnxruntime-node: 1.30.0
-  oxlint: 1.85.0
+  oxlint: 1.87.0
   # Cyclomatic AND cognitive complexity as one rule. Cognitive is the metric worth having: it charges nothing
   # for flat dispatch, compounds for nesting, and names the lines that cost the most, which is what makes the
   # diagnostic actionable rather than a number to argue with. Its own peers (oxc-parser, estree-walker, diff)
   # are auto-installed.
-  oxlint-plugin-complexity: 3.0.0
+  oxlint-plugin-complexity: 3.0.1
   # webq's HTML parser. parse5 rather than jsdom for the sandbox-image path: webq is baked into the daemon's
   # deployed tree, and parse5 is the spec-compliant parser alone (one dependency, no DOM emulation layer) —
   # the traversal webq needs is fifty lines of its own helpers.
   parse5: 8.0.1
-  pg: 8.23.0
+  pg: 8.23.1
   pino: 10.3.1
-  pino-pretty: 13.1.3
+  pino-pretty: 13.2.0
   playwright: 1.63.0
-  posthog-js: 1.434.14
+  posthog-js: 1.436.1
   prettier: 3.9.9
   primevue: 4.5.5
   prisma: 7.10.0
@@ -377,8 +388,8 @@ catalog:
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
   # site has to declare it even though astro carries the same optional dependency. astro 7.3 asks for ^0.35.4,
   # so the two share one copy without an override.
-  sharp: 0.35.4
-  shiki: 4.4.3
+  sharp: 0.35.5
+  shiki: 4.5.0
   # TOML for the sandbox-definition surface (sandbox.toml): a strict 1.0 parser with no coercion surprises.
   smol-toml: 1.9.0
   # The vector index behind iq's semantic tier. Ships as prebuilt loadable extensions, one optional dependency
@@ -387,11 +398,11 @@ catalog:
   ssh2: 1.17.0
   tailwind-merge: 3.7.0
   tailwindcss: 4.3.3
-  tar-stream: 3.2.1
-  testcontainers: 12.1.0
+  tar-stream: 3.2.2
+  testcontainers: 12.2.0
   tslib: 2.8.1
   tsx: 4.23.15
-  turbo: 2.11.4
+  turbo: 2.11.7
   typescript: 6.0.3
   # fileq's pdf deriver: a serverless pdf.js build that extracts text layers in plain Node — no worker, no
   # canvas, no DOM shims — at a fraction of pdfjs-dist's install.
@@ -399,15 +410,15 @@ catalog:
   # QR codes drawn in the browser (the phone pairing dialog): the code carries a live pairing token, so it is never
   # rendered by a third-party service. Zero dependencies.
   uqr: 0.1.3
-  vite: 8.3.1
-  vitest: 5.0.2
+  vite: 8.3.2
+  vitest: 5.0.3
   vue: 3.5.43
-  vue-i18n: 11.4.12
+  vue-i18n: 11.4.13
   vue-router: 5.3.1
-  vue-tsc: 3.3.11
+  vue-tsc: 3.3.12
   web-push: 3.6.7
-  wrangler: 4.140.0
-  ws: 8.21.3
+  wrangler: 4.147.0
+  ws: 8.22.0
   yaml: 2.9.1
   zod: 4.6.5
 
