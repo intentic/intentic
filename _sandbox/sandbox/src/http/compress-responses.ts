@@ -60,6 +60,10 @@ export const compressResponses = (): MiddlewareHandler => async (c, next) => {
     const body = await response.arrayBuffer();
     const headers = new Headers(response.headers);
     headers.append("vary", "accept-encoding");
+    // Cleared before each replacement: Hono's `c.res` setter copies every header of the answer it replaces onto the new
+    // one, so a route's own Content-Length (an extension backend's, proxied under /x/) overwrote the encoded length, and
+    // the browser waited forever for bytes that were never coming.
+    c.res = undefined;
     if (body.byteLength < MIN_COMPRESSED_BYTES) {
         c.res = new Response(body, { status: response.status, statusText: response.statusText, headers });
         return;

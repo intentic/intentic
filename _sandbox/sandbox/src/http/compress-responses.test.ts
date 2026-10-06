@@ -14,6 +14,11 @@ app.get("/small", (c) => c.json({ ok: true }));
 app.get("/events", (c) => c.body("data: one\n\n".repeat(200), 200, { "content-type": "text/event-stream" }));
 app.get("/raw", (c) => c.body("plain text ".repeat(500), 200, { "content-type": "text/plain" }));
 app.get("/held", (c) => c.body(JSON.stringify(big), 200, { "content-type": "application/json", "cache-control": "no-store, no-transform" }));
+// An answer that arrives with its own Content-Length, as an extension backend's does through the /x/ proxy.
+app.get("/proxied", () => {
+    const text = JSON.stringify(big);
+    return new Response(text, { headers: { "content-type": "application/json", "content-length": String(Buffer.byteLength(text)) } });
+});
 
 const get = async (path: string, acceptEncoding?: string): Promise<Response> =>
     app.request(path, acceptEncoding === undefined ? {} : { headers: { "accept-encoding": acceptEncoding } });
@@ -47,6 +52,15 @@ describe("compressResponses", () => {
             expect(Number(response.headers.get("content-length"))).toBe(bytes.length);
             expect(JSON.parse(decode(bytes).toString("utf8"))).toEqual(big);
         }
+    });
+
+    test("an answer carrying its own Content-Length leaves with the encoded length, not the one it came with", async () => {
+        const response = await get("/proxied", "zstd");
+        expect(response.headers.get("content-encoding")).toBe("zstd");
+        expect(response.headers.get("vary")?.toLowerCase()).toContain("accept-encoding");
+        const bytes = Buffer.from(await response.arrayBuffer());
+        expect(Number(response.headers.get("content-length"))).toBe(bytes.length);
+        expect(JSON.parse(zstdDecompressSync(bytes).toString("utf8"))).toEqual(big);
     });
 
     test("a JSON answer under the floor, or one the browser accepts no coding for, leaves as written", async () => {
