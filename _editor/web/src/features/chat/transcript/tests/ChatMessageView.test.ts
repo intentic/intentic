@@ -1017,6 +1017,14 @@ describe(`ChatMessageView added-notes mark`, () => {
         expect(scrollersUnderShut(element)).toEqual([]);
     });
 
+    it(`shows a lone note as the bare paperclip, since a count of one says nothing the glyph does not`, () => {
+        const element = mount({ id: 9, role: `user`, text: `fix the bug`, notes: notes.slice(0, 1) });
+
+        const mark = element.querySelector(`[aria-expanded]`)!;
+        expect(mark.querySelector(`[data-icon="paperclip"]`)).not.toBeNull();
+        expect(mark.textContent?.trim()).toBe(``);
+    });
+
     it(`stands on the spine as a figure, in a row of its own that shut costs the column nothing`, () => {
         const element = mount({ id: 8, role: `user`, text: `fix the bug`, notes });
 

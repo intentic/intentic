@@ -10,6 +10,7 @@ const t = useT();
 // left gutter beside the message it went out with (`.chat-notes-node` in chat.css), since these are things attached to
 // that message, not words the user wrote. Opened, it is the LIST of what was added, each note opening to its own
 // words: the titles answer "what went with this" without charging the reader for the text of five notes to find out.
+// A lone note shows the paperclip bare: "1" is what a paperclip already says, so the count only appears when it adds to it.
 
 defineProps<{ notes: readonly TurnNote[] }>();
 
@@ -37,7 +38,7 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
             <ChatSpineNode
                 class="chat-notes-node"
                 icon="paperclip"
-                :count="notes.length"
+                :count="notes.length > 1 ? notes.length : undefined"
                 :open="open"
                 :label="t(`chat.chatNotes.sentMessage`)"
                 :tip="t(`chat.chatNotes.addedContext`)"
