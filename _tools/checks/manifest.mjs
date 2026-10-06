@@ -75,6 +75,14 @@ export const CHECKS = [
         about: "an extension's manifest names only the @intentic/* packages its imports may reach (the extension SDK, the wire contract, base; testing and tsconfig as devDependencies)",
     },
     {
+        id: "runtime-deps",
+        file: "runtime-deps.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "code that ships (the image's `pnpm deploy --prod` trees, the npm packages) imports no package its manifest names only as a devDependency, which its production install would not carry",
+    },
+    {
         id: "contract-paths",
         ratchet: true,
         file: "contract-paths.mjs",

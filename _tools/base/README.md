@@ -67,7 +67,9 @@ flowchart LR
   large daemon process, retries only on `index.lock` contention, and marks pathspecs literal so a file named `[slug]`
   matches only itself. `forkedExec` runs the daemon's other polled commands (tmux, status probes) from the same child:
   a spawn from a large process first copies its page tables, 52 ms at 778 MB, where a request to the child costs
-  0.04 ms. `politeGit` runs bulk agent work under `nice` and `ionice`. `commands.ts` holds the generic verbs over an
+  0.04 ms. `setRunnerEnv` adds what every command it starts carries and the process's own environment must not: the
+  daemon's ssh agent socket, which its own git signs through and its other children would inherit from `process.env`.
+  `politeGit` runs bulk agent work under `nice` and `ionice`. `commands.ts` holds the generic verbs over an
   injectable `GitRunner`, and `locks.ts` clears a lock only while no git process runs. (2026-10-06: moved here from
   `@intentic/scaffold`, which is named for the workspace skeleton; a new package was rejected because a name npm has
   never seen fails the release plan until it is registered by hand.)

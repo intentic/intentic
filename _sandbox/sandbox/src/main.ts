@@ -1,3 +1,4 @@
+import { setRunnerEnv } from "@intentic/base/git";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
@@ -131,6 +132,11 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // The budget's verdict for heavy commands and test fan-outs, on a socket of its own; one per container, so the
     // daemon that claimed the container serves it.
     if (role.container) {
+        // The daemon's own git signs through the owner's ssh agent socket (bound below): an alias names only the public half
+        // of its key (ssh-hosts.ts), so a fetch or pull without SSH_AUTH_SOCK fails "Permission denied (publickey)". Handed
+        // to the git runner, not set on process.env, which every other child (an extension backend, a turn bound no socket
+        // of its own) would inherit. Only where the agent is the container's, as for the tmux server (boot-sweeps.ts).
+        setRunnerEnv({ SSH_AUTH_SOCK: services.sshAgent.owner });
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => void room.close());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).

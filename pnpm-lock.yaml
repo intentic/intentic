@@ -2779,6 +2779,9 @@ importers:
       smol-toml:
         specifier: 'catalog:'
         version: 1.9.0
+      ssh2:
+        specifier: 'catalog:'
+        version: 1.17.0
       tar-stream:
         specifier: 'catalog:'
         version: 3.2.2
@@ -2834,9 +2837,6 @@ importers:
       pino-pretty:
         specifier: 'catalog:'
         version: 13.2.0
-      ssh2:
-        specifier: 'catalog:'
-        version: 1.17.0
       testcontainers:
         specifier: 'catalog:'
         version: 12.2.0(supports-color@10.2.2)

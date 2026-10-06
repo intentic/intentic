@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { requires } from "@intentic/testing/requires";
-import { defaultGit, gitSpawnStats, observeGitCommands, politeGit, settleIndex } from "./runner.js";
+import { defaultGit, forkedExec, gitSpawnStats, observeGitCommands, politeGit, setRunnerEnv, settleIndex } from "./runner.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock
 // contention.
@@ -244,4 +244,24 @@ test.skipIf(!dist.runs)(dist.title("forkedExec runs any command from the forker,
     expect(carried).toBe("carried");
     expect(result.limited).toBe(true);
     expect(result.limitedMs).toBeLessThan(3000);
+});
+
+// The sandbox daemon hands its ssh agent socket to the commands it runs itself (main.ts) and never to process.env, which
+// every other child of the daemon would inherit: a fetch from the editor signs, an extension backend does not.
+test("setRunnerEnv reaches every command the runner starts, under a call's own env and never into process.env", async () => {
+    const dir = await tempRepo();
+    const inherited = process.env["SSH_AUTH_SOCK"];
+    setRunnerEnv({ SSH_AUTH_SOCK: "/run/intentic/ssh/owner.sock", RUNNER_PROBE: "runner" });
+    try {
+        const plain = await forkedExec("sh", ["-c", 'echo "$SSH_AUTH_SOCK $RUNNER_PROBE"']);
+        const overridden = await forkedExec("sh", ["-c", 'echo "$RUNNER_PROBE"'], { env: { RUNNER_PROBE: "call" } });
+        const git = await defaultGit(dir, ["-c", "alias.sock=!echo $SSH_AUTH_SOCK", "sock"]);
+        expect(plain.stdout.trim()).toBe("/run/intentic/ssh/owner.sock runner");
+        expect(overridden.stdout.trim()).toBe("call");
+        expect(git.stdout.trim()).toBe("/run/intentic/ssh/owner.sock");
+        expect(process.env["SSH_AUTH_SOCK"]).toBe(inherited);
+        expect(process.env["RUNNER_PROBE"]).toBe(undefined);
+    } finally {
+        setRunnerEnv({});
+    }
 });

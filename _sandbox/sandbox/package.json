@@ -77,6 +77,7 @@
         "playwright": "catalog:",
         "sharp": "catalog:",
         "smol-toml": "catalog:",
+        "ssh2": "catalog:",
         "tar-stream": "catalog:",
         "tslib": "catalog:",
         "web-push": "catalog:",
@@ -97,7 +98,6 @@
         "@types/ws": "catalog:",
         "@typescript/native-preview": "catalog:",
         "pino-pretty": "catalog:",
-        "ssh2": "catalog:",
         "testcontainers": "catalog:",
         "tsx": "catalog:",
         "vitest": "catalog:"

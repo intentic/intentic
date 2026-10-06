@@ -211,11 +211,19 @@ interface ForkedOptions {
     readonly env?: Readonly<Record<string, string>>;
 }
 
+// What every command this runner starts carries that the process's own environment must not: the sandbox daemon's ssh
+// agent socket, which its own git signs through (a background fetch, a pull from the editor) and which every other child
+// of the daemon would inherit from process.env. Set by the process that owns it; a call's own `env` still wins.
+let ownEnv: Readonly<Record<string, string>> = {};
+export const setRunnerEnv = (env: Readonly<Record<string, string>>): void => {
+    ownEnv = env;
+};
+
 const runForked = async (command: string, args: readonly string[], options: ForkedOptions): Promise<GitRun> => {
     // Merged, not replaced: execFile's `env` replaces the whole environment, and git needs PATH/HOME too. Always sent,
     // since the forker's own environment is this process's as it was at fork time, and a variable the process has
     // dropped since (netd's sockets, once the daemon's netd door has them) must not reach what it runs.
-    const resolved = { ...process.env, ...options.env };
+    const resolved = { ...process.env, ...ownEnv, ...options.env };
     const limits = {
         maxBuffer: options.maxBuffer,
         ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),

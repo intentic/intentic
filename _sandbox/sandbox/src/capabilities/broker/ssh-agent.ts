@@ -1,4 +1,5 @@
 import type { Socket } from "node:net";
+import { Transform } from "node:stream";
 import { AgentProtocol, type ParsedKey } from "ssh2";
 import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
 
@@ -104,6 +105,43 @@ export const sshSignature = (key: ParsedKey, data: Buffer, hash: string | undefi
 
 const sameKey = (held: ParsedKey, asked: ParsedKey): boolean => held.getPublicSSH().equals(asked.getPublicSSH());
 
+// The two requests ssh2's AgentProtocol answers itself (SSH_AGENTC_REQUEST_IDENTITIES, SSH_AGENTC_SIGN_REQUEST).
+const ANSWERED = new Set([11, 13]);
+// OpenSSH's own ceiling on one agent message (AGENT_MAX_LEN, authfd.c).
+const MAX_MESSAGE = 256 * 1024;
+
+/**
+ * The client's messages as AgentProtocol can read them: one it does not answer is cut to its type alone. Its catch-all
+ * replies with a failure but never steps past the message's body (ssh2 1.17.0, lib/agent.js), so the body is read as
+ * more messages and every reply after it lands one late. OpenSSH 8.9 and later opens each listing with
+ * SSH_AGENTC_EXTENSION ("session-bind@openssh.com"), so `ssh` took a failure for the answer to its listing ("agent
+ * refused operation") and logged in with no key, while `ssh-add -L`, which sends no extension, worked. Cut short, every
+ * such message is still refused, in its turn: a failure is what the protocol asks of an agent without the extension.
+ */
+export const agentMessages = (): Transform => {
+    let pending = Buffer.alloc(0);
+    return new Transform({
+        transform(chunk: Buffer, _encoding, done) {
+            pending = Buffer.concat([pending, chunk]);
+            const read: Buffer[] = [];
+            while (pending.length >= 4) {
+                const length = pending.readUInt32BE(0);
+                if (length === 0 || length > MAX_MESSAGE) {
+                    done(new Error(`an agent message of ${String(length)} bytes`));
+                    return;
+                }
+                if (pending.length < 4 + length) {
+                    break;
+                }
+                const type = pending[4] ?? 0;
+                read.push(ANSWERED.has(type) ? pending.subarray(0, 4 + length) : Buffer.from([0, 0, 0, 1, type]));
+                pending = pending.subarray(4 + length);
+            }
+            done(null, read.length === 0 ? undefined : Buffer.concat(read));
+        },
+    });
+};
+
 /** Serves one client connection: identities and signatures for `principal`, a failure for anything else. */
 export const serveSshAgent = (socket: Socket, principal: SshPrincipal, deps: SshAgentDeps): void => {
     const protocol = new AgentProtocol(false);
@@ -119,7 +157,12 @@ export const serveSshAgent = (socket: Socket, principal: SshPrincipal, deps: Ssh
         deps.warn("ssh agent: a client sent something that is not the agent protocol; its connection was closed", error);
         close();
     });
-    socket.pipe(protocol).pipe(socket);
+    const messages = agentMessages();
+    messages.on("error", (error: Error) => {
+        deps.warn("ssh agent: a client sent a message no agent reads; its connection was closed", error);
+        close();
+    });
+    socket.pipe(messages).pipe(protocol).pipe(socket);
 
     const usable = async (): Promise<readonly HeldKey[]> => {
         const keys = await deps.keys();

@@ -89,6 +89,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [editor-boundaries](editor-boundaries.mjs) | a static import cycle between web editor modules, or a new cycle between its subsystems |
 | [shared-boundary](shared-boundary.mjs) | a `_shared/` package depending on another part |
 | [extension-deps](extension-deps.mjs) | an extension manifest naming an `@intentic/*` package outside the extension SDK |
+| [runtime-deps](runtime-deps.mjs) | shipped code importing a package its manifest names only as a devDependency |
 | [contract-paths](contract-paths.mjs) | a contract route, or a platform route the daemon calls, called by spelling its path |
 | [publish-set](publish-set.mjs) | a publish list that is not dependency-closed and ordered |
 | [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |

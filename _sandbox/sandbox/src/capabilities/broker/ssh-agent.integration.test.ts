@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { connect } from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -123,6 +123,84 @@ test("nothing on the socket can load, remove or lock a key: only listing and sig
         writeFileSync(extra, generateSshKey("extra").privateKey, { mode: 0o600 });
         await expect(run("ssh-add", [extra], withSocket(sockets.owner))).rejects.toThrow();
         expect(await listed(sockets.owner)).toHaveLength(1);
+    } finally {
+        await sockets.stop();
+    }
+});
+
+// One agent message: a length, a type, a body.
+const agentMessage = (type: number, body: Buffer = Buffer.alloc(0)): Buffer => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(1 + body.length);
+    return Buffer.concat([length, Buffer.from([type]), body]);
+};
+
+// The extension OpenSSH 8.9 and later sends before every listing (PROTOCOL.agent), its fields filled with stand-ins.
+const sessionBind = agentMessage(
+    27,
+    Buffer.concat(
+        [Buffer.from("session-bind@openssh.com"), Buffer.alloc(51, 1), Buffer.alloc(32, 2), Buffer.alloc(83, 3)].map((field) => {
+            const length = Buffer.alloc(4);
+            length.writeUInt32BE(field.length);
+            return Buffer.concat([length, field]);
+        }),
+    ),
+);
+
+// A hang bound, not a latency: a loopback reply takes milliseconds. An agent that swallowed a message never answers it,
+// and the assertion should then say what did arrive rather than leave the suite's timeout to.
+const REPLY_BOUND_MS = 5_000;
+
+// Sends each batch of messages once the replies to the batch before have arrived, as ssh does; answers every reply's type.
+const exchange = async (socketPath: string, batches: readonly (readonly Buffer[])[]): Promise<number[]> => {
+    const socket = connect(socketPath);
+    const types: number[] = [];
+    let pending = Buffer.alloc(0);
+    let waiting: { readonly count: number; readonly done: () => void } | undefined;
+    socket.on("data", (data: Buffer) => {
+        pending = Buffer.concat([pending, data]);
+        while (pending.length >= 4 && pending.length >= 4 + pending.readUInt32BE(0)) {
+            types.push(pending[4] ?? -1);
+            pending = pending.subarray(4 + pending.readUInt32BE(0));
+        }
+        if (waiting !== undefined && types.length >= waiting.count) {
+            waiting.done();
+        }
+    });
+    try {
+        for (const batch of batches) {
+            const count = types.length + batch.length;
+            await new Promise<void>((resolve) => {
+                const bound = setTimeout(resolve, REPLY_BOUND_MS);
+                waiting = {
+                    count,
+                    done: () => {
+                        clearTimeout(bound);
+                        resolve();
+                    },
+                };
+                socket.write(Buffer.concat(batch));
+            });
+        }
+        return types;
+    } finally {
+        socket.destroy();
+    }
+};
+
+const SSH_AGENT_FAILURE = 5;
+const SSH_AGENTC_REQUEST_IDENTITIES = 11;
+const SSH_AGENT_IDENTITIES_ANSWER = 12;
+
+test("an extension the agent does not speak is refused in its turn, and the listing after it is answered", async () => {
+    const { sockets } = harness([ed25519]);
+    await sockets.start();
+    try {
+        const listing = agentMessage(SSH_AGENTC_REQUEST_IDENTITIES);
+        // As ssh sends them: the extension, its reply, then the listing.
+        expect(await exchange(sockets.owner, [[sessionBind], [listing]])).toEqual([SSH_AGENT_FAILURE, SSH_AGENT_IDENTITIES_ANSWER]);
+        // And arriving in one write, where a body read as messages would have answered the listing out of turn.
+        expect(await exchange(sockets.owner, [[sessionBind, listing]])).toEqual([SSH_AGENT_FAILURE, SSH_AGENT_IDENTITIES_ANSWER]);
     } finally {
         await sockets.stop();
     }
