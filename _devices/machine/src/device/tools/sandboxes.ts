@@ -19,7 +19,7 @@ import {
 import { z } from "zod";
 import { assertScope } from "../policy.js";
 import { ensureCurrentIc, icCandidates } from "./ic-binary.js";
-import { inFlightMarks } from "./in-flight.js";
+import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes

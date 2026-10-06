@@ -1,5 +1,4 @@
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import type { ChatRoute, Persona } from "@intentic/sandbox-contract";
+import { type ChatRoute, type Persona, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, type Ref, ref } from "vue";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";

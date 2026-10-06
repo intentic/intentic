@@ -13,7 +13,7 @@ const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 //
 // Every shot of the code workspace is taken of the demo's `showcase` recording (_site/demo/src/mode.ts): five agents on
 // an ordinary afternoon, served QUIET, so no card carries a cooling cache, a teammate's reaction or a key it is waiting
-// for, no pipeline is red and nothing on the rail asks for attention it does not need. The recording's every-state
+// for, no pipeline is failing and nothing on the rail asks for attention it does not need. The recording's every-state
 // richness is for a visitor exploring the demo; a screenshot is a picture of the workspace at rest.
 //
 // `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather

@@ -89,92 +89,10 @@ if (-not $Ic) {
     # is replaced. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
     $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
     $IcCurrent = $false
-    if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
-        Add-IntenticPath -Folder $IcDir -Command 'ic'
-    } else {
-        Write-Host 'intentic: fetching the ic CLI...'
-        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
-        # five-megabyte download take several seconds instead of a fraction of one.
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
-            Move-Item -Force "$IcDest.tmp" $IcDest
-            $Ic = $IcDest
-            Add-IntenticPath -Folder $IcDir -Command 'ic'
-        } catch {
-            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
-            if (Test-Path $IcDest) {
-                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
-                $Ic = $IcDest
-            } else {
-                $installed = Get-Command ic -ErrorAction SilentlyContinue
-                if ($installed) {
-                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
-                    $Ic = $installed.Source
-                } else {
-                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
-                    exit 1
-                }
-            }
-        }
-    }
-}
-
-# One the platform does not know is ic's to say so; it fixes anyway, only unobserved.
-if ($Code) {
-    & $Ic sandbox fix --code $Code @IcArgs
-} else {
-    & $Ic sandbox fix @IcArgs
-}
-# ic's exit code stays in $LASTEXITCODE either way. `exit` only when this is a script file: pasted (irm | iex) or
-# wrapped in a scriptblock, `exit` ends the user's whole PowerShell session, and the window would close on the one
-# message that says what is left for them.
-if ($PSCommandPath) { exit $LASTEXITCODE }
-) {
+    if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)$') {
         $IcHaveCore = [version]$Matches[1]
         $IcHavePre = $Matches[2]
-        if ($env:IC_VERSION -match '^v?(\d+\.\d+\.\d+)(\S*)        $Ic = $IcDest
-        Add-IntenticPath -Folder $IcDir -Command 'ic'
-    } else {
-        Write-Host 'intentic: fetching the ic CLI...'
-        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
-        # five-megabyte download take several seconds instead of a fraction of one.
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
-            Move-Item -Force "$IcDest.tmp" $IcDest
-            $Ic = $IcDest
-            Add-IntenticPath -Folder $IcDir -Command 'ic'
-        } catch {
-            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
-            if (Test-Path $IcDest) {
-                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
-                $Ic = $IcDest
-            } else {
-                $installed = Get-Command ic -ErrorAction SilentlyContinue
-                if ($installed) {
-                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
-                    $Ic = $installed.Source
-                } else {
-                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
-                    exit 1
-                }
-            }
-        }
-    }
-}
-
-# One the platform does not know is ic's to say so; it fixes anyway, only unobserved.
-if ($Code) {
-    & $Ic sandbox fix --code $Code @IcArgs
-} else {
-    & $Ic sandbox fix @IcArgs
-}
-# ic's exit code stays in $LASTEXITCODE either way. `exit` only when this is a script file: pasted (irm | iex) or
-# wrapped in a scriptblock, `exit` ends the user's whole PowerShell session, and the window would close on the one
-# message that says what is left for them.
-if ($PSCommandPath) { exit $LASTEXITCODE }
-) {
+        if ($env:IC_VERSION -match '^v?(\d+\.\d+\.\d+)(\S*)$') {
             $IcPinCore = [version]$Matches[1]
             $IcCurrent = ($IcHaveCore -gt $IcPinCore) -or ($IcHaveCore -eq $IcPinCore -and (-not $IcHavePre -or $IcHavePre -eq $Matches[2]))
         }

@@ -329,6 +329,41 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     expect(snapshots.map((snapshot) => snapshot.trigger)).toContain("restore");
 });
 
+// Commit times are whole seconds off a clock that can be stepped back (a VM's, resynced); the timeline follows each
+// scope's parent chain, so a checkpoint taken after a step is still the newer one, and diffs against the one before it.
+test("integration: a checkpoint taken after the clock stepped back still diffs against the one before it", async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    const intent = join(work, "intent");
+    await mkdir(intent, { recursive: true });
+    await writeFile(join(work, "hello.txt"), "one\n");
+    await writeFile(join(intent, "deploy.config.ts"), "v1\n");
+    const sh = async (cwd: string, ...args: string[]) => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
+    await sh(intent, "init", "-q");
+    await sh(intent, "add", "-A");
+    await sh(intent, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot: join(base, "history"), logger });
+    const now = Math.floor(Date.now() / 1000);
+    try {
+        // The time git stamps a snapshot's commits with, read from the environment the history's git inherits.
+        process.env["GIT_COMMITTER_DATE"] = `${now + 60} +0000`;
+        const first = await history.snapshot("user");
+        process.env["GIT_COMMITTER_DATE"] = `${now} +0000`;
+        await writeFile(join(work, "hello.txt"), "two\n");
+        await writeFile(join(intent, "deploy.config.ts"), "v2\n");
+        const second = await history.snapshot("turn");
+
+        expect((await history.list()).map((snapshot) => snapshot.id)).toEqual([second ?? "", first ?? ""]);
+        const changes = await history.diff(second ?? "");
+        expect(changes).toHaveLength(2);
+        expect(changes).toContainEqual({ scope: "root", path: "hello.txt", status: "modified" });
+        expect(changes).toContainEqual({ scope: "intent", path: "deploy.config.ts", status: "modified" });
+    } finally {
+        delete process.env["GIT_COMMITTER_DATE"];
+    }
+});
+
 test("integration: a nested repo scopes under its slash id and restores after deletion", async () => {
     const base = await tempBase();
     const work = join(base, "work");

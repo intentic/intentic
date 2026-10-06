@@ -25,6 +25,19 @@ const signalRaced = (error: unknown): boolean => {
     return code === "ESRCH" || code === "EPERM";
 };
 
+// SIGTERM to one process: false when it was already gone (the goal), and any refusal signalRaced does not excuse thrown.
+const askToEnd = (pid: number): boolean => {
+    try {
+        process.kill(pid, "SIGTERM");
+        return true;
+    } catch (error) {
+        if (signalRaced(error)) {
+            return false;
+        }
+        throw error;
+    }
+};
+
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
 // turn registry reports it stopped, on one clock instead of one policy per resource kind. Archive and discard bypass
 // the grace and reap immediately, attached terminals included.
@@ -576,16 +589,10 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                     selfPid: process.pid,
                 }).filter((leftover) => leftover.owner === owner);
                 for (const leftover of mineToo) {
-                    try {
-                        process.kill(leftover.pid, "SIGTERM");
+                    if (askToEnd(leftover.pid)) {
                         asked.add(leftover.pid);
                         // Already past its grace: the next pass that still finds it sends the SIGKILL.
                         unownedSince.set(leftover.pid, now - processGraceMs);
-                    } catch (error) {
-                        // Already gone, which is the goal.
-                        if (!signalRaced(error)) {
-                            throw error;
-                        }
                     }
                 }
                 if (mineToo.length > 0) {

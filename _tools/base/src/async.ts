@@ -391,7 +391,7 @@ export const watchQueue = <T>({ signal, until, longestMs, now = Date.now }: Watc
             queue.push(value);
             nudge();
         },
-        drain: async function* () {
+        async *drain() {
             const deadline = setTimeout(end, Math.max(0, Math.min(until - now(), longestMs)));
             const unsubscribe = whenAborted(signal, end);
             try {

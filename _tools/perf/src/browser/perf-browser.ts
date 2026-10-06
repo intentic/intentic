@@ -89,8 +89,16 @@ try {
     // Vite optimises dependencies on the first load after --force and would reload a measured page for any it finds
     // late; the shell prefetches every view at idle, so one settled board finds them all.
     const warm = await Session.open(browser, server.origin, PROBE);
-    await warm.open("/demo/agents", 1_000);
-    await warm.close();
+    try {
+        await warm.open("/demo/agents", 1_000);
+    } catch (error) {
+        // The dev server reloading the page under the warm-up reads here as a destroyed context, and only its own output
+        // says why: a dependency scan that cannot resolve an import skips pre-bundling, so the first load finds every
+        // dependency late and Vite reloads the page to serve them.
+        throw new Error(`the demo did not settle on its first load; the demo server said:\n${server.log()}`, { cause: error });
+    } finally {
+        await warm.close();
+    }
     process.stderr.write(`demo up at ${server.origin} and warm in ${seconds(started)}\n`);
 
     for (const scenario of selected) {

@@ -4,10 +4,10 @@ import { Button, Icon, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { usePrivacyShield } from "../../sandbox/agent-settings/safety/usePrivacyShield";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { usePrivacyShield } from "../../../sandbox/agent-settings/safety/usePrivacyShield";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { privacyStanding } from "./privacyStanding";
-import { usePaneView } from "./useChat-view";
+import { usePaneView } from "../useChat-view";
 
 // The privacy shield's word on this conversation, above the composer: that its provider would be turned away before the
 // send rather than after it, with the narrow way through (this conversation only), and once that is granted a quiet line

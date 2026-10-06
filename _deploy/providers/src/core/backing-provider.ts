@@ -5,7 +5,7 @@ import { type EnvEntry, type HostFile, writeEnvOnce, writeHostFiles } from "./ho
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "./inputs.js";
 import { listStampedContainers } from "./list-stamped.js";
 import { type ContainerStamp, containerStampOf, observedStamp, stampOf } from "./stamp.js";
-import { type SshExecutor, type SshSession } from "./ssh.js";
+import type { SshExecutor, SshSession } from "./ssh.js";
 
 // A backing is a single-container compose project per instance (Postgres, Valkey, Garage, Authentik). The six
 // entry points below (read/diff/apply/delete/list/restamp) are the same shape for every kind; only the schema,

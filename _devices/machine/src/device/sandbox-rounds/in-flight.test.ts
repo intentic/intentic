@@ -1,5 +1,5 @@
 import { inFlightMarks } from "./in-flight.js";
-import { holdIcFlow, icInFlight, icSwapsInFlight } from "./sandboxes.js";
+import { holdIcFlow, icInFlight, icSwapsInFlight } from "../tools/sandboxes.js";
 
 test("two overlapping holds on one slug keep it marked until the last one is released", () => {
     const marks = inFlightMarks();

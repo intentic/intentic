@@ -13,7 +13,7 @@ import {
 import { type App, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
-import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import { RouterLinkStub } from "../../../../testing/routerLinkStub";
 
 const provider = ref(`cursor`);
 const capabilities = ref<AgentCapabilities>(CURSOR);
@@ -21,7 +21,7 @@ const queuePaused = ref<string | undefined>(undefined);
 const lastFailure = ref<{ code: string; text?: string } | undefined>(undefined);
 const resumeQueue = jest.fn(async () => {});
 const streaming = ref(false);
-jest.mock(`./useChat-view`, () => ({
+jest.mock(`../useChat-view`, () => ({
     usePaneView: () => ({
         conversation: shallowRef({ conversationId: `vivid-rowan-moks` }),
         provider,
@@ -34,7 +34,7 @@ jest.mock(`./useChat-view`, () => ({
 }));
 const reachable = ref(true);
 const active = ref<{ role: string } | undefined>({ role: `owner` });
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
 
 const policy = ref<PrivacyShieldPolicy>({ ...DEFAULT_PRIVACY_SHIELD, mode: `on` });
 const status = ref<PrivacyShieldStatus | undefined>(undefined);
@@ -49,7 +49,7 @@ const updatePolicy = jest.fn(async (change: (current: PrivacyShieldPolicy) => Pr
     written.push(policy.value);
     status.value = statusOf(policy.value);
 });
-jest.mock(`../../sandbox/agent-settings/safety/usePrivacyShield`, () => ({
+jest.mock(`../../../sandbox/agent-settings/safety/usePrivacyShield`, () => ({
     usePrivacyShield: () => ({ status, updatePolicy, isSaving: ref(false) }),
 }));
 // SAFETY: the stub renders the one prop the strip passes (`to`), which is all a RouterLink is asked for here.

@@ -22,11 +22,14 @@ const ocr = requires(ocrInstalled() && installed("pdftoppm"), `the PP-OCRv6 mode
 test.skipIf(!ocr.runs)(ocr.title("a masked image read again holds the token where the value was, and the rest as it was"), async () => {
     const value = pesel(1985, 3, 14);
     const dir = await mkdtemp(join(tmpdir(), "privacy-mask-"));
+    // One reader for both reads, released at the end: its model sessions are native memory that the one process every
+    // integration file of the package runs in would otherwise hold to the end of the run.
+    const reader = await loadTextReader();
     try {
         await writeFile(join(dir, "page.pdf"), pdfWith(`PESEL: ${value} Faktura 12/2026`));
         execFileSync("pdftoppm", ["-r", "200", "-png", "-singlefile", join(dir, "page.pdf"), join(dir, "page")]);
         const image = await readFile(join(dir, "page.png"));
-        const readers = createLocalReaders({ textReader: () => loadTextReader() });
+        const readers = createLocalReaders({ textReader: async () => reader });
         const reading = await readers.readImage(image);
         if (reading === undefined) {
             throw new Error("the page did not read");
@@ -55,6 +58,7 @@ test.skipIf(!ocr.runs)(ocr.title("a masked image read again holds the token wher
         expect(text).toContain("PESEL");
         expect(text).toContain("Faktura 12/2026");
     } finally {
+        await reader?.release();
         await rm(dir, { recursive: true, force: true });
     }
 });

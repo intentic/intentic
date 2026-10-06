@@ -4,7 +4,6 @@ import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
-import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
 // The ssh block is the control-plane host's, the admin API is reached over an SSH port-forward.

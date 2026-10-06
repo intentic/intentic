@@ -1,6 +1,6 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
-import { type SshExecutor, type SshSession } from "../core/ssh.js";
+import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "../services/compose-service.js";
 

@@ -16,7 +16,7 @@ afterEach(() => {
     app = undefined;
     const { tabs, closeTabIds } = useWorkspaceTabs();
     closeTabIds(new Set(tabs.value.map((tab) => tab.id))).forEach((path) => useEditBuffers().forget(path));
-    for (const path of [...externalDirtyPaths.value]) {
+    for (const path of externalDirtyPaths.value) {
         setExternalDirty(path, false);
     }
     resetSandboxScope();

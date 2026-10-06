@@ -2,7 +2,7 @@ import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { containerId } from "./backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "./inputs.js";
-import { type SshExecutor, type SshSession } from "./ssh.js";
+import type { SshExecutor, SshSession } from "./ssh.js";
 
 // One app's slice of a shared backing (a Postgres database+role, a Valkey ACL user, a Garage bucket+key); reaches
 // into the instance's container over SSH + `docker exec` rather than owning one. A missing container reads as

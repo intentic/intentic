@@ -144,4 +144,9 @@
 // `badge: true`, since the asks are the badge's count spelled out. Additive: a view that declares none is unchanged,
 // and an older host ignores the field. The recorded surface grows a grain for it, ViewRegistration's own fields
 // (`viewRegistration`).
-export const extensionApiVersion = "2.23.0";
+// 2.24.0 adds the `phone` capability kind: a phone family the user connects their own phone of, through an app installed
+// on it (`install`, where that app comes from), with a SKILL.md teaching the agent to work on that phone, the way a
+// `webext` card stands for a browser family. Additive, but a manifest declaring one needs this version: an older host
+// knows no such kind and refuses the whole manifest at parse. No member or top-level key was added, so the manifest
+// digest is the only grain that records it.
+export const extensionApiVersion = "2.24.0";

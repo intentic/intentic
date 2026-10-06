@@ -324,8 +324,6 @@ export const createWorkspaceHistory = (
     interface HistoryIndex {
         // Every snapshot group, newest first, hidden interval captures included (restore/stateAt need them).
         readonly groups: SnapshotGroup[];
-        // scope name → its full snapshot log, newest first, backs stateAt without re-running `git log`.
-        readonly logs: Map<string, ScopeCommit[]>;
     }
 
     // Caches historyIndex(): invalidated when a snapshot records a change or a restore runs, and past INDEX_MAX_MS.
@@ -338,11 +336,12 @@ export const createWorkspaceHistory = (
         }
         // Taken as the logs are read, so a snapshot landing mid-read leaves the result stale rather than trusted.
         indexRead.taken();
-        const logs = new Map<string, ScopeCommit[]>();
+        // Per scope, each snapshot id's place in that scope's log, newest first: 0 is its head.
+        const positions: Map<string, number>[] = [];
         const byId = new Map<string, { id: string; at: number; trigger: SnapshotTrigger; label?: string; commits: Map<string, string> }>();
         for (const scope of await knownScopes()) {
             const log = await scopeLog(scope);
-            logs.set(scope.name, log);
+            positions.push(new Map(log.map((commit, index) => [commit.id, index])));
             for (const commit of log) {
                 const group = byId.get(commit.id) ?? {
                     id: commit.id,
@@ -356,22 +355,21 @@ export const createWorkspaceHistory = (
                 byId.set(commit.id, group);
             }
         }
-        // Commit timestamps are whole seconds, so two snapshots in one second tie; a scope's own log is the parent
-        // chain, which orders them for real. Newest first.
+        // Newest first, in the order the snapshots were taken. A scope's own log is its parent chain, which orders two
+        // snapshots for real wherever one log holds both; their commit times only order two that no log holds together,
+        // since they are whole seconds and come from a clock that can be stepped back: ordered by time first, a checkpoint
+        // taken after such a step read as older than the one before it, and diffed against the empty tree.
         const newestFirst = (a: SnapshotGroup, b: SnapshotGroup): number => {
-            if (a.at !== b.at) {
-                return b.at - a.at;
-            }
-            for (const log of logs.values()) {
-                const left = log.findIndex((commit) => commit.id === a.id);
-                const right = log.findIndex((commit) => commit.id === b.id);
-                if (left !== -1 && right !== -1 && left !== right) {
+            for (const log of positions) {
+                const left = log.get(a.id);
+                const right = log.get(b.id);
+                if (left !== undefined && right !== undefined && left !== right) {
                     return left - right;
                 }
             }
-            return 0;
+            return b.at - a.at;
         };
-        indexCache = { groups: [...byId.values()].toSorted(newestFirst), logs };
+        indexCache = { groups: [...byId.values()].toSorted(newestFirst) };
         return indexCache;
     };
 
@@ -387,10 +385,17 @@ export const createWorkspaceHistory = (
         return visible[position + 1];
     };
 
-    // A scope's commit at-or-before a group's moment: its own commit there, else the most recent earlier one. undefined
-    // means the scope didn't exist yet.
-    const stateAt = async (scope: Scope, group: SnapshotGroup): Promise<string | undefined> =>
-        group.commits.get(scope.name) ?? ((await historyIndex()).logs.get(scope.name) ?? []).find((commit) => commit.at <= group.at)?.sha;
+    // A scope's commit at-or-before a group's place on the timeline: its own commit there, else the one of the nearest
+    // older group that has one (by the timeline's order, not the clock's). undefined means the scope didn't exist yet.
+    const stateAt = async (scope: Scope, group: SnapshotGroup): Promise<string | undefined> => {
+        const own = group.commits.get(scope.name);
+        if (own !== undefined) {
+            return own;
+        }
+        const { groups } = await historyIndex();
+        const position = groups.findIndex((candidate) => candidate.id === group.id);
+        return position === -1 ? undefined : groups.slice(position + 1).find((older) => older.commits.has(scope.name))?.commits.get(scope.name);
+    };
 
     const STATUS_BY_LETTER: Record<string, SnapshotChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
 

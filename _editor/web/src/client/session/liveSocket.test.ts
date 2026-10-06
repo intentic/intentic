@@ -1,7 +1,7 @@
 // A live socket keeps itself alive: it dials again after a drop, lets a replaced channel go quiet, closes one that has
 // stopped answering, and cuts a wait short when the sandbox comes back. Each case drives the channel's side by hand.
 import "@intentic/testing/dom";
-import { waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 import { liveSocket, type LiveChannel, type LiveLink, type LiveSocketOptions } from "./liveSocket";
 
@@ -42,6 +42,7 @@ afterEach(() => {
     for (const socket of live.splice(0)) {
         socket.dispose();
     }
+    jest.useRealTimers();
 });
 
 test("a dropped channel is dialled again with a fresh address, and the drop is told once", async () => {
@@ -109,15 +110,27 @@ test("a channel that opens after it was replaced is closed rather than adopted",
 });
 
 test("an open channel is pinged, and one that stops answering is closed so it can be dialled again", async () => {
+    // On the fake clock each ping tick lands where the test steps it: on the real one a poll fell either side of a tick.
+    jest.useFakeTimers();
     const { live: socket, dialled } = harness();
     live.push(socket);
     socket.connect();
     await waitFor(() => expect(dialled).toHaveLength(1));
     dialled[0]!.link.opened();
 
-    await waitFor(() => expect(dialled[0]!.sent).toContainEqual({ type: `ping` }));
-    // Nothing heard since it opened: past the silence bound, the next ping tick closes it instead.
-    await waitFor(() => expect(dialled[0]!.closes).toBe(1), { timeout: 2_000 });
+    await advanceTimersByTimeAsync(FAST.pingMs);
+    expect({ sent: dialled[0]!.sent, closes: dialled[0]!.closes }).toEqual({ sent: [{ type: `ping` }], closes: 0 });
+    // Nothing heard since it opened: the first tick past the silence bound closes it instead of pinging.
+    await advanceTimersByTimeAsync(FAST.staleMs);
+    expect(dialled[0]!.closes).toBe(1);
+    // The harness's close never comes back, as a half-open socket's may not for a while: it is not pinged or closed again.
+    await advanceTimersByTimeAsync(FAST.pingMs * 5);
+    expect({ pings: dialled[0]!.sent.length, closes: dialled[0]!.closes }).toEqual({ pings: 2, closes: 1 });
+
+    // Its close arriving at last is a drop like any other, dialled again on the ladder's first rung.
+    dialled[0]!.link.closed(1006, ``);
+    await advanceTimersByTimeAsync(FAST.maxRetryMs);
+    await waitFor(() => expect(dialled).toHaveLength(2));
 });
 
 test("a channel that keeps answering is never closed for silence", async () => {

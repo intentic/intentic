@@ -151,12 +151,12 @@ export const planCommand = buildCommand<PlanFlags>({
                 lastActivity = "scanning retired hosts";
                 retired = (
                     await scanRetiredHosts(previous?.retiredHosts ?? [], { ssh, env: process.env, owner, providers: engineConfig.providers })
-                ).map((scan) => ({
-                    id: scan.host.id,
-                    address: scan.host.address,
-                    leftovers: scan.leftovers.map(({ id, type }) => ({ id, type })),
-                    unowned: scan.unowned,
-                    ...(scan.error !== undefined ? { error: scan.error } : {}),
+                ).map((hostScan) => ({
+                    id: hostScan.host.id,
+                    address: hostScan.host.address,
+                    leftovers: hostScan.leftovers.map(({ id, type }) => ({ id, type })),
+                    unowned: hostScan.unowned,
+                    ...(hostScan.error !== undefined ? { error: hostScan.error } : {}),
                 }));
             } else {
                 out.text("");
