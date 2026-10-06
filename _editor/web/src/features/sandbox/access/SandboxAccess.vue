@@ -72,6 +72,9 @@ const rosterChanged = (next: InviteRecord[]): void => {
     void queryClient.invalidateQueries({ queryKey: SANDBOX_MEMBERS.of() });
 };
 const email = ref(``);
+// An invite is being written once an address is: the form's scope line waits for that, and a pick it held from a
+// previous invite comes back with the next address rather than standing on the page with nobody to apply to.
+const composing = computed(() => email.value.trim().length > 0);
 
 // Tiers an invite can grant, nested order, shared by the invite form and every roster row's <Picker>.
 const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
@@ -214,9 +217,13 @@ const load = async (): Promise<void> => {
         const [invited, granted] = await Promise.all([
             apiClient.invite.list({ sandboxId: id }),
             sandboxJson<{ members: AccessGrant[] }>(`/members`).catch((err: unknown): undefined => {
-                grantsUnread.value = noticeFrom(err, `Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`, {
-                    tone: `warning`,
-                });
+                grantsUnread.value = noticeFrom(
+                    err,
+                    `Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`,
+                    {
+                        tone: `warning`,
+                    },
+                );
                 return undefined;
             }),
         ]);
@@ -586,15 +593,23 @@ const revoke = async (target: string): Promise<void> => {
                                 <Icon name="exclamation-triangle" class="text-2xs" />
                                 {{ t(`sandbox.sandboxAccess.enterValidEmailAddress`) }}
                             </span>
-                            <!-- Fence pickers only when the sandbox has named areas; unnarrowed is the default, and
-                                 the empty case is explained from a member row's Areas control. -->
-                            <AreaPicker
-                                v-if="inviteRole !== 'maintainer' && sandboxAreas.length > 0"
-                                :picked="inviteAreas"
-                                :role="inviteRole"
-                                :disabled="busy"
-                                @change="(areas) => (inviteAreas = areas)"
-                            />
+                            <!-- The invite's scope, only once there is an invite: drawn at rest it read as a setting
+                                 for everybody rather than the next part of this one. Only when the sandbox has named
+                                 areas; unnarrowed is the default, and the empty case is explained from a member
+                                 row's Areas control. -->
+                            <template v-if="composing && sandboxAreas.length > 0">
+                                <span v-if="inviteRole === 'maintainer'" class="text-2xs text-subtle">{{
+                                    t(`sandbox.sandboxAccess.maintainerUnfenced`)
+                                }}</span>
+                                <AreaPicker
+                                    v-else
+                                    :picked="inviteAreas"
+                                    :role="inviteRole"
+                                    :disabled="busy"
+                                    class="pt-0.5"
+                                    @change="(areas) => (inviteAreas = areas)"
+                                />
+                            </template>
                         </form>
                     </div>
                 </RowNote>

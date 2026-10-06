@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import type { GrantedRole } from "@intentic/sandbox-contract";
-import { StatusBadge } from "@intentic/ui";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAreas } from "../areas/useAreas";
 import { usePersonaReach } from "./usePersonaReach";
 import { useT } from "@intentic/ui/i18n";
 
-// Which parts of the workspace this person reaches: one switch per area the sandbox has named. Naming none is the
-// whole workspace, which is what every grant means until somebody narrows it — so an all-off picker is a real
-// answer, not an unfinished one, and the line under it says which.
-// The fence is also the only thing deciding which assistants they may talk to, so the line under the switches names
+// Which parts of the workspace ONE person reaches, read as a sentence that finishes the role picked beside it:
+// "Sees — Whole workspace", "Talks to assistants in — Support desk". The lead changes with the tier, so the line
+// reads as this grant's own scope rather than a setting for everybody, and the chips are picks, not switches: a
+// switch reads as something that is on for the whole sandbox.
+// The fence is also the only thing deciding which assistants they may talk to, so the line under the chips names
 // them: this is the one control whose consequence is not readable off the control itself.
 
 const t = useT();
@@ -31,36 +30,84 @@ const needsOne = computed(() => role === `writer` || role === `guest`);
 // A guest reaches its assistants and nothing else, so a fence that holds none is a grant with nothing behind it.
 const strandsDesk = computed(() => role === `guest` && held.value.length > 0 && reached.value.length === 0);
 
-const toggle = (id: string, on: boolean): void => {
-    const next = on ? [...new Set([...held.value, id])] : held.value.filter((area) => area !== id);
-    // Switching the last one off gives the workspace back rather than fencing them to nothing: nobody presses a
-    // toggle meaning to end up seeing no files at all, and "no fence" is the state this page started in.
+// The verb that finishes the role's sentence. Maintainer never gets here (that tier cannot be fenced), so it shares
+// the collaborator's words rather than owning a message nothing would draw.
+const LEAD: Record<GrantedRole, () => string> = {
+    viewer: () => t(`sandbox.sandboxAccess.areaLeadViewer`),
+    collaborator: () => t(`sandbox.sandboxAccess.areaLeadCollaborator`),
+    writer: () => t(`sandbox.sandboxAccess.areaLeadWriter`),
+    guest: () => t(`sandbox.sandboxAccess.areaLeadGuest`),
+    maintainer: () => t(`sandbox.sandboxAccess.areaLeadCollaborator`),
+};
+const lead = computed(() => LEAD[role]());
+
+// Who each area hands a guest, on the chip itself: for that tier the assistants ARE the access, so an area nobody
+// works in reads as the dead end it is before it is picked rather than after.
+const reachOf = (id: string): string => {
+    const names = namesOf([id]);
+    return names.length === 0 ? t(`sandbox.sandboxAccess.areaNoAssistant`) : names.join(`, `);
+};
+// Every area a dead end for a guest: said once, up front, instead of letting the owner find it chip by chip.
+const nobodyAnywhere = computed(() => role === `guest` && areas.value.every((area) => namesOf([area.id]).length === 0));
+
+const toggle = (id: string): void => {
+    const next = held.value.includes(id) ? held.value.filter((area) => area !== id) : [...new Set([...held.value, id])];
+    // Picking the last one off gives the workspace back rather than fencing them to nothing: nobody presses a chip
+    // meaning to end up seeing no files at all, and "no fence" is the state this picker started in.
     emit(`change`, next.length === 0 ? undefined : next);
 };
 </script>
 
 <template>
-    <div class="flex flex-col gap-2">
-        <span class="text-xs text-subtle">{{ t(`sandbox.sandboxAccess.areaPick`) }}</span>
+    <div class="flex flex-col gap-1.5">
         <p v-if="areas.length === 0" class="text-xs text-subtle">
             {{ t(`sandbox.sandboxAccess.noAreasToGrant`) }}
             <RouterLink to="/sandbox/areas" class="underline">{{ t(`sandbox.sandboxAccess.nameOne`) }}</RouterLink>
         </p>
-        <label v-for="area in areas" :key="area.id" class="flex items-center justify-between gap-3">
-            <span class="flex min-w-0 flex-col">
-                <span class="flex min-w-0 items-baseline gap-1.5">
-                    <span class="truncate text-sm text-content">{{ area.label ?? area.id }}</span>
-                    <StatusBadge variant="neutral" size="xs">{{ area.folders.join(`, `) }}</StatusBadge>
-                </span>
-                <span v-if="area.brief !== undefined" class="truncate text-2xs text-subtle">{{ area.brief }}</span>
-            </span>
-            <ToggleSwitch :model-value="held.includes(area.id)" :disabled="disabled" @update:model-value="(on: boolean) => toggle(area.id, on)" />
-        </label>
+        <template v-else>
+            <div role="group" :aria-label="lead" class="flex flex-wrap items-center gap-1.5">
+                <span class="mr-0.5 text-xs text-subtle">{{ lead }}</span>
+                <!-- The unfenced answer as a pick of its own, where a tier may have it: "nothing on" read as "nothing
+                     granted", which is the opposite of what it means. -->
+                <button
+                    v-if="!needsOne"
+                    type="button"
+                    class="ui-chip"
+                    :class="picked === undefined ? `ui-chip-on` : ``"
+                    :aria-pressed="picked === undefined"
+                    :disabled="disabled"
+                    @click="emit(`change`, undefined)"
+                >
+                    <Icon :name="picked === undefined ? `check` : `globe`" class="text-2xs" />
+                    {{ t(`sandbox.sandboxAccess.wholeWorkspace`) }}
+                </button>
+                <button
+                    v-for="area in areas"
+                    :key="area.id"
+                    v-tooltip.top="{ title: area.folders.join(`, `), note: area.brief }"
+                    type="button"
+                    class="ui-chip"
+                    :class="held.includes(area.id) ? `ui-chip-on` : ``"
+                    :aria-pressed="held.includes(area.id)"
+                    :disabled="disabled"
+                    @click="toggle(area.id)"
+                >
+                    <Icon v-if="held.includes(area.id)" name="check" class="text-2xs" />
+                    {{ area.label ?? area.id }}
+                    <!-- The guest tier's own mark, not a separator: assistant labels carry their own middle dots. -->
+                    <span v-if="role === `guest`" class="inline-flex items-center gap-1 text-subtle">
+                        <Icon name="comments" class="text-2xs" />{{ reachOf(area.id) }}
+                    </span>
+                </button>
+            </div>
 
-        <!-- What the fence above hands over, in assistants. The refusals first: a tier that cannot be granted this way
-             says so before it says what the pick would mean. -->
-        <template v-if="areas.length > 0">
-            <span v-if="needsOne && held.length === 0" class="ui-field-error">{{
+            <!-- What the pick above hands over, in assistants. Guidance stays quiet until a pick is actually wrong: an
+                 empty pick on a tier that needs one is the next step, not a mistake. -->
+            <span v-if="nobodyAnywhere" class="text-2xs text-subtle">
+                {{ t(`sandbox.sandboxAccess.guestHasNobodyAnywhere`) }}
+                <RouterLink to="/sandbox/personas" class="underline">{{ t(`sandbox.sandboxAccess.giveAssistantFolder`) }}</RouterLink>
+            </span>
+            <span v-else-if="needsOne && held.length === 0" class="text-2xs text-subtle">{{
                 role === `guest` ? t(`sandbox.sandboxAccess.guestNeedsArea`) : t(`sandbox.sandboxAccess.writerNeedsArea`)
             }}</span>
             <span v-else-if="strandsDesk" class="ui-field-error">{{ t(`sandbox.sandboxAccess.noAssistantWorksHere`) }}</span>
