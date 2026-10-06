@@ -200,15 +200,16 @@ test("python's own pip, and uv's with --system, are image installs like pip itse
 });
 
 // A `cd` in a subshell, a command substitution or before a `popd` does not move the shell for what follows.
+const APP = `${WORKSPACE_ROOT}/app`;
 test.each<[string, { dir: string; ecosystem: "node" | "python" }[]]>([
-    ["(cd /tmp/scratch && pnpm install); pnpm install", [{ dir: "/tmp/scratch", ecosystem: "node" }, { dir: "/work/app", ecosystem: "node" }]],
-    ["(cd sub && ls); pnpm install", [{ dir: "/work/app", ecosystem: "node" }]],
-    ["pushd sub && npm i && popd && npm i", [{ dir: "/work/app/sub", ecosystem: "node" }, { dir: "/work/app", ecosystem: "node" }]],
-    ['cd "$(git rev-parse --show-toplevel)" && pnpm install', [{ dir: "/work/app", ecosystem: "node" }]],
-    ["cd $REPO && pnpm install", [{ dir: "/work/app", ecosystem: "node" }]],
-    ["bash -c 'cd sub && npm i'; npm i", [{ dir: "/work/app/sub", ecosystem: "node" }, { dir: "/work/app", ecosystem: "node" }]],
+    ["(cd /tmp/scratch && pnpm install); pnpm install", [{ dir: "/tmp/scratch", ecosystem: "node" }, { dir: APP, ecosystem: "node" }]],
+    ["(cd sub && ls); pnpm install", [{ dir: APP, ecosystem: "node" }]],
+    ["pushd sub && npm i && popd && npm i", [{ dir: `${APP}/sub`, ecosystem: "node" }, { dir: APP, ecosystem: "node" }]],
+    ['cd "$(git rev-parse --show-toplevel)" && pnpm install', [{ dir: APP, ecosystem: "node" }]],
+    ["cd $REPO && pnpm install", [{ dir: APP, ecosystem: "node" }]],
+    ["bash -c 'cd sub && npm i'; npm i", [{ dir: `${APP}/sub`, ecosystem: "node" }, { dir: APP, ecosystem: "node" }]],
 ])("an install is located where its own shell stands: %s", (command, expected) => {
-    expect(projectInstallsOf(command, "/work/app")).toEqual(expected);
+    expect(projectInstallsOf(command, APP)).toEqual(expected);
 });
 
 test("a project install carried in the current tmux wrapper is still found", () => {

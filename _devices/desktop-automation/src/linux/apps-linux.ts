@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { looksLikeUrl, parseSwayTree, parseWmctrl, parseXwininfoTree, withAbsoluteBounds } from "./parse.js";
-import { environment, has, run } from "./run.js";
-import { isWayland } from "./screen.js";
-import { DesktopError, type WindowInfo } from "./types.js";
+import { looksLikeUrl, parseSwayTree, parseWmctrl, parseXwininfoTree, withAbsoluteBounds } from "../parse.js";
+import { environment, has, run } from "../run.js";
+import { isWayland } from "../screen.js";
+import { DesktopError, type WindowInfo } from "../types.js";
 import { XDOTOOL_INSTALL } from "./input-linux.js";
 
 // Linux window listing/control. X11 uses wmctrl/xdotool. Wayland mostly refuses by design (a compositor won't let

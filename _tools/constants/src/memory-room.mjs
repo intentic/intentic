@@ -59,8 +59,9 @@ export const TEST_PROCESS_BYTES = Object.freeze({
     // One bun worker on the web package at its peak (measured 2026-09-25: 2.4 to 3.2 GiB over the web suite), the size a
     // lone `suites` run sizes to.
     standaloneWorker: 3 * GIB,
-    // One typecheck task: most packages' tsgo or vue-tsc settle under 1 GiB, the web package's vue-tsc may take its 4 GiB
-    // heap, and at most one of those runs among the others.
+    // One typecheck task: most packages' tsgo or vue-tsc settle under 1 GiB, the web package's vue-tsc may take its 6 GiB
+    // heap (measured 2026-10-06: 4.8 GiB from no build info, 1 GiB of it vue-i18n's `t` checked against the catalog), and
+    // at most one of those runs among the others.
     typecheck: 2 * GIB,
     // Past this one process is a leak, not a suite: twice the largest worker measured. On 2026-09-25 a single bun process
     // reached 14.7 GiB resident plus 31 GiB of swap, twice in one day, and stalled every conversation on the sandbox.

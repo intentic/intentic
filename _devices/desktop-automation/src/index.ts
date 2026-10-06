@@ -1,15 +1,15 @@
-import { linuxApps } from "./apps-linux.js";
-import { windowsApps } from "./apps-windows.js";
+import { linuxApps } from "./linux/apps-linux.js";
+import { windowsApps } from "./windows/apps-windows.js";
 import { CuaClient, cuaDesktop, findCuaDriver } from "./cua.js";
-import { windowsElements } from "./elements-windows.js";
-import { linuxInput } from "./input-linux.js";
-import { windowsInput } from "./input-windows.js";
-import { windowsNotice } from "./notice-windows.js";
+import { windowsElements } from "./windows/elements-windows.js";
+import { linuxInput } from "./linux/input-linux.js";
+import { windowsInput } from "./windows/input-windows.js";
+import { windowsNotice } from "./windows/notice-windows.js";
 import { withEnvironment } from "./run.js";
 import { capture, displays, frame } from "./screen.js";
 import { type Desktop, DesktopError, type Notice, type NoticeEvents } from "./types.js";
 
-export { windowsSession } from "./apps-windows.js";
+export { windowsSession } from "./windows/apps-windows.js";
 export { CuaClient, cuaDesktop, cuaDriverCandidates, cuaKey, findCuaDriver, parseCuaElements, parseCuaWindows } from "./cua.js";
 export { parseChord, windowsChord, wtypeArgs, xdotoolChord, type Chord, type Modifier } from "./keys.js";
 export { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";

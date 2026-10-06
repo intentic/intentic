@@ -145,6 +145,7 @@ export interface DevRoots {
 
 // Whether a path, once every link on it is followed, is still inside `base` (itself already resolved).
 const staysWithin = async (base: string, path: string): Promise<boolean> => {
+    // allow(silent-catch): a link that cannot be followed (a loop, a refusal) is not shown to stay inside, so it is held
     const resolved = await realpath(path).catch(() => undefined);
     return resolved !== undefined && placeIn(base, resolved) !== undefined;
 };

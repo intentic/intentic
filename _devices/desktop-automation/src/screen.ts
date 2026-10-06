@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { parseDisplaysJson, parseSwayOutputs, parseXrandrMonitors } from "./parse.js";
 import { environment, has, run } from "./run.js";
 import { DesktopError, type DisplayInfo, type Rect, type ScreenFrame } from "./types.js";
-import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
+import { WINDOWS_DPI_AWARE } from "./windows/windows-dpi.js";
 
 // Screen capture and geometry across platforms. Capture tries a list of candidate tools in order, since each
 // platform's screenshot program varies; a total failure names what to install. PNG goes to a temp file rather than

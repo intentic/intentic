@@ -2573,7 +2573,7 @@
           "what": "the Desktop interface and the coordinate model."
         },
         {
-          "path": "_devices/desktop-automation/src/input-windows.ts",
+          "path": "_devices/desktop-automation/src/windows/input-windows.ts",
           "what": "pointer and keyboard through user32 from PowerShell."
         },
         {
@@ -2581,11 +2581,11 @@
           "what": "screenshots as frames: fitting, ids, and mapping points back to the desktop."
         },
         {
-          "path": "_devices/desktop-automation/src/elements-windows.ts",
+          "path": "_devices/desktop-automation/src/windows/elements-windows.ts",
           "what": "a window's controls through UI Automation."
         },
         {
-          "path": "_devices/desktop-automation/src/notice-windows.ts",
+          "path": "_devices/desktop-automation/src/windows/notice-windows.ts",
           "what": "the on-screen notice and its hotkey."
         }
       ],

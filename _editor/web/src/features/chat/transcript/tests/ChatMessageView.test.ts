@@ -227,6 +227,8 @@ jest.mock("../../panel/useChat-view", () => {
             editing: computed(() => pane.editing),
             messages: computed(() => pane.messages),
             queued: computed(() => pane.queued),
+            // Nothing here is booked for later, so what waits on the hold is the whole queue.
+            waiting: computed(() => pane.queued),
             queuePaused: computed(() => queueHold.paused),
             // No card says anything about the last turn here: the rows under test say it themselves.
             lastFailure: computed(() => undefined),

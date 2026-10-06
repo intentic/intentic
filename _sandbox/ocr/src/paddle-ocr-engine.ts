@@ -75,7 +75,16 @@ const THREADS = 4;
 export const loadOcrEngine = async (dir: string): Promise<OcrEngine> => {
     // Loaded on first use: a sandbox that never reads an image never maps the runtime's native library.
     const ort = await import("onnxruntime-node");
-    const options: InferenceSession.SessionOptions = { intraOpNumThreads: THREADS, interOpNumThreads: 1, graphOptimizationLevel: "all" };
+    // No arena and no memory pattern: with them each session keeps buffers sized to the largest image it has read, and
+    // reading a 4000 x 3000 photo took the process to 5.7 GiB; without them it peaked at 2.6 GiB, and no slower
+    // (measured 2026-10-06 over paddle-ocr.integration.test.ts).
+    const options: InferenceSession.SessionOptions = {
+        intraOpNumThreads: THREADS,
+        interOpNumThreads: 1,
+        graphOptimizationLevel: "all",
+        enableCpuMemArena: false,
+        enableMemPattern: false,
+    };
     const [detector, recognizer, alphabet] = await Promise.all([
         ort.InferenceSession.create(join(dir, ...DETECTOR), options),
         ort.InferenceSession.create(join(dir, ...RECOGNIZER), options),

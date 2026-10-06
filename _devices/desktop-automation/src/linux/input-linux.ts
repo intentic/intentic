@@ -1,7 +1,7 @@
-import { wtypeArgs, xdotoolChord } from "./keys.js";
-import { has, run, runOutput } from "./run.js";
-import { isWayland } from "./screen.js";
-import { DesktopError, type MouseButton, type Point, type ScrollDirection } from "./types.js";
+import { wtypeArgs, xdotoolChord } from "../keys.js";
+import { has, run, runOutput } from "../run.js";
+import { isWayland } from "../screen.js";
+import { DesktopError, type MouseButton, type Point, type ScrollDirection } from "../types.js";
 
 // Linux input is two backends: xdotool on X11, where any client can synthesise input. Wayland blocks that, so
 // ydotool writes to /dev/uinput (needs the input group or a daemon) and wtype covers text/keys without it via the

@@ -1,7 +1,7 @@
 {
     "_deploy/cli/src/sandbox-run/sandbox-run.command.integration.test.ts": 1,
-    "_editor/web/src/features/chat/tabs/HoverCard.test.ts": 1,
     "_editor/web/src/features/chat/session/conversation.test.ts": 1,
+    "_editor/web/src/features/chat/tabs/HoverCard.test.ts": 1,
     "_editor/web/src/features/sandbox/extensions/useManifestProblems.test.ts": 2,
     "_editor/web/src/features/sandbox/personas/SandboxPersonas.test.ts": 1,
     "_editor/web/src/features/sandbox/secrets/SandboxSecrets.test.ts": 1,
@@ -42,7 +42,6 @@
     "_sandbox/sandbox/src/sessions/turn-transcript.test.ts": 4,
     "_sandbox/sandbox/src/settings/skill-inventory.integration.test.ts": 4,
     "_sandbox/sandbox/src/share/share-payload.test.ts": 2,
-    "_sandbox/sandbox/src/share/share-publish.integration.test.ts": 5,
     "_sandbox/sandbox/src/system/invariant.integration.test.ts": 1,
     "_sandbox/sandbox/src/system/resources/queue-run.integration.test.ts": 1,
     "_sandbox/sandbox/src/workflows/handover-branches.test.ts": 11,

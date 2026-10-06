@@ -1,7 +1,7 @@
-import { focusRefusal, parseSessionJson, parseWindowsJson } from "./parse.js";
+import { focusRefusal, parseSessionJson, parseWindowsJson } from "../parse.js";
 import { psText } from "./powershell.js";
-import { run } from "./run.js";
-import { DesktopError, type SessionState, type WindowInfo } from "./types.js";
+import { run } from "../run.js";
+import { DesktopError, type SessionState, type WindowInfo } from "../types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
 
 // Windows window listing and focus, via PowerShell calls into user32.

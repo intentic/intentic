@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { SharePayload } from "@intentic/sandbox-contract";
 import { publishShare, shareRoot, unpublishShare } from "./share-publish.js";
 
@@ -19,11 +20,14 @@ const viewer = async (): Promise<string> => {
     return dir;
 };
 
-// A workspace with pictures a conversation showed, where agents actually put them.
+// Where agents actually put the pictures a conversation showed, relative to the workspace.
+const SHOTS = `${STATE_DIR}/records/artifacts/browser`;
+
+// A workspace with pictures a conversation showed.
 const workspace = async (): Promise<string> => {
     const dir = await mkdtemp(join(tmpdir(), "share-workspace-"));
-    await mkdir(join(dir, ".intentic/records/artifacts/browser"), { recursive: true });
-    await writeFile(join(dir, ".intentic/records/artifacts/browser/after.png"), "PNG-BYTES");
+    await mkdir(join(dir, SHOTS), { recursive: true });
+    await writeFile(join(dir, `${SHOTS}/after.png`), "PNG-BYTES");
     return dir;
 };
 
@@ -42,7 +46,7 @@ const exists = async (path: string): Promise<boolean> =>
 it("publishes a page, its pictures, and one copy of the viewer every share loads", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
     await publishShare(root, dist, "login-redirect-fix-3f9c", payload(), [
-        { source: ".intentic/records/artifacts/browser/after.png", published: "files/1-after.png" },
+        { source: `${SHOTS}/after.png`, published: "files/1-after.png" },
     ]);
 
     const share = join(shareRoot(root), "login-redirect-fix-3f9c");
@@ -57,7 +61,7 @@ it("publishes a page, its pictures, and one copy of the viewer every share loads
 // nothing at all where it could not be read.
 it("publishes a picture as the shield answers for it, and not at all where it answers nothing", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
-    await writeFile(join(root, ".intentic/records/artifacts/browser/unreadable.png"), "NOT-AN-IMAGE");
+    await writeFile(join(root, `${SHOTS}/unreadable.png`), "NOT-AN-IMAGE");
     const seen: string[] = [];
     await publishShare(
         root,
@@ -65,8 +69,8 @@ it("publishes a picture as the shield answers for it, and not at all where it an
         "chat-7a8b",
         payload(),
         [
-            { source: ".intentic/records/artifacts/browser/after.png", published: "files/1.png" },
-            { source: ".intentic/records/artifacts/browser/unreadable.png", published: "files/2.png" },
+            { source: `${SHOTS}/after.png`, published: "files/1.png" },
+            { source: `${SHOTS}/unreadable.png`, published: "files/2.png" },
         ],
         async (bytes) => {
             seen.push(bytes.toString("utf8"));
@@ -83,7 +87,7 @@ it("publishes a picture as the shield answers for it, and not at all where it an
 it("re-sharing replaces what was there, pictures included", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
     const id = "chat-1a2b";
-    await publishShare(root, dist, id, payload(), [{ source: ".intentic/records/artifacts/browser/after.png", published: "files/1-after.png" }]);
+    await publishShare(root, dist, id, payload(), [{ source: `${SHOTS}/after.png`, published: "files/1-after.png" }]);
     await publishShare(root, dist, id, payload(), []);
 
     expect(await exists(join(shareRoot(root), id, "index.html"))).toBe(true);
@@ -101,7 +105,7 @@ it("never copies a picture from outside the workspace", async () => {
 it("stop sharing takes the page and its pictures, and switches publishing off behind the last one", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
     await publishShare(root, dist, "chat-3c4d", payload(), [
-        { source: ".intentic/records/artifacts/browser/after.png", published: "files/1-after.png" },
+        { source: `${SHOTS}/after.png`, published: "files/1-after.png" },
     ]);
     await unpublishShare(root, "chat-3c4d");
 

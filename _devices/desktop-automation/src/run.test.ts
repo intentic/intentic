@@ -1,5 +1,5 @@
 import { run } from "./run.js";
-import { DesktopError } from "./types.js";
+import type { DesktopError } from "./types.js";
 
 /* What `run` says when a program fails, and which of those sentences may send someone off to install something. */
 

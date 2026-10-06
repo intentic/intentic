@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { spawnNotice } from "./notice-windows.js";
-import type { NoticeEvents } from "./types.js";
+import type { NoticeEvents } from "../types.js";
 
 /* The helper's plumbing, with a real process standing in for powershell.exe: it logs every line it is sent to a
    file, answers each "show" with a hotkey press, and in its two other modes dies at once or ignores "quit". */

@@ -149,7 +149,8 @@ const guardSnapshots = () => {
     }
     guarding = true;
     process.on("exit", () => {
-        for (const release of [...held]) {
+        // Each release deletes its own entry, which a Set's walk takes in its stride: the next one is still visited.
+        for (const release of held) {
             release();
         }
     });

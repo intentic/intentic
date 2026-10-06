@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { type Modifier, parseChord, windowsChord } from "./keys.js";
-import type { Notice, NoticeEvents } from "./types.js";
+import { type Modifier, parseChord, windowsChord } from "../keys.js";
+import type { Notice, NoticeEvents } from "../types.js";
 
 // The notice on Windows: one hidden powershell.exe hosting a WinForms window, told "show <text>" or "quit" on stdin
 // (end of input is quit) and answering "hotkey" or "hotkey-taken" on stdout. The window may never take focus, catch

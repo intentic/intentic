@@ -1,7 +1,7 @@
-import { windowsChord } from "./keys.js";
+import { windowsChord } from "../keys.js";
 import { psText } from "./powershell.js";
-import { run } from "./run.js";
-import type { MouseButton, Point, ScrollDirection } from "./types.js";
+import { run } from "../run.js";
+import type { MouseButton, Point, ScrollDirection } from "../types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
 
 // Windows input via PowerShell P/Invoke into user32.dll, not nut.js: its native addon cannot load from a

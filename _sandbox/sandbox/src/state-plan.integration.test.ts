@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { StatePlanSchema } from "@intentic/sandbox-contract";
+import { membersDocument } from "./auth/auth.js";
 import { conversionDigest, engineEpoch } from "./store/evolution/documents.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { newestRunDocument } from "./store/newest-run.js";
@@ -43,7 +44,9 @@ test("prints one plan line naming its format, conversion set and verdict, and wr
     expect(Object.keys(line)).toEqual(["plan", "version", "engine", "digest", "ok", "downgrade", "failures", "steps", "converts", "files"]);
     // The contract's schema for it, which ic's reader and the staged marker share, takes it whole and adds nothing.
     expect(StatePlanSchema.strict().safeParse(line).error?.issues).toBeUndefined();
-    // The pre-flight plans with exactly the registry the daemon's boot step converges with.
+    // The pre-flight plans with exactly the registry the daemon's boot step converges with. Fresh volumes need one write:
+    // the empty roster the identity move leaves, which is what keeps a roster planted in the workspace later from being
+    // brought over (identity-off-workspace.ts).
     expect(line).toEqual({
         plan: 1,
         version,
@@ -52,9 +55,9 @@ test("prints one plan line naming its format, conversion set and verdict, and wr
         ok: true,
         downgrade: false,
         failures: [],
-        steps: [],
+        steps: [{ document: "identity-off-workspace", change: `starts ${membersDocument.path} on the history volume with nobody on it` }],
         converts: [],
-        files: [],
+        files: [join(history, membersDocument.path)],
     });
     expect(await readdir(workspace)).toEqual([]);
     expect(await readdir(history)).toEqual([]);

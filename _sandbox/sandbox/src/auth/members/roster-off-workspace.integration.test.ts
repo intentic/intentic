@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { pino } from "pino";
 import { testConfig } from "../../testing.js";
@@ -21,7 +22,7 @@ test("a turn writing the workspace's identity files changes nobody's access", as
     const base = mkdtempSync(join(tmpdir(), "roster-off-workspace-"));
     const workspaceRoot = join(base, "work");
     const slice = createAuthSlice({ ...testConfig, historyRoot: join(base, "history") }, workspaceRoot, pino({ level: "silent" }));
-    const identity = join(workspaceRoot, ".intentic", "identity");
+    const identity = join(workspaceRoot, STATE_DIR, "identity");
 
     await put(join(identity, "members.json"), { members: [{ email: "mallory@example.com", role: "maintainer" }] });
     await put(join(identity, "owner.json"), { email: "mallory@example.com" });

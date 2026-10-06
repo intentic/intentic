@@ -141,7 +141,8 @@ export const minterBound = (tokens: ControlTokens, operates: (email: string) => 
         if (token?.createdBy === undefined) {
             return token;
         }
-        // An unreadable roster or owner file answers no: a token is never honoured on a standing nobody could check.
+        // allow(silent-catch): an unreadable roster or owner file answers no, so a token is never honoured on a standing
+        // nobody could check.
         return (await operates(token.createdBy).catch(() => false)) ? token : undefined;
     },
 });

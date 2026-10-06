@@ -19,14 +19,14 @@ const AT = BASE.slice(0, 9);
 
 const repo = (branch = "main") => {
     const root = mkdtempSync(join(tmpdir(), "verify-turn-"));
-    const run = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+    const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
     const commit = (subject) => {
-        run("add", "-A");
-        run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", subject);
-        return run("rev-parse", "HEAD");
+        git("add", "-A");
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", subject);
+        return git("rev-parse", "HEAD");
     };
-    run("init", "-q", "-b", branch);
-    return { root, run, commit };
+    git("init", "-q", "-b", branch);
+    return { root, git, commit };
 };
 
 test("each finding the change added is one line under its check, capped, with the command that prints the rest", () => {
@@ -97,16 +97,16 @@ test("a base that could not be asked judges nothing, rather than charging the ch
 });
 
 test("the base is where HEAD left the main line, or the commit --base names, and nothing when neither answers", () => {
-    const { root, run, commit } = repo();
+    const { root, git, commit } = repo();
     const other = repo("trunk");
     try {
         writeFileSync(join(root, "a.txt"), "a\n");
         const cut = commit("base");
-        run("checkout", "-q", "-b", "agent/x");
+        git("checkout", "-q", "-b", "agent/x");
         writeFileSync(join(root, "a.txt"), "b\n");
         commit("the agent's own commit");
         assert.equal(baseOf(root, undefined), cut);
-        assert.equal(baseOf(root, "HEAD"), run("rev-parse", "HEAD"));
+        assert.equal(baseOf(root, "HEAD"), git("rev-parse", "HEAD"));
         assert.equal(baseOf(root, "no-such-rev"), undefined);
         assert.equal(baseOf(root, ""), undefined);
         // No `main`, and no remote to ask: there is no base, which is not a failure.
@@ -134,7 +134,7 @@ test("the checks a base knew are read from its own manifest, and a base without 
 
 // A file the turn created is untracked until the work is committed, and most checks list their files with git.
 test("the checks' index lists a file nobody has added yet, leaves out what is ignored, and leaves the checkout's own alone", () => {
-    const { root, run, commit } = repo();
+    const { root, git, commit } = repo();
     const scratch = mkdtempSync(join(tmpdir(), "verify-turn-index-"));
     try {
         writeFileSync(join(root, ".gitignore"), "ignored.txt\n");
@@ -148,7 +148,7 @@ test("the checks' index lists a file nobody has added yet, leaves out what is ig
         const listed = (env) => execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8", env: { ...process.env, ...env } }).trim().split("\n");
         assert.deepEqual(listed({ GIT_INDEX_FILE: index }), [".gitignore", "a.txt", "src/new.ts"]);
         assert.deepEqual(listed({}), [".gitignore", "a.txt"]);
-        assert.equal(run("status", "--porcelain"), "M a.txt\n?? src/");
+        assert.equal(git("status", "--porcelain"), "M a.txt\n?? src/");
     } finally {
         rmSync(root, { recursive: true, force: true });
         rmSync(scratch, { recursive: true, force: true });
@@ -165,7 +165,7 @@ test("a --base that is no commit says so and exits 0: a run that cannot judge is
 
 // A moved file keeps its findings: git pairs the new path with the old one, through the index that lists new files too.
 test("the files the change moved are paired with where the base had them, committed or not", () => {
-    const { root, run: git, commit } = repo();
+    const { root, git, commit } = repo();
     const scratch = mkdtempSync(join(tmpdir(), "verify-turn-index-"));
     try {
         writeFileSync(join(root, "a.txt"), "one\ntwo\nthree\nfour\n");
@@ -189,7 +189,7 @@ test("the files the change moved are paired with where the base had them, commit
 
 // Exit 1 says "this change added findings"; a run that fell over says nothing about the change.
 test("a run that fails for a fault of its own says so on stderr and exits 0, never as a finding", async () => {
-    const { root, run: git, commit } = repo();
+    const { root, git, commit } = repo();
     const tmp = process.env.TMPDIR;
     const write = process.stderr.write;
     let said = "";
@@ -221,12 +221,15 @@ test("a run that fails for a fault of its own says so on stderr and exits 0, nev
 // The whole run over a checkout of its own, with a stand-in for the checks: one that finds a `.bad` file, as printed
 // `  - <path>:1 smell`. A finding main already has stays main's when its file is only moved.
 test("moving a file that already has a finding is not adding one, and a new one is", async () => {
-    const { root, run: git, commit } = repo();
+    const { root, git, commit } = repo();
     const outWrite = process.stdout.write;
     const errWrite = process.stderr.write;
     let out = "";
     const quiet = async (fn) => {
-        process.stdout.write = (text) => ((out += text), true);
+        process.stdout.write = (text) => {
+            out += text;
+            return true;
+        };
         process.stderr.write = () => true;
         try {
             return await fn();

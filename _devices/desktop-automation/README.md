@@ -26,11 +26,11 @@ flowchart LR
   recognises a capture identical to the newest. Past those limits a model API shrinks the image itself and every
   coordinate read off it lands short. The PNG decoding, cropping, area-average shrinking and encoding are pure
   TypeScript over `node:zlib` (`png.ts`), about 0.2 s for a 5760×2160 desktop.
-- Every Windows script declares itself per-monitor DPI-aware (v2) first (`windows-dpi.ts`). Without it, a 4K monitor at
+- Every Windows script declares itself per-monitor DPI-aware (v2) first (`windows/windows-dpi.ts`). Without it, a 4K monitor at
   150% reads as 2560×1440 and only its top-left part is ever captured. Only per-monitor v2, no older fallback: the
   system-wide `SetProcessDPIAware` reads a mixed-DPI desk wrong in a new way, and Defender rejected the script that
   carried both beside a screen copy (2026-10-05, on a 4K-at-150% monitor beside a 1920×1200 one).
-- `elements()` reads a window's controls through UI Automation (`elements-windows.ts`, Windows only): one cache request
+- `elements()` reads a window's controls through UI Automation (`windows/elements-windows.ts`, Windows only): one cache request
   over the whole subtree, from a C# helper PowerShell compiles, under a second for a VS Code window of 1330 controls.
   Chromium and Electron windows build their tree only once asked, so a bare first read is read again. An element is
   found again by its runtime id; `elementAct` invokes, sets, toggles, expands, collapses, selects or focuses it through
@@ -55,7 +55,7 @@ flowchart LR
 
 - [src/index.ts](src/index.ts) — `desktop()`: picks the backend for the current platform.
 - [src/types.ts](src/types.ts) — the `Desktop` interface and the coordinate model.
-- [src/input-windows.ts](src/input-windows.ts) — pointer and keyboard through user32 from PowerShell.
+- [src/windows/input-windows.ts](src/windows/input-windows.ts) — pointer and keyboard through user32 from PowerShell.
 - [src/frames.ts](src/frames.ts) — screenshots as frames: fitting, ids, and mapping points back to the desktop.
-- [src/elements-windows.ts](src/elements-windows.ts) — a window's controls through UI Automation.
-- [src/notice-windows.ts](src/notice-windows.ts) — the on-screen notice and its hotkey.
+- [src/windows/elements-windows.ts](src/windows/elements-windows.ts) — a window's controls through UI Automation.
+- [src/windows/notice-windows.ts](src/windows/notice-windows.ts) — the on-screen notice and its hotkey.

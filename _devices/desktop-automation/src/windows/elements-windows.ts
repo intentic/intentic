@@ -1,8 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { parseElementJson, parseElementTreeJson } from "./parse.js";
+import { parseElementJson, parseElementTreeJson } from "../parse.js";
 import { psText } from "./powershell.js";
-import { run } from "./run.js";
-import { DesktopError, type ElementAction, type ElementTree, type UiElement } from "./types.js";
+import { run } from "../run.js";
+import { DesktopError, type ElementAction, type ElementTree, type UiElement } from "../types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
 
 /* A window's controls through UI Automation, the accessibility API every Windows toolkit answers (Win32, WPF,

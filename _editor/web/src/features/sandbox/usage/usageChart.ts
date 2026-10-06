@@ -159,10 +159,14 @@ export interface SpendBucket {
 
 // Month names in the reader's language ("Mar 2024", "mar 2024"), read as a UTC calendar day so no timezone shifts it.
 const utcDay = (day: string): number => Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)) || 1);
-const monthLabel = (day: string): string =>
-    new Intl.DateTimeFormat(activeLocale.value, { month: `short`, year: `numeric`, timeZone: `UTC` }).format(utcDay(day));
-const dayLabel = (day: string): string =>
-    new Intl.DateTimeFormat(activeLocale.value, { month: `short`, day: `numeric`, timeZone: `UTC` }).format(utcDay(day));
+const utcDate = (day: string, options: Intl.DateTimeFormatOptions): string => {
+    // allow(format-tiers): the kit's dates are in the viewer's zone, which would move a UTC rollup day; this one is built
+    // per call from activeLocale, so a language change still reaches it.
+    const format = new Intl.DateTimeFormat(activeLocale.value, { ...options, timeZone: `UTC` });
+    return format.format(utcDay(day));
+};
+const monthLabel = (day: string): string => utcDate(day, { month: `short`, year: `numeric` });
+const dayLabel = (day: string): string => utcDate(day, { month: `short`, day: `numeric` });
 
 // Days anchor to themselves; weeks grid back from the window's last day; months to the 1st.
 const bucketStart = (day: string, bucket: Bucket, window: { from: string; to: string }): string => {

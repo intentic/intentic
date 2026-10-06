@@ -95,7 +95,11 @@ describe.skipIf(!x11.runs)(x11.title("the sandbox's desktop"), () => {
 describe.skipIf(!x11.runs)(x11.title("who is handed the sandbox's desktop"), () => {
     const mounted = (powers: { readonly browser: boolean; readonly shell: boolean }): string[] => {
         const opened: string[] = [];
-        const lease = { open: (mount: { readonly name: string }) => (opened.push(mount.name), { name: mount.name }) } as unknown as Pick<TurnLease, "open">;
+        const open = (mount: { readonly name: string }) => {
+            opened.push(mount.name);
+            return { name: mount.name };
+        };
+        const lease = { open } as unknown as Pick<TurnLease, "open">;
         desktopServersOf(lease, powers);
         return opened;
     };

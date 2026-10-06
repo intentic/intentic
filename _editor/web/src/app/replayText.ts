@@ -129,24 +129,34 @@ const compile = (template: string): Template => {
     return made;
 };
 
-// Our wording with each value judged on its own, or undefined when no template of ours reads this way.
+// How much of a template is its own wording rather than room for a value.
+const wording = (template: Template): number => template.literals.join(``).length;
+
+// Our wording with each value judged on its own, or undefined when no template of ours reads this way. Of the templates
+// that read this way the one with the most wording wins: "Installing {name}" would read all of "Installing my-laptop on
+// this device" as a name, where "Installing {what} on this device" keeps the sentence and judges only the value.
 const fillTemplate = (words: string, depth: number): string | undefined => {
     const { byWord } = indexOfTemplates();
     const tried = new Set<string>();
+    let best: { template: Template; values: RegExpExecArray } | undefined;
     for (const word of new Set(words.split(` `))) {
         for (const template of byWord.get(word) ?? []) {
             if (tried.has(template)) {
                 continue;
             }
             tried.add(template);
-            const { literals, names, pattern } = compile(template);
-            const values = pattern.exec(words);
-            if (values !== null) {
-                return literals.map((literal, at) => (at === 0 ? literal : `${maskValue(names[at - 1] ?? ``, values[at] ?? ``, depth)}${literal}`)).join(``);
+            const made = compile(template);
+            const values = made.pattern.exec(words);
+            if (values !== null && (best === undefined || wording(made) > wording(best.template))) {
+                best = { template: made, values };
             }
         }
     }
-    return undefined;
+    if (best === undefined) {
+        return undefined;
+    }
+    const { template, values } = best;
+    return template.literals.map((literal, at) => (at === 0 ? literal : `${maskValue(template.names[at - 1] ?? ``, values[at] ?? ``, depth)}${literal}`)).join(``);
 };
 
 // One filled-in value, judged by what its placeholder is for and then by the rules for any text.

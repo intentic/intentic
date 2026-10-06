@@ -121,6 +121,7 @@ describe(`the database a platform boots on`, () => {
 
 describe(`watching the database under a running platform`, () => {
     const booted = { identity: `booted`, since: new Date(NOW) };
+    // Each read answers the next of `answers`, then the booted identity; `reads` counts the reads asked for.
     const reading = (answers: (string | Error)[]) => {
         const findUnique = jest.fn(async () => {
             const next = answers.shift() ?? `booted`;
@@ -129,22 +130,32 @@ describe(`watching the database under a running platform`, () => {
             }
             return { id: 1, identity: next, createdAt: new Date(NOW) };
         });
-        return unstubbed<PrismaClient>(`prisma`, { platformIdentity: delegate(`platformIdentity`, { findUnique }) });
+        return { prisma: unstubbed<PrismaClient>(`prisma`, { platformIdentity: delegate(`platformIdentity`, { findUnique }) }), reads: () => findUnique.mock.calls.length };
     };
-    const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+    // Until the watch has asked `count` times, however late a busy runner fires its timer. Each read answers at once, so
+    // by the time the watch asks again every earlier answer has been heard.
+    const readsReach = async (reads: () => number, count: number): Promise<void> => {
+        const deadline = Date.now() + 10_000;
+        while (reads() < count && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        expect(reads()).toBeGreaterThanOrEqual(count);
+    };
 
     it(`tells once, with the identity it found, when the database changes`, async () => {
         const onChange = jest.fn<(now: { identity: string; since: Date }) => void>();
-        const stop = watchPlatformIdentity(reading([`booted`, `another`, `another`]), booted, onChange, 5);
-        await settle();
+        const { prisma, reads } = reading([`booted`, `another`, `another`]);
+        const stop = watchPlatformIdentity(prisma, booted, onChange, 5);
+        await readsReach(reads, 4);
         stop();
         expect(onChange.mock.calls).toEqual([[{ identity: `another`, since: new Date(NOW) }]]);
     });
 
     it(`reads an unreachable database as no change`, async () => {
         const onChange = jest.fn<(now: { identity: string; since: Date }) => void>();
-        const stop = watchPlatformIdentity(reading([new Error(`connection refused`), new Error(`connection refused`)]), booted, onChange, 5);
-        await settle();
+        const { prisma, reads } = reading([new Error(`connection refused`), new Error(`connection refused`)]);
+        const stop = watchPlatformIdentity(prisma, booted, onChange, 5);
+        await readsReach(reads, 3);
         stop();
         expect(onChange).not.toHaveBeenCalled();
     });
