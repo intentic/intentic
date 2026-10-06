@@ -229,7 +229,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 </script>
 
 <template>
-    <div class="flex flex-col gap-2">
+    <div class="flex flex-col gap-4.5">
         <template v-for="item in items" :key="itemKey(item)">
             <!-- The idle band's own header: what these are, how many, and the way to see them. -->
             <div v-if="item.kind === `idle`" class="mt-3 flex min-w-0 flex-col gap-0.5 px-1">
