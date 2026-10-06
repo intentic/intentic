@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { highlightVersion } from "../../markdown/code.js";
-import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
+import { continueList, indentLines, insertLink, newlineInCode, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
 import { createMarkdownHistory, type EditKind } from "../../markdown/history.js";
 import { splitMarkdownBlocks } from "../../markdown/index.js";
 import type { MarkdownDecorator } from "../../markdown/render.js";
@@ -251,10 +251,14 @@ const holdHeight = (index: number): void => {
         if (!(each instanceof HTMLElement)) {
             return;
         }
+        // The attribute is what the stylesheet centres the source by: a keystroke rebuilds the element without what
+        // made it a picture (`data-md-drawn`), and the source must not jump to the top of its room when it does.
         if (held !== undefined && at === held.index) {
             each.style.setProperty(`--md-rest-height`, `${held.height}px`);
+            each.dataset[`mdHeld`] = ``;
         } else {
             each.style.removeProperty(`--md-rest-height`);
+            delete each.dataset[`mdHeld`];
         }
     });
 };
@@ -590,6 +594,19 @@ const onTabKey = (event: KeyboardEvent): void => {
     }
 };
 
+// Whether a source offset is inside code the caret's block holds (a fence's lines, raw HTML), short of the block's very
+// end: Enter there breaks a line of code, and at the end it still starts the paragraph after the block.
+const CODE = `.md-code-block, .md-src-verbatim`;
+const insideCode = (offset: number): boolean => {
+    const index = activeIndex();
+    const element = blockElements()[index];
+    const start = blockStarts()[index];
+    if (element === undefined || start === undefined || !(element.matches(CODE) || element.querySelector(CODE) !== null)) {
+        return false;
+    }
+    return offset > start && offset < start + blockBody(element).length;
+};
+
 const onEnterKey = (event: KeyboardEvent): void => {
     event.preventDefault();
     if (event.shiftKey) {
@@ -597,6 +614,10 @@ const onEnterKey = (event: KeyboardEvent): void => {
         return;
     }
     const at = selectionRange();
+    if (at !== undefined && insideCode(at.end)) {
+        apply(newlineInCode(text(), at.start, at.end), `typing`);
+        return;
+    }
     const continued = at?.start === at?.end && at !== undefined ? continueList(text(), at.start) : undefined;
     if (continued === undefined) {
         startBlock();

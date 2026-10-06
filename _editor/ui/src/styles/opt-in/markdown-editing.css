@@ -358,18 +358,14 @@
 }
 
 /* A BLOCK OPENED FROM ITS PICTURE keeps the room the picture took (`--md-rest-height`, measured by the surface as the caret arrives), its source centred in it, so the page under it does not jump as the reader clicks. It still grows past that room while typed in, and gives it back when the caret leaves. */
-.md-editing .md-block-active:is(.md-src-rich, .md-code-block, .md-src-trailed) {
+.md-editing .md-block-active[data-md-held] {
     min-height: var(--md-rest-height, auto);
-}
-.md-editing .md-block-active.md-src-rich,
-.md-editing .md-block-active.md-src-trailed,
-.md-editing .md-block-active.md-code-block[data-md-drawn] {
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 /* A centred source is a column of rows and a box, not a row of words: the flexed children keep their own widths. */
-.md-editing .md-block-active:is(.md-src-rich, .md-src-trailed) > * {
+.md-editing .md-block-active[data-md-held] > * {
     flex: none;
 }
 

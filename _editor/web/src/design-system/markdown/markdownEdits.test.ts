@@ -1,4 +1,4 @@
-import { continueList, indentLines, insertLink, onListLine, outdentLines, toggleWrap } from "@intentic/ui/markdown";
+import { continueList, indentLines, insertLink, newlineInCode, onListLine, outdentLines, toggleWrap } from "@intentic/ui/markdown";
 
 // Formatting keys and Enter-on-a-list, as edits to markdown source, tested from here beside the block splitter's suite.
 // Each case is written the way it is pressed: `|` marks a caret and `[...]` a selection above it, and the assertion is
@@ -218,5 +218,21 @@ describe(`continueList`, () => {
     test(`writes into the middle of a document without disturbing what follows`, () => {
         const text = `# Criteria\n\n- one\n- two\n\nAnd some prose after.`;
         expect(continueList(text, endOf(text, `two`))?.edit.text).toBe(`# Criteria\n\n- one\n- two\n- \n\nAnd some prose after.`);
+    });
+});
+
+describe(`newlineInCode`, () => {
+    test(`breaks the line once, carrying its indentation`, () => {
+        const text = "```mermaid\nflowchart LR\n    a --> b\n```";
+        const at = text.indexOf(`b\n`) + 1;
+        const edit = newlineInCode(text, at, at);
+        expect(edit.text).toBe("```mermaid\nflowchart LR\n    a --> b\n    \n```");
+        expect(edit.start).toBe(at + 5);
+        expect(edit.end).toBe(edit.start);
+    });
+
+    test(`replaces a selection, as typing over it would`, () => {
+        const edit = newlineInCode(`<p>\n  <b>x</b>\n</p>`, 6, 14);
+        expect(edit.text).toBe(`<p>\n  \n  \n</p>`);
     });
 });

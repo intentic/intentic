@@ -7,7 +7,7 @@ export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml, highlight
 // Writing half of the engine: shared by every surface in the product that authors markdown (see
 // MarkdownDocument.vue), not owned by one view. `edits.ts`/`history.ts` are pure over (text, selection);
 // `sourceDom.ts` defers DOM access to call time, so this subpath stays importable from a node test.
-export { continueList, indentLines, insertLink, type ListEnter, onListLine, outdentLines, type TextEdit, toggleWrap } from "./edits.js";
+export { continueList, indentLines, insertLink, type ListEnter, newlineInCode, onListLine, outdentLines, type TextEdit, toggleWrap } from "./edits.js";
 export { createMarkdownHistory, type DocumentState, type EditKind, type MarkdownHistory } from "./history.js";
 export { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret, RENDERED } from "./sourceDom.js";
 export {

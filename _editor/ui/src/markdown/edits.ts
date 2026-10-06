@@ -150,6 +150,19 @@ const nextOpener = (groups: Record<string, string | undefined>): string => {
     return `${indent}${next} ${groups[`task`] === undefined ? `` : `[ ] `}`;
 };
 
+/**
+ * Enter inside code (a fenced block, a block of raw HTML): one line break, carrying the indentation of the line it
+ * breaks. A blank line is what Enter means in prose, and in code it is two keystrokes' worth of nothing, or, in HTML,
+ * the end of the block.
+ */
+export const newlineInCode = (text: string, start: number, end: number): TextEdit => {
+    const line = lineAt(text, start);
+    const indent = /^[ \t]*/u.exec(text.slice(line.start, start))?.[0] ?? ``;
+    const insert = `\n${indent}`;
+    const caret = start + insert.length;
+    return { text: `${text.slice(0, start)}${insert}${text.slice(end)}`, start: caret, end: caret };
+};
+
 export interface ListEnter {
     readonly edit: TextEdit;
     /** True when the item was empty (leaving the list); the caller must also open a block to place the caret. */
