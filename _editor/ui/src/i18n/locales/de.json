@@ -156,7 +156,8 @@
         "document": "Dokument"
     },
     "markdownDocumentSurface": {
-        "document": "Dokument"
+        "document": "Dokument",
+        "followLink": "{target} · Strg+Klick zum Öffnen"
     },
     "noteEditor": {
         "copyMarkdown": "Markdown kopieren",

@@ -182,7 +182,8 @@
         "overLimit": "{over} character over the {max}-character limit | {over} characters over the {max}-character limit"
     },
     "markdownDocumentSurface": {
-        "document": "Document"
+        "document": "Document",
+        "followLink": "{target} · Ctrl+click to open"
     },
     "noteEditor": {
         "copyMarkdown": "Copy markdown",

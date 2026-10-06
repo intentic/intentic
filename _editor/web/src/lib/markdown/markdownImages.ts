@@ -55,12 +55,44 @@ export const picturePathIn = (dir: string, src: string): string | undefined => {
     return resolved === `` ? undefined : resolved;
 };
 
+// One `srcset` candidate: an address and, after whitespace, the width or density it is for (`a.png 2x`).
+const CANDIDATE = /^(\S+)(\s+.*)?$/su;
+
+// A `<source>`'s candidates, each relative address resolved like an `<img>`'s; a candidate with nothing to draw yet is
+// left out, and a set left with none is empty, which the browser skips for the next source or the `<img>`.
+const resolveSrcset = (srcset: string, dir: string, draw: (path: string) => string | undefined): string =>
+    srcset
+        .split(`,`)
+        .map((candidate) => candidate.trim())
+        .flatMap((candidate) => {
+            const match = CANDIDATE.exec(candidate);
+            const url = match?.[1] ?? ``;
+            if (url === `` || ADDRESSED.test(url)) {
+                return candidate === `` ? [] : [candidate];
+            }
+            const path = picturePathIn(dir, url);
+            const drawn = path === undefined ? undefined : draw(path);
+            return drawn === undefined ? [] : [`${drawn}${match?.[2] ?? ``}`];
+        })
+        .join(`, `);
+
+// `<source media="(prefers-color-scheme: dark)">`, the way a README offers a dark picture.
+const SCHEME_QUERY = /^\s*\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)\s*$/iu;
+
 /**
  * Points every relative picture in a sanitized document at what `draw` answers for its workspace path, in place.
  * `dir` is the document's folder. While `draw` has nothing yet the `src` is empty, which asks nothing of anyone; a
- * picture that climbs out of the workspace keeps it empty, and `draw` is never asked about it.
+ * picture that climbs out of the workspace keeps it empty, and `draw` is never asked about it. A `<picture>`'s
+ * `<source srcset>` resolves the same way, and one offered for a colour scheme answers to `scheme`, the app's look,
+ * rather than to the operating system's: a dark app shows a README's dark picture on a light desktop, as GitHub's
+ * own theme does.
  */
-export const resolvePictures = (fragment: DocumentFragment, dir: string, draw: (path: string) => string | undefined): void => {
+export const resolvePictures = (
+    fragment: DocumentFragment,
+    dir: string,
+    draw: (path: string) => string | undefined,
+    scheme?: `light` | `dark`,
+): void => {
     for (const image of fragment.querySelectorAll(`img`)) {
         const src = image.getAttribute(`src`);
         if (src === null || src === `` || ADDRESSED.test(src)) {
@@ -68,5 +100,15 @@ export const resolvePictures = (fragment: DocumentFragment, dir: string, draw: (
         }
         const path = picturePathIn(dir, src);
         image.setAttribute(`src`, path === undefined ? `` : (draw(path) ?? ``));
+    }
+    for (const source of fragment.querySelectorAll(`picture > source`)) {
+        const srcset = source.getAttribute(`srcset`);
+        if (srcset !== null) {
+            source.setAttribute(`srcset`, resolveSrcset(srcset, dir, draw));
+        }
+        const wants = SCHEME_QUERY.exec(source.getAttribute(`media`) ?? ``)?.[1]?.toLowerCase();
+        if (scheme !== undefined && wants !== undefined) {
+            source.setAttribute(`media`, wants === scheme ? `all` : `not all`);
+        }
     }
 };

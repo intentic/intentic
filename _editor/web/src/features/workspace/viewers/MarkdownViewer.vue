@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow } from "@intentic/ui";
+import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow, useTheme } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
 import { computed, inject, onMounted, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../workbench/window/useLayout";
-import { openFileRefFromEvent } from "../files/refs/openFileRef";
+import { openFileRefFromEvent, openWorkspaceRef } from "../files/refs/openFileRef";
 import { useViewScope } from "../../../app/workspaceScope";
 import { picture } from "../home/thumbnails";
 import type { LineJump } from "../tabs/workspaceTabs";
@@ -48,12 +48,15 @@ const editing = computed(() => editable === true && view.value === `document`);
 // cross-referencing others (README → ARCHITECTURE.md) navigates within the reader's own scope. A picture beside the
 // document is drawn from its own bytes in that scope: the cache is read inside the parse, which redraws when they land.
 const viewAgent = useViewScope();
+// A `<picture>` offering a dark and a light version picks by the app's look, so a scheme change re-parses.
+const { scheme } = useTheme();
 const decorate = computed<MarkdownDecorator>(() => {
     const agent = viewAgent.value;
     const links = fileLinkDecorator({
         dir: path.slice(0, path.lastIndexOf(`/`) + 1),
         agent,
         picture: (file) => picture(agent, file, `original`)?.url,
+        scheme: scheme.value,
     });
     const tickable = editable === true;
     return (fragment) => {
@@ -109,6 +112,38 @@ const onPreviewClick = (event: MouseEvent): void => {
         return;
     }
     openFileRefFromEvent(event);
+};
+
+// While writing, a link is inert (a click places the caret), so Ctrl/Cmd+click follows it, as a code editor does. Its
+// target goes through the same decorator the rendered document uses, so a relative path opens the workspace file and
+// an address opens its own tab.
+const onEditingClick = (event: MouseEvent): void => {
+    if (!(event.ctrlKey || event.metaKey) || !(event.target instanceof Element)) {
+        return;
+    }
+    const link = event.target.closest<HTMLAnchorElement>(`a[data-md-href], .md-rendered a[href]`);
+    if (link === null) {
+        return;
+    }
+    event.preventDefault();
+    let anchor = link;
+    if (!link.classList.contains(`md-file-link`)) {
+        const fragment = document.createDocumentFragment();
+        anchor = document.createElement(`a`);
+        anchor.setAttribute(`href`, link.dataset[`mdHref`] ?? link.getAttribute(`href`) ?? ``);
+        fragment.append(anchor);
+        decorate.value(fragment);
+    }
+    const file = anchor.dataset[`file`];
+    if (file !== undefined && file !== ``) {
+        const at = Number(anchor.dataset[`line`]);
+        void openWorkspaceRef(file, Number.isInteger(at) && at > 0 ? at : undefined, { agent: anchor.dataset[`agent`] });
+        return;
+    }
+    const href = anchor.getAttribute(`href`) ?? ``;
+    if (/^https?:\/\//iu.test(href)) {
+        window.open(href, `_blank`, `noopener,noreferrer`);
+    }
 };
 
 // A search hit is a line: while editing that's a caret offset, but rendered prose has no stable line mapping,
@@ -218,7 +253,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                     ref="scroller"
                     class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas py-5 pl-12"
                     :class="docked ? `pr-[18.5rem]` : `pr-6`"
-                    @click="editing ? undefined : onPreviewClick($event)"
+                    @click="editing ? onEditingClick($event) : onPreviewClick($event)"
                 >
                     <!-- Reading and editing render the same document through the shared prose engine. -->
                     <!-- Full height: an empty or short file is then a click target the size of the pane, not one line at the top of it. -->

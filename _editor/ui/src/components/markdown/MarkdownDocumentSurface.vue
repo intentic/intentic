@@ -1,18 +1,31 @@
 <!-- The editing half of <MarkdownDocument>: one `contenteditable` whose text is the markdown source (markdownSourceDom.ts). -->
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { highlightVersion } from "../../markdown/code.js";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
 import { createMarkdownHistory, type EditKind } from "../../markdown/history.js";
 import { splitMarkdownBlocks } from "../../markdown/index.js";
-import { blockBody, buildBlockElement, caretAtOffset, FIGURE_HOLDER, offsetOfCaret } from "../../markdown/sourceDom.js";
+import type { MarkdownDecorator } from "../../markdown/render.js";
+import { blockBody, buildBlockElement, caretAtOffset, FIGURE_HOLDER, offsetOfCaret, RENDERED } from "../../markdown/sourceDom.js";
 import { useT } from "../../i18n/index.js";
 import { useTheme } from "../../composables/useTheme.js";
 import { drawFigures } from "./figureDrawing.js";
+import { alignContainers, createRenderedDrawing, sourceOffsetOfPress } from "./richBlocks.js";
 
 const t = useT();
 
-const { source, caretAt, placeholder = `` } = defineProps<{ source: string; caretAt?: number; placeholder?: string }>();
+const {
+    source,
+    caretAt,
+    placeholder = ``,
+    decorate,
+} = defineProps<{
+    source: string;
+    caretAt?: number;
+    placeholder?: string;
+    /** The rendered document's pass over its DOM (file links, a picture's path), applied to the blocks drawn rendered at rest. */
+    decorate?: MarkdownDecorator;
+}>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const host = ref<HTMLElement>();
@@ -136,9 +149,41 @@ const drawDiagrams = (): void => {
 };
 watch([scheme, accent], drawDiagrams);
 
+// Blocks drawn as their rendering at rest (raw HTML, pictures, inline tags; sourceDom.ts), filled here with what the
+// rendered document would draw. `definitions` is the document's link reference definitions, which a block rendered on
+// its own needs to resolve `[![ci][badge]][ci]`; refreshed wherever the document is re-split.
+const rendered = createRenderedDrawing(() => decorate);
+let definitions = ``;
+// Bumped after every rebuild, so the effect below fills the new holders; the effect also re-runs by itself when
+// something a rendering read changes (a picture's bytes landing), which no rebuild would have announced.
+const drawVersion = ref(0);
+watchEffect(
+    () => {
+        if (drawVersion.value > 0 && host.value !== undefined) {
+            rendered.draw(host.value, definitions);
+        }
+    },
+    { flush: `sync` },
+);
+
+// A `<div align="center">` in one block centres the blocks after it, up to the block that closes it.
+const alignBlocks = (): void => alignContainers(built);
+
+// A link is inert while it is being written, so it carries its target in a tooltip: the host follows it on Ctrl/Cmd+click.
+const titleLinks = (): void => {
+    for (const link of host.value?.querySelectorAll<HTMLAnchorElement>(`a[data-md-href]:not([title]), .${RENDERED} a[href]:not([data-md-titled])`) ?? []) {
+        const target = link.dataset[`mdHref`] ?? link.getAttribute(`href`) ?? ``;
+        link.dataset[`mdTitled`] = ``;
+        link.title = t(`ui.markdownDocumentSurface.followLink`, { target: link.title === `` ? target : link.title });
+    }
+};
+
 // The picture is not editable, so a press on it would land the caret wherever the browser guesses; it opens the
 // diagram's source instead, at the first line after its opening fence.
 const onFigurePress = (event: MouseEvent): void => {
+    if (onRenderedPress(event)) {
+        return;
+    }
     const block = event.target instanceof Element ? event.target.closest(`.${FIGURE_HOLDER}`)?.parentElement : undefined;
     const index = block === undefined || block === null ? -1 : blockElements().indexOf(block);
     const start = blockStarts()[index];
@@ -151,11 +196,53 @@ const onFigurePress = (event: MouseEvent): void => {
     markActive();
 };
 
+// A press on a block drawn rendered opens its source with the caret where the press was: on the word, or at a picture's
+// `alt`. Ctrl/Cmd on a link is the host's (it follows the link), so the caret stays where it is.
+const onRenderedPress = (event: MouseEvent): boolean => {
+    const target = event.target instanceof Element ? event.target : undefined;
+    const holder = target?.closest<HTMLElement>(`.${RENDERED}`);
+    if (target === undefined || holder === undefined || holder === null) {
+        return false;
+    }
+    if ((event.ctrlKey || event.metaKey) && target.closest(`a`) !== null) {
+        event.preventDefault();
+        return true;
+    }
+    // The document's own child, which a rendering can sit one wrapper deep in (a block with definitions under it).
+    const index = blockElements().findIndex((element) => element.contains(holder));
+    const block = blockElements()[index];
+    const start = blockStarts()[index];
+    if (block === undefined || start === undefined) {
+        return true;
+    }
+    event.preventDefault();
+    const at = sourceOffsetOfPress(event, holder, blockBody(block));
+    host.value?.focus({ preventScroll: true });
+    putCaret(start + at);
+    markActive();
+    return true;
+};
+
+// A link inside a rendering is a real anchor, so a click on it would leave the app; the press above already decided
+// what it means.
+const onRenderedClick = (event: MouseEvent): void => {
+    if (event.target instanceof Element && event.target.closest(`.${RENDERED} a`) !== null) {
+        event.preventDefault();
+    }
+};
+
 // Marks whichever block holds the caret, regardless of how it got there (click, arrow key, find, rewrite).
 const markActive = (): void => {
     const index = activeIndex();
     blockElements().forEach((element, at) => element.classList.toggle(`md-block-active`, at === index));
     drawDiagrams();
+};
+
+// After a rebuild: what each new block draws at rest, and the alignment a container around it gives it.
+const decorateBlocks = (): void => {
+    alignBlocks();
+    drawVersion.value += 1;
+    titleLinks();
 };
 
 // A block's span, split into the part that is drawn and the blank lines that follow it (which are not).
@@ -183,10 +270,12 @@ const layout = (parts: readonly { body: string; gap: string }[]): void => {
         root.appendChild(element);
         return { body: part.body, gap: part.gap, element };
     });
+    decorateBlocks();
 };
 
 const render = (next: string): void => {
-    const { blocks } = splitMarkdownBlocks(next);
+    const { blocks, defs } = splitMarkdownBlocks(next);
+    definitions = defs;
     layout(blocks.map((block) => partsOf(next.slice(block.start, block.end))));
 };
 
@@ -199,7 +288,8 @@ const sync = (): void => {
         return;
     }
     const current = text();
-    const { blocks } = splitMarkdownBlocks(current);
+    const { blocks, defs } = splitMarkdownBlocks(current);
+    definitions = defs;
     const wanted = blocks.map((block) => partsOf(current.slice(block.start, block.end)));
     const offset = caretOffset();
     const elements = blockElements();
@@ -238,6 +328,7 @@ const sync = (): void => {
     } finally {
         syncing = false;
     }
+    decorateBlocks();
     if (offset !== undefined) {
         putCaret(offset);
     }
@@ -257,7 +348,8 @@ const recolour = (): void => {
     syncing = true;
     try {
         built.forEach((part, index) => {
-            if (!part.element.classList.contains(`md-code-block`) || part.element.dataset[`mdColoured`] !== undefined) {
+            const code = part.element.classList.contains(`md-code-block`) || part.element.dataset[`mdHasCode`] !== undefined;
+            if (!code || part.element.dataset[`mdColoured`] !== undefined) {
                 return;
             }
             const element = buildBlockElement(part.body);
@@ -274,6 +366,7 @@ const recolour = (): void => {
     if (!redrawn) {
         return;
     }
+    decorateBlocks();
     if (offset !== undefined) {
         putCaret(offset);
     }
@@ -380,6 +473,7 @@ const startBlock = (): void => {
     built.splice(at, 0, { body: ``, gap: `\n\n`, element: blank });
     caretInto(blank);
     emit(`change`, text());
+    alignBlocks();
     markActive();
     remember(`structural`);
 };
@@ -636,6 +730,7 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
         @beforeinput="onBeforeInput"
         @keydown="onKeydown"
         @mousedown="onFigurePress"
+        @click="onRenderedClick"
         @paste="onPaste"
         @drop="onDrop"
         @compositionstart="onCompositionStart"

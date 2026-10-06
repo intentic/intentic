@@ -9,7 +9,7 @@ export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml, highlight
 // `sourceDom.ts` defers DOM access to call time, so this subpath stays importable from a node test.
 export { continueList, indentLines, insertLink, type ListEnter, onListLine, outdentLines, type TextEdit, toggleWrap } from "./edits.js";
 export { createMarkdownHistory, type DocumentState, type EditKind, type MarkdownHistory } from "./history.js";
-export { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "./sourceDom.js";
+export { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret, RENDERED } from "./sourceDom.js";
 export {
     type BarsFigure,
     type BarsFigureItem,

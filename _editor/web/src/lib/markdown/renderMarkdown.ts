@@ -22,13 +22,19 @@ export type { MarkdownPart, ParsedMarkdown, RenderedMarkdown, StreamingMarkdown 
 // The app's file-link decorator, handed to the engine directly or as the kit's <Markdown> `decorate` prop. `dir`
 // resolves a relative reference; `agent` scopes links to that conversation's workspace copy. A document with a folder
 // can also draw the pictures it names relative to it (markdownImages.ts), from what `picture` answers for a workspace
-// path; agent prose has no folder to resolve them in.
+// path; agent prose has no folder to resolve them in. `scheme` is the app's look, which a `<picture>` offering a dark and
+// a light version picks by.
 export const fileLinkDecorator =
-    (options?: { readonly dir?: string; readonly agent?: string; readonly picture?: (path: string) => string | undefined }): MarkdownDecorator =>
+    (options?: {
+        readonly dir?: string;
+        readonly agent?: string;
+        readonly picture?: (path: string) => string | undefined;
+        readonly scheme?: `light` | `dark`;
+    }): MarkdownDecorator =>
     (fragment) => {
         linkifyFileRefs(fragment, options?.dir, options?.agent);
         if (options?.dir !== undefined && options.picture !== undefined) {
-            resolvePictures(fragment, options.dir, options.picture);
+            resolvePictures(fragment, options.dir, options.picture, options.scheme);
         }
     };
 

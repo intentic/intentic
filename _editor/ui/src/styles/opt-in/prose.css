@@ -195,9 +195,17 @@
     color: var(--color-muted);
 }
 
+/* Inline, as markdown and HTML both mean it (the base layer makes every image a block): a row of badges is a row, and a picture in a centred container centres with the text around it. */
 .md-prose img {
+    display: inline-block;
+    vertical-align: middle;
     max-width: 100%;
     border-radius: var(--radius-md);
+}
+
+/* An HTML container a README centres its header with (`<div align="center">`): the browser centres the text, and the measured blocks inside it centre in the column rather than sitting left with their text centred in the measure. */
+.md-prose [align="center"] > :is(p, h1, h2, h3, h4, ul, ol, blockquote) {
+    margin-inline: auto;
 }
 
 /* Inline code. */

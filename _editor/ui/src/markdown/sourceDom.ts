@@ -72,8 +72,12 @@ const appendInline = (parent: Node, tokens: readonly MarkdownToken[]): void => {
         }
         const element = tag === undefined ? parent : document.createElement(tag);
         if (element !== parent && element instanceof HTMLAnchorElement) {
-            // Inert while editing: a click here places a caret. Links open from the preview rendering instead.
+            // Inert while editing: a click here places a caret. The target rides in a data attribute instead, for the
+            // host to follow on a modified click (Ctrl/Cmd), the way a code editor follows a link.
             element.removeAttribute(`href`);
+            if (token.href !== undefined && token.href !== ``) {
+                element.dataset[`mdHref`] = token.href;
+            }
         }
         element.appendChild(span(token.raw.slice(0, inner.at), MARKER));
         appendInline(element, token.tokens ?? []);
@@ -202,7 +206,108 @@ const paragraphElement = (token: MarkdownToken, source: string): HTMLElement => 
     return element;
 };
 
-const listElement = (source: string, ordered: boolean): HTMLElement => linePrefixed(source, ordered ? `ol` : `ul`, `li`, LIST_LINE, `md-src-list`);
+// Columns a run of indentation reaches, a tab stopping at the next multiple of four as CommonMark counts it.
+const columnsOf = (text: string): number => [...text].reduce((at, char) => (char === `\t` ? at + 4 - (at % 4) : at + 1), 0);
+
+const ORDERED_LEAD = /^\s*(\d+)[.)]/u;
+// A bullet's shape by how deep it sits, as a browser draws nested lists.
+const BULLETS = [`disc`, `circle`, `square`];
+
+// One row inside a fence an item holds: the indentation the item owns hangs in the gutter, the rest is code, typed as
+// written and never read as markdown.
+const appendCodeRow = (row: HTMLElement, line: string, owned: number): void => {
+    const lead = /^[ \t]*/u.exec(line)?.[0] ?? ``;
+    const cut = Math.min(lead.length, owned);
+    row.appendChild(span(line.slice(0, cut), MARKER, GUTTER));
+    row.appendChild(document.createTextNode(line.slice(cut)));
+};
+
+// Where a list being drawn has got to: the content column of each item still open, innermost last (a line indented
+// less than one closes it), and the fence an item's content is inside, with the indentation that is the item's.
+interface ListState {
+    readonly open: number[];
+    fence: { readonly marker: string; readonly owned: number } | undefined;
+}
+
+// A line inside a fence an item holds: the closing delimiter, as markup, or a line of the code.
+const fencedListRow = (row: HTMLElement, line: string, rest: string, state: ListState): void => {
+    const fence = state.fence;
+    if (fence !== undefined && closesFence(rest, fence.marker)) {
+        row.classList.add(`md-src-cont`, `md-src-fence`);
+        row.appendChild(span(line, MARKER));
+        state.fence = undefined;
+    } else {
+        row.classList.add(`md-src-cont`, `md-src-codeline`);
+        appendCodeRow(row, line, fence?.owned ?? 0);
+    }
+    row.style.setProperty(`--md-depth`, String(Math.max(0, state.open.length - 1)));
+};
+
+// A line that opens an item: as deep as the items still open above it, with the number it was written with.
+const itemListRow = (row: HTMLElement, line: string, lead: string, indent: number, state: ListState): void => {
+    while (state.open.length > 0 && indent < (state.open.at(-1) ?? 0)) {
+        state.open.pop();
+    }
+    const depth = state.open.length;
+    state.open.push(columnsOf(lead));
+    const number = ORDERED_LEAD.exec(line)?.[1];
+    // Read by the stylesheet, which stands it down while the item shows its own marker.
+    row.dataset[`mdBullet`] = number === undefined ? (BULLETS[Math.min(depth, BULLETS.length - 1)] ?? `disc`) : `decimal`;
+    if (number !== undefined) {
+        row.style.setProperty(`counter-set`, `list-item ${Number(number)}`);
+    }
+    if (depth > 0) {
+        row.style.setProperty(`--md-depth`, String(depth));
+    }
+    appendPrefixedRow(row, line, LIST_LINE);
+};
+
+// A line that is not an item: content of the item it is indented under, or the opening of a fence that item holds. A
+// blank line closes nothing, since a loose list's next paragraph comes after one.
+const contentListRow = (row: HTMLElement, line: string, rest: string, indent: number, state: ListState): void => {
+    if (rest !== ``) {
+        while (state.open.length > 1 && indent < (state.open.at(-1) ?? 0)) {
+            state.open.pop();
+        }
+    }
+    row.classList.add(`md-src-cont`);
+    row.style.setProperty(`--md-depth`, String(Math.max(0, state.open.length - 1)));
+    const opener = fenceOf(rest);
+    // A backtick fence's info string cannot hold a backtick; one that does is inline code, not a fence.
+    if (opener !== undefined && !(opener.marker.startsWith(`\``) && opener.rest.includes(`\``))) {
+        row.classList.add(`md-src-fence`);
+        row.appendChild(span(line, MARKER));
+        state.fence = { marker: opener.marker, owned: line.length - rest.length };
+        return;
+    }
+    appendPrefixedRow(row, line, LIST_LINE);
+};
+
+// A list drawn line by line (see `linePrefixed`), with what a line-by-line drawing loses put back: an item's own number
+// (`5.` reads as 5, not as the row's position), how deep it is nested, and the lines that are not items at all — a
+// wrapped sentence, a second paragraph, a fence the item holds — which belong to the item above rather than being
+// numbered as items of their own.
+const listElement = (source: string, ordered: boolean): HTMLElement => {
+    const element = document.createElement(ordered ? `ol` : `ul`);
+    element.dataset[ROWS] = ``;
+    element.className = `md-src-list`;
+    const state: ListState = { open: [], fence: undefined };
+    for (const line of bodyLines(source)) {
+        const row = rowElement(`li`);
+        element.appendChild(row);
+        const lead = /^[ \t]*/u.exec(line)?.[0] ?? ``;
+        const rest = line.slice(lead.length);
+        const item = LIST_LINE.exec(line);
+        if (state.fence !== undefined) {
+            fencedListRow(row, line, rest, state);
+        } else if (item === null) {
+            contentListRow(row, line, rest, columnsOf(lead), state);
+        } else {
+            itemListRow(row, line, item[1] ?? ``, columnsOf(lead), state);
+        }
+    }
+    return element;
+};
 
 const quoteElement = (source: string): HTMLElement => linePrefixed(source, `blockquote`, `div`, QUOTE_LINE, `md-src-quote`);
 
@@ -303,6 +408,8 @@ const codeElement = (source: string): HTMLElement | undefined => {
     const element = document.createElement(`pre`);
     element.className = `md-code-block`;
     element.dataset[ROWS] = ``;
+    // Code is not prose: a squiggle under every identifier says nothing about it.
+    element.spellcheck = false;
     // Read by the stylesheet, which prints it where the rendered document prints its language chip.
     const lang = fenced.info.trim().split(/\s/u)[0] ?? ``;
     if (lang !== ``) {
@@ -333,6 +440,7 @@ const htmlElement = (source: string): HTMLElement => {
     const element = document.createElement(`pre`);
     element.className = `md-code-block`;
     element.dataset[ROWS] = ``;
+    element.spellcheck = false;
     if (coloured !== undefined) {
         element.dataset[`mdColoured`] = ``;
     }
@@ -471,6 +579,22 @@ const tableElement = (source: string): HTMLElement | undefined => {
     return element;
 };
 
+// A run of link reference definitions (`[ci]: https://…`): the targets other blocks point at, which a rendered document
+// draws as nothing. Here they stay in the file's own words, quieted, since a line that drew as nothing could not be
+// clicked into to change it.
+const definitionsElement = (source: string): HTMLElement => {
+    const element = document.createElement(`div`);
+    element.className = `md-src-defs`;
+    element.dataset[ROWS] = ``;
+    element.spellcheck = false;
+    for (const line of bodyLines(source)) {
+        const row = rowElement(`div`);
+        row.textContent = line;
+        element.appendChild(row);
+    }
+    return element;
+};
+
 // Every block shape this surface draws as itself; anything absent is shown as its own source (`verbatimElement`).
 const BUILDERS: Record<string, (token: MarkdownToken, source: string) => HTMLElement | undefined> = {
     heading: (token, source) => headingElement(source, (token as MarkdownToken & { depth?: number }).depth ?? 1),
@@ -481,9 +605,86 @@ const BUILDERS: Record<string, (token: MarkdownToken, source: string) => HTMLEle
     table: (_token, source) => tableElement(source),
     hr: (_token, source) => ruleElement(source),
     html: (_token, source) => htmlElement(source),
+    def: (_token, source) => definitionsElement(source),
 };
 
+// Where a block that has HTML or a picture in it is drawn as it renders (by the surface, which owns the renderer and
+// the decorator that resolves a picture's path): not a row, so no part of the block's text, and not editable, so the
+// caret cannot land inside the rendering. At rest the block is this; with the caret in it, it is its source again.
+export const RENDERED = `md-rendered`;
+
+// Inline markup this surface can only spell, not draw: raw HTML (a `<b>`, a `<br>`, an `<img>`) and pictures, which
+// read as their own source while edited and as what they draw at rest. Walks every place a block keeps inline
+// tokens: a list's items, a table's cells.
+const drawsMoreThanItSpells = (token: MarkdownToken): boolean =>
+    token.type === `html` ||
+    token.type === `image` ||
+    [...(token.tokens ?? []), ...(token.items ?? []), ...[...(token.header ?? []), ...(token.rows ?? []).flat()].flatMap((cell) => cell.tokens)].some(
+        drawsMoreThanItSpells,
+    );
+
+// The block's source drawn as a rendering at rest, its source element kept beside it for the caret. A block that has
+// no rows of its own (a paragraph, a heading) becomes the one row of the wrapper.
+const withRendering = (inner: HTMLElement, source: string): HTMLElement => {
+    const element = document.createElement(`div`);
+    element.className = `md-src-rich`;
+    element.dataset[ROWS] = ``;
+    if (!(ROWS in inner.dataset)) {
+        inner.dataset[ROW] = ``;
+    }
+    // Read by the surface, which re-asks the highlighter only about blocks that hold code.
+    if (inner.classList.contains(`md-code-block`)) {
+        element.dataset[`mdHasCode`] = ``;
+        if (inner.dataset[`mdColoured`] !== undefined) {
+            element.dataset[`mdColoured`] = ``;
+        }
+    }
+    const holder = document.createElement(`div`);
+    holder.className = RENDERED;
+    holder.setAttribute(`contenteditable`, `false`);
+    holder.dataset[`mdRenderSource`] = source;
+    element.append(inner, holder);
+    return element;
+};
+
+// Which shapes are drawn as their rendering at rest: raw HTML always, prose only when it holds inline HTML or a picture.
+const RENDERS_AT_REST = new Set([`paragraph`, `heading`, `list`, `blockquote`, `table`]);
+// A picture by reference (`[![ci][badge]][ci]`) lexes as plain text in a block read apart from its definitions, so the
+// spelling is checked as well as the tokens.
+const REFERENCE_PICTURE = /!\[[^\]\n]*\]\[[^\]\n]*\]/u;
+const rendersAtRest = (token: MarkdownToken, source: string): boolean =>
+    token.type === `html` || (RENDERS_AT_REST.has(token.type) && (drawsMoreThanItSpells(token) || REFERENCE_PICTURE.test(source)));
+
 const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefined => BUILDERS[token.type]?.(token, source);
+
+// A block followed by the link definitions folded into it (blocks.ts): the block's own element, then one quiet row
+// per line after it, blank lines included, so the rows still join back into the source.
+const withTrailingDefinitions = (tokens: readonly MarkdownToken[], source: string): HTMLElement | undefined => {
+    const [first, ...rest] = tokens;
+    if (first === undefined || rest.length === 0 || !rest.some((each) => each.type === `def`) || rest.some((each) => each.type !== `def` && each.type !== `space`)) {
+        return undefined;
+    }
+    const head = first.raw.replace(/\n+$/u, ``);
+    const tail = source.slice(head.length);
+    if (head === `` || !source.startsWith(head) || !tail.startsWith(`\n`)) {
+        return undefined;
+    }
+    const element = document.createElement(`div`);
+    element.className = `md-src-trailed`;
+    element.dataset[ROWS] = ``;
+    const lead = buildBlockElement(head);
+    if (!(ROWS in lead.dataset)) {
+        lead.dataset[ROW] = ``;
+    }
+    element.appendChild(lead);
+    for (const line of tail.slice(1).split(`\n`)) {
+        const row = rowElement(`div`, `md-src-def-line`);
+        row.spellcheck = false;
+        row.textContent = line;
+        element.appendChild(row);
+    }
+    return blockBody(element) === source ? element : undefined;
+};
 
 /**
  * One block of markdown as an element whose `textContent` is that block's source. `source` excludes the blank
@@ -491,14 +692,28 @@ const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefin
  */
 export const buildBlockElement = (source: string): HTMLElement => {
     const tokens = lexBlocks(source);
+    // Definitions lex one token per line, and are one block of the file all the same.
+    if (tokens !== undefined && tokens.length > 1 && tokens.every((each) => each.type === `def`)) {
+        return definitionsElement(source);
+    }
+    // The block splitter folds definitions into the block above them, since they draw nothing on their own: that
+    // block is drawn as itself, with the definitions as quiet lines under it.
+    const trailing = tokens === undefined ? undefined : withTrailingDefinitions(tokens, source);
+    if (trailing !== undefined) {
+        return trailing;
+    }
     const token = tokens?.length === 1 ? tokens[0] : undefined;
     const built = token === undefined ? undefined : buildProse(token, source);
-    if (built !== undefined) {
+    if (built !== undefined && token !== undefined) {
         dropEmptyMarkers(built);
         // The invariant, checked rather than trusted: a block that doesn't reassemble its source exactly is shown as
         // source instead.
         if (blockBody(built) === source) {
-            return built;
+            if (!rendersAtRest(token, source)) {
+                return built;
+            }
+            const rich = withRendering(built, source);
+            return blockBody(rich) === source ? rich : built;
         }
     }
     return verbatimElement(source);

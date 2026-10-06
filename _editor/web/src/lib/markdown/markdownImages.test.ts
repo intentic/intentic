@@ -110,3 +110,36 @@ describe(`pictures in a previewed document`, () => {
         expect(asked).toEqual([]);
     });
 });
+
+describe(`a picture offered in more than one version`, () => {
+    const PICTURE = `<picture>\n  <source media="(prefers-color-scheme: dark)" srcset="img/dark.png">\n  <img src="img/light.png" alt="flow">\n</picture>`;
+
+    const sourceOf = (html: string): { srcset: string | null; media: string | null } => {
+        const holder = document.createElement(`div`);
+        holder.innerHTML = html;
+        const source = holder.querySelector(`source`);
+        return { srcset: source?.getAttribute(`srcset`) ?? null, media: source?.getAttribute(`media`) ?? null };
+    };
+
+    it(`resolves a <source srcset> the way it resolves an <img src>`, () => {
+        landed.value = { "docs/img/dark.png": `blob:app/dark`, "docs/img/light.png": `blob:app/light` };
+        const html = renderIn(`docs/`, PICTURE);
+        expect(sourceOf(html).srcset).toBe(`blob:app/dark`);
+        expect(sources(html)).toEqual([`blob:app/light`]);
+    });
+
+    it(`keeps a candidate's width or density, and leaves out one whose bytes have not landed`, () => {
+        landed.value = { "docs/img/a.png": `blob:app/a` };
+        const html = renderIn(`docs/`, `<picture><source srcset="img/a.png 1x, img/b.png 2x, https://x.dev/c.png 3x"><img src="x.png"></picture>`);
+        expect(sourceOf(html).srcset).toBe(`blob:app/a 1x, https://x.dev/c.png 3x`);
+    });
+
+    it(`picks the version for the app's look, not the operating system's`, () => {
+        const inScheme = (scheme: `light` | `dark`): string | null =>
+            sourceOf(renderEngine(PICTURE, fileLinkDecorator({ dir: `docs/`, picture: draw, scheme }))).media;
+        expect(inScheme(`dark`)).toBe(`all`);
+        expect(inScheme(`light`)).toBe(`not all`);
+        // Without a look to answer to, the query is left for the browser.
+        expect(sourceOf(renderIn(`docs/`, PICTURE)).media).toBe(`(prefers-color-scheme: dark)`);
+    });
+});

@@ -159,7 +159,8 @@
         "document": "Documento"
     },
     "markdownDocumentSurface": {
-        "document": "Documento"
+        "document": "Documento",
+        "followLink": "{target} · Ctrl+clic para abrir"
     },
     "noteEditor": {
         "copyMarkdown": "Copiar markdown",

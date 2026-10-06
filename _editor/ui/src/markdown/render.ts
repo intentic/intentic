@@ -31,6 +31,18 @@ export interface MarkdownToken {
     // Child tokens, if any; their `raw`s concatenate to the parent's, so a caller can find the parent's own markers by
     // subtraction.
     readonly tokens?: readonly MarkdownToken[];
+    /** A link's or a picture's target. */
+    readonly href?: string;
+    /** A list's items. */
+    readonly items?: readonly MarkdownToken[];
+    /** A table's header cells and body rows, for a caller that asks what a table holds rather than where it sits. */
+    readonly header?: readonly MarkdownCell[];
+    readonly rows?: readonly (readonly MarkdownCell[])[];
+}
+
+/** One table cell: its inline tokens. */
+export interface MarkdownCell {
+    readonly tokens: readonly MarkdownToken[];
 }
 
 // Returns undefined rather than throwing: a lexer edge case should only cost the feature built on this, not the

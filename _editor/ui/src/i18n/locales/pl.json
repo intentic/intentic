@@ -182,7 +182,8 @@
         "overLimit": "{over} znak ponad limit {max} znaków | {over} znaki ponad limit {max} znaków | {over} znaków ponad limit {max} znaków"
     },
     "markdownDocumentSurface": {
-        "document": "Dokument"
+        "document": "Dokument",
+        "followLink": "{target} · Ctrl+klik, aby otworzyć"
     },
     "noteEditor": {
         "copyMarkdown": "Kopiuj markdown",

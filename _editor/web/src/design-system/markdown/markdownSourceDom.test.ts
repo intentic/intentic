@@ -88,6 +88,8 @@ describe(`what it draws`, () => {
         const anchor = element.querySelector(`a`);
         expect(anchor?.textContent).toBe(`[the docs](https://example.com)`);
         expect(anchor?.hasAttribute(`href`)).toBe(false);
+        // The target rides along for the host, which follows it on Ctrl/Cmd+click.
+        expect(anchor?.dataset[`mdHref`]).toBe(`https://example.com`);
     });
 
     test(`a list item's bullet hangs in the gutter where the rendered bullet was`, () => {
@@ -95,6 +97,28 @@ describe(`what it draws`, () => {
         expect(element.tagName).toBe(`UL`);
         const bullets = [...element.querySelectorAll(`li > .md-marker-gutter`)].map((node) => node.textContent);
         expect(bullets).toEqual([`- `, `- `]);
+    });
+
+    test(`an ordered item keeps the number it was written with, and a nested item knows how deep it is`, () => {
+        const element = buildBlockElement(`5. five\n6. six\n   - nested`);
+        const rows = [...element.querySelectorAll<HTMLElement>(`li`)];
+        expect(rows.map((row) => row.style.getPropertyValue(`counter-set`))).toEqual([`list-item 5`, `list-item 6`, ``]);
+        expect(rows.map((row) => row.dataset[`mdBullet`])).toEqual([`decimal`, `decimal`, `circle`]);
+        expect(rows[2]?.style.getPropertyValue(`--md-depth`)).toBe(`1`);
+    });
+
+    test(`a line inside an item is the item's content, and a fence it holds is code`, () => {
+        const source = "1. one\n2. two\n\n   ```sh\n   curl x | sh\n   ```\n\n   More about two.\n3. three";
+        const element = buildBlockElement(source);
+        const rows = [...element.querySelectorAll<HTMLElement>(`li`)];
+        // Only the three items are items; everything else belongs to the one above it.
+        expect(rows.filter((row) => !row.classList.contains(`md-src-cont`)).map((row) => row.textContent)).toEqual([`1. one`, `2. two`, `3. three`]);
+        expect(rows.filter((row) => row.classList.contains(`md-src-fence`))).toHaveLength(2);
+        const code = rows.filter((row) => row.classList.contains(`md-src-codeline`));
+        expect(code.map((row) => row.textContent)).toEqual([`   curl x | sh`]);
+        // The item's indentation hangs in the gutter; the code is the rest, never read as markdown.
+        expect(code[0]?.querySelector(`.md-marker-gutter`)?.textContent).toBe(`   `);
+        expect(blockBody(element)).toBe(source);
     });
 
     test(`a task item's brackets hang in the gutter with its bullet, where its checkbox is drawn`, () => {
@@ -158,9 +182,39 @@ describe(`what it draws`, () => {
     test(`a raw HTML block is drawn as code, every line of it, with nothing hidden as markup`, () => {
         const source = `<div align="center">\n<p>Hi</p>\n</div>`;
         const element = buildBlockElement(source);
-        expect(element.classList.contains(`md-code-block`)).toBe(true);
-        expect(element.querySelector(`.md-marker`)).toBeNull();
+        const code = element.querySelector(`.md-code-block`);
+        expect(code).not.toBeNull();
+        expect(code?.querySelector(`.md-marker`)).toBeNull();
         expect([...element.querySelectorAll(`.md-code-line`)].map((node) => node.textContent)).toEqual([`<div align="center">`, `<p>Hi</p>`, `</div>`]);
+        expect(blockBody(element)).toBe(source);
+    });
+
+    test(`a raw HTML block carries a holder for its rendering, which is no part of its text`, () => {
+        const source = `<p align="center">\n  <img src="a.png" alt="A">\n</p>`;
+        const element = buildBlockElement(source);
+        expect(element.classList.contains(`md-src-rich`)).toBe(true);
+        const holder = element.querySelector<HTMLElement>(`.md-rendered`);
+        expect(holder?.getAttribute(`contenteditable`)).toBe(`false`);
+        expect(holder?.dataset[`mdRenderSource`]).toBe(source);
+        holder?.append(`what a rendering would hold`);
+        expect(blockBody(element)).toBe(source);
+    });
+
+    test(`prose with inline HTML or a picture is drawn rendered at rest; plain prose is not`, () => {
+        for (const source of [`A <b>raw</b> word.`, `<a href="x"><img src="a.png" alt="A"></a>`, `See ![alt](p.png) here.`, `- an item with <br> a break`]) {
+            const element = buildBlockElement(source);
+            expect(element.querySelector(`.md-rendered`), source).not.toBeNull();
+            expect(blockBody(element)).toBe(source);
+        }
+        for (const source of [`Plain **bold** prose.`, `- a list`, "Some `<b>` in code."]) {
+            expect(buildBlockElement(source).querySelector(`.md-rendered`), source).toBeNull();
+        }
+    });
+
+    test(`a run of link reference definitions stays its own words`, () => {
+        const source = `[ci]: https://ci.example/\n[badge]: https://img.example/b.svg`;
+        const element = buildBlockElement(source);
+        expect(element.classList.contains(`md-src-defs`)).toBe(true);
         expect(blockBody(element)).toBe(source);
     });
 
@@ -218,9 +272,9 @@ describe(`what it draws`, () => {
     });
 
     test(`a construct it does not model is shown verbatim rather than wrongly`, () => {
-        const element = buildBlockElement(`<details>\n<summary>More</summary>\n</details>`);
+        const element = buildBlockElement(`    const x = 1;\n    const y = 2;`);
         expect(element.tagName).toBe(`PRE`);
-        expect(blockBody(element)).toBe(`<details>\n<summary>More</summary>\n</details>`);
+        expect(blockBody(element)).toBe(`    const x = 1;\n    const y = 2;`);
     });
 
     test(`no empty marker spans, which would be markup that is not in the file`, () => {

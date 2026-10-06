@@ -139,6 +139,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
                 class="min-w-0 flex-1"
                 :source="doc"
                 :caret-at="caretAt"
+                :decorate="decorate"
                 :placeholder="placeholder"
                 :aria-label="label ?? t(`ui.markdownDocument.document`)"
                 @change="onChange"

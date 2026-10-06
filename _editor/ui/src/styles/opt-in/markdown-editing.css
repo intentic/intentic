@@ -93,6 +93,8 @@
 /* A FENCED BLOCK IS THE CODE IT HOLDS, not the source of a code block: its delimiters are markup like a heading's hashes, and its body wears the colours the rendered document gives it (sourceDom.ts). A raw HTML block is drawn the same way, every line of it code. */
 .md-editing .md-code-block {
     position: relative;
+    /* Code reads from its left edge, even inside a container that centres the prose around it. */
+    text-align: start;
     font-family: var(--font-mono);
     font-size: 0.9em;
     tab-size: 4;
@@ -237,4 +239,120 @@
 .md-editing a {
     cursor: text;
     text-decoration: none;
+}
+
+/* A BLOCK THE SURFACE CAN ONLY SPELL — raw HTML, a picture, an inline tag — is drawn at rest as the rendered document draws it, and the caret in it brings back the source (sourceDom.ts `withRendering`, filled by richBlocks.ts). The rendering is a picture of the block, not a place to type. */
+.md-editing .md-rendered {
+    display: none;
+    user-select: none;
+    cursor: text;
+}
+/* "At rest" is the block the caret is not in, which a rendering can sit one wrapper inside (a block with link definitions folded under it). */
+.md-editing .md-src-rich:not(.md-block-active, .md-block-active *, [data-md-quiet]) > .md-rendered {
+    display: flow-root;
+}
+.md-editing .md-src-rich:not(.md-block-active, .md-block-active *, [data-md-quiet]) > :not(.md-rendered) {
+    display: none;
+}
+/* A rendering's link is followed with Ctrl/Cmd+click (the host's), so it looks like one without promising a plain click. */
+.md-editing .md-rendered a {
+    cursor: pointer;
+}
+
+/* A BLOCK THAT DRAWS NOTHING — a lone `<div align="center">`, its `</div>`, a comment, the link definitions at the foot of a README — keeps its source on the page, since a block with no height could not be clicked into; quietly, small and faint, without the box code wears. */
+.md-editing .md-src-rich[data-md-quiet]:not(.md-block-active, .md-block-active *) > .md-code-block,
+.md-editing .md-src-defs:not(.md-block-active),
+.md-editing .md-src-trailed:not(.md-block-active) > .md-src-def-line {
+    margin-block: 0.35em;
+    border-color: transparent;
+    background: transparent;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    opacity: 0.55;
+}
+.md-editing :is(.md-src-defs, .md-src-def-line) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.md-editing .md-src-def-line {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+/* AN ALIGNMENT AN HTML CONTAINER OPENS (`<div align="center">` … `</div>`) holds for every block it wraps, as it does on GitHub; carried by richBlocks.ts `alignContainers`. A measured paragraph centres in the column, not in its own measure. */
+.md-editing [data-md-align="center"] {
+    text-align: center;
+}
+.md-editing [data-md-align="right"] {
+    text-align: right;
+}
+.md-editing > [data-md-align]:not([data-md-align="left"]),
+.md-editing > [data-md-align]:not([data-md-align="left"]) > :is(p, h1, h2, h3, h4),
+.md-editing [data-md-align]:not([data-md-align="left"]) .md-rendered > :is(p, h1, h2, h3, h4) {
+    margin-inline: auto;
+}
+
+/* A LIST, drawn line by line, still reads as one: an item sits as deep as it is nested, takes the number it was written with, and a line that is not an item (a wrapped sentence, a second paragraph, a fence the item holds) is the item's content rather than an item of its own. */
+.md-editing .md-src-list > li {
+    margin-left: calc(var(--md-depth, 0) * 1.6em);
+}
+.md-editing .md-src-list > li[data-md-bullet="disc"]:not([data-task]) {
+    list-style-type: disc;
+}
+.md-editing .md-src-list > li[data-md-bullet="decimal"]:not([data-task]) {
+    list-style-type: decimal;
+}
+.md-editing .md-src-list > li[data-md-bullet="circle"]:not([data-task]) {
+    list-style-type: circle;
+}
+.md-editing .md-src-list > li[data-md-bullet="square"]:not([data-task]) {
+    list-style-type: square;
+}
+.md-editing :is(.md-src-list.md-block-active, .md-block-active .md-src-list) > li[data-md-bullet] {
+    list-style-type: none;
+}
+.md-editing .md-src-list > li.md-src-cont {
+    display: block;
+}
+.md-editing .md-src-list > li.md-src-cont:empty {
+    height: 0.6lh;
+}
+.md-editing :is(.md-src-list.md-block-active, .md-block-active .md-src-list) > li.md-src-cont:empty {
+    height: auto;
+    min-height: 1lh;
+}
+
+/* A fence an item holds is the code it holds, as a fenced block is: its delimiters step aside at rest, its lines wear the code box. */
+.md-editing .md-src-list > li.md-src-fence {
+    display: none;
+}
+.md-editing :is(.md-src-list.md-block-active, .md-block-active .md-src-list) > li.md-src-fence {
+    display: block;
+}
+.md-editing .md-src-list > li.md-src-codeline {
+    background: var(--color-canvas);
+    border-inline: 1px solid var(--color-line);
+    padding-inline: 0.85em;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    tab-size: 4;
+}
+.md-editing .md-src-list > li.md-src-codeline,
+.md-editing .md-src-list > li.md-src-codeline span {
+    white-space: pre-wrap;
+}
+.md-editing .md-src-list > li.md-src-fence + li.md-src-codeline {
+    margin-top: 0.5em;
+    border-top: 1px solid var(--color-line);
+    border-start-start-radius: var(--radius-md);
+    border-start-end-radius: var(--radius-md);
+    padding-top: 0.6em;
+}
+.md-editing .md-src-list > li.md-src-codeline:has(+ li.md-src-fence) {
+    margin-bottom: 0.5em;
+    border-bottom: 1px solid var(--color-line);
+    border-end-start-radius: var(--radius-md);
+    border-end-end-radius: var(--radius-md);
+    padding-bottom: 0.6em;
 }
