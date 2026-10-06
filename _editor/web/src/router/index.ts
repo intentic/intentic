@@ -13,7 +13,7 @@ import {
 } from "vue-router";
 import { asyncView } from "../components/asyncView";
 import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
-import { conversationRedirect } from "./conversationLink";
+import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { mobileChatPath } from "../shell/tabRoots";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
@@ -531,7 +531,15 @@ router.beforeEach((to) => noteFound(to));
 // `/?conversation=<id>`, and a shell that rewrites its entry path before the router runs (the demo does) must not
 // drop the tap on the way in. Global, not the home redirect's, for that reason; the target carries no such query,
 // so it cannot loop.
-router.beforeEach((to) => conversationRedirect(to.query, useDevice().mobile.value) ?? true);
+// The chat's home is read only for such a link, and its module loaded only then: it opens floating-window machinery a
+// sign-in page has no business starting.
+router.beforeEach(async (to) => {
+    if (linkedConversation(to.query) === undefined) {
+        return true;
+    }
+    const surface = useDevice().mobile.value ? `phone` : (await import(`../features/chat/panel/chatPanelLayout`)).chatOnRailTile.value ? `chat` : `board`;
+    return conversationRedirect(to.query, surface) ?? true;
+});
 
 // Router half of stale-chunk recovery (asyncView owns the in-shell half). Covers route-level loads (login, handoffs,
 // invite, the shell); a dead chunk here reloads onto the route asked for.

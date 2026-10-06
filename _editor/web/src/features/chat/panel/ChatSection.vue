@@ -6,6 +6,7 @@ import { useChatFloating } from "./chatFloating";
 import { useLayout } from "../../../shell/window/useLayout";
 import { chatFullSlot } from "../../../shell/window/panelSlots";
 import { useT } from "@intentic/ui/i18n";
+import { useChatFocusLink } from "./chatFocusLink";
 
 const t = useT();
 
@@ -13,6 +14,9 @@ const { floats, dock } = useChatFloating();
 
 /* STANDING HERE IS CHOOSING THE RAIL AS THE CHAT'S HOME. */
 useLayout().setChatHome(`rail`);
+
+/* A LINK NAMING A CONVERSATION (a notification's press) OPENS IT HERE. */
+useChatFocusLink();
 
 const slot = useTemplateRef(`slot`);
 onMounted(() => {

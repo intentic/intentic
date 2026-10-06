@@ -17,6 +17,8 @@ const layout = useLayout();
 
 export const chatWide = computed(() => floating.floats.value || chatFullSlot.value !== null);
 export const chatOnRail = computed(() => layout.chatHome.value === `rail`);
+// The rail's home with this page drawing it: the chat is the rail tile's full-window /chat, not a window of its own.
+export const chatOnRailTile = computed(() => chatOnRail.value && !floating.floats.value);
 // The side home in effect: the chat lives in the side panel, under whatever was opened beside it (shell/side). Neither
 // homed on the rail nor in a window of its own.
 export const chatInSidePanel = computed(() => !chatOnRail.value && !floating.floats.value);
