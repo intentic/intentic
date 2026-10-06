@@ -1,6 +1,6 @@
 //! One held tunnel as the edge uses it: a carrier of byte streams, each exchange a stream of its own carrying plain
 //! HTTP/1.1, where an upgrade is itself. QUIC and `/tunnel/v2`'s yamux are such carriers; a legacy `/tunnel/v1` h2
-//! session is not, and is spoken by `legacy.rs` for the fronts that still dial it.
+//! session is not, and is spoken by `legacy.rs` for the netd instances that still dial it.
 //!
 //! Over QUIC a stream's opening and its answer's first byte have deadlines (2026-10-05: a half-dead QUIC path took every
 //! request and answered none, since QUIC outranks the socket). A stream that does not open in time hands its request
@@ -39,7 +39,7 @@ pub enum Failed {
     },
 }
 
-// A QUIC stream opens at once while the front grants streams; one that has not opened by now never will.
+// A QUIC stream opens at once while netd grants streams; one that has not opened by now never will.
 const OPEN_PATIENCE: Duration = Duration::from_secs(5);
 
 // Past this without an answer's first byte, a probe asks whether the path still serves streams.
@@ -50,7 +50,7 @@ pub struct Session(Arc<Carrier>);
 
 enum Carrier {
     Quic(Connection),
-    /// A `/tunnel/v2` socket, and the transfer routes its front announced on it.
+    /// A `/tunnel/v2` socket, and the transfer routes its netd announced on it.
     Mux(mux::Opener, BulkRoutes),
     Legacy(SendRequest<Body>),
 }
@@ -74,7 +74,7 @@ impl Session {
     }
 
     /// Whether a request to `host` belongs on its sandbox's bulk socket, as the daemon behind this one announced: a
-    /// legacy front's by the routes frozen with its door, and nothing over QUIC, where a burst yields by itself.
+    /// legacy netd's by the routes frozen with its door, and nothing over QUIC, where a burst yields by itself.
     pub fn carries_bulk(&self, host: &str, method: &str, path: &str) -> bool {
         match &*self.0 {
             Carrier::Quic(_) => false,

@@ -10,9 +10,9 @@
 **/dist.zip
 **/deploy
 **/generated
-# Except the front's wire types: cargo writes them (_sandbox/front, front-wire), and they are committed because every
+# Except netd's wire types: cargo writes them (_sandbox/netd, netd-wire), and they are committed because every
 # TypeScript build compiles against them with no Rust toolchain in reach.
-!_shared/sandbox-contract/src/front/generated
+!_shared/sandbox-contract/src/netd/generated
 # Every shape each stored document has had: history, committed like a lock file. The checks against it
 # (state-shapes.ts) are derived from it before every typecheck, and not committed.
 !_sandbox/sandbox/src/store/generated
@@ -41,9 +41,9 @@ _editor/desktop-app/src-tauri/staged-scripts
 # The local files sidecar compiled for each target (_tools/scripts/desktop/stage-local-files.sh).
 _editor/desktop-app/src-tauri/binaries
 _site/site/public/desktop
-# ic (the host-side CLI), the sandbox front and the Windows launcher stub: their Rust build trees.
+# ic (the host-side CLI), the sandbox netd and the Windows launcher stub: their Rust build trees.
 _sandbox/ic/target
-_sandbox/front/target
+_sandbox/netd/target
 _platform/ingress/target
 _shared/relay/target
 _devices/win-launcher/target

@@ -34,7 +34,7 @@
 #                     production behind a proxy holding no certificate. Only a hand-run fallback says `proxy`.
 #
 # TLS MODE, the default: the edge holds the certificate and serves UDP beside it, and it must also DECLARE that on
-# /health (`"transports":["quic","h3","webtransport"]`), since fronts and editors reach for QUIC and WebTransport only
+# /health (`"transports":["quic","h3","webtransport"]`), since netd instances and editors reach for QUIC and WebTransport only
 # where it is declared; an edge that answers without it is one whose INGRESS_QUIC_PORT is not set, and the deploy
 # fails. Success ends in one line CI's log can be checked for: `edge-mode: tls — <app> declares quic, h3 and
 # webtransport`.
@@ -128,12 +128,12 @@ done
 echo
 echo "$APP is serving build $EXPECTED"
 
-# AND IT SERVES THE DOOR THIS CHECKOUT'S FRONTS DIAL, which is what image publication asks of it next (ci.yml
+# AND IT SERVES THE DOOR THIS CHECKOUT'S NETD DIALS, which is what image publication asks of it next (ci.yml
 # images-merge, the release): an edge rolled from an image that somehow lacks it fails here, where the cause is.
 EDGE_HEALTH_URL="$HEALTH_URL" EDGE_DOOR_WAIT=0 bash "$ROOT/_tools/scripts/image/require-edge-door.sh"
 
 # TERMINATING TLS, THE EDGE MUST SAY SO. The build answering above proves the process is up behind the new services;
-# the declaration proves it bound the QUIC door those services send UDP to, which is what every front and editor now
+# the declaration proves it bound the QUIC door those services send UDP to, which is what every netd and editor now
 # goes by. Fly accepted the UDP service either way, so nothing else here would notice an edge that never listens on it.
 if [ "$SHAPE" = tls ]; then
     declared="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | sed -n 's/.*"transports":\[\([^]]*\)\].*/\1/p')"
@@ -143,7 +143,7 @@ if [ "$SHAPE" = tls ]; then
             *)
                 echo >&2 "error: $APP terminates TLS under $(basename "$CONFIG") but its /health declares [${declared}], not $transport."
                 echo >&2 "  The edge declares what it binds: INGRESS_QUIC_PORT=443 and INGRESS_QUIC_HOST=fly-global-services"
-                echo >&2 "  must be set on it ('flyctl secrets list -a $APP'). Until they are, fronts dial no QUIC and editors open"
+                echo >&2 "  must be set on it ('flyctl secrets list -a $APP'). Until they are, netd instances dial no QUIC and editors open"
                 echo >&2 "  no WebTransport; the WebSocket still carries everything. ingress/README.md has the runbook."
                 exit 1
                 ;;

@@ -1,0 +1,44 @@
+[package]
+name = "intentic-netd"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "intentic-netd"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+browser-wire.workspace = true
+bytes.workspace = true
+netd-wire.workspace = true
+futures-util.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+ignore.workspace = true
+inotify.workspace = true
+libc.workspace = true
+memchr.workspace = true
+pin-project-lite.workspace = true
+relay.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tokio-tungstenite.workspace = true
+tower-service.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tunnel.workspace = true
+webpki-roots.workspace = true
+
+[dev-dependencies]
+base64 = "0.23"
+rcgen = "0.14"
+ring = "0.17"
+vt100 = "0.16"

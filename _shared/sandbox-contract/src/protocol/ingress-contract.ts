@@ -60,7 +60,7 @@ export { hostOwnerId } from "../ids/hostnames.js";
 // Wire constants
 
 // Tunnel door on the ingress (the tunnel crate's TUNNEL_PATH); versioned, so a new session shape adds a path. `/tunnel/v1`
-// is the edge's alone to answer now, for fronts that predate this one.
+// is the edge's alone to answer now, for netd versions that predate this one.
 export const INGRESS_TUNNEL_PATH = "/tunnel/v2";
 
 // Grant travels as a header on the tunnel upgrade; this connection is never a browser's.
@@ -75,9 +75,9 @@ export const ENV_SANDBOX_GRANT = "SANDBOX_GRANT";
 //   and cache the answer, failing open if the platform doesn't respond. A 404 refuses the tunnel.
 // - Displacement: a new tunnel for an id closes the old session (code 4001) and takes the registration.
 // - Streams: every exchange is a stream of its own carrying HTTP/1.1 (yamux over a WebSocket, or QUIC). Over TCP a
-//   transfer rides the bulk socket: a preview's request, or a route the front announced (tunnel-bulk.ts); over QUIC a
+//   transfer rides the bulk socket: a preview's request, or a route netd announced (tunnel-bulk.ts); over QUIC a
 //   stream that sends a megabyte without pausing yields to the others.
-// - Liveness: the front pings every 15s; a peer silent for 45s is unregistered.
+// - Liveness: netd pings every 15s; a peer silent for 45s is unregistered.
 // - Routing: host maps via hostOwnerId to a registered tunnel; no tunnel answers 502 naming the sandbox label, with
 //   the verdict header and CORS of edge-verdict.ts, and admits the preflight of the request it is about to refuse.
 // - The tunnel door and any host without a sandbox id are served directly by the ingress, never routed.

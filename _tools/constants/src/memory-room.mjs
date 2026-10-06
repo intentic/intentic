@@ -76,7 +76,7 @@ export const STALL_SUSTAINED_PERCENT = 10;
 // The share of its swap limit past which swap counts as full, and the swapped pages count as used.
 export const SWAP_FULL_SHARE = 0.9;
 export const RESERVATION_MS = 90_000;
-// Where the daemon answers `GET /room`; never the daemon's own socket, which the front relays to the internet.
+// Where the daemon answers `GET /room`; never the daemon's own socket, which netd relays to the internet.
 export const ROOM_SOCKET = process.env.INTENTIC_ROOM_SOCKET ?? "/run/intentic/room.sock";
 
 const CGROUP = "/sys/fs/cgroup";

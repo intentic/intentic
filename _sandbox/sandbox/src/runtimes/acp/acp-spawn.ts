@@ -46,7 +46,7 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
         // Stamped as the DAEMON's rather than any one turn's, because that is what a pooled agent is: it
         // deliberately outlives the turn that warmed it (acp-connection.ts), so the in-life sweep must never
         // read one as abandoned. A pool process a previous daemon left is no sweep's either: it stays in that
-        // daemon's process group, which intentic-front ends once the daemon has crashed (supervise.rs).
+        // daemon's process group, which intentic-netd ends once the daemon has crashed (supervise.rs).
         env: { ...process.env, ...env, ...workloadStamp(DAEMON_OWNER) },
         stdio: ["pipe", "pipe", "pipe"],
     });

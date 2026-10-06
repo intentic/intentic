@@ -1,6 +1,6 @@
 //! Which tunnel serves which sandbox on this machine, per slot, and who dialled it. One holder per sandbox
-//! (2026-10-05): a registration from a front of another instance than one already holding the sandbox, whose carrier is
-//! alive, is refused (`Elsewhere`), so two containers holding one grant no longer trade the tunnel every minute. A front
+//! (2026-10-05): a registration from a netd of another instance than one already holding the sandbox, whose carrier is
+//! alive, is refused (`Elsewhere`), so two containers holding one grant no longer trade the tunnel every minute. A netd
 //! naming no instance predates instances and keeps the old rule: the newest registration for an id and slot takes it and
 //! closes the older with `DISPLACED_CODE`, whose teardown then cannot evict it. The same instance replaces its own older
 //! registration the same way. Every arrival and departure, in any slot, is the cluster's news, with when it registered
@@ -23,7 +23,7 @@ pub struct Held {
     pub closing: watch::Sender<Option<Close>>,
 }
 
-/// Who holds a registration: the front that dialled it (none for one from before instances), when it registered, when
+/// Who holds a registration: netd that dialled it (none for one from before instances), when it registered, when
 /// its carrier last heard it, and whether the carrier may take requests yet.
 #[derive(Debug, Clone)]
 pub struct Holder {
@@ -62,7 +62,7 @@ impl Holder {
     }
 }
 
-/// Where a tunnel is held: the interactive socket every front dials first (`/tunnel/v2`, or a legacy front's interactive
+/// Where a tunnel is held: the interactive socket every netd dials first (`/tunnel/v2`, or a legacy netd's interactive
 /// lane, either one the sandbox's home in the cluster), the bulk socket beside it, or the QUIC connection that carries
 /// every request while it lasts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -84,7 +84,7 @@ pub enum Change {
 }
 
 /// A registration as the cluster tells it: the sandbox, the slot, when it registered (wall-clock milliseconds), and the
-/// front that dialled it with where that front runs.
+/// netd that dialled it with where that netd runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Holding {
     pub id: String,
@@ -96,7 +96,7 @@ pub struct Holding {
     pub host: String,
 }
 
-/// Another live copy of the sandbox holds it: where that copy runs, as its front named the machine.
+/// Another live copy of the sandbox holds it: where that copy runs, as its netd named the machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Elsewhere {
     pub instance: String,
@@ -130,7 +130,7 @@ impl Entry {
     // machine's environment cannot run two copies of a sandbox at once (one engine, one container name), so a new
     // instance from the very place the holder runs is that container started again after a crash or a recreate: it
     // replaces the holder instead of waiting out the old carrier's silence, which a refusal's backoff would stretch to
-    // minutes of downtime. Only a place both fronts named counts; two machines labelled alike stay newest-wins.
+    // minutes of downtime. Only a place both netd instances named counts; two machines labelled alike stay newest-wins.
     fn keeps_out(&self, newcomer: &Identity) -> Option<Elsewhere> {
         let identity = self.holder.identity.as_ref()?;
         let same_place = !identity.host.is_empty() && identity.host == newcomer.host;
@@ -190,8 +190,8 @@ impl Registry {
         let _ = self.listener.set(Box::new(listener));
     }
 
-    /// Whether a front of `identity` would be refused `id` here: another instance holds a slot of it and its carrier is
-    /// alive. Asked before an upgrade is answered, so a refused front hears 409 rather than a 101 and a close; a front
+    /// Whether a netd of `identity` would be refused `id` here: another instance holds a slot of it and its carrier is
+    /// alive. Asked before an upgrade is answered, so a refused netd hears 409 rather than a 101 and a close; a netd
     /// naming none is never refused.
     pub fn held_elsewhere(&self, id: &str, identity: Option<&Identity>) -> Option<Elsewhere> {
         self.lock().elsewhere(id, identity?)
@@ -248,7 +248,7 @@ impl Registry {
         Ok(previous.is_some())
     }
 
-    /// Takes `id` in `slot` for a tunnel from a front that names no instance: newest wins, as it always did. Answers
+    /// Takes `id` in `slot` for a tunnel from a netd that names no instance: newest wins, as it always did. Answers
     /// whether something was displaced.
     pub fn register(&self, id: &str, slot: Slot, held: Held) -> bool {
         self.admit(
@@ -654,7 +654,7 @@ mod tests {
         assert_eq!(
             registry.held_elsewhere(ID, None),
             None,
-            "a front naming none is never refused"
+            "a netd naming none is never refused"
         );
         assert!(
             registry
@@ -786,9 +786,9 @@ mod tests {
         );
     }
 
-    // An older front names no instance: the newest still wins against it, and it against a named one, during the roll.
+    // An older netd names no instance: the newest still wins against it, and it against a named one, during the roll.
     #[tokio::test]
-    async fn a_front_naming_no_instance_keeps_newest_wins_either_way() {
+    async fn a_netd_naming_no_instance_keeps_newest_wins_either_way() {
         let registry = Registry::new();
         let (named_one, _, named_closed, _pipe17) = held().await;
         registry

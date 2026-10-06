@@ -73,7 +73,7 @@ if [ "$(printf '%s' "$target" | gh_field prerelease)" = "true" ]; then
   exit 1
 fi
 
-# NOT ONTO A FRONT THE LIVE EDGE CANNOT SERVE. The version rolled back onto dials the tunnel door ITS contract names,
+# NOT ONTO A NETD THE LIVE EDGE CANNOT SERVE. The version rolled back onto dials the tunnel door ITS contract names,
 # which may be one the edge has since retired; asked before any pointer moves, and without waiting, since a rollback
 # is taken in a hurry and the edge will not change under it. The door is read from the tag itself; a version whose
 # contract is not at today's path (older than the 2026-09 directory overhaul) is named by hand with ROLLBACK_DOOR.
@@ -85,7 +85,7 @@ if [ -z "$door" ]; then
     })' || true)"
 fi
 if [ -z "$door" ]; then
-  echo "cannot read the tunnel door ${TAG}'s front dials from its contract; name it with ROLLBACK_DOOR (e.g. /tunnel/v1)" >&2
+  echo "cannot read the tunnel door ${TAG}'s netd dials from its contract; name it with ROLLBACK_DOOR (e.g. /tunnel/v1)" >&2
   exit 1
 fi
 EDGE_DOOR_WAIT=0 bash "$DIR/../image/require-edge-door.sh" "$door"

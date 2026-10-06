@@ -36,7 +36,7 @@ describe(`streamCapacity`, () => {
         expect(streamCapacity(undefined, undefined, true)).toBe(Number.POSITIVE_INFINITY);
     });
 
-    // A front too old to send Timing-Allow-Origin leaves the protocol unknown for good: Blink and Gecko reach the
+    // A netd too old to send Timing-Allow-Origin leaves the protocol unknown for good: Blink and Gecko reach the
     // certified loopback name over h2, so capping them there would push a third window or stream to the tunnel.
     it(`leaves the certified loopback name uncapped for engines that multiplex it, and plain HTTP capped for all`, () => {
         expect(streamCapacity(`local`, undefined, false)).toBe(Number.POSITIVE_INFINITY);

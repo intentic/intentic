@@ -19,7 +19,7 @@ import {
 
 const ID = "abc123def456";
 
-// The cases the front's Rust router is held to as well (_sandbox/front, route.rs), read from the one file both run.
+// The cases netd's Rust router is held to as well (_sandbox/netd, route.rs), read from the one file both run.
 interface HostCase {
     readonly host: string;
     readonly sandboxId?: string;
@@ -32,7 +32,7 @@ interface HostCase {
 }
 const HOST_CASES = JSON.parse(readFileSync(new URL("./hostnames.fixture.json", import.meta.url), "utf8")) as HostCase[];
 
-test.each(HOST_CASES)("the shared host cases parse as the front parses them: $host", (hostCase) => {
+test.each(HOST_CASES)("the shared host cases parse as netd parses them: $host", (hostCase) => {
     expect({
         panel: panelFromHost(hostCase.host, hostCase.sandboxId),
         port: portSlotFromHost(hostCase.host, hostCase.sandboxId),

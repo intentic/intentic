@@ -26,7 +26,7 @@ import { t } from "@intentic/ui/i18n";
 // No frame this long means the connection silently died; sized to tolerate a few missed heartbeats under real
 // load, not just an idle one.
 const WATCHDOG_MS = 10_000;
-// The daemon's heartbeat is produced on its own event loop, so a sandbox the diagnosis saw alive but slow (its front
+// The daemon's heartbeat is produced on its own event loop, so a sandbox the diagnosis saw alive but slow (its netd
 // answering for it, diagnosis/) would trip the ordinary watchdog on every attempt, and each reconnect adds load it has
 // to work through before its first frame. While that holds, a stream is given this long, and a retry waits this long.
 const BUSY_WATCHDOG_MS = 30_000;

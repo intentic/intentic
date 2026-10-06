@@ -1,5 +1,5 @@
-# What both of the tunnel's Rust ends relay HTTP with: the edge (_platform/ingress) and the sandbox's front
-# (_sandbox/front) build it by path. Its own workspace, so it builds and tests apart from either.
+# What both of the tunnel's Rust ends relay HTTP with: the edge (_platform/ingress) and the sandbox's netd
+# (_sandbox/netd) build it by path. Its own workspace, so it builds and tests apart from either.
 [package]
 name = "relay"
 edition = "2024"

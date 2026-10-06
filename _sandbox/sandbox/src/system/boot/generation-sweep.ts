@@ -7,7 +7,7 @@ import { procUnits, type ScannedProcess, scanProcesses } from "../resources/proc
 
 // WHAT AN EARLIER DAEMON RUN LEFT RUNNING (2026-10-05). Every process the daemon starts carries its run's generation
 // (seams/workload-stamp.ts `INTENTIC_DAEMON_GEN`), and a detached child of the daemon's own (an isolation anchor, a
-// watch check, an edit rule's command, the sign-in window's Chromium) also says what it is. intentic-front ends a
+// watch check, an edit rule's command, the sign-in window's Chromium) also says what it is. intentic-netd ends a
 // crashed daemon's process group, but these sit in groups of their own, so before this pass an isolation anchor leaked
 // one `sleep infinity` per crash and nothing ever ended it. At boot, before anything is started, a stamped process of
 // an earlier run goes, except:
@@ -64,7 +64,7 @@ export interface GenerationCandidate {
 export interface GenerationPolicy {
     readonly generation: string;
     readonly selfPid: number;
-    // Where an orphan is reparented to: init, and the front when it is a subreaper.
+    // Where an orphan is reparented to: init, and netd when it is a subreaper.
     readonly orphanParents: ReadonlySet<number>;
     // Every live tmux pane's root pid, and the tmux server's.
     readonly panePids: ReadonlySet<number>;

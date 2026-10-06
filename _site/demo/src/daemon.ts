@@ -1149,7 +1149,7 @@ export const raw = {
     // can ever redeem this one.
     "GET /system/phones": () => json({ phones: [] }),
     "POST /system/phones/pair": () => json({ token: `demo-pairing-never-redeemable`, expiresIn: 600_000 }),
-    // intentic-front's own answer in a real sandbox: a daemon that is up, idle and never restarted.
+    // intentic-netd's own answer in a real sandbox: a daemon that is up, idle and never restarted.
     "GET /system/vitals": () =>
         json({
             node: `up`,

@@ -1,16 +1,16 @@
-// The sandbox's proof of life, which intentic-front answers itself on the daemon's own address and never forwards to
-// Node: whether Node is up, how long its event loop takes to answer the front's ping, how often the front restarted it,
+// The sandbox's proof of life, which intentic-netd answers itself on the daemon's own address and never forwards to
+// Node: whether Node is up, how long its event loop takes to answer netd's ping, how often netd restarted it,
 // how long the container has run, and its pressure stall. The daemon's heartbeat on /events rides Node's event loop,
 // so a busy sandbox and a dead one look alike from there; this route tells them apart. The Rust crate `browser-wire`
 // is the definition (SandboxVitals), and wire-manifests.test.ts holds the path here to the manifest it writes.
 
 import { z } from "zod";
-import type { NodeLink, Pressure, SandboxVitals } from "../front/generated/browser-wire.js";
+import type { NodeLink, Pressure, SandboxVitals } from "../netd/generated/browser-wire.js";
 
 export type { NodeLink, Pressure, SandboxVitals };
 
-// A plain GET any origin may read, answered by the front whatever state Node is in. The route is registered as
-// `front: true` in raw-routes.ts, so the daemon serves none.
+// A plain GET any origin may read, answered by netd whatever state Node is in. The route is registered as
+// `netd: true` in raw-routes.ts, so the daemon serves none.
 export const VITALS_PATH = "/system/vitals";
 
 // Every state, so a new one in the Rust enum fails this file's typecheck until it is read here too.
@@ -27,10 +27,10 @@ const VitalsSchema = z.object({
     pressure: PressureSchema.nullable().catch(null),
 });
 
-// A response body as `Response.json()` hands it over: any JSON value, not yet known to be the front's answer.
+// A response body as `Response.json()` hands it over: any JSON value, not yet known to be netd's answer.
 type JsonBody = string | number | boolean | null | readonly JsonBody[] | { readonly [key: string]: JsonBody };
 
-// The front's answer, or undefined for anything else: an older sandbox forwards the path to Node, which answers 404 or
+// netd's answer, or undefined for anything else: an older sandbox forwards the path to Node, which answers 404 or
 // an HTML page, and an edge in between may answer for a box that is not there.
 export const parseVitals = (body: JsonBody): SandboxVitals | undefined => {
     const parsed = VitalsSchema.safeParse(body);

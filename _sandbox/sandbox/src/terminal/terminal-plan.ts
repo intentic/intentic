@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import type { Answer, TerminalPlan } from "@intentic/sandbox-contract/front-wire";
+import type { Answer, TerminalPlan } from "@intentic/sandbox-contract/netd-wire";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { redeemTicket, type WsTickets } from "../auth/tokens/ws-tickets.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { isValidSessionName, SERVICE_SESSION_PREFIX } from "./terminal-session.js";
 
-// A terminal socket is the front's (_sandbox/front, term/): it asks here, once per socket, whether the socket may open
+// A terminal socket is netd's (_sandbox/netd, term/): it asks here, once per socket, whether the socket may open
 // and onto what, and none of its bytes ever pass through this process.
 
 export interface TerminalPlanDeps {
@@ -20,7 +20,7 @@ export interface TerminalPlanDeps {
 export type TerminalAnswer = Extract<Answer, { answer: "terminal" }>;
 
 // Panel, agent and job sessions are attach-only, so a missing one fails honestly, not as a bare shell in its place; any
-// other is created where the socket asked when it does not exist yet. The front composes the tmux command itself.
+// other is created where the socket asked when it does not exist yet. netd composes the tmux command itself.
 const attachOnly = (session: string): boolean =>
     [PANEL_SESSION_PREFIX, AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX].some((prefix) => session.startsWith(prefix));
 
@@ -51,7 +51,7 @@ export const planTerminal = (deps: TerminalPlanDeps, query: string): TerminalAns
         return { answer: "terminal", plan: { plan: "refused", code: 1008, reason: "unauthorized" } };
     }
     const session = params.get("session") ?? "";
-    // The name reaches the front's tmux argv: checked, so a name like `-C` is never read as a flag.
+    // The name reaches netd's tmux argv: checked, so a name like `-C` is never read as a flag.
     const plan: TerminalPlan = isValidSessionName(session)
         ? planOf(deps, session, params.get("cwd"))
         : { plan: "refused", code: 1008, reason: "invalid session" };

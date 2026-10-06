@@ -28,7 +28,7 @@ flowchart LR
 | [extension-manifest](extension-manifest) | Schema of `intentic-extension.json`, what an extension declares. |
 | [extension-ui](extension-ui) | Host-provided UI kit extensions render with. |
 | [registry](registry) | Extension registry file format: sha-pinned pointers, trust, scan facts. |
-| [relay](relay) | How the edge and the sandbox's front relay HTTP over a tunnel's streams (Rust). |
+| [relay](relay) | How the edge and the sandbox's netd relay HTTP over a tunnel's streams (Rust). |
 | [sandbox-contract](sandbox-contract) | Wire contract between the editor and the sandbox daemon. |
 | [sandbox-openapi](sandbox-openapi) | The daemon's contract as an OpenAPI 3.1 document. |
 | [sandbox-run](sandbox-run) | How a sandbox container starts: names, privileges, env, Fly config. |

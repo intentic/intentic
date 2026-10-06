@@ -2,8 +2,8 @@
 # The intentic ingress image (ghcr.io/intentic/ingress): the edge every sandbox is reached through, a Rust binary
 # compiled here in a BuildKit stage on the Debian release it then runs on, so it links the glibc it carries and no
 # job needs a toolchain. docker-release.sh passes the three sibling trees it compiles from as named contexts: `tunnel`
-# (_sandbox/front/crates/tunnel, the wire both ends of a tunnel speak), `browser-wire`
-# (_sandbox/front/crates/browser-wire, what a browser sees of the edge: the verdict header, the WebTransport path) and
+# (_sandbox/netd/crates/tunnel, the wire both ends of a tunnel speak), `browser-wire`
+# (_sandbox/netd/crates/browser-wire, what a browser sees of the edge: the verdict header, the WebTransport path) and
 # `relay` (_shared/relay, how both ends relay HTTP over a stream), so the context stays this directory.
 #
 # THERE IS NO BOOT CHAIN HERE: no migrations to apply, no schema to prove, no database to reach. The process holds
@@ -24,9 +24,9 @@
 #                           certificate is a PEM pair on disk (INGRESS_TLS_CERT_FILE, INGRESS_TLS_KEY_FILE) or the one
 #                           the platform issued (INGRESS_PLATFORM_TOKEN with PLATFORM_URL), reloaded in place.
 #   INGRESS_PROXY_PROTOCOL  the TLS port sits behind a TCP passthrough that names the browser in a PROXY header.
-#   INGRESS_QUIC_PORT       the UDP door, on the same certificate: a front's QUIC tunnel and a browser's HTTP/3 and
+#   INGRESS_QUIC_PORT       the UDP door, on the same certificate: a netd's QUIC tunnel and a browser's HTTP/3 and
 #                           WebTransport. Setting it is also what the edge DECLARES (x-intentic-transports on a tunnel's
-#                           answer, `transports` on /health): fronts and editors reach for UDP only where it is declared.
+#                           answer, `transports` on /health): netd instances and editors reach for UDP only where it is declared.
 #                           On Fly it MUST be the public 443: Fly never rewrites a UDP packet's port.
 #   INGRESS_QUIC_HOST       the address it binds, else INGRESS_HOST; on Fly, `fly-global-services`, the only one UDP
 #                           reaches.
@@ -38,8 +38,8 @@
 # The private half of the key NEVER appears here: this image can verify grants and can never mint one, which is the
 # whole of why a compromised edge cannot make anything reachable.
 FROM rust:1.98.1-slim-trixie@sha256:f47a8de237dcbb0b0ce1099901e60a89728e3d51f24e664b40e947171538ade7 AS build
-COPY --from=tunnel . /src/_sandbox/front/crates/tunnel
-COPY --from=browser-wire . /src/_sandbox/front/crates/browser-wire
+COPY --from=tunnel . /src/_sandbox/netd/crates/tunnel
+COPY --from=browser-wire . /src/_sandbox/netd/crates/browser-wire
 COPY --from=relay . /src/_shared/relay
 WORKDIR /src/_platform/ingress
 COPY . .

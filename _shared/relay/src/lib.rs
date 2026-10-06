@@ -1,5 +1,5 @@
 //! What the tunnel's two Rust ends share to relay HTTP: the edge (`_platform/ingress`) between browsers and tunnels,
-//! the front (`_sandbox/front`) between tunnels, listeners, Node and previews. One body type, one list of what never
+//! netd (`_sandbox/netd`) between tunnels, listeners, Node and previews. One body type, one list of what never
 //! crosses a hop, one reading of a request's host, one HTTP/1.1 exchange over any byte stream with upgrades spliced,
 //! one redial ladder, and one TLS certificate slot.
 

@@ -95,7 +95,7 @@ export interface ChangedFiles {
     blobs: Map<string, { head?: string; index?: string }>;
 }
 
-// Read once per change the front counted in the checkout (git/feed): an untouched one answers from memory.
+// Read once per change netd counted in the checkout (git/feed): an untouched one answers from memory.
 export const changedFiles = (dir: string, git: GitRunner = defaultGit): Promise<ChangedFiles> =>
     readOnFeed("changed-files", dir, git, () => readChangedFiles(dir, git));
 

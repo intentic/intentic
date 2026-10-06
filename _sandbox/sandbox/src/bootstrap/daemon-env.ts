@@ -62,9 +62,9 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
 };
 
 /**
- * Takes the front's two socket paths off this process's environment once the front door has dialled them (2026-10-05):
+ * Takes netd's two socket paths off this process's environment once the netd door has dialled them (2026-10-05):
  * every child inherits what is left, and an agent's shell holding them could start a second Node that takes the
- * front's socket over. The tmux server's own copy goes with terminal/tmux-server.ts prepareTmuxServer.
+ * netd's socket over. The tmux server's own copy goes with terminal/tmux-server.ts prepareTmuxServer.
  */
 export const forgetDaemonOnlyEnv = (env: NodeJS.ProcessEnv = process.env): void => {
     for (const name of DAEMON_ONLY_ENV) {

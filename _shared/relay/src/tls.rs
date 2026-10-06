@@ -100,7 +100,7 @@ mod tests {
         slot.0.read().unwrap().clone()
     }
 
-    // The front once accepted any pair that parsed, so a renewal whose key did not belong to its certificate replaced a
+    // netd once accepted any pair that parsed, so a renewal whose key did not belong to its certificate replaced a
     // working certificate with one every handshake failed on.
     #[test]
     fn a_key_that_is_not_the_certificates_is_refused_and_the_held_one_kept() {

@@ -34,7 +34,7 @@ A module takes `Pick<Services, …>` of the seams it uses, so its dependencies a
 
 ## Boot
 
-[src/main.ts](../src/main.ts) runs the phases in [src/bootstrap/](../src/bootstrap): the front door first, so
+[src/main.ts](../src/main.ts) runs the phases in [src/bootstrap/](../src/bootstrap): the netd door first, so
 `/health` and `/events` answer at once; then the boot chain (`boot-chain.ts`) while data routes wait behind the
 readiness gate; then workspace apps, sweeps, restores, schedulers, resumes, version watches and change reactions.
 Every subsystem registers its own teardown in one `DisposableStore`, so shutdown enumerates nothing.

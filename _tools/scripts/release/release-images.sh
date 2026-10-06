@@ -15,7 +15,7 @@ cd "$(repo_root)"
 # the GHCR throttle retry (lib/registry-retry.sh) lives there with the writes it wraps.
 
 # `stable` is what every hosted machine and every `ic sandbox update` pulls, so it never moves ahead of the edge that
-# serves its front's tunnel door. The release workflow asked before semantic-release; this is for the run by hand.
+# serves its netd's tunnel door. The release workflow asked before semantic-release; this is for the run by hand.
 bash "$DIR/../image/require-edge-door.sh"
 
 # THE RELEASE MOVES `stable`. There is ONE lane: a release that gets here has passed the whole pipeline —

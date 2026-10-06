@@ -634,7 +634,7 @@ async fn a_redial_on_the_other_machine_displaces_the_first_which_then_forwards()
     let _ = StatusCode::OK;
 }
 
-// A tunnel of the front instance `instance`, registered here, as the edge admits one from a front that named itself.
+// A tunnel of netd instance `instance`, registered here, as the edge admits one from a netd that named itself.
 async fn admit(
     registry: &Registry,
     id: &str,
@@ -686,8 +686,8 @@ impl FakePeer {
 
 // 2026-10-05: a delayed `add` displaced a newer local tunnel. Now a peer's holding is ordered by when it registered.
 #[tokio::test]
-async fn an_add_older_than_the_local_tunnel_is_stale_and_a_newer_one_of_the_same_front_displaces_it()
- {
+async fn an_add_older_than_the_local_tunnel_is_stale_and_a_newer_one_of_the_same_netd_displaces_it()
+{
     let w = world(&[], &[], this(), REMOTE_TTL).await;
     let (held, closed, _pipe) = admit(&w.registry, X, Slot::Socket, "a1").await;
     let since = w.registry.holding(X, Slot::Socket).unwrap().since;
@@ -743,7 +743,7 @@ async fn between_two_copies_the_first_to_register_holds_the_sandbox_on_every_mac
         })
     })
     .await;
-    // And a front of another instance asking this machine for X is refused while the peer's copy is fresh.
+    // And a netd of another instance asking this machine for X is refused while the peer's copy is fresh.
     let refusing = tunnel::Identity {
         instance: "z9".into(),
         host: String::new(),

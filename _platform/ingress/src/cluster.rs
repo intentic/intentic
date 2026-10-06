@@ -3,11 +3,11 @@
 //! a roll, so its shape only grows.
 //!
 //! Since 2026-10-05 every slot is news (a sandbox held only over QUIC on another machine is that machine's to answer,
-//! not `no-tunnel` here), and each holding carries when it registered and which front instance dialled it, so what a
+//! not `no-tunnel` here), and each holding carries when it registered and which netd instance dialled it, so what a
 //! peer hears is ordered: an `add` older than this machine's own registration in that slot is stale and ignored rather
-//! than displacing the newer tunnel (a delayed one did), a newer one of the same front displaces it, and between two
+//! than displacing the newer tunnel (a delayed one did), a newer one of the same netd displaces it, and between two
 //! copies of one sandbox the one that registered first holds it on every machine, the other closed with
-//! `HELD_ELSEWHERE_CODE`. A full `set` never displaces a tunnel of the same front. An older peer's message names its
+//! `HELD_ELSEWHERE_CODE`. A full `set` never displaces a tunnel of the same netd. An older peer's message names its
 //! socket ids alone (`ids`), and is read as it always was: newest wins.
 
 use std::collections::{HashMap, HashSet};
@@ -68,7 +68,7 @@ pub struct Holds {
     pub op: Op,
     /// Socket slots alone, as every peer before 2026-10-05 reads them.
     pub ids: Vec<String>,
-    /// Every slot, each with when it registered and the front that dialled it; empty from an older peer.
+    /// Every slot, each with when it registered and netd that dialled it; empty from an older peer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tunnels: Vec<Holding>,
 }
@@ -111,7 +111,7 @@ struct Remote {
 /// What a peer's holding means for one this machine holds of the same sandbox.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Meets {
-    /// The peer's is the newer tunnel of the same front (or of one naming no instance): it takes the slot.
+    /// The peer's is the newer tunnel of the same netd (or of one naming no instance): it takes the slot.
     Displace,
     /// Another copy of the sandbox registered before this machine's one did: this machine's is refused.
     Refuse,
@@ -227,7 +227,7 @@ impl Cluster {
         found
     }
 
-    /// Whether a peer holds `id` for a front of another instance than `identity`'s, as it said within the TTL: the
+    /// Whether a peer holds `id` for a netd of another instance than `identity`'s, as it said within the TTL: the
     /// one-holder rule across machines, asked before a registration is answered.
     pub fn held_elsewhere(&self, id: &str, identity: Option<&Identity>) -> Option<Elsewhere> {
         let instance = &identity?.instance;
@@ -637,7 +637,7 @@ mod tests {
             meets(&mine, false, &holding(Slot::Socket, 2_000, Some("b2"))),
             Meets::Displace
         );
-        // An older peer's message is unordered, and newest-wins as it always was; so is a front naming no instance.
+        // An older peer's message is unordered, and newest-wins as it always was; so is a netd naming no instance.
         assert_eq!(
             meets(&mine, true, &holding(Slot::Socket, UNORDERED, None)),
             Meets::Displace

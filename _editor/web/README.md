@@ -45,7 +45,7 @@ flowchart LR
   live socket (`client/session/liveSocket.ts`): minted, pinged, closed when silent, and redialled on one
   ladder that starts over when the sandbox answers again.
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
-  bounded probes of the sandbox's address (the front's own `/system/vitals`, which answers whatever state Node is in,
+  bounded probes of the sandbox's address (netd's own `/system/vitals`, which answers whatever state Node is in,
   plus an opaque reach check), the platform, a hosted machine's power state, this computer's loopback where no
   permission prompt is raised, and the report the machine it runs on posted (`hostReport`, written by
   `ic sandbox fix`). `diagnose.ts` names one cause from them. A sandbox with any sign of life is **busy**, never down:

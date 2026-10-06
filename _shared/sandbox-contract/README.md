@@ -55,15 +55,15 @@ flowchart LR
 - `StatePlanSchema` and `StateStatusSchema` are what `ic` reads by field name: the update pre-flight's line (embedded
   verbatim in the staged-update marker) and `/health`'s `state`. `golden/` holds their examples, which the contract's
   test keeps current and ic's Rust tests parse.
-- The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/front/crates`): `tunnel` (the
+- The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/netd/crates`): `tunnel` (the
   `/tunnel/v2` door, its headers and lanes, the stream multiplexer, close codes, liveness, ALPN and the transports an
   edge declares; what the daemon announces as its transfers is `protocol/tunnel-bulk.ts`, held to the edge's reading by
-  the shared `ingress-contract.fixture.json`), `browser-wire` (what a browser sees: the terminal socket and its messages, the front's vitals,
-  the WebTransport path, the edge's verdict) and `front-wire` (the front's control socket with Node, its env vars and its patience). The
+  the shared `ingress-contract.fixture.json`), `browser-wire` (what a browser sees: the terminal socket and its messages, netd's vitals,
+  the WebTransport path, the edge's verdict) and `netd-wire` (netd's control socket with Node, its env vars and its patience). The
   vitals are read at the package root: `protocol/vitals.ts` gives `VITALS_PATH` and `parseVitals`, which reads any
   other body (an older sandbox's 404 from Node) as undefined. Their tests
-  write TypeScript and a JSON manifest each into `src/front/generated/`; `src/front/browser-wire.ts` and
-  `src/front/front-wire.ts` are the entries to them, and `wire-manifests.test.ts` holds every value TypeScript restates
+  write TypeScript and a JSON manifest each into `src/netd/generated/`; `src/netd/browser-wire.ts` and
+  `src/netd/netd-wire.ts` are the entries to them, and `wire-manifests.test.ts` holds every value TypeScript restates
   to those manifests.
 - `contract.lock.json` is every exported schema as canonical JSON Schema, plus those three manifests under `wire:`
   names, so a changed tunnel header or a gone control message is a shrink like any other, plus who reaches each route

@@ -7,7 +7,7 @@ flowchart LR
     dotenv["Repo-root .env<br/>bare dev runs"] --> config(["loadConfig"])
     env["Process env<br/>image ENV · host flow"] --> config
     argv["Command-line flags"] --> config
-    front["intentic-front<br/>socket paths"] --> daemon["Daemon"]
+    netd["intentic-netd<br/>socket paths"] --> daemon["Daemon"]
     config --> daemon
     daemon -->|"log and tmux paths"| children["tmux-run · output filter<br/>intentic CLI"]
 ```
@@ -34,8 +34,8 @@ when the daemon runs from a checkout), the process environment, then command-lin
 - The image bakes the asset paths and ports ([Dockerfile](../Dockerfile) `ENV` lines).
 - The host's creation flow sets identity, reachability and the owner's resource asks. `REPLAY_ENV` in
   [`@intentic/sandbox-run`](../../../_shared/sandbox-run/src/index.ts) lists every variable a recreate carries over.
-- `intentic-front` sets `INTENTIC_FRONT_SOCKET` and `INTENTIC_NODE_SOCKET` for the daemon it spawns, both named once
-  in the front's `front-wire` crate and read by [src/bootstrap/front-door.ts](../src/bootstrap/front-door.ts).
+- `intentic-netd` sets `INTENTIC_NETD_SOCKET` and `INTENTIC_NODE_SOCKET` for the daemon it spawns, both named once
+  in netd's `netd-wire` crate and read by [src/bootstrap/netd-door.ts](../src/bootstrap/netd-door.ts).
 - A runner container gets `RUNNER_PARENT_URL` and `RUNNER_PAIR_TOKEN`, both or neither
   ([src/runners/runner-mode.ts](../src/runners/runner-mode.ts)).
 - `ic` sets `SANDBOX_PROJECT_DIR=/work/<name>` on a project sandbox, one made for a folder on the owner's computer and
@@ -66,4 +66,4 @@ The daemon exits with code 78 rather than serve an unsafe posture:
   serves, seeds or keeps state (`requireProjectDir` in [src/system/project-dir.ts](../src/system/project-dir.ts));
 - `SANDBOX_PROJECT_DIR` and `SANDBOX_PROJECTS_HOST` both set: a sandbox is made for one folder or is the one folders
   attach to, never both;
-- started without the two front sockets.
+- started without the two netd sockets.

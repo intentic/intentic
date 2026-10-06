@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createWsTickets } from "../auth/tokens/ws-tickets.js";
 import { planTerminal, type TerminalPlanDeps } from "./terminal-plan.js";
 
-// Node's whole say over a terminal the front serves: who may open it, and which session, directory or log it opens onto.
+// Node's whole say over a terminal netd serves: who may open it, and which session, directory or log it opens onto.
 
 let root: string;
 const warnings: string[] = [];

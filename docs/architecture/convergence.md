@@ -32,7 +32,7 @@ flowchart LR
    - Containers: `HOST_PLATFORM` plus `HOST_ENV`, and `dev.intentic.*` labels ([`ic`'s side.rs](../../_sandbox/ic/src/sandbox/side.rs), [labels.rs](../../_sandbox/ic/src/sandbox/labels.rs)).
    - Mutagen sessions: `intentic-owner` labels ([`mutagen.ts`](../../_devices/machine/src/sync/mutagen.ts)).
    - Daemon children: `INTENTIC_DAEMON_GEN` ([`workload-stamp.ts`](../../_sandbox/sandbox/src/seams/workload-stamp.ts)).
-   - Tunnels: an instance id ([`identity.rs`](../../_sandbox/front/crates/tunnel/src/identity.rs)).
+   - Tunnels: an instance id ([`identity.rs`](../../_sandbox/netd/crates/tunnel/src/identity.rs)).
    - Deployed resources: `intentic.owner` ([`stamp.ts`](../../_deploy/providers/src/core/stamp.ts)).
 2. **Ownership is a lease.**
    - The environment that keeps a sandbox writes `/history/.ic/keeper.json` inside it on every keeper pass. The

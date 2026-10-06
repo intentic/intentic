@@ -30,8 +30,8 @@ export const isNoTmuxTarget = (error: unknown): boolean => isNoTmuxServer(error)
 // holder session (killed right after); `exit-empty off` keeps the server alive so nothing else can win the fork.
 export const HOLDER_SESSION = "intentic-server-pin";
 
-// What the server's own environment must not hand every pane it starts (2026-10-05): the front's two sockets, which a
-// server the front or an earlier daemon started holds, and a daemon run's generation, which would date every pane by
+// What the server's own environment must not hand every pane it starts (2026-10-05): netd's two sockets, which a
+// server netd or an earlier daemon started holds, and a daemon run's generation, which would date every pane by
 // the run that happened to start the server. The tmux sessions have their own sweeps.
 const SCRUBBED_SERVER_ENV = [...DAEMON_ONLY_ENV, DAEMON_GEN_ENV];
 

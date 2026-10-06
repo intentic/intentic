@@ -205,26 +205,26 @@
                 "default": "./dist/policy/owner-ticket.js"
             }
         },
-        "./front-wire": {
-            "types": "./dist/front/front-wire.d.ts",
+        "./netd-wire": {
+            "types": "./dist/netd/netd-wire.d.ts",
             "import": {
-                "@intentic/src": "./src/front/front-wire.ts",
-                "default": "./dist/front/front-wire.js"
+                "@intentic/src": "./src/netd/netd-wire.ts",
+                "default": "./dist/netd/netd-wire.js"
             },
             "require": {
-                "@intentic/src": "./src/front/front-wire.ts",
-                "default": "./dist/front/front-wire.js"
+                "@intentic/src": "./src/netd/netd-wire.ts",
+                "default": "./dist/netd/netd-wire.js"
             }
         },
         "./browser-wire": {
-            "types": "./dist/front/browser-wire.d.ts",
+            "types": "./dist/netd/browser-wire.d.ts",
             "import": {
-                "@intentic/src": "./src/front/browser-wire.ts",
-                "default": "./dist/front/browser-wire.js"
+                "@intentic/src": "./src/netd/browser-wire.ts",
+                "default": "./dist/netd/browser-wire.js"
             },
             "require": {
-                "@intentic/src": "./src/front/browser-wire.ts",
-                "default": "./dist/front/browser-wire.js"
+                "@intentic/src": "./src/netd/browser-wire.ts",
+                "default": "./dist/netd/browser-wire.js"
             }
         },
         "./share-paths": {

@@ -183,7 +183,7 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
         'add-zsh-hook preexec _intentic_prompt_signal' \
         'add-zsh-hook precmd _intentic_prompt_signal' \
         > /root/.zshrc
-# tmux backs each terminal tab (one session per tab, attached by intentic-front: _sandbox/front's term/), as a
+# tmux backs each terminal tab (one session per tab, attached by intentic-netd: _sandbox/netd's term/), as a
 # PERSISTENCE layer only: the browser's client is a CONTROL-MODE client (`tmux -C`), which gets every pane's
 # raw bytes as text notifications instead of a drawn screen, and xterm in the browser is the terminal that
 # interprets them. So nothing here is about how a pane LOOKS — no status bar (the web UI draws the tab bar), no
@@ -192,7 +192,7 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
 # program reaches xterm raw), and nothing bound to the prefix key (keystrokes are injected straight into the
 # pane, tmux never sees them as its own). default-command launches the oh-my-zsh zsh above (not /bin/sh);
 # destroy-unattached off keeps a session alive when its web client detaches on reload/drop — the whole point of
-# tmux-backed persistence; history-limit is how far back a fresh attach can replay (the front's term/hub.rs
+# tmux-backed persistence; history-limit is how far back a fresh attach can replay (netd's term/hub.rs
 # captures it to seed xterm's scrollback), matched by the shell's HISTSIZE above.
 # The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
 # /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
@@ -372,9 +372,9 @@ COPY _sandbox/sandbox/claude-policy /opt/intentic-claude-policy
 COPY _sandbox/sandbox/claude-policy/managed-settings.json /etc/claude-code/managed-settings.json
 # The sandbox daemon.
 COPY --from=trees sandbox /opt/sandbox
-# The front the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/front). Built
-# on this image's Debian release by build-front.sh, so it links against the glibc this layer carries.
-COPY --from=trees front /opt/sandbox/front
+# netd the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/netd). Built
+# on this image's Debian release by build-netd.sh, so it links against the glibc this layer carries.
+COPY --from=trees netd /opt/sandbox/netd
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
 # bundled @typescript/native-preview binary) over whatever tsconfig project the agent points it at in /work.

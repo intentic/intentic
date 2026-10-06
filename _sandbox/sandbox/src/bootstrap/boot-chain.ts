@@ -59,7 +59,7 @@ interface BootChainStep {
 // though keeping them is the point of `keep`); the tmux server is container-wide, so they are the container owner's to
 // sweep. Then what an earlier daemon run left running outside tmux (system/boot/generation-sweep.ts).
 const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promise<void> => {
-    // A server that outlived the last daemon (or that the front started) still hands every new pane the front's sockets.
+    // A server that outlived the last daemon (or that netd started) still hands every new pane netd's sockets.
     await prepareTmuxServer(logger);
     // An events log that cannot be read spares whatever apply session exists: killing a live infra apply mid-run is the
     // costlier mistake.

@@ -1,4 +1,4 @@
-//! HTTP/3 for browsers on the QUIC endpoint the fronts dial, found through the Alt-Svc TCP answers carry. Each request
+//! HTTP/3 for browsers on the QUIC endpoint the netd instances dial, found through the Alt-Svc TCP answers carry. Each request
 //! reaches the handler a TCP one does, so routing, refusals and tunnels are the TCP path's. The only extended CONNECT is
 //! WebTransport's (`webtransport.rs`), so a WebSocket stays on TCP.
 

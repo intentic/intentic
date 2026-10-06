@@ -1,20 +1,20 @@
 import { edgeVerdictOf, EDGE_VERDICT_HEADER, parseVitals, type SandboxVitals, VITALS_PATH } from "@intentic/sandbox-contract";
-import type { FrontProbe } from "./diagnose";
+import type { NetdProbe } from "./diagnose";
 
 // THE PROBES a diagnosis is made of, each bounded and each safe to run against a sandbox that is down, busy or gone.
-// They never carry a credential: the vitals route is the front's own and public, and the second probe is opaque. What
-// each outcome means is decided by `frontProbeOf`, pure, so the reading is tested without a network.
+// They never carry a credential: the vitals route is netd's own and public, and the second probe is opaque. What
+// each outcome means is decided by `netdProbeOf`, pure, so the reading is tested without a network.
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-// Well inside the connection watchdog, and far above what the front needs: it answers vitals without asking its daemon.
+// Well inside the connection watchdog, and far above what netd needs: it answers vitals without asking its daemon.
 export const VITALS_TIMEOUT_MS = 4000;
 // The opaque probe only asks "does anything answer this address"; the edge answers at once when it holds no tunnel.
 const REACH_TIMEOUT_MS = 6000;
 
 // How one fetch ended, reduced to what the reading needs.
 export type Settled =
-    // `vitals` is the body read as the front's vitals, undefined for any other body.
+    // `vitals` is the body read as netd's vitals, undefined for any other body.
     | { readonly kind: "response"; readonly status: number; readonly verdict: string | null; readonly vitals: SandboxVitals | undefined }
     | { readonly kind: "timeout" }
     // The fetch rejected without a response: no route, DNS, TLS, or a response CORS kept from this page.
@@ -60,7 +60,7 @@ const reach = async (url: string, fetchImpl: FetchLike): Promise<Reach> => {
 
 // What the two probes of the sandbox's address establish, together. The readable one decides whenever it can; the
 // opaque one only says whether an unreadable failure was this browser's network or a response it may not read.
-export const frontProbeOf = (vitals: Settled, reached: Reach): FrontProbe => {
+export const netdProbeOf = (vitals: Settled, reached: Reach): NetdProbe => {
     if (vitals.kind === `response`) {
         const verdict = edgeVerdictOf(vitals.verdict);
         if (verdict !== undefined) {
@@ -69,14 +69,14 @@ export const frontProbeOf = (vitals: Settled, reached: Reach): FrontProbe => {
         if (vitals.vitals !== undefined) {
             return { kind: `vitals`, vitals: vitals.vitals };
         }
-        // The front's own "daemon is restarting"; any other answer came from behind the edge, from a sandbox that is up.
+        // netd's own "daemon is restarting"; any other answer came from behind the edge, from a sandbox that is up.
         return vitals.status === 503 ? { kind: `restarting` } : { kind: `answered` };
     }
     if (vitals.kind === `timeout`) {
         return { kind: `silent` };
     }
     // Unreadable. If the opaque probe got through, something there answered in a way this page may not read (an older
-    // front's refusal carries no CORS header), which only a running container does.
+    // netd's refusal carries no CORS header), which only a running container does.
     if (reached === `answered`) {
         return { kind: `answered` };
     }
@@ -84,11 +84,11 @@ export const frontProbeOf = (vitals: Settled, reached: Reach): FrontProbe => {
 };
 
 // Both probes at once, so the reading costs the slower budget rather than the sum.
-export const probeFront = async (daemonUrl: string, fetchImpl: FetchLike = fetch): Promise<FrontProbe> => {
+export const probeNetd = async (daemonUrl: string, fetchImpl: FetchLike = fetch): Promise<NetdProbe> => {
     const base = daemonUrl.replace(/\/+$/, ``);
     const [vitals, reached] = await Promise.all([
         settle(() => fetchImpl(`${base}${VITALS_PATH}`, { cache: `no-store`, signal: AbortSignal.timeout(VITALS_TIMEOUT_MS) })),
         reach(`${base}/health`, fetchImpl),
     ]);
-    return frontProbeOf(vitals, reached);
+    return netdProbeOf(vitals, reached);
 };

@@ -7,7 +7,7 @@ import type { PerfTracker } from "../system/resources/perf.js";
 import type { ResourceBudget } from "./resource-budget.js";
 
 // The budget's verdict for the scripts that start heavy work outside a turn (bin/queue-run, through `memory-room`;
-// _tools/scripts/verify/test-workers.mjs), on a Unix socket of its own: never the daemon's socket, which the front
+// _tools/scripts/verify/test-workers.mjs), on a Unix socket of its own: never the daemon's socket, which netd
 // relays to the internet. `GET /room?class=toolchain&wait=120&label=…` admits one more of that class, holding the
 // answer up to `wait` seconds for room; `size=targeted` prices a command aimed at named files below its class, and
 // `pid=N` names the process the work runs as, whose exit hands its reservation back; `GET /snapshot` is the reading and what admitted work holds, for a caller that

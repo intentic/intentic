@@ -338,7 +338,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         };
         const command = hostCommand();
         const child = spawnAs({ class: "service" }, command.file, command.args, {
-            // Stamped, since its own group is out of reach of the front's group kill: the boot sweep ends one an
+            // Stamped, since its own group is out of reach of netd's group kill: the boot sweep ends one an
             // earlier daemon run left behind.
             env: { ...process.env, ...detachedStamp("backend-host"), [BACKEND_CONFIG_ENV]: JSON.stringify(config) },
             // A process group of its own, killable as a unit with whatever its backends started.

@@ -65,10 +65,10 @@ if ! node "$SCRIPT_DIR/dev-manifest-drift.mjs" "$CONTAINER"; then
     exit 1
 fi
 
-# The daemon serves only behind the front its image bakes and its entrypoint execs. An image from before the front
+# The daemon serves only behind netd its image bakes and its entrypoint execs. An image from before netd
 # would restart into a daemon that refuses to start, so that one is rebuilt, never restarted.
-if ! docker exec "$CONTAINER" test -x /opt/sandbox/front/intentic-front; then
-    echo "error: ${CONTAINER}'s image predates the front the daemon now runs behind (_sandbox/front)." >&2
+if ! docker exec "$CONTAINER" test -x /opt/sandbox/netd/intentic-netd; then
+    echo "error: ${CONTAINER}'s image predates netd the daemon now runs behind (_sandbox/netd)." >&2
     echo "       A restart would bring up a daemon that refuses to start: run 'pnpm rebuild:sandbox'." >&2
     exit 1
 fi
@@ -82,13 +82,13 @@ if ! pnpm turbo run build --filter=@intentic/sandbox...; then
     exit 1
 fi
 
-# The front compiles on the image's own Debian release (build-front.sh) into the directory mounted over its baked copy,
+# netd compiles on the image's own Debian release (build-netd.sh) into the directory mounted over its baked copy,
 # so the restart below runs it. Found from the checkout's marker, like dev-sandbox.sh finds it.
 ROOT="$(cd "$SCRIPT_DIR" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/pnpm-workspace.yaml" ]; do ROOT="$(dirname "$ROOT")"; done
-echo "intentic: compiling the front…"
-if ! bash "$ROOT/_tools/scripts/image/build-front.sh"; then
-    echo "error: the front failed to build — the running daemon is untouched. Fix the error and save again." >&2
+echo "intentic: compiling netd…"
+if ! bash "$ROOT/_tools/scripts/image/build-netd.sh"; then
+    echo "error: netd failed to build — the running daemon is untouched. Fix the error and save again." >&2
     exit 1
 fi
 

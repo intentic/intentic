@@ -31,7 +31,7 @@ const JOURNAL_SECS: u64 = 15 * 60;
 const STRIKES: u32 = 3;
 /// Container restarts that are a crash loop on their own, whatever the daemon says.
 const RESTARTS: u64 = 3;
-/// Daemon restarts inside a running container (the front restarts a crashed daemon without the container stopping)
+/// Daemon restarts inside a running container (netd restarts a crashed daemon without the container stopping)
 /// that are a crash loop on their own.
 const DAEMON_RESTARTS: u32 = 3;
 

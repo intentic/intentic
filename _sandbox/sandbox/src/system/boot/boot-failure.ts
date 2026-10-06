@@ -69,7 +69,7 @@ export interface BootAttempt {
 // The boot step that failed, when the chain's own tracker saw it: more exact than the stage around it.
 const failedStep = (attempt: BootAttempt): string | undefined => attempt.services?.boot.progress().steps.find((step) => step.state === "failed")?.label;
 
-// Records why this boot failed where the host looks, logs it, and exits non-zero so the front restarts the daemon with
+// Records why this boot failed where the host looks, logs it, and exits non-zero so netd restarts the daemon with
 // backoff. Only the daemon that owns the container records anything: a second daemon sharing the volume is not the one
 // the host started. What had started is stopped first, so a restart finds nothing of it running.
 export const failBoot = (attempt: BootAttempt, error: Error, exit: (code: number) => never = process.exit): never => {

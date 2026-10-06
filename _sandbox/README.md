@@ -4,12 +4,12 @@ One private box per project where the code and its coding agents live, owned by 
 
 ```mermaid
 flowchart LR
-    editor["Editor<br/>web · desktop · mobile"] --> front["front<br/>ports · tunnel"]
-    acp["acp-bridge on a device<br/>Zed · JetBrains"] --> front
-    embeds["webchat-widget · issue-sdk<br/>on a website"] --> front
-    ci["gate · gate-action<br/>in CI"] --> front
-    ic["ic<br/>host CLI"] -->|"starts · updates"| front
-    front -->|"Unix socket"| daemon(["sandbox daemon"])
+    editor["Editor<br/>web · desktop · mobile"] --> netd["netd<br/>ports · tunnel"]
+    acp["acp-bridge on a device<br/>Zed · JetBrains"] --> netd
+    embeds["webchat-widget · issue-sdk<br/>on a website"] --> netd
+    ci["gate · gate-action<br/>in CI"] --> netd
+    ic["ic<br/>host CLI"] -->|"starts · updates"| netd
+    netd -->|"Unix socket"| daemon(["sandbox daemon"])
     daemon --> agents["Agents in worktrees"]
     agents --> tools["fileq · webq · ocr<br/>agent CLIs"]
 ```
@@ -19,7 +19,7 @@ flowchart LR
 | [agent-context](agent-context) | What an agent is told as a session opens (project map, field notes) and the readings that measure it |
 | [claude-plugin](claude-plugin) | The `intentic` Claude Code plugin: trimmed Bash output, session context, fileq and iq, measured savings |
 | [fileq](fileq) | Agent CLI reading binary files (docx, pdf, images, archives) as budgeted markdown |
-| [front](front) | Rust network edge: owns every port and the tunnel, supervises the daemon |
+| [netd](netd) | Rust network daemon: owns every port and the tunnel, supervises the daemon |
 | [gate](gate) | `intentic-gate`: a CI pipeline waits on a release gate's verdict |
 | [gate-action](gate-action) | GitHub Action: wait on a release gate or wake an automation |
 | [ic](ic) | Rust host CLI: run, update and repair sandboxes, runners and deploy targets |

@@ -25,7 +25,7 @@ it(`renders the shared grid while continuing to report its own viewport without 
     expect([s.term.cols, s.term.rows]).toEqual([100, 30]);
 });
 
-it(`fits locally with an older front, including after reconnecting from a newer one`, () => {
+it(`fits locally with an older netd, including after reconnecting from a newer one`, () => {
     const s = session();
     requestTerminalGrid(s, { cols: 90, rows: 20 });
     expect([s.term.cols, s.term.rows]).toEqual([90, 20]);

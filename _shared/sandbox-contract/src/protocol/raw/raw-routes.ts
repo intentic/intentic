@@ -33,10 +33,10 @@ export const RAW_ROUTES = {
     "POST /system/ws-ticket": { beforeBoot: true, floor: "collaborator", control: "never" },
     // A WebSocket upgrade carries no Authorization header; the terminal, both browser wires and the desktop's check a
     // query ticket.
-    "GET /system/terminal": { auth: "door", beforeBoot: true, control: "never", front: true },
-    // The front's proof of life (vitals.ts): no credential and nothing of the workspace, readable by any origin, answered
+    "GET /system/terminal": { auth: "door", beforeBoot: true, control: "never", netd: true },
+    // netd's proof of life (vitals.ts): no credential and nothing of the workspace, readable by any origin, answered
     // whatever state the daemon is in.
-    "GET /system/vitals": { auth: "door", beforeBoot: true, front: true },
+    "GET /system/vitals": { auth: "door", beforeBoot: true, netd: true },
     // Desktop sync's byte pipe, guarded again by sshd's own key check against the same enrollment.
     "GET /system/sync/ssh": { sync: "pipe", control: "never", lane: "bulk" },
     "GET /system/browser-profile": { auth: "door", beforeBoot: true, control: "never" },

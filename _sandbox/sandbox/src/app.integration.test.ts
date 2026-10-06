@@ -43,8 +43,8 @@ test("the app registers exactly the declared raw routes, in declaration order, a
     const registered = createApp(services()).routes.map((route) => `${route.method} ${route.path}`);
     // Everything before the first route is middleware, registered on `*`.
     const routes = registered.slice(registered.findIndex((route) => route !== "ALL /*"));
-    // A route the front serves itself (RouteMeta `front`) never reaches the daemon, so the daemon registers none.
-    const daemonServed = RAW_ROUTE_LIST.filter((route) => route.meta.front !== true);
+    // A route netd serves itself (RouteMeta `netd`) never reaches the daemon, so the daemon registers none.
+    const daemonServed = RAW_ROUTE_LIST.filter((route) => route.meta.netd !== true);
     expect(routes).toEqual([...daemonServed.map((route) => `${route.method} ${route.path.replaceAll(/\{([^}]+)\}/gu, ":$1")}`), "ALL /*"]);
 });
 

@@ -3,8 +3,8 @@ import type { AddressInfo } from "node:net";
 import type { PanelUpstream, PanelUpstreamResolver } from "./panel-upstream.js";
 import { answerPreview, PREVIEW_PROBE_PATH, type PreviewDeps, previewRoute, type SlotResolver } from "./preview-routes.js";
 
-// What becomes of a preview host's request, decided once when the front asks, and the two things it still hands back.
-// The byte relay (Host/Origin rewrite, frame-ancestors, TLS and ::1 upstreams) is the front's, tested in _sandbox/front.
+// What becomes of a preview host's request, decided once when netd asks, and the two things it still hands back.
+// The byte relay (Host/Origin rewrite, frame-ancestors, TLS and ::1 upstreams) is netd's, tested in _sandbox/netd.
 
 const ID = "abcdef012345";
 
@@ -70,8 +70,8 @@ describe("previewRoute", () => {
     });
 });
 
-describe("the pages the front writes as rendered", () => {
-    // What the front is told to write for a host, as a browser would read it.
+describe("the pages netd writes as rendered", () => {
+    // What netd is told to write for a host, as a browser would read it.
     const rendered = async (
         previewDeps: PreviewDeps,
         host: string,
@@ -149,7 +149,7 @@ describe("answerPreview", () => {
         await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
     });
 
-    // Node's HTTP side as the front reaches it: a request the front marked and handed back.
+    // Node's HTTP side as netd reaches it: a request netd marked and handed back.
     const answering = async (previewDeps: PreviewDeps): Promise<number> => {
         const server = http.createServer((request, response) => void answerPreview(request, response, previewDeps));
         servers.push(server);
@@ -175,7 +175,7 @@ describe("answerPreview", () => {
             request.end();
         });
 
-    test("an upstream that refused the front's connection is a 502 naming its port", async () => {
+    test("an upstream that refused netd's connection is a 502 naming its port", async () => {
         const response = await handBack(await answering(deps()), "port-a.example.com", "/", { "x-intentic-preview-unreachable": "5174" });
         expect(response.status).toBe(502);
         expect(response.body).toContain("nothing is answering on port 5174");

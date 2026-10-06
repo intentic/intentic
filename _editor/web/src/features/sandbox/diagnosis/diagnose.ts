@@ -5,19 +5,19 @@ import type { ConnectionFailure } from "../../../client/sandbox/connection";
 // WHY A SANDBOX ISN'T ANSWERING, as a pure function of what could be observed while it wasn't. The connection machine
 // (connection.ts) knows only that a stream failed and how; this file adds what a few bounded probes found out after
 // (probes.ts) and what the machine the sandbox runs on reported to the platform (`hostReport`), and names the one cause
-// they establish. Its first job is the distinction every surface used to get wrong: a sandbox that is BUSY (its front
+// they establish. Its first job is the distinction every surface used to get wrong: a sandbox that is BUSY (its netd
 // says the daemon is up, or anything behind the edge answered) is never described as down, and never offered a way back.
 
-// What the probe of the sandbox's own address found (probes.ts `probeFront`).
-export type FrontProbe =
-    // The front answered its vitals route: the container is up, and this is how its daemon is.
+// What the probe of the sandbox's own address found (probes.ts `probeNetd`).
+export type NetdProbe =
+    // netd answered its vitals route: the container is up, and this is how its daemon is.
     | { readonly kind: "vitals"; readonly vitals: SandboxVitals }
-    // Something behind the edge answered, just not with vitals: an older sandbox's daemon, or a front refusing on its
+    // Something behind the edge answered, just not with vitals: an older sandbox's daemon, or a netd refusing on its
     // behalf. Either way the container is up.
     | { readonly kind: "answered" }
     // The edge answered for it, and holds no working tunnel.
     | { readonly kind: "edge"; readonly verdict: EdgeVerdict }
-    // The front said its daemon is restarting (503, no edge verdict).
+    // netd said its daemon is restarting (503, no edge verdict).
     | { readonly kind: "restarting" }
     // Nothing answered within the probe's budget: a tunnel the edge still holds (a computer that slept a moment ago is
     // held for up to 45 s), or a daemon too stalled to answer.
@@ -34,7 +34,7 @@ export interface Evidence {
     readonly online: boolean;
     // Whether the platform answered the last refresh of the sandbox list.
     readonly platform: "ok" | "down" | undefined;
-    readonly front: FrontProbe | undefined;
+    readonly netd: NetdProbe | undefined;
     // Own machine, probed only where no permission prompt would be raised: the sandbox answered on this computer's own
     // loopback address.
     readonly loopback: boolean | undefined;
@@ -99,7 +99,7 @@ export const HOSTED_COLD_PATIENCE_MS = 5 * 60_000;
 // The edge lets go of a tunnel whose far side went quiet after 45 s (tunnel `DEAD_AFTER`), so silence this long is no
 // longer a slept computer being let go.
 export const SILENT_PATIENCE_MS = 60_000;
-// A daemon the front restarted this many times in its ten-minute window is not coming back by restarting.
+// A daemon netd restarted this many times in its ten-minute window is not coming back by restarting.
 export const CRASH_LOOP_RESTARTS = 3;
 // A restart that has not come back in this long is not a restart any more.
 export const RESTARTING_PATIENCE_MS = 2 * 60_000;
@@ -189,10 +189,10 @@ const silent = (input: DiagnosisInput): Diagnosis => {
 
 const unreachable = (input: DiagnosisInput): Diagnosis => (input.evidence?.platform === `down` ? { kind: `platform-down` } : { kind: `unreachable` });
 
-const fromFront = (front: FrontProbe, input: DiagnosisInput): Diagnosis => {
-    switch (front.kind) {
+const fromNetd = (netd: NetdProbe, input: DiagnosisInput): Diagnosis => {
+    switch (netd.kind) {
         case `vitals`:
-            return vitalsDiagnosis(front.vitals, input);
+            return vitalsDiagnosis(netd.vitals, input);
         case `answered`:
             return { kind: `busy`, vitals: undefined, longMs: input.outageMs };
         case `restarting`:
@@ -211,8 +211,8 @@ export const diagnose = (input: DiagnosisInput): Diagnosis => {
     if (evidence?.online === false) {
         return { kind: `offline` };
     }
-    if (evidence?.front !== undefined) {
-        return fromFront(evidence.front, input);
+    if (evidence?.netd !== undefined) {
+        return fromNetd(evidence.netd, input);
     }
     // No probe has settled yet: the connection's own reading is all there is.
     return input.failure?.kind === `detached` ? detached(input) : { kind: `checking` };

@@ -104,7 +104,7 @@ export interface FakeHealthBody {
     readonly state?: { readonly journal: string };
 }
 export const healthAnswer = (body: FakeHealthBody): FakeFlyExecAnswer => ({ exit_code: 0, stdout: `${JSON.stringify(body)}\n`, stderr: `` });
-// What `curl -sf` answers when nothing listens, or the front says 503.
+// What `curl -sf` answers when nothing listens, or netd says 503.
 export const NO_HEALTH: FakeFlyExecAnswer = { exit_code: 7, stdout: ``, stderr: `curl: (7) Failed to connect to localhost port 8787` };
 const CLEAR_PLAN: FakeFlyExecAnswer = { exit_code: 0, stdout: `${JSON.stringify(CLEAR_STATE_PLAN)}\n`, stderr: `` };
 // How many times each machine's `/health` was asked; per machine, since a suite's fake holds one object for a test's life.

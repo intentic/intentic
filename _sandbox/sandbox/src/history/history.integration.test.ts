@@ -129,7 +129,7 @@ test("snapshot commits parentless first, skips an unchanged tree, then parents o
     expect(commitCalls()[1]?.join(" ")).toContain("-p c1");
 });
 
-// The interval sweep reads the front's change count first: an untouched checkout costs it no `git add -A` walk, while a
+// The interval sweep reads netd's change count first: an untouched checkout costs it no `git add -A` walk, while a
 // turn's or a person's snapshot always runs.
 test("an interval sweep skips a checkout whose change count has not moved since its last snapshot", async () => {
     const { history, calls, setTree, work } = await fakeHistory();

@@ -49,7 +49,7 @@ test("unmet in the CI lane that provides it: a failing test naming the requireme
 });
 
 test("unmet in any other CI job: stands down, naming the lane that runs it", () => {
-    for (const env of [{ CI: "true" }, { CI: "true", [CI_LANE]: "front" }]) {
+    for (const env of [{ CI: "true" }, { CI: "true", [CI_LANE]: "netd" }]) {
         const needs = requirementOf(false, "the iq models", env, never, { lane: "machine" });
         expect({ runs: needs.runs, title: needs.title("ranks") }).toEqual({
             runs: false,

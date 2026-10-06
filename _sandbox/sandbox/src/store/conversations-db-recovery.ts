@@ -25,7 +25,7 @@ import { type ManifestProblem, recordStandingProblem } from "./manifest/manifest
 //
 // The one failure it does not work around is a sound file this build could not upgrade (ConversationsUpgradeError):
 // setting it aside would tell the owner a healthy database was damaged and run this build without it, when the fault is
-// the build's. That boot fails instead (system/boot/boot-failure.ts): the front restarts it with backoff, the host reads
+// the build's. That boot fails instead (system/boot/boot-failure.ts): netd restarts it with backoff, the host reads
 // why, and an update on probation is put back on the version before it, which reads the file as it was.
 
 // What opening found and did, when the file was not simply there and sound.

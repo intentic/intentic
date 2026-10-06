@@ -24,7 +24,7 @@ const evidence = (over: Partial<Evidence> = {}): Evidence => ({
     at: OUTAGE_AT + 5_000,
     online: true,
     platform: `ok`,
-    front: undefined,
+    netd: undefined,
     loopback: undefined,
     hosted: undefined,
     ...over,
@@ -56,42 +56,42 @@ const report = (over: Partial<HostReport> = {}): HostReport => ({
 });
 
 describe(`a sandbox that is alive`, () => {
-    it(`is busy, not down, when its front says the daemon is up, at any age of the outage`, () => {
+    it(`is busy, not down, when its netd says the daemon is up, at any age of the outage`, () => {
         for (const outageMs of [10_000, 5 * 60_000, 60 * 60_000]) {
-            const found = diagnose(input({ outageMs, evidence: evidence({ front: { kind: `vitals`, vitals: vitals() } }) }));
+            const found = diagnose(input({ outageMs, evidence: evidence({ netd: { kind: `vitals`, vitals: vitals() } }) }));
             expect(found).toEqual({ kind: `busy`, vitals: vitals(), longMs: outageMs });
             expect(isAlive(found)).toBe(true);
         }
     });
 
     it(`is busy when anything behind the edge answered, which an older sandbox without vitals does`, () => {
-        expect(diagnose(input({ evidence: evidence({ front: { kind: `answered` } }) }))).toEqual({ kind: `busy`, vitals: undefined, longMs: 20_000 });
+        expect(diagnose(input({ evidence: evidence({ netd: { kind: `answered` } }) }))).toEqual({ kind: `busy`, vitals: undefined, longMs: 20_000 });
     });
 });
 
-describe(`a daemon the front is restarting`, () => {
+describe(`a daemon netd is restarting`, () => {
     it(`is restarting, then crashing once it has restarted too often or for too long`, () => {
         const restarting = (restarts: number, outageMs = 20_000) =>
-            diagnose(input({ outageMs, evidence: evidence({ front: { kind: `vitals`, vitals: vitals({ node: `restarting`, restarts }) } }) }));
+            diagnose(input({ outageMs, evidence: evidence({ netd: { kind: `vitals`, vitals: vitals({ node: `restarting`, restarts }) } }) }));
         expect(restarting(CRASH_LOOP_RESTARTS - 1)).toEqual({ kind: `restarting`, restarts: CRASH_LOOP_RESTARTS - 1 });
         expect(restarting(CRASH_LOOP_RESTARTS)).toEqual({ kind: `crashing`, restarts: CRASH_LOOP_RESTARTS });
         expect(restarting(0, RESTARTING_PATIENCE_MS)).toEqual({ kind: `crashing`, restarts: 0 });
     });
 
-    it(`reads an older front's own 503 the same way`, () => {
-        expect(diagnose(input({ evidence: evidence({ front: { kind: `restarting` } }) }))).toEqual({ kind: `restarting`, restarts: 0 });
-        expect(diagnose(input({ outageMs: RESTARTING_PATIENCE_MS, evidence: evidence({ front: { kind: `restarting` } }) }))).toEqual({ kind: `crashing`, restarts: 0 });
+    it(`reads an older netd's own 503 the same way`, () => {
+        expect(diagnose(input({ evidence: evidence({ netd: { kind: `restarting` } }) }))).toEqual({ kind: `restarting`, restarts: 0 });
+        expect(diagnose(input({ outageMs: RESTARTING_PATIENCE_MS, evidence: evidence({ netd: { kind: `restarting` } }) }))).toEqual({ kind: `crashing`, restarts: 0 });
     });
 });
 
 describe(`this side of the connection`, () => {
     it(`says this device is offline before anything else`, () => {
-        expect(diagnose(input({ evidence: evidence({ online: false, front: { kind: `vitals`, vitals: vitals() } }) }))).toEqual({ kind: `offline` });
+        expect(diagnose(input({ evidence: evidence({ online: false, netd: { kind: `vitals`, vitals: vitals() } }) }))).toEqual({ kind: `offline` });
     });
 
     it(`tells a platform that doesn't answer from a network that only blocks the sandbox's address`, () => {
-        expect(diagnose(input({ evidence: evidence({ platform: `down`, front: { kind: `unreachable` } }) }))).toEqual({ kind: `platform-down` });
-        expect(diagnose(input({ evidence: evidence({ platform: `ok`, front: { kind: `unreachable` } }) }))).toEqual({ kind: `unreachable` });
+        expect(diagnose(input({ evidence: evidence({ platform: `down`, netd: { kind: `unreachable` } }) }))).toEqual({ kind: `platform-down` });
+        expect(diagnose(input({ evidence: evidence({ platform: `ok`, netd: { kind: `unreachable` } }) }))).toEqual({ kind: `unreachable` });
     });
 
     it(`is still checking before any probe has settled`, () => {
@@ -100,7 +100,7 @@ describe(`this side of the connection`, () => {
 });
 
 describe(`an own-machine sandbox that is not dialled in`, () => {
-    const noTunnel = evidence({ front: { kind: `edge`, verdict: `no-tunnel` } });
+    const noTunnel = evidence({ netd: { kind: `edge`, verdict: `no-tunnel` } });
 
     it(`waits for it to redial, then says it is not connected`, () => {
         expect(diagnose(input({ outageMs: OWN_REDIAL_PATIENCE_MS - 1, evidence: noTunnel }))).toEqual({ kind: `not-dialled`, patient: true, lastReport: undefined });
@@ -126,7 +126,7 @@ describe(`an own-machine sandbox that is not dialled in`, () => {
     });
 
     it(`says it runs here and is offline when this computer's loopback answers`, () => {
-        expect(diagnose(input({ evidence: evidence({ front: { kind: `edge`, verdict: `no-tunnel` }, loopback: true }) }))).toEqual({ kind: `local-only` });
+        expect(diagnose(input({ evidence: evidence({ netd: { kind: `edge`, verdict: `no-tunnel` }, loopback: true }) }))).toEqual({ kind: `local-only` });
     });
 
     it(`reads the edge's verdict from the connection before any probe settles`, () => {
@@ -136,7 +136,7 @@ describe(`an own-machine sandbox that is not dialled in`, () => {
 
 describe(`a hosted sandbox that is not dialled in`, () => {
     const hosted = (over: Partial<DiagnosisInput>, machine?: Evidence[`hosted`]) =>
-        diagnose(input({ lane: `hosted`, warm: true, evidence: evidence({ front: { kind: `edge`, verdict: `no-tunnel` }, hosted: machine }), ...over }));
+        diagnose(input({ lane: `hosted`, warm: true, evidence: evidence({ netd: { kind: `edge`, verdict: `no-tunnel` }, hosted: machine }), ...over }));
 
     it(`is waking within the patience its pool earns, and down past it`, () => {
         expect(hosted({ outageMs: HOSTED_WARM_PATIENCE_MS - 1 }, `starting`)).toEqual({ kind: `waking`, machine: `starting` });
@@ -149,7 +149,7 @@ describe(`a hosted sandbox that is not dialled in`, () => {
     });
 
     it(`reads a silent address through the machine's power state`, () => {
-        expect(diagnose(input({ lane: `hosted`, warm: true, evidence: evidence({ front: { kind: `silent` }, hosted: `stopped` }) }))).toEqual({
+        expect(diagnose(input({ lane: `hosted`, warm: true, evidence: evidence({ netd: { kind: `silent` }, hosted: `stopped` }) }))).toEqual({
             kind: `waking`,
             machine: `stopped`,
         });
@@ -158,7 +158,7 @@ describe(`a hosted sandbox that is not dialled in`, () => {
 
 describe(`an address that answers nothing`, () => {
     it(`is waited on while a slept computer's tunnel may still be held, then called stuck`, () => {
-        const silent = evidence({ front: { kind: `silent` } });
+        const silent = evidence({ netd: { kind: `silent` } });
         expect(diagnose(input({ outageMs: SILENT_PATIENCE_MS - 1, evidence: silent }))).toEqual({ kind: `silent`, patient: true });
         expect(diagnose(input({ outageMs: SILENT_PATIENCE_MS, evidence: silent }))).toEqual({ kind: `silent`, patient: false });
     });

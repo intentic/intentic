@@ -16,7 +16,7 @@ on:
         description: "The released version to put stable back onto, e.g. 1.200.0"
         required: true
       door:
-        description: "Only for a version older than the 2026-09 directory overhaul: the tunnel door its front dials, e.g. /tunnel/v1"
+        description: "Only for a version older than the 2026-09 directory overhaul: the tunnel door its netd dials, e.g. /tunnel/v1"
         required: false
         default: ""
       reason:

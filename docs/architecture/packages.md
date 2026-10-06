@@ -17,7 +17,7 @@ flowchart LR
 - `_shared` holds the contracts, SDKs and pure helpers more than one part is written against (`workspace-setup` serves the editor's upload and the daemon alike), and depends on nothing but the `_tools` foundation, apart from the exceptions the `shared-boundary` check names.
 - Some directories are not workspace packages:
   - The store shells [`_editor/ios-app`](../../_editor/ios-app) and [`_editor/android-app`](../../_editor/android-app), and the Gradle project [`_devices/android`](../../_devices/android), are negated in the workspace and built by their own toolchains.
-  - The Rust crates ([`_sandbox/front`](../../_sandbox/front), [`_sandbox/ic`](../../_sandbox/ic), [`_shared/relay`](../../_shared/relay), [`_devices/win-launcher`](../../_devices/win-launcher), the desktop app's `src-tauri`) build with cargo.
+  - The Rust crates ([`_sandbox/netd`](../../_sandbox/netd), [`_sandbox/ic`](../../_sandbox/ic), [`_shared/relay`](../../_shared/relay), [`_devices/win-launcher`](../../_devices/win-launcher), the desktop app's `src-tauri`) build with cargo.
   - [`_tools/checks`](../../_tools/checks), [`_tools/scripts`](../../_tools/scripts), [`_tools/oxlint`](../../_tools/oxlint) and [`_tools/nav`](../../_tools/nav) are plain Node scripts that run before any install.
   - [`_tools/ci-base`](../../_tools/ci-base), [`_tools/ci-desktop`](../../_tools/ci-desktop), [`_tools/turbo-cache`](../../_tools/turbo-cache) and [`_tools/selfhost`](../../_tools/selfhost) hold only images and compose files, and [`_tools/extension-example`](../../_tools/extension-example) is a seed copied into other repositories.
 

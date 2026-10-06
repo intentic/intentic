@@ -1051,7 +1051,7 @@ describe(`wakeHosted`, () => {
         expect(fly.called(`POST`, `/machines/m1/start`)).toHaveLength(1);
     });
 
-    // The row's guest and volume stay; the image is today's stock digest, since one this old predates the front.
+    // The row's guest and volume stay; the image is today's stock digest, since one this old predates netd.
     it(`re-applies the config of a machine missing the tunnel's pair, onto today's stock digest`, async () => {
         const fly = configuredFly(PRE_TUNNEL_ENV);
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);

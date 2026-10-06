@@ -3,12 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { FromNode } from "@intentic/sandbox-contract/front-wire";
+import type { FromNode } from "@intentic/sandbox-contract/netd-wire";
 import { defaultGit, type GitRunner, observeGitCommands } from "@intentic/base/git";
 import { statusPaths } from "../changes/changes.js";
-import { type CheckoutFeed, frontCheckoutFeed, readOnFeed, useCheckoutFeed } from "./checkout-feed.js";
+import { type CheckoutFeed, netdCheckoutFeed, readOnFeed, useCheckoutFeed } from "./checkout-feed.js";
 
-// The daemon's half of the change feed against a stand-in front: which checkouts it names, how its questions batch,
+// The daemon's half of the change feed against a stand-in netd: which checkouts it names, how its questions batch,
 // and that a status read is taken once per generation and never handed out to be changed under the next reader.
 
 const exec = promisify(execFile);
@@ -46,7 +46,7 @@ const dirOf = (message: FromNode): string => {
 const byDir = (told: readonly FromNode[]): FromNode[] =>
     told.toSorted((one, two) => Number(dirOf(one) > dirOf(two)) - Number(dirOf(one) < dirOf(two)));
 
-// The front's end of the socket: what it was told, the syncs it was asked, answered from `counts`.
+// netd's end of the socket: what it was told, the syncs it was asked, answered from `counts`.
 const standIn = (counts: Map<string, number>) => {
     const told: FromNode[] = [];
     const asked: string[][] = [];
@@ -66,39 +66,39 @@ const standIn = (counts: Map<string, number>) => {
 test("names each checkout once, and once they are watched asks one sync for every checkout read together", async () => {
     const parent = await tempDir();
     const [a, b] = await Promise.all([checkoutIn(parent, "a"), checkoutIn(parent, "b")]);
-    const front = standIn(new Map([[a, 4]]));
-    const feed = frontCheckoutFeed(front.link);
+    const netd = standIn(new Map([[a, 4]]));
+    const feed = netdCheckoutFeed(netd.link);
 
     expect(await Promise.all([feed.generation(a), feed.generation(b)])).toEqual([4, undefined]);
-    expect(byDir(front.told)).toEqual([
+    expect(byDir(netd.told)).toEqual([
         { kind: "watch", checkout: { dir: a, gitDir: join(a, ".git"), commonDir: join(a, ".git") } },
         { kind: "watch", checkout: { dir: b, gitDir: join(b, ".git"), commonDir: join(b, ".git") } },
     ]);
-    front.asked.length = 0;
+    netd.asked.length = 0;
     expect(await Promise.all([feed.generation(a), feed.generation(b), feed.generation(a)])).toEqual([4, undefined, 4]);
-    expect(front.asked).toEqual([[a, b, a]]);
-    expect(front.told).toHaveLength(2);
+    expect(netd.asked).toEqual([[a, b, a]]);
+    expect(netd.told).toHaveLength(2);
 });
 
 test("a directory that is no checkout is never named and never asked about", async () => {
     const plain = await tempDir();
-    const front = standIn(new Map());
-    const feed = frontCheckoutFeed(front.link);
+    const netd = standIn(new Map());
+    const feed = netdCheckoutFeed(netd.link);
     expect(await feed.generation(plain)).toBeUndefined();
-    expect(front.told).toEqual([]);
-    expect(front.asked).toEqual([]);
+    expect(netd.told).toEqual([]);
+    expect(netd.asked).toEqual([]);
 });
 
 test("lets the least recently read checkout go once more are watched than the kernel should hold", async () => {
     const parent = await tempDir();
     const dirs = await Promise.all(Array.from({ length: 49 }, (_, index) => checkoutIn(parent, `c${String(index)}`)));
-    const front = standIn(new Map());
-    const feed = frontCheckoutFeed(front.link);
+    const netd = standIn(new Map());
+    const feed = netdCheckoutFeed(netd.link);
     for (const dir of dirs) {
         await feed.generation(dir);
     }
     const [oldest] = dirs;
-    expect(front.told.filter((message) => message.kind === "unwatch")).toEqual([{ kind: "unwatch", dir: oldest ?? "" }]);
+    expect(netd.told.filter((message) => message.kind === "unwatch")).toEqual([{ kind: "unwatch", dir: oldest ?? "" }]);
 });
 
 // A feed standing still at one generation per directory, until the test moves it.

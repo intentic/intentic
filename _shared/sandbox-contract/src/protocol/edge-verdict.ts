@@ -3,7 +3,7 @@
 // JavaScript unless the responder allows it — so the verdict rides an exposed header and the edge CORS-allows its own
 // errors. Ingress writes it, the editor's connection machine reads it; both sides import this file so they cannot drift.
 
-import type { EdgeVerdict } from "../front/generated/browser-wire.js";
+import type { EdgeVerdict } from "../netd/generated/browser-wire.js";
 
 export const EDGE_VERDICT_HEADER = "x-intentic-edge";
 

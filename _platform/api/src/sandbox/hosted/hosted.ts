@@ -350,7 +350,7 @@ const startTrialHosted = async (
  * when the tunnel's pair is missing or no longer what this platform would write (a moved edge, a rotated key),
  * re-applies the whole config the way a restart does, with the machine's own overlay and guest, then starts it and
  * confirms. A stock machine moves onto today's stock digest, as a restart moves it: one that old most likely runs an
- * image from before the front that dials (aa02061469 landed hours before 71dbfb7145), and a grant it cannot present
+ * image from before netd that dials (aa02061469 landed hours before 71dbfb7145), and a grant it cannot present
  * would heal nothing. That move is an image change, so it goes through the state gate (gate/state-gate.ts): a target
  * that cannot convert this sandbox's state heals the tunnel on the image the machine already runs instead, and a
  * target that does not start is put back, so the wake is never the thing that leaves a machine unable to boot. A

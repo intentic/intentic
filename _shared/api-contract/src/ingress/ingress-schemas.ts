@@ -72,7 +72,7 @@ export type BootReport = z.infer<typeof BootReportSchema>;
 
 /* WHAT A DAEMON'S ANNOUNCE CARRIES (POST /sandbox/announce, the connect token in `x-intentic-connect`): the address it
  * answers on, its version, and, from a daemon new enough (2026-10-05), which copy of the sandbox it is. `instance` is
- * minted once per container start (the front's INTENTIC_INSTANCE, else once per daemon process), `host` is the
+ * minted once per container start (netd's INTENTIC_INSTANCE, else once per daemon process), `host` is the
  * machine's own name (HOST_LABEL) and `os` the side it runs on (HOST_ENV, else HOST_PLATFORM). Two instances that keep
  * announcing side by side are two containers holding one token, which the owner's summary names (`duplicateCopies`).
  * Every field past `daemonUrl` is a label (`label` above): an older daemon sends none of them, and the platform reads

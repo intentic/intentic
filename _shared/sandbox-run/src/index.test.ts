@@ -207,7 +207,7 @@ test("the hosted-provider shape drops init/alias and adds ports, labels, dns: sa
     });
     expect(argv).not.toContain("--init");
     expect(argv).not.toContain("--network-alias");
-    // The same front runs inside, with the same grace on a stop.
+    // The same netd runs inside, with the same grace on a stop.
     expect(argv.join(" ")).toContain("--stop-timeout 30");
     expect(argv).not.toContain("--memory");
     expect(argv).not.toContain("--memory-swap");

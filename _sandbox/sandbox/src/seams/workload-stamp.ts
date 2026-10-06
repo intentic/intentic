@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { FRONT_SOCKET_ENV, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/front-wire";
+import { NETD_SOCKET_ENV, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/netd-wire";
 
 // Whose work a process the daemon spawned is, stamped into its environment by every spawner (a turn's runtime, a
 // browser, a helper call) and read back by the process scan (system/resources/process-scan.ts), so
@@ -23,7 +23,7 @@ export const ONE_SHOT_OWNER = "one-shot";
 // otherwise carry its parent's.
 export const DAEMON_GEN_ENV = "INTENTIC_DAEMON_GEN";
 // What a detached child the daemon starts on its own account is, for the children no other stamp or sweep reaches
-// (their own process group, so neither the front's group kill nor the leftover sweep's group test finds them).
+// (their own process group, so neither netd's group kill nor the leftover sweep's group test finds them).
 export const DETACHED_ENV = "INTENTIC_DETACHED";
 // Epoch ms past which a detached child with a deadline of its own is overdue, so the sweep ends it even when the
 // daemon that set the deadline is gone.
@@ -68,6 +68,6 @@ export const detachedStamp = (kind: DetachedKind, deadlineAt?: number): Detached
     return deadlineAt === undefined ? stamp : { ...stamp, [DEADLINE_ENV]: String(Math.ceil(deadlineAt)) };
 };
 
-// Variables only the daemon may hold: the front's control socket and the socket it relays HTTP to. A child that
-// inherited them (an agent's shell, a second Node started there) could take the front's socket over.
-export const DAEMON_ONLY_ENV = [FRONT_SOCKET_ENV, NODE_SOCKET_ENV] as const;
+// Variables only the daemon may hold: netd's control socket and the socket it relays HTTP to. A child that
+// inherited them (an agent's shell, a second Node started there) could take netd's socket over.
+export const DAEMON_ONLY_ENV = [NETD_SOCKET_ENV, NODE_SOCKET_ENV] as const;

@@ -80,7 +80,7 @@ describe(`handBackOf`, () => {
 
 describe(`jobsAtAGlance`, () => {
     it(`spells a few jobs and folds the rest`, () => {
-        const six = [`quick`, `front-check`, `verify-core`, `verify-clocks`, `perf-browser`, `lint`];
+        const six = [`quick`, `netd-check`, `verify-core`, `verify-clocks`, `perf-browser`, `lint`];
         expect(jobsAtAGlance(six)).toEqual({ shown: six.slice(0, 3), folded: six.slice(3) });
     });
 

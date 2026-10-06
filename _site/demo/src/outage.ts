@@ -5,8 +5,8 @@ import { type DemoHandler, json } from "./transport";
 // WHICH OUTAGE this page load acts out, from `?outage=`, sticky per tab like the mode: the way to look at the
 // diagnosis and the recovery panel (`@intentic/web` features/sandbox/diagnosis/) without breaking a real sandbox.
 // `?outage=none` ends it. Each one is what a real sandbox in that state answers, at the same seams:
-//   busy        the front answers vitals (daemon up, CPU starved); everything else hangs until the caller gives up
-//   restarting  the front says its daemon is restarting, and keeps saying it
+//   busy        netd answers vitals (daemon up, CPU starved); everything else hangs until the caller gives up
+//   restarting  netd says its daemon is restarting, and keeps saying it
 //   down        the edge holds no tunnel; nothing on the machine has reported
 //   fixing      the edge holds no tunnel; the machine agent is starting Docker Desktop
 //   needs-you   the edge holds no tunnel; the machine found what only its owner can fix

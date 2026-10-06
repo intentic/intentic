@@ -272,14 +272,14 @@ async fn open(
     }
 }
 
-/// Dials the tunnel door as today's front does (`/tunnel/v2`), its interactive socket announcing no transfers: a
+/// Dials the tunnel door as today's netd does (`/tunnel/v2`), its interactive socket announcing no transfers: a
 /// WebSocket carrying yamux, each stream the edge opens served as one HTTP/1.1 connection. `Err` carries the status of a
 /// refused upgrade.
 pub async fn dial(port: u16, grant: &str, answering: Answering) -> Result<Sandbox, u16> {
     dial_lane(port, grant, Lane::Interactive, &[], answering).await
 }
 
-/// Dials one of a front's two `/tunnel/v2` sockets, announcing `bulk` as its daemon's transfer routes.
+/// Dials one of a netd's two `/tunnel/v2` sockets, announcing `bulk` as its daemon's transfer routes.
 pub async fn dial_lane(
     port: u16,
     grant: &str,
@@ -290,7 +290,7 @@ pub async fn dial_lane(
     dial_with(port, grant, lane, bulk, None, answering).await
 }
 
-/// Dials the interactive socket as a front of instance `instance` running on `host` (2026-10-05).
+/// Dials the interactive socket as a netd of instance `instance` running on `host` (2026-10-05).
 pub async fn dial_as(
     port: u16,
     grant: &str,
@@ -360,7 +360,7 @@ async fn dial_with(
     })
 }
 
-/// Dials the legacy door as a front that predates `/tunnel/v2` does: `/tunnel/v1` on the lane named, an h2 session on
+/// Dials the legacy door as a netd that predates `/tunnel/v2` does: `/tunnel/v1` on the lane named, an h2 session on
 /// it, and an upgrade carried as a CONNECT whose h1 head rides under `x-ingress-*`.
 pub async fn dial_legacy(
     port: u16,

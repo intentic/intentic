@@ -1,14 +1,14 @@
 import { defaultGit, type GitRunner, politeGit } from "@intentic/base/git";
 import { commonDirOf, gitDirOf } from "../git-dir.js";
-import type { FrontLink } from "../../front/front-link.js";
+import type { NetdLink } from "../../netd/netd-link.js";
 
-// The front counts each watched checkout's changes (_sandbox/front, feed.rs): a generation that moves whenever anything
+// netd counts each watched checkout's changes (_sandbox/netd, feed.rs): a generation that moves whenever anything
 // a `git status` there reads may have changed, read only after every write that finished before the question was
 // counted. A status read is kept per generation, so a checkout nothing touched answers from memory and spawns no git.
 
 export interface CheckoutFeed {
-    // The checkout's generation now, or undefined where nothing is counted: no front, a directory that is not a
-    // checkout, or one the front has not finished watching.
+    // The checkout's generation now, or undefined where nothing is counted: no netd, a directory that is not a
+    // checkout, or one netd has not finished watching.
     readonly generation: (dir: string) => Promise<number | undefined>;
 }
 
@@ -20,8 +20,8 @@ const MAX_WATCHED = 48;
 // could not see (a filesystem inotify is blind to) stays unread.
 const MAX_AGE_MS = 60_000;
 
-export const frontCheckoutFeed = (link: Pick<FrontLink, "tell" | "sync">): CheckoutFeed => {
-    // Whether each directory is a checkout the front was asked to watch, least recently read first (Map order).
+export const netdCheckoutFeed = (link: Pick<NetdLink, "tell" | "sync">): CheckoutFeed => {
+    // Whether each directory is a checkout netd was asked to watch, least recently read first (Map order).
     const watched = new Map<string, Promise<boolean>>();
     let batch: { readonly dirs: string[]; readonly answer: Promise<(number | null)[]> } | undefined;
 
@@ -82,7 +82,7 @@ interface Reading {
 const readings = new Map<string, Reading>();
 let feed: CheckoutFeed | undefined;
 
-// The daemon behind the front names its feed at boot; without one (a test, a tool) every read goes to git.
+// The daemon behind netd names its feed at boot; without one (a test, a tool) every read goes to git.
 export const useCheckoutFeed = (next: CheckoutFeed | undefined): void => {
     feed = next;
     readings.clear();

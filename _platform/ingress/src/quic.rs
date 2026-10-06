@@ -1,4 +1,4 @@
-//! The edge's UDP door, told apart by ALPN: a front presenting its grant in a hello is held as its sandbox's carrier, each
+//! The edge's UDP door, told apart by ALPN: a netd presenting its grant in a hello is held as its sandbox's carrier, each
 //! request then a stream of its own, and a browser speaks HTTP/3. It needs the certificate the TLS listener serves, since
 //! QUIC is TLS or nothing.
 
@@ -11,7 +11,7 @@ use quinn::{Endpoint, ServerConfig};
 use crate::edge::Edge;
 use crate::tls::CertificateSlot;
 
-/// A browser's HTTP/3, beside the fronts' tunnel on the one endpoint.
+/// A browser's HTTP/3, beside the netd instances' tunnel on the one endpoint.
 const H3: &[u8] = browser_wire::H3_ALPN.as_bytes();
 
 pub fn endpoint(address: SocketAddr, slot: Arc<CertificateSlot>) -> anyhow::Result<Endpoint> {

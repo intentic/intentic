@@ -1,7 +1,7 @@
 // A WebSocket spoken by hand over a byte stream: RFC 6455's client side (the opening handshake, masked frames out,
 // unmasked frames in) on one bidirectional stream of the edge's WebTransport session. The edge serves each such stream as
-// one HTTP/1.1 connection to the sandbox, so the front's own `/system/terminal` answers it exactly as it answers a
-// WebSocket over TCP, and any front or daemon that serves a terminal serves this. The object reads as a WebSocket to
+// one HTTP/1.1 connection to the sandbox, so netd's own `/system/terminal` answers it exactly as it answers a
+// WebSocket over TCP, and any netd or daemon that serves a terminal serves this. The object reads as a WebSocket to
 // whoever holds it (`SocketLike`), so the terminal channel treats both carriers alike.
 
 // What the terminal channel needs of a socket, which a browser's `WebSocket` already is.
@@ -29,7 +29,7 @@ const ABNORMAL = 1006;
 const PROTOCOL_ERROR = 1002;
 const TOO_BIG = 1009;
 
-// A response head past this is no answer the front gives; a message past this is no paste.
+// A response head past this is no answer netd gives; a message past this is no paste.
 const HEAD_MAX = 16 * 1024;
 const MESSAGE_MAX = 16 * 1024 * 1024;
 
@@ -104,7 +104,7 @@ export class StreamSocket extends EventTarget implements SocketLike {
         }
     }
 
-    // The front needs no answer to a close, and a half-open stream would never give one: the socket is closed here and now.
+    // netd needs no answer to a close, and a half-open stream would never give one: the socket is closed here and now.
     close(): void {
         if (this.readyState === OPEN) {
             this.write(8, new Uint8Array(0));
@@ -179,7 +179,7 @@ export class StreamSocket extends EventTarget implements SocketLike {
         }
     }
 
-    // Every whole frame `chunk` completes, in order; the socket closes at the first a front never sends.
+    // Every whole frame `chunk` completes, in order; the socket closes at the first a netd never sends.
     private receive(chunk: Uint8Array): void {
         this.pending = joined(this.pending, chunk);
         while (this.readyState === OPEN) {

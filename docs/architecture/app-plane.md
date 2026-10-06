@@ -20,7 +20,7 @@ flowchart LR
 ## What is in it
 
 - [`_editor`](../../_editor): the web app at `app.intentic.dev` and the desktop, phone and share-view shells around it.
-- [`_sandbox`](../../_sandbox): the daemon, its network front, and the tools baked into the sandbox image.
+- [`_sandbox`](../../_sandbox): the daemon, netd (its network daemon), and the tools baked into the sandbox image.
 - [`_platform`](../../_platform): sign-in, the sandbox registry, hosted machines and the ingress.
 - [`_extensions`](../../_extensions) and [`_devices`](../../_devices): features added through the extension manifest, and the programs that let an agent reach the owner's own machines.
 - [`_shared`](../../_shared): the contracts the parts above are written against. The sandbox contract ([`_shared/sandbox-contract`](../../_shared/sandbox-contract)) is the wire between editor and daemon; the api contract ([`_shared/api-contract`](../../_shared/api-contract)) is the wire between editor and platform.

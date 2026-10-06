@@ -87,7 +87,7 @@ describe("createAnnouncer", () => {
         ]);
     });
 
-    /* WHICH COPY (2026-10-05): one id for this process's life, or the front's for the container's; and where it runs. */
+    /* WHICH COPY (2026-10-05): one id for this process's life, or netd's for the container's; and where it runs. */
     describe("which copy it is", () => {
         afterEach(() => {
             delete process.env["INTENTIC_INSTANCE"];
@@ -102,11 +102,11 @@ describe("createAnnouncer", () => {
             expect(new Set(named).size).toBe(1);
         });
 
-        it("names the container's instance when the front sets one, and the machine and side it runs on", () => {
-            process.env["INTENTIC_INSTANCE"] = "front-7f3a";
+        it("names the container's instance when netd sets one, and the machine and side it runs on", () => {
+            process.env["INTENTIC_INSTANCE"] = "netd-7f3a";
             process.env["HOST_ENV"] = "Ubuntu";
             createAnnouncer({ ...config, hostLabel: "rog", hostPlatform: "linux" } as typeof config, logger).start();
-            expect(calls[0]?.body).toMatchObject({ instance: "front-7f3a", host: "rog", os: "Ubuntu" });
+            expect(calls[0]?.body).toMatchObject({ instance: "netd-7f3a", host: "rog", os: "Ubuntu" });
         });
 
         it("names the platform `ic` stamped as its side when no environment is set, and leaves out what is unknown", () => {

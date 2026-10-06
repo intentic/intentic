@@ -4,7 +4,7 @@
 #
 #   require-edge-door.sh [door]
 #
-# A front reaches the world through exactly one tunnel door on the edge (`INGRESS_TUNNEL_PATH`, held to the front's
+# A netd reaches the world through exactly one tunnel door on the edge (`INGRESS_TUNNEL_PATH`, held to netd's
 # own `tunnel::TUNNEL_PATH` by wire-manifests.test.ts), and it has no fallback: an edge that does not serve that door
 # answers its upgrade with a 404, and every sandbox on the new image is unreachable until the edge is redeployed.
 # So the question is not "did this pipeline roll the edge" but "does the edge that is live RIGHT NOW serve the door
@@ -12,8 +12,8 @@
 # edge.rs). That covers every way an image gets published and every way an edge gets deployed, CI or by hand, where a
 # job dependency would cover one pipeline and pass on a skip.
 #
-# The door defaults to the one this checkout's front dials. rollback-stable.sh passes the door of the version it
-# rolls back onto, since that is the front sandboxes will run.
+# The door defaults to the one this checkout's netd dials. rollback-stable.sh passes the door of the version it
+# rolls back onto, since that is netd sandboxes will run.
 #
 # FAILS CLOSED: no answer, an answer that is not JSON, or a door list without this door is an error. An edge that
 # answers without a `doors` field predates the declaration, and every such build served `/tunnel/v1` alone.
@@ -31,7 +31,7 @@ if [ -z "$DOOR" ]; then
     DOOR="$(sed -n 's/^export const INGRESS_TUNNEL_PATH = "\([^"]*\)";$/\1/p' "$(repo_root)/$CONTRACT")"
 fi
 if [ -z "$DOOR" ]; then
-    echo >&2 "error: no INGRESS_TUNNEL_PATH in $CONTRACT, so the door this image's front dials is unknown."
+    echo >&2 "error: no INGRESS_TUNNEL_PATH in $CONTRACT, so the door this image's netd dials is unknown."
     exit 1
 fi
 HEALTH_URL="${EDGE_HEALTH_URL:-https://ingress.sbx.intentic.dev/health}"
@@ -70,13 +70,13 @@ while :; do
     sleep 30
 done
 
-echo >&2 "error: the live edge does not serve $DOOR, the tunnel door this image's front dials."
+echo >&2 "error: the live edge does not serve $DOOR, the tunnel door this image's netd dials."
 if [ "$status" -eq 1 ]; then
     echo >&2 "  $HEALTH_URL declares doors $declared."
 else
     echo >&2 "  $HEALTH_URL gave no edge health answer: ${body:-(nothing)}"
 fi
-echo >&2 "  Moving the tag now would strand every sandbox that pulls it: a front has no other way in."
+echo >&2 "  Moving the tag now would strand every sandbox that pulls it: a netd has no other way in."
 echo >&2 "  Roll the edge first (deploy-ingress.sh, which images-platform runs on a platform push; ingress/README.md),"
 echo >&2 "  then re-run this job."
 exit 1

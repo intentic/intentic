@@ -1,15 +1,15 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { panelFromHost, portSlotFromHost, publicSlotFromHost } from "@intentic/sandbox-contract";
-import type { FrontHeader, Page, PreviewRoute, Upstream } from "@intentic/sandbox-contract/front-wire";
+import type { NetdHeader, Page, PreviewRoute, Upstream } from "@intentic/sandbox-contract/netd-wire";
 import { escapeHtml } from "@intentic/base/format";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PublicHandler } from "../public/public-serve.js";
 import { interstitial, type Refusal } from "./interstitial.js";
 import type { PanelServer, PanelUpstreamResolver } from "./panel-upstream.js";
 
-// What a preview host (`preview-`, `port-`, `public-` labels) answers with, decided once when the front asks
-// (_sandbox/front, proxy.rs): the front relays a serving upstream's bytes itself and writes a refusal or the probe's
-// report as the page rendered here, so only the outbox, and an upstream that refused the front, come back here marked.
+// What a preview host (`preview-`, `port-`, `public-` labels) answers with, decided once when netd asks
+// (_sandbox/netd, proxy.rs): netd relays a serving upstream's bytes itself and writes a refusal or the probe's
+// report as the page rendered here, so only the outbox, and an upstream that refused netd, come back here marked.
 
 // Resolves a forward slot to its mapped port and upstream scheme.
 export type SlotResolver = (slot: string) => PortTarget | undefined;
@@ -17,11 +17,11 @@ export type SlotResolver = (slot: string) => PortTarget | undefined;
 // CORS-open so a browser can tell reachable from not; the string must match @intentic/ui's portPreview.ts.
 export const PREVIEW_PROBE_PATH = "/__intentic/preview-probe";
 
-// Set by the front on a request it hands back: the outbox this side decided it is, or the page for an upstream that
-// refused the front's connection.
-const ANSWER_HEADER: FrontHeader = "x-intentic-preview";
+// Set by netd on a request it hands back: the outbox this side decided it is, or the page for an upstream that
+// refused netd's connection.
+const ANSWER_HEADER: NetdHeader = "x-intentic-preview";
 const OUTBOX = "outbox";
-const UNREACHABLE_HEADER: FrontHeader = "x-intentic-preview-unreachable";
+const UNREACHABLE_HEADER: NetdHeader = "x-intentic-preview-unreachable";
 
 // What this side can answer for. `outbox` is absent without a connect token (tests, loopback), which has no salted
 // slot to publish at.
@@ -135,7 +135,7 @@ const probePage = (body: ProbeBody): Page => ({
     body: JSON.stringify(body),
 });
 
-// The front's question, answered with everything it needs to act: relay to this upstream, write this page, or hand the
+// netd's question, answered with everything it needs to act: relay to this upstream, write this page, or hand the
 // request back as the outbox. `probe` asks for the probe's report, whatever the host resolves to.
 export const previewRoute = async (host: string, probe: boolean, deps: PreviewDeps): Promise<PreviewRoute> => {
     const resolved = await resolve(host, deps, probe);
@@ -151,7 +151,7 @@ export const previewRoute = async (host: string, probe: boolean, deps: PreviewDe
     }
 };
 
-// Whether the front marked this request as one of the handed-back previews above.
+// Whether netd marked this request as one of the handed-back previews above.
 export const isHandedBackPreview = (request: IncomingMessage): boolean =>
     request.headers[ANSWER_HEADER] !== undefined || request.headers[UNREACHABLE_HEADER] !== undefined;
 
@@ -160,7 +160,7 @@ const refuse = (response: ServerResponse, refusal: Refusal): void => {
     response.end(interstitial(refusal.title, refusal.message));
 };
 
-// Answers what the front handed back, nothing resolved again: the outbox it was decided to be, or the page for an
+// Answers what netd handed back, nothing resolved again: the outbox it was decided to be, or the page for an
 // upstream that stopped answering between the question and the relay.
 export const answerPreview = async (request: IncomingMessage, response: ServerResponse, deps: PreviewDeps): Promise<void> => {
     const unreachable = request.headers[UNREACHABLE_HEADER];

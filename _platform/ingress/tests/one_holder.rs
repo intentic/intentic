@@ -1,4 +1,4 @@
-//! One holder per sandbox (2026-10-05): a front names its instance, the edge refuses a second live copy instead of
+//! One holder per sandbox (2026-10-05): a netd names its instance, the edge refuses a second live copy instead of
 //! letting the two trade the tunnel every minute, proves a QUIC carrier with probes before and while it takes requests,
 //! moves a request a stalled QUIC carrier would not answer onto the socket, and closes the tunnels of a sandbox the
 //! platform deleted while they were held.
@@ -37,8 +37,8 @@ fn named(instance: &str, host: &str) -> Identity {
     }
 }
 
-// How a QUIC front treats the streams the edge opens: as HTTP/1.1, as an older front does (a probe is answered 400), only
-// the first, or none at all, as a front on a path that carries nothing more.
+// How a QUIC netd treats the streams the edge opens: as HTTP/1.1, as an older netd does (a probe is answered 400), only
+// the first, or none at all, as a netd on a path that carries nothing more.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Serves {
     Every,
@@ -46,7 +46,7 @@ enum Serves {
     Nothing,
 }
 
-// A front dialling the QUIC door with today's hello, naming itself.
+// A netd dialling the QUIC door with today's hello, naming itself.
 async fn dial_quic_as(
     door: &Door,
     grant: &str,
@@ -160,7 +160,7 @@ async fn a_second_live_copy_is_refused_naming_the_holder_and_the_holder_keeps_se
     let answer = get(running.port, &daemon_host(SANDBOX_ID), "/").await;
     assert!(answer.body.starts_with("again "), "{}", answer.body);
 
-    // A front from before instances names none, and the newest still wins against a named one during the roll.
+    // A netd from before instances names none, and the newest still wins against a named one during the roll.
     let older = dial(running.port, &grant, serving("older")).await.unwrap();
     assert_eq!(
         again.ended.await.unwrap(),
@@ -170,7 +170,7 @@ async fn a_second_live_copy_is_refused_naming_the_holder_and_the_holder_keeps_se
 }
 
 #[tokio::test]
-async fn a_named_quic_front_is_refused_while_another_copy_holds_the_socket() {
+async fn a_named_quic_netd_is_refused_while_another_copy_holds_the_socket() {
     let keys = Keys::default();
     let door = door(&keys).await;
     let grant = keys.grant(SANDBOX_ID);
@@ -345,7 +345,7 @@ async fn a_held_sandbox_the_platform_deleted_is_closed_and_refused_with_the_verd
     assert_eq!(held.ended.await.unwrap(), Ended::Closed(Some(DELETED_CODE)));
     wait_for("the tunnel to go", || running.edge.registry().size() == 0).await;
 
-    // A redial is refused, with the verdict that tells a front it was a deletion.
+    // A redial is refused, with the verdict that tells a netd it was a deletion.
     let mut request = format!("ws://127.0.0.1:{}{}", running.port, tunnel::TUNNEL_PATH)
         .into_client_request()
         .unwrap();

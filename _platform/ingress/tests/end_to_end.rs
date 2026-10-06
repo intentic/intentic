@@ -437,7 +437,7 @@ mod hosted {
     }
 }
 
-// Over TCP a front holds two sockets, and a request rides the bulk one when the daemon announced its route as a transfer
+// Over TCP a netd holds two sockets, and a request rides the bulk one when the daemon announced its route as a transfer
 // (or it is a preview's) and the bulk socket is held here, the interactive one otherwise.
 mod lanes {
     use super::*;
@@ -541,7 +541,7 @@ mod lanes {
     }
 }
 
-// A front that predates `/tunnel/v2` dials `/tunnel/v1` on two lanes, and is served as it always was: a transfer rides
+// A netd that predates `/tunnel/v2` dials `/tunnel/v1` on two lanes, and is served as it always was: a transfer rides
 // the bulk lane when this machine holds it, the interactive one otherwise, and an upgrade crosses its h2 session.
 mod legacy {
     use super::*;
@@ -639,7 +639,7 @@ mod legacy {
         assert!(head.starts_with("HTTP/1.1 502"), "{head}");
     }
 
-    // Both doors take the one socket slot, so a front that upgrades mid-flight displaces its own older tunnel either way,
+    // Both doors take the one socket slot, so a netd that upgrades mid-flight displaces its own older tunnel either way,
     // and a v2 tunnel carries every request whatever lane a legacy one left behind.
     #[tokio::test]
     async fn a_v2_tunnel_displaces_a_legacy_interactive_lane_and_carries_the_transfers_too() {

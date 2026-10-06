@@ -14,7 +14,7 @@ import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly
  * - nothing answers within READY_BUDGET_MS of the start;
  * - the journal reads `failed` (this version could not convert the files, and put them back as they were);
  * - the journal, once seen open, is not seen committed within JOURNAL_BUDGET_MS, silence included, since silence
- *   after an open journal is the front restarting a daemon that fell over mid-conversion;
+ *   after an open journal is netd restarting a daemon that fell over mid-conversion;
  * - the machine exits with an error, whether Fly restarts it (on-failure, three times, then stopped) or not, or reads
  *   stopped with no exit to explain it;
  * - the sandbox does not check in with the platform within the budget.
@@ -129,7 +129,7 @@ const endOf = (baseline: DaemonBaseline, detail: FlyMachineDetail): DaemonVerdic
         : { kind: `down`, reason: `its machine reads ${detail.state} before the new version was ready` };
 };
 
-// Asks the daemon once; undefined when nothing readable answered (a refused exec, curl's failure, a front answering 503).
+// Asks the daemon once; undefined when nothing readable answered (a refused exec, curl's failure, a netd answering 503).
 const askHealth = async (config: Config, machine: DaemonMachine): Promise<DaemonHealthAnswer | undefined> => {
     // allow(silent-catch): an exec Fly refuses is one more poll with no answer; the budget decides what silence means
     const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, DAEMON_HEALTH_COMMAND, HEALTH_EXEC_SECONDS).catch(

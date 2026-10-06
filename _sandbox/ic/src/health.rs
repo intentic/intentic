@@ -9,13 +9,13 @@ use crate::util::{bail, Result};
 const HEALTH_URL: &str = "http://localhost:8787/health";
 
 /// How long one read of `/health` in the waits below may take, in curl's `-m` seconds: a daemon that took the
-/// connection and never answers fails the read instead of holding the update forever. Past the half minute the front
+/// connection and never answers fails the read instead of holding the update forever. Past the half minute netd
 /// holds a request while its daemon is not up, so a read still rides that hold to its answer, and a wait's reach stays
 /// what it was.
 const WAIT_READ_SECS: &str = "35";
 
 /// How long the readiness wait holds. A clock rather than a count of reads: while its daemon restarts, the
-/// front holds a request for up to half a minute before answering 503, so a count could stretch into an hour.
+/// netd holds a request for up to half a minute before answering 503, so a count could stretch into an hour.
 const READY_BUDGET: Duration = Duration::from_secs(120);
 
 /// How long an open state journal may take to commit before the swap is undone. Longer than the plain wait,
@@ -34,7 +34,7 @@ pub fn wait_answering(container: &str, log: &Log, remedy: &str) -> Result<String
             return Ok(answer);
         }
         // A daemon that recorded why it could not start has answered, just not over HTTP: no point waiting out the
-        // rest of the budget on the front's "restarting" while it fails the same way again.
+        // rest of the budget on netd's "restarting" while it fails the same way again.
         if let Some(error) = crate::sandbox::probation::boot_failure_since(container, started) {
             log.section(&format!("container logs ({container})"));
             docker::logs_into(container, "500", log);
@@ -124,7 +124,7 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
 /// A daemon reports its state journal open from its start until it commits the conversions a new version
 /// made, right after its readiness gate opens; until then the previous version can still restore the
 /// pre-images. So once any answer said open, only a ready answer with the journal closed ends the wait, and
-/// silence stops meaning "an old daemon that reports nothing": it is the front answering 503 while it
+/// silence stops meaning "an old daemon that reports nothing": it is netd answering 503 while it
 /// restarts a daemon that crashed mid-conversion.
 #[derive(Default)]
 struct Readiness {
@@ -144,7 +144,7 @@ impl Readiness {
     }
 
     /// May the wait end on this answer? None is no readable answer at all: an empty or unparsable body, or no
-    /// answer (`curl -sf` fails on the front's 503 as it does on a refused connection).
+    /// answer (`curl -sf` fails on netd's 503 as it does on a refused connection).
     fn admits(&mut self, health: Option<&serde_json::Value>) -> bool {
         let Some(health) = health else {
             return !self.journal_seen;
@@ -293,7 +293,7 @@ mod tests {
             serde_json::json!({ "ready": true, "state": { "journal": "open", "engine": 7 } });
         // Ready is not enough while the conversions are uncommitted.
         assert!(!readiness.admits(Some(&open)));
-        // The front's 503 while it restarts a crashed daemon: silence is no longer readiness.
+        // netd's 503 while it restarts a crashed daemon: silence is no longer readiness.
         assert!(!readiness.admits(None));
         assert!(
             readiness.journal_open,

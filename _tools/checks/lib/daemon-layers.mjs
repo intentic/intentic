@@ -23,7 +23,7 @@ export const DAEMON_LAYERS = [
     {
         name: "foundation",
         about: "storage, ports and primitives every other layer stands on; they know no subsystem",
-        units: ["store", "seams", "http", "offload", "front", "fences", "speech", "areas", "workload", "safety", "tunnel", "image"],
+        units: ["store", "seams", "http", "offload", "netd", "fences", "speech", "areas", "workload", "safety", "tunnel", "image"],
     },
     {
         name: "host",

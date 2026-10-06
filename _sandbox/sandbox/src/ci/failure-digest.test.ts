@@ -128,9 +128,9 @@ test("a failed check keeps its findings under it, a few at most, and the push ch
 test("a compiler's error carries the place it names, and a formatter's and a test runner's failures are said in a line", () => {
     const excerpt = excerptOf(
         job(
-            "front-check",
+            "netd-check",
             githubLog(
-                ...step("cargo fmt --all --check", ["Diff in /__w/web/web/_sandbox/front/src/main.rs at line 12:", "-fn main(){", "+fn main() {"], 1),
+                ...step("cargo fmt --all --check", ["Diff in /__w/web/web/_sandbox/netd/src/main.rs at line 12:", "-fn main(){", "+fn main() {"], 1),
                 ...step(
                     "cargo clippy --all-targets --locked -- -D warnings",
                     ["error: unused variable: `port`", "  --> crates/tunnel/src/lib.rs:41:9", "   |", "error: could not compile `tunnel`"],
@@ -141,7 +141,7 @@ test("a compiler's error carries the place it names, and a formatter's and a tes
         ),
     );
     expect(excerpt.errors).toEqual([
-        "rustfmt: _sandbox/front/src/main.rs differs at line 12",
+        "rustfmt: _sandbox/netd/src/main.rs differs at line 12",
         "error: unused variable: `port` --> crates/tunnel/src/lib.rs:41:9",
         "test frames::round_trip FAILED",
     ]);

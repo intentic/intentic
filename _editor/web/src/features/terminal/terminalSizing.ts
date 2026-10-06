@@ -27,7 +27,7 @@ export const applyTerminalGrid = (s: TerminalSizing, grid: Grid): void => {
     render(s);
 };
 
-// A reconnect may reach an older front that never announces a grid; local fitting remains its fallback.
+// A reconnect may reach an older netd that never announces a grid; local fitting remains its fallback.
 export const resetTerminalGrid = (s: TerminalSizing): void => {
     s.authoritativeGrid = undefined;
     render(s);

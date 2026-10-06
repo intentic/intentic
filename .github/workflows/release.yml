@@ -447,11 +447,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # NO RELEASE AHEAD OF THE EDGE. The release moves `stable`, which every hosted machine and every `ic sandbox
-      # update` pulls, and its front dials one tunnel door with no fallback. Asked before semantic-release rather
+      # update` pulls, and its netd dials one tunnel door with no fallback. Asked before semantic-release rather
       # than only inside release-images.sh so a refusal leaves no tag and no Release behind; it waits out the edge
       # roll of the same push (require-edge-door.sh says how long), and release-images.sh asks again for the
       # manual run.
-      - name: The live edge serves this front's tunnel door
+      - name: The live edge serves this netd's tunnel door
         run: bash _tools/scripts/image/require-edge-door.sh
       # THE RELEASE, AND WHETHER IT HAPPENED — which are two different facts, and everything below this step
       # depends on the second one.

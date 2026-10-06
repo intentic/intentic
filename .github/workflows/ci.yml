@@ -138,7 +138,7 @@ jobs:
       ci-desktop: ${{ steps.filter.outputs.ci-desktop }}
       desktop: ${{ steps.filter.outputs.desktop }}
       ic: ${{ steps.filter.outputs.ic }}
-      front: ${{ steps.filter.outputs.front }}
+      netd: ${{ steps.filter.outputs.netd }}
       images: ${{ steps.filter.outputs.images }}
       platform: ${{ steps.filter.outputs.platform }}
       perf-instr: ${{ steps.filter.outputs.perf-instr }}
@@ -1166,18 +1166,18 @@ jobs:
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --manifest-path _devices/win-launcher/Cargo.toml
 
-  # The tunnel's two Rust ends. The sandbox's front (_sandbox/front) owns every port and the ingress tunnel and
+  # The tunnel's two Rust ends. The sandbox's netd (_sandbox/netd) owns every port and the ingress tunnel and
   # supervises the daemon; the edge (_platform/ingress) holds the tunnels and routes browsers down them, building the
-  # front's tunnel crate and the relay crate both share (_shared/relay) by path. The ic gate again for all three (fmt,
+  # netd's tunnel crate and the relay crate both share (_shared/relay) by path. The ic gate again for all three (fmt,
   # clippy at -D warnings, tests, which run the real binaries on real sockets), each from its crate's own directory
   # because cargo reads .cargo/config.toml from where it runs, not from the manifest: that config is where the wire
-  # crate's TypeScript lands, and the front's last step refuses a control socket whose committed TypeScript is not
-  # what the Rust types emit, since Node and the front would then disagree about every frame. images-platform waits on this job, since the edge it rolls is only tested here.
-  # It ends by running the daemon's feed suite against the front it built (the `front` lane), which is why the sandbox
-  # image and the release wait on it too, and why `front` also fires on the daemon's end of the socket (affected.mjs).
-  front-check:
+  # crate's TypeScript lands, and netd's last step refuses a control socket whose committed TypeScript is not
+  # what the Rust types emit, since Node and netd would then disagree about every frame. images-platform waits on this job, since the edge it rolls is only tested here.
+  # It ends by running the daemon's feed suite against the netd binary it built (the `netd` lane), which is why the sandbox
+  # image and the release wait on it too, and why `netd` also fires on the daemon's end of the socket (affected.mjs).
+  netd-check:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && needs.changes.outputs.front == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && needs.changes.outputs.netd == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -1189,10 +1189,10 @@ jobs:
     timeout-minutes: 30
     env:
       CARGO_HOME: /ci-cache/cargo
-      CARGO_TARGET_DIR: /ci-cache/front-check-target
+      CARGO_TARGET_DIR: /ci-cache/netd-check-target
     defaults:
       run:
-        working-directory: _sandbox/front
+        working-directory: _sandbox/netd
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1200,19 +1200,19 @@ jobs:
           persist-credentials: false
           clean: false
       # EACH STEP NEEDS WHAT IT READS AND NOTHING ELSE: three crates are three separate questions, and a clippy finding
-      # in the front used to skip the edge's and the relay's whole gate behind it. Every cargo step needs only the
+      # in netd used to skip the edge's and the relay's whole gate behind it. Every cargo step needs only the
       # checkout; the two below that read another step's output say which.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo fmt --all --check
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo clippy --all-targets --locked -- -D warnings
-      - id: front-test
+      - id: netd-test
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --locked
       # ts-rs writes the TypeScript while `cargo test` runs, so the diff reads that step's output: it runs whenever the
       # tests ran at all (a failing test elsewhere still exported every binding), and not when they never started.
-      - if: ${{ !cancelled() && steps.front-test.outcome != 'skipped' }}
-        run: git diff --exit-code -- ../../_shared/sandbox-contract/src/front/generated
+      - if: ${{ !cancelled() && steps.netd-test.outcome != 'skipped' }}
+        run: git diff --exit-code -- ../../_shared/sandbox-contract/src/netd/generated
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo fmt --all --check
         working-directory: _platform/ingress
@@ -1231,24 +1231,24 @@ jobs:
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --locked
         working-directory: _shared/relay
-      # THE DAEMON'S END OF THE FRONT'S SOCKET, against the binary this job builds: checkout-feed-front is the one Node
-      # suite that needs the front, and this is the one job that has it, so it runs here as the `front` lane
-      # (requires(…, { lane: "front" }) fails here without the binary and stands down in every other job). The debug
+      # THE DAEMON'S END OF THE NETD'S SOCKET, against the binary this job builds: checkout-feed-netd is the one Node
+      # suite that needs netd, and this is the one job that has it, so it runs here as the `netd` lane
+      # (requires(…, { lane: "netd" }) fails here without the binary and stands down in every other job). The debug
       # bin links against what `cargo test` above already compiled; the install is the warm store every job uses.
-      - id: front-build
+      - id: netd-build
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo build --locked -p intentic-front
+        run: cargo build --locked -p intentic-netd
       - id: setup
-        if: ${{ !cancelled() && steps.front-build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.netd-build.outcome == 'success' }}
         uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - if: ${{ !cancelled() && steps.front-build.outcome == 'success' && steps.setup.outcome == 'success' }}
-        run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-front.integration.test.ts
+      - if: ${{ !cancelled() && steps.netd-build.outcome == 'success' && steps.setup.outcome == 'success' }}
+        run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-netd.integration.test.ts
         working-directory: .
         env:
-          INTENTIC_CI_LANE: front
-          INTENTIC_FRONT_BINARY: ${{ env.CARGO_TARGET_DIR }}/debug/intentic-front
+          INTENTIC_CI_LANE: netd
+          INTENTIC_NETD_BINARY: ${{ env.CARGO_TARGET_DIR }}/debug/intentic-netd
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
   # came out. Two tiers, ordered by cost, each proving something the one before it cannot:
@@ -1557,14 +1557,14 @@ jobs:
   # uses: wait for the release call, run only when it released nothing. On a non-releasing push that wait is
   # the release's one-minute `plan`; a release that failed leaves `latest` to this job, as before.
   images:
-    needs: [changes, preflight, verify-core, verify-machine, front-check, release]
+    needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-machine.result == 'success'
-      && needs.front-check.result != 'failure'
+      && needs.netd-check.result != 'failure'
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: [self-hosted, intentic]
     container:
@@ -1636,7 +1636,7 @@ jobs:
       - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
         shell: bash
 
-  # THE IMAGE `images` WOULD HAVE SHIPPED, BUILT AND BOOTED, WHEN A GATE IN FRONT OF IT FAILED. Publishing rightly
+  # THE IMAGE `images` WOULD HAVE SHIPPED, BUILT AND BOOTED, WHEN A GATE IN NETD OF IT FAILED. Publishing rightly
   # waits on preflight and the verify groups, but the proof that rides with it — the prod-pruned tree builds, and the
   # daemon in it boots and converges (smoke-image.sh) — is nobody else's, so a commit failing a gate used to learn
   # about its broken image only after the gate was fixed: one more round. This job runs exactly when `images` would
@@ -1650,7 +1650,7 @@ jobs:
   #
   # The cost, said plainly: one more amd64 image build, on the fleet, for each failing main push that changes the image.
   images-dry:
-    needs: [changes, preflight, verify-core, verify-machine, front-check, release]
+    needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
@@ -1658,7 +1658,7 @@ jobs:
       && !(needs.preflight.result == 'success'
         && needs.verify-core.result == 'success'
         && needs.verify-machine.result == 'success'
-        && needs.front-check.result != 'failure')
+        && needs.netd-check.result != 'failure')
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1714,7 +1714,7 @@ jobs:
   # registry's own arm64 tags. The release does NOT reuse these sha tags — its arm64 half is version-stamped
   # inside release.yml (sandbox-arm64 there) so a released manifest's halves never skew.
   images-arm64:
-    needs: [changes, preflight, verify-core, verify-machine, front-check, release]
+    needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     # Gated on preflight and the release the way `images` is: the release's sandbox-arm64 builds this half on a
     # releasing push.
     if: |
@@ -1723,7 +1723,7 @@ jobs:
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-machine.result == 'success'
-      && needs.front-check.result != 'failure'
+      && needs.netd-check.result != 'failure'
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -1802,7 +1802,7 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # NOT AHEAD OF THE EDGE. A front dials one tunnel door and has no other way in, so `latest` moves only once the
+      # NOT AHEAD OF THE EDGE. A netd dials one tunnel door and has no other way in, so `latest` moves only once the
       # live edge declares that door on /health. Asked of the edge rather than of this workflow's job graph: the edge
       # rolls in images-platform, which runs on a platform push only, and a `needs` on it would pass on the skip.
       - run: bash _tools/scripts/image/require-edge-door.sh
@@ -1835,7 +1835,7 @@ jobs:
   #
   # And preflight, by name, for the reason `images` spells out.
   images-platform:
-    needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, front-check]
+    needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, netd-check]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
@@ -1844,7 +1844,7 @@ jobs:
       && needs.verify-platform.result == 'success'
       && needs.e2e-billing.result == 'success'
       && needs.e2e-signin.result == 'success'
-      && needs.front-check.result != 'failure'
+      && needs.netd-check.result != 'failure'
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1933,18 +1933,18 @@ jobs:
   # `!= 'failure'` the two image jobs get. Those two are allowed to be skipped; this one is not, because the
   # whole point of it is that a release cannot be cut without every provider's real CLI having been driven. A
   # gate that a skip satisfies is a gate that disappears exactly when someone disables it.
-  # verify-machine is required the same way, since it runs every pipeline. front-check runs only when the front or
+  # verify-machine is required the same way, since it runs every pipeline. netd-check runs only when netd or
   # the daemon's end of its socket moved, so it is held to `!= 'failure'`, as images-platform holds it.
   # Preflight is required by name, for the reason `images` spells out: the verify groups no longer carry its verdict.
   release:
-    needs: [preflight, verify-core, verify-providers, verify-machine, front-check, ci-base, ci-desktop]
+    needs: [preflight, verify-core, verify-providers, verify-machine, netd-check, ci-base, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-providers.result == 'success'
       && needs.verify-machine.result == 'success'
-      && needs.front-check.result != 'failure'
+      && needs.netd-check.result != 'failure'
       && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
     concurrency:

@@ -6,8 +6,8 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { loopbackPermission } from "../../../client/endpoint/loopbackPermission";
 import type { ConnectionFailure } from "../../../client/sandbox/connection";
 import { candidatesFor, couldBeOnThisMachine, probeEndpoint, sandboxIdOf } from "../../../client/endpoint/endpoint";
-import { type Diagnosis, diagnose, type Evidence, type FrontProbe, type HostedMachineState } from "./diagnose";
-import { probeFront } from "./probes";
+import { type Diagnosis, diagnose, type Evidence, type NetdProbe, type HostedMachineState } from "./diagnose";
+import { probeNetd } from "./probes";
 
 // THE DIAGNOSIS, gathered while the active sandbox is unreachable and dropped the moment it answers. A module singleton
 // started beside the connection loop (useSandboxLiveness.ts): it probes on the first failure of an outage, again after
@@ -82,28 +82,28 @@ const answersHere = async (): Promise<boolean | undefined> => {
 };
 
 // A dead tunnel or none at all: only then is this computer's loopback worth asking.
-const tunnelDown = (front: FrontProbe): boolean => front.kind === `edge` || front.kind === `unreachable` || front.kind === `silent`;
+const tunnelDown = (netd: NetdProbe): boolean => netd.kind === `edge` || netd.kind === `unreachable` || netd.kind === `silent`;
 
 const gather = async (sandboxId: string, daemonUrl: string): Promise<Evidence> => {
     const box = active.value;
     const owner = box?.role === `owner`;
     const hosted = (box?.hosted ?? null) !== null;
-    const [platform, front, machine] = await Promise.all([
+    const [platform, netd, machine] = await Promise.all([
         platformAnswers(),
-        probeFront(daemonUrl),
+        probeNetd(daemonUrl),
         hosted && owner ? hostedState(sandboxId) : Promise.resolve(undefined),
     ]);
-    if (front.kind === `edge`) {
-        noteVerdict(sandboxId, front.verdict);
+    if (netd.kind === `edge`) {
+        noteVerdict(sandboxId, netd.verdict);
     }
     const loopback =
-        !hosted && owner && tunnelDown(front)
+        !hosted && owner && tunnelDown(netd)
             ? await answersHere().catch((cause: unknown) => {
                   console.warn("Could not probe the local sandbox", cause);
                   return undefined;
               })
             : undefined;
-    return { at: Date.now(), online: globalThis.navigator?.onLine !== false, platform, front, loopback, hosted: machine };
+    return { at: Date.now(), online: globalThis.navigator?.onLine !== false, platform, netd, loopback, hosted: machine };
 };
 
 // What the current outage is, if there is one worth diagnosing.
@@ -204,10 +204,10 @@ export const diagnosisEvidence = computed<Evidence | undefined>(() => {
 // For the connection loop, which has no component scope: whether the last probe of this outage saw the sandbox alive.
 export const sandboxSeemsAlive = (now = Date.now()): boolean => {
     const evidence = diagnosisEvidence.value;
-    if (evidence === undefined || now - evidence.at > ALIVE_FRESH_MS || evidence.front === undefined) {
+    if (evidence === undefined || now - evidence.at > ALIVE_FRESH_MS || evidence.netd === undefined) {
         return false;
     }
-    return evidence.front.kind === `answered` || (evidence.front.kind === `vitals` && evidence.front.vitals.node === `up`);
+    return evidence.netd.kind === `answered` || (evidence.netd.kind === `vitals` && evidence.netd.vitals.node === `up`);
 };
 
 // Component-scoped (its clocks bind to the caller): the diagnosis of the active sandbox, or undefined while it answers

@@ -356,8 +356,8 @@ const identityEnv = (run: SandboxRun): string[] => [
     ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
 ];
 
-// How long `docker stop` waits before its SIGKILL: past the 25 s intentic-front gives the daemon to dispose every
-// subsystem on SIGTERM (STOP_GRACE in _sandbox/front/crates/front/src/supervise.rs), with room for the front to close
+// How long `docker stop` waits before its SIGKILL: past the 25 s intentic-netd gives the daemon to dispose every
+// subsystem on SIGTERM (STOP_GRACE in _sandbox/netd/crates/netd/src/supervise.rs), with room for netd to close
 // its tunnel after, where Docker's default of 10 s cut that stop short.
 const STOP_TIMEOUT_SECONDS = "30";
 

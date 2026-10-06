@@ -1,8 +1,8 @@
 // contract.lock.json is every exported schema serialized to canonical JSON Schema, so git can flag a wire-contract
 // change. contract-shrink demands a `!` commit with a Breaking-Note when a schema, field or type shrinks; additions
 // pass freely. Derived from the package's exports, not a hand-kept list, plus the wire no oRPC route carries: the
-// manifests the Rust crates that define it write beside their TypeScript (the tunnel, what a browser sees of the front
-// and the edge, and the front's control socket with Node), under `wire:` names no export can take.
+// manifests the Rust crates that define it write beside their TypeScript (the tunnel, what a browser sees of netd
+// and the edge, and netd's control socket with Node), under `wire:` names no export can take.
 //
 // And who reaches each route: every raw route's and every procedure's RouteMeta, each reach field with its default
 // resolved (route-meta.ts `routeAccess`), under `access:METHOD /path`. Resolved, so every field is a value on every
@@ -81,8 +81,8 @@ export const accessChanges = (baseText: string, headText: string): string[] => {
     });
 };
 
-// Each written by its crate's own test: `tunnel`, `browser-wire` and `front-wire` under _sandbox/front/crates.
-const WIRE_MANIFESTS = ["browser-wire", "front-wire", "tunnel"] as const;
+// Each written by its crate's own test: `tunnel`, `browser-wire` and `netd-wire` under _sandbox/netd/crates.
+const WIRE_MANIFESTS = ["browser-wire", "netd-wire", "tunnel"] as const;
 
 export const currentLock = (): Record<string, unknown> => {
     const lock: Record<string, unknown> = {};
@@ -103,7 +103,7 @@ export const currentLock = (): Record<string, unknown> => {
     }
     for (const manifest of WIRE_MANIFESTS) {
         // Read from src/ whether this runs from src/ or dist/: the manifests are data `cargo test` writes, never compiled.
-        const text = readFileSync(join(packageRoot(import.meta.url), "src", "front", "generated", `${manifest}.json`), "utf8");
+        const text = readFileSync(join(packageRoot(import.meta.url), "src", "netd", "generated", `${manifest}.json`), "utf8");
         lock[`wire:${manifest}`] = sorted(JSON.parse(text));
     }
     return { ...lock, ...accessEntries() };

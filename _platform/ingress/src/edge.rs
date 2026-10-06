@@ -4,12 +4,12 @@
 //! the peer holding it, else is refused with a verdict. A hosted sandbox is no exception: it is reached only down the
 //! tunnel it dials, and one that dials nothing answers `no-tunnel`, which is what the editor wakes it on.
 //!
-//! One holder per sandbox (2026-10-05): a tunnel from a front of another instance than the live one holding the sandbox,
+//! One holder per sandbox (2026-10-05): a tunnel from a netd of another instance than the live one holding the sandbox,
 //! here or on a peer, is refused (409 naming where the holder runs, or `HELD_ELSEWHERE_CODE`). A held QUIC connection is
 //! proven by a probe stream at registration and every `PROBE_EVERY`, takes requests only once proven, and is closed with
 //! `DEMOTED_CODE` when a probe or a stalled request finds it serving nothing, the socket carrying on meanwhile. Every held
 //! sandbox's existence is asked again as its cached answer expires, and one the platform deleted is closed with
-//! `DELETED_CODE`, rather than staying reachable until its front happened to redial.
+//! `DELETED_CODE`, rather than staying reachable until its netd happened to redial.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -48,7 +48,7 @@ use crate::session::{Failed, Session};
 // A QUIC connection that has not said who it is by now never will.
 const HELLO_PATIENCE: Duration = Duration::from_secs(10);
 
-// A front acknowledges a `Held` the moment it reads it; one that has not by now gave up on this connection.
+// A netd acknowledges a `Held` the moment it reads it; one that has not by now gave up on this connection.
 const ACKNOWLEDGED_WITHIN: Duration = Duration::from_secs(5);
 
 // A refused socket's close frame gets this long to leave before the connection goes.
@@ -69,7 +69,7 @@ pub struct EdgeOptions {
     pub instance: String,
     /// Which image this process is, baked at build; empty is an unreleased build.
     pub build: String,
-    /// What this edge serves beyond HTTPS over TCP, because its own configuration binds it: declared to every front on
+    /// What this edge serves beyond HTTPS over TCP, because its own configuration binds it: declared to every netd on
     /// its tunnel's answer and to everyone else on `/health`, so nothing has to find out by failing.
     pub transports: Vec<Transport>,
 }
@@ -199,7 +199,7 @@ impl Edge {
         socket.map(|socket| (socket, Slot::Socket))
     }
 
-    // One exchange down a held tunnel. A QUIC carrier that stalled on it is demoted (closed, its front redialling it) and
+    // One exchange down a held tunnel. A QUIC carrier that stalled on it is demoted (closed, its netd redialling it) and
     // the request, when it can be sent again, rides the socket instead, once.
     async fn through(
         &self,
@@ -251,7 +251,7 @@ impl Edge {
         }
     }
 
-    // Whether another live copy holds `id`, here or on a peer: a front naming no instance never asks.
+    // Whether another live copy holds `id`, here or on a peer: a netd naming no instance never asks.
     fn held_elsewhere(&self, id: &str, identity: Option<&Identity>) -> Option<Elsewhere> {
         self.registry.held_elsewhere(id, identity).or_else(|| {
             self.cluster
@@ -262,8 +262,8 @@ impl Edge {
 
     /// Asks the platform again, every `every`, whether each sandbox held here still exists, `RECHECK_AT_ONCE` at a
     /// time; the revocation cache asks only for answers that expired. One the platform deleted has every tunnel closed
-    /// with `DELETED_CODE`, and its front stops dialling. Before 2026-10-05 existence was asked only at registration,
-    /// so a deleted sandbox stayed reachable until its front happened to redial.
+    /// with `DELETED_CODE`, and its netd stops dialling. Before 2026-10-05 existence was asked only at registration,
+    /// so a deleted sandbox stayed reachable until its netd happened to redial.
     pub fn recheck_held(self: &Arc<Self>, every: Duration) {
         if !self.revocation.enforced() {
             return;
@@ -331,7 +331,7 @@ impl Edge {
                     "remote": self.cluster.as_ref().map_or(0, |cluster| cluster.remote_count()),
                     "build": self.build,
                     "transports": self.transports.iter().map(|transport| transport.token()).collect::<Vec<_>>(),
-                    // Which tunnel doors this build serves, so nothing publishes a front ahead of the edge it dials
+                    // Which tunnel doors this build serves, so nothing publishes a netd ahead of the edge it dials
                     // (require-edge-door.sh). Not `tunnels`, which has always been the count.
                     "doors": [legacy::PATH, TUNNEL_PATH],
                 });
@@ -377,7 +377,7 @@ impl Edge {
         };
         if !self.revocation.allows(&claim.sandbox_id).await {
             tracing::info!(sandbox = %claim.sandbox_id, "tunnel refused: the platform says this sandbox is gone");
-            // The verdict tells a front this is a deletion, after which it stops dialling.
+            // The verdict tells a netd this is a deletion, after which it stops dialling.
             return with_verdict(
                 refused(StatusCode::FORBIDDEN, "that sandbox no longer exists"),
                 Verdict::UnknownSandbox,
@@ -425,8 +425,8 @@ impl Edge {
         switching.body(body::empty()).expect("a 101 builds")
     }
 
-    /// Holds a front's QUIC connection as its sandbox's carrier: the hello's grant is checked as a WebSocket's is, a
-    /// front of another instance than the live holder is refused, and a named front's acknowledgement is waited for
+    /// Holds a netd's QUIC connection as its sandbox's carrier: the hello's grant is checked as a WebSocket's is, a
+    /// netd of another instance than the live holder is refused, and a named netd's acknowledgement is waited for
     /// before the connection is registered. Proven by a probe at once and every `PROBE_EVERY`, it takes requests from its
     /// first answered probe and is closed with `DEMOTED_CODE` at its first unanswered one; else it is closed with the
     /// code a displacement, a deletion or a shutdown names.
@@ -473,7 +473,7 @@ impl Edge {
         {
             Ok(true) => {}
             _ => {
-                tracing::info!(sandbox = %id, %remote, "QUIC tunnel not registered: its front did not acknowledge the hello");
+                tracing::info!(sandbox = %id, %remote, "QUIC tunnel not registered: its netd did not acknowledge the hello");
                 connection.close(quinn::VarInt::from_u32(0), b"no acknowledgement");
                 return;
             }
@@ -612,9 +612,9 @@ impl Edge {
 /// Which tunnel door an upgrade knocked on, and on which lane.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Door {
-    /// `/tunnel/v2`: a WebSocket carrying yamux, and the transfer routes its front announced.
+    /// `/tunnel/v2`: a WebSocket carrying yamux, and the transfer routes its netd announced.
     Mux(Lane, BulkRoutes),
-    /// `/tunnel/v1`: a legacy front's lane, an h2 session.
+    /// `/tunnel/v1`: a legacy netd's lane, an h2 session.
     Legacy(Lane),
 }
 
@@ -643,7 +643,7 @@ impl Door {
         }
     }
 
-    // Who keeps the socket alive. A `/tunnel/v2` front always pings, so the edge only listens. A `/tunnel/v1` front
+    // Who keeps the socket alive. A `/tunnel/v2` netd always pings, so the edge only listens. A `/tunnel/v1` netd
     // may predate that one-sided rule: some never ping and only answer the edge's pings, and an edge that stopped
     // pinging dropped them for silence every `DEAD_AFTER` (each drop cutting that sandbox's terminals and streams).
     fn liveness(&self) -> Liveness {
@@ -653,7 +653,7 @@ impl Door {
         }
     }
 
-    // Either door's interactive lane is the sandbox's home, so a front moving between doors displaces its own older one.
+    // Either door's interactive lane is the sandbox's home, so a netd moving between doors displaces its own older one.
     fn slot(&self) -> Slot {
         match self.lane() {
             Lane::Interactive => Slot::Socket,
@@ -793,7 +793,7 @@ fn refused_upgrade(verdict: Verdict, sentence: &str) -> Response<Body> {
     with_verdict(refused(StatusCode::BAD_GATEWAY, sentence), verdict)
 }
 
-// A tunnel another live copy of its sandbox holds: 409, naming where that copy runs for the refused front to say.
+// A tunnel another live copy of its sandbox holds: 409, naming where that copy runs for the refused netd to say.
 fn held_by_another(elsewhere: &Elsewhere) -> Response<Body> {
     let named = Identity::named_host(&elsewhere.host);
     let mut response = refused(
@@ -828,7 +828,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_edge_pings_legacy_fronts_and_leaves_v2_fronts_to_ping_it() {
+    fn the_edge_pings_legacy_netds_and_leaves_v2_netds_to_ping_it() {
         assert_eq!(Door::Legacy(Lane::Interactive).liveness(), Liveness::Pings);
         assert_eq!(
             Door::Mux(Lane::Interactive, BulkRoutes::parse("")).liveness(),

@@ -1,4 +1,4 @@
-//! The tunnel over QUIC against a front speaking it: the hello's grant is checked as a WebSocket's is, every request and
+//! The tunnel over QUIC against a netd speaking it: the hello's grant is checked as a WebSocket's is, every request and
 //! upgrade is a stream of its own carrying HTTP/1.1, QUIC is preferred while held and the WebSocket takes over when
 //! it goes, and a newer connection displaces an older one.
 
@@ -22,7 +22,7 @@ use support::{
     Door, Keys, SANDBOX_ID, ZONE, daemon_host, dial, door, get, serving, upgrade, wait_for,
 };
 
-// A front dialling the QUIC door: its hello's answer, and the connection, whose streams it serves as HTTP/1.1.
+// A netd dialling the QUIC door: its hello's answer, and the connection, whose streams it serves as HTTP/1.1.
 async fn dial_quic(door: &Door, grant: &str, name: &'static str) -> (Hello, Connection) {
     let mut roots = rustls::RootCertStore::empty();
     roots.add(door.trust.clone()).unwrap();
@@ -87,7 +87,7 @@ async fn dial_quic(door: &Door, grant: &str, name: &'static str) -> (Hello, Conn
 }
 
 #[tokio::test]
-async fn a_front_over_quic_carries_requests_and_upgrades_and_is_preferred_while_held() {
+async fn a_netd_over_quic_carries_requests_and_upgrades_and_is_preferred_while_held() {
     let keys = Keys::default();
     let door = door(&keys).await;
     let _socket = dial(
@@ -246,7 +246,7 @@ async fn a_browser_over_http_3_reaches_a_sandbox_down_its_tunnel() {
     assert_eq!(response.headers()["x-intentic-edge"], "no-tunnel");
 }
 
-// What a front and the platform read to know whether to reach for QUIC, HTTP/3 and WebTransport at all: the edge's own
+// What a netd and the platform read to know whether to reach for QUIC, HTTP/3 and WebTransport at all: the edge's own
 // declaration, off what it binds, on its answer to every tunnel and on `/health`. An edge binding no UDP declares nothing.
 #[tokio::test]
 async fn the_edge_declares_what_it_serves_on_every_tunnels_answer_and_on_health() {

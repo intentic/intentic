@@ -17,9 +17,9 @@ flowchart LR
 - Inside the container, `curl -s localhost:8787/health` answers even mid-boot. `boot` lists every boot step with its
   state and time, `announce` says whether the platform was reached, and `reach` / `reachedBy` say how the world gets in.
 - On the host, `ic sandbox doctor` walks the sandbox's reachability chain and names the broken link.
-- `docker logs` shows the daemon's JSON lines and `intentic-front`'s own log (its level from `FRONT_LOG`). A daemon
+- `docker logs` shows the daemon's JSON lines and `intentic-netd`'s own log (its level from `NETD_LOG`). A daemon
   that refuses its config says why on stderr and exits with code 78. One whose boot fails before it is ready writes
-  why to `/history/boot-failure.json` and exits 1, and the front starts it again with backoff; the next boot that gets
+  why to `/history/boot-failure.json` and exits 1, and netd starts it again with backoff; the next boot that gets
   all the way removes the file.
 
 ## Log files

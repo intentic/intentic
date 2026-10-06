@@ -64,7 +64,7 @@ export const findingsOf = (report: HostReport): HostCheck[] => {
         .toSorted((a, b) => order[a.state] - order[b.state]);
 };
 
-// Why it is slow, when its front says: the pressure that is highest, if it is high enough to be the reason.
+// Why it is slow, when its netd says: the pressure that is highest, if it is high enough to be the reason.
 const busyReason = (vitals: SandboxVitals | undefined): string | undefined => {
     const pressure = vitals?.pressure;
     if (pressure === null || pressure === undefined) {

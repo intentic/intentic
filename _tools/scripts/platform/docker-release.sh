@@ -3,7 +3,7 @@
 # Runs from an app dir as its `docker:release` turbo task (turbo.json: dependsOn build), so the app and its
 # workspace deps are already built job-side with the warm turbo cache — each Dockerfile is a pure COPY of the
 # prepared tree, never an in-container install/compile. The ingress is the exception: it is Rust, compiled in a
-# BuildKit stage the way the sandbox's front is, so no job needs a toolchain. The OSS core images
+# BuildKit stage the way the sandbox's netd is, so no job needs a toolchain. The OSS core images
 # (sandbox/dind-host) keep their own publish-images.sh: same job-side-build philosophy, but they ride
 # semantic-release with a trees payload and registry-cache machinery this flow doesn't need.
 #
@@ -28,7 +28,7 @@ APP="${1:?usage: docker-release.sh <image> [--prune] [--build-context name=dir .
 shift
 PRUNE=""
 # A named BuildKit context per sibling tree a Dockerfile compiles from (the ingress's Rust build takes the tunnel crate
-# from _sandbox/front), so a context stays the app's own directory and nothing else of the repository enters it.
+# from _sandbox/netd), so a context stays the app's own directory and nothing else of the repository enters it.
 context_args=()
 while [ $# -gt 0 ]; do
     case "$1" in

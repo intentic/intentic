@@ -3966,7 +3966,7 @@
         },
         {
           "path": "_platform/ingress/src/quic.rs",
-          "what": "the UDP door: a front's QUIC tunnel or a browser's HTTP/3, told apart by ALPN."
+          "what": "the UDP door: a netd's QUIC tunnel or a browser's HTTP/3, told apart by ALPN."
         },
         {
           "path": "_platform/ingress/src/webtransport.rs",
@@ -4123,41 +4123,41 @@
     {
       "anchors": [
         {
-          "path": "_sandbox/front/crates/front/src/route.rs",
+          "path": "_sandbox/netd/crates/netd/src/route.rs",
           "what": "which side answers a request."
         },
         {
-          "path": "_sandbox/front/crates/front/src/supervise.rs",
+          "path": "_sandbox/netd/crates/netd/src/supervise.rs",
           "what": "runs Node, restarts it and ends what it left, reaps orphans as PID 1."
         },
         {
-          "path": "_sandbox/front/crates/front/src/tunnel.rs",
+          "path": "_sandbox/netd/crates/netd/src/tunnel.rs",
           "what": "the ingress tunnel: grant, then a stream per request."
         },
         {
-          "path": "_sandbox/front/crates/front/src/standing.rs",
+          "path": "_sandbox/netd/crates/netd/src/standing.rs",
           "what": "where the tunnel stands for Node and the vitals, and"
         },
         {
-          "path": "_sandbox/front/crates/front/src/term/mod.rs",
+          "path": "_sandbox/netd/crates/netd/src/term/mod.rs",
           "what": "a terminal socket from Node's plan to its close."
         },
         {
-          "path": "_sandbox/front/crates/front-wire/src/lib.rs",
+          "path": "_sandbox/netd/crates/netd-wire/src/lib.rs",
           "what": "the control socket's frames, their only definition."
         },
         {
-          "path": "_sandbox/front/crates/front/tests/routes.rs",
+          "path": "_sandbox/netd/crates/netd/tests/routes.rs",
           "what": "the real binary on real ports: routing, preview relay, TLS, upgrades."
         }
       ],
       "behind": 1,
       "component": "sandbox",
-      "dir": "_sandbox/front",
+      "dir": "_sandbox/netd",
       "files": 0,
       "hasTests": false,
       "loc": 0,
-      "oneLiner": "The sandbox's network edge: a Rust binary that owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and keeps the daemon running.",
+      "oneLiner": "The sandbox's network daemon, named the Unix way (like sshd): a Rust binary that owns every port and the ingress tunnel, relays each request to the Node daemon or a preview, and keeps the daemon running.",
       "readmeRev": "1cf4594512fd7dc1a8b74314442cf8f27737bda0",
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
@@ -5040,7 +5040,7 @@
         },
         {
           "path": "_shared/relay/src/backoff.rs",
-          "what": "the jittered redial ladder the front's carriers and its supervisor climb, started"
+          "what": "the jittered redial ladder netd's carriers and its supervisor climb, started"
         },
         {
           "path": "_shared/relay/src/body.rs",
@@ -5966,10 +5966,10 @@
   "orphans": [],
   "repo": "intentic",
   "undocumented": [
-    "_sandbox/front/crates/browser-wire",
-    "_sandbox/front/crates/front",
-    "_sandbox/front/crates/front-wire",
-    "_sandbox/front/crates/tunnel",
+    "_sandbox/netd/crates/browser-wire",
+    "_sandbox/netd/crates/netd",
+    "_sandbox/netd/crates/netd-wire",
+    "_sandbox/netd/crates/tunnel",
     "_sandbox/ic/bounded"
   ]
 }

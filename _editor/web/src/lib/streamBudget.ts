@@ -30,7 +30,7 @@ const WEBKIT_ENGINE = ((agent: string): boolean => /AppleWebKit/.test(agent) && 
 );
 
 // By what the browser negotiated, not by which address it dialled: the Linux app's WebKitGTK has spoken HTTP/1.1 to the
-// certified loopback name, which every other browser reaches over h2. Unknown (no request answered yet, or a front
+// certified loopback name, which every other browser reaches over h2. Unknown (no request answered yet, or a netd
 // too old to send Timing-Allow-Origin, for good) is read by what the route and engine allow: plain-HTTP loopback is
 // HTTP/1.1 in every browser, the certified loopback name is under a WebKit engine and multiplexed under the others,
 // and the tunnel's edge serves h2 and h3 to everyone, which the phone and other browsers have always used uncapped.

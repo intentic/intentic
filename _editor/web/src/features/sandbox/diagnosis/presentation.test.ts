@@ -30,7 +30,7 @@ describe(`a busy sandbox`, () => {
         expect(shown.chain.map((link) => link.state)).toEqual([`ok`, `ok`, `ok`, `working`]);
     });
 
-    it(`names the pressure its front measured when it is the reason`, () => {
+    it(`names the pressure its netd measured when it is the reason`, () => {
         const vitals = { node: `up` as const, lagMs: 9000, restarts: 0, uptimeS: 60, pressure: { cpu: 12, memory: 88, io: 4 } };
         expect(present({ kind: `busy`, vitals, longMs: 60_000 }).body).toBe(`It's short on memory right now and will catch up by itself.`);
     });

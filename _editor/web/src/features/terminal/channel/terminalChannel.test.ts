@@ -2,19 +2,19 @@ import { StreamSocket } from "./streamSocket";
 import { type ChannelEvents, socketChannel } from "./terminalChannel";
 
 // The editor's end of a terminal on a WebTransport stream: a WebSocket spoken by hand, read through the same channel a
-// browser WebSocket is. The far end here plays the front, which answers such a stream as any WebSocket over TCP.
+// browser WebSocket is. The far end here plays netd, which answers such a stream as any WebSocket over TCP.
 
 interface FarEnd {
     readonly heard: ReadableStreamDefaultReader<Uint8Array>;
     readonly answer: WritableStreamDefaultWriter<Uint8Array>;
 }
 
-// One stream, as `createBidirectionalStream()` resolves it, and the front's end of it.
+// One stream, as `createBidirectionalStream()` resolves it, and netd's end of it.
 const streamPair = (): { opening: Promise<WebTransportBidirectionalStream>; far: FarEnd } => {
-    const toFront = new TransformStream<Uint8Array, Uint8Array>();
+    const toNetd = new TransformStream<Uint8Array, Uint8Array>();
     const toBrowser = new TransformStream<Uint8Array, Uint8Array>();
-    const stream = { readable: toBrowser.readable, writable: toFront.writable } as unknown as WebTransportBidirectionalStream;
-    return { opening: Promise.resolve(stream), far: { heard: toFront.readable.getReader(), answer: toBrowser.writable.getWriter() } };
+    const stream = { readable: toBrowser.readable, writable: toNetd.writable } as unknown as WebTransportBidirectionalStream;
+    return { opening: Promise.resolve(stream), far: { heard: toNetd.readable.getReader(), answer: toBrowser.writable.getWriter() } };
 };
 
 const utf8 = new TextEncoder();
@@ -30,7 +30,7 @@ const joined = (...parts: Uint8Array[]): Uint8Array => {
     return out;
 };
 
-// A frame as the front writes it: unmasked.
+// A frame as netd writes it: unmasked.
 const serverFrame = (opcode: number, payload: Uint8Array, final = true): Uint8Array => {
     const extended = payload.length < 126 ? 0 : 2;
     const head = new Uint8Array(2 + extended);
@@ -96,7 +96,7 @@ const upgradeOf = async (far: FarEnd): Promise<{ head: string; frames: () => Pro
     return { head, frames };
 };
 
-// The 101 the front answers `head` with, its accept derived from the key as RFC 6455 says.
+// The 101 netd answers `head` with, its accept derived from the key as RFC 6455 says.
 const switching = async (head: string, accept?: string): Promise<Uint8Array> => {
     const key = /sec-websocket-key: (\S+)/.exec(head)?.[1] ?? ``;
     const digest = await crypto.subtle.digest(`SHA-1`, utf8.encode(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`));
@@ -136,7 +136,7 @@ const until = async (condition: () => boolean): Promise<void> => {
 const REQUEST = { host: `sandbox-abcdef012345.sbx.test`, path: `/system/terminal`, query: `ticket=t&session=main` };
 
 describe(`a terminal on a WebTransport stream`, () => {
-    it(`opens as a WebSocket, then carries the front's messages and its own, masked, until the front closes it`, async () => {
+    it(`opens as a WebSocket, then carries netd's messages and its own, masked, until netd closes it`, async () => {
         const { opening, far } = streamPair();
         const { log, events, closed } = recorded();
         const channel = socketChannel(new StreamSocket(opening, REQUEST), events);
@@ -188,7 +188,7 @@ describe(`a terminal on a WebTransport stream`, () => {
         channel.close();
     });
 
-    it(`joins a message the front sent in fragments, and one past 125 bytes`, async () => {
+    it(`joins a message netd sent in fragments, and one past 125 bytes`, async () => {
         const { opening, far } = streamPair();
         const { log, events } = recorded();
         socketChannel(new StreamSocket(opening, REQUEST), events);
@@ -235,7 +235,7 @@ describe(`a terminal on a WebTransport stream`, () => {
         }
     });
 
-    it(`refuses a 101 that did not answer its key, and a frame the front never sends`, async () => {
+    it(`refuses a 101 that did not answer its key, and a frame netd never sends`, async () => {
         const unanswered = streamPair();
         const refused = recorded();
         socketChannel(new StreamSocket(unanswered.opening, REQUEST), refused.events);

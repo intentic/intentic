@@ -15,7 +15,7 @@ import { startChangeReactions } from "./bootstrap/change-reactions.js";
 import { forgetDaemonOnlyEnv, prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
 import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
-import { startFrontDoor } from "./bootstrap/front-door.js";
+import { startNetdDoor } from "./bootstrap/netd-door.js";
 import { startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
@@ -46,7 +46,7 @@ import { appPanelKey } from "./workspace/layout/app-previews.js";
 // everything past the gate is background machinery no queued request depends on. Each phase owns its own subject and
 // registers its own teardown, so nothing here enumerates what to stop.
 // A boot that fails before the gate opens records why and exits (system/boot/boot-failure.ts), rather than lingering
-// as a daemon that answers /health and never serves: the front restarts it with backoff, and the host reads the record.
+// as a daemon that answers /health and never serves: netd restarts it with backoff, and the host reads the record.
 
 // What the rest of the boot needs once the gate has opened.
 interface Ready {
@@ -93,7 +93,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         }
     };
     // Registered while boot is still under way, not once it is over: a stop that arrives mid-boot (the host's, the
-    // front closing its socket, idle-stop) would otherwise take Node's default exit, tearing nothing down and leaving
+    // netd closing its socket, idle-stop) would otherwise take Node's default exit, tearing nothing down and leaving
     // the marker unstamped, so the next boot would report a kill nobody made.
     process.on("SIGTERM", stop);
     process.on("SIGINT", stop);
@@ -169,9 +169,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Declares the readiness gate data routes await (app.ts): an early request waits instead of reading half-built
     // state, and a browser is told which step is running. Before the listeners, or a request could slip past it.
     declareBootSteps(services);
-    attempt.stage = "Opening the front door";
-    const reach = await startFrontDoor(phase, host);
-    // The front door has dialled its sockets: no child inherits them from here on (daemon-env.ts).
+    attempt.stage = "Opening the netd door";
+    const reach = await startNetdDoor(phase, host);
+    // The netd door has dialled its sockets: no child inherits them from here on (daemon-env.ts).
     forgetDaemonOnlyEnv();
     startPlatformPresence(phase, reach);
 

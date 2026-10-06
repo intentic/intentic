@@ -10,7 +10,7 @@ When I have to act, I am handed one command for the computer the sandbox runs on
 
 ## Acceptance criteria
 
-- [ ] A sandbox whose front says its daemon is up, or that answers anything at its address, is shown as busy and never as down, however long it lasts
+- [ ] A sandbox whose netd says its daemon is up, or that answers anything at its address, is shown as busy and never as down, however long it lasts
 - [ ] While a sandbox is busy, the browser tab does not say Offline and no card appears for the first 90 seconds
 - [ ] A restart is offered for a busy sandbox only after five minutes, and only among the other options
 - [ ] The recovery panel appears when the diagnosis finds a cause with something to do about it, never because a timer ran out

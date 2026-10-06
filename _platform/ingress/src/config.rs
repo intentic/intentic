@@ -48,7 +48,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// What this edge serves beyond HTTPS over TCP, read off what it binds: the QUIC door carries a front's tunnel, a
+    /// What this edge serves beyond HTTPS over TCP, read off what it binds: the QUIC door carries a netd's tunnel, a
     /// browser's HTTP/3 and its WebTransport session alike, and the process does not start when it cannot bind it.
     pub fn transports(&self) -> Vec<Transport> {
         if self.quic_port.is_some() {

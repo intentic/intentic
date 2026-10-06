@@ -1,0 +1,332 @@
+{
+  "edge": {
+    "verdictHeader": "x-intentic-edge",
+    "verdicts": {
+      "description": "The edge's verdicts, the only values [`VERDICT_HEADER`] carries.",
+      "oneOf": [
+        {
+          "const": "no-tunnel",
+          "description": "No tunnel is registered: the box is off, and one that comes back redials within seconds.",
+          "type": "string"
+        },
+        {
+          "const": "unknown-sandbox",
+          "description": "The platform has no such sandbox, and no tunnel for it will be accepted again.",
+          "type": "string"
+        },
+        {
+          "const": "dropped",
+          "description": "A tunnel was held and the forward failed mid-flight.",
+          "type": "string"
+        }
+      ],
+      "title": "EdgeVerdict"
+    }
+  },
+  "terminal": {
+    "client": {
+      "description": "What the browser sends on a terminal socket, each a JSON text message.",
+      "oneOf": [
+        {
+          "description": "Keystrokes, a paste or a mouse report, written into the pane as their UTF-8 bytes.",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "type": {
+              "const": "input",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cols": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rows": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "resize",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cols",
+            "rows"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The client's liveness, the socket's only one: the editor sends one every 30 s and calls the socket stale after\n90 s without a frame. netd answers `pong`, sends a WebSocket ping only to a client silent for 45 s, and closes\none silent for 90.",
+          "properties": {
+            "type": {
+              "const": "ping",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "TerminalClientMessage"
+    },
+    "path": "/system/terminal",
+    "server": {
+      "description": "What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.",
+      "oneOf": [
+        {
+          "description": "The shared pane's grid. Viewport resize requests remain the viewer's own available size.",
+          "properties": {
+            "cols": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rows": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "grid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cols",
+            "rows"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The session is over, and the browser must not reconnect; `reason` is tmux's own words when it had any.",
+          "properties": {
+            "code": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "exit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "pong",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "TerminalServerMessage"
+    },
+    "upgrade": "websocket"
+  },
+  "vitals": {
+    "body": {
+      "$defs": {
+        "NodeLink": {
+          "description": "Where netd's control link to Node stands.",
+          "oneOf": [
+            {
+              "const": "starting",
+              "description": "Node has not said hello since the container started.",
+              "type": "string"
+            },
+            {
+              "const": "up",
+              "description": "Node's control link is open and it said hello on it.",
+              "type": "string"
+            },
+            {
+              "const": "restarting",
+              "description": "Node was up or was restarted before, and is not up now: its link dropped, or its process exited and netd is\nstarting it again.",
+              "type": "string"
+            }
+          ]
+        },
+        "Pressure": {
+          "description": "The share of the last 10 seconds, as a percentage, in which some of the container's tasks stalled waiting for each\nresource: cgroup v2's `some avg10` from `cpu.pressure`, `memory.pressure` and `io.pressure`.",
+          "properties": {
+            "cpu": {
+              "format": "float",
+              "type": "number"
+            },
+            "io": {
+              "format": "float",
+              "type": "number"
+            },
+            "memory": {
+              "format": "float",
+              "type": "number"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory",
+            "io"
+          ],
+          "type": "object"
+        },
+        "TunnelState": {
+          "description": "Where netd's tunnel stands.",
+          "oneOf": [
+            {
+              "const": "off",
+              "description": "No tunnel is configured: the sandbox is reachable on loopback only.",
+              "type": "string"
+            },
+            {
+              "const": "dialling",
+              "description": "Configured and not held right now: dialling, or waiting to redial.",
+              "type": "string"
+            },
+            {
+              "const": "held",
+              "description": "The edge holds the interactive socket.",
+              "type": "string"
+            },
+            {
+              "const": "elsewhere",
+              "description": "Another copy of this sandbox holds the tunnel, and the edge refused this one three times in a row; netd\ndials every 15 minutes meanwhile.",
+              "type": "string"
+            },
+            {
+              "const": "deleted",
+              "description": "The platform deleted this sandbox, and netd stopped dialling.",
+              "type": "string"
+            }
+          ]
+        },
+        "TunnelVitals": {
+          "description": "The ingress tunnel as netd holds it: the interactive socket, which every request can ride, and QUIC beside it.",
+          "properties": {
+            "dropsLastHour": {
+              "description": "How many times a registered interactive socket dropped in the last hour.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "holder": {
+              "description": "Where the copy holding this sandbox's tunnel runs, as the edge named it, while `state` is `elsewhere`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "quic": {
+              "description": "Whether a QUIC connection is held beside the socket.",
+              "type": "boolean"
+            },
+            "state": {
+              "$ref": "#/$defs/TunnelState"
+            }
+          },
+          "required": [
+            "state",
+            "dropsLastHour",
+            "quic"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "The sandbox's proof of life, measured by netd and answered by it at [`VITALS_PATH`] whatever state Node is in:\nthe daemon's own heartbeat rides Node's event loop, so a sandbox busy enough to starve it would otherwise look dead.\nIt carries nothing of the workspace.",
+      "properties": {
+        "lagMs": {
+          "description": "How long Node's event loop takes to answer netd, in milliseconds: the round trip of the last ping it\nanswered, or how long the one outstanding has waited when that is longer. netd pings every 2 s, only once\nthe previous ping is answered. Null before the first ping, and while Node is not `up`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/NodeLink"
+        },
+        "pressure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pressure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The container's pressure stall; null where the cgroup's pressure files cannot be read."
+        },
+        "restarts": {
+          "description": "How many times netd restarted Node in the last 10 minutes.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tunnel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TunnelVitals"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the ingress tunnel stands and how often it dropped (2026-10-05: a tunnel that dropped once a minute for\nfour hours was counted nowhere). Absent from an older netd."
+        },
+        "uptimeS": {
+          "description": "Seconds since netd, and so the container, started.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "node",
+        "restarts",
+        "uptimeS"
+      ],
+      "title": "SandboxVitals",
+      "type": "object"
+    },
+    "path": "/system/vitals"
+  },
+  "webTransport": {
+    "alpn": "h3",
+    "path": "/system/transport"
+  }
+}

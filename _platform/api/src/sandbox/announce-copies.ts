@@ -20,7 +20,7 @@ import { HOUR_MS } from "../durations.js";
  *
  * `duplicateSince` is set by the announce that proves the overlap and kept while it lasts; it clears on the first
  * announce after the other copy has been silent an hour. The owner's summary names both copies (`duplicateCopies`)
- * while either still announces; the registry's half of "one instance per sandbox", whose other half is the front
+ * while either still announces; the registry's half of "one instance per sandbox", whose other half is netd
  * standing down after it is displaced again and again. A read-modify-write without a lock: two announces racing can
  * lose one entry, which the next heartbeat writes back. */
 

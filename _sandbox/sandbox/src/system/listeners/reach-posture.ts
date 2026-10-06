@@ -1,6 +1,6 @@
 import { INGRESS_TUNNEL_PATH } from "@intentic/sandbox-contract/ingress-contract";
 
-// How the world reaches this sandbox, decided once from config: a tunnel the front dials, a hosted machine's included, or
+// How the world reaches this sandbox, decided once from config: a tunnel netd dials, a hosted machine's included, or
 // loopback only. `reason` names the deciding piece, since postures are fixed in different places.
 
 export type ReachPosture = { readonly by: "tunnel" } | { readonly by: "loopback"; readonly reason: string };

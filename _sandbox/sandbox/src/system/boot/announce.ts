@@ -36,7 +36,7 @@ const QUIET_LOG_MS = 30 * 60_000;
 export const HEARTBEAT_MS = 60 * 60_000;
 const heartbeatDelay = (): number => Math.round(HEARTBEAT_MS * (0.9 + Math.random() * 0.2));
 
-/* WHICH COPY OF THIS SANDBOX IS SPEAKING. The front sets INTENTIC_INSTANCE once per container start when it can, so a
+/* WHICH COPY OF THIS SANDBOX IS SPEAKING. netd sets INTENTIC_INSTANCE once per container start when it can, so a
  * daemon restarted inside one container stays the same copy; without it, this process's own id, minted once at boot and
  * kept for its life. Either way a second container holding the same token is a different instance. */
 const PROCESS_INSTANCE = randomUUID();
@@ -46,7 +46,7 @@ const instanceId = (): string => {
 };
 
 // What the announce says about where this copy runs: the machine's own name (HOST_LABEL, which `ic` sets from the host)
-// and its side (HOST_ENV, a WSL distro's name where the front sets it, else HOST_PLATFORM). Each left out when unset.
+// and its side (HOST_ENV, a WSL distro's name where netd sets it, else HOST_PLATFORM). Each left out when unset.
 const whereThisRuns = (config: Config): { host?: string; os?: string } => {
     const host = (config.hostLabel ?? "").trim();
     const os = (process.env["HOST_ENV"] ?? "").trim() || (config.hostPlatform ?? "").trim();

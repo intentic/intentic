@@ -5,7 +5,7 @@ export interface AuthConnections {
     readonly register: (caller: Caller, close: () => void) => () => void;
     // No email means the sandbox-wide kill switch. An email closes only that member's live transports.
     readonly revoke: (email?: string) => void;
-    // Hears every revocation, lowercased, for transports held outside this process (the front's terminals).
+    // Hears every revocation, lowercased, for transports held outside this process (netd's terminals).
     readonly onRevoke: (listener: (email: string | undefined) => void) => () => void;
 }
 

@@ -33,11 +33,11 @@ export interface RouteMeta {
     // Withheld from the panel token, which reaches every other route: it puts a stored credential in motion.
     readonly panel?: false;
     readonly control?: ControlReach;
-    // A transfer: announced to the edge through the front (tunnel-bulk.ts), which sends it down the tunnel's bulk socket,
+    // A transfer: announced to the edge through netd (tunnel-bulk.ts), which sends it down the tunnel's bulk socket,
     // off the connection every keystroke and call waits on.
     readonly lane?: "bulk";
-    // Served by intentic-front itself (_sandbox/front, term/): the daemon only answers the front's question about it.
-    readonly front?: true;
+    // Served by intentic-netd itself (_sandbox/netd, term/): the daemon only answers netd's question about it.
+    readonly netd?: true;
 }
 
 // The floor a route gets when it declares none: a read (GET, HEAD) floors at viewer, anything else (`ALL` included) at
@@ -45,7 +45,7 @@ export interface RouteMeta {
 export const defaultFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
 // The fields that say how a request travels, not who may send it; every other RouteMeta field decides reach.
-type TransportField = "lane" | "front";
+type TransportField = "lane" | "netd";
 
 // Every field that decides who reaches a route, with its default resolved, so an absent field and a declared one read
 // alike and loosening either is a changed value: what contract.lock.json records per route (`access:METHOD /path`),

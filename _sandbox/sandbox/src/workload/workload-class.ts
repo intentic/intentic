@@ -62,7 +62,7 @@ export interface WorkloadPriority {
     readonly oomScoreAdj: number;
 }
 
-// The front renices every direct child of the daemon to 10 as well; a class never asks for less.
+// netd renices every direct child of the daemon to 10 as well; a class never asks for less.
 const WORKLOAD_NICE = 10;
 const COMMAND_NICE = 19;
 

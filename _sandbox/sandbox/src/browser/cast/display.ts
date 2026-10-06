@@ -173,7 +173,7 @@ const start = async (key: string, size: DisplaySize): Promise<Display> => {
     // Written before the spawn, so a claimed server is claimed from its first breath.
     writeFileSync(claimPath(number), `${key}\n${size.width}x${size.height}`, { mode: 0o600 });
     // -nolisten tcp: local socket only. -ac: no X access control (single-tenant sandbox). In a process group of its own,
-    // since intentic-front ends a crashed daemon's group with it, and this server is the next daemon's to adopt.
+    // since intentic-netd ends a crashed daemon's group with it, and this server is the next daemon's to adopt.
     const child = spawn("Xvfb", [`:${number}`, "-screen", "0", `${size.width}x${size.height}x24`, "-nolisten", "tcp", "-ac"], {
         stdio: "ignore",
         detached: true,

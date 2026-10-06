@@ -29,7 +29,7 @@ import { guestReach, routeFloor } from "./role-floor.js";
 const ROUTES: readonly ContractRoute[] = [...RAW_ROUTE_LIST, ...SANDBOX_ROUTES];
 
 // Every RouteMeta field, and whether it decides who reaches the route. Keyed by the interface, so a field added there
-// fails this file's typecheck until `declaredRowOf` says how it reads; `lane` and `front` say how a request travels,
+// fails this file's typecheck until `declaredRowOf` says how it reads; `lane` and `netd` say how a request travels,
 // not who may send it.
 const FIELDS = {
     auth: "reach",
@@ -45,7 +45,7 @@ const FIELDS = {
     panel: "reach",
     control: "reach",
     lane: "transport",
-    front: "transport",
+    netd: "transport",
 } as const satisfies Record<keyof RouteMeta, "reach" | "transport">;
 
 // Every route's declaration itself is pinned in the contract's lock (contract.lock.json `access:` entries, read by

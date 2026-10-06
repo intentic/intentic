@@ -241,7 +241,7 @@ export interface IsolationAnchor {
 // than degrading: the capability was already probed, so a failure here is a real fault.
 export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor> => {
     const child = spawn("unshare", ["--mount", "--propagation", "private", "sh", "-c", isolationScript(plan)], {
-        // Stamped, since its own group puts it out of the front's reach when the daemon dies: the next boot ends it
+        // Stamped, since its own group puts it out of netd's reach when the daemon dies: the next boot ends it
         // (system/boot/generation-sweep.ts), which no turn needs once the daemon that ran it is gone.
         env: { ...process.env, ...detachedStamp("isolation-anchor") },
         stdio: ["ignore", "pipe", "pipe"],

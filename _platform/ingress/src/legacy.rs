@@ -1,8 +1,8 @@
-//! `/tunnel/v1`, kept only for fronts that predate `/tunnel/v2`: two WebSocket lanes, each one HTTP/2 session with the
+//! `/tunnel/v1`, kept only for netd versions that predate `/tunnel/v2`: two WebSocket lanes, each one HTTP/2 session with the
 //! edge its client. An upgrade cannot cross h2 as itself (the headers it needs are the ones h2 forbids), so it rides a
-//! CONNECT stream carrying the browser's whole h1 head under `x-ingress-*`, and the front answers 200 and then writes its
-//! own h1 answer raw. Those fronts announce no transfer routes, so the ones their daemons had when this door was frozen
-//! are here, read as any announcement is. Nothing new is ever built on this file; it goes once no front dials it.
+//! CONNECT stream carrying the browser's whole h1 head under `x-ingress-*`, and netd answers 200 and then writes its
+//! own h1 answer raw. Those netd instances announce no transfer routes, so the ones their daemons had when this door was frozen
+//! are here, read as any announcement is. Nothing new is ever built on this file; it goes once no netd dials it.
 
 use bytes::Bytes;
 use http::header::{self, HeaderMap, HeaderName, HeaderValue};
@@ -27,26 +27,26 @@ const METHOD_HEADER: &str = "x-ingress-method";
 const PATH_HEADER: &str = "x-ingress-path";
 const HEADER_PREFIX: &str = "x-ingress-h-";
 
-// A front's raw answer head is refused past this; a real one is a few hundred bytes.
+// A netd's raw answer head is refused past this; a real one is a few hundred bytes.
 const MAX_HEAD: usize = 64 * 1024;
 
 // Headers an answer that declined the upgrade cannot keep: its body is already de-chunked and hyper frames it anew.
 const DECLINED_DROP: [&str; 3] = ["connection", "keep-alive", "transfer-encoding"];
 
-// The daemon's transfer routes when this door was frozen, as a front announces them on `/tunnel/v2`.
+// The daemon's transfer routes when this door was frozen, as a netd announces them on `/tunnel/v2`.
 const FROZEN_BULK: &str = "GET /diff/raw, GET /workspace/raw, GET /workspace/media, POST /workspace/upload, \
     POST /workspace/upload-archive, GET /system/sync/ssh, GET /bundles/download, GET /extensions/{id}/bundle, \
     GET /system/runners/git/{repo}/info/refs, POST /system/runners/git/{repo}/git-upload-pack, \
     POST /system/runners/git/{repo}/git-receive-pack";
 
-/// What a legacy front's daemon would have announced.
+/// What a legacy netd's daemon would have announced.
 pub fn frozen_bulk() -> &'static BulkRoutes {
     static FROZEN: LazyLock<BulkRoutes> = LazyLock::new(|| BulkRoutes::parse(FROZEN_BULK));
     &FROZEN
 }
 
 /// Forwards one exchange down a legacy session: a request as an h2 stream of its own, an upgrade as a CONNECT carrying
-/// its head. Nothing reaches the browser until the front has answered, so a refusal is still the caller's to write.
+/// its head. Nothing reaches the browser until netd has answered, so a refusal is still the caller's to write.
 pub async fn exchange(
     sender: &SendRequest<Body>,
     request: Request<Body>,
@@ -124,9 +124,9 @@ async fn carry_upgrade(
     let mut far = TokioIo::new(far);
     let (head, rest) = read_head(&mut far)
         .await
-        .map_err(|error| Dropped(format!("the front's answer was unreadable: {error}")))?;
-    let (status, mut headers) = parse_head(&head)
-        .ok_or_else(|| Dropped("the front's answer is not an HTTP/1.1 head".into()))?;
+        .map_err(|error| Dropped(format!("netd's answer was unreadable: {error}")))?;
+    let (status, mut headers) =
+        parse_head(&head).ok_or_else(|| Dropped("netd's answer is not an HTTP/1.1 head".into()))?;
     if status == StatusCode::SWITCHING_PROTOCOLS {
         tokio::spawn(async move {
             let Ok(browser) = browser.await else {
@@ -165,7 +165,7 @@ fn wrap_envelope(method: &Method, path: &str, headers: &HeaderMap) -> Option<Hea
     Some(envelope)
 }
 
-// The front's answer head, and whatever arrived past it.
+// netd's answer head, and whatever arrived past it.
 async fn read_head(far: &mut (impl AsyncRead + Unpin)) -> std::io::Result<(Vec<u8>, Vec<u8>)> {
     let mut buffer = Vec::with_capacity(1024);
     let mut chunk = [0_u8; 4096];
@@ -206,7 +206,7 @@ fn parse_head(head: &[u8]) -> Option<(StatusCode, HeaderMap)> {
     Some((status, headers))
 }
 
-// A declined upgrade's body: what came past the head, then the stream until the front closes it.
+// A declined upgrade's body: what came past the head, then the stream until netd closes it.
 fn rest_of(far: TokioIo<hyper::upgrade::Upgraded>, rest: Vec<u8>) -> Body {
     let frames = futures_util::stream::unfold(
         (far, Some(rest), false),
@@ -238,7 +238,7 @@ mod tests {
     const DAEMON: &str = "sandbox-abcdef012345.sbx.test";
 
     #[test]
-    fn a_legacy_front_carries_the_daemons_transfers_and_every_preview_on_its_bulk_lane() {
+    fn a_legacy_netd_carries_the_daemons_transfers_and_every_preview_on_its_bulk_lane() {
         let frozen = frozen_bulk();
         let bulk = [
             ("GET", DAEMON, "/workspace/raw?path=a.bin"),

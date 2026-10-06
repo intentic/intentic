@@ -5,9 +5,9 @@ The Node daemon at the center of every sandbox: it runs coding agents in git wor
 ```mermaid
 flowchart LR
     editor["Editor<br/>web · desktop · mobile"] --> edge["Platform ingress edge"]
-    edge -->|"tunnel"| front["intentic-front<br/>ports · TLS · tunnel"]
-    peers["Devices · browser extension<br/>runners"] --> front
-    front -->|"Unix socket"| daemon(["sandbox daemon"])
+    edge -->|"tunnel"| netd["intentic-netd<br/>ports · TLS · tunnel"]
+    peers["Devices · browser extension<br/>runners"] --> netd
+    netd -->|"Unix socket"| daemon(["sandbox daemon"])
     daemon --> runtimes["Agent runtimes<br/>Claude Code · Codex · ACP"]
     runtimes --> worktrees["Worktrees<br/>one per conversation"]
     worktrees -->|"land"| work["/work repos"]
@@ -15,14 +15,14 @@ flowchart LR
     daemon --> history["/history<br/>state · logs · git dirs"]
 ```
 
-- It runs as the child of `intentic-front` ([../front](../front)), which owns every port, the TLS certificate and
-  the platform tunnel, and relays HTTP over a Unix socket. The daemon decides, the front binds.
+- It runs as the child of `intentic-netd` ([../netd](../netd)), which owns every port, the TLS certificate and
+  the platform tunnel, and relays HTTP over a Unix socket. The daemon decides, netd binds.
 - Two roots: `/work` is what agents edit; `/history` is the daemon's own (git dirs, worktrees, the conversation
   database, snapshots, logs) and sits outside `/work`.
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
   `/events` pushes file, git and fleet changes to the browser.
 - It registers with the platform at boot (`system/boot/announce.ts`), then announces again about once an hour
-  (jittered by a tenth) as its heartbeat, naming which copy it is: `instance` (the front's `INTENTIC_INSTANCE`, else an
+  (jittered by a tenth) as its heartbeat, naming which copy it is: `instance` (netd's `INTENTIC_INSTANCE`, else an
   id minted once per process), `host` (`HOST_LABEL`) and `os` (`HOST_ENV`, else `HOST_PLATFORM`). (2026-10-05) It
   went quiet once accepted, so the platform's last-seen time was its registration. A refusal or an
   unreachable platform is retried for as long as the daemon runs, every few seconds for ten minutes and every five
@@ -161,7 +161,7 @@ flowchart LR
 - A `rename` conversion moves a key and nothing more: there is no grace window writing both names. A build rolled back
   past a committed rename keeps the new name as a key it does not know, and reads its own default for the old one.
 - A boot that fails before the readiness gate writes why to `/history/boot-failure.json` (`system/boot/boot-failure.ts`:
-  when, this build's version, the error with the first lines of its stack, the step) and exits 1, so the front starts
+  when, this build's version, the error with the first lines of its stack, the step) and exits 1, so netd starts
   it again with backoff instead of a daemon that answers `/health` and never serves; `ic` reads the file, and the next
   boot that reaches the gate removes it. `INTENTIC_FAULT` is the nightly update drill's hook for exercising that and the
   host's rollback (`system/boot/fault.ts`): `crash-at-boot` fails the boot before convergence, `crash-after-ready` exits 1
@@ -220,8 +220,8 @@ flowchart LR
   (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
   conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
   containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
-- The front's two sockets (`INTENTIC_FRONT_SOCKET`, `INTENTIC_NODE_SOCKET`) leave the daemon's environment once its
-  front door has dialled them, and the tmux server's, so no agent-spawned child inherits them (2026-10-05).
+- netd's two sockets (`INTENTIC_NETD_SOCKET`, `INTENTIC_NODE_SOCKET`) leave the daemon's environment once its
+  netd door has dialled them, and the tmux server's, so no agent-spawned child inherits them (2026-10-05).
 
 - `agent/` runs one turn: its prompt, tools, provider seam and the pipeline in `agent/run/stream-agent.ts`.
   `conversations/` is what turns belong to: the actors, the registry, each conversation's worktree and its land.
@@ -273,7 +273,7 @@ Main groups under `src/`:
 | Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
 | Owner controls | `auth/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
 | Outside world | `capabilities/` `extensions/` `browser/` `desktop/` `hosts/` `peers/` `webext/` `phones/` `runners/` `sandboxes/` `ci/` `automations/` |
-| Network | `front/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
+| Network | `netd/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |
 
