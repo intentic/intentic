@@ -140,3 +140,12 @@ describe(`offsetOfLine`, () => {
         expect(offsetOfLine(``, 5)).toBe(0);
     });
 });
+
+// A space typed at the end of a line is U+00A0 until the next character arrives; the block must stay one block meanwhile.
+test(`a trailing space a browser typed as U+00A0 stays in the block it was typed in`, () => {
+    for (const source of [`- [ ] Post\u00a0\n\n## Next\n`, `## Heading\u00a0\n\nBody.\n`, `- one\n- two\u00a0`]) {
+        const { blocks } = splitMarkdownBlocks(source);
+        expect(rejoin(source, blocks)).toBe(source);
+        expect(blocks).toHaveLength(source.includes(`##`) && source.startsWith(`-`) ? 2 : source.startsWith(`##`) ? 2 : 1);
+    }
+});

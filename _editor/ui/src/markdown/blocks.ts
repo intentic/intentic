@@ -1,5 +1,5 @@
 import { splitFrontmatter } from "./frontmatter.js";
-import { lexBlocks } from "./render.js";
+import { lexBlocks, lexedSource } from "./render.js";
 
 // Source-offset spans behind the file viewer's per-paragraph editing surface. Spans tile the source with no gaps
 // or overlaps, so an edit can safely splice one span back in. Blank lines and link definitions merge into the
@@ -71,7 +71,7 @@ export const splitMarkdownBlocks = (source: string): MarkdownBlocks => {
     const head = matter?.matter.raw.length ?? 0;
     const body = matter?.rest ?? source;
     const tokens = lexBlocks(body);
-    if (tokens === undefined || !reassembles(tokens, body)) {
+    if (tokens === undefined || !reassembles(tokens, lexedSource(body))) {
         return whole(source);
     }
     const split = spansOf(tokens, head);

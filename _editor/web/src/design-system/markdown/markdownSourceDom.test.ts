@@ -54,6 +54,10 @@ const BLOCKS = {
     ruleWithSpaces: `- - -`,
     htmlBlock: `<details>\n<summary>More</summary>\n</details>`,
     trailingSpaces: `A hard break  \nand the next line.`,
+    // A space a browser typed at a line's end, until the next character arrives.
+    listTypedSpace: `- [ ] Post\u00a0`,
+    headingTypedSpace: `## Heading\u00a0`,
+    paragraphTypedSpace: `Some **bold**\u00a0`,
     emptyish: ` `,
     unicode: `Emoji 🎉 and accents é in **bold é**.`,
 };
@@ -328,4 +332,10 @@ describe(`caret offsets`, () => {
         // What a browser reports for the boundary between two items.
         expect(offsetOfCaret(element, element, 1)).toBe(`- one\n`.length);
     });
+});
+
+test(`a list with a typed trailing space is still drawn as the list`, () => {
+    const element = buildBlockElement(`- [ ] Post\u00a0`);
+    expect(element.tagName).toBe(`UL`);
+    expect(blockBody(element)).toBe(`- [ ] Post\u00a0`);
 });

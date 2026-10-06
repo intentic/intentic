@@ -47,9 +47,19 @@ export interface MarkdownCell {
 
 // Returns undefined rather than throwing: a lexer edge case should only cost the feature built on this, not the
 // render that already worked.
+// A space typed at the end of a line arrives as U+00A0 until the next character does: that is how a browser keeps a
+// trailing space visible in an editable element. marked trims it off a list's or a heading's end (`trimEnd` counts it
+// as white space) but does not read it as a blank line either, so for one keystroke it would be a block of its own and
+// the block being typed in would split, render and re-form under the caret. Lexed as the plain space it stands for;
+// one character for one, so every `raw` still measures the source.
+const TRAILING_NBSP = /\u00a0+(?=\r?\n|$)/gu;
+
+/** The source as the block lexer reads it (see TRAILING_NBSP): what the tokens' `raw`s reassemble into. */
+export const lexedSource = (source: string): string => source.replace(TRAILING_NBSP, (run) => " ".repeat(run.length));
+
 export const lexBlocks = (source: string): readonly MarkdownToken[] | undefined => {
     try {
-        return marked.lexer(source);
+        return marked.lexer(lexedSource(source));
     } catch {
         return undefined;
     }
