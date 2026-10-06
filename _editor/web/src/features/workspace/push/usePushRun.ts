@@ -1,6 +1,6 @@
 import { sandboxValue } from "@intentic/extension-api";
 import type { PushRun } from "@intentic/sandbox-contract";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { createRunWatcher, type RunWatcher } from "./runWatcher";
 import { t } from "@intentic/ui/i18n";
 

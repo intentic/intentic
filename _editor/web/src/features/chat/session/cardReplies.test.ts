@@ -1,8 +1,8 @@
 import { type AgentEvent, type AgentReply, AgentReplySchema, type RequestField } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { ref } from "vue";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Pins the one way a parked turn is answered: every card kind through the same route, addressed by its request id,
@@ -10,7 +10,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The daemon's reply route, the only call an answer makes; a test holds it open or refuses it.
 const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async () => ({ ok: true as const })) };
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
 
 const { CardReplies, SKIP_CALL, afterReply, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
 const { TranscriptClock } = await import("../transcript/transcriptClock");

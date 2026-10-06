@@ -1,14 +1,13 @@
 <!-- The home: the folder being looked at as large tiles, folders first and files by kind, with a quick look on hover; or read through one file name in every folder. -->
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { ContextMenu, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { ContextMenu, formatCount, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { localFace } from "../../../app/environments/local";
 import { variableRows } from "../../../lib/windowing/rowWindow";
 import { useRowWindow } from "../../../lib/windowing/useRowWindow";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { consumeSuppressedClick, useEntryDrag } from "../explorer/transfer/useEntryDrag";
 import { deadLink } from "../explorer/tree/treeRows";
@@ -17,7 +16,7 @@ import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
 import { requestCaret } from "../files/caretRequest";
 import { withProvisionalEntries } from "../files/provisionalEntries";
-import { workspaceDir } from "../health/workspaceScope";
+import { workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { type GridKey, isGridKey, moveInGrid } from "./homeGrid";
 import { bandOfIndex, homeLayout } from "./homeLayout";
@@ -502,7 +501,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                  cover there are no tiles for it to narrow, and the chip naming the cover stands in its place. -->
             <div v-if="search !== undefined && !covering" class="ml-auto flex items-center gap-2 pl-4">
                 <span v-if="querying && !searching" class="text-2xs tabular-nums text-subtle"
-                    >{{ results.length.toLocaleString() }}{{ results.length >= RESULTS_CAP ? "+" : "" }}</span
+                    >{{ formatCount(results.length) }}{{ results.length >= RESULTS_CAP ? "+" : "" }}</span
                 >
                 <div class="relative">
                     <Icon
@@ -674,10 +673,10 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         </div>
                     </div>
                     <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
-                        {{ t(`workspace.homeView.toolingHidden`, { count: hiddenTooling.toLocaleString() }, hiddenTooling) }}
+                        {{ t(`workspace.homeView.toolingHidden`, { count: formatCount(hiddenTooling) }, hiddenTooling) }}
                     </p>
                     <p v-if="hiddenByCap > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
-                        {{ t(`workspace.homeView.moreEntries`, { count: hiddenByCap.toLocaleString() }, hiddenByCap) }}
+                        {{ t(`workspace.homeView.moreEntries`, { count: formatCount(hiddenByCap) }, hiddenByCap) }}
                     </p>
                 </div>
             </Transition>

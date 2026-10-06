@@ -1,8 +1,8 @@
 import type { AgentHarness, AgentProvider, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { AGENTS } from "../../../lib/queryKeys";
 import { type PickUp, pickUpOf } from "../run/pickUp";
 import type { SessionRef } from "../run/turnRequest";

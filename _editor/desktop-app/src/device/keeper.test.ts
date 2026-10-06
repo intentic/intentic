@@ -12,7 +12,7 @@ describe(`keptBy`, () => {
     });
 
     it(`names the distro ic stamped on the container, whatever runs`, () => {
-        expect(keptBy({ keptElsewhere: `linux`, hostEnv: `Debian` }, [windows, arch])).toBe(`WSL (Debian)`);
+        expect(keptBy({ keptElsewhere: `linux/Debian` }, [windows, arch])).toBe(`WSL (Debian)`);
         expect(keptBy({ keptElsewhere: `wsl:Debian` }, [windows])).toBe(`WSL (Debian)`);
         expect(keptBy({ keptElsewhere: `archlinux` }, [windows])).toBe(`WSL (archlinux)`);
     });

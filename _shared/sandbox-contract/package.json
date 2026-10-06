@@ -40,6 +40,28 @@
                 "default": "./dist/chores/index.js"
             }
         },
+        "./message-limits": {
+            "types": "./dist/policy/message-limits.d.ts",
+            "import": {
+                "@intentic/src": "./src/policy/message-limits.ts",
+                "default": "./dist/policy/message-limits.js"
+            },
+            "require": {
+                "@intentic/src": "./src/policy/message-limits.ts",
+                "default": "./dist/policy/message-limits.js"
+            }
+        },
+        "./workspace-state": {
+            "types": "./dist/state/workspace-state.d.ts",
+            "import": {
+                "@intentic/src": "./src/state/workspace-state.ts",
+                "default": "./dist/state/workspace-state.js"
+            },
+            "require": {
+                "@intentic/src": "./src/state/workspace-state.ts",
+                "default": "./dist/state/workspace-state.js"
+            }
+        },
         "./batch-runs": {
             "types": "./dist/policy/batch-runs.d.ts",
             "import": {
@@ -104,6 +126,28 @@
             "require": {
                 "@intentic/src": "./src/ids/tunnel-ids.ts",
                 "default": "./dist/ids/tunnel-ids.js"
+            }
+        },
+        "./headers": {
+            "types": "./dist/protocol/headers.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/headers.ts",
+                "default": "./dist/protocol/headers.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/headers.ts",
+                "default": "./dist/protocol/headers.js"
+            }
+        },
+        "./listener-protocol": {
+            "types": "./dist/protocol/listener-protocol.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/listener-protocol.ts",
+                "default": "./dist/protocol/listener-protocol.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/listener-protocol.ts",
+                "default": "./dist/protocol/listener-protocol.js"
             }
         },
         "./edge-verdict": {

@@ -1,7 +1,7 @@
 // Pins the per-state verbs (add to the image, ask an agent, dismiss) for a runtime install the daemon can report but
 // never resolve without one.
 import "@intentic/testing/dom";
-import type { EnvironmentRecurring } from "@intentic/api-contract";
+import type { EnvironmentRecurring } from "@intentic/sandbox-contract";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

@@ -8,7 +8,7 @@ import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment } from "../environment/environment.js";
-import { upsertEnv } from "../secrets/secrets.routes.js";
+import { upsertEnv } from "../secrets/env-text.js";
 import { switchOwnSkill, writeOwnSkill } from "../settings/skills.js";
 import { textFile } from "../store/text-file.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";

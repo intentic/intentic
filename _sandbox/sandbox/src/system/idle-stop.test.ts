@@ -6,9 +6,7 @@ const logger = pino({ level: "silent" });
 
 const probesOf = (over: Partial<IdleStopProbes>): IdleStopProbes => ({
     connected: () => 0,
-    turns: () => 0,
-    delegates: () => 0,
-    watchers: () => 0,
+    working: () => 0,
     terminalActivityAt: () => Promise.resolve(0),
     nextOneTimeWakeAt: () => Promise.resolve(0),
     ...over,
@@ -56,7 +54,7 @@ describe("startIdleStop", () => {
     it("an in-flight turn or live delegate keeps the machine up with nobody connected", async () => {
         const stop = jest.fn();
         let turns = 1;
-        const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ turns: () => turns }), stop);
+        const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ working: () => turns }), stop);
         await minutes(6);
         expect(stop).not.toHaveBeenCalled();
         turns = 0;
@@ -68,7 +66,7 @@ describe("startIdleStop", () => {
     it("an armed condition watch keeps the machine up: stopping it is how a watch never fires", async () => {
         const stop = jest.fn();
         let watchers = 1;
-        const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ watchers: () => watchers }), stop);
+        const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ working: () => watchers }), stop);
         await minutes(6);
         expect(stop).not.toHaveBeenCalled();
         watchers = 0;
@@ -142,7 +140,7 @@ describe("startIdleStop", () => {
         const stop = jest.fn();
         let watchers = 0;
         const tmux = held();
-        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ watchers: () => watchers, terminalActivityAt: tmux.probe }), stop);
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ working: () => watchers, terminalActivityAt: tmux.probe }), stop);
         await minutes(5);
         // An agent arms a condition watch in the gap; this daemon is the only thing that can ever fire it.
         watchers = 1;

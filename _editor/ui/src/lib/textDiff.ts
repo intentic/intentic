@@ -49,9 +49,14 @@ const walkTable = <T>(table: Uint32Array, before: readonly T[], after: readonly 
 };
 
 // A longest-common-subsequence edit script, by table. Fine at paragraph and word counts; sequences too large for
-// the table get `undefined`, which a caller reports as removed then added, honest rather than slow.
-export const diffSequence = <T>(before: readonly T[], after: readonly T[], equal: (left: T, right: T) => boolean): Op<T>[] | undefined =>
-    before.length * after.length > MAX_CELLS ? undefined : walkTable(lcsTable(before, after, equal), before, after, equal);
+// the table get `undefined`, which a caller reports as removed then added, honest rather than slow. `maxCells` lowers
+// the budget for a caller that runs often and must stay cheap (a chat tool card re-diffs on every streamed patch).
+export const diffSequence = <T>(
+    before: readonly T[],
+    after: readonly T[],
+    equal: (left: T, right: T) => boolean,
+    maxCells = MAX_CELLS,
+): Op<T>[] | undefined => (before.length * after.length > maxCells ? undefined : walkTable(lcsTable(before, after, equal), before, after, equal));
 
 // Words, runs of whitespace, and runs of punctuation are the units; a changed comma then marks the comma, not the word.
 const tokens = (text: string): string[] => text.match(/\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]+/gu) ?? [];

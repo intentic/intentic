@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { type Pump, pumpTcpWebSocket } from "@intentic/base/ws-tcp-pump";
 import { upgradeWebSocket, type WebSocketLike } from "@hono/node-server";
 import { SshHostKeySchema } from "@intentic/sandbox-contract";
 import type { WSContext } from "hono/ws";
@@ -29,11 +30,6 @@ export const sshdHostKey = async (historyRoot: string): Promise<string | undefin
     return type === undefined || body === undefined ? undefined : SshHostKeySchema.safeParse(`${type} ${body}`).data;
 };
 
-// Backpressure on the outbound side, which floods first: pause the TCP read above HIGH, resume below LOW.
-const BUFFER_HIGH = 1_048_576;
-const BUFFER_LOW = 262_144;
-const DRAIN_POLL_MS = 50;
-
 // Ceiling on concurrent SSH streams; 1013 tells a client to retry, which its reconnect already does.
 const MAX_STREAMS = 32;
 let active = 0;
@@ -51,35 +47,12 @@ export const STREAM_PING_MS = 30_000;
 // Whether a stream is dead at its next ping: it has been pinged, and nothing (a frame or a pong) came after that ping.
 export const streamSilent = (heardAt: number, lastPingAt: number | undefined): boolean => lastPingAt !== undefined && heardAt < lastPingAt;
 
-// Reads a frame as exactly its own bytes: a view's whole backing buffer would feed sshd neighbouring memory. Text
-// frames are dropped; this protocol is binary only.
-export const bytesOf = (data: unknown): Buffer | undefined => {
-    if (Buffer.isBuffer(data)) {
-        return data;
-    }
-    if (data instanceof ArrayBuffer) {
-        return Buffer.from(data);
-    }
-    if (ArrayBuffer.isView(data)) {
-        return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-    }
-    return undefined;
-};
-
-// Copies the chunk, since a Buffer is a slice of a shared pool and `send` is async; passing it through risks it being
-// overwritten before it sends.
-const frameOf = (chunk: Buffer): Uint8Array<ArrayBuffer> => {
-    const frame = new Uint8Array(chunk.byteLength);
-    frame.set(chunk);
-    return frame;
-};
-
 // The sync token rides the x-intentic-sync header (a Node client can set one), so this route skips the query-ticket
 // machinery the terminal socket needs for a browser's header-less upgrade.
 export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
     upgradeWebSocket(() => {
         let socket: Socket | undefined;
-        let drain: NodeJS.Timeout | undefined;
+        let pump: Pump | undefined;
         let pinger: NodeJS.Timeout | undefined;
         let counted = false;
         // When the far end last said anything (a frame or a pong), and when it was last pinged.
@@ -90,8 +63,8 @@ export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
         const cleanup = (): void => {
             clearInterval(pinger);
             pinger = undefined;
-            clearInterval(drain);
-            drain = undefined;
+            pump?.stop();
+            pump = undefined;
             if (counted) {
                 counted = false;
                 active -= 1;
@@ -128,19 +101,18 @@ export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
                 pinger.unref?.();
                 const tcp = connect(SSHD_PORT, SSHD_HOST);
                 socket = tcp;
-                tcp.on("data", (chunk: Buffer) => {
-                    ws.send(frameOf(chunk));
-                    if (drain === undefined && raw.bufferedAmount > BUFFER_HIGH) {
-                        tcp.pause();
-                        drain = setInterval(() => {
-                            if (raw.bufferedAmount < BUFFER_LOW) {
-                                clearInterval(drain);
-                                drain = undefined;
-                                tcp.resume();
-                            }
-                        }, DRAIN_POLL_MS);
-                    }
-                });
+                // Both directions through the pump the machine's end runs too (@intentic/base/ws-tcp-pump): binary frames
+                // only, and backpressure each way, pausing this `ws` socket while sshd is slow to take its bytes.
+                pump = pumpTcpWebSocket(
+                    tcp,
+                    {
+                        send: (frame) => ws.send(frame),
+                        bufferedAmount: () => raw.bufferedAmount,
+                        pause: () => raw.pause(),
+                        resume: () => raw.resume(),
+                    },
+                    { onOverflow: () => ws.close(1011, "ssh stream overflowed") },
+                );
                 // sshd hanging up must close the WebSocket too, or the laptop's ssh hangs on a socket nothing will
                 // answer.
                 tcp.on("close", () => ws.close(1000, "ssh stream closed"));
@@ -151,10 +123,7 @@ export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
             },
             onMessage: (event) => {
                 heardAt = Date.now();
-                const bytes = bytesOf(event.data);
-                if (bytes !== undefined) {
-                    socket?.write(bytes);
-                }
+                pump?.inbound(event.data);
             },
             onClose: cleanup,
             onError: cleanup,

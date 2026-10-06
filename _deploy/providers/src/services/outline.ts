@@ -2,7 +2,6 @@ import type { Provider } from "@intentic/engine";
 import { hashSync } from "bcryptjs";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
@@ -119,7 +118,7 @@ const dexConfigYaml = (parsed: OutlineInputs): string =>
 
 // Outline (team wiki); /_health answers 200 once migrations finish and the server is up. env secrets are generated
 // host-side; the admin password's hash rides dex-config.yaml instead, so nothing here needs the resolved password.
-export const createOutlineProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createOutlineProvider = (executor: SshExecutor): Provider =>
     createComposeServiceProvider(
         {
             kind: "outline",

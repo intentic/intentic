@@ -391,8 +391,8 @@ describe("watchLine", () => {
         const armed = watch();
         const line = watchLine({ status: `idle`, attention: none, watches: [armed] }, NOW);
         expect(line?.text).toBe(armed.note);
-        // Said as time left: "42m 0s" alone beside a running card's elapsed readout read as time spent.
-        expect(line?.countdown).toBe(`42m 0s left`);
+        // Said as time left: "42m" alone beside a running card's elapsed readout read as time spent.
+        expect(line?.countdown).toBe(`42m left`);
     });
 
     // Several notes truncated into a narrow column read as noise, so they collapse to a count; the clock still names
@@ -401,7 +401,7 @@ describe("watchLine", () => {
         const watches = [watch({ deadlineAt: NOW + 3 * 60 * 60 * 1000 }), watch({ id: `watch-2`, note: `deploy`, deadlineAt: NOW + 5 * 60 * 1000 })];
         const line = watchLine({ status: `idle`, attention: none, watches }, NOW);
         expect(line?.text).toContain(String(watches.length));
-        expect(line?.countdown).toBe(`5m 0s left`);
+        expect(line?.countdown).toBe(`5m left`);
     });
 
     // The hint carries what the line can't: every note in full with its pacing, and that the end of the wait is the
@@ -411,7 +411,7 @@ describe("watchLine", () => {
         const second = watch({ id: `watch-2`, note: `deploy` });
         const hint = watchLine({ status: `idle`, attention: none, watches: [first, second] }, NOW)?.hint;
         expect(hint?.rows?.map((row) => row.label)).toEqual([first.note, second.note]);
-        expect(hint?.rows?.[0]?.value).toContain(`60s`);
+        expect(hint?.rows?.[0]?.value).toContain(`1m`);
         expect(hint?.note).toBe(`First one wakes it`);
     });
 
@@ -421,8 +421,8 @@ describe("watchLine", () => {
             title: `Watching`,
             tone: `info`,
             rows: [
-                { label: `Checks every`, value: `60s` },
-                { label: `Gives up in`, value: `42m 0s` },
+                { label: `Checks every`, value: `1m` },
+                { label: `Gives up in`, value: `42m` },
             ],
             note: `Wakes this chat`,
         });
@@ -471,13 +471,13 @@ describe("a watch held by a command at a prompt", () => {
         expect(promptLine(held, NOW)).toEqual({
             jobId: `job-9672`,
             program: AT_PROMPT.program,
-            elapsed: `58m 0s`,
+            elapsed: `58m`,
             hint: {
                 title: `Waiting for input`,
                 tone: `warn`,
                 rows: [
                     { label: `Process`, value: AT_PROMPT.program },
-                    { label: `Waiting for`, value: `58m 0s` },
+                    { label: `Waiting for`, value: `58m` },
                 ],
                 note: `Nothing in the sandbox will answer it. Stop ends the command, so the work can land.`,
             },

@@ -1,5 +1,5 @@
 import type { ExtensionModule } from "@intentic/extension-api";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
@@ -8,9 +8,9 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
-import { sandboxError, sandboxRequest } from "../features/sandbox/client/sandboxClient";
-import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
-import { readFailure } from "../features/sandbox/overview/useDaemonRoutes";
+import { sandboxError, sandboxRequest } from "../client/sandbox/sandboxClient";
+import { sandboxRpc } from "../client/sandbox/sandboxRpc";
+import { readFailure } from "../client/sandbox/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
 import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
@@ -139,7 +139,7 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
         await runActivate(summary, host, compiled ?? (await importBundle(summary)), startedIn);
         return { ...status, state: `active` };
     } catch (error) {
-        return { ...status, state: `error`, detail: errorMessage(error, String(error)) };
+        return { ...status, state: `error`, detail: messageOr(error, String(error)) };
     }
 };
 
@@ -156,7 +156,7 @@ const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, det
                     await runActivate(summary, host, module, startedIn);
                     return { id: extensionId, extensionId, state: `unlisted`, detail };
                 } catch (error) {
-                    return { id: extensionId, extensionId, state: `error`, detail: errorMessage(error, String(error)) };
+                    return { id: extensionId, extensionId, state: `error`, detail: messageOr(error, String(error)) };
                 }
             }),
     );

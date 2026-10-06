@@ -1,6 +1,6 @@
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/client";
-import { acquireStreamSlot } from "../features/sandbox/client/streamBudget";
+import { acquireStreamSlot } from "./streamBudget";
 
 // Reads a daemon stream of IntenticLine frames (`intentic.run` and its kin) as they arrive; a failure the daemon reports
 // mid-stream becomes one last kind:"error" line, so callers stop on it rather than on a throw. One connection-pool

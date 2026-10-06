@@ -9,6 +9,8 @@ import { createInvariantRegistry, type InvariantRegistry } from "./invariants/in
 import { registerDaemonInvariants } from "./invariants/register.js";
 import type { Logger } from "pino";
 import { createAcpAgent } from "./runtimes/acp/acp-agent.js";
+import { probeAcpAgent } from "./runtimes/acp/acp-probe.js";
+import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "./runtimes/runtime-table.js";
 import { createAcpConnections } from "./runtimes/acp/acp-connection.js";
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
@@ -27,9 +29,12 @@ import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 import { desktopServersOf } from "./desktop/desktop-tools.js";
+import { closeBrowserSession, closeBrowserSessionsFor, idleBrowserSessionNames, runningBrowserOwners } from "./browser/sessions/browser-sessions.js";
+import { environmentSourcesOf } from "./environment-composers.js";
+import type { EnvironmentSources } from "./seams/environment-sources.js";
 
 import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usage.js";
-import { claudeHeadroomSource } from "./usage/claude-usage.js";
+import { claudeHeadroomSource } from "./runtimes/claude/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
 import { fileObservedLimitStore, observedLimitsDocument } from "./usage/observed-limits.js";
@@ -43,7 +48,7 @@ import { createPeerHub, type PeerDoorDeps } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
 import { filePeerTools } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./system/platform-client.js";
-import { enrolledFleet, syncPairBurns, type SyncMode } from "./hosts/desktop-sync.js";
+import { enrolledFleet, syncPairBurns, type SyncMode } from "./peers/desktop-sync.js";
 import { pairings } from "./peers/enrollment.js";
 import type { Config } from "./env.config.js";
 import { keepCodeCounts } from "./git/changes/code-counts.js";
@@ -76,7 +81,7 @@ import { fileRuleFiringsStore, ruleFiringsDocument, type RuleFiringsStore } from
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { cardDeps } from "./conversations/actor/card-offers.js";
+import { cardDeps } from "./conversations/actor/card-deps.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
@@ -107,7 +112,7 @@ import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
 import { createPhonesSlice, type PhonesSlice } from "./phones/phone-slice.js";
 import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
-import { connectorHostDefaults } from "./secrets/host-guards.js";
+import { connectorHostDefaults } from "./capabilities/contributions.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
 import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
 import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
@@ -177,6 +182,12 @@ export interface Services
     // The sandbox's own desktop as a turn mounts it, beside its browsers; a seam here rather than an import in
     // agent/tools/turn-tools.ts, since the desktop builds on the browser stack's display and the browser reaches the agent.
     readonly desktopServers: typeof desktopServersOf;
+    // Where the overlay's contributed fragments come from (capabilities, extensions, connected providers): a port the
+    // environment reads, since every composer of them sits above environment/.
+    readonly environmentSources: EnvironmentSources;
+    // Spawns an ACP agent and initializes it: what the agent capability's handler checks a command with, a seam since the
+    // ACP runtime sits above capabilities/.
+    readonly probeAcpAgent: typeof probeAcpAgent;
     // Every live turn's MCP mounts (its browser routers, peers and extension cards), reached at /mcp/<name> with the
     // turn's own bearer, which opens only what that turn mounted.
     readonly turnMounts: TurnMounts;
@@ -334,6 +345,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
 // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
 const createReaper = ({ conversations, agents, events, logger }: Pick<Services, "conversations" | "agents" | "events" | "logger">): ResourceReaper =>
     createResourceReaper({
+        browsers: { runningOwners: runningBrowserOwners, idleNames: idleBrowserSessionNames, close: closeBrowserSession, closeFor: closeBrowserSessionsFor },
         ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(conversations, owner),
         // A watch keeps the conversation for its wake; its finished turn's processes go regardless (2026-10-05).
         processOwnerLive: (owner) => owner === DAEMON_OWNER || turnInFlight(conversations, owner),
@@ -447,6 +459,7 @@ const createDaemonMembers = (
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace })),
         desktopServers: desktopServersOf,
+        probeAcpAgent,
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         info: infoOf(config),
         presentation: () => fetchPresentation(config),
@@ -638,6 +651,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             conversations,
             whole,
             acpConnections,
+            // Every native provider's module and every runtime's adapter, named here since each runtime imports agent/.
+            providerModules: PROVIDER_MODULES,
+            adapters: RUNTIME_ADAPTERS,
             acpAgent: createAcpAgent(acpConnections),
             // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
             piAgent: createPiAgent(piSpawner(join(authRoot, "pi", "sessions"))),
@@ -674,6 +690,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         pushSender: createPushSender(push, logger, (text) => whole().privacyShield.redactForDisplay(text)),
         events,
         reaper,
+        // Each source reads the finished services per call; none runs before composing returns.
+        environmentSources: environmentSourcesOf(whole),
     };
     wireReactions(services);
     // Registration only; nothing runs until a boot phase drives a moment, so a test build carries it unpaid for.

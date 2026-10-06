@@ -1,5 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
@@ -8,7 +7,7 @@ import type { RowAction } from "../rowActions";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
 import type { MultiSelect } from "../../../../lib/multiSelect";
-import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 
 // The right-click menu (entryMenu.ts) of a file surface: on a selected entry it acts on the whole selection.
 

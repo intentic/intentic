@@ -1,7 +1,8 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { onScopeDispose, ref, type Ref } from "vue";
+import { usePoll } from "@intentic/ui/async";
+import { ref, type Ref } from "vue";
 import { track } from "../../../app/analytics";
-import type { useSandbox } from "../../sandbox/client/useSandbox";
+import type { useSandbox } from "../../../client/sandbox/useSandbox";
 import type { HostedWaitView } from "../hostedWait";
 import { setupFailedEvent, setupReportView } from "../setupReport";
 import type { HostedLane } from "./hostedLane";
@@ -128,20 +129,9 @@ export const useRegistryWatch = ({ sandbox, row, hosted, mintedFor }: RegistryWa
         }
     };
 
-    const timer = setInterval(() => void check(), POLL_MS);
-    // A hidden tab (the whole install, inside the app) throttles the interval to far longer, so a return checks at once.
-    const recheck = (): void => {
-        if (document.visibilityState === `visible`) {
-            void check();
-        }
-    };
-    document.addEventListener(`visibilitychange`, recheck);
-    window.addEventListener(`focus`, recheck);
-    onScopeDispose(() => {
-        clearInterval(timer);
-        document.removeEventListener(`visibilitychange`, recheck);
-        window.removeEventListener(`focus`, recheck);
-    });
+    // For the life of the scope; a hidden tab (the whole install, inside the app) throttles the interval to far longer,
+    // so the poll checks at once on a return.
+    usePoll({ everyMs: POLL_MS, check, immediate: false }).start();
 
     return { status, check };
 };

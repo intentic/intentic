@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { BottomSheet, SearchBar } from "@intentic/ui";
+import { BottomSheet, SearchBar, timeAgo } from "@intentic/ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { statusIcon,relativeTime } from "../models/catalog";
+import { statusIcon } from "../models/catalog";
 import { useChat } from "../run/useChat";
-import { viewersOfSession } from "../../../shell/presence/usePresence";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
+import { viewersOfSession } from "../../../workbench/presence/usePresence";
+import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import PastChatList from "../panel/PastChatList.vue";
 import { modelOrProvider } from "./cardView";
 import { twinTitles } from "./tabs";
@@ -36,7 +36,7 @@ const twinFact = (c: Conversation): string | undefined => {
     }
     const agent = agentById(c.conversationId);
     const model = modelOrProvider({ conversation: c, agent });
-    return agent === undefined || agent.updatedAt === 0 ? model : `${model} · ${relativeTime(agent.updatedAt)}`;
+    return agent === undefined || agent.updatedAt === 0 ? model : `${model} · ${timeAgo(agent.updatedAt, { days: true })}`;
 };
 
 // The history search box. Filters the list by chat title or content (content scanned server-side over recent

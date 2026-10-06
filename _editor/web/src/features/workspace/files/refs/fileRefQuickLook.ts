@@ -1,4 +1,4 @@
-import type { WorkspaceFileResponse } from "@intentic/api-contract";
+import type { WorkspaceFile } from "@intentic/sandbox-contract";
 import { resolveFile } from "../../explorer/fileType";
 
 // What a hover over a file reference shows: the lines around the one it names, or the top of the file when it names
@@ -55,7 +55,7 @@ export type PeekView =
 export interface PeekIo {
     // The workspace path a written reference means (often only its tail); undefined leaves it as written.
     readonly resolve: (path: string) => Promise<string | undefined>;
-    readonly read: (path: string, offset: number, limit: number) => Promise<WorkspaceFileResponse>;
+    readonly read: (path: string, offset: number, limit: number) => Promise<WorkspaceFile>;
     // What a folder holds; undefined or none at all reads as nothing there, since a missing path lists empty too.
     readonly list: (path: string) => Promise<{ readonly names: readonly string[]; readonly count: number } | undefined>;
 }
@@ -123,7 +123,7 @@ export const peekView = (file: PeekFile, line: number | undefined): PeekView => 
 // contents.
 const bytesByName = (path: string): boolean => resolveFile(path, undefined).mode === `binary`;
 
-const fromWindow = (path: string, window: Extract<WorkspaceFileResponse, { present: true }>): PeekFile => {
+const fromWindow = (path: string, window: Extract<WorkspaceFile, { present: true }>): PeekFile => {
     if (window.size === 0) {
         return { kind: `empty`, path };
     }
@@ -138,7 +138,7 @@ const fromWindow = (path: string, window: Extract<WorkspaceFileResponse, { prese
 // Appends the next window to what was read. The daemon skips a partial line at a window's start, which only happens
 // after a single line longer than the last window: that line is ended where it was cut, so the numbering below it
 // holds. A read that moved nothing, or found the file gone, stops the reading rather than looping.
-export const extendPeek = (file: Extract<PeekFile, { kind: "text" }>, window: WorkspaceFileResponse): PeekFile => {
+export const extendPeek = (file: Extract<PeekFile, { kind: "text" }>, window: WorkspaceFile): PeekFile => {
     if (!window.present || window.bytes === 0 || window.offset < file.bytes) {
         return { ...file, done: true };
     }

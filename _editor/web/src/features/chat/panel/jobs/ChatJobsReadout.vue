@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { AnchoredOverlay, ui } from "@intentic/ui";
+import { AnchoredOverlay, formatElapsed, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { formatElapsed } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { openWorkTerminal } from "../../../terminal/useWorkTerminals";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
@@ -52,7 +51,7 @@ const watchJob = (session: string): void => {
                 <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
                 <span class="min-w-0 flex-1 truncate text-xs text-content">{{ job.label }}</span>
                 <span v-if="job.handed === true && job.ports !== undefined" class="shrink-0 font-mono text-2xs text-subtle">{{ portsLine(job.ports) }}</span>
-                <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ formatElapsed(job.startedAt, now) }}</span>
+                <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ formatElapsed((now - job.startedAt) / 1000) }}</span>
                 <button
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10`)"

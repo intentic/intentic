@@ -1,7 +1,7 @@
 import type { Ref } from "vue";
 import type { LineStat } from "@intentic/code-read";
 import { definePreference } from "@intentic/ui/preference";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 
 // Rail (`weightFill`) and order (`largestFirst`) rank changes by added lines, not total churn, since one large
 // deletion shouldn't dominate the scale. `shownStat` is the single reading (code-only or git's) that the rail,

@@ -4,12 +4,12 @@ import { Button, Notice, type NoticeModel, ui, useTheme, vAction } from "@intent
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useAuth } from "../../auth/useAuth";
+import { useAuth } from "../../../client/auth/useAuth";
 import { useBrowserHandoff } from "../../auth/browserHandoff";
-import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
-import { browserSupportsPasskeys, recoverWithCode, registerPasskey, signInWithPasskey } from "../session/passkeySignIn";
-import { useSignInPrompt } from "../session/signInPrompt";
-import { useSandbox } from "../client/useSandbox";
+import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
+import { browserSupportsPasskeys, recoverWithCode, registerPasskey, signInWithPasskey } from "../../../client/session/passkeySignIn";
+import { useSignInPrompt } from "../../../client/session/signInPrompt";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { desktopVersion } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 

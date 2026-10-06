@@ -1,10 +1,10 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import type { Router } from "vue-router";
-import type { ScreenPoint } from "../../../shell/window/floating";
-import { chatFullSlot } from "../../../shell/window/panelSlots";
+import type { ScreenPoint } from "../../../workbench/window/floating";
+import { chatFullSlot } from "../../../workbench/window/panelSlots";
 import { useChatFloating } from "./chatFloating";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 
 // Which of the panel's three homes (the side panel, the rail, its own window) is in effect, derived from where it's
 // drawn, never a stored mode.

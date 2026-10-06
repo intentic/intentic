@@ -57,42 +57,8 @@ foreach ($key in @(
   if (Test-Path $key) { $pending = $true }
 }
 
-# WHERE DOCKER DESKTOP IS, asked every way an install can answer it. Program Files is only the default: the
-# installer takes a folder of its own, newer builds install per user under LOCALAPPDATA, and a PC whose Docker
-# was put somewhere else still has to be found rather than told it has no Docker to start.
-$ddCandidates = @()
-foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
-  if ($base) { $ddCandidates += (Join-Path $base 'Docker\Docker\Docker Desktop.exe') }
-}
-foreach ($key in @('HKLM:\SOFTWARE\Docker Inc.\Docker\1.0', 'HKCU:\SOFTWARE\Docker Inc.\Docker\1.0')) {
-  $app = (Get-ItemProperty -Path $key).AppPath
-  if ($app) { $ddCandidates += (Join-Path $app 'Docker Desktop.exe') }
-}
-$ddVer = ''
-foreach ($key in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop', 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop')) {
-  $uninstall = Get-ItemProperty -Path $key
-  if ($uninstall) {
-    if (($ddVer -eq '') -and $uninstall.DisplayVersion) { $ddVer = [string]$uninstall.DisplayVersion }
-    if ($uninstall.InstallLocation) { $ddCandidates += (Join-Path $uninstall.InstallLocation 'Docker Desktop.exe') }
-    if ($uninstall.DisplayIcon) { $ddCandidates += ([string]$uninstall.DisplayIcon -replace ',-?\d+$', '').Trim('"') }
-  }
-}
-# The docker CLI ships inside the app: <app>\resources\bin\docker.exe, so a docker on PATH names its own app.
-$cli = Get-Command docker.exe -ErrorAction SilentlyContinue
-if ($cli -and $cli.Source) {
-  $ddCandidates += (Join-Path (Split-Path (Split-Path (Split-Path $cli.Source -Parent) -Parent) -Parent) 'Docker Desktop.exe')
-}
-foreach ($lnk in @(
-  (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Docker Desktop.lnk'),
-  (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Docker Desktop.lnk'))) {
-  if (Test-Path $lnk) {
-    try { $ddCandidates += (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath } catch { }
-  }
-}
-$dd = ''
-foreach ($candidate in $ddCandidates) {
-  if (($dd -eq '') -and $candidate -and ($candidate -like '*Docker Desktop.exe') -and (Test-Path $candidate)) { $dd = $candidate }
-}
+# WHERE DOCKER DESKTOP IS: the shared discovery (intentic_docker_host::desktop_app::LOCATE), which leaves $dd and $ddVer.
+%LOCATE_DOCKER_DESKTOP%
 
 # Two names for one feature. `LxssManager` is the in-box WSL's service; the modern WSL that ships as a Store
 # package registers `WslService` instead and does NOT create the old one. Asking only for `LxssManager` reads a
@@ -155,6 +121,14 @@ if ($disk -and $disk.FreeSpace) { $free = [int64]([math]::Floor($disk.FreeSpace 
 } | ConvertTo-Json -Compress
 "#;
 
+/// [`PROBE`] with Docker Desktop's discovery in its place: the one copy the desktop app and `ic`'s repairs run too.
+pub fn probe_script() -> String {
+    PROBE.replace(
+        "%LOCATE_DOCKER_DESKTOP%",
+        intentic_docker_host::desktop_app::LOCATE,
+    )
+}
+
 /// The probe's JSON into facts. Separate from running it, so the parse is exercised on the runner that
 /// cross-builds this binary — a field renamed on one side of that boundary is otherwise only ever found by a
 /// user, as a machine that mysteriously reports every fact as false.
@@ -173,13 +147,13 @@ pub fn parse(json: &str) -> Result<Facts, String> {
 /// of "is the daemon up" in PowerShell is exactly the drift this module was built to avoid.
 #[cfg(windows)]
 pub fn probe() -> Result<Facts, String> {
-    read(shell::run(PROBE))
+    read(shell::run(&probe_script()))
 }
 
 /// The same reading with a deadline: what `ic sandbox fix` asks, on a machine whose WSL may be the thing that hangs.
 #[cfg(windows)]
 pub fn probe_within(limit: std::time::Duration) -> Result<Facts, String> {
-    read(shell::run_within(PROBE, limit))
+    read(shell::run_within(&probe_script(), limit))
 }
 
 #[cfg(windows)]
@@ -333,11 +307,11 @@ mod tests {
     #[test]
     fn the_group_is_read_and_never_added_to() {
         assert!(
-            PROBE.contains("net.exe localgroup docker-users"),
+            probe_script().contains("net.exe localgroup docker-users"),
             "the roster has to actually be asked for"
         );
         assert!(
-            !PROBE.contains("/add"),
+            !probe_script().contains("/add"),
             "the probe runs before consent - it must never change a group"
         );
     }
@@ -351,8 +325,9 @@ mod tests {
     /* The probe is also a PowerShell script this repo ships inside a binary. */
     #[test]
     fn the_probe_is_ascii_and_asks_for_nothing_it_should_not() {
+        let probe = probe_script();
         assert!(
-            PROBE.is_ascii(),
+            probe.is_ascii(),
             "the probe must be ASCII, like every other PowerShell in this repo"
         );
         for mutating in [
@@ -364,12 +339,22 @@ mod tests {
             "Enable-",
         ] {
             assert!(
-                !PROBE.contains(mutating),
+                !probe.contains(mutating),
                 "the probe runs before any consent is asked for, so it must only ever read - found {mutating}"
             );
         }
         // The one exception to the rule above, stated so it cannot creep: setting WSL_UTF8 on our own
         // process environment is not a change to the machine.
-        assert!(PROBE.contains("$env:WSL_UTF8"));
+        assert!(probe.contains("$env:WSL_UTF8"));
+    }
+
+    /// Docker Desktop is found by the discovery every other lookup runs, and its answer is what the probe reports.
+    #[test]
+    fn the_probe_finds_docker_desktop_with_the_shared_discovery() {
+        let probe = probe_script();
+        assert!(probe.contains(intentic_docker_host::desktop_app::LOCATE));
+        assert!(!probe.contains("%LOCATE_DOCKER_DESKTOP%"));
+        assert!(probe.contains("dockerDesktopPath = $dd"));
+        assert!(probe.contains("dockerDesktopVersion = $ddVer"));
     }
 }

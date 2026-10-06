@@ -4,8 +4,8 @@ import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { ref, watch } from "vue";
 import { track } from "../../../app/analytics";
-import type { useSandbox } from "../../sandbox/client/useSandbox";
-import { autoSandboxName } from "../../sandbox/client/sandboxName";
+import type { useSandbox } from "../../../client/sandbox/useSandbox";
+import { autoSandboxName } from "../../../client/sandbox/sandboxName";
 
 // The sandbox row this visit sets up, and what the registry has said about it since: its code redeemed, the machine's
 // account of its run, the daemon's own check-ins. Created unasked on arrival, a row minted here is a draft the page

@@ -1,5 +1,6 @@
 import type { JsExecutionPlan } from "./js-runtime.js";
-import { formatJsResult, JS_SERVER_NAME, JS_TOOL_NAME, jsToolDescription } from "./js-tool.js";
+import { formatJsResult, jsToolDescription } from "./js-tool.js";
+import { JS_SERVER_NAME, JS_TOOL_NAME } from "../seams/js-tool-names.js";
 
 /* The loop-facing half of the backend, pure part: what the model is told, and the shape a run answers in. */
 

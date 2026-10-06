@@ -35,11 +35,11 @@ it(`updates only the date leaf when its minute changes`, async () => {
     const updated = jest.fn();
     const parentUpdated = jest.fn();
     const root = mount(Date.now() - 26 * 60_000, false, updated, parentUpdated);
-    expect(root.textContent).toBe(`26m`);
+    expect(root.textContent).toBe(`26m ago`);
 
     await advanceTimersByTimeAsync(60_000);
     await nextTick();
-    expect(root.textContent).toBe(`27m`);
+    expect(root.textContent).toBe(`27m ago`);
     expect(updated).toHaveBeenCalledTimes(1);
     expect(parentUpdated).not.toHaveBeenCalled();
 });
@@ -47,29 +47,30 @@ it(`updates only the date leaf when its minute changes`, async () => {
 it(`does not redraw an hour label on every minute tick`, async () => {
     const updated = jest.fn();
     const root = mount(Date.now() - 2 * 60 * 60_000, false, updated);
-    expect(root.textContent).toBe(`2h`);
+    expect(root.textContent).toBe(`2h ago`);
 
-    await advanceTimersByTimeAsync(29 * 60_000);
+    // An age is rounded down, so the hour holds for all of its sixty minutes.
+    await advanceTimersByTimeAsync(59 * 60_000);
     await nextTick();
-    expect(root.textContent).toBe(`2h`);
+    expect(root.textContent).toBe(`2h ago`);
     expect(updated).not.toHaveBeenCalled();
 
     await advanceTimersByTimeAsync(60_000);
     await nextTick();
-    expect(root.textContent).toBe(`3h`);
+    expect(root.textContent).toBe(`3h ago`);
     expect(updated).toHaveBeenCalledTimes(1);
 });
 
 it(`uses the sandbox's clock and reacts to its offset settling`, async () => {
     clockOffset.value = 5 * 60_000;
     const root = mount(Date.now() - 26 * 60_000, true);
-    expect(root.textContent).toBe(`Archived 21m`);
+    expect(root.textContent).toBe(`Archived 21m ago`);
 
     clockOffset.value = 4 * 60_000;
     await nextTick();
-    expect(root.textContent).toBe(`Archived 22m`);
+    expect(root.textContent).toBe(`Archived 22m ago`);
 
     await advanceTimersByTimeAsync(60_000);
     await nextTick();
-    expect(root.textContent).toBe(`Archived 23m`);
+    expect(root.textContent).toBe(`Archived 23m ago`);
 });

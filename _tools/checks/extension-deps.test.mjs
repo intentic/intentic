@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ALLOWED, BUILD_ONLY, manifestFindings, SHIPPED } from "./lib/extension-deps.mjs";
+import { ALLOWED, BUILD_ONLY, CONSUMERS, consumerFindings, manifestFindings, SHIPPED, specifierFindings } from "./lib/extension-deps.mjs";
 import { root } from "./lib/repo.mjs";
 
 const manifest = (fields) => JSON.stringify({ name: "@intentic/ext-probe", ...fields }, null, 4);
@@ -64,4 +64,37 @@ test("the manifests' list is the linter's", () => {
     assert.deepEqual(allowedByLinter(`"files": ["_extensions/**"]`), [...SHIPPED].sort());
     assert.deepEqual(allowedByLinter(`"files": ["_extensions/**/*.test.ts"`), [...SHIPPED, "@intentic/testing"].sort());
     assert.deepEqual([...ALLOWED.devDependencies].sort(), [...SHIPPED, ...BUILD_ONLY].sort());
+});
+
+// Outside _extensions, only the web app and the files sidecar may name an extension, the sidecar only ONLYOFFICE.
+test("a package outside _extensions may name an extension only as CONSUMERS allows it", () => {
+    const named = (name, dependencies) => JSON.stringify({ name, dependencies }, null, 4);
+    assert.deepEqual(consumerFindings("_editor/web/package.json", named("@intentic/web", { "@intentic/ext-activity": "workspace:*" })), []);
+    assert.deepEqual(
+        consumerFindings(
+            "_devices/local-files/package.json",
+            named("@intentic/local-files", { "@intentic/ext-onlyoffice": "workspace:*", "@intentic/ext-viewers": "workspace:*" }),
+        ),
+        ["_devices/local-files/package.json:5 @intentic/local-files names the extension @intentic/ext-viewers in dependencies"],
+    );
+    assert.deepEqual(
+        consumerFindings(
+            "_sandbox/sandbox/package.json",
+            named("@intentic/sandbox", { "@intentic/ext-onlyoffice": "workspace:*", "@intentic/extension-api": "workspace:*" }),
+        ),
+        ["_sandbox/sandbox/package.json:4 @intentic/sandbox names the extension @intentic/ext-onlyoffice in dependencies"],
+    );
+});
+
+test("the files sidecar reaches ONLYOFFICE through its local-office entry alone", () => {
+    const { specifiers } = CONSUMERS.get("_devices/local-files");
+    const source = [
+        `import type { LocalOffice } from "@intentic/ext-onlyoffice/local-office";`,
+        `import { NAMESPACE } from "@intentic/ext-onlyoffice";`,
+        `const late = await import("@intentic/ext-onlyoffice/src/server/bundle.js");`,
+    ].join("\n");
+    assert.deepEqual(specifierFindings("_devices/local-files/src/x.ts", source, specifiers), [
+        "_devices/local-files/src/x.ts:2 imports @intentic/ext-onlyoffice",
+        "_devices/local-files/src/x.ts:3 imports @intentic/ext-onlyoffice/src/server/bundle.js",
+    ]);
 });

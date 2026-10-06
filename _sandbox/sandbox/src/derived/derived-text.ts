@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { SingleFlight } from "@intentic/base/async";
 import { estimateTokens } from "@intentic/base/format";
 import { detectFormat } from "@intentic/fileq/formats";
 import { parseSidecarFront, sha256OfFile, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
@@ -24,9 +25,11 @@ const isDerivable = async (absPath: string): Promise<boolean> => {
     return source?.isFile() === true && (await detectFormat(absPath).catch(() => undefined)) !== undefined;
 };
 
-// Derivations asked for right now, by path: two callers wanting the same file wait on the same child rather than
-// spawning a second, and a reader arriving mid-run is told it is being read rather than offered to start another.
-const inFlight = new Map<string, Promise<WorkspaceDerived>>();
+// Derivations asked for right now, by root and path: two callers wanting the same file wait on the same child rather
+// than spawning a second, and a reader arriving mid-run is told it is being read rather than offered to start another.
+// The root is part of the key: the same relative path under two roots is two files.
+const inFlight = new SingleFlight<string, WorkspaceDerived>();
+const flightKey = (root: string, relPath: string): string => `${root}\u0000${relPath}`;
 
 // Who hears a rendering land: the /events stream, so a second reader of the same file refreshes. Renderings are written
 // where the watcher does not look, so nothing else would tell it.
@@ -77,7 +80,8 @@ const readText = async (root: string, relPath: string, reading: boolean, reason?
 };
 
 /** A file's rendered text as it stands, with no derivation triggered; absent is the ordinary answer, not a failure. */
-export const readDerivedText = (root: string, relPath: string): Promise<WorkspaceDerived> => readText(root, relPath, inFlight.has(relPath));
+export const readDerivedText = (root: string, relPath: string): Promise<WorkspaceDerived> =>
+    readText(root, relPath, inFlight.joined(flightKey(root, relPath)) !== undefined);
 
 // `fileq derive --json` prints one outcome object per line; with one file asked for, the last line is its verdict.
 const skipReason = (stdout: string): string | undefined => {
@@ -122,17 +126,17 @@ const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<
  * file share one run, and the box never carries more than a couple at once.
  */
 export const deriveText = (root: string, relPath: string, exec: ExecFn = defaultExec): Promise<WorkspaceDerived> => {
-    const already = inFlight.get(relPath);
+    const key = flightKey(root, relPath);
+    const already = inFlight.joined(key);
     if (already !== undefined) {
         return already;
     }
-    const started = deriveOnce(root, relPath, exec).finally(() => {
-        // Out of flight before anyone hears of it, so the read a listener makes finds the settled text.
-        inFlight.delete(relPath);
-        for (const listener of landedListeners) {
-            listener([relPath]);
-        }
-    });
-    inFlight.set(relPath, started);
-    return started;
+    // Heard after the run's own `finally` has taken it out of flight, so the read a listener makes finds the settled text.
+    return inFlight
+        .run(key, () => deriveOnce(root, relPath, exec))
+        .finally(() => {
+            for (const listener of landedListeners) {
+                listener([relPath]);
+            }
+        });
 };

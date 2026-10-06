@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
@@ -23,7 +24,6 @@ import { browseMarketplace } from "../capabilities/marketplace.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
-import { capabilityFragments } from "../environment/fragment-sources.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
@@ -282,7 +282,7 @@ export const applyExtensionUpdate = async (
         void reconcileListenerProcesses(services);
         const composedHash = await composeEnvironment(services);
         const rebuildNeeded =
-            (await capabilityFragments(services, { id, kind: "extension", config: nextConfig })).length > 0 &&
+            (await services.environmentSources.capabilityFragments({ id, kind: "extension", config: nextConfig })).length > 0 &&
             composedHash !== undefined &&
             composedHash !== services.config.sandbox.environmentHash;
         if (identity !== undefined) {
@@ -491,7 +491,7 @@ const autoUpdate = async (services: Services, target: InstalledTarget, update: E
 const STALE_MS = 6 * 60 * 60 * 1000;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-const inFlight = new Map<string, Promise<string>>();
+const inFlight = new SingleFlight<string, string>();
 
 // Thrown by a check pass once everything reachable is recorded; names each registry it could not read and why.
 export class RegistryUnreachableError extends Error {
@@ -506,11 +506,7 @@ export class RegistryUnreachableError extends Error {
 // is recorded, so a check that could not look never answers as all-clear; delisted clears them.
 export const checkExtensionUpdates = (services: Services): Promise<string> => {
     const root = services.workspace.root;
-    const running = inFlight.get(root);
-    if (running !== undefined) {
-        return running;
-    }
-    const run = (async (): Promise<string> => {
+    return inFlight.run(root, async (): Promise<string> => {
         const targets = await installedTargets(services);
         const byRegistry = new Map<string, InstalledTarget[]>();
         for (const target of targets) {
@@ -622,12 +618,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             throw new RegistryUnreachableError(unreached);
         }
         return now;
-    })();
-    inFlight.set(
-        root,
-        run.finally(() => inFlight.delete(root)),
-    );
-    return inFlight.get(root) ?? run;
+    });
 };
 
 // Called on every list read: a fresh state answers instantly; a stale one refreshes in the background, no waiting.

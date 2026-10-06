@@ -1,11 +1,11 @@
-import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/api-contract";
+import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
 import { computed, onScopeDispose, ref, watch } from "vue";
-import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSearchOptions } from "./useSearchOptions";
-import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 
 // Search over /work via the sandbox daemon (workspace.search). Two scopes, two verbs:

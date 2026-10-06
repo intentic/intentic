@@ -2,13 +2,13 @@ import type { CredentialGate, CredentialGateKind, SecretInventoryEntry } from "@
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../setup/devFill";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey, SANDBOX_MEMBERS } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { useSandboxSession } from "../../sandbox/session/sandboxSession";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { useSandboxSession } from "../../../client/session/sandboxSession";
 
 // User-supplied env-var secrets, written straight to the daemon's /secrets routes, split by consumer so each
 // surface only observes the server state it reads (an observer mount refetches its query). `reveal` is the owner's and
@@ -83,8 +83,7 @@ export function useCredentialGates() {
     const { query: gatesQuery } = useSandboxQuery(rpcQuery(`secrets.gates`));
     const { query: rosterQuery } = useSandboxQuery({
         queryKey: SANDBOX_MEMBERS.of(),
-        queryFn: async (): Promise<{ members: { email: string }[]; owner?: string }> =>
-            (await sandboxJson(`/members`)) as { members: { email: string }[]; owner?: string },
+        queryFn: () => sandboxRaw(`GET /members`),
     });
     const { presentedEmail } = useSandboxSession();
     const invalidate = (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.gates`) });

@@ -52,7 +52,9 @@ export const writeHostFiles = async (
 export const envArg = (key: string, value: string): string => shellQuote(envLine(key, value).slice(0, -1));
 
 // Write-once .env, chmod 600 regardless of whether any entry is a secret. Created even with no entries, since
-// composeUp always passes `--env-file`; written as one printf so the whole file is a single shell expression.
+// composeUp always passes `--env-file`; written as one printf so the whole file is a single shell expression. Created
+// under umask 077 so it is never readable by others, even for the moment before the chmod, and chmodded on every
+// apply so a .env an older release left world-readable is tightened too.
 export const writeEnvOnce = async (session: SshSession, kind: string, dir: string, entries: readonly EnvEntry[]): Promise<void> => {
     const args = (entries.length > 0 ? entries : [{ key: "TZ", value: "Etc/UTC" }]).map((entry) =>
         entry.value === undefined
@@ -64,7 +66,7 @@ export const writeEnvOnce = async (session: SshSession, kind: string, dir: strin
     await execChecked(
         session,
         kind,
-        `test -f ${dir}/.env || { printf '%s\\n' ${args.join(" ")} > ${dir}/.env && chmod 600 ${dir}/.env; }`,
+        `(umask 077; test -f ${dir}/.env || printf '%s\\n' ${args.join(" ")} > ${dir}/.env) && chmod 600 ${dir}/.env`,
         `write ${dir}/.env`,
     );
 };

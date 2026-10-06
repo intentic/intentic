@@ -1,28 +1,15 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { extensionRuntimeDir, STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
+import { join } from "node:path";
+import { findWorkspaceRoot } from "@intentic/connector-runtime";
+// The subpath, not the package root: the root loads every schema in the contract, which `gw` never needs.
+import { extensionRuntimeDir } from "@intentic/sandbox-contract/workspace-state";
 
 /* WHERE THIS EXTENSION KEEPS ITS SCRATCH STATE, one hour of cached access token per connection, and the watcher's resume marks. */
 
 const EXTENSION = "google-workspace";
 
-export const workspaceRoot = (env: NodeJS.ProcessEnv, cwd: string): string => {
-    const declared = env["INTENTIC_WORKSPACE"];
-    if (declared !== undefined && declared !== "") {
-        return declared;
-    }
-    let dir = cwd;
-    for (;;) {
-        if (existsSync(join(dir, STATE_DIR))) {
-            return dir;
-        }
-        const parent = dirname(dir);
-        if (parent === dir) {
-            return env["WORKSPACE_ROOT"] ?? WORKSPACE_ROOT;
-        }
-        dir = parent;
-    }
-};
+// INTENTIC_WORKSPACE, else the nearest ancestor holding `.intentic`, else WORKSPACE_ROOT: the one walk every
+// agent-side CLI of a connector does (connector-runtime's findWorkspaceRoot).
+export const workspaceRoot = (env: NodeJS.ProcessEnv, cwd: string): string => findWorkspaceRoot(env, cwd);
 
 // A connection's own directory under the runtime tree. `name` is an env suffix lowercased, so it is already
 // slug-shaped; the replace is defence in depth against a path ever being built from something else.

@@ -4,8 +4,9 @@ import type { MachineEnvironment, SandboxStatus } from "../desktop";
 // WSL distro, and `ic sandbox list --json` lists every sandbox on it from either side, naming the other side that keeps
 // one (`keptElsewhere`). That side runs its background care (its keeper, updates, backups); a person's start, stop and
 // restart still reach it from here, which is why the row keeps its verbs and only says where it is kept. The distro is
-// named when ic stamps it on the container (`hostEnv`), else when exactly one distro of this PC runs an agent (the
-// machine agents read off each distro's files, src-tauri/src/agents.rs), else not at all.
+// named when ic names it (`keptElsewhereName`, or the `linux/<distro>` form of `keptElsewhere`), else when exactly one
+// distro of this PC runs an agent (the machine agents read off each distro's files, src-tauri/src/agents.rs), else not
+// at all.
 
 /** How a person names an environment: `Windows`, `Linux`, `WSL (archlinux)`. */
 export const environmentLabel = (environment: Pick<MachineEnvironment, `kind` | `distro`>): string => {
@@ -21,7 +22,7 @@ export const otherAgents = (environments: readonly MachineEnvironment[]): string
 
 /** Where a sandbox kept by another side of this computer is kept, by name; undefined for this side's own. */
 export const keptBy = (
-    sandbox: Pick<SandboxStatus, `keptElsewhere` | `hostEnv` | `keptElsewhereName`>,
+    sandbox: Pick<SandboxStatus, `keptElsewhere` | `keptElsewhereName`>,
     environments: readonly MachineEnvironment[],
 ): string | undefined => {
     const side = sandbox.keptElsewhere;
@@ -44,7 +45,7 @@ export const keptBy = (
         return environmentLabel({ kind: `wsl`, distro: env });
     }
     // A side ic names by its distro already (`wsl:archlinux`, or the bare name) needs nothing more.
-    const named = side.startsWith(`wsl:`) ? side.slice(`wsl:`.length) : side === `linux` ? sandbox.hostEnv : side;
+    const named = side.startsWith(`wsl:`) ? side.slice(`wsl:`.length) : side === `linux` ? undefined : side;
     if (named !== undefined && named !== ``) {
         return environmentLabel({ kind: `wsl`, distro: named });
     }

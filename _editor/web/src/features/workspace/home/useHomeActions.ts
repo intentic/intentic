@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";

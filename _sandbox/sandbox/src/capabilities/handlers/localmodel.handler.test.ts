@@ -1,4 +1,4 @@
-import { packFragment, readPack } from "../../environment/packs.js";
+import { packFragment, readPack } from "../../image/packs.js";
 import { localModelLogPath } from "../../endpoints/local-model-load.js";
 import { serverCommand } from "./localmodel.handler.js";
 import { registry } from "../registry.js";

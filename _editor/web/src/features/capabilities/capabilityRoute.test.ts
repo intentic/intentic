@@ -1,7 +1,7 @@
 // Pins the page's URL as its state: every move's next address and whether it is a history stop, what survives leaving
 // a tile, and what the page reads off the URL (the open tile, the connection being edited, the slice, the walk),
 // including the bounce off a tile slug nothing answers to.
-import type { CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type EffectScope, effectScope, nextTick, reactive, ref } from "vue";
 import { type PageMove, type PageRoute, type PageStep, pageStep, SETUP, useCapabilityRoute } from "./capabilityRoute";

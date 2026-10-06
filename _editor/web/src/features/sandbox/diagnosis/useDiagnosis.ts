@@ -1,11 +1,11 @@
 import { useNow } from "@intentic/ui/async";
 import { computed, shallowRef, watch, type ComputedRef } from "vue";
 import { apiClient } from "../../../lib/useApi";
-import { noteVerdict } from "../client/edgeVerdict";
-import { useSandbox } from "../client/useSandbox";
-import { loopbackPermission } from "../devices/loopback/loopbackPermission";
-import type { ConnectionFailure } from "../live/connection";
-import { candidatesFor, couldBeOnThisMachine, probeEndpoint, sandboxIdOf } from "../secrets/endpoint";
+import { noteVerdict } from "../../../client/sandbox/edgeVerdict";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { loopbackPermission } from "../../../client/endpoint/loopbackPermission";
+import type { ConnectionFailure } from "../../../client/sandbox/connection";
+import { candidatesFor, couldBeOnThisMachine, probeEndpoint, sandboxIdOf } from "../../../client/endpoint/endpoint";
 import { type Diagnosis, diagnose, type Evidence, type FrontProbe, type HostedMachineState } from "./diagnose";
 import { probeFront } from "./probes";
 

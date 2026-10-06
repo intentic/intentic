@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { gitClone, gitInit } from "@intentic/scaffold";
+import { gitClone, gitInit } from "@intentic/base/git";
 import { renderTemplate } from "../lib/templates.js";
 
 const APP_GITIGNORE = "node_modules/\n";

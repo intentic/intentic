@@ -3,13 +3,13 @@ import { plural } from "@intentic/base/format";
 import { createStore, prune, resolveInputs } from "@intentic/engine";
 import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
 import { collectSecretUsage, linearize } from "@intentic/graph";
-import { createProviders, createSshExecutor, hostTarget } from "@intentic/providers";
+import { createProviders, hostTarget } from "@intentic/providers";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { acquireApplyLock } from "../apply/apply-lock.js";
 import { nextBaseline, writeBaseline } from "../apply/baseline.js";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_PATH, LAST_APPLIED_FILE, loadEnvFile, readArtifact } from "../lib/artifact.js";
-import { createKnownHostsStore } from "../lib/known-hosts.js";
+import { pinnedSshExecutor } from "../lib/known-hosts.js";
 import { createOutput, createRedactor } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 import { teardownTable } from "../lib/tables.js";
@@ -55,7 +55,7 @@ export const destroy = buildCommand<DestroyFlags>({
             out.result({ steps, executed: false });
             return;
         }
-        const ssh = createSshExecutor(createKnownHostsStore(dir));
+        const ssh = pinnedSshExecutor(dir);
         // Lock every host the artifact touches, exactly like apply: destroy is the destructive phase.
         const targets = Object.values(graph.resources)
             .filter((node) => node.type === "host")

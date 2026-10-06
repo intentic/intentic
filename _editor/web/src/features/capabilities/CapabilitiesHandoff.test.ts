@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
-import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 

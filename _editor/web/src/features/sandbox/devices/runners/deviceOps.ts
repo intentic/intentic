@@ -20,7 +20,7 @@ import {
     rowRemoval,
 } from "../deviceRows";
 import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
-import { useSandbox } from "../../client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { t } from "@intentic/ui/i18n";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's

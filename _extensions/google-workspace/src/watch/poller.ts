@@ -1,3 +1,4 @@
+import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { GatewayCtx, ListenerMessage } from "@intentic/connector-runtime";
 import type { Connection } from "../google/accounts.js";
@@ -231,11 +232,12 @@ export const startWatcher = (
         await save({ ...mark, announced });
     };
 
+    // One poll of each kind at a time: a poll slower than its interval would otherwise run beside the next against the
+    // same watermark and dispatch the same mail twice. A tick that finds its kind still running joins it instead.
+    const inFlight = new SingleFlight<"mail" | "calendar", void>();
+
     // The mark is read under the guard: a read that failed is logged and retried next tick, never polled past.
-    const tick = async (what: "mail" | "calendar", poll: () => Promise<void>): Promise<void> => {
-        if (!running) {
-            return;
-        }
+    const pollOnce = async (what: "mail" | "calendar", poll: () => Promise<void>): Promise<void> => {
         await guard(what, async () => {
             if (!loaded) {
                 mark = await readWatermark(path, (detail) =>
@@ -245,6 +247,13 @@ export const startWatcher = (
             }
             await poll();
         });
+    };
+
+    const tick = (what: "mail" | "calendar", poll: () => Promise<void>): Promise<void> => {
+        if (!running) {
+            return Promise.resolve();
+        }
+        return inFlight.run(what, () => pollOnce(what, poll));
     };
 
     const timers = [

@@ -1,4 +1,4 @@
-import type { RepoChanges } from "@intentic/api-contract";
+import type { RepoChanges } from "@intentic/sandbox-contract";
 import { sideTotal, truncatedOn, truncatedTotal } from "./truncation";
 
 const repo = (truncated?: RepoChanges["truncated"]): RepoChanges => ({

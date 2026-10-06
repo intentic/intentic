@@ -25,7 +25,7 @@ import type {
     UserInput,
     UserIntent,
     WorkspaceIntent,
-} from "@intentic/need-resolver";
+} from "@intentic/state-resolver";
 import { deploymentId, repoId } from "@intentic/state-resolver";
 import type {
     App,

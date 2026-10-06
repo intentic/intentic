@@ -1,4 +1,4 @@
-import type { WorkspaceHotspot } from "@intentic/api-contract";
+import type { WorkspaceHotspot } from "@intentic/sandbox-contract";
 import { hotspotAsk, type HotspotContext, moduleAsk } from "./refactorAsk";
 
 /* The prompt must select the intended kind of change. */

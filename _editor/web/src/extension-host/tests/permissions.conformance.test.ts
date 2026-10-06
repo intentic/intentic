@@ -235,11 +235,11 @@ const gatedClient = (gate: (procedure: readonly string[], input: unknown) => voi
         },
     );
 
-const sandboxRpcModule = await import("../../features/sandbox/client/sandboxRpc");
-const sandboxClientModule = await import("../../features/sandbox/client/sandboxClient");
+const sandboxRpcModule = await import("../../client/sandbox/sandboxRpc");
+const sandboxClientModule = await import("../../client/sandbox/sandboxClient");
 const sandboxUsageModule = await import("../sandboxUsage");
-jest.mock(`../../features/sandbox/client/sandboxRpc`, () => ({ ...sandboxRpcModule, gatedSandboxRpc: gatedClient }));
-jest.mock(`../../features/sandbox/client/sandboxClient`, () => ({
+jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ ...sandboxRpcModule, gatedSandboxRpc: gatedClient }));
+jest.mock(`../../client/sandbox/sandboxClient`, () => ({
     ...sandboxClientModule,
     sandboxJson: async () => undefined,
     sandboxRequest: async () => new Response(),

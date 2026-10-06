@@ -34,7 +34,7 @@ jest.mock(`./useChat-view`, () => ({
 }));
 const reachable = ref(true);
 const active = ref<{ role: string } | undefined>({ role: `owner` });
-jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
 
 const policy = ref<PrivacyShieldPolicy>({ ...DEFAULT_PRIVACY_SHIELD, mode: `on` });
 const status = ref<PrivacyShieldStatus | undefined>(undefined);

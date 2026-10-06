@@ -1,9 +1,9 @@
 import type { AdoptionTicket, SandboxLookup, SandboxSummary } from "@intentic/api-contract";
 import { errorMessage } from "@intentic/base/errors";
-import type { RelinkAnswer, RelinkRequest } from "@intentic/sandbox-contract";
+import { type RelinkAnswer, type RelinkRequest, sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/client";
 import { computed, ref } from "vue";
-import { type RememberedSandbox, sandboxIdOfUrl } from "./deviceDirectory";
+import type { RememberedSandbox } from "../../../client/directory/deviceDirectory";
 
 // THE RECOVERY SCREEN'S WORK (Recover.vue, README.md): the sandboxes this device remembers and the account's list
 // lacks, each asked whether it answers and what the platform holds of it, then brought back on the owner's press. Every
@@ -94,7 +94,7 @@ export const useRecovery = (deps: RecoveryDeps) => {
             await Promise.all(
                 entries.map(async (entry) => {
                     const health = await deps.health(entry.daemonUrl);
-                    const sandboxId = health?.sandboxId ?? sandboxIdOfUrl(entry.daemonUrl);
+                    const sandboxId = health?.sandboxId ?? sandboxIdOfDaemonUrl(entry.daemonUrl);
                     if (health === undefined || sandboxId === undefined) {
                         set(entry, { kind: `offline` });
                         return [];

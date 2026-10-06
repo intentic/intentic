@@ -1,10 +1,10 @@
 import { ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
 import { TrialStatusSchema } from "@intentic/sandbox-contract";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { ProcedureInput, ProcedureOutput } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { ProcedureInput, ProcedureOutput } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../../lib/activeSandbox";
 
 // The composer's picks are one answer per account, not per browser window; this suite proves it by making the
 // picks here and opening a second window's copy of the modules that hold them over the same storage. A thin catalog
@@ -18,7 +18,7 @@ const TWO = [
 // Two Claude accounts, a Cursor one so a second-provider pick is actually runnable (an unrunnable pick would resolve
 // elsewhere and hide whether it was remembered), and every other connection read answering empty.
 const providerModels = jest.fn<(input: ProcedureInput<`providers.models`>) => Promise<ProcedureOutput<`providers.models`>>>();
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         accounts: {
             accounts: async ({ provider }) => ({
@@ -35,7 +35,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
 jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // The app's one active-sandbox ref, as every store reads it.
 activeSandboxId.value = `sb1`;
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });

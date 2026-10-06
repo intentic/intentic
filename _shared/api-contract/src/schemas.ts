@@ -1,383 +1,16 @@
 import type { ResourceType } from "@intentic/resources";
-import type {
-    ActivityConnectionSchema,
-    ActivityEventSchema,
-    ActivityStatusSchema,
-    AddInventoryInputSchema,
-    AutomationApprovalSchema,
-    AutomationRunSchema,
-    AutomationSchema,
-    AutomationSummarySchema,
-    BuiltinPromptTextSchema,
-    CapabilityKindSchema,
-    CapabilityProbeSchema,
-    CapabilityRecommendationSchema,
-    CapabilityStateSchema,
-    CapabilityStatusSchema,
-    CapabilitySummarySchema,
-    ApprovalSchema,
-    ApprovalStatusSchema,
-    ApprovalsListSchema,
-    ApprovalSummarySchema,
-    ArrivalHostSchema,
-    ArrivalItemSchema,
-    ArrivalPlanSchema,
-    ArrivalReportSchema,
-    ArrivalSourceSchema,
-    DefinitionDiffSchema,
-    DefinitionExportSchema,
-    WorkspacePublishResultSchema,
-    WorkspaceRemoteSchema,
-    EngineRowSchema,
-    EnginesViewSchema,
-    EnvironmentContentsSchema,
-    EnvironmentSchema,
-    BundleExportSchema,
-    InventoryEntrySchema,
-    InventoryProviderSchema,
-    LogFileEntrySchema,
-    LogReadSchema,
-    MarketplaceSchema,
-    PanelLaunchSchema,
-    PanelSummarySchema,
-    PushConfigSchema,
-    RepoAppSchema,
-    RuleFiringsSchema,
-    RuleMomentSchema,
-    RuleSchema,
-    SafetyLogEntrySchema,
-    SafetyPolicySchema,
-    SandboxSettingsSchema,
-    ServiceKindSchema,
-    TimezoneOfferSchema,
-    TimezoneStateSchema,
-    AgentChangeSchema,
-    AgentChangesSchema,
-    AgentHistoryCommitSchema,
-    AgentHistorySchema,
-    AgentRepoChangesSchema,
-    FileDiffSchema,
-    GitActionResultSchema,
-    GitDiffSideSchema,
-    GitBranchesSchema,
-    GitBranchSchema,
-    CommitResultSchema,
-    GitChangeSchema,
-    GitChangesSchema,
-    GitCommitDiffSchema,
-    GitCommitSchema,
-    GitLogSchema,
-    GitRemoteStateSchema,
-    GitReposSchema,
-    GitScopeSchema,
-    GitTargetSchema,
-    LandedMessageDraftSchema,
-    LandedMessageSchema,
-    LandedMessageStepSchema,
-    OriginAgentSchema,
-    RepoChangesSchema,
-    RepoTargetSchema,
-    SnapshotChangeSchema,
-    SnapshotDiffSchema,
-    SnapshotSchema,
-    SnapshotsListSchema,
-    SkillBodySchema,
-    SkillDraftSchema,
-    SkillOriginSchema,
-    SkillSummarySchema,
-    SkillSwitchSchema,
-    SnapshotTriggerSchema,
-    TemplatesListSchema,
-    TemplateSummarySchema,
-    WorkspaceHealthSchema,
-    WorkspaceHotspotSchema,
-    WorkspaceKeyModuleSchema,
-    WorkspaceSearchFreshnessSchema,
-    WorkspaceSearchGroupSchema,
-    WorkspaceSearchHitSchema,
-    WorkspaceSearchQuerySchema,
-    WorkspaceSearchResultSchema,
-    WorkspaceSearchSpanSchema,
-    WorkspaceSearchTagSchema,
-} from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, MemberRoleSchema, PushNotificationSchema, WalletNetworkSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { BootReportSchema, HostReportSchema, SetupReportSchema } from "./ingress/ingress-schemas.js";
 
 // Where the oRPC handler is mounted; the client link uses the same base so request URLs line up.
 export const API_BASE_PATH = "/rpc";
 
-// Daemon wire shapes: re-exported from @intentic/sandbox-contract, single source of truth.
-// Some types keep the platform's historical names (e.g. WorkspaceTreeResponse = WorkspaceTree).
-export {
-    ActivityConnectionSchema,
-    ActivityEventSchema,
-    ActivityListSchema,
-    ActivityStatusSchema,
-    AddInventoryInputSchema,
-    AppEntrySchema,
-    AppsListSchema,
-    AutomationApprovalSchema,
-    AutomationApprovalsListSchema,
-    AutomationRunSchema,
-    AutomationSchema,
-    AutomationsListSchema,
-    AutomationSummarySchema,
-    BackendEntrySchema,
-    CapabilitiesListSchema,
-    BuiltinPromptTextSchema,
-    CapabilityKindSchema,
-    CapabilityProbeSchema,
-    CapabilityRecommendationSchema,
-    CapabilityStateSchema,
-    CapabilityStatusSchema,
-    CapabilitySummarySchema,
-    ApprovalSchema,
-    ApprovalStatusSchema,
-    ApprovalsListSchema,
-    ApprovalSummarySchema,
-    NeedsActionSchema,
-    ArrivalGroupSchema,
-    ArrivalHostSchema,
-    ArrivalHostsSchema,
-    ArrivalItemSchema,
-    ArrivalPlanSchema,
-    ArrivalReportSchema,
-    ArrivalSourceSchema,
-    AssistantSourceSchema,
-    DefinitionDiffSchema,
-    DefinitionExportSchema,
-    WorkspacePublishResultSchema,
-    WorkspaceRemoteSchema,
-    EngineRowSchema,
-    EnginesViewSchema,
-    EnvironmentContentsSchema,
-    EnvironmentSchema,
-    BundleExportSchema,
-    BundleExportsSchema,
-    InventoryEntrySchema,
-    InventoryProviderSchema,
-    InventoryValuesSchema,
-    LogFileEntrySchema,
-    LogReadSchema,
-    LogsListSchema,
-    MarketplaceSchema,
-    PanelLaunchSchema,
-    PanelsListSchema,
-    PanelSummarySchema,
-    PushConfigSchema,
-    RepoAppSchema,
-    RuleFiringsSchema,
-    RuleMomentSchema,
-    RuleSchema,
-    SafetyLogEntrySchema,
-    SafetyPolicySchema,
-    SandboxSettingsSchema,
-    ServiceEntrySchema,
-    TimezoneOfferSchema,
-    TimezoneStateSchema,
-    ServiceKindSchema,
-    SkillBodySchema,
-    SkillDraftSchema,
-    SkillOriginSchema,
-    SkillsListSchema,
-    SkillSummarySchema,
-    SkillSwitchSchema,
-    TemplatesListSchema,
-    TemplateSummarySchema,
-    TerminalSessionSchema,
-    TerminalsListSchema,
-    TriggerSchema,
-    WorkspaceChildrenSchema,
-    WorkspaceFileSchema,
-    WorkspaceSearchResultSchema,
-    WorkspaceTreeEntrySchema,
-    WorkspaceTreeSchema,
-} from "@intentic/sandbox-contract";
+// What machines send the platform outside /rpc (the setup claim and report, announce, boot and host reports), which the
+// editor reads back off a sandbox's summary: declared with the ingress routes that carry them.
+export * from "./ingress/index.js";
 
-export type InventoryProvider = z.infer<typeof InventoryProviderSchema>;
-export type ServiceKind = z.infer<typeof ServiceKindSchema>;
-export type InventoryEntry = z.infer<typeof InventoryEntrySchema>;
-export type AddInventoryInput = z.infer<typeof AddInventoryInputSchema>;
-export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
-export type CapabilityState = z.infer<typeof CapabilityStateSchema>;
-export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
-export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
-export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
-export type CapabilityProbe = z.infer<typeof CapabilityProbeSchema>;
-export type EngineRow = z.infer<typeof EngineRowSchema>;
-export type EnginesView = z.infer<typeof EnginesViewSchema>;
-export type Environment = z.infer<typeof EnvironmentSchema>;
-export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
-export type EnvironmentItem = EnvironmentContents["items"][number];
-// One row of the runtime-install list; derived from the response so the row type can't drift from it.
-export type EnvironmentRecurring = NonNullable<Environment["recurring"]>[number];
-export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
-export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
-export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
-export type WorkspacePublishResult = z.infer<typeof WorkspacePublishResultSchema>;
-// The arrival pipeline: one plan/apply/report shape shared by the four inbound sources.
-export type ArrivalHost = z.infer<typeof ArrivalHostSchema>;
-export type ArrivalItem = z.infer<typeof ArrivalItemSchema>;
-export type ArrivalPlan = z.infer<typeof ArrivalPlanSchema>;
-export type ArrivalSource = z.infer<typeof ArrivalSourceSchema>;
-// The two kinds a connected computer can be scanned for; a bundle is a file, never a home-folder setup.
-export type AssistantSource = Extract<ArrivalSource, "hermes" | "openclaw">;
-export type ArrivalReport = z.infer<typeof ArrivalReportSchema>;
-export type BundleExport = z.infer<typeof BundleExportSchema>;
-export type Marketplace = z.infer<typeof MarketplaceSchema>;
-export type Automation = z.infer<typeof AutomationSchema>;
-export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
-export type AutomationRun = z.infer<typeof AutomationRunSchema>;
-export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
-export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
-export type Approval = z.infer<typeof ApprovalSchema>;
-export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
-export type ApprovalsList = z.infer<typeof ApprovalsListSchema>;
-export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
-export type TimezoneOffer = z.infer<typeof TimezoneOfferSchema>;
-export type TimezoneState = z.infer<typeof TimezoneStateSchema>;
-export type Rule = z.infer<typeof RuleSchema>;
-export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
-export type SkillSummary = z.infer<typeof SkillSummarySchema>;
-export type SkillBody = z.infer<typeof SkillBodySchema>;
-export type SkillDraft = z.infer<typeof SkillDraftSchema>;
-export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
-export type RuleMoment = z.infer<typeof RuleMomentSchema>;
-export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
-export type SafetyPolicy = z.infer<typeof SafetyPolicySchema>;
-export type SafetyLogEntry = z.infer<typeof SafetyLogEntrySchema>;
-export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
-export type PanelSummary = z.infer<typeof PanelSummarySchema>;
-export type PanelLaunch = z.infer<typeof PanelLaunchSchema>;
-export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;
-export type TemplatesList = z.infer<typeof TemplatesListSchema>;
-export type RepoApp = z.infer<typeof RepoAppSchema>;
-export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
-export type ActivityConnection = z.infer<typeof ActivityConnectionSchema>;
-export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
-export type LogFileEntry = z.infer<typeof LogFileEntrySchema>;
-export type LogRead = z.infer<typeof LogReadSchema>;
-
-// Workspace tree/file/children types; the daemon's schemas stay re-exported above for runtime parsing.
-// The daemon infers `children` loosely; this interface stays precisely recursive for the tree view.
-// `to` is the link's own text; the entry's `type` beside it is what it points at (folder expands, file opens).
-// `state` is absent when the link resolves inside the workspace; "broken" or "outside" otherwise.
-export interface WorkspaceLink {
-    readonly to: string;
-    readonly state?: "broken" | "outside";
-}
-export interface WorkspaceTreeEntry {
-    readonly name: string;
-    // Root-relative path (forward slashes), fed straight back to the file route.
-    readonly path: string;
-    readonly type: "file" | "dir";
-    readonly size?: number;
-    // Ignored-by-tooling (node_modules, .git, .gitignore'd, browser profiles): the row is grayed.
-    readonly ignored?: boolean;
-    // Present when the entry is a symlink, `type` above is then its target's type.
-    readonly link?: WorkspaceLink;
-    // Absent means listed but not descended into (client lazy-loads on expand); empty dir is `children: []`.
-    readonly children?: readonly WorkspaceTreeEntry[];
-}
-export interface WorkspaceTreeResponse {
-    readonly root: string;
-    readonly tree: readonly WorkspaceTreeEntry[];
-    // How many of the root's own entries the budget cut (0 = complete); per-dir cuts count on each entry.
-    readonly hidden: number;
-    // Folders holding only empty folders, root-relative; not derivable from `tree` (an undescended dir isn't empty).
-    readonly barren: readonly string[];
-}
-// Children of one not-yet-descended dir, fetched lazily on expand (GET /workspace/children).
-export interface WorkspaceChildrenResponse {
-    readonly entries: readonly WorkspaceTreeEntry[];
-    readonly hidden: number;
-}
-// One window of a file's text; `size` is the whole file, `offset`/`bytes` the byte range `content` decodes from.
-// Byte counts, not `content.length`, since they differ on non-ASCII; the viewer gates on `size` here.
-export interface WorkspaceFileWindow {
-    readonly present: true;
-    readonly path: string;
-    readonly content: string;
-    readonly size: number;
-    readonly offset: number;
-    readonly bytes: number;
-    // Which tree answered: the shared /work tree, or the conversation's own checkout (`?agent=`).
-    readonly shared: boolean;
-    // The bytes aren't valid UTF-8, so `content` holds replacement characters and a save would change them; set only
-    // by a file server that checks the decode (the desktop app's), absent everywhere else (sandbox-contract's `lossy`).
-    readonly lossy?: true;
-}
-// A read of a path with nothing at it is a successful answer, not a failure; a disallowed read still fails.
-export type WorkspaceFileResponse = WorkspaceFileWindow | { readonly present: false; readonly path: string };
-// What a named file reference resolves to: the workspace path it means, absent if nothing matches.
-export interface WorkspaceResolveResponse {
-    readonly path?: string;
-}
-
-// Workspace search results (the daemon's fused-search shape); `WorkspaceSearchMode` is the query's verb enum.
-export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;
-export type WorkspaceSearchSpan = z.infer<typeof WorkspaceSearchSpanSchema>;
-export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
-export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
-export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSchema>;
-export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
-export type WorkspaceSearchMode = z.infer<typeof WorkspaceSearchQuerySchema>["mode"];
-
-// One repo's codebase health: churn x complexity per file, index totals, and the import graph's key modules.
-export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
-export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
-export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
-
-// Workspace history (daemon snapshots); kept under the platform's historical *Response names as aliases.
-export type SnapshotTrigger = z.infer<typeof SnapshotTriggerSchema>;
-export type WorkspaceSnapshot = z.infer<typeof SnapshotSchema>;
-export type SnapshotsResponse = z.infer<typeof SnapshotsListSchema>;
-export type SnapshotChange = z.infer<typeof SnapshotChangeSchema>;
-export type SnapshotDiffResponse = z.infer<typeof SnapshotDiffSchema>;
-// Shared by the snapshot file diff and the working-tree (Changes review) file diff.
-export type FileDiffResponse = z.infer<typeof FileDiffSchema>;
-// Which of the working tree's two diffs a Changes row opens, index-vs-HEAD or worktree-vs-index.
-export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
-
-// The Changes review (uncommitted work per repo, VSCode-SCM style).
-export type GitChange = z.infer<typeof GitChangeSchema>;
-export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// What a bulk git verb acts on: picked paths, or a scope the daemon resolves itself.
-// Git can't span repos, so every batch verb groups into one RepoTarget per repo.
-export type GitScope = z.infer<typeof GitScopeSchema>;
-export type GitTarget = z.infer<typeof GitTargetSchema>;
-export type RepoTarget = z.infer<typeof RepoTargetSchema>;
-// Who an agent id in a repo's `origins` is; the roster can drop an archived agent while its lines remain.
-export type OriginAgent = z.infer<typeof OriginAgentSchema>;
-// The commit message drafted from a landing's diff, one shape for the board card and the review record.
-export type LandedMessage = z.infer<typeof LandedMessageSchema>;
-// Account of a message being drafted: models asked, how each went; live during the run, kept after.
-export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
-export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
-export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
-// What a commit answers: whether it recorded anything, plus the repo's row after, absent if nothing's left.
-export type CommitResult = z.infer<typeof CommitResultSchema>;
-export type GitCommit = z.infer<typeof GitCommitSchema>;
-export type GitLogResponse = z.infer<typeof GitLogSchema>;
-export type GitCommitDiffResponse = z.infer<typeof GitCommitDiffSchema>;
-export type GitReposResponse = z.infer<typeof GitReposSchema>;
-export type GitActionResult = z.infer<typeof GitActionResultSchema>;
-// Web push: the VAPID public key to subscribe with, plus whether this browser is already registered.
-export type PushConfig = z.infer<typeof PushConfigSchema>;
-// Remote sync + branch management (the Changes panel's sync bar and the graph's branch switcher).
-export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
-export type GitBranch = z.infer<typeof GitBranchSchema>;
-export type GitBranchesResponse = z.infer<typeof GitBranchesSchema>;
-// Per-agent worktree review: a flat change set per repo, not the working tree's staged/unstaged shape.
-// A row flags whether the workspace holds that content; committed files drop out and count in `absorbed`.
-export type AgentChange = z.infer<typeof AgentChangeSchema>;
-export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
-export type AgentChangesResponse = z.infer<typeof AgentChangesSchema>;
-// Where the absorbed half went: the user's own commits now carrying files the review can no longer list.
-export type AgentHistoryCommit = z.infer<typeof AgentHistoryCommitSchema>;
-export type AgentHistoryResponse = z.infer<typeof AgentHistorySchema>;
-
-// ---- platform-native (owned by the platform; NOT daemon wire shapes) ----
+// ---- platform-native shapes. A daemon wire shape is imported from @intentic/sandbox-contract, never through here ----
 
 export const UserSchema = z.object({
     id: z.string(),
@@ -506,77 +139,8 @@ export interface PlanStreamEvent {
 
 // ---- sandboxes: the user's workspaces + shared access ----
 
-// One broken check from a setup run: its name, what it found, and the fix, rendered verbatim in the wizard.
-// `remedy` may be empty when the failure message already carries its own fix.
-export const SetupReportFailureSchema = z.object({
-    check: z.string().max(120),
-    problem: z.string().max(2000),
-    remedy: z.string().max(2000),
-});
-// Machine-side setup progress, POSTed on every stage transition, authenticated by the live setup code.
-// Stages are the connect flow's real phases; non-empty `failed` is a verdict, `at` stamped by the platform.
-export const SetupReportSchema = z.object({
-    stage: z.enum(["preflight", "pulling-image", "creating-tunnel", "starting-sandbox", "starting-connector", "waiting-health", "verifying", "done"]),
-    failed: z.array(SetupReportFailureSchema).max(12),
-    at: z.string(),
-});
-export type SetupReport = z.infer<typeof SetupReportSchema>;
 
-// The daemon's boot account (POSTed to /sandbox/boot-report); an announce means the daemon started, not that it's
-// reachable.
-//   checking the probe has not concluded yet
-//   reachable its own public address answered
-//   unreachable it did not; `detail` says how
-export const BootReportSchema = z.object({
-    reach: z.enum(["checking", "reachable", "unreachable"]),
-    // Why, for `unreachable`, already in the user's terms; rendered verbatim like a setup failure's problem.
-    detail: z.string().max(2000).optional(),
-    // False means the probe has stopped for good; absent means an older daemon never sent this field.
-    retrying: z.boolean().optional(),
-    // Boot-chain progress; `ready` is the readiness gate, `step` names what's running, absent on an older daemon.
-    boot: z
-        .object({
-            ready: z.boolean(),
-            step: z.string().max(200).optional(),
-            done: z.number().int().nonnegative(),
-            total: z.number().int().nonnegative(),
-        })
-        .optional(),
-    // How much of the machine's time the host reclaimed, to tell a slow boot from the host's own quota.
-    cpu: z.object({ throttledMs: z.number().nonnegative(), throttledPeriods: z.number().int().nonnegative() }).optional(),
-    // Settled, unlike `reach`: a gap here is missing env, and only a setup run closes it.
-    // Absent (older daemon) and empty (nothing missing) are read the same by clients.
-    drift: z
-        .array(
-            z.object({
-                key: z.string().max(64),
-                missing: z.array(z.string().max(64)).max(12),
-                enables: z.string().max(300),
-                lost: z.string().max(2000),
-                repair: z.string().max(500),
-            }),
-        )
-        .max(12)
-        .optional(),
-    at: z.string(),
-});
-export type BootReport = z.infer<typeof BootReportSchema>;
 
-/* WHAT A DAEMON'S ANNOUNCE CARRIES (POST /sandbox/announce, the connect token in `x-intentic-connect`): the address it
- * answers on, its version, and, from a daemon new enough (2026-10-05), which copy of the sandbox it is. `instance` is
- * minted once per container start (the front's INTENTIC_INSTANCE, else once per daemon process), `host` is the
- * machine's own name (HOST_LABEL) and `os` the side it runs on (HOST_ENV, else HOST_PLATFORM). Two instances that keep
- * announcing side by side are two containers holding one token, which the owner's summary names (`duplicateCopies`).
- * Every field past `daemonUrl` is optional: an older daemon sends none of them, and the platform reads that as nothing
- * known, never as a refusal. The daemon sends the same body every hour once registered, as its heartbeat. */
-export const AnnounceBodySchema = z.object({
-    daemonUrl: z.string(),
-    version: z.string().max(64).optional(),
-    instance: z.string().min(1).max(80).optional(),
-    host: z.string().max(120).optional(),
-    os: z.string().max(40).optional(),
-});
-export type AnnounceBody = z.infer<typeof AnnounceBodySchema>;
 
 // Two copies of one sandbox seen announcing side by side, on the owner's summary: what each copy named itself as
 // (`rog (windows)`, `rog (linux)`), and since when. The tunnel keeps only one of them at a time, so the other is an
@@ -584,94 +148,6 @@ export type AnnounceBody = z.infer<typeof AnnounceBodySchema>;
 export const DuplicateCopiesSchema = z.object({ hosts: z.array(z.string()), since: z.string() });
 export type DuplicateCopies = z.infer<typeof DuplicateCopiesSchema>;
 
-/* WHAT THE MACHINE A SANDBOX RUNS ON FOUND, for the moments the browser cannot ask the sandbox itself. `ic sandbox fix`
- * writes it: run by the machine agent on its own when a sandbox of its machine stops answering (`agent`), by the command
- * the recovery panel hands out (`command`), or by the desktop app (`app`). The platform keeps only the latest one per
- * sandbox, and only for a sandbox on someone's own machine: a hosted one has `hostedStatus`. */
-
-// The links of the chain `ic` checks, in the order it checks them. Strings on the wire, so a check a later `ic` adds
-// never fails an older editor's parse; the editor has words of its own for these and prints `label` for any other.
-export const HOST_CHECKS = [
-    "prerequisites",
-    "docker-app",
-    "docker",
-    "wsl",
-    "disk",
-    "container",
-    "daemon",
-    "registration",
-    "network",
-    "tunnel",
-    "agent",
-] as const;
-export type HostCheckId = (typeof HOST_CHECKS)[number];
-
-export const HostCheckSchema = z.object({
-    id: z.string().max(40),
-    // The check's name as `ic` prints it.
-    label: z.string().max(120),
-    state: z.enum(["ok", "warn", "fail", "fixing", "skip"]),
-    // On warn/fail only: what is wrong and what closes it, already in the user's terms and rendered verbatim, like a
-    // setup failure's.
-    problem: z.string().max(2000).optional(),
-    remedy: z.string().max(2000).optional(),
-    // Who can close it. `auto`: `ic` does, now or on its next pass. `consent`: `ic` can once someone says yes, which the
-    // handed-out command asks in its terminal. `you`: only a person can (a firmware switch, a dialog in Docker Desktop,
-    // disk space only they can free).
-    fix: z.enum(["auto", "consent", "you"]).optional(),
-});
-export type HostCheck = z.infer<typeof HostCheckSchema>;
-
-// What `ic` sends; the platform stamps `at` on receipt.
-export const HostReportInputSchema = z.object({
-    source: z.enum(["agent", "command", "app"]),
-    // The machine's own name, as the sandbox's device card calls it (`HOST_LABEL`), and the OS `ic` ran on there.
-    machine: z.string().max(120),
-    os: z.enum(["windows", "linux", "macos", "wsl"]),
-    // checking → fixing → asking (a command waits on a yes in its terminal) → done.
-    stage: z.enum(["checking", "fixing", "asking", "done"]),
-    // While fixing, what it is doing ("Starting Docker Desktop"); while asking, the question it is waiting on.
-    doing: z.string().max(300).optional(),
-    // On `done` only. healthy: nothing on this machine was wrong. fixed: something was and is not now. needs-you: a
-    // `you` check, or a `consent` one nobody agreed to, is left. failed: a fix was tried and did not take.
-    outcome: z.enum(["healthy", "fixed", "needs-you", "failed"]).optional(),
-    checks: z.array(HostCheckSchema).max(24),
-    // (2026-10-05) Which environment on the machine ran it, when one machine has several (a WSL distro's name beside
-    // `windows`). With `machine` and `os` it names the reporter: the platform keeps the newest report of each, so a
-    // Windows agent and a WSL agent no longer overwrite each other. Absent from an older `ic`.
-    env: z.string().max(80).optional(),
-    // (2026-10-05) What the machine's own upkeep found, fixed and left last time it ran: leftovers of deleted sandboxes,
-    // retired agent generations and the like, counted by kind. Absent from an `ic` that has no upkeep pass.
-    upkeep: z
-        .object({
-            found: z.number().int().nonnegative(),
-            fixed: z.number().int().nonnegative(),
-            skipped: z.number().int().nonnegative(),
-            kinds: z.record(z.string().max(40), z.number().int().nonnegative()).optional(),
-            // The machine agent that ran the pass, so the platform can tell which release left machines unconverged.
-            agentVersion: z.string().max(40).optional(),
-        })
-        .optional(),
-});
-export type HostReportInput = z.infer<typeof HostReportInputSchema>;
-
-export const HostReportSchema = HostReportInputSchema.extend({ at: z.string() });
-export type HostReport = z.infer<typeof HostReportSchema>;
-
-// `POST /host-report`, bearer the sandbox's report key: `sandbox` is its tunnel id, the hex its hostname carries.
-export const HostReportPostSchema = z.object({ sandbox: z.string().regex(/^[0-9a-f]{12}$/), report: HostReportInputSchema });
-export type HostReportPost = z.infer<typeof HostReportPostSchema>;
-
-// `POST /host-report/claim`: a live fix code buys the sandbox it was minted for and that sandbox's report key, which
-// `ic` keeps in its channel record so later runs (the machine agent's among them) can report with no code at all.
-export const HostReportClaimSchema = z.object({ code: z.string().min(1).max(64) });
-export const HostReportClaimedSchema = z.object({ sandbox: z.string(), key: z.string() });
-export type HostReportClaimed = z.infer<typeof HostReportClaimedSchema>;
-
-// The report key is HMAC-SHA256 over this label, keyed with the sandbox's connect token, in lowercase hex: `ic` derives
-// it wherever it can read the container's env, the platform wherever it can decrypt the token, and it grants nothing
-// but the one write above.
-export const HOST_REPORT_KEY_LABEL = "intentic/host-report/v1";
 
 // A short-lived code the recovery panel puts in the command it hands out, so the run can report back to the page that
 // asked for it without a credential in the shell's history. Owner-only, own-machine sandboxes only.
@@ -779,14 +255,15 @@ export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 // A platform with none mints no codes; the wizard must say so before drawing the pasted-command lane.
 export const AddressOfferSchema = z.object({ enabled: z.boolean() });
 
-// A short-lived signed claim spent on a hosted daemon; the platform sign-in is the only one needed.
-// Minted only for the owner on a platform-run machine; elsewhere it 404s and the browser falls back to Google.
-export const OwnerTicketSchema = z.object({
+// A short-lived signed claim spent on a hosted daemon; the platform sign-in is the only one needed. Minted only for the
+// owner on a platform-run machine; elsewhere it 404s and the browser falls back to Google. The minted ticket as the
+// browser carries it, where sandbox-contract's `OwnerTicket` is the claim a daemon decodes from it.
+export const MintedOwnerTicketSchema = z.object({
     ticket: z.string(),
     // ISO, the moment the ticket stops verifying; the browser spends it at once and never stores it.
     expiresAt: z.string(),
 });
-export type OwnerTicket = z.infer<typeof OwnerTicketSchema>;
+export type MintedOwnerTicket = z.infer<typeof MintedOwnerTicketSchema>;
 export type AddressOffer = z.infer<typeof AddressOfferSchema>;
 
 // What the registry holds of a sandbox named by its 12-hex id (the `sandboxId` its daemon's /health reports), for the
@@ -811,14 +288,6 @@ export const AdoptionTicketSchema = z.object({
 });
 export type AdoptionTicket = z.infer<typeof AdoptionTicketSchema>;
 
-// Which database the platform is reading (GET /api/identity): random per database, so a different one means the
-// registry is not the one a browser or a daemon last spoke to, however healthy it looks.
-export const PlatformIdentitySchema = z.object({
-    identity: z.string(),
-    // ISO, when this database was given its identity.
-    since: z.string(),
-});
-export type PlatformIdentityAnswer = z.infer<typeof PlatformIdentitySchema>;
 
 export const SandboxSummarySchema = z.object({
     id: z.string(),
@@ -968,16 +437,6 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
 
-// What a machine redeeming a setup code may say about itself (POST /setup/claim, form fields beside `code`), from an
-// `ic` new enough (2026-10-05): its name (HOST_LABEL's value), the side it runs on, and its own run id. The first claim
-// that names a machine is kept, and a second one naming a DIFFERENT machine is refused while the code lives: one pasted
-// command must not start two copies of the same sandbox. A claim that names nothing is never refused for it.
-export const SetupClaimerSchema = z.object({
-    host: z.string().max(120).optional(),
-    os: z.string().max(40).optional(),
-    instance: z.string().max(80).optional(),
-});
-export type SetupClaimer = z.infer<typeof SetupClaimerSchema>;
 
 // A "view" is a projection of the desired-state graph plus reconciliation drift.
 // Read through the sandbox's own git routes (desired-state.json + status.json); it stays the source of truth.

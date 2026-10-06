@@ -1,3 +1,43 @@
+// The intent the SDK records and the capabilities it needs (`intent/`), formerly `@intentic/need-resolver`.
+export type {
+    AppTeamGrantInput,
+    BackupInput,
+    BackupRetention,
+    CloudflareInput,
+    DiscordInput,
+    EnvironmentInput,
+    ForgejoRole,
+    GitHubInput,
+    GitLabInput,
+    HostInput,
+    KomodoRole,
+    ServiceInput,
+    ServiceKind,
+    StripeInput,
+    TeamInput,
+    UpdatePolicy,
+    UserInput,
+} from "./intent/inputs.js";
+export type {
+    AppBindingInput,
+    AppIntent,
+    BackingCapability,
+    BackingIntent,
+    BackupIntent,
+    CloudflareIntent,
+    DiscordIntent,
+    GitHubIntent,
+    GitLabIntent,
+    HostIntent,
+    IntentSet,
+    ServiceIntent,
+    StripeIntent,
+    TeamIntent,
+    UserIntent,
+    WorkspaceIntent,
+} from "./intent/intent.js";
+export type { Capability, Need, Plane } from "./intent/needs.js";
+export { controlPlaneHostId, needKey, resolveNeeds } from "./intent/needs.js";
 export type { Assignment } from "./emit/emit.js";
 export { emit } from "./emit/emit.js";
 export type { Catalog, Option } from "./lib/catalog.js";

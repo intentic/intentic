@@ -30,7 +30,7 @@ test("a signal handed the boot's facts writes them with every count", async () =
     const dir = await mkdtemp(join(tmpdir(), "work-signal-"));
     const path = join(dir, "work.json");
     const signal = startWorkSignal({
-        conversations: { liveSessionIds: () => [] },
+        working: () => 0,
         events: quietEvents,
         logger: quietLogger,
         boot: async () => ({ bootedAt: 700, bootsInWindow: 1, storm: false }),
@@ -52,7 +52,7 @@ test("it says how many turns run, and says it again when the count changes", asy
     let live: string[] = ["a", "b"];
     let clock = 1_000;
     const signal = startWorkSignal({
-        conversations: { liveSessionIds: () => live },
+        working: () => live.length,
         events: quietEvents,
         logger: quietLogger,
         path,
@@ -76,7 +76,7 @@ test("an unchanged count is rewritten only once its stamp is a minute old, so `a
     const path = join(dir, "work.json");
     let clock = 1_000;
     const signal = startWorkSignal({
-        conversations: { liveSessionIds: () => ["a"] },
+        working: () => 1,
         events: quietEvents,
         logger: quietLogger,
         path,
@@ -99,7 +99,7 @@ test("an unchanged count is rewritten only once its stamp is a minute old, so `a
 test("a daemon with nowhere to write says so once, and keeps running", async () => {
     const warnings: unknown[] = [];
     const signal = startWorkSignal({
-        conversations: { liveSessionIds: () => [] },
+        working: () => 0,
         events: quietEvents,
         logger: { warn: (...args: unknown[]) => void warnings.push(args) },
         path: "/proc/no-such-dir/work.json",
@@ -112,4 +112,33 @@ test("a daemon with nowhere to write says so once, and keeps running", async () 
     await signal.tick();
     signal.stop();
     expect(warnings).toHaveLength(1);
+});
+
+// Writes are chained so a stale count never lands after a fresher one; a tick that threw must not leave that chain
+// rejected, or the host would read the last count before it forever.
+test("a tick that throws loses only itself: the next one still writes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "work-signal-"));
+    const path = join(dir, "work.json");
+    let asked = 0;
+    const signal = startWorkSignal({
+        working: () => {
+            asked += 1;
+            if (asked === 2) {
+                throw new Error("registry mid-swap");
+            }
+            return asked === 1 ? 1 : 2;
+        },
+        events: quietEvents,
+        logger: quietLogger,
+        path,
+        now: () => 1_000,
+    });
+    try {
+        await expect(signal.tick()).rejects.toThrow("registry mid-swap");
+        await signal.tick();
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ liveTurns: 2, at: 1_000 });
+    } finally {
+        signal.stop();
+        await rm(dir, { recursive: true, force: true });
+    }
 });

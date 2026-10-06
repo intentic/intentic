@@ -1,7 +1,7 @@
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, nextTick, type Ref, watch } from "vue";
-import { commandShortcut } from "../../../../shell/commands/useCommands";
+import { commandShortcut } from "../../../../workbench/commands/useCommands";
 
 // Which pane the keyboard is in, and where the caret goes: working in a pane raises it as the focused one, only the
 // focused pane's close button teaches the shortcut, and the caret lands in the composer when the shell asks for it (a

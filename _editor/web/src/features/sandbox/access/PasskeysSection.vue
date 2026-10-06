@@ -3,8 +3,8 @@ import type { PasskeySummary } from "@intentic/sandbox-contract";
 import { Button, Code, Notice, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { useAuth } from "../../auth/useAuth";
-import { useSandbox } from "../client/useSandbox";
+import { useAuth } from "../../../client/auth/useAuth";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { usePasskeys } from "./usePasskeys";
 import { useT } from "@intentic/ui/i18n";
 

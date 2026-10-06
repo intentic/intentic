@@ -4,7 +4,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { uiLength } from "../../../shell/window/uiScale";
+import { uiLength } from "../../../workbench/window/uiScale";
 import * as actualUi from "@intentic/ui";
 
 // The only stand-in: the form factor, which the kit reads off matchMedia (desktop under jsdom) and this suite needs
@@ -16,7 +16,7 @@ jest.mock("@intentic/ui", () => ({
 }));
 
 const { default: AgentReviewOutline } = await import("./AgentReviewOutline.vue");
-const { useLayout } = await import("../../../shell/window/useLayout");
+const { useLayout } = await import("../../../workbench/window/useLayout");
 
 let app: App | undefined;
 

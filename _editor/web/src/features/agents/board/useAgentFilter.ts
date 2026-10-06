@@ -1,11 +1,12 @@
 import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { computed, onScopeDispose, ref, watch } from "vue";
+import { boolPreference } from "@intentic/ui/preference";
 import type { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
 import type { ChatSession } from "../../chat/run/useChat-sessions";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { handleOf, type IdMatch, idMatchOf } from "./idMatch";
@@ -95,25 +96,9 @@ const cardKey = (agent: FleetAgent): string => `${agent.sandboxId ?? ``}/${agent
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
 
-// The case rule, shared by every filter field and remembered across reloads: written through on change so the ref is
-// the preference and no caller has to save it.
-const CASE_KEY = `ui-fleet-filter-case`;
-const readStoredCase = (): boolean => {
-    try {
-        return localStorage.getItem(CASE_KEY) === `1`;
-    } catch {
-        return false;
-    }
-};
-// allow(module-state): a preference persisted per browser, the same whichever sandbox is open
-const matchCase = ref(readStoredCase());
-watch(matchCase, (value) => {
-    try {
-        localStorage.setItem(CASE_KEY, value ? `1` : `0`);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
-});
+// The case rule, shared by every filter field and remembered across reloads and windows: the ref is the preference, so
+// no caller has to save it.
+const matchCase = boolPreference(`ui-fleet-filter-case`);
 
 export function useAgentFilter() {
     const { reachable } = useSandbox();

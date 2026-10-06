@@ -2,13 +2,13 @@
 import { Button, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref, watch } from "vue";
-import { usePushNotifications } from "../../push/usePushNotifications";
-import { type Chime, playChime } from "../../shell/browser-tab/chimes";
+import { usePushNotifications } from "../../workbench/push/usePushNotifications";
+import { type Chime, playChime } from "../../workbench/browser-tab/chimes";
 import { sendTestNotice } from "../../shell/browser-tab/desktopSignal";
-import { chimeAsks, chimeFinished, noticeAsks, noticeFinished, tabStatus } from "../../shell/browser-tab/tabPreferences";
+import { chimeAsks, chimeFinished, noticeAsks, noticeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
 import { desktopVersion } from "../../app/environments/desktop";
 import { askDesktopNoticeSetting, desktopNotices, desktopNoticeSetting } from "../../app/environments/desktopNotices";
-import { readerHere } from "../../shell/browser-tab/readerHere";
+import { readerHere } from "../../workbench/browser-tab/readerHere";
 import { pushUnsupportedReason } from "./pushAdvice";
 import { useT } from "@intentic/ui/i18n";
 

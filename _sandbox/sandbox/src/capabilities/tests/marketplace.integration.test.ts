@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { REGISTRY_FACTS_FILE, REGISTRY_FILE } from "@intentic/registry";
-import { gitClone } from "@intentic/scaffold";
+import { gitClone } from "@intentic/base/git";
 import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { browseMarketplace } from "../marketplace.js";

@@ -1,0 +1,83 @@
+{
+    "name": "@intentic/ocr",
+    "version": "0.0.0",
+    "description": "ocr, the text on an image read on this machine by PaddleOCR PP-OCRv6 in onnxruntime-node: the privacy shield's reader and the sandbox's `ocr` command",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/ocr"
+    },
+    "bin": {
+        "ocr": "./dist/cli.js"
+    },
+    "exports": {
+        "./models": {
+            "types": "./dist/models.d.ts",
+            "import": {
+                "@intentic/src": "./src/models.ts",
+                "default": "./dist/models.js"
+            },
+            "require": {
+                "@intentic/src": "./src/models.ts",
+                "default": "./dist/models.js"
+            }
+        },
+        "./paddle-ocr": {
+            "types": "./dist/paddle-ocr.d.ts",
+            "import": {
+                "@intentic/src": "./src/paddle-ocr.ts",
+                "default": "./dist/paddle-ocr.js"
+            },
+            "require": {
+                "@intentic/src": "./src/paddle-ocr.ts",
+                "default": "./dist/paddle-ocr.js"
+            }
+        },
+        "./raster": {
+            "types": "./dist/raster.d.ts",
+            "import": {
+                "@intentic/src": "./src/raster.ts",
+                "default": "./dist/raster.js"
+            },
+            "require": {
+                "@intentic/src": "./src/raster.ts",
+                "default": "./dist/raster.js"
+            }
+        },
+        "./geometry": {
+            "types": "./dist/geometry.d.ts",
+            "import": {
+                "@intentic/src": "./src/geometry.ts",
+                "default": "./dist/geometry.js"
+            },
+            "require": {
+                "@intentic/src": "./src/geometry.ts",
+                "default": "./dist/geometry.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "onnxruntime-node": "catalog:",
+        "sharp": "catalog:",
+        "tslib": "catalog:",
+        "yaml": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

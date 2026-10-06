@@ -9,7 +9,10 @@ const opened = jest.fn((_session: string) => undefined);
 // The overlay's placement is the kit's own suite; here only whether its contents are drawn.
 jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
+    // The kit's real formatters, from the subpath this mock does not replace: the rows word their times through them.
+    const { formatElapsed } = await import("@intentic/ui/format");
     return {
+        formatElapsed,
         AnchoredOverlay: vue.defineComponent({
             props: { modelValue: { type: Boolean, required: true } },
             setup:

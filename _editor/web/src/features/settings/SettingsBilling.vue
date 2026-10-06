@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
 import { hostedShapeLine } from "@intentic/constants";
-import { Button, Notice, RowGroup, RowNote, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { Button, formatElapsed, Notice, RowGroup, RowNote, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { messageOr, usePoll } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import HostedHoursMeter from "./hosted-plan/HostedHoursMeter.vue";
 import HostedPlanOffer from "./hosted-plan/HostedPlanOffer.vue";
-import { formatDay, formatMinutes, hoursMeter, machineHours, RECOVERABLE } from "./hosted-plan/hostedHours";
+import { formatDay, hoursMeter, machineHours, RECOVERABLE } from "./hosted-plan/hostedHours";
 import { hasReturned, subscribeLabel, useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { apiClient } from "../../lib/useApi";
 import { desktopVersion } from "../../app/environments/desktop";
@@ -31,7 +31,7 @@ const { state: plan, error, refetch, setSlots, slotsWorking, changeTier, moving,
 const working = ref(false);
 const actionError = ref<string | undefined>(undefined);
 
-const loadError = computed(() => (error.value === null ? undefined : errorMessage(error.value, `Couldn't load the plan state.`)));
+const loadError = computed(() => (error.value === null ? undefined : messageOr(error.value, `Couldn't load the plan state.`)));
 
 const outline = useLoadingReveal(
     computed(() => plan.value === undefined && error.value === null),
@@ -42,7 +42,6 @@ const outline = useLoadingReveal(
 // instead of asking for a reload, and gives up after a bounded wait.
 const route = useRoute();
 const justJoined = computed(() => route.query[`plan`] === `welcome`);
-const waiting = ref(false);
 
 // The app has no browser of its own: a navigation to Stripe is intercepted and handed to the reader's real browser
 // (desktop-app `windows.rs`), so this window stays on this page. Nothing else would ever clear the press or re-read
@@ -66,40 +65,27 @@ const planMark = (state: HostedPlanState | undefined): string =>
 
 // What the plan said when the errand left for the browser; the errand is over when the answer differs.
 let leftWith = ``;
-let poll: ReturnType<typeof setInterval> | undefined;
-let waitUntil = 0;
-
-const stopWaiting = (): void => {
-    if (poll !== undefined) {
-        clearInterval(poll);
-        poll = undefined;
-    }
-    waiting.value = false;
-};
 
 // A redirect back is answered by the plan going live; an errand still out in the browser, by the answer changing at
 // all — a cancellation and a new card are the same round trip as a payment, and neither turns `onPlan` on.
 const landed = (): boolean => (away.value === undefined ? plan.value?.onPlan === true : planMark(plan.value) !== leftWith);
 
-const waitForPlan = (forMs: number): void => {
-    waitUntil = Math.max(waitUntil, Date.now() + forMs);
-    if (poll !== undefined) {
-        return;
-    }
-    waiting.value = true;
-    const tick = (): void => {
-        void refetch().then(() => {
-            if (landed()) {
-                away.value = undefined;
-                stopWaiting();
-            } else if (Date.now() > waitUntil) {
-                stopWaiting();
-            }
-        });
-    };
-    poll = setInterval(tick, POLL_EVERY_MS);
-    tick();
-};
+// Re-reads the plan until it has moved or the wait runs out; a later errand only moves the deadline out.
+const {
+    polling: waiting,
+    start: waitForPlan,
+    stop: stopWaiting,
+} = usePoll({
+    everyMs: POLL_EVERY_MS,
+    check: async () => {
+        await refetch();
+        if (!landed()) {
+            return false;
+        }
+        away.value = undefined;
+        return true;
+    },
+});
 
 // Coming back to this window is the only thing the app hears about an errand it handed to the browser, so the return
 // re-reads the plan and keeps re-reading for the webhook's few seconds.
@@ -110,7 +96,6 @@ const onFocus = (): void => {
 };
 
 onUnmounted(() => {
-    stopWaiting();
     window.removeEventListener(`focus`, onFocus);
 });
 
@@ -158,7 +143,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
             waitForPlan(BROWSER_WAIT_MS);
         }
     } catch (err) {
-        actionError.value = errorMessage(err, `Couldn't open the payment page.`);
+        actionError.value = messageOr(err, `Couldn't open the payment page.`);
         working.value = false;
     }
 };
@@ -194,7 +179,7 @@ const freeHoursNote = computed(() => {
     }
     return meter.remainingMinutes === 0
         ? t(`settings.settingsBilling.freeHoursSpentEmpty`, { resetsOn: formatDay(meter.resetsAt) })
-        : t(`settings.settingsBilling.freeHoursLeftEmpty`, { left: formatMinutes(meter.remainingMinutes), allowance: formatMinutes(meter.allowanceMinutes) });
+        : t(`settings.settingsBilling.freeHoursLeftEmpty`, { left: formatElapsed(meter.remainingMinutes * 60, { largest: `hours` }), allowance: formatElapsed(meter.allowanceMinutes * 60, { largest: `hours` }) });
 });
 
 // A machine's standing this minute, off the row's own stamp: no provider call, honest about what it knows.
@@ -228,7 +213,7 @@ const changeSlots = async (tier: string, quantity: number): Promise<void> => {
     try {
         await setSlots(tier, quantity);
     } catch (err) {
-        slotsError.value = errorMessage(err, `Couldn't change the plan.`);
+        slotsError.value = messageOr(err, `Couldn't change the plan.`);
     }
 };
 
@@ -245,7 +230,7 @@ const moveTo = async (sandboxId: string, tier: string): Promise<void> => {
             moveError.value = migration.error ?? `The machine was put back as it was.`;
         }
     } catch (err) {
-        moveError.value = errorMessage(err, `Couldn't move this sandbox.`);
+        moveError.value = messageOr(err, `Couldn't move this sandbox.`);
     }
 };
 

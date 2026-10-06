@@ -1,4 +1,4 @@
-import type { AgentChangesResponse } from "@intentic/api-contract";
+import type { AgentChanges } from "@intentic/sandbox-contract";
 import { router } from "../..";
 import { agentChangesKey, agentFileDiffQuery, fetchAgentChanges } from "../../../features/agents/review/useAgentChanges";
 import { unregistered } from "../../../features/agents/fleet/agentStatus";
@@ -32,7 +32,7 @@ const wishesFor = (agent: FleetAgent, focused: boolean): readonly WarmTask[] => 
 // Rows for a review whose list is already in hand, warmed the beat after it lands. A card with no
 // changes contributes nothing. Which reviews to warm is reviewsToRead's job.
 const reviewRowWishes = ({ agentId, band, rows }: ReviewToRead): readonly WarmTask[] => {
-    const held = queryClient.getQueryData<AgentChangesResponse>(agentChangesKey(agentId));
+    const held = queryClient.getQueryData<AgentChanges>(agentChangesKey(agentId));
     return (held?.repos ?? [])
         .flatMap((group) => group.changes.map((change) => ({ repo: group.repo, path: change.path })))
         .slice(0, rows)

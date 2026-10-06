@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
-import { gitInit } from "@intentic/scaffold";
+import { gitInit } from "@intentic/base/git";
 import type { Services } from "../composition.js";
 import { seedStarterSite, STARTER_BAKED_DIR, workspaceArrivedEmpty } from "./starter-site.js";
 

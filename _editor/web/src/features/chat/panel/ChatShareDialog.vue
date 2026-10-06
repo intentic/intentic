@@ -3,7 +3,7 @@
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

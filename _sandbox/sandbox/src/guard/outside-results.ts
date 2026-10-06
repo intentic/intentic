@@ -1,6 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { classifyCommand, CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
-import { JS_TOOL_NAME } from "../execution/js-tool.js";
+import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 
 // Wraps tool results that pull outside content into the turn mid-run, the counterpart to automations/scheduler.ts's

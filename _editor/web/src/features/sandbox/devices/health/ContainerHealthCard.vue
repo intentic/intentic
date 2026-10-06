@@ -6,8 +6,8 @@ import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
 import { containerNotices } from "../../overview/containerHealth";
 import { manageDeviceSandbox, useDevices, useHostRunning } from "../useDevices";
-import { useSandbox } from "../../client/useSandbox";
-import { useRole } from "../../secrets/useRole";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { useRole } from "../../../../client/sandbox/useRole";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 

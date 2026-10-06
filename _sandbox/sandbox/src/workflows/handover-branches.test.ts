@@ -1,5 +1,5 @@
 import type { RepoBase } from "@intentic/sandbox-contract";
-import type { GitRunner } from "@intentic/scaffold";
+import type { GitRunner } from "@intentic/base/git";
 import { resolvedBranches } from "./handover-branches.js";
 
 // A handover must not name a branch it has not resolved. Stubbed, not real git, since only two answers matter (a ref

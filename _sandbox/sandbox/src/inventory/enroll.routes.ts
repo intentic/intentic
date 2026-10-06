@@ -1,4 +1,4 @@
-import { type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
+import { CONNECT_TOKEN_HEADER, type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
 import { ManagedRegionError } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
@@ -13,7 +13,7 @@ import { enrollHost } from "./enroll-host.js";
 export const createEnrollRoute =
     (services: Services) =>
     async (c: Context<AppEnv>): Promise<Response> => {
-        if (services.auth !== undefined && !tokenEquals(c.req.header("x-intentic-connect") ?? "", services.config.connectToken)) {
+        if (services.auth !== undefined && !tokenEquals(c.req.header(CONNECT_TOKEN_HEADER) ?? "", services.config.connectToken)) {
             return c.json({ error: "unauthorized" }, 401);
         }
         let input: EnrollHostInput;

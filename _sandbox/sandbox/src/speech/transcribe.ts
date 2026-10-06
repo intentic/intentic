@@ -1,4 +1,5 @@
 import { availableParallelism } from "node:os";
+import { serialLock } from "@intentic/base/async";
 import { pathExists } from "@intentic/base/fs";
 import { runWhisper, storeWhisperModel, type WhisperExec, whisperCliMissing } from "@intentic/base/whisper";
 import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
@@ -88,12 +89,7 @@ export const createSpeech = ({ workspaceRoot, log, exec, fetchModel }: SpeechDep
         });
 
     // One whisper-cli run at a time: transcription is CPU-bound and the sandbox is small; utterances queue.
-    let queue: Promise<unknown> = Promise.resolve();
-    const serialize = <T>(job: () => Promise<T>): Promise<T> => {
-        const next = queue.then(job, job);
-        queue = next.catch(() => {});
-        return next;
-    };
+    const serialize = serialLock();
 
     return {
         status: async () => {

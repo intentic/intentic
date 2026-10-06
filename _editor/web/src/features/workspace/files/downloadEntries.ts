@@ -1,9 +1,9 @@
 import { basename } from "@intentic/ui/path";
-import { sandboxBlob } from "../../sandbox/client/sandboxClient";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
-import { useEndpoint } from "../../sandbox/secrets/useEndpoint";
-import { scopeQuery, type ViewScope, workspaceScope } from "../health/workspaceScope";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import { useEndpoint } from "../../../client/endpoint/useEndpoint";
+import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
 import { mediaUrl } from "./mediaUrl";
 
 // Saves workspace entries onto this computer through the browser's own download manager, which streams them to disk:

@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import { receivePreferenceChange } from "@intentic/ui/preference";
 import { DEFAULT_HEIGHT, MIN_HEIGHT, usePanelHeight } from "./usePanelHeight";
 
 // Pins the panel's height: the default until one is remembered, a remembered one clamped to the floor and to 80% of
@@ -30,5 +31,12 @@ describe(`the panel's height`, () => {
             null,
         ]);
         expect(panel.maxHeight.value).toBe(Math.round(window.innerHeight * 0.8));
+    });
+
+    // It was written straight to storage, so a popped-out window kept the height it opened with.
+    it(`follows a height dragged in another window`, () => {
+        const panel = usePanelHeight(`dock`);
+        receivePreferenceChange({ key: `ui-dock-terminal-height`, raw: `180` });
+        expect(panel.height.value).toBe(180);
     });
 });

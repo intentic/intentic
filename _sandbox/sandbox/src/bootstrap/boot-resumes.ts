@@ -1,4 +1,4 @@
-import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
+import { fileRestartResume } from "../system/restart-resume.js";
 import { settleRestartPauses } from "../agent/subagents/paused-children.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";

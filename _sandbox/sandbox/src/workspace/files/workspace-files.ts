@@ -4,6 +4,9 @@ import { dirname } from "node:path";
 import { openWorkspaceFileRange } from "./workspace-files-download.js";
 import { errnoCode, isMissing } from "@intentic/base/errors";
 import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
+import { isUtf8, trimUtf8Window } from "@intentic/base/utf8-text";
+import type { WorkspaceFilePresentSchema } from "@intentic/sandbox-contract";
+import type { z } from "zod";
 
 // A workspace file's text whole, for callers that bound their own read size; undefined only when missing or a
 // directory, and any other failure throws, so a read-modify-write never replaces content it could not read.
@@ -21,55 +24,12 @@ export const readWorkspaceFile = async (absPath: string): Promise<string | undef
 // Bounds a single text read/window so neither daemon nor browser holds an entire file as a string.
 export const MAX_TEXT_BYTES = 4 * 1024 * 1024;
 
-// A slice of a file's text plus its position: size is the whole file, offset/bytes the byte range this text decodes.
-// Byte counts, not string length (they differ on non-ASCII); more remains when offset > 0 or offset + bytes < size.
-export interface WorkspaceFileWindow {
-    readonly content: string;
-    readonly size: number;
-    readonly offset: number;
-    readonly bytes: number;
-    // Not UTF-8 (a UTF-16 file behind its BOM): the editor shows it read-only, since a save would write UTF-8.
-    readonly lossy?: true;
-}
-
-// A utf8 continuation byte (0b10xxxxxx): the middle of a character, never a cut point.
-const isContinuation = (byte: number): boolean => (byte & 0b1100_0000) === 0b1000_0000;
-
-// Bytes in a character from its lead byte: 4 for 0b11110xxx, 3 for 0b1110xxxx, 2 for 0b110xxxxx, else 1.
-const sequenceLength = (byte: number): number => (byte >= 0b1111_0000 ? 4 : byte >= 0b1110_0000 ? 3 : byte >= 0b1100_0000 ? 2 : 1);
-
-// Trims a byte window to a clean decode: no partial character or line at a non-file boundary (atStart/atEnd mark real
-// file ends).
-// A window with no newline (one long line) keeps its bytes; there's no line boundary to snap to.
-const trimToBoundaries = (buffer: Buffer, atStart: boolean, atEnd: boolean): { start: number; end: number } => {
-    let start = 0;
-    let end = buffer.length;
-    if (!atStart) {
-        // Enter on a character boundary, then skip past the partial line the window opened in.
-        while (start < end && isContinuation(buffer[start] ?? 0)) {
-            start += 1;
-        }
-        const newline = buffer.indexOf(0x0a, start);
-        if (newline !== -1) {
-            start = newline + 1;
-        }
-    }
-    if (!atEnd) {
-        const newline = buffer.lastIndexOf(0x0a, end - 1);
-        if (newline !== -1 && newline >= start) {
-            return { start, end: newline + 1 };
-        }
-        // No line boundary to cut on; walk back to the cut character's lead byte and keep it only if it's whole.
-        let lead = end - 1;
-        while (lead > start && isContinuation(buffer[lead] ?? 0)) {
-            lead -= 1;
-        }
-        if (end - lead < sequenceLength(buffer[lead] ?? 0)) {
-            end = lead;
-        }
-    }
-    return { start, end };
-};
+// A slice of a file's text plus its position, the contract's window without the route's own fields (`present`, `path`,
+// `shared`): size is the whole file, offset/bytes the byte range this text decodes. Byte counts, not string length (they
+// differ on non-ASCII); more remains when offset > 0 or offset + bytes < size. `lossy` marks text that is not UTF-8 (a
+// UTF-16 file behind its BOM, or bytes that do not decode as UTF-8), which the editor shows read-only, since a save
+// would write UTF-8, with U+FFFD where bytes failed to decode.
+export type WorkspaceFileWindow = Pick<z.infer<typeof WorkspaceFilePresentSchema>, "content" | "size" | "offset" | "bytes" | "lossy">;
 
 // Reads a window of a workspace file's text; undefined when missing. Path is already contained by resolveWithin.
 // A negative offset reads the file's tail (for following a growing log); limit is clamped to MAX_TEXT_BYTES regardless
@@ -97,8 +57,11 @@ export const readWorkspaceFileWindow = async (absPath: string, offset = 0, limit
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, from - probe);
         const slice = buffer.subarray(probe, bytesRead);
         const atStart = probe === 0 || buffer[0] === 0x0a;
-        const { start, end } = trimToBoundaries(slice, atStart, from + slice.length >= size);
-        return { content: slice.toString("utf8", start, end), size, offset: from + start, bytes: end - start };
+        const { start, end } = trimUtf8Window(slice, atStart, from + slice.length >= size);
+        const read = { content: slice.toString("utf8", start, end), size, offset: from + start, bytes: end - start };
+        // Bytes that are not UTF-8 (Latin-1, Windows-1252) decode with U+FFFD in them, and a save would write those over
+        // the file's own bytes: lossy, the desktop folder server's rule too, so the editor opens it read-only.
+        return isUtf8(slice.subarray(start, end)) ? read : { ...read, lossy: true };
     } catch {
         return undefined;
     } finally {

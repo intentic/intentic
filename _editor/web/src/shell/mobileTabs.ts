@@ -3,8 +3,8 @@ import { computed, type ComputedRef } from "vue";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../features/extensions/usePanels";
 import { useInbox } from "../features/needs/inbox/useInbox";
-import { APPROVALS_VIEW_ID, detectActivations } from "../core-views/registry";
-import { parseRoot, type TabRoot } from "./tabRoots";
+import { APPROVALS_VIEW_ID, detectActivations } from "../workbench/views/registry";
+import { parseRoot, type TabRoot } from "../lib/routes/tabRoots";
 
 // The four tab destinations MobileTabBar and ShellMobile both need. Agents and Menu are constants; Chat is the active
 // conversation's own screen (tabRoots.ts); Review is the Needs you inbox when the approvals pack is on, else the

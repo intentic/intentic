@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { SandboxHttpError } from "../client/sandboxHttpError";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 
 // Import chain touches a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
@@ -34,7 +34,7 @@ const state = {
     listFails: undefined as Error | undefined,
 };
 
-jest.mock(`../client/sandboxClient`, () => ({
+jest.mock(`../../../client/sandbox/sandboxClient`, () => ({
     sandboxJson: async (path: string, init?: RequestInit) => {
         state.calls.push({ path, init });
         if (path === `/system/passkeys` && init === undefined) {
@@ -56,7 +56,7 @@ jest.mock(`../client/sandboxClient`, () => ({
         return { ok: true };
     },
 }));
-jest.mock(`../session/passkeySignIn`, () => ({
+jest.mock(`../../../client/session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => state.supported,
     createPasskey: async (options: { challenge: string }) => ({
         id: `new`,
@@ -65,10 +65,10 @@ jest.mock(`../session/passkeySignIn`, () => ({
         response: { clientDataJSON: options.challenge, attestationObject: `AA` },
     }),
 }));
-jest.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<`owner` | `viewer`>(`owner`);
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));
 
 const { default: PasskeysSection } = await import("./PasskeysSection.vue");
 

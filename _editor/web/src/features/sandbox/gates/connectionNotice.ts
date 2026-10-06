@@ -1,6 +1,6 @@
 import { SANDBOX_RECOVERY_DAYS } from "@intentic/api-contract";
 import { DETACHED_AFTER_MS } from "../overview/availability";
-import type { ConnectionFailure } from "../live/connection";
+import type { ConnectionFailure } from "../../../client/sandbox/connection";
 import { RESTART_PATIENCE_MS, type RestartQuiet } from "../live/sandboxRestart";
 import { t } from "@intentic/ui/i18n";
 

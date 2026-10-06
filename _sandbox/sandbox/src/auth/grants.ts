@@ -1,5 +1,5 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { sandboxRouteFor } from "@intentic/sandbox-contract";
+import { EXTENSION_TOKEN_HEADER, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, controlScoped } from "./tokens/control-tokens.js";
 import type { Principal } from "./principal.js";
@@ -60,10 +60,6 @@ const agentReach = (method: string, path: string): boolean => declared(method, p
 // stored credential (`panel: false`); an allowlist here would be fiction. Extension processes hold their own
 // per-extension token instead, never this one.
 const panelReach = (method: string, path: string): boolean => declared(method, path)?.panel !== false;
-
-// The header an extension presents its token in. The same string as EXTENSION_TOKEN_HEADER in the extensions'
-// backend-host-config.ts, restated rather than imported so auth takes no import from extensions (which imports auth).
-const EXTENSION_TOKEN_HEADER = "x-intentic-extension";
 
 // What a per-extension token resolves to: the extension, its manifest's `permissions.daemon`, and the provider its
 // `contributes.listener` names, if any. Minted once per extension for its backend and its processes alike.

@@ -246,3 +246,24 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
     }
     return undefined;
 };
+
+// The hosts each connected capability's connector declares for its credential, expanded over that capability's own
+// settings (a self-hosted instance's URL). A capability whose connector declares none, or whose templates come out empty,
+// has no default. The secrets slice reads it through its `connectorHosts` dep (secrets/host-guards.ts), which
+// composition.ts fills with this.
+export const connectorHostDefaults = async (host: ExtensionHost): Promise<ReadonlyMap<string, readonly string[]>> => {
+    const registry = await contributionRegistry(host);
+    const defaults = new Map<string, readonly string[]>();
+    for (const capability of await host.capabilities.list()) {
+        // Only a cli connector's credential reaches a command as a reference; the other kinds mount instead.
+        if (capability.kind !== "cli") {
+            continue;
+        }
+        const connector = contributionFor(registry, "cli", capability.config);
+        const hosts = connector === undefined ? [] : contributionHosts(connector.spec, capability.config);
+        if (hosts.length > 0) {
+            defaults.set(capability.id, hosts);
+        }
+    }
+    return defaults;
+};

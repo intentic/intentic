@@ -1,8 +1,8 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, effectScope, type EffectScope, onScopeDispose, shallowRef, watch } from "vue";
 import { type AgentStanding, editsRefusal } from "../fleet/agentStatus";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { settingsPagesOf } from "./conflictResolution";
 
 // The Sandbox pages behind a card's refused land, when the refusal is the owner's half and a page wrote every file in

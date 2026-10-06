@@ -37,12 +37,6 @@ export const CHANNEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 // Bound the file. Threads are evicted oldest-touched-first, so an active conversation is never the one dropped.
 const MAX_SESSIONS = 500;
 
-// One thread's key: namespaced by provider (no channel-id collisions), by automation (independent conversations per
-// automation), and by the persona the sender's lane resolved to, so two people a channel answers as different agents
-// never share a conversation or a session (automations/senders.ts). No persona is the bare key.
-export const threadKey = (provider: string, automationId: string, channelId: string, persona?: string): string =>
-    persona === undefined ? `${provider}:${automationId}:${channelId}` : `${provider}:${automationId}:${channelId}:${persona}`;
-
 export interface ThreadSessionsStore {
     // The live record, or undefined if none or past TTL; only the caller's write prunes a stale one.
     readonly get: (key: string, ttlMs: number, now: number) => Promise<ThreadSession | undefined>;

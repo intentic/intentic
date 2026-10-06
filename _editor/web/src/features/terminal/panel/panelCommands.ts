@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import type { Ref } from "vue";
-import type { CommandRegistration } from "../../../shell/commands/useCommands";
+import type { CommandRegistration } from "../../../workbench/commands/useCommands";
 import { showWorkTerminals } from "../useWorkTerminals";
 
 // Every strip action as a command, registered while the strip is mounted. Tab-family chords match the workspace and chat

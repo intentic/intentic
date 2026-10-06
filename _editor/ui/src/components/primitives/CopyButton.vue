@@ -3,7 +3,7 @@
 import Button from "./Button.vue";
 import { computed, ref } from "vue";
 import { useT } from "../../i18n/index.js";
-import { clipboardOf } from "../../lib/clipboard.js";
+import { useCopied } from "../../lib/clipboard.js";
 import { vAction } from "../../lib/pressAction.js";
 import { ui } from "../../lib/ui.js";
 
@@ -28,7 +28,7 @@ const {
 const emit = defineEmits<{ copied: [] }>();
 
 const t = useT();
-const copied = ref(false);
+const { copied, copy: write } = useCopied();
 // The pressed element: a `<Button>` component for the emphasised spellings, a plain element for the
 // quiet one, so `$el` is resolved either way.
 const root = ref<HTMLButtonElement | { $el: HTMLElement }>();
@@ -37,15 +37,18 @@ const rootEl = (): HTMLElement | undefined => (root.value === undefined ? undefi
 // Weight, not geometry: the quiet spelling stays a bare chip, since a copy-as-convenience is not an action.
 const chrome = computed(() => (stretch ? `min-h-10 w-full gap-1.5 px-3 text-sm` : `gap-1.5`));
 
+// Chromium/Firefox allow awaiting a resolver before writeText; Safari's user-gesture rule may refuse it. A refused or
+// unavailable clipboard (insecure context) leaves the text on screen to select.
 const copy = async (): Promise<void> => {
+    let value: string;
     try {
-        // Chromium/Firefox allow awaiting a resolver before writeText; Safari's user-gesture rule may reject it.
-        await clipboardOf(rootEl()).writeText(typeof text === `function` ? await text() : text);
-        copied.value = true;
-        emit(`copied`);
-        setTimeout(() => (copied.value = false), 1500);
+        value = typeof text === `function` ? await text() : text;
     } catch {
-        // Clipboard unavailable (insecure context); the user can still select the text.
+        // allow(silent-catch): a resolver that failed has nothing to copy, and the press acknowledges nothing.
+        return;
+    }
+    if (await write(value, rootEl())) {
+        emit(`copied`);
     }
 };
 </script>

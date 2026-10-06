@@ -1,5 +1,5 @@
 import type * as Monaco from "monaco-editor-core";
-import type { DiffOpen } from "../../../shell/window/useLayout";
+import type { DiffOpen } from "../../../workbench/window/useLayout";
 import { isBlank } from "@intentic/code-read";
 
 // One function per useLayout.diffOpen strategy behind one entry point (landingChange): which hunk a diff opens

@@ -1,9 +1,9 @@
 import { errorMessage } from "@intentic/base/errors";
 import { whisperCliMissing } from "@intentic/base/whisper";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
-import type { Client } from "discord.js";
+import { type Client, REST } from "discord.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
-import { createDiscordListener, deliverToChannel } from "./listener.js";
+import { type ChannelLookup, clientLookup, createDiscordListener, deliverToChannel, restLookup } from "./listener.js";
 import { activeVoiceSession, joinVoice, leaveVoice, stopVoice, voiceStatus } from "./voice.js";
 
 // Discord gateway: a baked extension's autoStart process. Reconciles a discord.js connection per bot token, dispatches
@@ -19,6 +19,23 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
         const listener = createDiscordListener(ctx, subscribed);
         // The voice control surface reads the first connector's config; multi-bot voice is a ponytail.
         let connectors: ReadonlyArray<{ id: string; config: DiscordConnectorConfig }> = [];
+        // One REST handle per bot token, for a delivery while no client is connected (no automation holds one), made
+        // on first use and kept: each carries its own rate-limit buckets.
+        const rests = new Map<string, REST>();
+        const restOf = (token: string): REST => {
+            const existing = rests.get(token) ?? new REST({ version: "10" }).setToken(token);
+            rests.set(token, existing);
+            return existing;
+        };
+        // The connected clients when there are any; else every configured token over REST, so an owner-approved post
+        // reaches Discord without the gateway opening (and then holding) a socket nobody else needs.
+        const deliveringBots = (): ChannelLookup[] => {
+            if (subscribed.size > 0) {
+                return [...subscribed.values()].map(clientLookup);
+            }
+            const tokens = new Set(connectors.map(({ config }) => config.botToken).filter((token) => token !== ""));
+            return [...tokens].map((token) => restLookup(restOf(token)));
+        };
 
         // whisper presence can't change without an image rebuild (which restarts this process), so probe once.
         let whisperReady = false;
@@ -56,9 +73,9 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                 const voice = activeVoiceSession();
                 return { ...(voice !== undefined ? { voice } : {}), whisperReady };
             },
-            // Daemon's outbound door: posts an owner-placed message through whichever connected bot can see the
-            // channel.
-            deliver: (channelId, text) => deliverToChannel(subscribed, channelId, text),
+            // Daemon's outbound door (a conversation's reply between turns, an approved post): posts through whichever
+            // bot can see the channel.
+            deliver: (channelId, text) => deliverToChannel(deliveringBots(), channelId, text),
             // Loopback control surface for the discord-voice CLI; same-container only, so no extra auth beyond that.
             routes: async (req, body) => {
                 const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;

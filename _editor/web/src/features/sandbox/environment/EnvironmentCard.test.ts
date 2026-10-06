@@ -64,7 +64,7 @@ jest.mock(`./useEnvironmentContents`, () => ({
 }));
 // The active sandbox as the platform describes it; `hosted` selects the rebuild executor.
 const active = ref<{ id: string; role: string; hosted?: { region: string; warm: boolean } | null }>({ id: `sb1`, role: `owner` });
-jest.mock(`../client/useSandbox`, () => ({
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
 }));
@@ -73,7 +73,7 @@ jest.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData:
 const sandboxJson = jest.fn(async (..._request: unknown[]): Promise<never> => {
     throw new Error(`the daemon said no`);
 });
-jest.mock(`../client/sandboxClient`, () => ({ sandboxJson: (...request: unknown[]) => sandboxJson(...request) }));
+jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (...request: unknown[]) => sandboxJson(...request) }));
 // Mocked as a module: agentActions reaches the shared query client and chat broadcast singletons, which
 // are out of this suite's subject and fail at import if left real.
 jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }));

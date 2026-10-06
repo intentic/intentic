@@ -16,8 +16,8 @@ import {
 } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
-import { adoptDefinitionSettings } from "../portability/apply-definition.js";
-import { parseDefinitionToml } from "../portability/definition.js";
+import { adoptDefinitionSettings } from "../definition/apply-definition.js";
+import { parseDefinitionToml } from "../definition/definition.js";
 import { gitEnv, pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
 import { createRunnerCommands } from "./runner-command.js";
 import type { RunnerIdentity } from "./runner-identity.js";

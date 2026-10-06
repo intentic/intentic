@@ -2,11 +2,9 @@ import type { EnvironmentContents, EnvironmentItem } from "@intentic/sandbox-con
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { customPath, proposalPath } from "./environment.js";
-import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
-import { listPacks } from "./packs.js";
+import { listPacks } from "../image/packs.js";
 import { privacyPackFragments } from "./privacy-pack.js";
-import { providerPackFragments } from "./provider-packs.js";
 import { probeAll, probeModules, probePackages } from "./version-probe.js";
 
 // What this sandbox has: composed from the same fragment sources composeEnvironment uses, for attribution, plus the
@@ -56,14 +54,14 @@ const capabilityCandidates = async (services: Services): Promise<Candidate[]> =>
     const named = (content: string, fallback: string): OverlayBlock => ({ name: packs.get(sha256Hex(content.trim())) ?? fallback, body: content });
     const candidates: Candidate[] = [];
     for (const capability of await services.capabilities.list()) {
-        for (const fragment of await capabilityFragments(services, capability)) {
+        for (const fragment of await services.environmentSources.capabilityFragments(capability)) {
             candidates.push({ block: named(fragment, capability.id), origin: "capability", originLabel: `${capability.id} capability` });
         }
     }
-    for (const fragment of await workspaceExtensionFragments(services)) {
+    for (const fragment of await services.environmentSources.workspaceExtensionFragments()) {
         candidates.push({ block: named(fragment, "extension"), origin: "capability", originLabel: "workspace extension" });
     }
-    for (const fragment of await providerPackFragments(services)) {
+    for (const fragment of await services.environmentSources.providerPackFragments()) {
         candidates.push({ block: named(fragment, "provider"), origin: "capability", originLabel: "a connected AI account" });
     }
     for (const fragment of await privacyPackFragments(services)) {

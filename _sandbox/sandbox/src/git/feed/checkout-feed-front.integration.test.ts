@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { repoRoot } from "@intentic/constants/node";
-import { observeGitCommands } from "@intentic/scaffold";
+import { observeGitCommands } from "@intentic/base/git";
 import { requires } from "@intentic/testing/requires";
 import { connectFront, type FrontLink } from "../../front/front-link.js";
 import { statusPaths } from "../changes/changes.js";

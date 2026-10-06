@@ -1,7 +1,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { computed, type ComputedRef, shallowRef, watch } from "vue";
-import { onScreen } from "../../../shell/window/onScreen";
-import { useSandbox } from "../client/useSandbox";
+import { onScreen } from "../../../workbench/window/onScreen";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { connectedSandboxes } from "./roster";
 
 // Reads every sandbox but the active one (the fleet board's All-sandboxes scope, the changes ledger) by polling,

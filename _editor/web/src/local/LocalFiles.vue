@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ConfirmDialog, Icon, ui } from "@intentic/ui";
+import { Button, Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref } from "vue";
 import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/local";
@@ -8,15 +8,16 @@ import WorkspaceTree from "../features/workspace/explorer/WorkspaceTree.vue";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { useRootDrop } from "../features/workspace/explorer/transfer/useRootDrop";
 import EditorPane from "../features/workspace/files/EditorPane.vue";
-import { supportsRoute } from "../features/sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../client/sandbox/useDaemonRoutes";
 import { HOISTED_CONTEXT } from "../features/workspace/files/viewerChrome";
 import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearchResults.vue";
 import { matchToggles } from "../features/workspace/search/useSearchOptions";
 import { type SearchScope, useWorkspaceSearch } from "../features/workspace/search/useWorkspaceSearch";
+import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
-import { isApplePlatform } from "../shell/commands/keybindings";
+import { isApplePlatform } from "../workbench/commands/keybindings";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
-import { useQuickOpen } from "../shell/commands/useQuickOpen";
+import { useQuickOpen } from "../workbench/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
 import { useFolderSandbox } from "./folderSandbox";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
@@ -48,11 +49,6 @@ const { activeId, activeTab, openFile, openAtLine, openDirectory, selectTab, kee
 // Every close that would lose unsaved edits asks first, the window's and a tab's alike (useUnsavedGuard.ts): the pane
 // shows a closed tab's edits nowhere else, so a tab holding some closes only once the reader agrees.
 const { question, asking, closeTab, closeAnyway, keepOpen } = useUnsavedGuard();
-// The workspace's own words for the same question.
-const questionHeader = computed(() => {
-    const count = question.value?.paths.length ?? 0;
-    return count === 1 ? t(`workspace.workspaceDesktop.discardUnsavedChanges`) : t(`workspace.workspaceDesktop.discardUnsavedChangesIn`, { count });
-});
 
 // The breadcrumb and the viewer's actions ride the tab row, as they do in the workspace.
 provide(HOISTED_CONTEXT, true);
@@ -364,22 +360,6 @@ onUnmounted(() => {
         <!-- Ctrl/Cmd+P: this folder's files alone, each opened here. -->
         <QuickOpen :open-file="openKept" />
         <!-- A close that would discard unsaved edits, the window's (held back by the app) or a tab's: it happens only on the reader's word. -->
-        <ConfirmDialog
-            :open="asking"
-            :header="questionHeader"
-            :confirm-label="t(`workspace.workspaceDesktop.closeAnyway`)"
-            confirm-icon="times"
-            :items="question?.paths ?? []"
-            @cancel="keepOpen"
-            @confirm="closeAnyway"
-        >
-            <template #item="{ item }">
-                <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
-                <span class="truncate text-content">{{ item }}</span>
-            </template>
-            <p class="mt-3 text-xs text-muted">
-                {{ question?.what === `tab` ? t(`local.localFiles.closingTabDiscardsUnsaved`) : t(`local.localFiles.closingDiscardsUnsaved`) }}
-            </p>
-        </ConfirmDialog>
+        <CloseGuardDialog :open="asking" :question="question" @cancel="keepOpen" @confirm="closeAnyway" />
     </div>
 </template>

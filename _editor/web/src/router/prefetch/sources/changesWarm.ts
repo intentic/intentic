@@ -1,6 +1,6 @@
-import type { GitChangesResponse } from "@intentic/api-contract";
+import type { GitChanges } from "@intentic/sandbox-contract";
 import { router } from "../..";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { queryClient } from "../../../lib/queryPersistence";
 import { changesKey, fetchChanges, fileDiffQuery } from "../../../features/workspace/changes/useChanges";
 import type { WarmBand, WarmTask } from "../warmPlan";
@@ -25,7 +25,7 @@ const band = (): WarmBand => {
 export const changesWarmSource = (): readonly WarmTask[] => {
     // The list shares its rows' band; a list warmed below its rows would never come first.
     const list = warmQuery(`changes:list`, band(), { queryKey: changesKey(), queryFn: fetchChanges });
-    const held = queryClient.getQueryData<GitChangesResponse>(changesKey());
+    const held = queryClient.getQueryData<GitChanges>(changesKey());
     if (held === undefined) {
         // Nothing to walk yet: the list is the only wish until it lands.
         return [list];

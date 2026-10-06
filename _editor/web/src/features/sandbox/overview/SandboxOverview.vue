@@ -13,11 +13,11 @@ import {
     vSkeletonSource,
 } from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "./version/useSandboxVersion";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { sandboxHoursLine } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import { useSandboxOutline } from "./useSandboxOutline";
@@ -26,7 +26,7 @@ import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { useSelfResources } from "../devices/useSelfResources";
-import { useRole } from "../secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
@@ -83,7 +83,7 @@ const applyResize = async (shape: ResourcesForm): Promise<void> => {
     // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the
     // machine actually sent has anything to say.
     await selfResources.apply(shape).catch((error: unknown) => {
-        resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
+        resizeFailed.value = messageOr(error, `That didn't work on this device.`);
     });
 };
 // Saving leaves the sandbox running, so unlike Apply this one answers: the share line picks up "changes on restart".
@@ -91,7 +91,7 @@ const saveResize = async (shape: ResourcesForm | undefined): Promise<void> => {
     resizing.value = false;
     resizeFailed.value = undefined;
     await selfResources.save(shape).catch((error: unknown) => {
-        resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
+        resizeFailed.value = messageOr(error, `That didn't work on this device.`);
     });
 };
 
@@ -156,7 +156,7 @@ const writeLogo = async (image: string | null): Promise<void> => {
     try {
         await sandbox.update(id, { image });
     } catch (err) {
-        logoError.value = errorMessage(err, `Couldn't save the logo.`);
+        logoError.value = messageOr(err, `Couldn't save the logo.`);
     } finally {
         logoBusy.value = false;
     }

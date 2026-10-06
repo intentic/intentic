@@ -12,13 +12,13 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 })();
 
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-jest.mock(`../sandbox/overview/activeSandbox`, () => ({
+jest.mock(`../../lib/activeSandbox`, () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-jest.mock(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: jest.fn() }));
-jest.mock(`../sandbox/client/useSandbox`, () => ({
+jest.mock(`../../client/sandbox/sandboxClient`, () => ({ sandboxJson: jest.fn() }));
+jest.mock(`../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
 jest.mock(`./terminalSession`, () => ({
@@ -38,11 +38,11 @@ jest.mock(`./terminalsQuery`, () => ({
     dropPendingTerminal: jest.fn(),
     listTerminals: jest.fn(async () => []),
     refreshTerminals: jest.fn(async () => undefined),
-    removeTerminal: jest.fn(),
+    killTerminal: jest.fn(async () => undefined),
 }));
 
 const { default: TerminalPanel } = await import("./TerminalPanel.vue");
-const { commands } = await import("../../shell/commands/useCommands");
+const { commands } = await import("../../workbench/commands/useCommands");
 
 type Listed = { name: string; kind: "shell" | "panel" | "process"; running: boolean; activityAt: number; label?: string; command?: string };
 // Minutes since last activity; stated per fixture so no case silently decides its own threshold.

@@ -1,3 +1,4 @@
+import { charsOfTokens, tokensOfChars } from "@intentic/base/format";
 import { type AgentCapabilities, type AgentProvider, endpointIdOf, isTrialProvider, type Model } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
@@ -12,9 +13,6 @@ const HARNESS_FLOOR_TOKENS: Partial<Record<AgentCapabilities["runtime"], number>
 
 // Room reserved for the reply; a truncated answer just spends the whole window again on retry.
 const OUTPUT_RESERVE_TOKENS = 2_000;
-
-// Rough chars-per-token rate every budget in this daemon counts at (workspace-map.ts, runtime-history.ts).
-const CHARS_PER_TOKEN = 4;
 
 // A one-shot helper's reply: a commit subject, a session title, a verdict and at most a short document. Far below a
 // turn's reserve because nothing here writes code.
@@ -34,7 +32,7 @@ const withCommas = (value: number): string =>
 // Infinity where the window is unknown, so a caller can size against it arithmetically without branching, and so an
 // unknown window never makes a helper send less than it would have.
 export const helperPromptRoom = (declared: DeclaredWindow | undefined): number =>
-    declared === undefined ? Number.POSITIVE_INFINITY : Math.max(0, (declared.window - HELPER_REPLY_TOKENS) * CHARS_PER_TOKEN);
+    declared === undefined ? Number.POSITIVE_INFINITY : Math.max(0, charsOfTokens(declared.window - HELPER_REPLY_TOKENS));
 
 // Why a rung was not asked, in the words the owner can act on: what it would have taken, what the model accepts, and
 // the two places either number is changed. Undefined means it fits.
@@ -46,7 +44,7 @@ export const helperOverflow = (prompt: string, room: number, declared: DeclaredW
         ? `Raise "Conversation window" on this model's card in Connections`
         : `Raise the context size its server was started with`;
     return (
-        `this job needs about ${withCommas(prompt.length / CHARS_PER_TOKEN)} tokens and the model accepts ` +
+        `this job needs about ${withCommas(tokensOfChars(prompt.length))} tokens and the model accepts ` +
         `${withCommas(declared.window)} in one request. ${fix}, or set a model with a larger window for this job in ` +
         `Sandbox ▸ Agent ▸ Models.`
     );
@@ -124,7 +122,7 @@ export const contextShortfall = (turn: {
         return undefined;
     }
     const { window, onACard } = turn.declared;
-    const promptTokens = Math.ceil(turn.prompt.length / CHARS_PER_TOKEN);
+    const promptTokens = tokensOfChars(turn.prompt.length);
     const needed = floor + OUTPUT_RESERVE_TOKENS + promptTokens;
     if (needed <= window) {
         return undefined;

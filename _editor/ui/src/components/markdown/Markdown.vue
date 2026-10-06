@@ -3,7 +3,7 @@
 import { computed } from "vue";
 import { copyCodeFromEvent } from "../../markdown/code.js";
 import { type MarkdownDecorator, parseMarkdownParts, renderParsedMarkdown } from "../../markdown/render.js";
-import MarkdownFigure from "../charts/MarkdownFigure.vue";
+import MarkdownParts from "./MarkdownParts.vue";
 
 defineOptions({ inheritAttrs: false });
 
@@ -30,9 +30,6 @@ const plain = computed(() => {
 <template>
     <div v-if="plain !== undefined" v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent" v-html="plain"></div>
     <div v-else v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent">
-        <template v-for="(part, index) in parts" :key="index">
-            <div v-if="part.kind === `html`" class="md-run" v-html="part.html"></div>
-            <MarkdownFigure v-else :figure="part.figure" />
-        </template>
+        <MarkdownParts :parts="parts" />
     </div>
 </template>

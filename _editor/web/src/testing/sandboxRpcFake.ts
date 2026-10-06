@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import type { SandboxRpc } from "../features/sandbox/client/sandboxRpc";
+import type { SandboxRpc } from "../client/sandbox/sandboxRpc";
 
 // The one fake of the typed daemon client, for every suite; type-checked with them, never bundled (nothing the app loads
 // imports it).

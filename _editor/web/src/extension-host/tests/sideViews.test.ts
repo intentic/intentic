@@ -12,8 +12,8 @@ jest.mock("../../router/index", () => ({
 }));
 
 const { createExtensionApi, deactivateExtension } = await import("../apiImpl");
-const { claimLink, describeTab, homeOf, sideViewOf } = await import("../../shell/side/sideViews");
-const { closeAllTabs, sideDocked, sideTabId, useSidePanel } = await import("../../shell/side/sideTabs");
+const { claimLink, describeTab, homeOf, sideViewOf } = await import("../../workbench/side/sideViews");
+const { closeAllTabs, sideDocked, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
 
 const panel = useSidePanel();
 

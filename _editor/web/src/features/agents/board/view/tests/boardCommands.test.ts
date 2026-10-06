@@ -1,8 +1,8 @@
 import "@intentic/testing/dom";
 import { t } from "@intentic/ui/i18n";
 import { type App, createApp, h, ref, shallowRef } from "vue";
-import { commandContext } from "../../../../../shell/commands/contextKeys";
-import { boundCommand, commands } from "../../../../../shell/commands/useCommands";
+import { commandContext } from "../../../../../workbench/commands/contextKeys";
+import { boundCommand, commands } from "../../../../../workbench/commands/useCommands";
 import { useBoardCommands } from "../boardCommands";
 
 // Pins what the board claims while it is on screen: it reads the roster and the archive on arriving, Mod+Z undoes an

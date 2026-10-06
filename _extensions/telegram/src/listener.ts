@@ -1,31 +1,37 @@
 import { sleep } from "@intentic/base/async";
-import { chatRings, createStreamingPainter, failureNotice, framePainter, type GatewayCtx, GatewayRefusal, type ListenerMessage, recentKeys, type StreamPoster, typingHeartbeat } from "@intentic/connector-runtime";
+import {
+    chatRings,
+    deliverChunked,
+    type GatewayCtx,
+    GatewayRefusal,
+    HISTORY_LIMIT,
+    type ListenerHistoryEntry,
+    type ListenerMessage,
+    MESSAGE_LIMITS,
+    paintReply,
+    recentKeys,
+    type StreamPoster,
+    typingHeartbeat,
+} from "@intentic/connector-runtime";
 import { type TelegramConnection, TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./client.js";
 
 // Inbound half of the gateway: every update becomes a normalized message posted to the daemon's dispatch route; on a
 // mention, holds the stream and paints the reply live, with "typing…" as the "I'm on it" signal. Telegram gives bots no
-// history API, so context is a per-chat ring of what this process itself watched go by, empty after a restart.
+// history API, so context is a per-chat ring of what this process itself watched go by, empty after a restart. The Bot
+// API never sends a bot its own messages back as updates, so what we post (a painted reply, a delivered message) goes
+// into the ring as it is posted, marked `self`, the way Discord's and Slack's history APIs and WhatsApp's store already
+// hold ours.
 
-// Telegram rejects sendMessage over 4096 chars outright; a longer reply spills into follow-up messages.
-const TELEGRAM_MAX = 3_900;
+// Telegram rejects sendMessage over its limit outright; a longer reply spills into follow-up messages.
+const TELEGRAM_MAX = MESSAGE_LIMITS.telegram;
 // Min gap between edits; Telegram's per-chat rate budget counts edits too, so this is slower than Slack's.
 const EDIT_INTERVAL_MS = 2_500;
-// Recent `chat:message` keys dedupe delivery when two bots share a group; best-effort, forgotten on restart.
-const RECENT_MAX = 500;
-// Prior messages handed to the model when the bot is tagged, per chat, and how many chats we keep rings for.
-const HISTORY_LIMIT = 20;
+// How many chats we keep history rings for.
 const HISTORY_CHATS_MAX = 200;
-// Typing action expires after ~5s; re-sent on this cadence, capped so a dead turn can't leak it forever.
+// Typing action expires after ~5s; re-sent on this cadence.
 const TYPING_INTERVAL_MS = 4_000;
-const TYPING_MAX_MS = 300_000;
 // A 429 during a paint is Telegram asking us to slow down, not to stop, the reply is worth one patient retry.
 const RATE_LIMIT_MAX_WAIT_MS = 10_000;
-
-interface HistoryEntry {
-    author: { id: string; name: string };
-    content: string;
-    timestamp: string;
-}
 
 // Best available name for the author: display name if set, else @username; an anonymous channel post has neither, so
 // falls back to "channel".
@@ -87,39 +93,33 @@ export const addressesUs = (message: TelegramMessage, usernames: ReadonlySet<str
     return repliedTo !== undefined && selfIds.has(repliedTo.id);
 };
 
-// Posts into a chat outside any live turn (the daemon's speak-as-the-agent path). Tries the next bot only if nothing
-// posted yet, so a partial spill is never duplicated.
-export const deliverToChat = async (connections: ReadonlyMap<string, TelegramConnection>, chatId: string, text: string): Promise<void> => {
-    let refusal: unknown = new GatewayRefusal("no Telegram bot is connected");
-    for (const connection of connections.values()) {
-        let posted = false;
-        try {
-            for (let base = 0; base < text.length; base += TELEGRAM_MAX) {
-                await connection.call("sendMessage", { chat_id: chatId, text: text.slice(base, base + TELEGRAM_MAX) });
-                posted = true;
-            }
-            return;
-        } catch (error) {
-            if (posted) {
-                throw error;
-            }
-            refusal = error;
-        }
-    }
-    throw refusal;
-};
-
 export interface TelegramListener {
     readonly onUpdate: (connection: TelegramConnection, update: TelegramUpdate) => void;
+    // Posts into a chat outside any live turn (the daemon's speak-as-the-agent path), through the first bot that takes
+    // it; the next is tried only if nothing posted yet, so a partial spill is never duplicated.
+    readonly deliver: (chatId: string, text: string) => Promise<void>;
     readonly stopAll: () => void;
 }
 
 export const createTelegramListener = (ctx: GatewayCtx, connections: () => ReadonlyMap<string, TelegramConnection>): TelegramListener => {
-    const recent = recentKeys(RECENT_MAX);
-    // Stand-in for a history API: what this process has watched go by, per chat.
-    const seen = chatRings<HistoryEntry>({ perChat: HISTORY_LIMIT, chats: HISTORY_CHATS_MAX });
+    const recent = recentKeys();
+    // Stand-in for a history API: what this process has watched go by, and what it posted itself, per chat.
+    const seen = chatRings<ListenerHistoryEntry>({ perChat: HISTORY_LIMIT, chats: HISTORY_CHATS_MAX });
     // Live "typing…" indicators keyed by chatId, started on a mention, cleared when the turn ends.
-    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS, maxMs: TYPING_MAX_MS });
+    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS });
+
+    // One of our own posts, as the ring holds it. The entry is returned so a reply that grows by edits can keep it
+    // reading as the chat does.
+    const rememberOwn = (connection: TelegramConnection, chatId: string, content: string): ListenerHistoryEntry => {
+        const entry: ListenerHistoryEntry = {
+            author: { id: String(connection.selfId), name: connection.username },
+            content,
+            timestamp: new Date().toISOString(),
+            self: true,
+        };
+        seen.remember(chatId, entry);
+        return entry;
+    };
 
     const startTyping = (connection: TelegramConnection, message: TelegramMessage): void => {
         const action = {
@@ -133,6 +133,9 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
     // The two Bot API calls the painter makes; folds in two non-failures: an unchanged edit (400) is a no-op, and a 429
     // gets one patient wait. Anything else reaches the painter, which kills the stream rather than post a half reply.
     const posterFor = (connection: TelegramConnection, message: TelegramMessage): StreamPoster<number> => {
+        const chatId = String(message.chat.id);
+        // What each message we posted for this reply says now, so an edit updates its history entry in place.
+        const posted = new Map<number, ListenerHistoryEntry>();
         const base = {
             chat_id: message.chat.id,
             ...(message.message_thread_id === undefined ? {} : { message_thread_id: message.message_thread_id }),
@@ -153,8 +156,9 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
         };
         return {
             post: async (text) => {
-                const posted = await patient(() => connection.call<{ message_id: number }>("sendMessage", { ...base, text }));
-                return posted.message_id;
+                const sent = await patient(() => connection.call<{ message_id: number }>("sendMessage", { ...base, text }));
+                posted.set(sent.message_id, rememberOwn(connection, chatId, text));
+                return sent.message_id;
             },
             update: async (messageId, text) => {
                 await patient(() => connection.call("editMessageText", { chat_id: message.chat.id, message_id: messageId, text })).catch(
@@ -164,6 +168,10 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
                         }
                     },
                 );
+                const entry = posted.get(messageId);
+                if (entry !== undefined) {
+                    entry.content = text;
+                }
             },
         };
     };
@@ -216,26 +224,28 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
         }
         // Immediate feedback: show "typing…" the moment we're tagged, before the (debounced) turn spins up.
         startTyping(connection, message);
-        // One painter per matched automation (framePainter), so two automations answering one mention don't collide.
-        const poster = posterFor(connection, message);
-        const onError = (error: unknown): void => ctx.log.warn({ err: error }, "telegram stream paint failed");
-        try {
-            await ctx.daemon.dispatchStreaming(
-                payload,
-                framePainter(
-                    () => createStreamingPainter(poster, onError, { maxChars: TELEGRAM_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
-                    // Posted directly, not through the painter, which owns reply text; a failed turn usually has none
-                    // to flush.
-                    (reason) => void poster.post(failureNotice(reason, TELEGRAM_MAX)).catch(onError),
-                ),
-            );
-        } finally {
+        await paintReply(ctx.daemon, payload, {
+            surface: { stream: posterFor(connection, message), editIntervalMs: EDIT_INTERVAL_MS },
+            maxChars: TELEGRAM_MAX,
+            onError: (error) => ctx.log.warn({ err: error }, "telegram stream paint failed"),
             // The turn(s) ended (or the stream broke), the reply is there, so retire the indicator.
-            typing.stop(chatId);
-        }
+            settle: () => typing.stop(chatId),
+        });
     };
 
     return {
+        deliver: async (chatId, text) => {
+            await deliverChunked(
+                connections().values(),
+                async (connection, chunk) => {
+                    await connection.call("sendMessage", { chat_id: chatId, text: chunk });
+                    rememberOwn(connection, chatId, chunk);
+                },
+                text,
+                TELEGRAM_MAX,
+                () => new GatewayRefusal("no Telegram bot is connected"),
+            );
+        },
         onUpdate: (connection, update) => {
             const message = update.message ?? update.channel_post;
             if (message === undefined) {

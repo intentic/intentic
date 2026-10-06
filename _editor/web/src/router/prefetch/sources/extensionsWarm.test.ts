@@ -2,9 +2,9 @@ import type { Disposable, ViewRegistration } from "@intentic/extension-api";
 import { ref } from "vue";
 
 // The registry's rail table asks who is reading (a guest gets two tiles); this is about warming, so everyone is the owner.
-jest.mock(`../../../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
+jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
 
-import { registerView } from "../../../core-views/registry";
+import { registerView } from "../../../workbench/views/registry";
 import { queryClient } from "../../../lib/queryPersistence";
 import { extensionsWarmSource } from "./extensionsWarm";
 

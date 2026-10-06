@@ -1,25 +1,25 @@
 import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import type {
+    PushRun,
     CommitResult,
-    FileDiffResponse,
-    GitChangesResponse,
+    FileDiff,
+    GitChanges,
     GitDiffSide,
     GitTarget,
     OriginAgent,
     RepoChanges,
     RepoTarget,
-} from "@intentic/api-contract";
-import type { PushRun } from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract";
 import { computed, watch } from "vue";
 import { withinScope } from "../../../app/projectScope";
 import { useChat } from "../../chat/run/useChat";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { useRole } from "../../../client/sandbox/useRole";
 import { refusalSummary } from "../push/refusalSummary";
 import { outgoingWork } from "../push/outgoingWork";
 import { landingLine, landingNow } from "./landing";
@@ -138,7 +138,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
                     if (current()) {
                         failures.value = new Map(failures.value).set(task.scope, {
                             action: task.action,
-                            detail: errorMessage(caught, `git gave no reason.`),
+                            detail: messageOr(caught, `git gave no reason.`),
                             ...(caught instanceof PushRefused ? { run: caught.run } : {}),
                         });
                     }
@@ -165,7 +165,7 @@ export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unkn
 // Named apart from the fetcher below so a background loader can be handed the query object directly.
 export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => ({
     queryKey: fileDiffKey(repo, path, side),
-    queryFn: (): Promise<FileDiffResponse> => sandboxRpc.git.fileDiff({ repo, path, side }),
+    queryFn: (): Promise<FileDiff> => sandboxRpc.git.fileDiff({ repo, path, side }),
     staleTime: Infinity,
     gcTime: FILE_DIFF_GC_MS,
     // No retry: a daemon hiccup during read-ahead would otherwise multiply requests; a failed read simply isn't cached.
@@ -173,13 +173,12 @@ export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => 
 });
 
 // Wraps the query above in fetchQuery; the panel is the only caller, the loader uses the query object directly.
-const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
-    queryClient.fetchQuery(fileDiffQuery(repo, path, side));
+const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiff> => queryClient.fetchQuery(fileDiffQuery(repo, path, side));
 
 // Named apart from the composable that reads it, so the loader can warm the same cache entry.
 export const changesKey = (): unknown[] => rpcKey(`git.changes`);
 
-export const fetchChanges = (): Promise<GitChangesResponse> => sandboxRpc.git.changes();
+export const fetchChanges = (): Promise<GitChanges> => sandboxRpc.git.changes();
 
 // Invalidates the change list, its file diffs, and every agent's review: committing or discarding changes what a review
 // reads though no ref moved. Fired directly, not left to the throttled file-watcher pass.
@@ -207,7 +206,7 @@ const targetBody = (target: GitTarget): GitTarget => ({
 const applyCommitResult = async (repo: string, result: CommitResult): Promise<void> => {
     const queryKey = changesKey();
     await queryClient.cancelQueries({ queryKey });
-    queryClient.setQueryData<GitChangesResponse>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
+    queryClient.setQueryData<GitChanges>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
 };
 
 // One real commit per group (git can't span repos); stageFirst stages the group's target first when nothing's staged

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
-import { type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract";
+import { type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract";
 import { Button, Icon, type IconName, SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";

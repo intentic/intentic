@@ -89,10 +89,14 @@ pub struct Facts {
 }
 
 /// Whether the daemon's refusal (see `crate::docker::daemon_refusal`) is the engine turning THIS ACCOUNT away
-/// rather than not being there at all. Docker's CLI reports the pipe's own error, and Windows spells a
-/// permission failure on a named pipe exactly one way.
+/// rather than not being there at all. Read by the one classifier of docker's words (`crate::docker::refusal_kind`),
+/// which this used to repeat with fewer of them: it knew Windows' named-pipe wording only, and read an engine that
+/// answered 500 with "access is denied" in its body as a group membership to fix rather than an engine that is broken.
 pub fn engine_denied(refusal: &str) -> bool {
-    refusal.to_ascii_lowercase().contains("access is denied")
+    matches!(
+        crate::docker::refusal_kind(refusal),
+        crate::docker::Engine::Denied(_)
+    )
 }
 
 /// How an unmet requirement gets met. This is what the app turns into a button and what the terminal turns
@@ -1229,6 +1233,14 @@ mod tests {
             "error during connect: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified."
         ));
         assert!(!engine_denied(""));
+        // Linux spells the same refusal on its socket, and the one classifier hears both.
+        assert!(engine_denied(
+            "permission denied while trying to connect to the Docker daemon socket"
+        ));
+        // An engine that answered 500 exists and is broken: no group membership fixes it, whatever its body says.
+        assert!(!engine_denied(
+            "request returned 500 Internal Server Error for API route and version http://%2F%2F.%2Fpipe%2Fdocker_engine/v1.47/version: Access is denied."
+        ));
     }
 
     /// The sign-out row is built once for the three moments that produce it, so they cannot drift.

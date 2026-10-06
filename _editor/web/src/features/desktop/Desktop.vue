@@ -5,8 +5,8 @@ import { computed, nextTick, ref, watch } from "vue";
 import { type DesktopStatus, useDesktopView } from "./useDesktopView";
 import type { DesktopPointerAction } from "./desktopInput";
 import { useDesktopQuery } from "./desktopQuery";
-import { useSandbox } from "../sandbox/client/useSandbox";
-import { useRole } from "../sandbox/secrets/useRole";
+import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useRole } from "../../client/sandbox/useRole";
 import { useAudience } from "../../app/useAudience";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 

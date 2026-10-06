@@ -16,7 +16,7 @@ import {
 import { useAsyncAction } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
-import { sandboxRpc } from "../../client/sandboxRpc";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSavings } from "../../usage/useSavings";
 import MeasurementPanel from "../models/MeasurementPanel.vue";

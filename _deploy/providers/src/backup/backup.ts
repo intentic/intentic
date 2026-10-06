@@ -8,7 +8,6 @@ import { execChecked, writeHostFiles } from "../core/host-files.js";
 import { parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { stampLabelArgs, stampOf } from "../core/stamp.js";
 
 // Secrets arrive already resolved to strings. retention/schedule carry the resolver-or-default cron + keep
@@ -172,7 +171,7 @@ const mountArgs = (parsed: BackupInputs, dockerBin: string): string => {
 
 // The scheduled restic backup for a host: a container running busybox crond that dumps Forgejo + Komodo (and
 // SignOz when opted in) to the operator's restic repo. delete never touches the restic repo.
-export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provider => ({
+export const createBackupProvider = (executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         let session: SshSession;

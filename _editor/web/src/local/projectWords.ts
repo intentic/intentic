@@ -2,6 +2,7 @@ import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { LocalProjectCaution, LocalProjectRefusal } from "../app/environments/localHost";
 import type { HouseStage } from "./agentHouse";
+import { formatCount } from "@intentic/ui/format";
 
 // WHAT A FOLDER'S SANDBOX DIALOG AND THE HOUSE ON ITS CARD SAY, in the reader's language: the app answers with kinds
 // and numbers (its project.rs), and the words are chosen here, where the catalogs are.
@@ -24,7 +25,7 @@ export const cautionSentence = (caution: LocalProjectCaution): string =>
 
 /** What the first copy carries: its files, and their size where it says anything. */
 export const copyWeight = (copy: { readonly files: number; readonly bytes: number; readonly more: boolean }): string => {
-    const files = copy.more ? t(`local.project.moreFiles`, { count: copy.files.toLocaleString() }) : t(`local.project.files`, { count: copy.files.toLocaleString() }, copy.files);
+    const files = copy.more ? t(`local.project.moreFiles`, { count: formatCount(copy.files) }) : t(`local.project.files`, { count: formatCount(copy.files) }, copy.files);
     return copy.bytes > 0 ? t(`local.project.weight`, { files, size: formatBytes(copy.bytes) }) : files;
 };
 

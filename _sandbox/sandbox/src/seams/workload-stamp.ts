@@ -29,7 +29,19 @@ export const DETACHED_ENV = "INTENTIC_DETACHED";
 // daemon that set the deadline is gone.
 export const DEADLINE_ENV = "INTENTIC_DEADLINE";
 
-export const DETACHED_KINDS = ["isolation-anchor", "watch-check", "edit-rule", "login-browser"] as const;
+export const DETACHED_KINDS = [
+    "isolation-anchor",
+    "watch-check",
+    "edit-rule",
+    "login-browser",
+    // The rest run through workload/run-check.ts, or are the extension backend host (its own group, killed as one).
+    "automation-guard",
+    "loop-check",
+    "probe",
+    "js-run",
+    "python-check",
+    "backend-host",
+] as const;
 export type DetachedKind = (typeof DETACHED_KINDS)[number];
 
 const generation = `${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`;

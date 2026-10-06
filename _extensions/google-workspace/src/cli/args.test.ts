@@ -1,4 +1,6 @@
-import { UsageError, bool, flag, limit, list, parseArgs, positional, required } from "./args.js";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { KNOWN_FLAGS, UsageError, bool, flag, limit, list, parseArgs, positional, rejectUnknownFlags, required } from "./args.js";
 
 describe("parseArgs", () => {
     it("reads a flag and its value, however it was spelled", () => {
@@ -54,5 +56,62 @@ describe("what a command demands", () => {
         expect(limit(parseArgs(["-n", "100000"]), 20, 200)).toBe(200);
         expect(() => limit(parseArgs(["-n", "lots"]), 20)).toThrow(UsageError);
         expect(() => limit(parseArgs(["-n", "0"]), 20)).toThrow(/positive/);
+    });
+});
+
+describe("flags gw does not know", () => {
+    it("are refused before anything runs, naming the flag a typo probably meant", () => {
+        expect(() => rejectUnknownFlags(parseArgs(["mail", "send", "--to", "a@x", "--attachh", "f.pdf"]))).toThrow(
+            new UsageError("unknown flag --attachh; did you mean --attach? (gw <group> lists each command's flags)"),
+        );
+        expect(() => rejectUnknownFlags(parseArgs(["drive", "ls", "--colour", "red"]))).toThrow(
+            new UsageError("unknown flag --colour (gw <group> lists each command's flags)"),
+        );
+    });
+
+    it("let every flag gw reads through", () => {
+        expect(() => rejectUnknownFlags(parseArgs(["cal", "list", "--calendar", "work", "-n", "5", "--json"]))).not.toThrow();
+    });
+
+    // The list is only safe while it holds every flag a command asks for: one missing would refuse a working command.
+    it("include every flag name the sources read", () => {
+        const sources = (dir: string): string[] =>
+            readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+                const path = join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    return sources(path);
+                }
+                return entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts") ? [path] : [];
+            });
+        const read = new Set<string>();
+        const call = /\b(?:flag|bool|list|required)\((?:ctx\.)?args((?:,\s*"[a-z][a-z-]*")+)\)|flags\.(?:has|get|set)\("([a-z][a-z-]*)"/g;
+        for (const file of sources(join(import.meta.dir, ".."))) {
+            for (const match of readFileSync(file, "utf8").matchAll(call)) {
+                for (const name of (match[1] ?? `"${match[2]}"`).matchAll(/"([a-z][a-z-]*)"/g)) {
+                    read.add(name[1] ?? "");
+                }
+            }
+        }
+        // The scan itself must see the reads it guards, one from each way a flag is asked for.
+        expect(["attach", "csv", "case", "client-id", "meet", "json"].filter((name) => !read.has(name))).toEqual([]);
+        expect([...read].filter((name) => !KNOWN_FLAGS.has(name))).toEqual([]);
+        // `limit()` reads -n and --limit through its own spelling, which the scan above cannot see.
+        expect(["n", "limit"].filter((name) => !KNOWN_FLAGS.has(name))).toEqual([]);
+    });
+});
+
+describe("a flag that names a file", () => {
+    // `--csv` was listed as valueless, so `--csv rows.csv` arrived as a switch plus a stray positional, and
+    // `gw sheets write` answered that no data was passed.
+    it("keeps its value", () => {
+        const args = parseArgs(["sheets", "write", "ID", "--range", "Sheet1!A1", "--csv", "rows.csv"]);
+        expect(flag(args, "csv")).toBe("rows.csv");
+        expect(args.positional).toEqual(["sheets", "write", "ID"]);
+    });
+
+    it("while a switch at the end of a line leaves the id after it alone", () => {
+        const args = parseArgs(["docs", "replace", "--find", "a", "--with", "b", "--case", "DOC1"]);
+        expect(bool(args, "case")).toBe(true);
+        expect(args.positional).toEqual(["docs", "replace", "DOC1"]);
     });
 });

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { DerivedDiff, DerivedSide, DiffSourceQuery } from "@intentic/sandbox-contract";
-import { Button } from "@intentic/ui";
-import { errorMessage, useLatest } from "@intentic/ui/async";
+import { Button, EmptyState, formatElapsed } from "@intentic/ui";
+import { messageOr, useLatest, useNow } from "@intentic/ui/async";
+import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onUnmounted, ref, watch } from "vue";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
+import { computed, ref, watch } from "vue";
 import { formatOf } from "@intentic/ui/file-format";
 import ConversionNotes, { type ConversionNote } from "./ConversionNotes.vue";
 import { readDerivedDiff } from "./derivedDiff";
@@ -30,21 +30,20 @@ const error = ref<string>();
 
 // A render runs in a child process this pane cannot see into; elapsed time is what tells working from hung.
 const busySince = ref(0);
-const now = ref(0);
-let ticker: ReturnType<typeof setInterval> | undefined;
+const ticking = ref(false);
+const now = useNow(ticking, 250);
 const startClock = (): void => {
     busySince.value = Date.now();
-    now.value = busySince.value;
-    ticker ??= setInterval(() => (now.value = Date.now()), 250);
+    ticking.value = true;
 };
 const stopClock = (): void => {
-    clearInterval(ticker);
-    ticker = undefined;
+    ticking.value = false;
 };
-onUnmounted(stopClock);
-const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(busySince.value, now.value)));
+// Never below zero: the shared clock may not have ticked since this wait began.
+const waitedMs = computed(() => Math.max(0, now.value - busySince.value));
+const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(waitedMs.value / 1000)));
 // Past this, the wait is long enough that a reader wants to know they are allowed to walk away from it.
-const longWait = computed(() => now.value - busySince.value >= 20_000);
+const longWait = computed(() => waitedMs.value >= 20_000);
 
 const latest = useLatest();
 const load = (): void => {
@@ -68,7 +67,7 @@ const load = (): void => {
             }
             loading.value = false;
             stopClock();
-            error.value = errorMessage(err, t(`workspace.derivedDiffView.couldNotRenderVersions`));
+            error.value = messageOr(err, t(`workspace.derivedDiffView.couldNotRenderVersions`));
         },
     );
 };
@@ -134,7 +133,7 @@ const changedLabel = computed(() => {
     return grid.value ? t(`workspace.words.rowsChanged`, { count }, count) : t(`workspace.derivedDiffView.paragraphsChanged`, { count }, count);
 });
 
-const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
+const filename = computed(() => basename(path));
 </script>
 
 <template>
@@ -174,16 +173,19 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
             <ConversionNotes :notes="notes" />
 
             <!-- A side nothing could read: said against that side, with the other reading one press away. -->
-            <div v-if="unreadable.length > 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <Icon name="box" class="text-3xl text-subtle" />
-                <p v-for="side of unreadable" :key="side.label" class="max-w-md text-sm text-muted">
-                    {{ t(`workspace.derivedDiffView.versionCouldNotBeRead`, { side: sideName(side.label), filename, reason: side.reason }) }}
-                </p>
-                <Button severity="secondary" @click="emit(`sides`)">
-                    <Icon name="split-columns" class="text-xs" />
-                    {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
-                </Button>
-            </div>
+            <EmptyState v-if="unreadable.length > 0" icon="box" class="min-h-0 flex-1">
+                <template #title>
+                    <span v-for="side of unreadable" :key="side.label" class="block max-w-md">
+                        {{ t(`workspace.derivedDiffView.versionCouldNotBeRead`, { side: sideName(side.label), filename, reason: side.reason }) }}
+                    </span>
+                </template>
+                <template #actions>
+                    <Button severity="secondary" @click="emit(`sides`)">
+                        <Icon name="split-columns" class="text-xs" />
+                        {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
+                    </Button>
+                </template>
+            </EmptyState>
             <TableDiffView
                 v-else-if="readable && grid"
                 class="min-h-0 flex-1"
@@ -202,18 +204,21 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
         </template>
 
         <!-- A wait that can legitimately run for a minute is indistinguishable from a failure without a clock. -->
-        <div v-else-if="loading" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
-            <Icon name="spinner" class="text-xl" spin />
-            <p class="text-sm">{{ t(`workspace.derivedDiffView.renderingBothVersions`) }}</p>
-            <p class="max-w-sm text-2xs text-subtle">{{ t(`workspace.derivedDiffView.versionAlreadyRenderedCostsNothing`) }}</p>
+        <EmptyState
+            v-else-if="loading"
+            icon="spinner"
+            spin
+            role="status"
+            :title="t(`workspace.derivedDiffView.renderingBothVersions`)"
+            :line="t(`workspace.derivedDiffView.versionAlreadyRenderedCostsNothing`)"
+            class="h-full"
+        >
             <p class="text-2xs tabular-nums text-subtle">{{ waited }}</p>
             <p v-if="longWait" class="max-w-sm text-2xs text-subtle">{{ t(`workspace.derivedDiffView.stillGoingNothingFailed`) }}</p>
-        </div>
+        </EmptyState>
 
-        <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="max-w-md text-sm text-danger">{{ error }}</p>
-            <div class="flex items-center gap-2">
+        <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full">
+            <template #actions>
                 <Button severity="secondary" @click="load()">
                     <Icon name="refresh" class="text-xs" />
                     {{ t(`ui.action.tryAgain`) }}
@@ -222,7 +227,7 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
                     <Icon name="split-columns" class="text-xs" />
                     {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
                 </Button>
-            </div>
-        </div>
+            </template>
+        </EmptyState>
     </div>
 </template>

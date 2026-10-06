@@ -1,4 +1,4 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { operationInProgress } from "./operation.js";
 
 // Moves a branch back to its reflog's previous position (git has no native undo). Complements Checkpoints (which

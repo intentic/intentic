@@ -4,6 +4,8 @@
 // Nothing here imports Tauri or is desktop-only at runtime, and nothing here runs at import: this module loads
 // wherever floating.ts does, node tests included (where to DOWNLOAD the app is desktopDownloads.ts, which does not).
 
+import { isTypingTarget } from "@intentic/ui/event-target";
+
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
 // (loopback/loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
 // the browser", which is correct for an older window that still enforces the check.
@@ -345,7 +347,7 @@ const internalLinkContextMenu = (event: MouseEvent): void => {
     if (!ownOrigin && link.protocol !== `intentic:`) {
         return;
     }
-    if (target.closest(`input, textarea, select`) !== null || target.closest<HTMLElement>(`[contenteditable]`)?.isContentEditable === true) {
+    if (isTypingTarget(target)) {
         return;
     }
     const selection = window.getSelection();

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
+import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
 import type { LineStat } from "@intentic/code-read";
 import { extensionOf, formatOf } from "@intentic/ui/file-format";
 import { rendersAsBytes } from "../explorer/fileType";
-import { useLayout } from "../../../shell/window/useLayout";
-import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
+import { useLayout } from "../../../workbench/window/useLayout";
+import { compareViewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { derivedDiffSource } from "../changes/diffRaw";
 import BinaryDiffView from "./BinaryDiffView.vue";
 import CompareDiffView from "./CompareDiffView.vue";
@@ -68,7 +69,7 @@ const derived = computed(
 
 // Delimited text as a grid, when whole sides are here to parse; a partial (oversized) csv keeps the line diff.
 const table = computed(() => diffDocument.value !== `sides` && reads.value === `table` && partial === undefined);
-const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
+const filename = computed(() => basename(path));
 const beforeSheets = computed(() => (before === undefined ? [] : [sheetOfDelimited(before, filename.value)]));
 const afterSheets = computed(() => (after === undefined ? [] : [sheetOfDelimited(after, filename.value)]));
 

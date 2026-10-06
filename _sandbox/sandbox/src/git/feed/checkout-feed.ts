@@ -1,4 +1,4 @@
-import { defaultGit, type GitRunner, politeGit } from "@intentic/scaffold";
+import { defaultGit, type GitRunner, politeGit } from "@intentic/base/git";
 import { commonDirOf, gitDirOf } from "../git-dir.js";
 import type { FrontLink } from "../../front/front-link.js";
 

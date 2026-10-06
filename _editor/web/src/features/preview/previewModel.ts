@@ -1,5 +1,4 @@
-import type { PanelSummary, RepoApp, PanelLaunch } from "@intentic/api-contract";
-import type { PortSummary, PublicFile } from "@intentic/sandbox-contract";
+import type { PortSummary, PublicFile, PanelSummary, RepoApp, PanelLaunch } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Everything the workspace can show live, as one flat list both the rail tile and the panel build from (so a count can

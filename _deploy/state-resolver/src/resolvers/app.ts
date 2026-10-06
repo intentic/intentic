@@ -1,6 +1,7 @@
 import type { Input, Ref, SecretRef } from "@intentic/graph";
 import { generated, makeRef } from "@intentic/graph";
-import type { AppIntent, BackingIntent, HostInput } from "@intentic/need-resolver";
+import type { HostInput } from "../intent/inputs.js";
+import type { AppIntent, BackingIntent } from "../intent/intent.js";
 import type { ResolvedNode } from "@intentic/resources";
 import {
     adminUsername,

@@ -14,8 +14,8 @@ flowchart LR
 
 - **Remote content.** `server.url` is `INTENTIC_APP_URL` or `https://app.intentic.dev`, so the app always runs the
   current [web](../web) editor. `www/` holds only the offline page.
-- **Push.** WKWebView has no web push. The editor's `src/push/nativePush.ts` driver finds
-  `@capacitor/push-notifications` on `window.Capacitor` (typed in `src/shell/window/capacitor.ts`), takes the APNs
+- **Push.** WKWebView has no web push. The editor's `src/workbench/push/nativePush.ts` driver finds
+  `@capacitor/push-notifications` on `window.Capacitor` (typed in `src/workbench/window/capacitor.ts`), takes the APNs
   token and registers it with the platform's push relay (`_platform/api/src/push-relay`), because Apple accepts
   sends only from the app's vendor.
 - **Generated project, then patched.** `cap add ios` writes `ios/`. `scripts/prepare-native.mjs` then adds the two

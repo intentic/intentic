@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { DAY_MS } from "../../../system/chore-clock.js";
 import { workspacePaths } from "../../../workspace/workspace.js";
-import { carriedRef, parkedRefOf } from "../agent-refs.js";
+import { carriedRef, parkedRefOf } from "../../../git/agent-refs.js";
 import {
     deleteRefsAtomically,
     PARKED_REF_RETENTION_MS,
@@ -96,7 +96,7 @@ test("a batch that fails is logged and left for tomorrow", async () => {
     const { retention, lines } = deps(
         work,
         { old: { archivedAt: LONG_AGO } },
-        { deleteRefs: async () => Promise.reject(new Error("packed-refs.lock: File exists")) },
+        { deleteRefs: async () => { throw new Error("packed-refs.lock: File exists"); } },
     );
     await runParkedRefRetention(retention);
     expect(await refsIn(work)).toEqual(["refs/agent/old"]);

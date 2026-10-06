@@ -1,5 +1,7 @@
+import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
+import { fieldApplies } from "@intentic/extension-manifest";
 import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
-import { partitionSecretValues, pastedSecret } from "./secret-fields.js";
+import { partitionSecretValues, pastedSecret, secretFieldsOf } from "./secret-fields.js";
 import { generateSshKey } from "./ssh-keys.js";
 
 // Pins that a vaulted entry (secret fields replaced by VAULTED) still passes CapabilitySchema; a kind whose echo omits
@@ -238,4 +240,33 @@ test("a pasted one-line credential is vaulted without its surrounding whitespace
     expect(pastedSecret(pem)).toBe(pem);
     const { values } = partitionSecretValues({ id: "fleet", kind: "fleet", config: { token: "itk_x\r\n" } } as Capability, new Map());
     expect(values).toEqual({ token: "itk_x" });
+});
+
+// Which fields are credentials is declared twice: the daemon vaults whatever a kind's echo leaves out, and the editor's
+// form and the needs gate read `secret: true` off the catalog. A sample is held against every catalog form of its kind
+// whose pinned values it carries: each field it fills is vaulted exactly when that form calls it secret, or the form
+// shows a credential back to the person, or the daemon writes one into the manifest.
+const formsOf = (sample: Capability): CapabilityCatalogEntry[] => {
+    const config = sample.config as Record<string, unknown>;
+    return CAPABILITY_CATALOG.filter(
+        (entry) => entry.kind === sample.kind && entry.fields.every((field) => field.value === undefined || config[field.key] === field.value),
+    );
+};
+const SAMPLE_CASES = Object.entries(SAMPLES).flatMap(([kind, samples]) => samples.map((sample, index) => [`${kind}[${index}]`, sample] as const));
+
+test.each(SAMPLE_CASES)("%s: the catalog calls secret exactly the fields the daemon vaults", (_name, sample) => {
+    const config = sample.config as Record<string, unknown>;
+    const vaulted = new Set(secretFieldsOf(sample, new Map()));
+    const disagreements = formsOf(sample).flatMap((entry) =>
+        entry.fields
+            .filter((field) => field.value === undefined && field.key in config && fieldApplies(field, config))
+            .filter((field) => (field.secret === true) !== vaulted.has(field.key))
+            .map((field) => `${entry.id}.${field.key}: the catalog says ${field.secret === true ? "secret" : "plain"}, the daemon ${vaulted.has(field.key) ? "vaults" : "echoes"} it`),
+    );
+    expect(disagreements).toEqual([]);
+});
+
+test("the parity above reads real forms: most kinds' samples meet a catalog form of their own", () => {
+    const met = SAMPLE_CASES.filter(([, sample]) => formsOf(sample).length > 0).map(([name]) => name);
+    expect(met.length).toBeGreaterThanOrEqual(10);
 });

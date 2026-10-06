@@ -1,6 +1,7 @@
 import { readdir, readlink, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pidsOf, procFile } from "../../../seams/session-processes.js";
+import { parseProcStat } from "../../../system/resources/proc-stat.js";
 
 // A command waiting for input nobody will type, told apart from one that is merely quiet by what the kernel says it is
 // doing rather than by what it printed. An agent's command runs in a tmux pane whose terminal is its stdin (bin/tmux-run),
@@ -58,7 +59,8 @@ const PROGRAM_CHARS = 80;
 
 const EVENTPOLL = "anon_inode:[eventpoll]";
 
-// The fields after the comm, which is bracketed by the first "(" and the LAST ")" since it may hold either.
+// What a sample reads of one process's stat line (system/resources/proc-stat.ts parses it); undefined for an empty line
+// (the process exited between the listing and the read) or one missing a field this needs.
 interface StatFields {
     readonly pgrp: number;
     readonly session: number;
@@ -68,19 +70,11 @@ interface StatFields {
 }
 
 const statFields = (line: string): StatFields | undefined => {
-    if (line === "") {
+    const parsed = line === "" ? undefined : parseProcStat(line);
+    if (parsed?.session === undefined || parsed.foreground === undefined || parsed.cpuTicks === undefined) {
         return undefined;
     }
-    const fields = line
-        .slice(line.lastIndexOf(")") + 1)
-        .trim()
-        .split(/\s+/u)
-        .map(Number);
-    const [pgrp, session, foreground, user, system] = [fields[2], fields[3], fields[5], fields[11], fields[12]];
-    if (![pgrp, session, foreground, user, system].every((value) => value !== undefined && Number.isSafeInteger(value))) {
-        return undefined;
-    }
-    return { pgrp: pgrp ?? 0, session: session ?? 0, foreground: foreground ?? 0, cpuTicks: (user ?? 0) + (system ?? 0) };
+    return { pgrp: parsed.pgrp, session: parsed.session, foreground: parsed.foreground, cpuTicks: parsed.cpuTicks };
 };
 
 // What a descriptor points at, empty once the process or the descriptor is gone.

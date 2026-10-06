@@ -1,8 +1,8 @@
-import type { WorkspaceHealth } from "@intentic/api-contract";
+import type { WorkspaceHealth } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import type { ChurnWindow } from "./codebaseHealth";
 
 /* Codebase health reads churn and complexity from the resident iq index. */

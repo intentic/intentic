@@ -7,7 +7,7 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import { stampLabelPairs, stampOf } from "../core/stamp.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { connectWithRetry, sshExecutor } from "../core/ssh.js";
+import { connectWithRetry } from "../core/ssh.js";
 
 // One agent MCP tool, resolved: a remote endpoint reached by URL with a scoped bearer; `token` is already the
 // concrete secret string by the time this provider runs.
@@ -72,7 +72,7 @@ const runningToolsDigest = async (session: SshSession): Promise<string> => {
 
 // Per-host AI-agent workspace: one long-lived sandbox container with its own isolated Docker Engine. previewPort
 // is the tunnel's target; daemonPort is host-internal only. `apply` ensures the network, then (re)creates the sandbox.
-export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Provider => ({
+export const createWorkspaceProvider = (executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "internalIp")) {

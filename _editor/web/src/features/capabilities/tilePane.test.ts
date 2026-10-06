@@ -1,10 +1,9 @@
 // Pins what the open tile lists beside its form: the background processes serving its connections (by the extension
 // behind each), the synced machines on it, its rows' live state and facts, the singleton's rebuild link, and the
 // registry counts and recommendation it shows.
-import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { RegistryEntry } from "@intentic/registry";
-import type { ExtensionSummary, HostSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, HostSummary, CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
 import { effectScope, type EffectScope, ref } from "vue";
 import type { BackgroundProcessRow } from "../terminal/useBackgroundProcesses";
 import type { ConnectionSources } from "./model/connectionRows";

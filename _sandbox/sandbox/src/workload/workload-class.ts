@@ -10,7 +10,7 @@ import {
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPriority, setPriority } from "node:os";
 import type { Readable, Writable } from "node:stream";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 
 // What a process is to this sandbox, decided by whoever spawned it and applied as it starts: its CPU niceness, its IO
 // class and its rank for the kernel's OOM killer. Children inherit all three at fork, so a class set on a runtime, a

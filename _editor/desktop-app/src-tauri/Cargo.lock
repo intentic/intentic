@@ -1915,6 +1915,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.23.1",
  "intentic-bounded",
+ "intentic-docker-host",
  "reqwest",
  "rustls",
  "serde",
@@ -1935,6 +1936,10 @@ dependencies = [
  "windows 0.61.3",
  "zbus",
 ]
+
+[[package]]
+name = "intentic-docker-host"
+version = "0.0.0"
 
 [[package]]
 name = "ipnet"

@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { stepLead } from "../treeSelect";
 import type { MoreRow, Row } from "./treeRows";
 

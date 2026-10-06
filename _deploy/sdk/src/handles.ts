@@ -12,7 +12,7 @@ import type {
     ServiceInput,
     StripeInput,
     UserInput,
-} from "@intentic/need-resolver";
+} from "@intentic/state-resolver";
 
 // Authoring surface: i.have.* is inventory intentic reads but never creates or destroys; i.want.* is desired state
 // owned end-to-end (created, reconciled, pruned, destroyed). Requirement fields (on/expose/use/observe/notify) point

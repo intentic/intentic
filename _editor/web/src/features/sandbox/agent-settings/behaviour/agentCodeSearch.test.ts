@@ -2,21 +2,21 @@
 // why. The daemon refused each write, and the page rolled it back while keeping the reason to itself. jsdom: mounts the
 // group over the real settings composable, against a daemon that refuses.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { stubGlobal, waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, ref } from "vue";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
-import { SandboxHttpError } from "../../client/sandboxHttpError";
-import type { SandboxRpc } from "../../client/sandboxRpc";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
+import type { SandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 const get = jest.fn<SandboxRpc[`settings`][`get`]>();
 const set = jest.fn<SandboxRpc[`settings`][`set`]>();
-jest.mock(`../../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
-jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
+jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
 // The group's two other reads, which say nothing about a save.
 jest.mock(`../../usage/useSavings`, () => ({ useSavings: () => ({ savings: ref(undefined) }) }));
 jest.mock(`./useFieldNotes`, () => ({ useFieldNotes: () => ({ status: ref(undefined) }) }));

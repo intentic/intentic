@@ -1,6 +1,6 @@
 import type { SettingValue } from "@intentic/extension-api";
 import { type ShallowRef, shallowRef } from "vue";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 
 /* One shared per-extension settings store (keyed by the capability entry id). */
 

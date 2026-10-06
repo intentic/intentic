@@ -18,6 +18,7 @@ export default defineConfig({
             // and resolve into a directory.
             "@intentic/ui/device-agent": join(root, `_editor/ui/src/components/sandbox/deviceAgent.ts`),
             "@intentic/ui/i18n": join(root, `_editor/ui/src/i18n/index.ts`),
+            "@intentic/ui/clipboard": join(root, `_editor/ui/src/lib/clipboard.ts`),
             "@intentic/ui": join(root, `_editor/ui/src/index.ts`),
         },
     },

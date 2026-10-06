@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { holdsCredentialMaterial } from "@intentic/sandbox-contract";
 
 // Checks whether a path actually holds a credential, the sandbox's half of `secrets.access`. May only subtract, and
@@ -50,8 +51,8 @@ const judge = (file: string): boolean | undefined => {
         // A NUL byte means this isn't a text config file (a DER key, a database); not judged rather than cleared.
         return text.includes("\0") ? undefined : holdsCredentialMaterial(text);
     } catch (error) {
-        // ENOENT is the one failure that's an answer: no file, so no credential; every other failure stays undefined.
-        return (error as NodeJS.ErrnoException).code === "ENOENT" ? false : undefined;
+        // Absence is the one failure that's an answer: no file, so no credential; every other failure stays undefined.
+        return isMissing(error) ? false : undefined;
     }
 };
 

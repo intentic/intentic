@@ -1,8 +1,7 @@
 // Pins that the posture (`agents.spawn`) writes into the shared `actionRules` record without clobbering other
 // keys (e.g. the outbound sniffer's `<provider>.<type>` rules), unlike the three plain-number ceilings beside it.
 import "@intentic/testing/dom";
-import type { SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { postureOf, postures, SPAWN_KEY, withPosture } from "../safety/spawnPosture";

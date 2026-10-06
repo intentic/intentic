@@ -1,5 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { archivePrefixOf, archiveRootOf, isBrowsableArchive } from "@intentic/sandbox-contract";
+import { archivePrefixOf, archiveRootOf, isBrowsableArchive, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 
 // Which workspace paths are an archive's contents rather than the workspace's own. A zip or tar is entered like a
 // folder (the daemon unpacks it out of sight and lists that), so every write verb has to know when it is looking at

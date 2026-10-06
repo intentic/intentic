@@ -1,5 +1,5 @@
-import { formatClock, formatDayMonthTime, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
+import { formatUntil } from "@intentic/ui/time";
 
 // When the composer's next message goes, when not now: at an instant the reader chose, or once another agent's work
 // has landed in the workspace. A setting of the composer like its model or mode, not words in the message: it rides
@@ -85,30 +85,14 @@ export const timeChoices = (now: number): readonly TimeChoice[] => {
     return choices;
 };
 
-// Whether two instants fall on the same day of the reader's calendar.
-const sameDay = (a: number, b: number): boolean => new Date(a).toDateString() === new Date(b).toDateString();
-
 /**
- * An instant as the pill and the panel say it: the clock alone today, "Tomorrow 09:00", the weekday inside the coming
- * week, the date past it. Never a countdown: a booked time is an appointment, read the way a calendar reads it.
- */
-export const sendTimeLabel = (at: number, now: number): string => {
-    if (sameDay(at, now)) {
-        return formatClock(at);
-    }
-    if (sameDay(at, now + DAY)) {
-        return t(`chat.sendLater.tomorrowAt`, { clock: formatClock(at) });
-    }
-    return at - now < 7 * DAY ? formatWeekdayTime(at) : formatDayMonthTime(at);
-};
-
-/**
- * A pick as the pill, the hint and the held message say it: the time it goes, or after which agent's work lands, that
+ * A pick as the pill, the hint and the held message say it: the time it goes (the kit's `formatUntil`, "22:00 today",
+ * "09:00 tomorrow", then the weekday or the date: a booked time is an appointment, read the way a calendar reads it), or after which agent's work lands, that
  * agent named by its card's title (`titleOf`), or as another agent when no card names it any more.
  */
 export const laterLabel = (later: SendLater, now: number, titleOf: (conversationId: string) => string | undefined): string =>
     later.kind === `at`
-        ? sendTimeLabel(later.at, now)
+        ? formatUntil(later.at, now)
         : t(`chat.sendLater.afterLands`, { title: titleOf(later.conversationId) ?? t(`chat.sendLater.anotherAgent`) });
 
 // The value a `datetime-local` field holds for an instant, on the reader's own clock: "2026-10-02T15:40".

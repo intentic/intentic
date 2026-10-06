@@ -13,9 +13,9 @@
 # runtime dependency of extension-manifest — publishing that one without this one ships a dead specifier.
 # webq, fileq and the Claude Code plugin close it: fileq depends on webq and on workspace-ignore, and the plugin
 # bundles what it runs, so nothing here depends on them. The three were bootstrapped at 1.317.0 by hand.
-PUB=(_tools/base _tools/constants _tools/agent-cli _shared/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/need-resolver _deploy/providers \
-     _shared/extension-manifest _shared/registry _shared/sandbox-contract _shared/extension-api _shared/extension-ui _devices/local-agent _devices/desktop-automation _devices/browser _devices/machine _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
-     _shared/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan \
+PUB=(_tools/base _tools/constants _tools/agent-cli _shared/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/providers \
+     _shared/extension-manifest _shared/registry _shared/sandbox-contract _shared/extension-api _shared/extension-ui _devices/local-agent _devices/desktop-automation _devices/browser _devices/machine _devices/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
+     _shared/workspace-ignore _search/iq-engine _search/iq _deploy/sdk _tools/registry-scan \
      _sandbox/webq _sandbox/fileq _sandbox/claude-plugin)
 
 # Every dir that carries the release version = the published set plus the two private packages that put the

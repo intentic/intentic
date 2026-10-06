@@ -3,15 +3,15 @@ import { Button } from "@intentic/ui";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useSandboxSession } from "../session/sandboxSession";
-import { useSandbox } from "../client/useSandbox";
-import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
+import { useSandboxSession } from "../../../client/session/sandboxSession";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";
 import { stalledPaths } from "../../../app/perf";
-import { DEADLINE_MS } from "../client/sandboxAuthFetch";
+import { DEADLINE_MS } from "../../../client/sandbox/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
 
 // Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified

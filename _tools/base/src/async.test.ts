@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, serialLock, sleep, SingleFlight, whenAborted, withTimeout } from "./async.js";
+import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, serialLock, sleep, SingleFlight, watchQueue, whenAborted, withTimeout } from "./async.js";
 
 beforeEach(() => {
     jest.useFakeTimers();
@@ -546,5 +546,51 @@ describe(`whenAborted`, () => {
         expect(ran).toBe(1);
         dispose();
         expect(ran).toBe(1);
+    });
+});
+
+describe("watchQueue", () => {
+    it("yields what was pushed in order, including what was pushed before an abort", async () => {
+        const abort = new AbortController();
+        const watch = watchQueue<number>({ signal: abort.signal, until: Date.now() + 60_000, longestMs: 60_000 });
+        watch.push(1);
+        watch.push(2);
+        abort.abort();
+        const seen: number[] = [];
+        for await (const value of watch.drain()) {
+            seen.push(value);
+        }
+        expect(seen).toEqual([1, 2]);
+    });
+
+    it("ends at `until`, or at `longestMs` when that comes first", async () => {
+        jest.useFakeTimers();
+        try {
+            const near = watchQueue<number>({ until: Date.now() + 1_000, longestMs: 60_000 }).drain();
+            const nearEnd = near.next();
+            await advanceTimersByTimeAsync(1_000);
+            expect(await nearEnd).toEqual({ done: true, value: undefined });
+
+            const far = watchQueue<number>({ until: Date.now() + 3_600_000, longestMs: 60_000 }).drain();
+            const farEnd = far.next();
+            await advanceTimersByTimeAsync(59_999);
+            let settled = false;
+            void farEnd.then(() => (settled = true));
+            await advanceTimersByTimeAsync(0);
+            expect(settled).toBe(false);
+            await advanceTimersByTimeAsync(1);
+            expect(await farEnd).toEqual({ done: true, value: undefined });
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("wakes a waiting reader on a push", async () => {
+        const watch = watchQueue<string>({ until: Date.now() + 60_000, longestMs: 60_000 });
+        const reader = watch.drain();
+        const first = reader.next();
+        watch.push("landed");
+        expect(await first).toEqual({ done: false, value: "landed" });
+        await reader.return(undefined);
     });
 });

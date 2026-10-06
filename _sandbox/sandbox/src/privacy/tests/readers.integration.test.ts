@@ -3,8 +3,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
-import { ocrInstalled, ocrModelDir } from "../../ocr/models.js";
-import { loadTextReader } from "../../ocr/paddle-ocr.js";
+import { ocrInstalled, ocrModelDir } from "@intentic/ocr/models";
+import { loadTextReader } from "@intentic/ocr/paddle-ocr";
 import { createLocalReaders } from "../readers.js";
 import { installed, pdfWith } from "./pages.testing.js";
 

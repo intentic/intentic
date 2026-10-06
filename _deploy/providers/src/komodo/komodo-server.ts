@@ -4,7 +4,6 @@ import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
@@ -25,7 +24,7 @@ const POLL_TIMEOUT_MS = 120_000;
 // A worker host registered as a Komodo Server. Periphery's outbound `connect_as` auto-registers the server
 // when it connects to Core; this provider waits for that registration to appear, then reports it as existing.
 // Pure assertion/gate: no write operations, the server is created by Periphery, not by this provider.
-export const createKomodoServerProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createKomodoServerProvider = (api: KomodoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         try {

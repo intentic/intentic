@@ -1,13 +1,13 @@
 import { sandboxRef } from "@intentic/extension-api";
-import type { TerminalSessionSchema } from "@intentic/api-contract";
-import type { TerminalsList } from "@intentic/sandbox-contract";
+import type { TerminalsList, TerminalSessionSchema } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import type { z } from "zod";
+import { optimisticUpdate } from "../../lib/optimistic";
 import { queryClient } from "../../lib/queryPersistence";
-import { rpcQuery } from "../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 // Single cache entry shared by the rail badge, background-process rows, and the panel's tab strip. Unpolled: the daemon
 // pushes changes instead of each surface polling. A pending entry claims a `web-*` name from creation until the daemon
@@ -58,12 +58,16 @@ export const listTerminals = async (): Promise<TerminalSession[]> => {
     return withPending(listed);
 };
 
-// Drops a session from the shared list the moment its kill is issued, ahead of the daemon's confirmation; a failed kill
-// is undone by the refetch that follows.
-export const removeTerminal = (name: string): void => {
+// Drops a session from the shared list the moment its kill is issued, ahead of the daemon's confirmation, so the badge
+// falls with the tab. A refused kill puts the row straight back, and the list is re-read either way; the refusal is
+// the caller's to say.
+export const killTerminal = async (name: string): Promise<void> => {
     dropPendingTerminal(name);
-    queryClient.setQueryData<TerminalsList>(terminalsKey, (listed) =>
-        listed === undefined ? undefined : { ...listed, sessions: listed.sessions.filter((session) => session.name !== name) },
+    await optimisticUpdate<TerminalsList, unknown>(
+        terminalsKey,
+        (listed) => ({ ...listed, sessions: listed.sessions.filter((session) => session.name !== name) }),
+        () => sandboxRpc.system.killTerminal({ name }),
+        { settle: true },
     );
 };
 

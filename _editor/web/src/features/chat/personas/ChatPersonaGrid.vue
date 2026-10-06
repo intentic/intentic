@@ -10,7 +10,7 @@ import { startAgent } from "../../agents/fleet/agentActions";
 import { laneOf, turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { canArchive } from "../../agents/fleet/useAgents-fleet";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { useChat } from "../run/useChat";
 import { laneOfTab, tabsOfPersona } from "../tabs/tabs";

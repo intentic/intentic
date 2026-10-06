@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
+import { formatCount, SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef, watch } from "vue";
 import { type CellDiff, foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, type SheetDiff } from "./tableDiff";
@@ -79,7 +79,7 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
 <template>
     <div class="ui-softscroll h-full min-h-0 overflow-auto px-4 py-3">
         <p v-if="cut" class="mb-3 text-2xs text-warning">
-            {{ t(`workspace.tableDiffView.longTableOnlyFirstRows`, { rows: MAX_ROWS.toLocaleString() }) }}
+            {{ t(`workspace.tableDiffView.longTableOnlyFirstRows`, { rows: formatCount(MAX_ROWS) }) }}
         </p>
         <!-- Held back a moment so a diff that lands at once never flashes it; held here, so the remembered table waits too. -->
         <div v-if="sheets === undefined" class="animate-[ui-fade-in_0.2s_ease-out_0.3s_both]">

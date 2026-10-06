@@ -1,7 +1,7 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
-import type { ProcedureOutput } from "../../features/sandbox/client/sandboxRpc";
+import type { ProcedureOutput } from "../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 // The switch, at the loader's grain: pointing the browser at another sandbox drops everything this host was holding on
@@ -35,8 +35,8 @@ jest.mock(`../builtins`, () => ({ builtinModules: state.builtins }));
 jest.mock(`../../features/extensions/useExtensionSettings`, () => ({
     extensionSettingsStore: () => ({ load: () => state.settingsLoad() }),
 }));
-jest.mock(`../../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { list: () => state.list() } }) }));
-jest.mock(`../../features/sandbox/client/sandboxClient`, () => ({
+jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { list: () => state.list() } }) }));
+jest.mock(`../../client/sandbox/sandboxClient`, () => ({
     sandboxRequest: () => Promise.resolve(new Response(``)),
     sandboxError: (response: Response) => new Error(String(response.status)),
 }));

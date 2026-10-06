@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type RequestDocument, planParts } from "@intentic/sandbox-contract";
-import { browserOwnsClick, MarkdownFigure } from "@intentic/ui";
+import { browserOwnsClick, MarkdownParts } from "@intentic/ui";
+import { basename } from "@intentic/ui/path";
 import { copyCodeFromEvent, parseMarkdownParts, renderParsedMarkdown } from "@intentic/ui/markdown";
 import { computed, ref } from "vue";
 import { useChatSurface } from "../../tools/chatToolSurface";
@@ -46,7 +47,7 @@ const parsed = computed(() => {
 const parts = computed(() => renderParsedMarkdown(parsed.value));
 
 // Bare file name for the header chip; the full path isn't useful at a glance.
-const fileName = computed(() => props.document.path.split(`/`).pop() ?? props.document.path);
+const fileName = computed(() => basename(props.document.path));
 
 // In a card the shell draws nothing: the rows below read the card's own inset, so the document sits on its margins.
 const shellClass = computed(() => (props.inCard ? `` : `chat-inset overflow-hidden`));
@@ -118,10 +119,7 @@ const onProseClick = (event: MouseEvent): void => {
             @click="onProseClick"
             @pointerdown="copyCodeFromEvent"
         >
-            <template v-for="(part, index) in parts" :key="index">
-                <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
-                <MarkdownFigure v-else :figure="part.figure" />
-            </template>
+            <MarkdownParts :parts="parts" />
         </div>
     </div>
 </template>

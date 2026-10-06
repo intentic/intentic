@@ -1,12 +1,12 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { summonChat } from "../../chat/run/summon";
-import { commandShortcut } from "../../../shell/commands/useCommands";
-import { useNotifications } from "../../../shell/notifications/notifications";
-import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
+import { useNotifications } from "../../../workbench/notifications/notifications";
+import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { clearableOf, type FleetAgent, lanes } from "./useAgents-fleet";
 import { archived, holdPending, moveAhead } from "./useAgents-registry";
 
@@ -170,7 +170,7 @@ export const archive = async (ids?: readonly string[], options?: { readonly rece
         // The press failed, so the cards it took slide back into their lane, under the strip that says why.
         if (current()) {
             restore();
-            notice.value = errorMessage(error, t(`agents.useAgentsArchive.couldntArchive`));
+            notice.value = messageOr(error, t(`agents.useAgentsArchive.couldntArchive`));
         }
     } finally {
         release();
@@ -228,7 +228,7 @@ export const restore = async (ids: readonly string[]): Promise<void> => {
         }
         unput();
         archived.value = withReturned(before, new Set(leaving.map((agent) => agent.id)));
-        notice.value = errorMessage(error, t(`agents.useAgentsArchive.couldntRestore`));
+        notice.value = messageOr(error, t(`agents.useAgentsArchive.couldntRestore`));
     } finally {
         release();
     }
@@ -262,7 +262,7 @@ export const purgeArchived = async (): Promise<void> => {
         if (!current()) {
             return;
         }
-        notice.value = errorMessage(error, t(`agents.useAgentsArchive.couldntDeleteArchive`));
+        notice.value = messageOr(error, t(`agents.useAgentsArchive.couldntDeleteArchive`));
     } finally {
         release();
     }

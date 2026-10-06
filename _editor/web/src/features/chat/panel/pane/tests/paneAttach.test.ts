@@ -39,7 +39,7 @@ jest.mock("../../../../agents/fleet/useAgents", () => ({
     }),
 }));
 jest.mock("../../../run/useChat-sessions", () => ({ ...sessionsOriginal, hydrateOnce, refreshAfterSleep }));
-jest.mock("../../../../../shell/window/onScreen", () => ({ onScreen }));
+jest.mock("../../../../../workbench/window/onScreen", () => ({ onScreen }));
 
 const { usePaneAttach } = await import("../paneAttach");
 const { Conversation } = await import("../../../session/conversation");

@@ -3,10 +3,10 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { readIntenticLines } from "../../../lib/intenticStream";
 import { rpcKey } from "../../../lib/queryKeys";
-import { rpcQuery } from "../client/rpcQuery";
-import { SandboxHttpError } from "../client/sandboxHttpError";
-import { sandboxRpc } from "../client/sandboxRpc";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Live tunnels and disks: state is read back from the OS, so a link the agent opens or drops outside the UI shows up.
 

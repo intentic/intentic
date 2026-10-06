@@ -9,7 +9,7 @@ const active = ref({ id: `box`, role: `owner`, hosted: null, removedAt: null });
 const activeWakeRefused = ref(undefined);
 
 jest.mock("@intentic/ui/async", () => ({ useNow: () => clock }));
-jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ active, connection, reachable, activeWakeRefused }) }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ active, connection, reachable, activeWakeRefused }) }));
 jest.mock("../live/sandboxRestart", () => ({ restartExpected: () => undefined }));
 jest.mock("../diagnosis/useDiagnosis", () => ({ useDiagnosis: () => computed(() => undefined) }));
 const { useRecoveryDue, useVisibleOutage } = await import("./useVisibleOutage");

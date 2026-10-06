@@ -6,7 +6,7 @@ import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import * as actualVueRouter from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
-import type { RememberedSandbox } from "./deviceDirectory";
+import type { RememberedSandbox } from "../../../client/directory/deviceDirectory";
 import type { RecoveryDeps } from "./useRecovery";
 
 // The recovery screen as the reader meets it: the sandboxes it can bring back, one press each, and somewhere to go once
@@ -24,9 +24,9 @@ jest.mock(`vue-router`, () => ({
 }));
 
 const owner = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref(owner) }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref(owner) }) }));
 const sandboxes = ref<SandboxSummary[]>([]);
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ sandboxes }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ sandboxes }) }));
 
 const intentic: RememberedSandbox = {
     id: `s1`,
@@ -55,7 +55,7 @@ jest.mock(`./recoveryDeps`, () => ({
 }));
 
 const { default: Recover } = await import(`./Recover.vue`);
-const { forgetAccount, rememberListed } = await import(`./deviceDirectory`);
+const { forgetAccount, rememberListed } = await import(`../../../client/directory/deviceDirectory`);
 const { sandboxSummary } = await import(`../../../testing/sandboxSummary`);
 
 let app: App | undefined;

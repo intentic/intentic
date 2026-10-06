@@ -19,7 +19,8 @@ flowchart LR
 - WhatsApp has no API to call, so the gateway holds the only session. The agent's `whatsapp` CLI (`bin/whatsapp`,
   put on the agent's PATH by `contributes.bin`) forwards to the gateway's loopback control surface, found through a
   `gateway.url` file under the workspace's runtime directory. A chat can be named by JID, phone number or contact
-  name; an ambiguous name is refused with the candidates rather than guessed.
+  name; an ambiguous name is refused with the candidates rather than guessed. Like every agent-facing CLI here it
+  prints errors to stdout and exits 2 on any failure, since an agent drops stderr.
 - Unlike the other messaging gateways it connects as soon as the card exists, because pairing starts then. The card
   shows a pairing code the owner enters on the phone, refreshed while unpaired.
 - The device presents itself as Chrome on Ubuntu, using the current WhatsApp Web version. WhatsApp refuses a link-code
@@ -47,7 +48,7 @@ flowchart LR
 - [src/store.ts](src/store.ts) — the session store: contacts, the `@lid` map, chats, the bounded message log, name search.
 - [src/listener.ts](src/listener.ts) — incoming messages to dispatched events, sender identity, typing indicator.
 - [src/routes.ts](src/routes.ts) — the CLI's control routes and the text each one answers with.
-- [bin/whatsapp](bin/whatsapp) — the agent's CLI, a dependency-free forwarder to the gateway.
+- [src/cli.ts](src/cli.ts) — the agent's `whatsapp` CLI, a forwarder to the gateway's control surface.
 
 ## Commands
 

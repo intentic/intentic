@@ -1,7 +1,7 @@
 import { computed, type Ref } from "vue";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { WORKSPACE_APPS } from "../../lib/queryKeys";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { usePanels } from "./usePanels";
 
 /* The apps living in workspace monorepos, via the daemon's per-repo apps routes (one round-trip per monorepo). */

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 /* House metals stay shared with the app entry screens and Sanctum skin. */
-@import "../../../../_shared/house-css/house.css";
+@import "../../../../_shared/entry-css/house.css";
 /* The light skin. Ordered first because it cannot lose: its selector outscores the `:root` Tailwind emits. */
 @import "./desk.css";
 /* Every face the site serves, self-hosted. Regenerate with `node _tools/scripts/fonts.mjs`. */

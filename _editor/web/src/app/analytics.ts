@@ -1,8 +1,8 @@
 import type { PostHog } from "posthog-js";
-import { watch } from "vue";
+import type { User } from "@intentic/api-contract";
+import { type Ref, watch } from "vue";
 import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
-import { useAuth } from "../features/auth/useAuth";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
 import { replayPrivacy } from "./replayPrivacy";
 
@@ -44,7 +44,8 @@ const firstIdle = (): Promise<void> =>
 const touchScreen = (): boolean => `matchMedia` in globalThis && globalThis.matchMedia(`(hover: none) and (pointer: coarse)`).matches;
 
 // `routePatternOf` is the router's table as a question, so an address is reported as its route (`/workspace/:path*`).
-export const initAnalytics = async (routePatternOf: RoutePatternOf): Promise<void> => {
+// `user` is the signed-in account (useAuth's), handed in since the account's client sits above this module.
+export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readonly<Ref<User | null>>): Promise<void> => {
     const { posthogKey, posthogHost } = environment.analytics;
     // Empty in dev; a literal `$POSTHOG_KEY` when the deploy container's envsubst had no key to substitute.
     if (posthogKey === `` || posthogKey.startsWith(`$`)) {
@@ -81,7 +82,6 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf): Promise<voi
         posthog.capture(event, properties);
     }
 
-    const { user } = useAuth();
     // Session resolves (sign-in or reload) → stable identity; sign-out / account deletion → drop it. Immediate, since a
     // session that resolved while the SDK was still loading has no change left to announce it.
     watch(

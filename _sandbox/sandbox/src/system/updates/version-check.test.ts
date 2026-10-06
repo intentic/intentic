@@ -1,6 +1,7 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { isDevBuild } from "../../version.js";
-import { isNewer, latestVersion, refreshLatestVersion, startVersionCheck } from "./version-check.js";
+import { expireTimeouts, stalledFetch } from "../../testing.js";
+import { isNewer, latestVersion, RELEASE_FETCH_TIMEOUT_MS, refreshLatestVersion, startVersionCheck } from "./version-check.js";
 
 afterEach(() => {
     unstubAllGlobals();
@@ -47,6 +48,25 @@ test("a GitHub release ahead of the stable image is not offered, and the publish
     release("v9.9.10", "9.9.10");
     await refreshLatestVersion();
     expect(latestVersion()).toBe("9.9.10");
+});
+
+test("a GitHub that never answers times the refresh out and keeps the version it had", async () => {
+    stubGlobal("fetch", async (url: string) => {
+        if (url.endsWith("/releases/latest")) {return new Response(JSON.stringify({ tag_name: "v8.8.8" }), { status: 200 });}
+        if (url.includes("/token?")) {return new Response(JSON.stringify({ token: "read-only" }), { status: 200 });}
+        return new Response(null, { status: 200, headers: { "docker-content-digest": "sha256:published" } });
+    });
+    await refreshLatestVersion();
+    expect(latestVersion()).toBe("8.8.8");
+    stubGlobal("fetch", stalledFetch);
+    const timeouts = expireTimeouts();
+    try {
+        await refreshLatestVersion();
+        expect(timeouts.asked).toEqual([RELEASE_FETCH_TIMEOUT_MS]);
+    } finally {
+        timeouts.mockRestore();
+    }
+    expect(latestVersion()).toBe("8.8.8");
 });
 
 test("a dev build never checks, so /info can't offer an update that would move it backwards", async () => {

@@ -3,7 +3,7 @@
 # FEATURE PACK: a checked-in fragment under packs/ that _tools/scripts/image/compose-image-dockerfile.mjs splices at
 # the two marker lines below to build a published profile (image-packs/profiles.json — `standard` is what
 # ghcr.io/intentic/sandbox:stable ships), and that the daemon composes into the environment overlay when a
-# capability needs it on demand (src/environment/packs.ts). Same fragment files both ways, so the baked and
+# capability needs it on demand (src/image/packs.ts). Same fragment files both ways, so the baked and
 # on-demand paths cannot drift; a splice stamps /opt/packs/<name> so the daemon knows what its base carries.
 #
 # The monorepo is compiled OUTSIDE Docker: _tools/scripts/image/prepare-image-trees.sh builds the baked packages
@@ -244,7 +244,7 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.9.1 SHELL=/b
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g node-gyp@13.0.2 && node-gyp --version
 # The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
-# feature packs: connected-provider state decides whether each rides the overlay (environment/provider-packs.ts),
+# feature packs: connected-provider state decides whether each rides the overlay (agent/providers/provider-packs.ts),
 # and the standard profile bakes them all.
 # cloudflared, for one job that has nothing to do with how this sandbox is reached: `intentic deploy apply`
 # shells out to `cloudflared access tcp` to reach a self-host's SSH through the USER'S own Cloudflare tunnel
@@ -487,11 +487,12 @@ COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
 RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
     && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean
 # ocr on PATH: the text on an image, read on this machine by the privacy shield's own reader (PaddleOCR PP-OCRv6,
-# src/ocr/cli.ts), for an agent that must read a screenshot without sending it anywhere and for fileq's OCR tier. Its
-# models come with the privacy pack; without them it says so and exits 2. Symlinked like pane-log-clean above, so node
-# resolves onnxruntime-node and sharp from the daemon's own node_modules.
-RUN chmod +x /opt/sandbox/dist/ocr/cli.js \
-    && ln -s /opt/sandbox/dist/ocr/cli.js /usr/local/bin/ocr
+# _sandbox/ocr), for an agent that must read a screenshot without sending it anywhere and for fileq's OCR tier. Its
+# models come with the privacy pack; without them it says so and exits 2. Symlinked out of the daemon's tree like lsp
+# and iq above: @intentic/ocr is a dependency of @intentic/sandbox, so node resolves onnxruntime-node and sharp from
+# the package's realpath inside /opt/sandbox/node_modules. Same chmod-as-existence-check rationale.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/ocr/dist/cli.js \
+    && ln -s /opt/sandbox/node_modules/@intentic/ocr/dist/cli.js /usr/local/bin/ocr
 # The memory half of the same queue, symlinked the same way: it asks the daemon's resource budget over its local socket
 # (src/workload/room-socket.ts), and where no daemon answers applies the same formula itself
 # (@intentic/constants/memory-room), so queue-run holds a suite off a pinned box without a second policy. Fails open
@@ -515,7 +516,7 @@ COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
 # or unbounded. Not on PATH ⇒ nothing queues, and heavy programs are still ranked (terminal-run.ts queueRunEnabled).
 COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
 # The thin wrappers for heavy programs that are not node scripts (pnpm's own binary, bun, cargo), first on an agent
-# command's PATH (src/system/resources/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
+# command's PATH (src/workload/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
 # node loads for them instead. Each name is a link to the one wrapper.
 COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims /opt/sandbox/heavy-shims
 # The output filter and its cleaner registry come from @intentic/output-cleaners, the same files the Claude Code plugin

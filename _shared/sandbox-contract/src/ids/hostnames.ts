@@ -77,19 +77,45 @@ export const portSlotFromHost = (hostHeader: string | undefined, sandboxId: stri
 export const publicSlotFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
     keyFromHost("public-", hostHeader, sandboxId);
 
+// WHICH SANDBOX A NAME BELONGS TO is three questions, and each has its own answer below; they disagree on purpose:
+// - hostOwnerId: the sandbox a hostname routes to, by the 12-hex id the platform mints into every name it makes. The
+//   edge routes a Host by it, and the platform's DNS reaper reads a record's owner by it.
+// - sandboxIdOfDaemonUrl: the minted id in a daemon's own address, `sandbox-<id>` exactly, which is what the platform's
+//   lookup names. A preview or port name is not a daemon's address, and an own domain carries none, its /health says it.
+// - sandboxIdFromUrl: the identity as the user sees it, whatever the label, for naming a sync folder.
+
+const MINTED_ID = "[0-9a-f]{12}";
+// A URL's hostname, scheme optional; undefined for one that does not parse.
+const hostnameOf = (url: string): string | undefined => {
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`;
+    try {
+        return new URL(withScheme).hostname;
+    } catch {
+        return undefined;
+    }
+};
+
+// The sandbox that owns a Host (port optional): its leftmost DNS label is `sandbox-<id>` or ends in `-<id>` (a preview,
+// port or outbox name). Anything else, including the loopback `<id>.local.<zone>` label, is no sandbox's.
+export const hostOwnerId = (host: string): string | undefined => {
+    const label = host.split(":")[0]?.split(".")[0] ?? "";
+    return new RegExp(`-(${MINTED_ID})$`).exec(label)?.[1];
+};
+
+// The platform-minted id a daemon's address carries (`https://sandbox-<id>.<zone>`), or undefined for a sandbox behind a
+// domain of its own, or an address that does not parse.
+export const sandboxIdOfDaemonUrl = (url: string): string | undefined => {
+    const label = hostnameOf(url)?.split(".")[0] ?? "";
+    return new RegExp(`^${SANDBOX_PREFIX}(${MINTED_ID})$`).exec(label)?.[1];
+};
+
 // The sandbox's identity as the user sees it: the URL's leading DNS label minus the `sandbox-` prefix. On the
 // own-Cloudflare path the label is whatever subdomain the owner chose, so that is the id there.
 export const sandboxIdFromUrl = (url: string | undefined): string | undefined => {
     if (url === undefined || url === "") {
         return undefined;
     }
-    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`;
-    let label: string;
-    try {
-        label = new URL(withScheme).hostname.split(".")[0] ?? "";
-    } catch {
-        return undefined;
-    }
+    const label = hostnameOf(url)?.split(".")[0] ?? "";
     if (label === "" || label === SANDBOX_PREFIX) {
         return undefined;
     }
@@ -114,14 +140,7 @@ export const zoneFromUrl = (url: string | undefined): string | undefined => {
     if (url === undefined || url === "") {
         return undefined;
     }
-    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`;
-    let hostname: string;
-    try {
-        hostname = new URL(withScheme).hostname;
-    } catch {
-        return undefined;
-    }
-    const labels = hostname.split(".");
+    const labels = hostnameOf(url)?.split(".") ?? [];
     if (labels.length < 3) {
         return undefined;
     }

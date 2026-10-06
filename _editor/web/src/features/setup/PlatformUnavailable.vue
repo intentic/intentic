@@ -3,7 +3,7 @@ import { Button } from "@intentic/ui";
 import { onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
-import { platformRetry } from "../../router/platformRetry";
+import { platformRetry } from "../../client/auth/platformRetry";
 import DirectSandboxes from "../sandbox/recovery/DirectSandboxes.vue";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 

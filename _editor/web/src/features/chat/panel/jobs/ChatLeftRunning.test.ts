@@ -14,7 +14,7 @@ jest.mock("../../../agents/fleet/useAgents", () => ({
     useAgents: () => ({ agentById: () => ({ jobs: roster.jobs, watches: roster.watches }), stopJob, stopWatching }),
 }));
 jest.mock("../useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
-jest.mock("../../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
+jest.mock("../../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
 jest.mock("../../tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
 jest.mock("../../../preview/previewSurface", () => ({ openPreviewBeside: previewed }));
 jest.mock("vue-router", () => ({ useRouter: () => ({}) }));
@@ -77,7 +77,7 @@ describe(`ChatLeftRunning`, () => {
         expect(text).toContain(`Still running after the turn`);
         expect(text).toContain(`This chat wakes by itself when these finish.`);
         expect(text).toContain(`Run the web e2e suite`);
-        expect(text).toContain(`Wakes this chat when it exits · 1m 5s, gives up in 5h 0m`);
+        expect(text).toContain(`Wakes this chat when it exits · 1m 5s, gives up in 5h`);
         // The job's own watch is said on the job's row, not again as a row of its own.
         expect(text).not.toContain(`Background job "Run the web e2e suite"`);
     });
@@ -100,7 +100,7 @@ describe(`ChatLeftRunning`, () => {
     it(`lists a watch the agent armed with its pace and deadline, and disarms only it`, async () => {
         roster.watches = [watch({})];
         const element = mount();
-        expect(element.textContent).toContain(`CI on the pushed branchChecks every 60s · gives up in 1h 0m`);
+        expect(element.textContent).toContain(`CI on the pushed branchChecks every 1m · gives up in 1h`);
         labelled(element, `Stop watching`)?.click();
         await nextTick();
         expect(stopWatching).toHaveBeenCalledWith(`agent-1`, `watch-1`);

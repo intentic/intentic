@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
-import type { SafetyLogEntry, SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SafetyLogEntry, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";

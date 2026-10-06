@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";

@@ -8,7 +8,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { OOM_SCORE, priorityOf } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
-import { queueRunEnabled } from "../../system/resources/heavy-commands.js";
+import { queueRunEnabled } from "../../workload/heavy-commands.js";
 import { bashTmuxHooks, NO_PROMPTS, PIPESTATUS_TRAP, softTimeoutOf } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./jobs/background-jobs.js";
 

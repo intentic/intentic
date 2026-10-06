@@ -1,7 +1,7 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { type ComputedRef, shallowRef } from "vue";
-import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 /* Whether the board asks at all is the whole promise of the preference: off must mean no request, so the daemon (which
@@ -26,17 +26,17 @@ const reading: SandboxMetrics = {
 };
 const measure = jest.fn<SandboxRpc[`system`][`metrics`]>(async () => reading);
 
-jest.mock("../../sandbox/client/useSandboxQuery", () => ({
+jest.mock("../../../client/sandbox/useSandboxQuery", () => ({
     useSandboxQuery: (options: CapturedOptions) => {
         captured.options = options;
         return { query: { data }, error: { value: undefined } };
     },
 }));
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { metrics: measure } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { metrics: measure } }) }));
 
 const { heaviestRoles, LIVE_METRICS_POLL_MS, showLiveMetrics, useLiveMetrics } = await import("./liveMetrics");
-const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes");
-const { activeSandboxId } = await import("../../sandbox/overview/activeSandbox");
+const { setDaemonRoutes } = await import("../../../client/sandbox/useDaemonRoutes");
+const { activeSandboxId } = await import("../../../lib/activeSandbox");
 const { UNPERSISTED } = await import("../../../lib/queryPersistence");
 
 const optionsOf = (): CapturedOptions => {

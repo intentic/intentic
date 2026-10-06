@@ -1,7 +1,6 @@
 // AgentProjectInstalls controls projectInstalls: whether an agent's own project install runs, asks first, or is refused.
 import "@intentic/testing/dom";
-import type { SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";

@@ -1,5 +1,5 @@
 import { PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
-import { registerViewer, renderViewerForExtension } from "../../../../core-views/viewerRegistry";
+import { registerViewer, renderViewerForExtension } from "../../../../workbench/views/viewerRegistry";
 import { RAW_MAX_BYTES } from "../../explorer/fileType";
 import { resolveOpenFile } from "../openFile";
 

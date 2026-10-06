@@ -20,6 +20,7 @@ import { startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
+import { workingNow } from "./bootstrap/working-now.js";
 import { createServices } from "./composition.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
@@ -128,8 +129,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     if (role.container) {
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => void room.close());
-        // How many turns run, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
-        const work = startWorkSignal({ conversations: services.conversations, events: services.events, logger, boot: bootFacts });
+        // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
+        const work = startWorkSignal({ working: () => workingNow(services, "restart").length, events: services.events, logger, boot: bootFacts });
         shutdown.push(() => work.stop());
     }
     shutdown.push(() => services.perf.stop());

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract";
-import { gitBytes } from "@intentic/scaffold";
+import { gitBytes } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import { isValidRepoId } from "../../workspace/layout/repo-discovery.js";
 import { MAX_RAW_BYTES } from "../../workspace/files/workspace-files-download.js";

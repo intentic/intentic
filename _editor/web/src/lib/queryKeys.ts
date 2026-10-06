@@ -1,5 +1,5 @@
-import type { ProcedureName } from "../features/sandbox/client/sandboxRpc";
-import { sandboxKey } from "../features/sandbox/overview/activeSandbox";
+import type { ProcedureName } from "../client/sandbox/sandboxRpc";
+import { sandboxKey } from "./activeSandbox";
 
 // Every cache key's path, written once: `sandboxKey` scopes to the active sandbox, so `.of()` is that sandbox's exact
 // key and `.every` is the deliberate wider prefix across all sandboxes. Imports only `sandboxKey` at runtime, nothing

@@ -3,10 +3,10 @@ import { STATE_DIR } from "@intentic/constants";
 import { type AttachFrame, sandboxRouteName, TRIAL_PROVIDER, TrialStatusSchema } from "@intentic/sandbox-contract";
 import { nextTick, ref, toRaw, watch } from "vue";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { SandboxCallContext } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxCallContext } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../../lib/activeSandbox";
 import { chatRun } from "./chatRun";
 import { runningTurn } from "../../../testing/runningTurn";
 
@@ -26,7 +26,7 @@ const procedureOf =
     (name: string) =>
     (...call: [input?: unknown, options?: CallOptions]): never =>
         daemon(name, ...call) as never;
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         accounts: {
             accounts: procedureOf(`accounts.accounts`),
@@ -74,7 +74,7 @@ jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 activeSandboxId.value = `sb1`;
 // Whether the sandbox reads as reachable; false unless a test says otherwise.
 const sandboxReachable = ref(false);
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined.
     return { useSandbox: () => ({ activeSandboxId, reachable: sandboxReachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });
@@ -1279,7 +1279,7 @@ describe(`abandoned drafts`, () => {
     it(`answers for the strip from whichever window draws the chat`, async () => {
         const { chatStrip, previewOf } = await import("../panel/useChat-strip");
         const { receiveChatNote } = await import("./chatChannel");
-        const { receiveFloatingNote } = await import("../../../shell/window/floating");
+        const { receiveFloatingNote } = await import("../../../workbench/window/floating");
         const chat = useChat();
         const own = chat.active.value.conversationId;
         chat.draft.value = `real work`;
@@ -1326,7 +1326,7 @@ describe(`abandoned drafts`, () => {
     // A window not drawing the chat can't tell its shadow copy is empty vs. being typed into elsewhere, so it mints
     // fresh instead of reusing the shadow.
     it(`mints a fresh draft from a window that is not drawing the chat: its copy cannot tell empty from being typed into`, async () => {
-        const { receiveFloatingNote } = await import("../../../shell/window/floating");
+        const { receiveFloatingNote } = await import("../../../workbench/window/floating");
         const chat = useChat();
         chat.draft.value = `real work`;
         const shadow = newChat();

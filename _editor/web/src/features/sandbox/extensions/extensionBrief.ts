@@ -1,4 +1,5 @@
 import { composeAsk } from "@intentic/sandbox-contract/chores";
+import { formatCount } from "@intentic/ui/format";
 
 // What's said to an agent handed a new extension: the wish, quoted verbatim, plus the rules a workspace extension
 // lives under that are invisible from inside the directory. Built on composeAsk
@@ -63,7 +64,7 @@ export interface TightenBrief {
 export const tightenBrief = ({ id, dir, unused, used }: TightenBrief): string =>
     composeAsk({
         subject: `Tighten the daemon routes ${id} asks for, in ${dir}/intentic-extension.json.`,
-        why: `Of the routes it declares, these have never been observed being called: ${unused.join(`, `)}. These have: ${used.map((route) => `${route.route} (${route.calls.toLocaleString()})`).join(`, `)}.`,
+        why: `Of the routes it declares, these have never been observed being called: ${unused.join(`, `)}. These have: ${used.map((route) => `${route.route} (${formatCount(route.calls)})`).join(`, `)}.`,
         diagnosis: `The counts come from the host's own permission gate, which records which declared entry covered each call, so the used ones are certain, and an unused one only means nothing exercised it here.`,
         goal: `Decide, route by route, whether the extension still needs it. The result is a shorter permissions list, a note for each route you kept, or a reasoned "leave it as it is".`,
         invariants: TIGHTEN_INVARIANTS,

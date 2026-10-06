@@ -1,9 +1,9 @@
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
 import { forgetMedia, type MediaKind, rememberMedia } from "./attachmentPreviews";
-import { sandboxUpload } from "../../sandbox/client/sandboxClient";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxUpload } from "../../../client/sandbox/sandboxClient";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { ChatAttachment } from "../transcript/transcript";
 import { uuid } from "../../../lib/uuid";
 
@@ -90,7 +90,7 @@ export const useChatAttachments = (composer: {
             },
             (err: unknown) => {
                 entry.status = `failed`;
-                entry.error = errorMessage(err, `Upload failed.`);
+                entry.error = messageOr(err, `Upload failed.`);
             },
         );
     };

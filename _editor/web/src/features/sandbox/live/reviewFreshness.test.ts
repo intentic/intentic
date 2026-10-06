@@ -5,7 +5,7 @@ import { ref } from "vue";
 
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -13,7 +13,7 @@ jest.mock("../client/useSandbox", () => {
 });
 // Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
 // this factory returns; only the two below are ever called here.
-jest.mock("../client/sandboxClient", () => ({
+jest.mock("../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: jest.fn(),
     sandboxRequest: jest.fn(),
     sandboxBlob: jest.fn(),

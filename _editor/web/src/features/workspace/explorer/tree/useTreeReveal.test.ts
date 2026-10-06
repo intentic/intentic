@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { effectScope, nextTick, ref, shallowRef } from "vue";
 import { indexEntries, type MoreRow, type Row } from "./treeRows";
 import { useTreeReveal } from "./useTreeReveal";

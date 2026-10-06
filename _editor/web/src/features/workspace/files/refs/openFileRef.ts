@@ -1,13 +1,13 @@
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { router } from "../../../../router";
-import { sectionReachable } from "../../../../core-views/registry";
-import { FILE_SIDE_VIEW, fileSideInput } from "../../../../shell/side/sideFileInput";
-import { openBeside, sideDocked } from "../../../../shell/side/sideTabs";
-import { handOffToMainWindow } from "../../../../shell/window/mainWindow";
+import { sectionReachable } from "../../../../workbench/views/registry";
+import { FILE_SIDE_VIEW, fileSideInput } from "../../../../workbench/side/sideFileInput";
+import { openBeside, sideDocked } from "../../../../workbench/side/sideTabs";
+import { handOffToMainWindow } from "../../../../workbench/window/mainWindow";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "../../tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../../app/projectScope";
-import { workspaceAgent, workspaceScope } from "../../health/workspaceScope";
+import { workspaceAgent, workspaceScope } from "../../../../app/workspaceScope";
 
 // `.intentic` is bind-mounted into every isolated namespace, so a path under it is shared regardless of scope.
 export const sharedStatePath = (path: string): boolean => path.startsWith(`${STATE_DIR}/`);

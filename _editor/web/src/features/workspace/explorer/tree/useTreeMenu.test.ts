@@ -1,13 +1,12 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import { SANDBOX_ROUTE_NAMES, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 import { unstubbed } from "@intentic/testing";
 import { ref } from "vue";
 import { useMultiSelect } from "../../../../lib/multiSelect";
-import { setDaemonRoutes } from "../../../sandbox/overview/useDaemonRoutes";
+import { setDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
 import { dir, fakeTreeStore, file, type SurfaceOptions, treeSurface } from "../../../../testing/treeSurface";
 import type { RowAction } from "../rowActions";
 import { type TreeMenuHost, useTreeMenu } from "./useTreeMenu";

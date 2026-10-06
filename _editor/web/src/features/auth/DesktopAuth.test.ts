@@ -27,13 +27,13 @@ const getIdToken = jest.fn<(options?: { gate?: boolean; usableFor?: number }) =>
 // An ordinary browser, where Google's button renders; the webview refusal case is signInSurfaces.test.ts's case.
 const renderButton = jest.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
 const adoptIdToken = jest.fn<(credential: string) => boolean>().mockReturnValue(true);
-jest.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
+jest.mock(`../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
 const signInWithGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string } | null>({ email: `owner@example.com` });
 const refresh = jest.fn<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
 const signInWithGoogleCredential = jest.fn<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
-jest.mock(`./useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
+jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
 const handoff = jest.fn();
 // The credential the platform already holds; undefined means it holds nothing usable.
 const googleIdToken = jest.fn<() => Promise<{ idToken?: string }>>().mockResolvedValue({});

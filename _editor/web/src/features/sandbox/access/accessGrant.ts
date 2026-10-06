@@ -1,4 +1,4 @@
-import type { GrantedRole } from "@intentic/sandbox-contract";
+import type { GrantedRole, MemberGrant } from "@intentic/sandbox-contract";
 
 // What one grant sends the daemon, and the ways it can be malformed before it is sent. Pure, since the Access page's
 // two writes (daemon first, platform second) both read it.
@@ -14,7 +14,7 @@ export interface AccessGrant {
 // The daemon's `/members` body. An area list rides on any tier below maintainer, and its ABSENCE is the whole
 // workspace, so it is omitted rather than sent empty — an empty list would be a fence admitting nothing, which is a
 // different grant.
-export const grantBody = (email: string, role: GrantedRole, areas: readonly string[] | undefined): AccessGrant => ({
+export const grantBody = (email: string, role: GrantedRole, areas: readonly string[] | undefined): MemberGrant => ({
     email,
     role,
     ...(areas === undefined || role === `maintainer` ? {} : { areas: [...areas] }),

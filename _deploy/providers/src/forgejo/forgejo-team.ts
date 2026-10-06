@@ -3,7 +3,6 @@ import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
@@ -28,7 +27,7 @@ const parse = (inputs: ResolvedInputs): ForgejoTeamInputs => parseInputs(forgejo
 // team's existence + its current permission (so a permission change re-applies); membership and repo
 // attachment are idempotent PUTs re-asserted on apply. Depends (via the resolver's refs) on the org, every
 // member's account, and every attached repo, so all exist before apply runs. A pure sink, no outputs.
-export const createForgejoTeamProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createForgejoTeamProvider = (api: ForgejoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         try {

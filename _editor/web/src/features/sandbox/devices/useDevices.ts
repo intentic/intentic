@@ -13,15 +13,15 @@ import {
     hostRunningSandbox,
     SyncStatusSchema,
 } from "@intentic/sandbox-contract";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref } from "vue";
-import { sandboxError, sandboxJson, sandboxRequest } from "../client/sandboxClient";
-import { SandboxHttpError } from "../client/sandboxHttpError";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxError, sandboxJson, sandboxRequest } from "../../../client/sandbox/sandboxClient";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { readIntenticLines } from "../../../lib/intenticStream";
 import { SYNC_HEALTH } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Polled on a slow cadence and
 // pushed on the `hosts` domain when a machine's reading actually moves, so state is a snapshot cached by the daemon
@@ -159,7 +159,7 @@ const outcomeOf = async (
     const said = await flowSaid(frames, onLine).catch((error: unknown) => {
         if (!severs) {
             // Read by shape: the browser's own abort is a DOMException, which not every DOM makes an Error.
-            const browser = errorMessage(error, ``);
+            const browser = messageOr(error, ``);
             throw new DeviceFlowLostError(browser === `` ? undefined : browser);
         }
         return { outcome: undefined, refusal: undefined };

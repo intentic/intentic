@@ -11,8 +11,8 @@ import { quickBarShowAsk, quickBarTranscript } from "./chatPanelLayout";
 import { draftConversation, reveal } from "./useChat-reveal";
 
 import { queryClient } from "../../../lib/queryPersistence";
-import { chatBarSlot, chatFullSlot } from "../../../shell/window/panelSlots";
-import { useLayout } from "../../../shell/window/useLayout";
+import { chatBarSlot, chatFullSlot } from "../../../workbench/window/panelSlots";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import ChatQuickBar from "./ChatQuickBar.vue";

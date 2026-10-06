@@ -1,12 +1,12 @@
-import type { PartialFileDiff } from "@intentic/sandbox-contract";
+import type { ChangeStatus, PartialFileDiff } from "@intentic/sandbox-contract";
 
 // The argument to `api.workspace.openDiff`: the extension says what changed, the host owns the tab, viewer and
 // dirty-buffer bookkeeping. Lives in the public api package because the app's own review surfaces build the identical
 // payload.
 
-// Git's vocabulary for what happened to a file; the host renders each as its own letter and colour. "conflicted" is
-// git's unmerged state (`U`), not a kind of modification.
-export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "type-changed" | "conflicted";
+// Git's vocabulary for what happened to a file (the contract's ChangeStatusSchema); the host renders each as its own
+// letter and colour. "conflicted" is git's unmerged state (`U`), not a kind of modification.
+export type { ChangeStatus };
 
 // A binary diff ships its two sides as daemon URLs to fetch bytes from, not as content. An absent side means that side
 // does not exist; the viewer gives the pane entirely to the side that does.

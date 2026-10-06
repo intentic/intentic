@@ -1,9 +1,9 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { queryClient } from "../../../lib/queryPersistence";
-import { idTokenClaims } from "../../auth/googleToken";
-import { useAuth } from "../../auth/useAuth";
-import { SANDBOX_LIST_KEY, useSandbox } from "../client/useSandbox";
-import type { RememberedAccount, RememberedSandbox } from "./deviceDirectory";
+import { idTokenClaims } from "../../../client/auth/googleToken";
+import { useAuth } from "../../../client/auth/useAuth";
+import { SANDBOX_LIST_KEY, useSandbox } from "../../../client/sandbox/useSandbox";
+import type { RememberedAccount, RememberedSandbox } from "../../../client/directory/deviceDirectory";
 
 // OPENING A SANDBOX WITHOUT THE PLATFORM (README.md). All the workspace needs from the platform once it is open is the
 // account and the list: the account is the one this device last saw list, whole, and the list is what it remembers.

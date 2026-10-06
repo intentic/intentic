@@ -5,7 +5,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { localFace } from "../app/environments/local";
 import { type LocalFacts, type LocalSandbox, localHost } from "../app/environments/localHost";
 import { placementOfKind } from "../features/sandbox/overview/placement";
-import { formatChord, isApplePlatform } from "../shell/commands/keybindings";
+import { formatChord, isApplePlatform } from "../workbench/commands/keybindings";
 import { sandboxSlot, sandboxSlotChord } from "./localKeys";
 
 // THE PLACE CHIP: the top of a local window's rail, where the sandbox shell keeps its sandbox switcher, and the same

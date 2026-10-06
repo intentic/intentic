@@ -56,7 +56,11 @@ flowchart LR
   holds no `.vue` files and no import-time DOM access, so node tests can load it.
 - **Figures.** A fenced block in `dag`, `bars` or `stats` carries JSON, and a `mermaid` block carries Mermaid
   source. `MarkdownFigure.vue` draws each one with the kit's own charts and palette. A fence that does not parse
-  renders as an ordinary code block.
+  renders as an ordinary code block. `MarkdownParts.vue` draws a rendered document's prose runs and figures in order,
+  inside whatever `.md-prose` box the caller owns: `Markdown.vue` and chat's answer, plan and document cards all use it.
+- **Messages in place of content.** `Notice` is the one tinted message box (four sizes, an `#actions` slot for the
+  view's own buttons). `EmptyState` is the centred block a pane or page shows instead of its content: nothing yet, a
+  read that failed, a wait. Both are on the design kit page.
 - **Lazy chunks.** Every dynamic import in the editor goes through `loadChunk` (`@intentic/ui/chunk`). A chunk a
   redeploy removed reloads the page once onto where the reader is, and any chunk that loads re-arms that reload.
   `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.
@@ -137,7 +141,7 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 | Directory | Holds |
 | --- | --- |
 | `components/` | Components by role: primitives, layout, forms, rows, overlays, feedback, charts, markdown, brand, sandbox |
-| `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation |
+| `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation, preferences, the shared clock, polling |
 | `motion/` | Whether the interface moves, looping glyphs, folds, rows arriving and leaving |
 | `markdown/` | The markdown engine: render, figures, frontmatter, code blocks, block editing, history |
 | `styles/` | Tokens, motion, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |

@@ -1,7 +1,6 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { type UsageRollupRow, type UsageTurn, UsageTurnSchema, utcDayOf } from "@intentic/sandbox-contract";
+import { defineDocument } from "../store/evolution/documents.js";
+import { openLedger } from "../store/open-document.js";
 
 // Durable spend-and-outcome ledger (historyRoot/usage.jsonl): one append-only line per turn, daemon-written only,
 // outside the agent's /work mount.
@@ -9,6 +8,16 @@ import { type UsageRollupRow, type UsageTurn, UsageTurnSchema, utcDayOf } from "
 // ones.
 // `rollup` sums only billed turns (see `billed`), so a ledger holding every failure still projects a cost panel that
 // holds none of them.
+
+// One turn per line. A document so a change to a turn's shape ships with its conversion and the shape check sees it;
+// `boot: false` since it is JSON Lines, converted line by line on every read.
+export const usageLedgerDocument = defineDocument({
+    root: "history",
+    path: "usage.jsonl",
+    schema: UsageTurnSchema,
+    granularity: "entries",
+    boot: false,
+});
 
 export interface UsageStore {
     // Fills `at` + `day`; a failed call surfaces to its caller and never poisons later appends.
@@ -41,33 +50,15 @@ const billed = (turn: UsageTurn): boolean => turn.turns > 0;
 export const fileUsageStore = (path: string, now: () => number = Date.now): UsageStore => {
     let queue: Promise<unknown> = Promise.resolve();
 
-    const read = async (): Promise<UsageTurn[]> => {
-        // Only an absent ledger is empty: one that cannot be read answers with the error, not with no rows.
-        const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
-        if (raw === undefined) {
-            return [];
-        }
-        return raw
-            .split("\n")
-            .filter((line) => line !== "")
-            .flatMap((line) => {
-                try {
-                    const parsed = UsageTurnSchema.safeParse(JSON.parse(line));
-                    return parsed.success ? [parsed.data] : [];
-                } catch {
-                    // A torn line (crash mid-append) loses one turn's numbers, never the ledger.
-                    return [];
-                }
-            });
-    };
+    // Only an absent ledger is empty; a torn line (crash mid-append) loses one turn's numbers, never the ledger.
+    const ledger = openLedger(usageLedgerDocument, path);
+    const read = (): Promise<UsageTurn[]> => ledger.read();
 
     return {
         record: (turn) => {
             const step = queue.then(async () => {
-                await mkdir(dirname(path), { recursive: true });
                 const at = now();
-                const record: UsageTurn = { at, day: utcDay(at), ...turn };
-                await appendFile(path, `${JSON.stringify(record)}\n`);
+                await ledger.append({ at, day: utcDay(at), ...turn });
             });
             // A failed step surfaces to its own caller; the queue chain never poisons later appends.
             queue = step.catch(() => undefined);

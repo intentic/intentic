@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { ref } from "vue";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
 import { repoNameFromUrl } from "../health/repoName";
 

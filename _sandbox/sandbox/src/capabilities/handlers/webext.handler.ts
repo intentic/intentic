@@ -1,6 +1,6 @@
 import type { WebExtConfig } from "@intentic/sandbox-contract";
 import { peerHandler } from "./peer.handler.js";
-import { WEBEXT_TOOLS_NOTE } from "../../webext/webext-skills.js";
+import { WEBEXT_TOOLS_NOTE } from "./webext-skills.js";
 
 /* A BROWSER OF THE USER'S OWN, reached through the extension they installed in it: the peer handler (peers/) over the webext door. */
 export const webextHandler = peerHandler<WebExtConfig>({

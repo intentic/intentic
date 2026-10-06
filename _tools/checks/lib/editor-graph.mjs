@@ -3,7 +3,9 @@
 // resolves a relative specifier here, value imports only.
 import { posix } from "node:path";
 import { addEdge, cyclesOf } from "./cycle-edges.mjs";
+import { EDITOR_LAYERS, EDITOR_SHELVES } from "./editor-layers.mjs";
 import { importsOf } from "./imports.mjs";
+import { layeredSink, layering } from "./layers.mjs";
 
 // A Vue component's `<script>` blocks, with everything else blanked to its newlines, so a line stays the file's line.
 export const scriptOf = (path, text) => {
@@ -31,14 +33,18 @@ export const resolveIn = (modules, from, specifier) => {
     return [base, base.replace(/\.[cm]?js$/, ".ts"), `${base}.ts`, `${base}/index.ts`].find((candidate) => modules.has(candidate));
 };
 
-// A subsystem is a top-level directory of src, except features/, which is a shelf: each feature is its own. A root file
-// (main.ts, App.vue) wires them all together and belongs to none.
+// A shelf's subdirectory (`features/chat`, `workbench/window`) is its own unit; a module directly on the shelf is the
+// shelf's.
+const shelved = (parts, unit) => (EDITOR_SHELVES.includes(unit) && parts[0] === unit && parts.length > 2 ? `${unit}/${parts[1]}` : unit);
+
+// A subsystem is a top-level directory of src, except a shelf (features/, workbench/), whose every subdirectory is its
+// own. A root file (main.ts, App.vue) wires them all together and belongs to none.
 export const subsystemOf = (path) => {
     const parts = path.split("/");
     if (parts.length === 1) {
         return undefined;
     }
-    return parts[0] === "features" && parts.length > 2 ? `features/${parts[1]}` : parts[0];
+    return shelved(parts, parts[0]);
 };
 
 /**
@@ -65,4 +71,45 @@ export const editorGraphs = (sources) => {
     }
     const count = (edges) => [...edges.values()].reduce((sum, targets) => sum + targets.size, 0);
     return { files: cyclesOf(files), subsystems: cyclesOf(subsystems), fileEdges: count(files), subsystemEdges: count(subsystems) };
+};
+
+const editorLayers = layering(EDITOR_LAYERS);
+
+/**
+ * Where a module sits in lib/editor-layers.mjs: its layer, and the unit cycles are counted between (the table's unit,
+ * or `features/<x>` and `workbench/<x>` on a shelf, since each is its own). Undefined for a root file; `layer` undefined for a
+ * directory no layer places.
+ */
+export const placeInEditor = (path) => {
+    const parts = path.split("/");
+    if (parts.length === 1) {
+        return undefined;
+    }
+    const placed = editorLayers.placeOf(path);
+    if (placed === undefined) {
+        return { unit: parts[0], layer: undefined, top: parts[0] };
+    }
+    const unit = shelved(parts, placed.unit);
+    return { unit, layer: placed.layer, top: parts[0] };
+};
+
+/**
+ * The editor's layered view of the same imports `editorGraphs` reads, static and dynamic alike (either couples one unit
+ * to another): upward imports counted per `from -> to` with their sites, the same-layer edges between units as a
+ * `cyclesOf` graph, and the top-level directories no layer places.
+ */
+export const editorLayering = (sources) => {
+    const sink = layeredSink(addEdge);
+    for (const [from, text] of sources) {
+        const source = placeInEditor(from);
+        const imports = source === undefined ? [] : importsOf(scriptOf(from, text)).filter(({ typeOnly }) => !typeOnly);
+        for (const { specifier, line } of imports) {
+            const to = resolveIn(sources, from, specifier);
+            const target = to === undefined ? undefined : placeInEditor(to);
+            if (target !== undefined) {
+                sink.record(source, target, `${from}:${line}`);
+            }
+        }
+    }
+    return { cycles: cyclesOf(sink.sameLayer), upward: sink.upward, upwardSites: sink.upwardSites, unplaced: sink.unplaced };
 };

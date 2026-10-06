@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { unstubbed } from "@intentic/testing";
 import { effectScope, nextTick, ref } from "vue";

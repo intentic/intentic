@@ -7,7 +7,7 @@
     "icon": "wave-pulse",
     "engines": { "intentic": "^2.0.0" },
     "permissions": {
-        "sandbox": ["GET /activity", "GET /activity/status"]
+        "sandbox": ["GET /activity", "GET /activity/status", "GET /extensions"]
     },
     "contributes": {
         "views": [{ "id": "activity", "label": "Activity", "surface": "sandbox" }],

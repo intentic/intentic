@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import type { User } from "@intentic/api-contract";
-import { directMode } from "./directState";
-import type { RememberedAccount, RememberedSandbox } from "./deviceDirectory";
+import { directMode } from "../../../client/directory/directState";
+import type { RememberedAccount, RememberedSandbox } from "../../../client/directory/deviceDirectory";
 
 // Pins opening a sandbox without the platform: the remembered list becomes the list, under the account that remembered
 // it, and the platform is not asked for a list again until a session check it answers ends direct mode.
@@ -11,7 +11,7 @@ const enterDirect = jest.fn((account: User) => {
     directMode.value = true;
     return account;
 });
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ enterDirect, user: { value: null } }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ enterDirect, user: { value: null } }) }));
 // The platform is down: any list it is asked for fails, which is what direct mode must never trip over.
 const list = jest.fn(async () => {
     throw new Error(`the platform cannot be reached`);
@@ -19,7 +19,7 @@ const list = jest.fn(async () => {
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { list } } }));
 
 const { accountFromGoogle, enterDirectMode, sandboxAt, summaryOf } = await import(`./directMode`);
-const { useSandbox } = await import(`../client/useSandbox`);
+const { useSandbox } = await import(`../../../client/sandbox/useSandbox`);
 const { queryClient } = await import(`../../../lib/queryPersistence`);
 
 const user: User = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };

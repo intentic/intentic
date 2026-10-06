@@ -2,7 +2,7 @@
 import "@intentic/testing/dom";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { effectScope } from "vue";
-import type { ProcedureInput } from "../../../sandbox/client/sandboxRpc";
+import type { ProcedureInput } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 const openFile = jest.fn();
@@ -16,17 +16,17 @@ const unmatched = async (_input: ProcedureInput<`workspace.resolve`>): Promise<{
 const resolve = jest.fn(unmatched);
 
 jest.mock("../../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
 jest.mock("../../tabs/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile, openAtLine }) }));
 jest.mock("../../../../router", () => ({ router: { push, currentRoute } }));
-jest.mock("../../../../core-views/registry", () => ({ sectionReachable }));
+jest.mock("../../../../workbench/views/registry", () => ({ sectionReachable }));
 
 const { fileLinkDecorator, renderMarkdown } = await import("../../../../lib/markdown/renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 const { openFileRefFromEvent, openInWorkspace } = await import("./openFileRef");
-const { workspaceAgent } = await import("../../health/workspaceScope");
-const { claimFloating } = await import("../../../../shell/window/floating");
-const { sideDocked, sideTabId, useSidePanel, closeAllTabs } = await import("../../../../shell/side/sideTabs");
+const { workspaceAgent } = await import("../../../../app/workspaceScope");
+const { claimFloating } = await import("../../../../workbench/window/floating");
+const { sideDocked, sideTabId, useSidePanel, closeAllTabs } = await import("../../../../workbench/side/sideTabs");
 
 // Binds a click listener the way ChatMessageView and MarkdownViewer do, then renders markdown into it.
 const surface = (markdown: string): HTMLDivElement => {

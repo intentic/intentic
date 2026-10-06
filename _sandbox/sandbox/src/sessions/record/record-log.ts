@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { crc32, constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
-import { type FileHandle, mkdir, open, rename, rm, stat } from "node:fs/promises";
+import { type FileHandle, mkdir, open, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import { syncParents, writeAll } from "./record-io.js";
+import { syncParents, writeAll, writeDurable } from "./record-io.js";
 
 // A conversation's record on disk: zstd frames of JSONL, one per append (a settled turn), each preceded by a skippable
 // frame naming its length, its row count and its checksum. zstd readers skip those, so `zstdcat` and `zstdgrep` read a
@@ -151,26 +150,16 @@ export const appendLog = async (path: string, known: LogIndex | undefined, lines
 };
 
 // Writes a whole log from frames of lines, in place of whatever is there, never leaving a half-written one visible.
-export const writeLog = async (path: string, frames: readonly (readonly string[])[]): Promise<void> => {
-    await mkdir(dirname(path), { recursive: true });
-    // Unique per write: worker threads share the process id, and two may write beside the same path.
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    const handle = await open(temporary, "w");
-    try {
-        for (const lines of frames.filter((frame) => frame.length > 0)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- frames go down in order.
-            await writeAll(handle, frameBytes(jsonlOf(lines), lines.length));
-        }
-        await handle.datasync();
-    } finally {
-        await handle.close();
-    }
-    await rename(temporary, path).catch(async (error: unknown) => {
-        await rm(temporary, { force: true });
-        throw error;
-    });
-    await syncParents(path);
-};
+export const writeLog = (path: string, frames: readonly (readonly string[])[]): Promise<void> =>
+    // Compressed one frame at a time as the write reaches it, in order.
+    writeDurable(
+        path,
+        (function* () {
+            for (const lines of frames.filter((frame) => frame.length > 0)) {
+                yield frameBytes(jsonlOf(lines), lines.length);
+            }
+        })(),
+    );
 
 // One frame's lines, newline-split, the last empty piece dropped.
 export const readFrame = async (path: string, frame: Frame): Promise<string[]> => {

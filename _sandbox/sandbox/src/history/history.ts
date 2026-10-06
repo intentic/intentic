@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { freshness } from "@intentic/base/held";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
-import { defaultGit } from "@intentic/scaffold";
+import { defaultGit } from "@intentic/base/git";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";

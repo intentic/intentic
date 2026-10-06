@@ -5,6 +5,7 @@ import {
     type CodeToken,
     explorerColorClass,
     formatBytes,
+    formatCount,
     iconForEntry,
     SkeletonSnapshot,
     useHighlighter,
@@ -15,7 +16,7 @@ import {
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, ref, shallowRef, watch } from "vue";
-import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { resolveFile } from "../../explorer/fileType";
 import { readFileWindow } from "../fileWindow";
 import { createPeekCache, PEEK_SPAN, peekKey, type PeekFile, type PeekIo, peekView, peekWantsMore, readPeek } from "./fileRefQuickLook";
@@ -293,13 +294,13 @@ const iconColour = computed(() => explorerColorClass(`colorful`, name.value, ent
 const aside = computed(() => {
     const shown = view.value;
     if (shown?.kind === `lines` && shown.total !== undefined) {
-        return t(`workspace.fileRefPeek.lines`, { count: shown.total.toLocaleString() }, shown.total);
+        return t(`workspace.fileRefPeek.lines`, { count: formatCount(shown.total) }, shown.total);
     }
     if (shown?.kind === `binary`) {
         return formatBytes(shown.size);
     }
     if (shown?.kind === `folder`) {
-        return t(`workspace.fileRefPeek.items`, { count: shown.count.toLocaleString() }, shown.count);
+        return t(`workspace.fileRefPeek.items`, { count: formatCount(shown.count) }, shown.count);
     }
     return undefined;
 });
@@ -320,7 +321,7 @@ const note = computed(() => {
         return t(`workspace.fileRefPeek.binary`);
     }
     if (shown?.kind === `beyond`) {
-        return t(`workspace.fileRefPeek.beyond`, { line: shown.line.toLocaleString() });
+        return t(`workspace.fileRefPeek.beyond`, { line: formatCount(shown.line) });
     }
     return undefined;
 });
@@ -420,14 +421,14 @@ const imprintName = computed(() => `peek:${target.value?.written ?? ``}`);
                     v-if="view.past && view.total !== undefined && target?.line !== undefined"
                     class="border-t border-line px-3 py-1.5 text-2xs text-muted"
                 >
-                    {{ t(`workspace.fileRefPeek.past`, { line: target.line.toLocaleString(), total: view.total.toLocaleString() }) }}
+                    {{ t(`workspace.fileRefPeek.past`, { line: formatCount(target.line), total: formatCount(view.total) }) }}
                 </p>
             </template>
             <p v-else-if="note !== undefined" v-skeleton-source="imprintName" class="px-3 py-2.5 text-2xs text-muted">{{ note }}</p>
             <ul v-else-if="view?.kind === 'folder'" v-skeleton-source="imprintName" class="flex flex-col gap-0.5 px-2 py-2">
                 <li v-for="child in view.names" :key="child" class="truncate px-1 text-xs text-content/80">{{ child }}</li>
                 <li v-if="view.count > view.names.length" class="px-1 pt-1 text-2xs text-subtle">
-                    {{ t(`workspace.fileRefPeek.more`, { count: (view.count - view.names.length).toLocaleString() }) }}
+                    {{ t(`workspace.fileRefPeek.more`, { count: formatCount(view.count - view.names.length) }) }}
                 </li>
             </ul>
             <!-- Reading: still placeholder rows in the code's own measure (no animation), so the card keeps its height. -->

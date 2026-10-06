@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { BrandMark, Button, DisclosureRow, ui, StatusBadge } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { BrandMark, Button, DisclosureRow, formatCount, StatusBadge, ui } from "@intentic/ui";
+import { messageOr } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { ExtensionEntry } from "../../extensions/useExtensionList";
 import { publishBrief, tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
@@ -73,7 +73,7 @@ watch(
             readiness.value = [...result.checks];
         } catch (failure) {
             readiness.value = undefined;
-            readinessError.value = errorMessage(failure, `Could not check this extension.`);
+            readinessError.value = messageOr(failure, `Could not check this extension.`);
         }
     },
     { immediate: true },
@@ -246,7 +246,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                                 route.calls > 0
                                     ? {
                                           title: t(`sandbox.extensionRow.used`),
-                                          rows: [{ label: t(`sandbox.extensionRow.calls`), value: route.calls.toLocaleString() }],
+                                          rows: [{ label: t(`sandbox.extensionRow.calls`), value: formatCount(route.calls) }],
                                       }
                                     : route.unused
                                       ? t(`sandbox.extensionRow.neverCalled`)

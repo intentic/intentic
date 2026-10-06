@@ -2,7 +2,7 @@ import { defineAsyncComponent } from "vue";
 import type DagEditorView from "./components/charts/DagEditor.vue";
 import type DagGraphView from "./components/charts/DagGraph.vue";
 import { loadChunk } from "./lib/loadChunk.js";
-export { clipboardOf } from "./lib/clipboard.js";
+export { clipboardOf, COPIED_MS, type Copied, readClipboard, useCopied, writeClipboard } from "./lib/clipboard.js";
 // `browserOwnsClick` is the check a navigational row/tile/menu item runs before also doing app work on a click;
 // `appLink` applies the matching anchor attributes for surfaces with no router.
 export { appLink, browserOwnsClick } from "./lib/link.js";
@@ -174,6 +174,8 @@ export { default as Markdown } from "./components/markdown/Markdown.vue";
 // bare contenteditable) is not exported; use <NoteEditor> or build a frame around this.
 export { default as MarkdownDocument } from "./components/markdown/MarkdownDocument.vue";
 export { default as MarkdownFigure } from "./components/charts/MarkdownFigure.vue";
+// A rendered document's prose runs and figures in order, for a surface that owns its own `.md-prose` box.
+export { default as MarkdownParts } from "./components/markdown/MarkdownParts.vue";
 // Renders a mermaid diagram from fence-body text in the app's tokens, for diagrams outside prose that shouldn't
 // need wrapping in a markdown document.
 export { default as MermaidDiagram } from "./components/charts/MermaidDiagram.vue";
@@ -195,6 +197,8 @@ export { useKeyedDraft } from "./composables/useKeyedDraft.js";
 // Notice: a written sentence, the raw cause, and at most one way out. NoticeStack ranks multiple notices by
 // severity and collapses repeats.
 export { default as Notice } from "./components/feedback/Notice.vue";
+// The centred block a surface shows instead of its content (empty, failed, waiting), sized for a panel or a page.
+export { default as EmptyState, type EmptyStateSize, type EmptyStateTone } from "./components/feedback/EmptyState.vue";
 export { default as NoticeStack } from "./components/feedback/NoticeStack.vue";
 export { type NoticeAction, type NoticeModel, type NoticeTone } from "./components/feedback/notice.js";
 export { default as Page } from "./components/layout/Page.vue";
@@ -281,11 +285,16 @@ export { vTw } from "./lib/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export {
     formatBytes,
+    formatCompact,
+    formatCount,
     formatDate,
     formatDateLong,
     formatDateTime,
     formatDayMonth,
     formatDayMonthTime,
+    formatElapsed,
+    formatMoney,
+    formatPercent,
     formatTime,
     formatTimestamp,
     formatTokens,
@@ -324,16 +333,26 @@ export { type StickyTop, useStickyTop } from "./composables/useStickyTop.js";
 export { useRailMemory } from "./composables/useRailMemory.js";
 // Shared wall clock and mutation-report shape, for any view with a live readout or a user-facing mutation.
 export { useNow } from "./composables/useNow.js";
+export { type Poll, type PollOptions, usePoll, usePollWhile } from "./composables/usePoll.js";
 export { useLatest } from "./composables/useLatest.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";
 export { type HoverIntent, type HoverIntentOptions, useHoverIntent } from "./composables/useHoverIntent.js";
-export { isOverlayTarget } from "./lib/overlayTarget.js";
-export { errorMessage, noticeFrom, noticeOf, useAsyncAction, useConcurrentActions } from "./composables/useAsyncAction.js";
+export { isOverlayTarget, isTypingTarget } from "./lib/eventTarget.js";
+export { messageOr, noticeFrom, noticeOf, useAsyncAction, useConcurrentActions } from "./composables/useAsyncAction.js";
 // Declares an account preference: read, write, apply and cross-window change notification in one definition, so
 // a setting can't be live in one window and stale in another.
-export { definePreference, type PreferenceOptions, receivePreferenceChange, storedPreference } from "./composables/preference.js";
+export {
+    boolPreference,
+    definePreference,
+    enumPreference,
+    numberPreference,
+    type PreferenceOptions,
+    receivePreferenceChange,
+    storedPreference,
+    textPreference,
+} from "./composables/preference.js";
 export { type ColorScheme, type SchemeChoice, useTheme } from "./composables/useTheme.js";
 // Accent-colour control; the ramp maths stays in themeColor.ts, callers just use the picker and
 // `useTheme().accent`.

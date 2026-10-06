@@ -4,7 +4,6 @@
         { "path": "_tools/base" },
         { "path": "_deploy/graph" },
         { "path": "_deploy/resources" },
-        { "path": "_deploy/need-resolver" },
         { "path": "_deploy/state-resolver" },
         { "path": "_deploy/sdk" },
         { "path": "_deploy/engine" },
@@ -15,7 +14,7 @@
         { "path": "_devices/local-agent" },
         { "path": "_devices/browser" },
         { "path": "_shared/workspace-ignore" },
-        { "path": "_sandbox/workspace-setup" },
+        { "path": "_shared/workspace-setup" },
         { "path": "_search/iq-engine" },
         { "path": "_search/iq" },
         { "path": "_deploy/cli" }

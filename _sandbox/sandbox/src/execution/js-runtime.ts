@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { whenAborted } from "@intentic/base/async";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
-import { inWorktree, nsenterArgv } from "../conversations/worktrees/isolation.js";
+import { nsenterArgv } from "../workload/namespace-entry.js";
+import { inWorktree } from "../workload/worktree-paths.js";
 import type { TurnPersona } from "../personas/personas.js";
+import { runCheck } from "../workload/run-check.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 // Second way a turn runs code, beside the shell; Node's permission model makes the read/write/spawn fence real rather
@@ -55,7 +55,7 @@ export const jsExecutionPlanOf = (
 // Mirrors the Bash tool's own bounds: the default a script gets, and the most it may ask for.
 export const JS_TIMEOUT_DEFAULT_S = 120;
 export const JS_TIMEOUT_MAX_S = 600;
-// Tail-kept output per stream, and the hard stop that kills a run flooding its pipes.
+// Tail-kept output per stream, and the hard stop (per stream) that kills a run flooding its pipes.
 const OUTPUT_TAIL = 30_000;
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
@@ -93,66 +93,37 @@ const placedPlan = (plan: JsExecutionPlan, placement: TurnPlacement | undefined)
 };
 
 // Resolves on every road, exit, timeout, spawn failure, turn abort, so a script's own bug fails the tool call, not the
-// turn. Killed with SIGKILL: the script is unattended, and a runaway ignoring SIGTERM would outlive the turn.
-export const runJs = (
+// turn. Its whole process group is ended, SIGKILL after a grace: the script is unattended, and a runaway ignoring
+// SIGTERM, or a child it started, would otherwise outlive the turn.
+export const runJs = async (
     plan: JsExecutionPlan,
     code: string,
     options: { readonly timeoutMs: number; readonly signal: AbortSignal; readonly placement: TurnPlacement | undefined },
-): Promise<JsRunResult> =>
-    new Promise((resolve) => {
-        const placed = placedPlan(plan, options.placement);
-        const anchor = options.placement?.anchor;
-        const invocation =
-            anchor === undefined ? { command: "node", args: nodeArgs(placed) } : nsenterArgv(anchor.pid, placed.cwd, "node", nodeArgs(placed));
+): Promise<JsRunResult> => {
+    const placed = placedPlan(plan, options.placement);
+    const anchor = options.placement?.anchor;
+    const invocation =
+        anchor === undefined ? { command: "node", args: nodeArgs(placed) } : nsenterArgv(anchor.pid, placed.cwd, "node", nodeArgs(placed));
+    const ran = await runCheck({
+        argv: [invocation.command, ...invocation.args],
+        ...(anchor === undefined ? { cwd: placed.cwd } : {}),
         // Same environment the agent's shell gets: the container's, plus the turn's persona-filtered credentials.
-        const child = spawn(invocation.command, invocation.args, {
-            ...(anchor === undefined ? { cwd: placed.cwd } : {}),
-            env: { ...process.env, ...placed.env },
-            stdio: ["pipe", "pipe", "pipe"],
-        });
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        let settled = false;
-        const settle = (exitCode: number | undefined): void => {
-            if (settled) {
-                return;
-            }
-            settled = true;
-            clearTimeout(timer);
-            unwatchAbort();
-            resolve({ exitCode, timedOut, stdout: stdout.slice(-OUTPUT_TAIL), stderr: stderr.slice(-OUTPUT_TAIL) });
-        };
-        const kill = (): void => {
-            child.kill("SIGKILL");
-        };
-        const timer = setTimeout(() => {
-            timedOut = true;
-            kill();
-        }, options.timeoutMs);
-        // A turn already aborted when this script's card arrives would otherwise run the full timeout after the Stop.
-        const unwatchAbort = whenAborted(options.signal, kill);
-        child.stdout.on("data", (data: Buffer) => {
-            stdout += data.toString();
-            if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
-                kill();
-            }
-        });
-        child.stderr.on("data", (data: Buffer) => {
-            stderr += data.toString();
-            if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
-                kill();
-            }
-        });
-        child.on("error", (error) => {
-            stderr += `${stderr === "" ? "" : "\n"}${error.message}`;
-            settle(undefined);
-        });
-        child.on("close", (exitCode) => {
-            settle(exitCode ?? undefined);
-        });
-        child.stdin.on("error", () => {
-            // A child that dies before reading its script closes stdin under the write; `close` reports the real story.
-        });
-        child.stdin.end(code);
+        env: { ...process.env, ...placed.env },
+        timeoutMs: options.timeoutMs,
+        signal: options.signal,
+        workload: { class: "command" },
+        kind: "js-run",
+        // The hard stop that kills a run flooding its pipes; what comes back is the tail of each.
+        captureBytes: MAX_OUTPUT_BYTES,
+        keep: "tail",
+        killOnOverflow: true,
+        stdin: code,
     });
+    const stderr = ran.spawnError === undefined ? ran.stderr : `${ran.stderr}${ran.stderr === "" ? "" : "\n"}${ran.spawnError}`;
+    return {
+        exitCode: ran.exitCode,
+        timedOut: ran.ended === "timeout",
+        stdout: ran.stdout.slice(-OUTPUT_TAIL),
+        stderr: stderr.slice(-OUTPUT_TAIL),
+    };
+};

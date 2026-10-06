@@ -115,13 +115,13 @@ export const createReachReporter = (
         // Sent on every report: this is the only channel that still works when the tunnel itself is broken.
         // Computed per post, not cached: a pure read of process.env, so nothing can go stale.
         const drift = containerDrift(process.env);
-        const answer = await reportToPlatform(config, "/sandbox/boot-report", {
+        const answer = await reportToPlatform(config, "bootReport", {
             reach,
             ...(detail === undefined ? {} : { detail }),
             ...(retrying === undefined ? {} : { retrying }),
             ...(boot === undefined ? {} : { boot }),
             ...(cpu === undefined ? {} : { cpu }),
-            ...(drift.length === 0 ? {} : { drift }),
+            ...(drift.length === 0 ? {} : { drift: drift.map((gap) => ({ ...gap, missing: [...gap.missing] })) }),
         });
         if ("error" in answer) {
             logger.debug({ err: answer.error }, "reachability report could not be delivered");

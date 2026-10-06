@@ -1,8 +1,9 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { compareUnrankedModelIds, type EndpointConfig, type HelperOnly, LOCAL_MODELS, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../opt.js";
+import { cacheFile } from "../store/open-document.js";
 import { localTolerantFetch } from "../system/tls/local-tls.js";
 import { endpointHeaders, unversionedBase, versionedBase } from "./endpoint-config.js";
 
@@ -149,15 +150,8 @@ export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetc
     const persistPath = (id: string): string => join(persistDir, `${id}.json`);
 
     // Parsed through the schema, not trusted: a record from an older daemon or a truncated write reads as nothing
-    // known, never half-formed.
-    const readPersisted = async (id: string): Promise<Model[]> => {
-        try {
-            const parsed = z.array(ModelSchema).safeParse(JSON.parse(await readFile(persistPath(id), "utf8")));
-            return parsed.success ? parsed.data : [];
-        } catch {
-            return [];
-        }
-    };
+    // known, never half-formed. Written atomically, so a crash mid-write can't leave the truncated record either.
+    const persisted = (id: string) => cacheFile<Model[]>(persistPath(id), { parse: (raw) => z.array(ModelSchema).safeParse(raw).data, fallback: () => [] });
 
     return {
         models: async (id, config) => {
@@ -169,12 +163,12 @@ export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetc
             if (discovered.length > 0) {
                 const value = ordered(discovered);
                 await mkdir(dirname(persistPath(id)), { recursive: true });
-                await writeFile(persistPath(id), JSON.stringify(value.models));
+                await persisted(id).update(() => value.models);
                 cache.set(id, { value, expiresAt: Date.now() + MODELS_TTL_MS });
                 return value;
             }
             // Uncached, so the next read re-probes instead of pinning a stale list.
-            return ordered(await readPersisted(id));
+            return ordered(await persisted(id).read());
         },
         forget: async (id) => {
             cache.delete(id);

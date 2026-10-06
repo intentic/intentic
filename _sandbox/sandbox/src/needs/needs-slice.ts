@@ -10,7 +10,7 @@ import { contributionEnv, contributionFor, contributionRegistry, contributionSec
 import { connectableEntries } from "../capabilities/offers/connectable.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
-import { liveRequestRun } from "../conversations/actor/card-offers.js";
+import { liveRequestRun } from "../conversations/actor/card-deps.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
@@ -18,7 +18,7 @@ import { appliedEnvironmentHash, approveDraft, proposeDraft, rejectDraft } from 
 import { deliverWake } from "../agent/run/turn/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
-import { upsertEnv } from "../secrets/secrets.routes.js";
+import { upsertEnv } from "../secrets/env-text.js";
 import { textFile } from "../store/text-file.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";

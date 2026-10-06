@@ -1,5 +1,5 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { joinPath } from "./entryNames";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { joinPath } from "@intentic/ui/path";
 
 /* Opinionated file nesting (VSCode's feature, minus the configuration): in any directory that contains a package.json file. */
 

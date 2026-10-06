@@ -101,6 +101,7 @@ export const ActivityConnectionSchema = z.object({
         ),
     lastError: z.string().optional().describe("The most recent thing that went wrong on it."),
 });
+export type ActivityConnection = z.infer<typeof ActivityConnectionSchema>;
 export const ActivityStatusSchema = z.object({
     connections: z
         .array(ActivityConnectionSchema)

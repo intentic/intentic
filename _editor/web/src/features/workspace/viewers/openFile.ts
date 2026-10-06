@@ -1,7 +1,7 @@
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { extensionOf } from "@intentic/ui/file-format";
-import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
-import { viewerForExtension } from "../../../core-views/viewerRegistry";
+import type { RegisteredViewer } from "../../../workbench/views/viewerRegistry";
+import { viewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { RAW_MAX_BYTES, resolveFile } from "../explorer/fileType";
 
 // Which surface opens a file: an extension that claims its extension wins, fileType.ts's answer is the fallback. Text

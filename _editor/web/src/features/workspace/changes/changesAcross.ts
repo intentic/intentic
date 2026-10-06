@@ -1,10 +1,10 @@
-import type { GitChangesResponse, RepoChanges } from "@intentic/api-contract";
+import type { GitChanges, RepoChanges } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { type AcrossRecord, createAcrossStore } from "../../sandbox/live/acrossSandboxes";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { ahead, outgoingWork, unpublished } from "../push/outgoingWork";
 import { truncatedTotal } from "./truncation";
 import { usePushRun } from "../push/usePushRun";
@@ -36,7 +36,7 @@ const store = createAcrossStore<BoxChanges>({
     blank: (sandbox) => ({ sandbox, repos: [], readAt: undefined, unreachable: false }),
     unreachable: () => ({ unreachable: true }),
     read: async (sandbox) => {
-        const body: GitChangesResponse = await sandboxRpc.git.changes(undefined, { context: { at: sandbox.id, background: true } });
+        const body: GitChanges = await sandboxRpc.git.changes(undefined, { context: { at: sandbox.id, background: true } });
         // Filed under this box's own key, so it's cleaned up the same way and cleared when that box lands work.
         queryClient.setQueryData(rpcKeyAt(sandbox.id, `git.changes`), body);
         return { repos: body.repos, unreachable: false };
@@ -113,7 +113,7 @@ export const pushRow = async (row: LedgerRow): Promise<void> => {
         // Re-reads only this box; a push here doesn't change any other box's counts.
         await store.readOne(row.sandboxId);
     } catch (caught) {
-        pushError.value = { key, reason: errorMessage(caught, `That push didn't work.`) };
+        pushError.value = { key, reason: messageOr(caught, `That push didn't work.`) };
     } finally {
         pushing.value = undefined;
     }

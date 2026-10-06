@@ -19,11 +19,11 @@ Every browser→outside call in the web app goes through one of these globals, r
 
 | Transport | Where | Reaches |
 | --- | --- | --- |
-| `globalThis.fetch` | `features/sandbox/client/sandboxAuthFetch.ts` (every daemon call, the typed `sandboxRpc` and the raw `sandboxClient` alike), `lib/useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and its raw routes, and the platform's `/rpc` + `/api/auth/*` |
+| `globalThis.fetch` | `client/sandbox/sandboxAuthFetch.ts` (every daemon call, the typed `sandboxRpc` and the raw `sandboxClient` alike), `lib/useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and its raw routes, and the platform's `/rpc` + `/api/auth/*` |
 | `globalThis.WebSocket` | `features/terminal/channel/terminalChannel.ts`, `features/browsers/useBrowserView.ts` | `/system/terminal`, `/system/browser-view` |
 | `globalThis.WebTransport` | `features/terminal/channel/webTransport.ts` | `/system/transport`, the session a terminal's stream rides where the edge declares it; the demo's sandbox row declares nothing, so terminals take the WebSocket, and a session asked for anyway never opens |
 
-`features/sandbox/client/sandboxRpc.ts` already documents why its fetch is resolved per request rather than
+`client/sandbox/sandboxRpc.ts` already documents why its fetch is resolved per request rather than
 captured: *"so a fetch replaced later (a test stub, instrumentation) still applies"*. The demo is that
 replacement, and it needs no branch anywhere in the app.
 
@@ -184,7 +184,7 @@ was invented for them and none of their code knows the difference. What the demo
 a `POST /agent` whose conversation id carries a run prefix (`xt-`, `dg-`, `mt-`) is a fan-out of isolated agents
 against a checkout that does not exist here, so it comes back as a refusal the extension already renders.
 
-**The scripted turn is the centrepiece.** `AgentEventSchema` (`_shared/sandbox-contract/src/events.ts:186`) is the
+**The scripted turn is the centrepiece.** `AgentEventSchema` (`_shared/sandbox-contract/src/events/agent-events.ts:22`) is the
 whole streaming-turn protocol, and `/agent/attach` yields `{kind:"frame", seq, event}`. A recorded sequence on a
 timer gives, in the real UI with no special-casing: `thinking` folding open, `delta` text typing,
 `tool_call` → `tool_call_update` cards resolving with their line stats derived from the diffs (a Read, a Write, an

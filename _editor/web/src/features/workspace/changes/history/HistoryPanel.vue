@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intentic/api-contract";
+import type { SnapshotChange, SnapshotTrigger, Snapshot } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { useVocabulary } from "../../../../core-views/vocabulary";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { diffRawUrls } from "../diffRaw";
 import { useHistory } from "./useHistory";
 import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
@@ -40,7 +40,7 @@ const TRIGGER_META = computed<Record<SnapshotTrigger, { title: string; icon: Ico
 
 const changeLabel = (change: SnapshotChange): string => (change.scope === `root` ? change.path : `${change.scope}/${change.path}`);
 
-const select = (snapshot: WorkspaceSnapshot): void => {
+const select = (snapshot: Snapshot): void => {
     confirmRestoreId.value = undefined;
     if (selectedId.value === snapshot.id) {
         selectedId.value = undefined;

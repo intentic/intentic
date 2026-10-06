@@ -2,11 +2,11 @@ import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-c
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
 import { runDeviceCommand } from "../../devices/useDevices";
-import { SandboxHttpError } from "../../client/sandboxHttpError";
-import { useSandbox } from "../../client/useSandbox";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import { removeStoredValue, storedValue, storeValue } from "../../../../lib/browserStorage";
-import { beginHubWork, hubWorkKey } from "../../../../shell/hub/hubWork";
+import { beginHubWork, hubWorkKey } from "../../../../workbench/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
 
 // FOLLOWING A REBUILD THAT NOTHING ON THIS PAGE OWNS. `dev-rebuild` starts a detached build on the machine holding the
@@ -60,18 +60,6 @@ export interface DevRebuildRun {
 
 const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
 export const rebuildRunning = (phase: DevRebuildPhase): boolean => LIVE.has(phase);
-
-/**
- * How long a run took, in words. Minutes first, because every rebuild worth watching is minutes; seconds padded so
- * the number stops jittering. Shared, so the card and the receipt raised for a reader who left it never disagree.
- */
-export const rebuildElapsedLabel = (seconds: number | undefined): string | undefined => {
-    if (seconds === undefined) {
-        return undefined;
-    }
-    const minutes = Math.floor(seconds / 60);
-    return minutes === 0 ? `${seconds}s` : `${minutes}m ${String(seconds % 60).padStart(2, `0`)}s`;
-};
 
 /** Seconds a settled run took; undefined for one adopted mid-flight, whose start nothing here ever saw. */
 export const rebuildSeconds = (run: DevRebuildRun): number | undefined =>

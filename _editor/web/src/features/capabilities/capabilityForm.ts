@@ -1,7 +1,6 @@
-import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import type { ForticlientConnection } from "@intentic/sandbox-contract";
+import type { ForticlientConnection, CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { computed, nextTick, reactive, type Ref, ref, watch } from "vue";
 import { auditOffered, replacedPin } from "./model/audit";

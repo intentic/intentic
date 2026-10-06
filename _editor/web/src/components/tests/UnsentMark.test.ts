@@ -39,9 +39,10 @@ describe(`<UnsentMark>`, () => {
     });
 
     it(`names the message and how long it has been standing`, () => {
-        jest.spyOn(Date, `now`).mockReturnValue(1_000_000);
+        // A multiple of the mark's 15s step, so the age is exactly twelve minutes rather than rounded down past it.
+        jest.spyOn(Date, `now`).mockReturnValue(1_005_000);
         try {
-            expect(hintOf({ preview: `fix the login redirect`, at: 1_000_000 - 12 * 60_000 })).toBe(`Not sent, 12m, fix the login redirect`);
+            expect(hintOf({ preview: `fix the login redirect`, at: 1_005_000 - 12 * 60_000 })).toBe(`Not sent, 12m ago, fix the login redirect`);
         } finally {
             mocked(Date.now).mockRestore();
         }
@@ -55,10 +56,10 @@ describe(`<UnsentMark>`, () => {
         jest.setSystemTime(600_000);
         try {
             const host = render({ preview: `fix the login redirect`, at: 580_000 });
-            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, just now, fix the login redirect`);
+            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, now, fix the login redirect`);
             jest.advanceTimersByTime(45_000);
             await nextTick();
-            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, 1m, fix the login redirect`);
+            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, 1m ago, fix the login redirect`);
         } finally {
             app?.unmount();
             app = undefined;
@@ -70,7 +71,7 @@ describe(`<UnsentMark>`, () => {
     it(`reports the age alone when what is unsent is not typed words`, () => {
         jest.spyOn(Date, `now`).mockReturnValue(2 * 86_400_000);
         try {
-            expect(hintOf({ at: 0 })).toBe(`Not sent, 2d`);
+            expect(hintOf({ at: 0 })).toBe(`Not sent, 2d ago`);
         } finally {
             mocked(Date.now).mockRestore();
         }

@@ -1,5 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
+
+use intentic_docker_host::desktop_app;
 
 use super::clock;
 use super::model::{Check, Fix, Repair, DISK, DOCKER, DOCKER_APP, NETWORK, PREREQUISITES, WSL};
@@ -179,18 +181,50 @@ fn windows_facts() -> std::result::Result<plan::Facts, String> {
 
 /* DOCKER DESKTOP, per OS. */
 
-/// Where Docker Desktop's executable lives on Windows, spelled for this side: C:\ on Windows, /mnt/c inside WSL.
-pub fn windows_desktop_exe(os: Os) -> PathBuf {
+/// Where Docker Desktop's launcher is, as Windows spells it, by the discovery every lookup shares
+/// (`intentic_docker_host::desktop_app`). On Windows the default installs are checked (the probe of the PC, which already
+/// ran the whole discovery, is read before this); from inside WSL the whole discovery is asked through interop, since
+/// nothing on this side knows the Windows profile's folders, and the default install stands in when interop cannot run.
+pub fn windows_desktop_exe(os: Os) -> Option<String> {
     match os {
-        Os::Wsl => PathBuf::from("/mnt/c/Program Files/Docker/Docker/Docker Desktop.exe"),
-        _ => {
-            let root =
-                std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".to_string());
-            Path::new(&root)
-                .join("Docker")
-                .join("Docker")
-                .join("Docker Desktop.exe")
+        Os::Windows => desktop_app::default_installs_here()
+            .into_iter()
+            .find(|exe| Path::new(exe).exists()),
+        Os::Wsl => {
+            let root = wsl_mount_root();
+            locate_on_windows(os)
+                .into_iter()
+                .chain(desktop_app::default_installs(
+                    Some(r"C:\Program Files"),
+                    Some(r"C:\Program Files (x86)"),
+                    None,
+                ))
+                .find(|exe| {
+                    desktop_app::wsl_path(exe, &root).is_some_and(|here| Path::new(&here).exists())
+                })
         }
+        Os::Linux | Os::Macos => None,
+    }
+}
+
+/// Where this distro mounts the Windows drives (`/etc/wsl.conf`, `/mnt/` by default).
+fn wsl_mount_root() -> String {
+    desktop_app::wsl_mount_root(&std::fs::read_to_string("/etc/wsl.conf").unwrap_or_default())
+}
+
+/// The shared discovery's whole probe, run with a deadline: None when it found nothing or could not run.
+fn locate_on_windows(os: Os) -> Option<String> {
+    let mut command = std::process::Command::new("powershell.exe");
+    command.args(intentic_docker_host::powershell::args(
+        &desktop_app::locate_script(),
+    ));
+    // Run from a Windows folder: interop started from a Linux one warns about the UNC path it cannot use.
+    if os == Os::Wsl && Path::new("/mnt/c").exists() {
+        command.current_dir("/mnt/c");
+    }
+    match docker::bounded(command, Duration::from_secs(30)) {
+        Ok(ran) if !ran.timed_out => desktop_app::located(&ran.stdout),
+        _ => None,
     }
 }
 
@@ -198,7 +232,7 @@ fn desktop(os: Os, windows: Option<&plan::Facts>) -> (Desktop, Option<bool>) {
     match os {
         Os::Windows => {
             let installed = windows.is_some_and(|facts| !facts.docker_desktop_path.is_empty())
-                || windows_desktop_exe(os).exists();
+                || windows_desktop_exe(os).is_some();
             if !installed {
                 return (Desktop::NotInstalled, None);
             }
@@ -208,7 +242,7 @@ fn desktop(os: Os, windows: Option<&plan::Facts>) -> (Desktop, Option<bool>) {
             (running_on_windows("tasklist.exe"), autostart)
         }
         Os::Wsl => {
-            if !windows_desktop_exe(os).exists() {
+            if windows_desktop_exe(os).is_none() {
                 return (Desktop::NotInstalled, None);
             }
             (running_on_windows("tasklist.exe"), None)

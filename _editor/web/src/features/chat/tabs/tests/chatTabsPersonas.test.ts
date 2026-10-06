@@ -12,7 +12,7 @@ import { startAgent } from "../../../agents/fleet/agentActions";
 import { setAgents } from "../../../agents/fleet/useAgents-registry";
 import { useChat } from "../../run/useChat";
 import { openAgentConversation } from "../../panel/useChat-reveal";
-import { setDaemonRoutes } from "../../../sandbox/overview/useDaemonRoutes";
+import { setDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { router } from "../../../../router/index";

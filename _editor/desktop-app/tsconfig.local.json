@@ -12,7 +12,8 @@
             "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"],
             // This app's half of the shell (src/host.ts, This device) is drawn in the kit, read from source as src/ reads it.
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
-            "@intentic/ui/i18n": ["../../_editor/ui/src/i18n/index.ts"]
+            "@intentic/ui/i18n": ["../../_editor/ui/src/i18n/index.ts"],
+            "@intentic/ui/clipboard": ["../../_editor/ui/src/lib/clipboard.ts"]
         }
     },
     "extends": "@intentic/tsconfig/tsconfig.vue.json",

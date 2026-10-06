@@ -1,3 +1,4 @@
+import { markdownTable } from "@intentic/webq/markdown";
 import type ExcelJS from "exceljs";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
@@ -37,7 +38,8 @@ const cellText = (value: ExcelJS.CellValue): string => {
     return String(value);
 };
 
-const tableRow = (cells: string[]): string => `| ${cells.map((cell) => cell.replaceAll("|", "\\|").replaceAll(/\s+/g, " ").trim()).join(" | ")} |`;
+// What a cell shows as one line: a sheet's cell can hold line breaks and runs of spaces nobody reads as meaningful.
+const oneLine = (text: string): string => text.replaceAll(/\s+/g, " ").trim();
 
 export const xlsxDeriver: Deriver = {
     name: "xlsx",
@@ -71,11 +73,7 @@ export const xlsxDeriver: Deriver = {
                 sections.push(`## ${sheet.name}\n\n(empty sheet)`);
                 continue;
             }
-            const width = Math.max(...kept.map((row) => row.length));
-            const pad = (row: string[]): string[] => [...row, ...Array.from({ length: width - row.length }, () => "")];
-            const [header, ...body] = kept.map(pad) as [string[], ...string[][]];
-            const table = [tableRow(header), tableRow(header.map(() => "---")), ...body.map(tableRow)].join("\n");
-            sections.push(`## ${sheet.name}\n\n${table}`);
+            sections.push(`## ${sheet.name}\n\n${markdownTable(kept.map((row) => row.map(oneLine)))}`);
         }
         return { markdown: sections.join("\n\n"), notes };
     },

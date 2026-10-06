@@ -5,17 +5,17 @@ import { parentOf } from "../../features/agents/board/ownership";
 import { readingAcross } from "../../features/agents/fleet/fleetScope";
 import { type FleetAgent, fleet } from "../../features/agents/fleet/useAgents-fleet";
 import { heldHeard, heldWakes, rosterHeard } from "../../features/agents/fleet/useAgents-registry";
-import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../lib/activeSandbox";
 import type { SandboxAvailability } from "../../features/sandbox/overview/availability";
 import { useSandboxAvailability } from "../../features/sandbox/overview/useSandboxAvailability";
 import { otherBoxes } from "../../features/sandbox/live/fleetAcross";
-import { floatingWindowPanel } from "../window/floating";
-import { type Chime, ringOnce } from "./chimes";
+import { floatingWindowPanel } from "../../workbench/window/floating";
+import { type Chime, ringOnce } from "../../workbench/browser-tab/chimes";
 import { showDesktopBadge } from "./desktopBadge";
 import { readerBack, settleDesktop, tellDesktop } from "./desktopSignal";
-import { readerHere } from "./readerHere";
+import { readerHere } from "../../workbench/browser-tab/readerHere";
 import { setTabMark } from "./tabTitle";
-import { chimeAsks, chimeFinished, tabStatus } from "./tabPreferences";
+import { chimeAsks, chimeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
 import { newsItemsBetween, type TabFrame, tabMark } from "./tabSignal";
 
 // The browser tab as a surface of the app (tabSignal.ts has the rules): what the fleet says the tab should show, and

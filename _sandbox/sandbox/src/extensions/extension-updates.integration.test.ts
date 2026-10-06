@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { gitCheckout, gitClone, gitFullHead, gitHead } from "@intentic/scaffold";
+import { gitCheckout, gitClone, gitFullHead, gitHead } from "@intentic/base/git";
 import { createApp } from "../app.js";
 import { extensionDir, extensionsRoot } from "../capabilities/extension-dirs.js";
 import { previousDir } from "../capabilities/git-checkout.js";

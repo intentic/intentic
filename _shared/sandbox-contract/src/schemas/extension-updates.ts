@@ -2,6 +2,7 @@
 // check found and what the owner decided to do about it.
 import { z } from "zod";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { RegistryTrustSchema } from "@intentic/registry";
 // Each extension is addressed by its capability entry id (git-installed) or its manifest's `publisher.name`
 // (image-baked, no entry), hence the dot allowed here. A rotted checkout is skipped; its capability row still shows
 // status.
@@ -26,7 +27,8 @@ export const ExtensionUpdateSchema = z.object({
     version: z.string().optional().describe("What it calls itself."),
     url: z.string().describe("Where it comes from."),
     path: z.string().optional().describe("Where inside that repository it lives."),
-    trust: z.enum(["verified", "listed"]).describe("Whether anybody vouched for it, or it is merely listed."),
+    // The registry's trust, less `blocked`: a blocked row is an advisory, never an update on offer.
+    trust: RegistryTrustSchema.exclude(["blocked"]).describe("Whether anybody vouched for it, or it is merely listed."),
     // The badge renders loud (urgent) when this is set.
     securityFix: z
         .boolean()

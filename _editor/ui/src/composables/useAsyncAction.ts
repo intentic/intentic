@@ -4,9 +4,9 @@ import { computed, ref } from "vue";
 // The one shape every user-facing mutation reports through: a busy flag plus a surfaced notice. Errors
 // are surfaced, not thrown; re-entry while busy is a no-op.
 
-// The thrown thing's message, for places that need a string rather than something to show a user. Anything
-// a person reads goes through `noticeFrom` instead.
-export const errorMessage = (error: unknown, fallback: string): string =>
+// The thrown thing's message, or `fallback` when it has none, for places that need a string rather than something to
+// show a user. Anything a person reads goes through `noticeFrom` instead.
+export const messageOr = (error: unknown, fallback: string): string =>
     typeof error === `object` && error !== null && `message` in error && typeof error.message === `string` && error.message !== ``
         ? error.message
         : fallback;
@@ -21,7 +21,7 @@ interface NoticeOptions {
 // required, so the caller's words are the headline and the raw message drops to `detail` as evidence.
 // The detail is dropped when it repeats the title.
 export const noticeFrom = (cause: unknown, wrote: string, options: NoticeOptions = {}): NoticeModel => {
-    const raw = errorMessage(cause, ``);
+    const raw = messageOr(cause, ``);
     return {
         tone: options.tone ?? `danger`,
         title: wrote,

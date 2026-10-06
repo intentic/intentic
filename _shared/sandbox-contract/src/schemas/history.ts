@@ -24,6 +24,7 @@ export interface SnapshotTurn {
     readonly index: number;
 }
 export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema).describe("Every point you can go back to, newest first.") });
+export type SnapshotsList = z.infer<typeof SnapshotsListSchema>;
 // Restores the workspace to that turn's checkpoint, drops every message after it, and forgets the provider session so
 // the next turn opens fresh. `messageId` is what makes `index` safe to act on: a position is only as current as the
 // transcript it was read from.
@@ -65,6 +66,7 @@ export type SnapshotChange = z.infer<typeof SnapshotChangeSchema>;
 export const SnapshotDiffSchema = z.object({
     changes: z.array(SnapshotChangeSchema).describe("Everything that differs between this saved point and the one before it."),
 });
+export type SnapshotDiff = z.infer<typeof SnapshotDiffSchema>;
 export const SnapshotFileDiffQuerySchema = z.object({
     id: z.string().min(1).describe("Which saved point."),
     scope: z.string().min(1).describe("Which part of the workspace the path belongs to."),

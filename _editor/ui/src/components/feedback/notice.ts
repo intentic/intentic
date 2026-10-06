@@ -23,11 +23,34 @@ export interface NoticeModel {
 }
 
 // Spelled out per tone, not templated: Tailwind only emits a utility it can see used literally.
-export const NOTICE_BOX: Record<NoticeTone, string> = {
-    danger: `flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger`,
-    warning: `flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning`,
-    info: `flex items-start gap-2 rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info`,
+export const NOTICE_TONE: Record<NoticeTone, string> = {
+    danger: `border-danger/40 bg-danger/10 text-danger`,
+    warning: `border-warning/40 bg-warning/10 text-warning`,
+    info: `border-info/40 bg-info/10 text-info`,
 };
+
+// `xs`: a line inside a list or popover (a truncated result set). `sm`: a strip in a narrow column (the chat pane's).
+// `md`: the default, in a form or a card. `lg`: a page's own banner, read at body size.
+export type NoticeSize = "xs" | "sm" | "md" | "lg";
+
+export const NOTICE_SIZE: Record<NoticeSize, string> = {
+    xs: `gap-1 rounded px-2 py-0.5 text-2xs`,
+    sm: `gap-x-2 gap-y-1 rounded-xl px-3 py-2 text-2xs`,
+    md: `gap-2 rounded-lg px-3 py-2 text-xs`,
+    lg: `gap-2 rounded-lg px-4 py-3 text-sm`,
+};
+
+// The glyph steps down with the type at `xs`, where the box is one short line.
+export const NOTICE_ICON_SIZE: Record<NoticeSize, string> = {
+    xs: `mt-0.5 text-[0.6rem]`,
+    sm: `mt-px`,
+    md: `mt-px`,
+    lg: `mt-0.5`,
+};
+
+/** The box's whole class list: base, tone, size, and the wrapping layout a row of actions needs. */
+export const noticeBox = (tone: NoticeTone, size: NoticeSize, actions: boolean): string =>
+    `flex border text-left ${actions ? `flex-wrap items-center` : `items-start`} ${NOTICE_TONE[tone]} ${NOTICE_SIZE[size]}`;
 
 export const NOTICE_ICON: Record<NoticeTone, IconName> = {
     danger: `exclamation-circle`,

@@ -382,7 +382,7 @@ Rules that keep them honest:
   entries). The repo has no benchmark worth quoting yet: the offline cleaner bench measures ~2% over a
   real corpus, and the agent A/B bench costs real tokens to run. When one exists, it gets a page of its
   own rather than a number in a hero.
-- The demo fixture (`_editor/web/src/demo/`) is the world every shot is taken in, so enriching it improves
+- The demo fixture (`_site/demo/src/fixture/`) is the world every shot is taken in, so enriching it improves
   the public demo and the marketing shots in the same commit.
 
 ## The comparison shelf (`/compare/*`)

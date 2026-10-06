@@ -1,6 +1,5 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { capabilityEffects } from "@intentic/capability-catalog";
-import type { CapabilityKind, CapabilityState, NetdiskLink, VpnLink } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilityState, NetdiskLink, VpnLink, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

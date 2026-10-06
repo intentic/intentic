@@ -69,6 +69,7 @@ export const PushConfigSchema = z.object({
             "Whether the asking device is already registered, so a toggle can show its real state instead of trusting the device's own permission, which can be granted with nothing behind it.",
         ),
 });
+export type PushConfig = z.infer<typeof PushConfigSchema>;
 export const PushChannelIdSchema = z.object({
     id: z.string().min(1).describe("Which device: a browser's push address, or a native install's device id."),
 });

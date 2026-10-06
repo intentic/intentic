@@ -1,24 +1,28 @@
-import { createBufferedPainter, failureNotice, framePainter, type GatewayCtx, type ListenerMessage, recentKeys, typingHeartbeat } from "@intentic/connector-runtime";
+import {
+    type GatewayCtx,
+    HISTORY_LIMIT,
+    type ListenerHistoryEntry,
+    type ListenerMessage,
+    MESSAGE_LIMITS,
+    paintReply,
+    recentKeys,
+    typingHeartbeat,
+} from "@intentic/connector-runtime";
 import type { WhatsAppConnection } from "./client.js";
 import { contentOf, contextOf, hasMedia, isGroupJid, jidUser, type QuotedRef, quotedOf, timestampOf, unwrap } from "./content.js";
 import type { MessageRow } from "./store.js";
 import type { WaMessageContent, WaRawMessage } from "./types.js";
 
-// Safety ceiling far under WhatsApp's real 65,536-char limit, not a message-splitting boundary.
-export const WHATSAPP_MAX = 60_000;
+// WhatsApp's one-message ceiling; a reply that long is rare enough that this is a safety net, not pagination.
+export const WHATSAPP_MAX = MESSAGE_LIMITS.whatsapp;
 
 // Normalizes each live message into a dispatch to the daemon; a mention holds a typing indicator until the reply lands
 // complete. Context comes from the session's store: what WhatsApp synced at pairing, what the phone sent on request,
 // and everything since, our own replies included. Authors are named by phone number whenever WhatsApp let us learn
 // it, since an automation's sender rules are written in phone numbers.
 
-// Recent `chat:id` keys, to drop a redelivered message; best-effort, a restart risks one duplicate wake.
-const RECENT_MAX = 500;
-// Prior messages given to the model per chat when addressed.
-const HISTORY_LIMIT = 20;
-// Typing indicator expires ~10s; resent on this interval, capped so a stuck turn can't leak it forever.
+// Typing indicator expires ~10s; resent on this interval.
 const TYPING_INTERVAL_MS = 8_000;
-const TYPING_MAX_MS = 300_000;
 
 // Whether this message addresses us: always true in a DM, in a group only via an @mention of our identities or a reply
 // to our own message.
@@ -102,7 +106,7 @@ const extraOf = (connection: WhatsAppConnection, message: Admitted, selves: Read
 };
 
 // A stored message as one line of the history a mention carries.
-const historyEntry = (connection: WhatsAppConnection, row: MessageRow): NonNullable<ListenerMessage["history"]>[number] => {
+const historyEntry = (connection: WhatsAppConnection, row: MessageRow): ListenerHistoryEntry => {
     const timestamp = new Date(row.ts * 1_000).toISOString();
     if (row.fromMe) {
         return { author: { id: jidUser(connection.selfJid()), name: "you" }, content: row.text, timestamp, self: true };
@@ -138,9 +142,9 @@ const payloadOf = async (connection: WhatsAppConnection, raw: WaRawMessage, mess
 };
 
 export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => ReadonlyMap<string, WhatsAppConnection>): WhatsAppListener => {
-    const recent = recentKeys(RECENT_MAX);
+    const recent = recentKeys();
     // Typing indicators keyed by chat JID; stopping one sends WhatsApp's "paused" presence.
-    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS, maxMs: TYPING_MAX_MS });
+    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS });
 
     const startTyping = (connection: WhatsAppConnection, chat: string): void => {
         typing.start(
@@ -168,22 +172,13 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         const { chat, id } = message;
         // Typing starts immediately on being addressed and holds until the turn's single, complete reply lands.
         startTyping(connection, chat);
-        const onError = (error: unknown): void => ctx.log.warn({ err: error }, "whatsapp reply send failed");
-        // Quotes the triggering message in a group reply; a DM reply doesn't need to point at anything.
-        const send = (body: string): Promise<void> => connection.sendText(chat, body, isGroupJid(chat) ? id : undefined);
-        try {
-            await ctx.daemon.dispatchStreaming(
-                payload,
-                framePainter(
-                    () => createBufferedPainter(send, onError, WHATSAPP_MAX),
-                    // Sent directly, not through the painter: a failed turn usually has no reply text for the painter
-                    // to own.
-                    (reason) => void send(failureNotice(reason, WHATSAPP_MAX)).catch(onError),
-                ),
-            );
-        } finally {
-            typing.stop(chat);
-        }
+        await paintReply(ctx.daemon, payload, {
+            // Quotes the triggering message in a group reply; a DM reply doesn't need to point at anything.
+            surface: { send: (body: string) => connection.sendText(chat, body, isGroupJid(chat) ? id : undefined) },
+            maxChars: WHATSAPP_MAX,
+            onError: (error) => ctx.log.warn({ err: error }, "whatsapp reply send failed"),
+            settle: () => typing.stop(chat),
+        });
     };
 
     return {

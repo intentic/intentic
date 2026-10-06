@@ -2,22 +2,11 @@
 // unrecognised one just shows the words instead of a wrong answer. Rules live in one module since four sections must
 // agree on the same post.
 
-// Over the limit, a post doesn't post at all; absent means no known cap, so it just shows a plain count.
-const LIMITS: Record<string, number> = {
-    bluesky: 300,
-    discord: 2_000,
-    instagram: 2_200,
-    linkedin: 3_000,
-    mastodon: 500,
-    slack: 4_000,
-    telegram: 4_096,
-    threads: 500,
-    whatsapp: 4_096,
-    x: 280,
-    youtube: 5_000,
-};
+import { messageLimitOf } from "@intentic/sandbox-contract/message-limits";
 
-export const limitOf = (platform: string): number | undefined => LIMITS[platform.toLowerCase()];
+// Over the limit, a post doesn't post at all; absent means no known cap, so it just shows a plain count. The limits are
+// the contract's one table, the same numbers the gateways spill a reply at and the daemon refuses a direct post past.
+export const limitOf = (platform: string): number | undefined => messageLimitOf(platform);
 
 // On a titled platform, `title` is the headline; elsewhere, or on any reply, it's the agent's own note.
 const TITLED = new Set([`blog`, `devto`, `ghost`, `hackernews`, `linkedin`, `medium`, `reddit`, `substack`, `wordpress`, `youtube`]);

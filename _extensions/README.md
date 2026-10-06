@@ -15,6 +15,7 @@ flowchart LR
 
 - The manifest is the approval surface: the install dialog shows it, and the host refuses any registration or daemon route it does not declare. Its schema is [extension-manifest](../_shared/extension-manifest), the runtime API is [extension-api](../_shared/extension-api), and [extension-example](../_tools/extension-example) carries one contribution of every kind.
 - An extension depends on six `@intentic/*` packages and their subpaths, never on another: the SDK halves [extension-api](../_shared/extension-api), [extension-ui](../_shared/extension-ui) and [connector-runtime](../_shared/connector-runtime), [extension-manifest](../_shared/extension-manifest), the wire contract [sandbox-contract](../_shared/sandbox-contract), and [base](../_tools/base), the dependency-free helpers extension-manifest itself stands on. Its suites may add [testing](../_tools/testing), as a devDependency. The `no-restricted-imports` override in [.oxlintrc.json](../.oxlintrc.json) holds the imports to that list, and [extension-deps.mjs](../_tools/checks/extension-deps.mjs) holds the manifests to it.
+- Nothing outside this area depends on an extension, apart from two hosts: the web app, which compiles the UI extensions into its bundle, and the desktop app's files sidecar ([local-files](../_devices/local-files)), which runs ONLYOFFICE's browser engine for folders on the user's own disk through the one entry the extension exports for it, `@intentic/ext-onlyoffice/local-office`. The engine stays in the extension, which also runs it in a sandbox; `CONSUMERS` in [lib/extension-deps.mjs](../_tools/checks/lib/extension-deps.mjs) holds both hosts to that, and refuses a third.
 - UI extensions compile into the web bundle ([builtins.ts](../_editor/web/src/extension-host/builtins.ts)) and bake only their manifest into the sandbox image, so the Extensions tab lists them beside every other extension with one on/off switch.
 - Data-only packs (cards, skills, Dockerfile fragments) copy into the image as they are. Gateway extensions bake their manifest everywhere and ship their runnable tree in the `messaging` image pack.
 - Optional first-party extensions live in their own repositories and install from the registry like third-party ones. The daemon ([src/extensions](../_sandbox/sandbox/src/extensions)) enumerates baked, git-installed and workspace extensions as one list.
@@ -33,6 +34,7 @@ flowchart LR
 | [google-workspace](google-workspace) | `gw` CLI for Gmail, Calendar, Drive, Docs and Sheets, plus a watcher. |
 | [imap](imap) | IMAP inbox card and a mailbox watcher that wakes automations. |
 | [onlyoffice](onlyoffice) | Office documents in an ONLYOFFICE editor, run in the browser or as a Docker document server. |
+| [phones](phones) | Card pairing the owner's Android phone through the Intentic Device app. |
 | [pi-agent](pi-agent) | The Pi coding agent as a chat provider. |
 | [pipelines](pipelines) | Rail view of CI runs on the workspace repositories' remotes. |
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |

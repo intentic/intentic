@@ -6,6 +6,8 @@ import { type AuthFakeOverrides, authSliceFake } from "../auth/auth-slice.testin
 import { automationsSliceFake } from "../automations/automations-slice.testing.js";
 import { capabilitiesSliceFake } from "../capabilities/capabilities-slice.testing.js";
 import { type Services, wireReactions } from "../composition.js";
+import { environmentSourcesOf } from "../environment-composers.js";
+import { probeAcpAgent } from "../runtimes/acp/acp-probe.js";
 import { conversationsSliceFake } from "../conversations/conversations-slice.testing.js";
 import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
@@ -166,6 +168,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The workspace slice's: the real readers, since a shadow is read off disk and a fake would only test the fake.
         derived: { read: readDerivedText, derive: deriveText, deriveBytes },
         history: fakeHistory(),
+        // The real fragment sources over the finished services, as composition.ts fills the port.
+        environmentSources: environmentSourcesOf(context.self),
+        // The real probe, as composition.ts fills it: a suite adding an ACP agent spawns its command.
+        probeAcpAgent,
         async *intentic() {},
         // The engine's own announcements, as composition binds them, and the reactions it subscribes.
         events: createDomainEvents((name, error) => context.self().logger.warn({ err: error, event: name }, "domain event: a reaction failed")),

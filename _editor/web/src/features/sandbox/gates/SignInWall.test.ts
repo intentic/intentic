@@ -19,11 +19,11 @@ jest.mock(`vue-router`, () => ({
 const needsSignIn = ref(true);
 const renderButton = jest.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const cancelSignIn = jest.fn();
-jest.mock(`../../auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+jest.mock(`../../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 // A sandbox still being set up unless a test says it has answered before (`lastSeenAt`).
 const activeSandbox = ref<{ role: string; lastSeenAt?: string | null; removedAt?: string | null } | undefined>({ role: `owner` });
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
 
 const signInThroughBrowser = jest.fn();
 const desktopVersion = jest.fn<() => string | undefined>();
@@ -40,7 +40,7 @@ const supportsPasskeys = jest.fn(() => true);
 const signInWithPasskey = jest.fn<() => Promise<DaemonSession>>();
 const registerPasskey = jest.fn<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
 const recoverWithCode = jest.fn<() => Promise<DaemonSession & { remaining: number }>>();
-jest.mock(`../session/passkeySignIn`, () => ({
+jest.mock(`../../../client/session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => supportsPasskeys(),
     signInWithPasskey: (...args: unknown[]) => signInWithPasskey(...(args as [])),
     registerPasskey: (...args: unknown[]) => registerPasskey(...(args as [])),
@@ -48,7 +48,7 @@ jest.mock(`../session/passkeySignIn`, () => ({
 }));
 
 const { default: SignInWall } = await import("./SignInWall.vue");
-const { dismissSignIn, offerPasskey, raiseSignIn } = await import("../session/signInPrompt");
+const { dismissSignIn, offerPasskey, raiseSignIn } = await import("../../../client/session/signInPrompt");
 
 const TARGET = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
 

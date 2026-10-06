@@ -1,8 +1,7 @@
 <!-- Connection rows show name, state, address, and the next primary action. -->
 <script setup lang="ts">
-import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { HostSummary, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import type { HostSummary, PhoneSummary, WebExtSummary, CapabilitySummary } from "@intentic/sandbox-contract";
 import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";

@@ -5291,20 +5291,16 @@
             "clearEsc": "Leeren (Esc)",
             "closeAll": "Alle schließen",
             "closeAllTabs": "Alle Tabs schließen",
-            "closeAnyway": "Trotzdem schließen",
             "closeOtherTabs": "Andere Tabs schließen",
             "closeOthers": "Andere schließen",
             "closeSplit": "Teilung schließen",
             "closeTab": "Tab schließen",
             "closeTabsToRight": "Tabs rechts schließen",
-            "closingTabsDiscardsUnsaved": "Diese Tabs zu schließen verwirft ihre ungesicherten Änderungen. Das lässt sich nicht rückgängig machen.",
             "codebaseHealth": "Codebase-Zustand",
             "collapseAll": "Alle einklappen",
             "collapseAllFolders": "Alle Ordner einklappen",
             "commaSeparated": "Durch Kommas getrennt",
             "copyPath": "Pfad kopieren",
-            "discardUnsavedChanges": "Ungesicherte Änderungen verwerfen?",
-            "discardUnsavedChangesIn": "Ungesicherte Änderungen in {count} Dateien verwerfen?",
             "dropFilesToAdd": "Dateien ablegen, um sie dem Workspace-Wurzelverzeichnis hinzuzufügen",
             "excluded": "Ausgeschlossen",
             "filterFiles": "Dateien filtern…",
@@ -5479,6 +5475,12 @@
             "acrossRepos": "{summary}, {count} Repos",
             "toPush": "{count} Commit zu pushen | {count} Commits zu pushen",
             "unpushedBranch": "Branch nicht gepusht | {count} Branches nicht gepusht"
+        },
+        "closeGuard": {
+            "discardUnsavedChanges": "Ungesicherte Änderungen verwerfen?",
+            "discardUnsavedChangesIn": "Ungesicherte Änderungen in {count} Dateien verwerfen?",
+            "closeAnyway": "Trotzdem schließen",
+            "closingTabsDiscardsUnsaved": "Diese Tabs zu schließen verwirft ihre ungesicherten Änderungen. Das lässt sich nicht rückgängig machen."
         }
     },
     "needs": {

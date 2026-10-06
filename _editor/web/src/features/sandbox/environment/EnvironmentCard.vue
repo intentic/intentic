@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { EnvironmentSchema, type EnvironmentItem } from "@intentic/api-contract";
+import type { Environment, EnvironmentItem } from "@intentic/sandbox-contract";
 import { Button, Code, ConfirmDialog, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
-import { sandboxJson } from "../client/sandboxClient";
-import { jsonBody } from "../client/jsonBody";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
 import { useEnvironmentContents } from "./useEnvironmentContents";
-import { useRole } from "../secrets/useRole";
-import { useSandbox } from "../client/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import HostedRebuild from "./rebuild/HostedRebuild.vue";
 import HostRecreate from "../../capabilities/connect/hosts/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
@@ -116,15 +115,17 @@ const awaiting = computed(() => recurring.value.filter((entry) => entry.declined
 // card's first row, a runtime install's at the foot of its own list, and one spot for both is far from one of them.
 // One action between them, still, so the two never race each other's write.
 const decidedAt = ref<`step` | `installs` | `contents`>(`step`);
-const decide = (at: `step` | `installs` | `contents`, path: string, body?: object): Promise<void> => {
+const decide = (at: `step` | `installs` | `contents`, write: () => Promise<Environment>): Promise<void> => {
     decidedAt.value = at;
     return run(async () => {
-        const next = EnvironmentSchema.parse(await sandboxJson(path, jsonBody(`POST`, body ?? {})));
-        queryClient.setQueryData(ENVIRONMENT_KEY, next);
+        queryClient.setQueryData(ENVIRONMENT_KEY, await write());
     }, `Could not update the environment.`);
 };
-const approve = (): Promise<void> => decide(`step`, `/environment/approve`, { hash: proposal.value?.hash });
-const reject = (): Promise<void> => decide(`step`, `/environment/reject`);
+const approve = (): Promise<void> => {
+    const hash = proposal.value?.hash;
+    return hash === undefined ? Promise.resolve() : decide(`step`, () => sandboxRaw(`POST /environment/approve`, { input: { hash } }));
+};
+const reject = (): Promise<void> => decide(`step`, () => sandboxRaw(`POST /environment/reject`));
 
 // TAKING ONE TOOL OUT, confirmed by name first. An approved one stays until the next rebuild, which the card then asks
 // for like any other change; one still waiting for approval is only a request, dropped with nothing to rebuild.
@@ -145,7 +146,7 @@ const removeWords = computed(() => {
 const remove = (): Promise<void> => {
     const block = removing.value?.block;
     removing.value = undefined;
-    return block === undefined ? Promise.resolve() : decide(`contents`, `/environment/remove`, { block });
+    return block === undefined ? Promise.resolve() : decide(`contents`, () => sandboxRaw(`POST /environment/remove`, { input: { block } }));
 };
 
 // A base compiled from a checkout rebuilds from that checkout, and that rebuild applies the approved recipe as well
@@ -289,7 +290,7 @@ const step = computed(
                 :entries="recurring"
                 :can-operate="canOperate"
                 :busy="busy"
-                @decide="(tool, decision) => decide(`installs`, `/environment/runtime-install`, { tool, decision })"
+                @decide="(tool, decision) => decide(`installs`, () => sandboxRaw(`POST /environment/runtime-install`, { input: { tool, decision } }))"
             />
 
             <Notice v-if="actionNotice && decidedAt === `installs`" :of="actionNotice" />

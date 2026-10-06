@@ -2,7 +2,7 @@
 import { ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useVocabulary } from "../../../../core-views/vocabulary";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { useChanges } from "../useChanges";
 import { useSaveActions } from "./useSaveActions";
 

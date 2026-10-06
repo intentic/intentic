@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { type App, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { IDLE, type InlineEdit } from "./inlineEdit";
 import type { MoreRow, Row } from "./treeRows";

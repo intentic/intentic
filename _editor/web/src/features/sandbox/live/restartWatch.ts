@@ -1,21 +1,15 @@
 import { computed, effectScope, type EffectScope, shallowRef, watch } from "vue";
 import { router } from "../../../router";
-import { type NotificationInput, useNotifications } from "../../../shell/notifications/notifications";
-import { useSandbox } from "../client/useSandbox";
+import { type NotificationInput, useNotifications } from "../../../workbench/notifications/notifications";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useHostHolding } from "../devices/useDevices";
-import {
-    type DevRebuildPhase,
-    type DevRebuildRun,
-    rebuildElapsedLabel,
-    rebuildRunning,
-    rebuildSeconds,
-    useDevRebuild,
-} from "../environment/rebuild/useDevRebuild";
+import { type DevRebuildPhase, type DevRebuildRun, rebuildRunning, rebuildSeconds, useDevRebuild } from "../environment/rebuild/useDevRebuild";
 import { useSandboxVersion } from "../overview/version/useSandboxVersion";
 import { SANDBOX_DEFAULT_SECTION } from "../sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";
 import { restartFinished } from "./sandboxRestart";
 import { t } from "@intentic/ui/i18n";
+import { formatElapsed } from "@intentic/ui/format";
 
 // THE RUNS THAT END IN A RESTART, FOLLOWED FROM THE ROOT. Everything here was already followed — by the Environment
 // card, by the hub — and that was the whole problem: a build takes minutes, and the reader spends them somewhere
@@ -57,7 +51,8 @@ export const rebuildReceipt = (before: DevRebuildPhase | undefined, run: DevRebu
     // whoever left, which by the time a rebuild lands is nearly everyone.
     const seeTheLog = [{ label: t(`sandbox.restartWatch.seeLog`), severity: `secondary` as const, run: openEnvironment }];
     if (run.phase === `done`) {
-        const took = rebuildElapsedLabel(rebuildSeconds(run));
+        const seconds = rebuildSeconds(run);
+        const took = seconds === undefined ? undefined : formatElapsed(seconds);
         return {
             tone: `done`,
             title: `Rebuilt from your checkout in ${took ?? `a few minutes`}`,

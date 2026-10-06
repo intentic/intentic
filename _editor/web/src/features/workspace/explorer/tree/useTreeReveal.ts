@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { nextTick, type Ref, watch } from "vue";
 import { revealTargets } from "../revealPath";

@@ -1,5 +1,5 @@
 import type { ViewRegistration } from "@intentic/extension-api";
-import type { ActiveExtension } from "../../../core-views/registry";
+import type { ActiveExtension } from "../../../workbench/views/registry";
 import { directoryTabs } from "./directoryTabs";
 
 // The management panel is the only way in to a repository's git history, docs and health, so which tabs it shows and

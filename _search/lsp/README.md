@@ -13,6 +13,7 @@ flowchart LR
 - Nothing stays resident. `lsp diag` runs `tsgo` over the file's project and exits; `lsp rename` holds one short language-server conversation with `tsgo --lsp` and applies the same edit an editor would.
 - The CLI takes a symbol name. The first matching declaration in the file's outline anchors the rename; failing that, word-boundary occurrences are offered to the server in order.
 - A project that cannot load cleanly (a broken config, missing type foundations) is reported as unavailable instead of producing false errors, and so is a compiler that crashes, is killed, or reports errors this reader cannot parse. A rename refuses in that state, since it could miss usages.
+- The CLI keeps the agent-CLI contract the other agent tools do: refusals and usage errors go to stdout, since an agent drops stderr, and the exit code is 0 for an answer and 2 for anything else.
 - A `*.test.ts` file is checked against a sibling `tsconfig.test.json` when one exists. `.vue` imports are left unchecked.
 - The daemon's post-edit hook imports `./client`, where concurrent asks for one project pool into a single compiler run. In the sandbox the CLI is on `PATH` and the `lspTools` setting decides whether agents get its skill.
 

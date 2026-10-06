@@ -12,10 +12,10 @@
         "smoke:signin": "node smoke-signin.mjs"
     },
     "devDependencies": {
-        "@intentic/api-contract": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/localhost-https": "workspace:*",
         "@intentic/prisma": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@playwright/test": "catalog:",

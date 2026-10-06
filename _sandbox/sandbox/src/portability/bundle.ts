@@ -13,7 +13,7 @@ import type { SandboxPresentation } from "../system/platform-client.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
-import { deriveDefinition, sweepVaults } from "./definition.js";
+import { deriveDefinition, sweepVaults } from "../definition/definition.js";
 import { webStream } from "@intentic/base/web-stream";
 
 // Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to

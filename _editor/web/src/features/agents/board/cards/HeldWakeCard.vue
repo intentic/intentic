@@ -3,7 +3,7 @@ import { Button, Icon, timeAgo } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { AutomationApproval } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import OriginMark from "../../../../components/OriginMark.vue";
+import OriginMark from "../../fleet/OriginMark.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Approvals-queue row drawn on the board, a sibling of an agent card, not one: no conversation exists until Approve is

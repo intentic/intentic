@@ -4,7 +4,6 @@ import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
 import { execProbe } from "../core/backing-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "valkey";
@@ -39,7 +38,7 @@ const composeYaml = (parsed: ValkeyInputs, stamp: ContainerStamp): string =>
 const valkeyConf = (parsed: ValkeyInputs): string => [`requirepass ${parsed.adminPassword}`, "appendonly yes", ""].join("\n");
 
 // A Valkey backing instance (i.want.cache). Per-app ACL users are the binding provider's job.
-export const createValkeyProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createValkeyProvider = (executor: SshExecutor): Provider =>
     createBackingProvider(
         {
             kind: KIND,

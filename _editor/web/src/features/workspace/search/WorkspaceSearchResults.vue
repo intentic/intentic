@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic/api-contract";
+import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { iconForEntry } from "@intentic/ui";
+import { formatCount, iconForEntry, Notice } from "@intentic/ui";
 import { codeLangForPath } from "@intentic/code-read";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
 import type { OpenMode } from "../tabs/workspaceTabs";
@@ -128,9 +128,9 @@ const shown = computed(() => groups.reduce((sum, group) => sum + group.hits.leng
 const summary = computed(() => {
     // The `+` sits on the number, not the noun (`4,211+ matches`, not `4,211 matches+`).
     const floor = partial ? `+` : ``;
-    const matches = `${total.toLocaleString()}${floor} ${total === 1 && !partial ? `match` : `matches`}`;
-    const scope = `${matches} in ${files.toLocaleString()}${floor} ${files === 1 && !partial ? `file` : `files`}`;
-    return truncated ? `${scope} · showing ${shown.value.toLocaleString()}` : scope;
+    const matches = `${formatCount(total)}${floor} ${total === 1 && !partial ? `match` : `matches`}`;
+    const scope = `${matches} in ${formatCount(files)}${floor} ${files === 1 && !partial ? `file` : `files`}`;
+    return truncated ? `${scope} · showing ${formatCount(shown.value)}` : scope;
 });
 
 const activate = (row: ResultRow, mode: OpenMode): void => {
@@ -189,12 +189,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     <div class="flex h-full min-h-0 flex-col">
         <!-- Pinned above the list: the match count is the one number a searcher comes back to check. -->
         <p v-if="rows.length > 0" class="shrink-0 px-2 pt-1 pb-1 text-2xs text-subtle">{{ summary }}</p>
-        <p
-            v-if="note"
-            class="mx-1.5 mb-1 flex shrink-0 items-start gap-1 rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-2xs text-warning"
-        >
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-[0.6rem]" /><span class="min-w-0">{{ note }}</span>
-        </p>
+        <Notice v-if="note" tone="warning" size="xs" class="mx-1.5 mb-1 shrink-0">{{ note }}</Notice>
         <div
             ref="scroller"
             class="min-h-0 flex-1 overflow-auto"

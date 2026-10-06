@@ -3,7 +3,6 @@ import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi, ForgejoHook } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
@@ -32,7 +31,7 @@ const findDiscordHook = (hooks: readonly ForgejoHook[], webhook: string): Forgej
     hooks.find((hook) => hook.type === "discord" && hook.config["url"] === webhook);
 
 // CI notifications: a Forgejo repo webhook of type "discord" firing on build results.
-export const createForgejoNotifyProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createForgejoNotifyProvider = (api: ForgejoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         if (hasPendingRef(inputs, "webhook")) {
             return undefined;

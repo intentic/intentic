@@ -3,7 +3,7 @@ import { isLockedWorkspacePath, type PortSummary } from "@intentic/sandbox-contr
 import { explorerColorClass, iconForEntry, useExplorerStyle } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { z } from "zod";
-import { useVocabulary } from "../../core-views/vocabulary";
+import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useAgents } from "../../features/agents/fleet/useAgents";
 import { loopbackPreviewTarget } from "../../features/preview/previewModel";
 import { markPreviewOpened, openPreview, PREVIEW_SIDE_VIEW, previewSelectedId, selectPreviewTarget } from "../../features/preview/previewSurface";
@@ -11,10 +11,10 @@ import { openInWorkspace } from "../../features/workspace/files/refs/openFileRef
 import { PORTS } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { router } from "../../router";
-import { handOffToMainWindow } from "../window/mainWindow";
-import { previewSlot } from "../window/panelSlots";
-import { FILE_SIDE_VIEW, FileSideInputSchema } from "./sideFileInput";
-import { registerSideView } from "./sideViews";
+import { handOffToMainWindow } from "../../workbench/window/mainWindow";
+import { previewSlot } from "../../workbench/window/panelSlots";
+import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
+import { registerSideView } from "../../workbench/side/sideViews";
 
 // What the preview's tab names it by: the app, server or page it shows, read off the target's id, since the live target
 // list is the panel's to fetch. `app:shop/web` is `web`, `repo:shop` is `shop`, `port:5173` is `:5173`.

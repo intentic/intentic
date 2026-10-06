@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Button, Notice } from "@intentic/ui";
-import { computed, onUnmounted, ref, watch } from "vue";
+import { Button, Notice, useNow } from "@intentic/ui";
+import { computed } from "vue";
 import type { DockerStart } from "../desktop";
+import { formatDuration } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 
 // THE ENGINE THIS MACHINE'S SANDBOX RUNS IN, while it is being started and after a start that did not work out.
@@ -31,32 +32,17 @@ const emit = defineEmits<{ start: []; open: []; install: [] }>();
 // Seconds into a start before the card names what usually holds one up: a first start takes a couple of minutes.
 const HINT_AFTER_SECONDS = 75;
 
-// The card's own clock, ticking only while a start runs: the one thing on screen that moves during the wait.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-watch(
-    () => props.starting,
-    (starting) => {
-        clearInterval(ticker);
-        ticker = undefined;
-        now.value = Date.now();
-        if (starting) {
-            ticker = setInterval(() => (now.value = Date.now()), 1000);
-        }
-    },
-    { immediate: true },
-);
-onUnmounted(() => clearInterval(ticker));
+// The shared clock, followed only while a start runs: the one thing on screen that moves during the wait.
+const now = useNow(() => props.starting);
 
-const clock = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, `0`)}`;
 // Held at the limit: the last `docker info` may still be answering after it, and "5:04 of 5:00" reads as broken.
 const waited = computed(() =>
     props.startedAt === undefined ? 0 : Math.min(Math.max(0, (now.value - props.startedAt) / 1000), props.limitSeconds ?? Number.POSITIVE_INFINITY),
 );
 const progress = computed(() =>
     props.limitSeconds === undefined
-        ? clock(waited.value)
-        : t(`desktop.docker.waitedOf`, { elapsed: clock(waited.value), limit: clock(props.limitSeconds) }),
+        ? formatDuration(waited.value)
+        : t(`desktop.docker.waitedOf`, { elapsed: formatDuration(waited.value), limit: formatDuration(props.limitSeconds) }),
 );
 const hinted = computed(() => props.starting && waited.value >= HINT_AFTER_SECONDS);
 
@@ -76,6 +62,9 @@ const heading = computed(() => {
             return windows.value ? t(`desktop.docker.accountNotAllowedWindows`) : t(`desktop.docker.accountNotAllowed`);
         case `tookTooLong`:
             return t(`desktop.docker.dockerHasntFinishedStarting`);
+        // Up, and answering every request with an error: a wait would only have run out the clock on it.
+        case `broken`:
+            return t(`desktop.docker.engineIsBroken`);
         // Nothing has been tried yet: the engine is down and this screen was reached before a start began.
         default:
             return t(`desktop.docker.dockerIsntRunning`);
@@ -96,6 +85,8 @@ const body = computed(() => {
             return windows.value ? t(`desktop.docker.signOutAndBackIn`) : t(`desktop.docker.addToDockerGroup`);
         case `tookTooLong`:
             return t(`desktop.docker.mayBeWaitingForYou`);
+        case `broken`:
+            return t(`desktop.docker.quitAndOpenAgain`);
         default:
             return t(`desktop.docker.tryOpeningItYourself`);
     }

@@ -3,7 +3,7 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import { commands } from "../../../shell/commands/useCommands";
+import { commands } from "../../../workbench/commands/useCommands";
 import { setTerminalMeta, terminalMeta } from "../terminalMeta";
 import TerminalStrip from "./TerminalStrip.vue";
 import type { TerminalTab } from "../useTerminal";

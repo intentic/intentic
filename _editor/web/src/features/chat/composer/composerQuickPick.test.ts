@@ -6,7 +6,7 @@ import { DRILLED_ROWS, FLAT_MODEL_ROWS, kindMeta, type QuickPickSources, quickRo
 import { QUICK_KINDS } from "./useMentions";
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
 jest.mock("../models/useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });

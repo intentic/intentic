@@ -163,3 +163,33 @@ test("a reader arriving mid-render is told the file is being read, and hears it 
         stop();
     }
 });
+
+// The same relative path under two roots is two files: a run in one must neither be shared with nor reported to a reader
+// of the other.
+test("a derivation under one root is not another root's, though the relative path is the same", async () => {
+    const other = await mkdtemp(join(tmpdir(), "derived-text-other-"));
+    try {
+        const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
+        await writeFile(join(root, "same.zip"), zip);
+        await writeFile(join(other, "same.zip"), zip);
+        let release = (): void => {};
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let runs = 0;
+        const exec: ExecFn = async () => {
+            runs += 1;
+            await gate;
+            return { stdout: "" };
+        };
+        const held = deriveText(root, "same.zip", exec);
+
+        expect(await readDerivedText(other, "same.zip")).toMatchObject({ present: false, derivable: true, state: "idle" });
+        const second = deriveText(other, "same.zip", exec);
+        release();
+        await Promise.all([held, second]);
+        expect(runs).toBe(2);
+    } finally {
+        await rm(other, { recursive: true, force: true });
+    }
+});

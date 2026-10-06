@@ -1,12 +1,12 @@
 import type { Logger } from "pino";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { connectedCount } from "./presence.js";
 
 // Stops the daemon (SIGTERM to self) when nobody is connected and nothing is running for a full window, since a hosted
 // machine bills for as long as this process lives.
-// - checked once a minute: presence, in-flight turns, subagents, armed watches, tmux terminal activity, and whether a
-//   one-time wake is due before this machine could plausibly be back
+// - checked once a minute: presence, in-flight work (turns, lands, workflows, subagents, armed watches), tmux terminal
+//   activity, and whether a one-time wake is due before this machine could plausibly be back
 // - quiet is a streak, not a snapshot: any busy answer resets the clock
 
 // Freshest tmux session_activity across all panes, in ms; 0 when tmux has no server. A listing that failed throws, so
@@ -27,10 +27,9 @@ export const lastTerminalActivity = async (): Promise<number> => {
 
 export interface IdleStopProbes {
     readonly connected: () => number;
-    readonly turns: () => number;
-    readonly delegates: () => number;
-    // An armed condition watch; only the daemon can check and wake it, so stopping mid-watch means it never fires.
-    readonly watchers: () => number;
+    // What is mid-flight that stopping would cut or strand: turns, lands, workflows, subagents parked or running, and
+    // armed watches, which only this daemon can check and wake (bootstrap/working-now.ts, purpose "idle-stop").
+    readonly working: () => number;
     readonly terminalActivityAt: () => Promise<number>;
     // The soonest one-time wake, or 0 for none. Same problem as an armed watch: nothing outside restarts this machine
     // for a clock, so a moment somebody was promised passes unnoticed while it sleeps. Recurring schedules are left
@@ -42,7 +41,7 @@ export interface IdleStopProbes {
 // Everything the daemon can answer about itself. What its conversations are doing is not among it: turns, children and
 // watches are held by the conversations' actors, which the composition root holds and supplies, as it does the
 // workspace's own one-time wakes.
-export const DEFAULT_PROBES: Omit<IdleStopProbes, "turns" | "delegates" | "watchers"> = {
+export const DEFAULT_PROBES: Omit<IdleStopProbes, "working"> = {
     connected: connectedCount,
     terminalActivityAt: lastTerminalActivity,
     nextOneTimeWakeAt: () => Promise.resolve(0),
@@ -60,7 +59,7 @@ export const startIdleStop = (
     const windowMs = args.minutes * 60 * 1000;
     let quietSince = Date.now();
     // The live states as one question; asked twice, once before and once after the terminal probe awaits.
-    const busy = (): boolean => probes.connected() > 0 || probes.turns() > 0 || probes.delegates() > 0 || probes.watchers() > 0;
+    const busy = (): boolean => probes.connected() > 0 || probes.working() > 0;
     const check = async (): Promise<void> => {
         // Live states reset the streak outright; a terminal timestamp only advances the streak's start.
         if (busy()) {

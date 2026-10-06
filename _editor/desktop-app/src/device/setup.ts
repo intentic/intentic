@@ -1,4 +1,5 @@
 import { computed, ref, watch } from "vue";
+import { useCopied } from "@intentic/ui/clipboard";
 import { track, trackBeforeExit } from "../analytics";
 import {
     expectedStop,
@@ -269,15 +270,15 @@ export const stopSetup = async (): Promise<void> => {
 };
 
 /** Puts the transcript on the clipboard: what someone stuck actually needs to hand over. */
-export const logCopied = ref(false);
+const logCopy = useCopied();
+export const logCopied = logCopy.copied;
 export const copyLog = async (): Promise<void> => {
     track(`desktop_install_log`, { action: `copied`, ...whereLeft() });
     const text = eventsOf(`setup`)
         .flatMap((event) => (event.kind === `line` ? [`${event.stream === `stderr` ? `! ` : ``}${event.text}`] : []))
         .join(`\n`);
-    await navigator.clipboard.writeText(text);
-    logCopied.value = true;
-    setTimeout(() => (logCopied.value = false), 2000);
+    // A refused write leaves the flag down rather than rejecting into nothing; the log folder is the other way out.
+    await logCopy.copy(text);
 };
 
 export const openLogFolder = async (): Promise<void> => {

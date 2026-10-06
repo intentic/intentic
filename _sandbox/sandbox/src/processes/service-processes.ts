@@ -8,6 +8,7 @@ import { freePort } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SERVICE_SESSION_PREFIX } from "../terminal/terminal-session.js";
+import { killGroup } from "../workload/process-group.js";
 
 // Daemon-supervised background services (messaging gateways, `contributes.processes` extensions), not terminal panels:
 // exits are events, and a crash respawns on the shared backoff ladder. dockerd and local model servers stay out, since
@@ -64,28 +65,6 @@ const DEFAULT_TIMING: ServiceTiming = { backoffStartMs: 1_000, backoffCapMs: 60_
 
 // One rotation, size-capped, so a chatty gateway can't fill /history; one prior generation is enough.
 const LOG_ROTATE_BYTES = 4 * 1_048_576;
-
-// SIGTERMs the child's process group, SIGKILLs any survivor after the grace; its own children die with it.
-const killGroup = (child: ChildProcess, graceMs: number): void => {
-    const pid = child.pid;
-    if (pid === undefined) {
-        return;
-    }
-    try {
-        process.kill(-pid, "SIGTERM");
-    } catch {
-        return; // already gone
-    }
-    const hardKill = setTimeout(() => {
-        try {
-            process.kill(-pid, "SIGKILL");
-        } catch {
-            // exited within the grace
-        }
-    }, graceMs);
-    hardKill.unref();
-    child.once("exit", () => clearTimeout(hardKill));
-};
 
 interface Entry {
     readonly spec: ServiceSpec;

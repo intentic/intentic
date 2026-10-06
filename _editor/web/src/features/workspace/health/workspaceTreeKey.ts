@@ -1,6 +1,6 @@
 import { rpcKey } from "../../../lib/queryKeys";
 import { UNPERSISTED } from "../../../lib/queryPersistence";
-import { workspaceAgent } from "./workspaceScope";
+import { workspaceAgent } from "../../../app/workspaceScope";
 
 // The tree's cache entries, apart from the explorer so a reader of the tree needs no more than its key. Scope is part
 // of the key: different scopes are different trees. UNPERSISTED: a wide workspace runs to tens of thousands of entries,

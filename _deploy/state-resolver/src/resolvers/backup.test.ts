@@ -1,5 +1,5 @@
 import { env } from "@intentic/graph";
-import type { BackupInput, HostInput } from "@intentic/need-resolver";
+import type { BackupInput, HostInput } from "../intent/inputs.js";
 import { backupId, forgejoId, komodoId } from "../lib/ids.js";
 import { IMAGES } from "../lib/images.js";
 import { resolveBackup } from "./backup.js";

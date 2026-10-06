@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 
 /* Permanent browser retirement for an account-owned sandbox. */
 export interface BrowserAccess {
@@ -14,7 +15,8 @@ export const fileBrowserAccess = (path: string): BrowserAccess => ({
             await readFile(path);
             return false;
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            // Absent, including under a parent that is not a directory: no marker, so access stands.
+            if (isMissing(error)) {
                 return true;
             }
             // Permissions/I/O failures are not evidence that retirement is absent: fail closed.

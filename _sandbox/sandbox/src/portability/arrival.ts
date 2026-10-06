@@ -22,11 +22,11 @@ import {
 } from "../migrations/assistants.js";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
-import { applyDefinitionItems, definitionActions, definitionItems } from "./apply-definition.js";
+import { applyDefinitionItems, definitionActions, definitionItems } from "../definition/apply-definition.js";
 import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { applyBundle, bundleActions, bundleItems, dropSpool, type HeldBundle, spoolBundle } from "./bundle-arrival.js";
-import { parseDefinitionToml } from "./definition.js";
+import { parseDefinitionToml } from "../definition/definition.js";
 import { MAX_UPLOAD_BYTES } from "../workspace/files/workspace-files-upload.js";
 import { nodeStream, webStream } from "@intentic/base/web-stream";
 

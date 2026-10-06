@@ -3,9 +3,8 @@ import type { Provider, ProviderContext, ResolvedInputs } from "@intentic/engine
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { connectWithRetry, sshExecutor } from "../core/ssh.js";
+import { connectWithRetry } from "../core/ssh.js";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";
-import { cloudflareApi } from "./cloudflare-api.js";
 
 const tunnelSchema = sshSchema.extend({
     name: z.string(),
@@ -118,9 +117,16 @@ const runConnector = async (
     }
 };
 
+// The remotely-managed tunnel of this name in the account, made when there is none. The tunnel provider's apply and the
+// CLI's host SSH tunnel both find-or-create through this.
+export const findOrCreateTunnel = async (
+    api: CloudflareApi,
+    args: { readonly accountId: string; readonly apiToken: string; readonly name: string },
+): Promise<{ readonly id: string }> => (await api.findTunnel(args)) ?? (await api.createTunnel(args));
+
 // Cloudflare Tunnel for one host: a remotely-managed cfd_tunnel whose connector runs on the host and maps public
 // hostnames to internal service urls. `read` surfaces ingress + connector state for `diff`; `apply` reconciles both.
-export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createTunnelProvider = (api: CloudflareApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "accountId")) {
@@ -156,8 +162,7 @@ export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executo
     },
     apply: async (inputs, observed, ctx) => {
         const parsed = parse(inputs);
-        const existing = await api.findTunnel({ accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name });
-        const tunnel = existing ?? (await api.createTunnel({ accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name }));
+        const tunnel = await findOrCreateTunnel(api, { accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name });
         // Ingress goes first: cloudflared fetches config on startup; later edits arrive as live edge pushes.
         await api.putTunnelIngress({
             accountId: parsed.accountId,

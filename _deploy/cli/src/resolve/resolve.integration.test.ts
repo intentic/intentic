@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { IntentSet } from "@intentic/need-resolver";
+import type { IntentSet } from "@intentic/state-resolver";
 import { resolveState } from "@intentic/state-resolver";
 import { collectSecrets } from "../secrets/secrets.js";
 import { discoverZone, loadIntent } from "./resolve.js";

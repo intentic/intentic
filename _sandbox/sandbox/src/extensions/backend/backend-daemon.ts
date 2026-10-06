@@ -1,9 +1,9 @@
 import type { ExtensionServerApi } from "@intentic/extension-api";
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { sandboxAnswerSchema, sandboxContract, sandboxRequestFor } from "@intentic/sandbox-contract";
+import { EXTENSION_TOKEN_HEADER, sandboxAnswerSchema, sandboxContract, sandboxRequestFor } from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
-import { type BackendHostExtension, EXTENSION_TOKEN_HEADER } from "./backend-host-config.js";
+import type { BackendHostExtension } from "./backend-host-config.js";
 
 // One extension's `api.daemon`, every door presenting its minted grant, which the daemon judges each request by. The
 // typed client is also judged here, before anything is sent: on the method and path a call resolves to, against the

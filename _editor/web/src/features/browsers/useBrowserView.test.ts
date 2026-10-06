@@ -10,8 +10,8 @@ const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbo
 jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
-const { signalConnection } = await import(`../sandbox/client/useSandbox`);
-const { classifyFailure } = await import(`../sandbox/live/connection`);
+const { signalConnection } = await import(`../../client/sandbox/useSandbox`);
+const { classifyFailure } = await import(`../../client/sandbox/connection`);
 
 // Records what the view puts on the wire and can answer back; open from the start, since this suite is about the
 // handlers, not the connect dance.

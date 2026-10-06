@@ -1,8 +1,8 @@
 import { sandboxShallowRef } from "@intentic/extension-api";
 import { computed, type ComputedRef, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { floatingOwner, floatingWindowPanel, showsPanel } from "../../../shell/window/floating";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { floatingOwner, floatingWindowPanel, showsPanel } from "../../../workbench/window/floating";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { type ChatNote, onChatNote, postChatNote } from "./chatChannel";
 import { traceFocus } from "./focusTrace";
 import { type DraftPreviews, NO_PREVIEWS } from "../drafts/draftPreview";

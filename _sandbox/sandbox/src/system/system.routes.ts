@@ -10,13 +10,12 @@ import {
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import type { Caller } from "../auth/auth.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
 import { desktopState } from "../desktop/agent-desktop.js";
-import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
-import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
+import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
@@ -184,7 +183,7 @@ async function* systemEvents(
         subscribeRuntimeChanges((domains) => {
             enqueue({ kind: "runtimeChanged", domains });
             onWake();
-        }),
+        }, services.logger),
         // Account plan limits or a provider refusal changed, so every open window's usage ring agrees without polling.
         services.headroom.onChange((provider, account, usage) => {
             enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });

@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import { antiBotAccepted, mintChallenge, type AntiBotAnswer } from "../auth/antibot.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import { threadKey } from "../sessions/thread-sessions.js";
+import { threadKey } from "../seams/thread-key.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";
 import { fileInstallsStore, type InstallsDocument, type InstallsStore } from "../store/installs.js";

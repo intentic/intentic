@@ -9,9 +9,9 @@ const chatInSidePanel = ref(true);
 jest.mock("../../features/chat/panel/chatPanelLayout", () => ({ chatInSidePanel }));
 
 const { default: SidePanel } = await import("./SidePanel.vue");
-const { closeAllTabs, openBeside, sideTabId, useSidePanel } = await import("./sideTabs");
-const { registerSideView } = await import("./sideViews");
-const { chatSlot } = await import("../window/panelSlots");
+const { closeAllTabs, openBeside, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
+const { registerSideView } = await import("../../workbench/side/sideViews");
+const { chatSlot } = await import("../../workbench/window/panelSlots");
 
 const panel = useSidePanel();
 

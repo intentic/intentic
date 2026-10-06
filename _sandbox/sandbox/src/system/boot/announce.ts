@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
+import type { AnnounceBody, IngressOutput } from "@intentic/api-contract/ingress";
 import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { z } from "zod";
 import type { Config } from "../../env.config.js";
 import { version } from "../../version.js";
-import { exchangeWithPlatform } from "../platform-client.js";
+import { callIngress, type IngressAnswer } from "../platform-client.js";
 
 // Registration with the platform: tells it this sandbox's public URL at boot, then again every hour while it runs, as its
 // heartbeat (the browser's own SSE probe is still what says it is reachable). Authenticated by the connect token, the
@@ -72,10 +72,12 @@ export interface Announcer {
     readonly relink: (adoption?: Adoption) => Promise<RelinkAnswer>;
 }
 
-// The platform's answer, in the owner's terms; the identity rides a 200 from a platform new enough to send it.
-const verdictOf = (answer: { status: number; body: string }, at: number): AnnounceState => {
+// The platform's answer, in the owner's terms; the identity rides a 200 from a platform new enough to send it, and a
+// 200 whose body says nothing more (an older platform's) is a registration all the same.
+const verdictOf = (answer: IngressAnswer<IngressOutput<"announce">>, at: number): AnnounceState => {
     if (answer.status === 200) {
-        return { state: "registered", at, ...identityOf(answer.body) };
+        const identity = answer.data?.identity;
+        return { state: "registered", at, ...(identity === undefined ? {} : { identity }) };
     }
     if (answer.status === 410) {
         return {
@@ -98,19 +100,6 @@ const verdictOf = (answer: { status: number; body: string }, at: number): Announ
     return { state: "rejected", retrying: true, detail: `the platform answered HTTP ${answer.status} to this sandbox's registration`, at };
 };
 
-// A 200's body as a platform new enough to say which database took the registration sends it.
-const AcceptedSchema = z.object({ identity: z.string().min(1) });
-
-const identityOf = (body: string): Pick<AnnounceState, "identity"> => {
-    try {
-        const accepted = AcceptedSchema.safeParse(JSON.parse(body));
-        return accepted.success ? { identity: accepted.data.identity } : {};
-    } catch {
-        // allow(silent-catch): an older platform answers a bare ok, which carries no identity.
-        return {};
-    }
-};
-
 export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     let timer: NodeJS.Timeout | undefined;
     let fastUntil = 0;
@@ -118,16 +107,12 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     let lastLoggedAt = 0;
     let status: AnnounceState = { state: "off" };
     let inFlight: Promise<AnnounceState> | undefined;
-    const headers = { "x-intentic-connect": config.connectToken };
     // The same body on every announce, the heartbeat's included: fixed for this process's life.
-    const announceBody = JSON.stringify({ daemonUrl: config.sandbox.publicUrl, version, instance: instanceId(), ...whereThisRuns(config) });
-
-    const post = (path: string, payload: string) =>
-        exchangeWithPlatform(config, { method: "POST", path, headers, payload, idleMs: PLATFORM_IDLE_MS });
+    const announceBody: AnnounceBody = { daemonUrl: config.sandbox.publicUrl, version, instance: instanceId(), ...whereThisRuns(config) };
 
     // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
     const register = (): Promise<AnnounceState> => {
-        inFlight ??= post("/sandbox/announce", announceBody)
+        inFlight ??= callIngress(config, { route: "announce", input: announceBody, idleMs: PLATFORM_IDLE_MS })
             .then(
                 (answer) => verdictOf(answer, Date.now()),
                 (error: Error): AnnounceState => ({
@@ -190,18 +175,19 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     // The platform's answer to an adoption: its status and reason, or 0 when it could not be reached.
     const adopt = async (adoption: Adoption): Promise<{ status: number; detail: string }> => {
         try {
-            const answer = await post(
-                "/sandbox/adopt",
-                JSON.stringify({
+            const answer = await callIngress(config, {
+                route: "adopt",
+                input: {
                     ticket: adoption.ticket,
                     grant: config.sandbox.grant,
                     daemonUrl: config.sandbox.publicUrl,
                     owner: adoption.owner,
                     version,
                     ...adoptionPresentation(adoption),
-                }),
-            );
-            return { status: answer.status, detail: answer.status === 200 ? "adopted" : answer.body.replace(/^error: /, "").slice(0, 300) };
+                },
+                idleMs: PLATFORM_IDLE_MS,
+            });
+            return { status: answer.status, detail: answer.status === 200 ? "adopted" : (answer.refusal ?? "").slice(0, 300) };
         } catch (error) {
             return { status: 0, detail: `the platform could not be reached from inside the sandbox: ${errorMessage(error)}` };
         }

@@ -1,3 +1,4 @@
+import { tokensOfChars } from "@intentic/base/format";
 import type { AgentProvider, AgentTurn, TodoItem } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { handoffHistory } from "../../sessions/turn-transcript.js";
@@ -19,8 +20,6 @@ export interface LimitWay {
     readonly handoffTokens?: number | undefined;
     readonly move?: { readonly account: string; readonly carry: boolean } | undefined;
 }
-
-const CHARS_PER_TOKEN = 4;
 
 export const limitWayOf = async (
     services: Services,
@@ -59,7 +58,7 @@ export const limitWayOf = async (
         standing,
         ...opt("checklist", checklist),
         ...opt("contextTokens", contextTokens),
-        handoffTokens: Math.ceil(handoffChars / CHARS_PER_TOKEN),
+        handoffTokens: tokensOfChars(handoffChars),
         ...opt("move", move),
     };
 };

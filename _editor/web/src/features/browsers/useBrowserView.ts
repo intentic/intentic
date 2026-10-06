@@ -1,11 +1,11 @@
-import { createBackoff } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
+import { onScopeDispose, ref, type Ref, watch } from "vue";
 import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
 import { pointerFrame, type PointerAction } from "./pointerFrame";
+import { selectionCopy } from "./selectionCopy";
 import { canDecodeVideo, videoSink } from "./videoSink";
-import { useSandbox } from "../sandbox/client/useSandbox";
+import { useLiveSocket, webSocketChannel } from "../../client/session/liveSocket";
 import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
@@ -14,24 +14,13 @@ import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 // wire. The chrome around the picture is the pane's own, steered by the verbs below. No scrollback to preserve like
 // a terminal, so this is plain reactive state, and nothing is sent to the page until the user takes control.
 
-const PING_MS = 30_000;
-const RETRY_MS = 1000;
-const MAX_RETRY_MS = 30_000;
-// A connection alive this long was healthy; its drop resets the backoff (terminalSession's rule).
-const STABLE_MS = 5000;
-// The daemon pongs every ping, and a still page sends no frames, so silence this long means a half-open socket.
-const STALE_MS = 90_000;
 // Assumed only between the socket opening and `ready` landing, when there's nothing to click on yet.
 const VIEW_WIDTH = 1280;
 const VIEW_HEIGHT = 800;
 // Roughly one display frame, the rate CDP can act on anyway; each move is a few dozen bytes of JSON.
 const MOVE_THROTTLE_MS = 16;
-// How long Ctrl+C waits for the page's selection before the keystroke goes through anyway.
-const SELECTION_TIMEOUT_MS = 1500;
 // A size is asked once the box has held still this long: every step of a drag would otherwise restart the encoder.
 const RESIZE_DEBOUNCE_MS = 250;
-
-const { reachable } = useSandbox();
 
 // Mirrors the daemon's SelectMenu (screencast.ts); the browser package can't import that contract, so it's
 // re-declared here.
@@ -117,7 +106,6 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const viewScale = ref(1);
     const cursor = ref(`default`);
     const select = ref<SelectMenu | undefined>();
-    const socket = shallowRef<WebSocket | undefined>();
     // Turns each binary frame into an object URL, releasing ones the img has moved on from; frames path only, video
     // decodes into a canvas.
     const pictures = frameUrls();
@@ -127,12 +115,6 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     // The page the user picked, re-sent on every reconnect so a dropped socket doesn't silently switch them back to
     // the agent's tab.
     let pinned: string | undefined;
-    const ladder = createBackoff({ floorMs: RETRY_MS, capMs: MAX_RETRY_MS, stableMs: STABLE_MS });
-    let reconnect: number | undefined;
-    let closing = false;
-    // The Ctrl+C in flight, waiting on the page's answer; one at a time, since a second press before the first
-    // resolves is the same question twice.
-    let pendingSelection: ((text: string) => void) | undefined;
     // Keystrokes go to the display rather than the page while Chromium's find bar has them; see `find`.
     let rawKeys = false;
     // The box's last measured size, and the last one asked of the daemon; a box the daemon already has is not asked
@@ -141,11 +123,10 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     let askedSize: Size | undefined;
     let resizeTimer: number | undefined;
 
-    const send = (message: object): void => {
-        if (socket.value?.readyState === WebSocket.OPEN) {
-            socket.value.send(JSON.stringify(message));
-        }
-    };
+    // The live socket below; declared ahead so every verb can say something on it. The daemon pongs every ping, and a
+    // still page sends no frames, so its silence clock is the plain one.
+    const send = (message: object): void => live.send(message);
+    const copy = selectionCopy(send);
 
     const askSize = (): void => {
         if (kind.value !== `video` || boxSize === undefined || sameSize(boxSize, askedSize)) {
@@ -204,14 +185,9 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         }
     };
 
-    const onSelection = (text: string | undefined): void => {
-        pendingSelection?.(text ?? ``);
-        pendingSelection = undefined;
-    };
-
     // The daemon knows this session is done for good; reconnecting would only ask the same dead question.
     const onError = (reason: string | undefined): void => {
-        closing = true;
+        live.end();
         status.value = reason ?? `That browser session is gone.`;
         frame.value = undefined;
     };
@@ -244,7 +220,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 onCursor(message.cursor);
                 break;
             case `selection`:
-                onSelection(message.text);
+                copy.answer(message.text);
                 break;
             case `select`:
                 // Sent after every release: a menu to draw, or null to close one the user clicked away from.
@@ -262,147 +238,52 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         }
     };
 
-    // Asks the page what's selected, answered by the daemon's `selection` frame; the timeout keeps a slow tunnel from
-    // stranding the keystroke.
-    const askSelection = (): Promise<string> =>
-        new Promise((resolve) => {
-            pendingSelection?.(``);
-            pendingSelection = resolve;
-            send({ type: `selection` });
-            window.setTimeout(() => {
-                if (pendingSelection === resolve) {
-                    pendingSelection = undefined;
-                    resolve(``);
-                }
-            }, SELECTION_TIMEOUT_MS);
-        });
-
-    // Copying inside the agent's Chromium lands on the sandbox's clipboard, unreadable by the user's machine, so the
-    // selection is fetched and rewritten to the user's own here. The chord still reaches the page afterward, since a
-    // cut running first would delete the text being read.
-    const copyOut = async (chord: KeyFrame): Promise<void> => {
-        const text = await askSelection();
-        if (text !== ``) {
-            // Unavailable outside a secure context and refusable; a failed write must not eat the keystroke.
-            await navigator.clipboard?.writeText(text).catch(() => undefined);
-        }
-        send(chord);
-    };
-
     // A background or unmounted-but-alive view would otherwise keep pulling every frame down the tunnel to nothing
     // visible. The daemon holds the binding and pin across a pause, so resuming is one frame away, not a reconnect.
     const syncVisibility = (): void => send({ type: document.hidden ? `pause` : `resume` });
     document.addEventListener(`visibilitychange`, syncVisibility);
 
-    const connect = async (): Promise<void> => {
-        window.clearTimeout(reconnect);
-        reconnect = undefined;
-        const session = name.value;
-        if (closing || session === undefined) {
-            return;
-        }
-        let url: string | undefined;
-        try {
-            url = await socketUrl(session);
-        } catch (error) {
+    const live = useLiveSocket<string>({
+        mint: async () => {
+            const session = name.value;
+            return session === undefined ? undefined : socketUrl(session);
+        },
+        open: webSocketChannel({ text: handleJson, binary: takePicture }),
+        onMintFailed: (error) => {
             // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
-            console.warn(`browser ${session}: authorizing the view's socket failed`, error);
-            if (closing || session !== name.value) {
-                return;
-            }
+            console.warn(`browser ${name.value ?? ``}: authorizing the view's socket failed`, error);
             status.value = `Couldn't authorize the browser view (${errorMessage(error)}); retrying.`;
-            reconnect = window.setTimeout(() => void connect(), ladder.next());
-            return;
-        }
-        // The session may have changed while the token was in flight; that switch now owns the socket.
-        if (closing || session !== name.value) {
-            return;
-        }
-        if (url === undefined) {
+        },
+        onUnreachable: () => {
             status.value = `The sandbox isn't reachable, or you're not signed in.`;
-            reconnect = window.setTimeout(() => void connect(), ladder.next());
-            return;
-        }
-        const ws = new WebSocket(url);
-        // Frames arrive as binary; everything else on this socket is JSON, told apart by `event.data`.
-        ws.binaryType = `arraybuffer`;
-        // Supersedes any straggler socket; its handlers see `socket.value !== ws` and stay silent.
-        socket.value?.close();
-        socket.value = ws;
-        // A fresh socket knows nothing of the box; the first `ready` asks again.
-        askedSize = undefined;
-        let ping: number | undefined;
-        let openedAt = 0;
-        let lastFrameAt = 0;
-        ws.addEventListener(`open`, () => {
-            if (closing || socket.value !== ws) {
-                ws.close();
-                return;
-            }
-            openedAt = Date.now();
-            lastFrameAt = openedAt;
+        },
+        onOpen: () => {
+            // A fresh socket knows nothing of the box; the first `ready` asks again.
+            askedSize = undefined;
             if (pinned !== undefined) {
-                ws.send(JSON.stringify({ type: `bind`, pageId: pinned }));
+                send({ type: `bind`, pageId: pinned });
             }
             // A newly (re)opened socket starts out streaming; the daemon can't know otherwise until told.
             syncVisibility();
-            ping = window.setInterval(() => {
-                if (Date.now() - lastFrameAt > STALE_MS) {
-                    ws.close();
-                    return;
-                }
-                send({ type: `ping` });
-            }, PING_MS);
-        });
-        ws.addEventListener(`message`, (event) => {
-            lastFrameAt = Date.now();
-            // A picture, binary either way; the first byte says which kind (see takePicture).
-            if (event.data instanceof ArrayBuffer) {
-                takePicture(event.data);
-                return;
-            }
-            handleJson(String(event.data));
-        });
-        ws.addEventListener(`close`, () => {
-            window.clearInterval(ping);
-            if (socket.value !== ws || closing) {
-                return;
-            }
+        },
+        onDrop: () => {
             status.value = `Reconnecting…`;
-            reconnect = window.setTimeout(() => void connect(), ladder.next(openedAt === 0 ? 0 : Date.now() - openedAt));
-        });
-    };
+        },
+    });
 
     const teardown = (): void => {
-        window.clearTimeout(reconnect);
-        reconnect = undefined;
         window.clearTimeout(resizeTimer);
-        // A copy waiting on a socket that's going away resolves empty rather than hanging until its timeout.
-        pendingSelection?.(``);
-        pendingSelection = undefined;
-        socket.value?.close();
-        socket.value = undefined;
+        copy.cancel();
+        live.close();
     };
-
-    // The sandbox's event stream answering again is the news a view waiting out a rung of its ladder is waiting for:
-    // without it, one whose ladder had climbed to MAX_RETRY_MS stayed dark that long after the rest of the page was
-    // back. `reconnect` is set only while a retry is pending.
-    watch(reachable, (up) => {
-        if (up && reconnect !== undefined) {
-            ladder.reset();
-            void connect();
-        }
-    });
 
     watch(
         name,
         () => {
             teardown();
-            closing = false;
             pinned = undefined;
             rawKeys = false;
             askedSize = undefined;
-            ladder.reset();
             frame.value = undefined;
             driving.value = false;
             // A decoder holds state for the stream it was built for; the next browser's `ready` builds a new one.
@@ -414,13 +295,14 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             // A menu from the browser being left has nothing left to point at.
             select.value = undefined;
             status.value = name.value === undefined ? undefined : `Connecting to the agent's browser…`;
-            void connect();
+            if (name.value !== undefined) {
+                live.connect();
+            }
         },
         { immediate: true },
     );
 
     onScopeDispose(() => {
-        closing = true;
         document.removeEventListener(`visibilitychange`, syncVisibility);
         teardown();
         // An unreleased object URL holds its blob for the life of the document; a decoder holds buffers of its own.
@@ -517,7 +399,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             } else if (intent.kind === `key`) {
                 sendKey(intent.frame);
             } else {
-                void copyOut(intent.frame);
+                void copy.copyOut(intent.frame, event.target instanceof Element ? event.target : undefined);
             }
         },
         onPaste: (event) => {

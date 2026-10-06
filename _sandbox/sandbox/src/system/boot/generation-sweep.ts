@@ -19,8 +19,9 @@ import { procUnits, type ScannedProcess, scanProcesses } from "../resources/proc
 // An isolation anchor of an earlier run always goes: no turn survives a restart, so nothing will enter its namespace
 // again. Anchors from before the stamp are known by their shape (`sleep infinity` leading its own session in a mount
 // namespace of its own, orphaned).
-// A watch check and an edit rule's command carry their own deadline as well, which the reaper's minute sweep enforces
-// whichever run started them (overdueDetached).
+// Every command run through workload/run-check.ts (a watch check, an edit rule, a guard, a stop check, a probe, a JS
+// run, a Python check) carries its own deadline as well, which the reaper's minute sweep enforces whichever run started
+// them (overdueDetached).
 
 // Kernel names (comm, at most 15 characters) of programs meant to survive a daemon restart, adopted rather than
 // ended. dockerd and model servers normally run in a tmux panel and are spared by that already; named here for the

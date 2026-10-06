@@ -17,8 +17,8 @@ class RecordingRequest extends Request {
 }
 stubGlobal(`Request`, RecordingRequest);
 
-jest.mock(`../features/sandbox/client/sandboxTarget`, () => ({ currentSandboxTarget: () => currentTarget }));
-jest.mock(`../features/sandbox/client/sandboxAuthFetch`, () => ({
+jest.mock(`../client/sandbox/sandboxTarget`, () => ({ currentSandboxTarget: () => currentTarget }));
+jest.mock(`../client/sandbox/sandboxAuthFetch`, () => ({
     sandboxAuthenticatedFetch: async (request: Request) => {
         fetched.push({ body: JSON.parse(await request.clone().text()) });
         return new Response(`{}`);
@@ -27,12 +27,16 @@ jest.mock(`../features/sandbox/client/sandboxAuthFetch`, () => ({
 jest.mock(`./buildEpoch`, () => ({ buildId: () => `test-build` }));
 
 let currentTarget: typeof target | undefined = target;
+const { postClientDiagnostics } = await import("../client/sandbox/clientReport");
 
-const load = (): Promise<typeof import("./clientDiagnostics")> => {
+const load = async (): Promise<typeof import("./clientDiagnostics")> => {
     fetched.length = 0;
     inits.length = 0;
     currentTarget = target;
-    return freshImport<typeof import("./clientDiagnostics")>("./clientDiagnostics", import.meta.url);
+    const diagnostics = await freshImport<typeof import("./clientDiagnostics")>("./clientDiagnostics", import.meta.url);
+    // Handed the daemon's sender as main.ts hands it in.
+    diagnostics.sendClientDiagnosticsWith(postClientDiagnostics);
+    return diagnostics;
 };
 
 beforeEach(() => {

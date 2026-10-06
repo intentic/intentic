@@ -1,8 +1,7 @@
 // Pins that toggling a repo's changelog switch writes exactly that repo's name to `changelogRepos`, never
 // another. Mounted (not projected), since what's under test is the click-then-read round trip.
 import "@intentic/testing/dom";
-import type { SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";

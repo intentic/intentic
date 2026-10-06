@@ -5,9 +5,12 @@ import type { Logger } from "pino";
 import { opt } from "../opt.js";
 import type { DomainEvents } from "../seams/domain-events.js";
 
-// HOW MANY AGENT TURNS ARE RUNNING, FOR THE HOST. The machine agent's keeper restarts a sandbox unasked when its tunnel
-// or its registration is broken (ic: sandbox/fix/chain.rs), and a restart cuts every turn in flight. ic reads this file
-// through `docker exec` first, and while turns run it asks for a yes instead of restarting by itself. On /run, never on
+// HOW MUCH WORK IS IN FLIGHT, FOR THE HOST. The machine agent's keeper restarts a sandbox unasked when its tunnel or its
+// registration is broken (ic: sandbox/fix/chain.rs), and a restart cuts every turn in flight. ic reads this file
+// through `docker exec` first, and while work runs it asks for a yes instead of restarting by itself. The count keeps
+// the name ic reads, `liveTurns`, and since 2026-10-05 counts everything a restart would cut (bootstrap/working-now.ts,
+// purpose "restart": turns, lands, running subagents, workflows' steps), as an update and a device rebuild wait for:
+// the keeper's restart cuts a land as surely as theirs does. On /run, never on
 // /health: /health answers the public address too, and whether anyone is working here right now is nobody else's
 // business.
 export const WORK_SIGNAL_PATH = "/run/intentic/work.json";
@@ -30,7 +33,8 @@ export interface WorkSignalBoot {
 }
 
 export interface WorkSignalDeps {
-    readonly conversations: { readonly liveSessionIds: () => readonly string[] };
+    // How many things a restart would cut right now.
+    readonly working: () => number;
     // This boot's facts once known; absent for a daemon that keeps no boot record.
     readonly boot?: () => Promise<WorkSignalBoot | undefined>;
     readonly events: Pick<DomainEvents, "subscribe">;
@@ -57,14 +61,14 @@ export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalB
         ...opt("lastRestartAt", boot?.restartAskedAt),
     })}\n`;
 
-export const startWorkSignal = ({ conversations, events, logger, boot, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
+export const startWorkSignal = ({ working, events, logger, boot, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
     let written: { liveTurns: number; at: number } | undefined;
     let failing = false;
     let chain: Promise<void> = Promise.resolve();
     // Read once: a boot's facts never change after it.
     const booted = boot?.().catch(() => undefined) ?? Promise.resolve(undefined);
     const write = async (): Promise<void> => {
-        const liveTurns = conversations.liveSessionIds().length;
+        const liveTurns = working();
         const at = now();
         if (written !== undefined && written.liveTurns === liveTurns && at - written.at < REFRESH_MS) {
             return;
@@ -82,9 +86,10 @@ export const startWorkSignal = ({ conversations, events, logger, boot, path = WO
             failing = true;
         }
     };
-    // One write at a time, in order, so a stale count never lands after a fresher one.
+    // One write at a time, in order, so a stale count never lands after a fresher one; both arms, so a write that threw
+    // does not leave the chain rejected and every later tick with it.
     const tick = (): Promise<void> => {
-        chain = chain.then(write);
+        chain = chain.then(write, write);
         return chain;
     };
     // After the event has been handled, so the actor's own state already says whether the turn runs.

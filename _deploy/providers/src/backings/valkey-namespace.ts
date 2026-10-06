@@ -3,7 +3,6 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { bindingSchema, createInstanceBindingProvider } from "../core/instance-binding.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 
 const namespaceSchema = bindingSchema.extend({
     instanceHost: z.string(),
@@ -33,7 +32,7 @@ const cli = async (session: SshSession, cid: string, parsed: NamespaceInputs, ar
 
 // A per-app Valkey ACL user scoped to its key prefix. ACL users live in memory: if the instance restarts without
 // an aclfile, reconcile re-creates the user (self-healing).
-export const createValkeyNamespaceProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createValkeyNamespaceProvider = (executor: SshExecutor): Provider =>
     createInstanceBindingProvider(
         {
             kind: "valkey-namespace",

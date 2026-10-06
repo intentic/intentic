@@ -1,14 +1,15 @@
-import type { FileDiffResponse, SnapshotDiffResponse } from "@intentic/api-contract";
+import type { FileDiff, SnapshotDiff } from "@intentic/sandbox-contract";
 import { sandboxScopeGuard, sandboxShallowRef } from "@intentic/extension-api";
 import { useAsyncAction } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { type QueryClient, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
-import { rpcQuery } from "../../../sandbox/client/rpcQuery";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useChat } from "../../../chat/run/useChat";
 import { dropEditBuffers } from "../../files/useEditBuffers";
 import { rpcKey, rpcPrefix, workingReviewKeys } from "../../../../lib/queryKeys";
-import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 
 // Workspace history: the daemon's checkpoints of /work (turns, user changes, restores; hidden interval captures
 // aren't listed). The snapshot list is vue-query cached; diff and fileDiff stay imperative, loaded on demand.
@@ -18,8 +19,8 @@ import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
 // box's, and hands the next box a runner of its own.
 const actions = sandboxShallowRef(() => useAsyncAction());
 
-const diff = (id: string): Promise<SnapshotDiffResponse> => sandboxRpc.history.diff({ id });
-const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResponse> => sandboxRpc.history.fileDiff({ id, scope, path });
+const diff = (id: string): Promise<SnapshotDiff> => sandboxRpc.history.diff({ id });
+const fileDiff = (id: string, scope: string, path: string): Promise<FileDiff> => sandboxRpc.history.fileDiff({ id, scope, path });
 
 // Shared by every /work rewrite (this restore, and chat's rewind mid-operation). The tree's whole prefix, since its
 // scope is part of its key; a restore never moves HEAD, so the new diff is the new review set.
@@ -49,7 +50,7 @@ const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
                 conversation.transcript.noteWorkspaceRestored();
             }
         }
-    }, `Restore failed.`);
+    }, t(`workspace.fileVerbs.couldntRestore`));
 };
 
 export function useHistory() {

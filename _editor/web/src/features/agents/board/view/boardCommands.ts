@@ -1,9 +1,9 @@
 import type { Disposable } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, type Ref } from "vue";
-import { AGENTS } from "../../../../shell/commands/categories";
-import { publishContextKey } from "../../../../shell/commands/contextKeys";
-import { registerCommand } from "../../../../shell/commands/useCommands";
+import { AGENTS } from "../../../../workbench/commands/categories";
+import { publishContextKey } from "../../../../workbench/commands/contextKeys";
+import { registerCommand } from "../../../../workbench/commands/useCommands";
 
 // What the board does on arriving and holds while it is on screen: it reads the roster and the archive, and claims
 // Mod+Z and the filter's accelerator, which it hands back the moment it leaves.

@@ -1,7 +1,7 @@
 import { IMPRINT_VERSION, type ImprintElement, type SkeletonImprint } from "@intentic/ui/skeleton-imprint";
 import { adoptImprints, configureSkeletonSnapshots, loadImprintScope, type SkeletonPersistence } from "@intentic/ui/skeleton-store";
 import { z } from "zod";
-import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
+import { activeSandboxId } from "./activeSandbox";
 import { whenIdle } from "./whenIdle";
 
 // Where the imprints loading placeholders are drawn from (@intentic/ui's <SkeletonSnapshot>) outlive the page:

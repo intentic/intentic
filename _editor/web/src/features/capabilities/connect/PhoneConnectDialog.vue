@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { PHONE_DOOR, usePeerConnect } from "../../sandbox/devices/usePeerConnect";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { registerWakeOnce, type WakeOutcome } from "./phoneWake";
 
 // "Connect this phone" for a phone-kind capability: a QR code the phone's camera scans, which opens the Intentic Device

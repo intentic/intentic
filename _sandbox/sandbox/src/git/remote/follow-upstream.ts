@@ -1,4 +1,4 @@
-import { defaultGit, forkedExec, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, forkedExec, type GitRunner } from "@intentic/base/git";
 import { z } from "zod";
 import type { ActionResult } from "../changes/changes-commits.js";
 import { upstreamOf } from "../ops/branches.js";

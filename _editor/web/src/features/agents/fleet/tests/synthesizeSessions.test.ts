@@ -6,14 +6,14 @@ import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { mocked } from "@intentic/testing/bun";
-import { SandboxHttpError } from "../../../sandbox/client/sandboxHttpError";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 import { runningTurn } from "../../../../testing/runningTurn";
 
 // What agents.transcript answers, per test; the upload stays on the raw client, which carries bytes.
 const transcript = jest.fn();
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { transcript } }) }));
-jest.mock("../../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { transcript } }) }));
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxRequest: jest.fn(),
     sandboxError: jest.fn(),
     sandboxJson: jest.fn(),
@@ -24,7 +24,7 @@ jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 // Same window.env chain via analytics; the action only fires a milestone event through track.
 jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
 // Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId and reachable.
-jest.mock("../../../sandbox/client/useSandbox", () => {
+jest.mock("../../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
@@ -52,7 +52,7 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-const { sandboxRequest, sandboxUpload } = await import("../../../sandbox/client/sandboxClient");
+const { sandboxRequest, sandboxUpload } = await import("../../../../client/sandbox/sandboxClient");
 const sandboxRequestMock = mocked(sandboxRequest);
 const sandboxUploadMock = mocked(sandboxUpload);
 const { revealConversation } = await import("../agentActions");
@@ -67,7 +67,7 @@ const newChat = () => {
 
 const { renderTranscript, synthesisPrompt, synthesizeSessions } = await import("../synthesizeSessions");
 const { chatStrip } = await import("../../../chat/panel/useChat-strip");
-const { receiveFloatingNote } = await import("../../../../shell/window/floating");
+const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
 const { receiveChatNote } = await import("../../../chat/run/chatChannel");
 
 beforeEach(() => {

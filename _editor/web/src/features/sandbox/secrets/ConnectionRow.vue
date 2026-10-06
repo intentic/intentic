@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type IconName, InlineRename, Row } from "@intentic/ui";
-import UsageMeter from "../../../components/UsageMeter.vue";
+import UsageMeter from "../../chat/session/UsageMeter.vue";
 import type { PlanHeadroom } from "../../chat/session/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 

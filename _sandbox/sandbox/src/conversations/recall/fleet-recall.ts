@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow } from "@intentic/sandbox-contract";
 import { readableProviderText } from "../../agent/providers/provider-error-text.js";
 import type { Services } from "../../composition.js";
@@ -218,7 +219,7 @@ const repoStates = async (deps: FleetRecallDeps, entry: PersistedAgent, diff: bo
                 // Git's own totals: a recall shows sums, which never needed the review's per-row code counts.
                 return { ...landed, ...statOf(await agentRepoChanges(deps.agentWorktrees, entry, composed, "cumulative")) };
             } catch (error) {
-                return { ...landed, unavailable: error instanceof Error ? error.message : String(error) };
+                return { ...landed, unavailable: errorMessage(error) };
             }
         }),
     );

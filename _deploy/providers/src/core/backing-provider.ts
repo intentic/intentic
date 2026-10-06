@@ -5,7 +5,7 @@ import { type EnvEntry, type HostFile, writeEnvOnce, writeHostFiles } from "./ho
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "./inputs.js";
 import { listStampedContainers } from "./list-stamped.js";
 import { type ContainerStamp, containerStampOf, observedStamp, stampOf } from "./stamp.js";
-import { type SshExecutor, type SshSession, sshExecutor } from "./ssh.js";
+import { type SshExecutor, type SshSession } from "./ssh.js";
 
 // A backing is a single-container compose project per instance (Postgres, Valkey, Garage, Authentik). The six
 // entry points below (read/diff/apply/delete/list/restamp) are the same shape for every kind; only the schema,
@@ -53,7 +53,7 @@ export interface BackingSpec<S extends z.ZodType> {
     readonly restamp?: boolean;
 }
 
-export const createBackingProvider = <S extends typeof backingSchema>(spec: BackingSpec<S>, executor: SshExecutor = sshExecutor): Provider => {
+export const createBackingProvider = <S extends typeof backingSchema>(spec: BackingSpec<S>, executor: SshExecutor): Provider => {
     const parse = (inputs: ResolvedInputs): z.infer<S> => parseInputs(spec.schema, inputs, spec.kind);
     const pendingRefs = spec.pendingRefs ?? ["internalIp"];
 

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { servedRoute } from "./routes.js";
-import { RAW_ROUTE_LIST } from "./raw-routes.js";
+import { RAW_ROUTE_LIST } from "./raw/raw-routes.js";
 import { hostOwnerId } from "./ingress-contract.js";
 import { tunnelBulkRoutes } from "./tunnel-bulk.js";
 

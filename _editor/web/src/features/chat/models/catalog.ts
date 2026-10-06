@@ -1,5 +1,4 @@
 import type { IconName } from "@intentic/ui";
-import { formatDate } from "@intentic/ui/format";
 import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
 import { agentStatusMeta } from "../../agents/fleet/agentStatus";
 import type { ConversationStatus } from "../session/conversation";
@@ -89,24 +88,3 @@ export const statusTabClass = (status: ConversationStatus): string => {
     return ``;
 };
 
-// Compact relative time ("5m", "3h", "2d", else a date). Pass `now` when the caller holds a tick (board
-// cards, chat rail); otherwise a still component's age freezes at first render.
-export const relativeTime = (ms: number, now = Date.now()): string => {
-    const diff = now - ms;
-    const min = Math.round(diff / 60000);
-    if (min < 1) {
-        return `just now`;
-    }
-    if (min < 60) {
-        return `${min}m`;
-    }
-    const hours = Math.round(min / 60);
-    if (hours < 24) {
-        return `${hours}h`;
-    }
-    const days = Math.round(hours / 24);
-    if (days < 7) {
-        return `${days}d`;
-    }
-    return formatDate(ms);
-};

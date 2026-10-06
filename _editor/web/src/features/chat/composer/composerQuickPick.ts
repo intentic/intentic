@@ -1,9 +1,10 @@
 import { type AgentProvider, type CatalogOption, type Persona, providerLabel } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { filterEntries, normalize, type PickerEntry } from "../models/modelPickerState";
-import { type SendLater, sendTimeLabel, type TimeChoice } from "./later/sendLater";
+import { type SendLater, type TimeChoice } from "./later/sendLater";
 import { QUICK_KINDS, type QuickKind } from "./useMentions";
 import { t } from "@intentic/ui/i18n";
+import { formatUntil } from "@intentic/ui/time";
 
 // The rows the composer's `@` token offers besides files: the turn settings, as one pure derivation over plain data. A
 // kind whose source is undefined is not offered at all (the pill row refuses it too), so it appears in neither the
@@ -188,7 +189,7 @@ const sendRows = (source: NonNullable<QuickPickSources[`send`]>, query: string):
                 key: `send:${choice.key}`,
                 to: { kind: `at`, at: choice.at },
                 label: choice.label,
-                detail: sendTimeLabel(choice.at, source.now),
+                detail: formatUntil(choice.at, source.now),
                 current: picked?.kind === `at` && picked.at === choice.at,
             }),
         ),
@@ -258,7 +259,7 @@ const sendValue = (source: NonNullable<QuickPickSources[`send`]>): string => {
         return t(`chat.composerQuickPick.now`);
     }
     if (picked.kind === `at`) {
-        return sendTimeLabel(picked.at, source.now);
+        return formatUntil(picked.at, source.now);
     }
     return source.targets.find((target) => target.id === picked.conversationId)?.title ?? t(`chat.sendLater.anotherAgent`);
 };

@@ -9,7 +9,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The provider's connected accounts, in the provider's own order, as the daemon lists them.
 let listed: OauthAccount[] = [];
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 jest.mock("./useChat-accounts", () => ({
     accountsOf: (provider: AgentProvider) => (provider === `claude` ? listed : []),
     refreshConnections: jest.fn(async () => {}),

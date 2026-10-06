@@ -8,7 +8,7 @@ import {
     WORKSPACE_ROOT,
 } from "@intentic/sandbox-contract";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
-import { JS_TOOL_NAME } from "../execution/js-tool.js";
+import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";

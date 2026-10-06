@@ -4,8 +4,8 @@ import { join } from "node:path";
 import type { CredentialGate } from "@intentic/sandbox-contract";
 import { fileCredentialGates, gateForName, gateSubjectOf, gateTargetOf } from "./credential-gates.js";
 
-// Verifies the store tells an absent policy from an unreadable one (its one departure from the house `jsonFile`
-// fallback) and resolves the right subject for a name; needs a real filesystem to tell those apart.
+// Verifies the store tells an absent policy from an unreadable one (a refusal, never the house fallback) and resolves
+// the right subject for a name; needs a real filesystem to tell those apart.
 
 const dir = async (): Promise<string> => mkdtemp(join(tmpdir(), "credential-gates-"));
 
@@ -27,7 +27,22 @@ it("REFUSES a policy that exists and cannot be read, rather than reading it as n
     await writeFile(path, "{not json");
     await expect(store(path).list()).rejects.toThrow(/could not be read/);
     await writeFile(path, JSON.stringify({ gates: [{ subject: 7 }] }));
-    await expect(store(path).list()).rejects.toThrow(/not readable as a policy/);
+    await expect(store(path).list()).rejects.toThrow(/could not be read/);
+    // Nor written over: a fresh policy there would lift every gate the unreadable one held.
+    await expect(store(path).set(gate())).rejects.toThrow(/could not be read by this build/);
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ gates: [{ subject: 7 }] });
+});
+
+// A build rolled back to this one still writes the policy; what a newer build added to it must survive that write, or
+// a downgrade would quietly loosen a security policy.
+it("keeps what a newer build wrote when this one changes the policy", async () => {
+    const path = join(await dir(), "credential-gates.json");
+    await writeFile(path, JSON.stringify({ gates: [{ ...gate(), expiresAt: 1_900_000_000_000 }], audit: "kept" }));
+    await store(path).set(gate({ subject: "reddit", kind: "capability" }));
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        gates: [{ ...gate(), expiresAt: 1_900_000_000_000 }, gate({ subject: "reddit", kind: "capability" })],
+        audit: "kept",
+    });
 });
 
 const store = (path: string) => fileCredentialGates(path);

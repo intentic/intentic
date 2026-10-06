@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { EmptyState } from "@intentic/ui";
 import type { IconName, Tip, TipRow } from "@intentic/ui";
+import { basename } from "@intentic/ui/path";
 import { useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
@@ -107,7 +109,7 @@ onBeforeUnmount(() => {
     window.removeEventListener(`pointermove`, offFrame);
 });
 
-const name = computed(() => props.path.slice(props.path.lastIndexOf(`/`) + 1));
+const name = computed(() => basename(props.path));
 
 // What the preview left out or put back, only when it did: a few words for the bar over the page, beside the Preview
 // chip they qualify (FileViewer draws them, so no band of their own opens over the page), and the rest on hover. A file
@@ -191,10 +193,7 @@ defineExpose({ notes, pointerIn });
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="text-sm text-danger">{{ t(`workspace.htmlPreview.failed`) }}</p>
-        </div>
+        <EmptyState v-if="failed" tone="danger" :title="t(`workspace.htmlPreview.failed`)" class="flex-1" />
         <div v-else-if="built === undefined" class="flex flex-1 items-center justify-center text-muted">
             <Icon name="spinner" class="text-xl" spin />
         </div>

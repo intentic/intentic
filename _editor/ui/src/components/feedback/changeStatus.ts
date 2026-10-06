@@ -1,6 +1,8 @@
-/* Git's one-letter status vocabulary and the colour each letter is read in, the data behind <ChangeStatusMark>. */
+/* Git's one-letter status vocabulary and the colour each letter is read in, the data behind <ChangeStatusMark>. The
+ * vocabulary itself is the contract's (ChangeStatusSchema), the one every change list is parsed with. */
+import type { ChangeStatus } from "@intentic/sandbox-contract";
 
-export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "type-changed" | "conflicted";
+export type { ChangeStatus };
 
 export const STATUS_LETTER: Record<ChangeStatus, string> = {
     added: `A`,

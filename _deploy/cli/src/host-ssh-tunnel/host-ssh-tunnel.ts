@@ -1,7 +1,7 @@
-import { type CloudflareApi, cloudflareApi } from "@intentic/providers";
+import { type CloudflareApi, cloudflareApi, findOrCreateTunnel, upsertCname } from "@intentic/providers";
 import { CATCH_ALL, cfargotunnelCname, hostSshTunnelName, sshHostname } from "@intentic/sandbox-contract";
 import { hostSshIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { resolveZone, upsertCname } from "../lib/cf-tunnel.js";
+import { resolveZone } from "../lib/cf-tunnel.js";
 
 // connect.sh installs sshd on the standard port; the tunnel reaches it only via the host's own localhost.
 const HOST_SSH_PORT = 22;
@@ -28,12 +28,17 @@ export const createHostSshTunnel = async (args: {
     const name = hostSshTunnelName(id);
     const hostname = sshHostname(id, zone.name);
     args.log(`resolving host SSH tunnel "${name}" on zone "${zone.name}"…`);
-    const existing = await api.findTunnel({ accountId: zone.accountId, apiToken: args.apiToken, name });
-    const tunnel = existing ?? (await api.createTunnel({ accountId: zone.accountId, apiToken: args.apiToken, name }));
+    const tunnel = await findOrCreateTunnel(api, { accountId: zone.accountId, apiToken: args.apiToken, name });
     const token = await api.getTunnelToken({ accountId: zone.accountId, apiToken: args.apiToken, tunnelId: tunnel.id });
     const ingress = [{ hostname, service: `ssh://localhost:${HOST_SSH_PORT}` }, CATCH_ALL];
     await api.putTunnelIngress({ accountId: zone.accountId, apiToken: args.apiToken, tunnelId: tunnel.id, ingress });
-    await upsertCname(api, args.apiToken, zone.id, hostname, cfargotunnelCname(tunnel.id), "intentic host ssh tunnel");
+    await upsertCname(api, {
+        apiToken: args.apiToken,
+        zoneId: zone.id,
+        name: hostname,
+        content: cfargotunnelCname(tunnel.id),
+        comment: "intentic host ssh tunnel",
+    });
     args.log(`host SSH tunnel "${name}" → ${hostname} ready`);
     return { token, hostname };
 };

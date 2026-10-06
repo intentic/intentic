@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { providerGroupLabel } from "../../chat/accounts/providerCatalog";
-import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChart";
+import { niceMax, providerColor, type SpendBucket } from "./usageChart";
+import { formatMoney } from "@intentic/ui";
 
 // Spend over time as columns; a single series shows no legend (the title already names it), two or more get one.
 // Hand-rolled in HTML, not SVG or a library: percentage heights in a flex row are already responsive (no resize
@@ -20,8 +21,8 @@ const stackOf = (bucket: SpendBucket): { key: string; value: number }[] => bucke
 
 const tooltipFor = (bucket: SpendBucket): string =>
     [
-        `${bucket.label} · ${formatUsd(bucket.totals.costUsd)}`,
-        ...(stacked.value ? stackOf(bucket).map((segment) => `${providerGroupLabel(segment.key)} ${formatUsd(segment.value)}`) : []),
+        `${bucket.label} · ${formatMoney(bucket.totals.costUsd)}`,
+        ...(stacked.value ? stackOf(bucket).map((segment) => `${providerGroupLabel(segment.key)} ${formatMoney(segment.value)}`) : []),
         `${bucket.totals.turns} ${bucket.totals.turns === 1 ? `turn` : `turns`}`,
     ].join(` · `);
 
@@ -41,9 +42,9 @@ const PLOT_HEIGHT = `10rem`;
         <div class="flex gap-2">
             <!-- The axis carries the values no column is directly labelled with. -->
             <div class="flex w-11 shrink-0 flex-col justify-between text-right text-2xs tabular-nums text-subtle" :style="{ height: PLOT_HEIGHT }">
-                <span class="-translate-y-1/2">{{ formatUsd(max) }}</span>
-                <span class="-translate-y-1/2">{{ formatUsd(max / 2) }}</span>
-                <span class="-translate-y-1/2">{{ formatUsd(0) }}</span>
+                <span class="-translate-y-1/2">{{ formatMoney(max) }}</span>
+                <span class="-translate-y-1/2">{{ formatMoney(max / 2) }}</span>
+                <span class="-translate-y-1/2">{{ formatMoney(0) }}</span>
             </div>
 
             <div class="relative min-w-0 flex-1" :style="{ height: PLOT_HEIGHT }">

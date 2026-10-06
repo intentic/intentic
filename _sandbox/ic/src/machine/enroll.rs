@@ -132,6 +132,7 @@ pub fn run() -> Result<()> {
         .build()
         .new_agent()
         .post(format!("{sandbox_url}/enroll"))
+        // sandbox-contract's CONNECT_TOKEN_HEADER, held to this spelling by api-contract's ingress.test.ts.
         .header("x-intentic-connect", &connect_token)
         .header("content-type", "application/json")
         .send(body.to_string().as_bytes());

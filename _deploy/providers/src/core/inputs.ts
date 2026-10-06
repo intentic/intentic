@@ -1,16 +1,16 @@
 import type { ResolvedInputs } from "@intentic/engine";
+import { SSH_TRANSPORTS } from "@intentic/graph";
 import { z } from "zod";
 import type { SshTarget } from "./ssh.js";
 
-// SSH-creds block shared by every host-deploying provider (host/tunnel/forgejo/forgejo-runner/komodo); port
-// defaults to 22. `via` selects transport: "direct" dials address:port over TCP, "cloudflared" reaches a NAT'd host
-// through its Cloudflare tunnel.
+// SSH-creds block shared by every host-deploying provider (host/tunnel/forgejo/forgejo-runner/komodo): the resolver's
+// block (@intentic/graph's SshBlock) with its key filled in; port defaults to 22 and `via` to "direct".
 export const sshSchema = z.object({
     address: z.string(),
     user: z.string(),
     sshKey: z.string(),
     port: z.number().default(22),
-    via: z.enum(["direct", "cloudflared"]).default("direct"),
+    via: z.enum(SSH_TRANSPORTS).default("direct"),
 });
 
 const issues = (error: z.ZodError): string => error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ");

@@ -23,11 +23,11 @@ jest.mock("@intentic/ui/async", () => ({
         run: (task: () => Promise<void>) => task(),
     }),
 }));
-jest.mock("../../../shell/notifications/notifications", () => ({
+jest.mock("../../../workbench/notifications/notifications", () => ({
     useNotifications: () => ({ say: (message: string) => stub.said.push(message) }),
 }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: jest.fn() }, UNPERSISTED: `unpersisted` }));
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         git: {
             changes: async () => ({
@@ -47,7 +47,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
         },
     }),
 }));
-jest.mock("../../sandbox/client/useSandboxQuery", () => ({
+jest.mock("../../../client/sandbox/useSandboxQuery", () => ({
     useSandboxQuery: () => ({
         query: {
             data: { value: undefined },

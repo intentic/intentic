@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
 import { BULLET, FENCE } from "@intentic/sandbox-contract";
 

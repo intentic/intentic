@@ -3,7 +3,6 @@ import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
@@ -24,7 +23,7 @@ const parse = (inputs: ResolvedInputs): ForgejoUserInputs => parseInputs(forgejo
 // bootstrap is needed). read returns undefined while Forgejo is unreachable, so a plan proceeds; apply
 // create-or-skips. A pure sink: account existence is all it reconciles (a password rotation would break the
 // stable-output contract, like the persisted forgejo tokens), so diff is a noop.
-export const createForgejoUserProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createForgejoUserProvider = (api: ForgejoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         try {

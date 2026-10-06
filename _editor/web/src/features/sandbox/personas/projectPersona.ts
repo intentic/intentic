@@ -1,7 +1,7 @@
 import type { Persona } from "@intentic/sandbox-contract";
 import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // The persona a conversation started under a project wears when nothing else was chosen: opened in the project,
 // fenced to it (file tools refuse outside it), carrying its repository. One persona per project, made the first time

@@ -2,14 +2,14 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AddedDependencies, AgentSpan, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { scratchOf, scratchScopeOf } from "../../git/changes/scratch.js";
 import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../../git/changes/code-counts.js";
 import { readModules } from "../../workspace/deps/modules.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
-import { isAncestor } from "./agent-refs.js";
+import { isAncestor } from "../../git/agent-refs.js";
 import { addedNames, declaredDependencies, isManifest } from "./manifest-dependencies.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 

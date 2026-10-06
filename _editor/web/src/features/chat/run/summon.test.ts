@@ -4,17 +4,17 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, nextTick, ref } from "vue";
 import type { Summons } from "./summon";
 import type { StoredTab } from "../tabs/tabSnapshot";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // A daemon with nothing to say: every turn is refused at the door. A send is the one call only a turn makes.
 const run = jest.fn(async (_turn: ProcedureInput<`agent.run`>) => {
     throw new SandboxHttpError(404, `Request failed (404).`);
 });
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { run } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { run } }) }));
 jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
@@ -44,7 +44,7 @@ const { claimedSummons, relaySummons, summonChat, summonTurn, wireSummons } = aw
 const { snapshotTab } = await import("../tabs/tabSnapshot");
 const { receiveChatNote } = await import("./chatChannel");
 const { closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("../drafts/closedDrafts");
-const { claimFloating, receiveFloatingNote } = await import("../../../shell/window/floating");
+const { claimFloating, receiveFloatingNote } = await import("../../../workbench/window/floating");
 
 // A summons as another window's channel would deliver it: an envelope naming its sandbox.
 const deliver = (summons: Summons, sandbox: string | undefined = `sb1`): void => receiveChatNote({ sandbox, note: { kind: `summons`, summons } });

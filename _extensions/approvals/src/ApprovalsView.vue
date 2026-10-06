@@ -8,14 +8,15 @@ import {
     roleAtLeast,
 } from "@intentic/sandbox-contract";
 import {
-    BrandMark,
     appLink,
+    BrandMark,
     Button,
-    ui,
     ConfirmDialog,
+    formatCount,
     formatTimestamp,
     type IconName,
     Notice,
+    type NoticeModel,
     noticeOf,
     NoticeStack,
     Row,
@@ -25,7 +26,7 @@ import {
     SplitView,
     StatusBadge,
     timeAgo,
-    type NoticeModel,
+    ui,
     useAsyncAction,
     useLoadingReveal,
     useNow,
@@ -353,9 +354,9 @@ const lengthOf = (item: ApprovalSummary): string | undefined => {
     const limit = limitOf(item.platform);
     const count = edit.liveLength(item);
     if (limit !== undefined) {
-        return `${count.toLocaleString()} / ${limit.toLocaleString()}`;
+        return `${formatCount(count)} / ${formatCount(limit)}`;
     }
-    return count > OVERSIZED || edit.isEditing(item) ? `${count.toLocaleString()} characters` : undefined;
+    return count > OVERSIZED || edit.isEditing(item) ? `${formatCount(count)} characters` : undefined;
 };
 const isOver = (item: ApprovalSummary): boolean => isPost(item) && edit.liveLength(item) > (limitOf(item.platform) ?? Infinity);
 

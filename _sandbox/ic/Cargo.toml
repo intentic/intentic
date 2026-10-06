@@ -16,6 +16,8 @@ sha2 = "0.11"
 tempfile = "3"
 # The time-limited capture the desktop app shares with this binary (bounded/src/lib.rs says why there is one).
 intentic-bounded = { path = "bounded" }
+# What docker's refusals mean and where Docker Desktop lives, read the same way by the desktop app (docker-host/src/lib.rs).
+intentic-docker-host = { path = "docker-host" }
 
 # The bootstrap shims download this binary on EVERY run, so size is user-visible; thin LTO + strip for the
 # same build-time/size trade the desktop crate settled on (its Cargo.toml carries the measurements).
@@ -23,7 +25,7 @@ intentic-bounded = { path = "bounded" }
 strip = true
 lto = "thin"
 
-# `bounded` is a crate of its own because the desktop app depends on it too; a member here so it shares this
-# crate's lock and target directory, and `cargo test --workspace` / `cargo fmt --all` reach it from here.
+# `bounded` and `docker-host` are crates of their own because the desktop app depends on them too; members here so
+# they share this crate's lock and target directory, and `cargo test --workspace` / `cargo fmt --all` reach them.
 [workspace]
-members = ["bounded"]
+members = ["bounded", "docker-host"]

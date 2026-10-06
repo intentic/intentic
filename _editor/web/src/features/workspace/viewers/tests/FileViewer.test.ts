@@ -1,26 +1,26 @@
 // The open-file dispatcher mounted for real: which surface a tab ends on, and what it hands that surface. jsdom, since
 // what is asserted is what is on screen.
 import "@intentic/testing/dom";
-import type { WorkspaceFileResponse } from "@intentic/api-contract";
+import type { WorkspaceFile } from "@intentic/sandbox-contract";
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
 // whose copy it asked for, since a surface may read another than the Workspace's. An answer may take its time (a
 // promise), and a read the viewer cancels fails the way fetch fails it, with an AbortError.
-let answer: (path: string) => WorkspaceFileResponse | Promise<WorkspaceFileResponse> = (path) => ({ present: false, path });
+let answer: (path: string) => WorkspaceFile | Promise<WorkspaceFile> = (path) => ({ present: false, path });
 const reads: { path: string; agent: string | undefined }[] = [];
 jest.mock("../../files/fileWindow", () => ({
     FILE_WINDOW_BYTES: 4 * 1024 * 1024,
     readFileWindow: (path: string, opts?: { signal?: AbortSignal; scope?: { agent: string | undefined } }) => {
         reads.push({ path, agent: opts?.scope?.agent });
-        return new Promise<WorkspaceFileResponse>((resolve, reject) => {
+        return new Promise<WorkspaceFile>((resolve, reject) => {
             opts?.signal?.addEventListener(`abort`, () => reject(new DOMException(`The read was cancelled.`, `AbortError`)), { once: true });
             Promise.resolve(answer(path)).then(resolve, reject);
         });
     },
 }));
-jest.mock("../../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxBlob: (path: string) => Promise.resolve(new Blob([`bytes of ${path}`])),
 }));
 // The tree's write half and tier: the owner's, with nothing written here.
@@ -52,9 +52,9 @@ jest.mock("../DerivedTextView.vue", () => ({
 }));
 
 const { default: FileViewer } = await import("../FileViewer.vue");
-const { registerViewer } = await import("../../../../core-views/viewerRegistry");
+const { registerViewer } = await import("../../../../workbench/views/viewerRegistry");
 const { externalDirtyPaths } = await import("../../files/externalDirty");
-const { VIEW_SCOPE, workspaceAgent } = await import("../../health/workspaceScope");
+const { VIEW_SCOPE, workspaceAgent } = await import("../../../../app/workspaceScope");
 const { useEditBuffers } = await import("../../files/useEditBuffers");
 const { markWorkspaceChanged } = await import("../../changes/live/useWorkspaceLive");
 
@@ -121,7 +121,7 @@ const settle = async (): Promise<void> => {
     await nextTick();
 };
 
-const text = (path: string, content: string, extra: { lossy?: true } = {}): WorkspaceFileResponse => ({
+const text = (path: string, content: string, extra: { lossy?: true } = {}): WorkspaceFile => ({
     present: true,
     path,
     content,

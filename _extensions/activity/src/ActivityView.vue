@@ -11,13 +11,14 @@ import {
     timeWindows,
     type TimeWindow,
 } from "@intentic/extension-ui";
-import { computed } from "vue";
+import { computed, provide } from "vue";
 import ActivityTimeline from "./ActivityTimeline.vue";
 import { matches, toEpisodes, toSources } from "./episodes";
 import { host } from "./host";
 import { t } from "./i18n";
 import SourceFilter from "./SourceFilter.vue";
 import { useActivity } from "./useActivity";
+import { SOURCE_NAMES, useSourceNames } from "./useSourceNames";
 
 // Activity surface: what reached the agent, what it did, and how that went. A hub section, not its own page: the hub
 // draws page chrome, this owns the instrument and feed. Filters (source, window, text) live in the URL; read-only,
@@ -44,13 +45,15 @@ const search = computed<string>({
 });
 
 const { events, status, error, isLoading, truncated } = useActivity(window);
+const names = useSourceNames();
+provide(SOURCE_NAMES, names);
 
 // Sources are tallied on the windowed set, so the rail's counts always match what the timeline shows.
 const windowed = computed(() => {
     const since = sinceOf(window.value, Date.now());
     return toEpisodes(events.value).filter((episode) => episode.at >= since);
 });
-const sources = computed(() => toSources(windowed.value, status.value?.connections ?? []));
+const sources = computed(() => toSources(windowed.value, status.value?.connections ?? [], names.value));
 const selected = computed(() => sources.value.find((entry) => entry.key === source.value));
 const visible = computed(() =>
     windowed.value.filter((episode) => (source.value === undefined || episode.sourceKey === source.value) && matches(episode, search.value)),

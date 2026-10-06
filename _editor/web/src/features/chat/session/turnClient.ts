@@ -12,16 +12,16 @@ import {
     type TurnErrand,
     type TurnFact,
 } from "@intentic/sandbox-contract";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef } from "vue";
 import { uuid } from "../../../lib/uuid";
-import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { TurnBooking } from "../composer/later/sendLater";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { repointedPickUp } from "../run/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
@@ -586,7 +586,7 @@ export class TurnClient {
             }
         } catch (err) {
             this.giveBack(sent, messageId);
-            host.error.value = `${errorMessage(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
+            host.error.value = `${messageOr(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
         }
     }
 
@@ -617,11 +617,11 @@ export class TurnClient {
             this.giveBack(sent, messageId);
             this.host.error.value = stopped
                 ? null
-                : `${errorMessage(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
+                : `${messageOr(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
             return;
         }
         if (!stopped) {
-            this.host.error.value = errorMessage(err, `Chat failed.`);
+            this.host.error.value = messageOr(err, `Chat failed.`);
         }
     }
 
@@ -739,7 +739,7 @@ export class TurnClient {
             }
         } catch (error) {
             // Unreachable, not refused: said on the error line, and the strip stays for the next press.
-            host.error.value = errorMessage(error, `The sandbox did not answer.`);
+            host.error.value = messageOr(error, `The sandbox did not answer.`);
             return;
         }
         await this.reattach();
@@ -862,7 +862,7 @@ export class TurnClient {
                 }
             },
             (error: unknown) => {
-                host.error.value = errorMessage(error, `The sandbox did not answer.`);
+                host.error.value = messageOr(error, `The sandbox did not answer.`);
             },
         );
     }
@@ -896,7 +896,7 @@ export class TurnClient {
             }
         } catch (error) {
             // Unreachable, not refused: said on the error line, and the held turn stays for the next press.
-            host.error.value = errorMessage(error, `The sandbox did not answer.`);
+            host.error.value = messageOr(error, `The sandbox did not answer.`);
             return true;
         }
         await this.reattach();

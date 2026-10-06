@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { gunzipSync } from "fflate";
 import { plural } from "@intentic/base/format";
+import { markdownTable } from "@intentic/webq/markdown";
 import { gzipHead, listWithTar, looksLikeTar, tarEntries, tarOnPath, zipEntries, type ArchiveEntry } from "../archives.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
@@ -61,19 +62,13 @@ const summaryOf = (container: Container, entries: readonly ArchiveEntry[]): stri
     return lines;
 };
 
-const tableRow = (cells: readonly string[]): string => `| ${cells.map((cell) => cell.replaceAll("|", "\\|")).join(" | ")} |`;
-
 // Files only: a folder row carries no size and says nothing the paths beside it don't already.
 const entryTable = (entries: readonly ArchiveEntry[]): string => {
     const files = entries.filter((entry) => !entry.directory).slice(0, MAX_ENTRIES);
     if (files.length === 0) {
         return "";
     }
-    return [
-        tableRow(["Path", "Size"]),
-        tableRow(["---", "---"]),
-        ...files.map((entry) => tableRow([entry.path, entry.size === undefined ? "" : formatBytes(entry.size)])),
-    ].join("\n");
+    return markdownTable([["Path", "Size"], ...files.map((entry) => [entry.path, entry.size === undefined ? "" : formatBytes(entry.size)])]);
 };
 
 const listingDoc = (container: Container, entries: readonly ArchiveEntry[], notes: readonly string[]): DerivedDoc => {

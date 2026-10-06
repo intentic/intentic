@@ -14,6 +14,11 @@ flowchart LR
     api --> cf["Cloudflare DNS<br/>loopback certs"]
 ```
 
+- Two contracts, both in `@intentic/api-contract`. The editor calls oRPC procedures under `/rpc`; machines (the daemon,
+  `ic`, the edge, a builder, the trial's translator) call the plain routes of `PLATFORM_INGRESS`, its ingress table,
+  which `src/ingress.ts` registers handlers under. A handler reads its body through the route's schema and refuses with
+  `{ "error": … }` and the route's status. (2026-10-05) These routes used to be hand-written here and in the daemon, and
+  the boot report kept only the fields a handler listed, so `retrying` and `drift` never reached the editor.
 - A registry, never a relay: a daemon announces the address it answers on, and the browser talks to it directly.
   The api stores who owns which sandbox and where it answers; traffic between browser and sandbox never passes
   through it.
@@ -201,6 +206,7 @@ flowchart LR
 
 - [src/main.ts](src/main.ts) — boot: config, Prisma, the background jobs, `Bun.serve`.
 - [src/app.ts](src/app.ts) — the Hono app: middleware, daemon-facing routes, sub-apps, the oRPC mount at `/rpc`.
+- [src/ingress.ts](src/ingress.ts) — serves a machine-facing route under its entry in the contract's ingress table.
 - [src/router.ts](src/router.ts) — the oRPC router, one entry per domain, shaped by `@intentic/api-contract`.
 - [src/config.ts](src/config.ts) — every setting, its env var and its default.
 - [src/sandbox/hosted/hosted.ts](src/sandbox/hosted/hosted.ts) — provisioning and waking hosted machines.

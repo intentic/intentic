@@ -15,13 +15,13 @@ stubGlobal(`localStorage`, {
 
 // The switch itself: the one ref the whole app scopes by.
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-jest.mock("../sandbox/overview/activeSandbox", () => ({
+jest.mock("../../lib/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-jest.mock("../sandbox/client/useSandbox", () => ({
+jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
 jest.mock("./terminalSession", () => ({

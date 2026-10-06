@@ -18,8 +18,10 @@ export interface SandboxNames {
 }
 
 // Every container name below the workspace one is this plus a slug; exported so reading a slug back off a name is the
-// same string as writing it (`sandboxSlugOf`), not a regex copied per caller.
+// same string as writing it (`sandboxSlugOf`), not a regex copied per caller. `ic` and the desktop app spell it again
+// in Rust, which cannot import it: names.fixture.json is the one record all three are tested against.
 export const SANDBOX_CONTAINER_PREFIX = "intentic-sandbox-";
+export const SANDBOX_TUNNEL_PREFIX = `${SANDBOX_CONTAINER_PREFIX}tunnel-`;
 
 // The slug inside a container name, or undefined for a name that is not one (an empty env, another project's
 // container). Never guesses: a caller with no slug has to say so rather than aim an action at a plausible one.
@@ -30,7 +32,7 @@ export const sandboxSlugOf = (container: string | undefined): string | undefined
 
 export const sandboxNames = (slug: string): SandboxNames => ({
     container: `${SANDBOX_CONTAINER_PREFIX}${slug}`,
-    tunnelContainer: `intentic-sandbox-tunnel-${slug}`,
+    tunnelContainer: `${SANDBOX_TUNNEL_PREFIX}${slug}`,
     workspaceVolume: `intentic-workspace-${slug}`,
     historyVolume: `intentic-history-${slug}`,
     dockerVolume: `intentic-docker-${slug}`,
@@ -250,7 +252,9 @@ export const replayableEnv = (pairs: readonly (readonly [string, string])[]): [s
 // Every flow gates on /health with the same patience, so a crash-loop never reads as success.
 export const HEALTH = { url: `http://localhost:${DAEMON_PORT}/health`, attempts: 15, intervalSeconds: 2 } as const;
 
-// Kept quiet: above default dev-server/db ports, below Linux's ephemeral floor, so nothing collides.
+// Kept quiet: above default dev-server/db ports, below Linux's ephemeral floor, so nothing collides. The device agent's
+// sync SSH ports sit in the band just below (_devices/machine/src/sync/tunnel.ts); names.fixture.json records both, so
+// moving either base is a test that fails rather than two bands that quietly overlap.
 const LOCAL_PORT_BASE = 28000;
 const LOCAL_PORT_SPAN = 4000;
 

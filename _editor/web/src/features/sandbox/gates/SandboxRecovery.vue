@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "../../../lib/useApi";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { deviceRoute } from "../devices/deviceLinks";
 import { useServingSlug } from "../environment/servingSlug";
 import { devicesAcross, subscribeDevicesAcross } from "../live/devicesAcross";

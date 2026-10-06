@@ -1,4 +1,4 @@
-import type { AutomationApproval } from "@intentic/sandbox-contract";
+import { type AutomationApproval, awaitsOwner } from "@intentic/sandbox-contract";
 import type { HostQuery } from "@intentic/extension-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -15,9 +15,8 @@ export const heldWakesQuery = (): HostQuery<AutomationApproval[]> => {
     };
 };
 
-// Only holds with no `autoRunAt` want a person; a countdown hold releases itself, so counting it would ask about
-// something already about to happen on its own.
-export const waitingOf = (held: readonly AutomationApproval[]): readonly AutomationApproval[] => held.filter((wake) => wake.autoRunAt === undefined);
+// Only the holds that want a person (the contract's `awaitsOwner`, shared with the editor's inbox).
+export const waitingOf = (held: readonly AutomationApproval[]): readonly AutomationApproval[] => held.filter(awaitsOwner);
 
 export function useHeldWakes() {
     const api = host();

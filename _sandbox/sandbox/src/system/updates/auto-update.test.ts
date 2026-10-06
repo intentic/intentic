@@ -1,6 +1,6 @@
 import type { DeviceFlowLine, DeviceSandboxFlow, StagedUpdate } from "@intentic/sandbox-contract";
 import { waitFor } from "@intentic/testing/bun";
-import type { RestartResume } from "../../agent/run/turn/restart-resume.js";
+import type { RestartResume } from "../restart-resume.js";
 import {
     type AutoUpdateActivity,
     type AutoUpdateOffer,

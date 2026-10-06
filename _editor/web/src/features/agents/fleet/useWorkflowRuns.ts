@@ -1,10 +1,10 @@
 import type { Workflow, WorkflowRun } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { pushedKeys, rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { blocked, type FleetLane } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
 

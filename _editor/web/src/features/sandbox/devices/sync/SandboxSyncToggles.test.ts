@@ -10,7 +10,7 @@ import { type App, createApp, h, nextTick } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import type { DeviceRow, MachineRow } from "../deviceRows";
 
-jest.mock(`../../client/useSandbox`, () => ({
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active: { value: { name: `work` } }, daemonUrl: { value: `https://sandbox-82789f4106b4.radarsu.com` } }),
 }));
 

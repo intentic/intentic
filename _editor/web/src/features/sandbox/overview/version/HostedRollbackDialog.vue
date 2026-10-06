@@ -3,7 +3,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { ConfirmDialog, Notice } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { useSandbox } from "../../client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { rollBackHosted } from "./hostedRollback";
 
 // The one question before a hosted sandbox goes back to the version it ran before its last update, asked wherever that

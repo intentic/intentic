@@ -2,10 +2,10 @@
 import { Button } from "@intentic/ui";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
-import { useAuth } from "../../auth/useAuth";
-import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
-import { useSandboxSession } from "../session/sandboxSession";
-import { useSandbox } from "../client/useSandbox";
+import { useAuth } from "../../../client/auth/useAuth";
+import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
+import { useSandboxSession } from "../../../client/session/sandboxSession";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { desktopVersion, signInThroughBrowser } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 

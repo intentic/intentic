@@ -1,7 +1,7 @@
 import { MEMORY_FILE } from "@intentic/constants";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import type { Tip } from "@intentic/ui";
-import type { Vocabulary } from "../../../core-views/vocabulary";
+import type { Vocabulary } from "../../../workbench/views/vocabulary";
 import { t } from "@intentic/ui/i18n";
 
 // Entries the sandbox itself treats specially, where nothing about the name says so: the shelf it never edits, the

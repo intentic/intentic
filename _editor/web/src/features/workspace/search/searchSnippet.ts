@@ -1,4 +1,4 @@
-import type { WorkspaceSearchHit, WorkspaceSearchSpan } from "@intentic/api-contract";
+import type { WorkspaceSearchHit, WorkspaceSearchSpan } from "@intentic/sandbox-contract";
 import { type CodeToken, useHighlighter } from "@intentic/ui";
 import { clamp } from "@intentic/base/format";
 import { ref } from "vue";

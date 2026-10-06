@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/vue-query";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { readIntenticLines } from "../../lib/intenticStream";
-import { SandboxHttpError } from "../../features/sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { listTerminals, useTerminalsQuery } from "../../features/terminal/terminalsQuery";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { DEPLOYMENTS, rpcKey, WORKSPACE_STATE } from "../../lib/queryKeys";
@@ -142,7 +142,7 @@ export function useApplyProgress() {
         try {
             await sandboxRpc.intentic.apply();
         } catch (err) {
-            startError.value = describeProvisionError(errorMessage(err, `Apply failed to start.`));
+            startError.value = describeProvisionError(messageOr(err, `Apply failed to start.`));
             applying.value = false;
             return;
         }

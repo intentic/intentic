@@ -1,11 +1,11 @@
 import type { PersonaKit, SkillDraft } from "@intentic/sandbox-contract";
 import { useMutation } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // A persona's kit: prompt and skills at `.intentic/config/personas/<id>/`, fetched only for the open persona (unlike
 // usePersonas, which lists personas). The daemon's `personas` push refreshes every kit along with the list; the id is

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { Button, type Tip, useDevice } from "@intentic/ui";
+import { Button, formatElapsed, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
-import { activityIcon, formatElapsed, limitClosed, limitCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
+import { activityIcon, limitClosed, limitCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import AgentCardDate from "./AgentCardDate.vue";
@@ -194,6 +194,6 @@ const coolingTip = computed((): Tip | undefined =>
                 class="mr-1.5 inline-block align-[-0.1em] text-2xs"
             /><span class="hidden @[4.5rem]:inline">{{ activityText ?? t(`ui.status.working`) }}</span></span
         >
-        <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
+        <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed((now - agent.startedAt) / 1000) }}</span>
     </span>
 </template>

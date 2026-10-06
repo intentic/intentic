@@ -3,7 +3,6 @@ import { shellQuote, sqlIdentifier, sqlLiteral } from "@intentic/sandbox-run/quo
 import { z } from "zod";
 import { bindingSchema, createInstanceBindingProvider } from "../core/instance-binding.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 
 const databaseSchema = bindingSchema.extend({
     // The instance's host-internal coordinates, embedded in the produced connection URL.
@@ -35,7 +34,7 @@ const databaseExists = async (session: SshSession, cid: string, parsed: Database
 
 // A per-app Postgres database + owning role on a shared instance. All identifiers are resolver-sanitized to
 // [a-z0-9_].
-export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createPostgresDatabaseProvider = (executor: SshExecutor): Provider =>
     createInstanceBindingProvider(
         {
             kind: "postgres-database",

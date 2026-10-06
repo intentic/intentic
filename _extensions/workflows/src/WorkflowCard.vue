@@ -3,7 +3,7 @@ import { Card, DagGraph } from "@intentic/extension-ui";
 import type { Workflow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
-import { workflowDag, workflowLayers } from "./workflowDag";
+import { workflowDag, workflowLayers } from "./graph/workflowDag";
 import { t } from "./i18n.js";
 
 // One card for both a saved workflow and a template (dashed = not owned yet). Draws the actual graph via

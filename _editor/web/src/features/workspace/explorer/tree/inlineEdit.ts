@@ -1,5 +1,4 @@
-import { basename, parentDir } from "@intentic/ui/path";
-import { joinPath } from "../entryNames";
+import { basename, joinPath, parentDir } from "@intentic/ui/path";
 
 // The tree's one inline name field, as one value that only `advanceEdit` moves: idle, naming a new entry inside a
 // folder, or renaming a row. A step says what the field opens holding and which write, if any, a commit asks for.

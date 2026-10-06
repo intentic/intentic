@@ -1,4 +1,4 @@
-import { classifyFailure, type ConnectionFailure } from "../live/connection";
+import { classifyFailure, type ConnectionFailure } from "../../../client/sandbox/connection";
 import { DETACHED_AFTER_MS } from "../overview/availability";
 import { RESTART_PATIENCE_MS } from "../live/sandboxRestart";
 import {

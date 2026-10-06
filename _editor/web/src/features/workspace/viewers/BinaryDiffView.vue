@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Button, formatBytes, ImageView, type ImageViewState, SegmentedControl, useDevice, ui } from "@intentic/ui";
+import { Button, EmptyState, formatBytes, ImageView, type ImageViewState, SegmentedControl, ui, useDevice } from "@intentic/ui";
+import { basename } from "@intentic/ui/path";
 import { extensionOf, formatOf } from "@intentic/ui/file-format";
-import { errorMessage, useLatest } from "@intentic/ui/async";
+import { messageOr, useLatest } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { sandboxBlob } from "../../sandbox/client/sandboxClient";
-import { useLayout } from "../../../shell/window/useLayout";
-import { type RegisteredViewer, renderViewerForExtension, useViewerComponent } from "../../../core-views/viewerRegistry";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
+import { useLayout } from "../../../workbench/window/useLayout";
+import { type RegisteredViewer, renderViewerForExtension, useViewerComponent } from "../../../workbench/views/viewerRegistry";
 import ImageCompareView from "./ImageCompareView.vue";
 import { type ImageSize, imageSize, type SidesComparison } from "./image/imageSides";
 import { compareImageSides } from "./image/imageSidesClient";
@@ -28,7 +29,7 @@ const { diffLayout } = useLayout();
 const split = computed(() => !mobile.value && diffLayout.value === `split` && before !== undefined && after !== undefined);
 // A raster picture draws here whatever viewers are on; an SVG is markup, drawn by its viewer.
 const renderable = computed(() => formatOf(path).category === `image` && formatOf(path).binary === true);
-const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
+const filename = computed(() => basename(path));
 
 // The extension viewer that can draw this format from bytes, for everything that isn't a picture. Reactive: switching
 // the viewers extension off mid-review drops the panes to the download floor, the same as opening the file would.
@@ -96,7 +97,7 @@ watch(
                     blob = await sandboxBlob(source, undefined, at);
                 } catch (error) {
                     if (isLatest()) {
-                        loaded.value = { ...loaded.value, [side]: { error: errorMessage(error, `Couldn't load this side.`), loading: false } };
+                        loaded.value = { ...loaded.value, [side]: { error: messageOr(error, `Couldn't load this side.`), loading: false } };
                     }
                     return;
                 }
@@ -274,10 +275,7 @@ const panes = computed(() =>
                     <div v-if="pane.side.loading" class="flex h-full items-center justify-center text-muted">
                         <Icon name="spinner" class="text-xl" spin />
                     </div>
-                    <div v-else-if="pane.side.error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-                        <Icon name="exclamation-triangle" class="text-2xl text-danger" />
-                        <p class="text-xs text-danger">{{ pane.side.error }}</p>
-                    </div>
+                    <EmptyState v-else-if="pane.side.error" tone="danger" :title="pane.side.error" class="h-full" />
                     <!-- Shared view: zooming or panning either pane moves the other to match, the only way to compare two similar pictures by eye. -->
                     <ImageView
                         v-else-if="renderable && pane.side.url"
@@ -298,14 +296,14 @@ const panes = computed(() =>
                         <Icon name="spinner" class="text-xl" spin />
                     </div>
                     <!-- Nothing draws this format: say what it is and hand over the bytes. -->
-                    <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                        <Icon name="box" class="text-3xl text-subtle" />
-                        <p class="max-w-sm text-xs text-muted">{{ t(`workspace.binaryDiffView.binaryFileNoPreview`) }}</p>
-                        <Button v-if="pane.side.url" severity="secondary" @click="download(pane.side, pane.label.toLowerCase())">
-                            <Icon name="download" class="text-xs" />
-                            {{ t(`ui.action.download`) }}
-                        </Button>
-                    </div>
+                    <EmptyState v-else icon="box" :title="t(`workspace.binaryDiffView.binaryFileNoPreview`)" class="h-full">
+                        <template v-if="pane.side.url" #actions>
+                            <Button severity="secondary" @click="download(pane.side, pane.label.toLowerCase())">
+                                <Icon name="download" class="text-xs" />
+                                {{ t(`ui.action.download`) }}
+                            </Button>
+                        </template>
+                    </EmptyState>
                 </div>
             </div>
 

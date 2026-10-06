@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import { z } from "zod";
 import { stateRelPath } from "../state-paths.js";
 import { defineDocument } from "./evolution/documents.js";
@@ -50,16 +51,12 @@ export const fileInstallsStore = (document: InstallsDocument, path: string): Ins
     let timer: NodeJS.Timeout | undefined;
 
     // Serializes every read and write so a panel opened right after a page load never reads ahead of that load's write.
-    let tail: Promise<unknown> = Promise.resolve();
-    const queue = <T>(work: (all: InstallsFile) => T): Promise<T> => {
-        const next = tail.then(async () => {
+    const serially = serialLock();
+    const queue = <T>(work: (all: InstallsFile) => T): Promise<T> =>
+        serially(async () => {
             memory ??= await file.read();
             return work(memory);
         });
-        // Caught only to keep the chain alive after a failure; the caller still sees its own rejection.
-        tail = next.catch(() => undefined);
-        return next;
-    };
 
     const flush = async (): Promise<void> => {
         if (timer !== undefined) {

@@ -6,7 +6,7 @@ import { logsRoot, terminalLogsDir } from "../logs/log-files.js";
 import { adoptDaemonGeneration, DAEMON_ONLY_ENV } from "../seams/workload-stamp.js";
 import { claimBootMarker } from "../system/boot/boot-marker.js";
 import { recordBoot } from "../system/boot/boot-history.js";
-import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
+import { fileRestartResume } from "../system/restart-resume.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
 
 // Runs before the first service exists, so nothing here may depend on one.

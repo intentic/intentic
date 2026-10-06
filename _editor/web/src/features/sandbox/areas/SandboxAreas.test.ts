@@ -2,9 +2,8 @@
 // (the daemon refuses it), a rename can't drop folders picked a moment ago, and the picker never offers a folder the
 // schema would refuse. jsdom: renders and reads the mounted DOM.
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { STATE_DIR, WORKSPACE_ROOT as root } from "@intentic/constants";
-import type { Area } from "@intentic/sandbox-contract";
+import type { Area, WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
@@ -38,15 +37,15 @@ const personas = ref([
 jest.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 
 const role = ref<string>(`owner`);
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
 jest.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => ref(true) }));
 
 // <FolderPicker>'s own reads; this suite is about the page, so the tree is a fixture and nothing is fetched lazily.
 const tree = ref<WorkspaceTreeEntry[]>([]);
-jest.mock(`../client/sandboxRpc`, () => ({
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
     sandboxRpc: fakeSandboxRpc({ workspace: { children: jest.fn(async () => ({ entries: [], hidden: 0 })) } }),
 }));
-jest.mock(`../client/useSandboxQuery`, () => {
+jest.mock(`../../../client/sandbox/useSandboxQuery`, () => {
     // Imported inside the factory so the mock owns its own bindings, not this file's.
     return {
         useSandboxQuery: () => ({

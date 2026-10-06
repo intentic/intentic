@@ -2,7 +2,7 @@
 // that row's own prompt. Arithmetic is covered in refactorAsk.test.ts.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick, ref } from "vue";
-import type { WorkspaceHealth } from "@intentic/api-contract";
+import type { WorkspaceHealth } from "@intentic/sandbox-contract";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import { IconStub } from "@intentic/ui/testing";
 

@@ -486,9 +486,9 @@ export const SandboxSettingsSchema = z.object({
             "Whether each workspace repo keeps up with the remote branch it tracks. Every couple of minutes it is fetched, and what arrived is brought into the main tree: a fast-forward when you have no commits of your own, else a merge commit. Only while it is quiet (no turn working in the main tree, no merge or rebase of yours open), and never half-way: a conflict, or an uncommitted file in the way, leaves the repo exactly as it was until the next try. Nothing is ever pushed. Off, nothing is fetched.",
         ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
-    // the heavy-command rule an agent's command matched (system/resources/heavy-commands.ts), each naming a runner id. A
+    // the heavy-command rule an agent's command matched (workload/heavy-commands.ts), each naming a runner id. A
     // runner that is offline, outdated or full hands the work back here, which the command's output says. Never pushed
-    // to a runner itself (portability/definition.ts), which must not pass work on again.
+    // to a runner itself (definition/definition.ts), which must not pass work on again.
     offload: z
         .object({
             commands: z.record(z.string().min(1), z.string().min(1)).default({}),

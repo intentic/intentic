@@ -1,15 +1,15 @@
 import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { CHAT, GO_TO, PREVIEW, TERMINAL } from "./categories";
-import { type CommandRegistration, registerCommand } from "./useCommands";
+import { CHAT, GO_TO, PREVIEW, TERMINAL } from "../../workbench/commands/categories";
+import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
 import { chatOnRail, toggleChatFloating, toggleChatHome } from "../../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../../features/chat/panel/chatFloating";
 import { togglePreviewFloating, usePreviewFloating } from "../../features/preview/previewFloating";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
-import { useQuickOpen } from "./useQuickOpen";
-import { useRole } from "../../features/sandbox/secrets/useRole";
+import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
+import { useRole } from "../../client/sandbox/useRole";
 import { t } from "@intentic/ui/i18n";
 
 // Core shell's built-in actions: what the shell can *do*, against the panels it owns. Where these commands can take

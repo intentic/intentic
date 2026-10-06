@@ -19,9 +19,12 @@ flowchart LR
 - `scripts/build.mjs` compiles the published package from `_editor/ui`'s sources: declarations pruned to what the kit
   re-exports, and a `dist/index.js` bridge that throws when loaded outside an intentic host.
 - `names.mjs` lists the runtime export names by hand, because the `.vue` graph cannot load in Node. The editor's shim
-  generator reads it, and a dev-time assertion in `hostModules.ts` catches drift.
+  generator reads it, a dev-time assertion in `hostModules.ts` catches drift, and `extensionUiNames.test.ts` fails it.
 - `./diff`, `./format`, `./i18n` and `./worker` skip the component barrel, for extension tests that run without a Vue
-  compiler. `./worker` is also what a worker module imports `serveWorkerCall` from. A worker has no host bridge, so an
+  compiler. Each is published as a bridge holding what `src/index.ts` re-exports from that file, so a name a subpath
+  file exports must also be re-exported from the barrel and listed in `names.mjs`, or an extension installed from git
+  fails to link it; `extensionUiNames.test.ts` reads every subpath in `package.json`'s `exports` and fails the one left
+  out. `registerExtensionMessages` is left out on purpose: mounting a catalog is the host's job. `./worker` is also what a worker module imports `serveWorkerCall` from. A worker has no host bridge, so an
   extension built outside this repository bundles that module into its worker instead of marking it external.
 
 ## Key files

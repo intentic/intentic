@@ -9,7 +9,7 @@
 @import "../../../_editor/ui/src/styles/index.css";
 
 /* THE HOUSE METALS — cast bronze, the cartouche frame kit and the ember glows, as `--house-*` properties on `:root`. */
-@import "../../../_shared/house-css/house.css";
+@import "../../../_shared/entry-css/house.css";
 
 /* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used to be, below. */
 @import "../../../_editor/ui/src/styles/opt-in/extension-surface.css";

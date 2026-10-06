@@ -1,6 +1,7 @@
 import type { Ref, SecretRef } from "@intentic/graph";
 import { generated, makeRef } from "@intentic/graph";
-import type { BackingCapability, BackingIntent, HostInput } from "@intentic/need-resolver";
+import type { HostInput } from "../intent/inputs.js";
+import type { BackingCapability, BackingIntent } from "../intent/intent.js";
 import type { ResolvedNode, ResourceType } from "@intentic/resources";
 import { appSlug, backingPort, bindingId, bucketName, cacheUser, dbName, secretKey } from "../lib/ids.js";
 import { IMAGES } from "../lib/images.js";

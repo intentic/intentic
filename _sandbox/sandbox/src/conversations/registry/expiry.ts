@@ -1,4 +1,4 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 
 // Tracks, per landing, which paths history has touched since landedHead as head moves; keyed by landedHead so

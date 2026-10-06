@@ -83,7 +83,7 @@ flowchart LR
 
   On Windows the one Docker engine serves Windows and every WSL distro, and `ic` on either side lists every sandbox on
   it. A sandbox the other side keeps (`keptElsewhere` in `ic sandbox list --json`, named by its distro where `ic`
-  stamps one, `hostEnv`) keeps its verbs here, since a person's start, stop and restart reach it from either side, and
+  stamps one, `keptElsewhereName` or `linux/<distro>`) keeps its verbs here, since a person's start, stop and restart reach it from either side, and
   says under its row where it is kept: "Kept by WSL (archlinux)". The machine agents of this computer's environments are
   read off their files (`src-tauri/src/agents.rs`: this app's own home, and through `\\wsl.localhost` each distro that
   is running, never one that is stopped): their binary, their pidfile and `ic`. This device names the other environments
@@ -143,7 +143,10 @@ flowchart LR
   `/work` and `/history` stay recoverable for a week (`ic sandbox restore`), as they do from every other door. The
   confirmation says so, in place of the kit's "cannot be undone". The app reads nothing off `docker inspect`; the
   short children it waits on (Docker probes, the listing, the agent's status) share `ic`'s time-limited capture
-  crate, `_sandbox/ic/bounded`. A removal also has this machine's sync let go of the sandbox: `intentic-machine sync
+  crate, `_sandbox/ic/bounded`, and read docker's refusals and find Docker Desktop with `ic`'s own readings,
+  `_sandbox/ic/docker-host`: an engine that answers every request with an error stops a start's wait after 20 seconds
+  as `broken` (quit Docker Desktop and open it again) instead of running out the five minutes as `tookTooLong`, and
+  a Docker Desktop installed per user or in a folder of its own is found where `ic`'s probe finds it. A removal also has this machine's sync let go of the sandbox: `intentic-machine sync
   forget <slug>`, or, from an agent older than that verb, `sync uninstall --sandbox <id>` with the platform id this app
   remembers for the slug. _(2026-10-05) A removal used to forget only the sandbox's display name, and the agent went on
   syncing its folder until a new sandbox was made for that same folder._

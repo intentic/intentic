@@ -1,9 +1,14 @@
 // Pins that the on-screen order is what's written back, a knob moved on one entry lands only on that entry, and each
 // row writes only its own job's list, never a shared one. Mounted, since what's tested is the click-through round trip.
 import "@intentic/testing/dom";
-import type { SandboxSettings } from "@intentic/api-contract";
-import { humanizeModelId, MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import {
+    humanizeModelId,
+    MODEL_ROLE_BLOCKS,
+    MODEL_ROLES,
+    type ModelPin,
+    type SandboxSettings,
+    SandboxSettingsSchema,
+} from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";

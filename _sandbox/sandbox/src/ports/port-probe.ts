@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import { SingleFlight } from "@intentic/base/async";
 import type { LoopbackHost } from "./port-scan.js";
 
 // Whether anything answers on a port, and in which scheme; a plaintext check alone would misread an https-only dev
@@ -54,7 +55,7 @@ interface ProbedScheme {
     readonly scheme: PortScheme | undefined;
 }
 const probed = new Map<string, ProbedScheme>();
-const inFlight = new Map<string, Promise<PortScheme | undefined>>();
+const inFlight = new SingleFlight<string, PortScheme | undefined>();
 
 // Keyed by ephemeral ports; expired entries are swept rather than LRU-evicted.
 const MAX_PROBED = 512;
@@ -73,20 +74,14 @@ export const cachedScheme = async (port: number, host: LoopbackHost = "127.0.0.1
     if (hit !== undefined && Date.now() - hit.at < (hit.scheme === undefined ? SILENT_TTL_MS : SCHEME_TTL_MS)) {
         return hit.scheme;
     }
-    const running = inFlight.get(key);
-    if (running !== undefined) {
-        return running;
-    }
-    const probe = detectScheme(port, host)
-        .then((scheme) => {
+    return inFlight.run(key, () =>
+        detectScheme(port, host).then((scheme) => {
             const at = Date.now();
             if (probed.size >= MAX_PROBED) {
                 sweepExpired(at);
             }
             probed.set(key, { at, scheme });
             return scheme;
-        })
-        .finally(() => inFlight.delete(key));
-    inFlight.set(key, probe);
-    return probe;
+        }),
+    );
 };

@@ -11,6 +11,10 @@ const MANIFEST_URL = "https://ghcr.io/v2/intentic/sandbox/manifests/";
 const MANIFEST_ACCEPT = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json";
 // A moved release isn't urgent: about one request per sandbox per hour, beside release-notes.ts's own.
 const REFRESH_MS = 60 * 60_000;
+// How long one GitHub or registry request may take before the refresh gives up and keeps what it had; without one a
+// stalled connection held its refresh open forever. The same 10 s a local endpoint's discovery gets
+// (endpoints/endpoint-catalog.ts); release-notes.ts uses it too.
+export const RELEASE_FETCH_TIMEOUT_MS = 10_000;
 
 // Last successfully-fetched latest version, or undefined until the first success; a failed refresh leaves it alone.
 let latest: string | undefined;
@@ -27,7 +31,7 @@ const tagOf = (release: unknown): string | undefined => {
 // it flags the GitHub release latest (ship-stable.sh), but a sandbox offered a version `ic` could not yet pull restarted
 // onto the image it had and still read "update available"; the registry is asked rather than the order trusted.
 const publishedOnStable = async (version: string): Promise<boolean> => {
-    const tokenResponse = await fetch(TOKEN_URL);
+    const tokenResponse = await fetch(TOKEN_URL, { signal: AbortSignal.timeout(RELEASE_FETCH_TIMEOUT_MS) });
     if (!tokenResponse.ok) {
         return false;
     }
@@ -37,18 +41,22 @@ const publishedOnStable = async (version: string): Promise<boolean> => {
     }
     const headers = { authorization: `Bearer ${token}`, accept: MANIFEST_ACCEPT };
     const [versioned, stable] = await Promise.all([
-        fetch(`${MANIFEST_URL}${version}`, { method: "HEAD", headers }),
-        fetch(`${MANIFEST_URL}stable`, { method: "HEAD", headers }),
+        fetch(`${MANIFEST_URL}${version}`, { method: "HEAD", headers, signal: AbortSignal.timeout(RELEASE_FETCH_TIMEOUT_MS) }),
+        fetch(`${MANIFEST_URL}stable`, { method: "HEAD", headers, signal: AbortSignal.timeout(RELEASE_FETCH_TIMEOUT_MS) }),
     ]);
     const digest = versioned.headers.get("docker-content-digest");
     return versioned.ok && stable.ok && digest !== null && digest === stable.headers.get("docker-content-digest");
 };
 
-// Fetches the latest released version once and updates the cache. Never throws: any failure keeps the previous value,
-// so /info degrades to "no update known". A release not yet on `:stable` keeps the previous value too, which was.
+// Fetches the latest released version once and updates the cache. Never throws: any failure, a timed-out request
+// included, keeps the previous value, so /info degrades to "no update known". A release not yet on `:stable` keeps the
+// previous value too, which was.
 export const refreshLatestVersion = async (): Promise<void> => {
     try {
-        const response = await fetch(LATEST_URL, { headers: { accept: "application/vnd.github+json" } });
+        const response = await fetch(LATEST_URL, {
+            headers: { accept: "application/vnd.github+json" },
+            signal: AbortSignal.timeout(RELEASE_FETCH_TIMEOUT_MS),
+        });
         if (response.ok) {
             const version = tagOf(await response.json());
             if (version !== undefined && (await publishedOnStable(version))) {

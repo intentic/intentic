@@ -1,25 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { chmod, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { chmod, lstat, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join, posix } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import { pathExists } from "@intentic/base/fs";
 import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type BundleManifest, type NeedsAction } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extract, type Header } from "tar-stream";
 import { convertDocument, fold, isJsonObject, nested, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
-import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import { isUnder, realPathOf, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { writeStreamCounted } from "../workspace/files/workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace/files/workspace-files.js";
 import { ArrivalFormatError } from "../arrival-error.js";
-import { drain, extractAll } from "../tar-extract.js";
+import { drain, extractAll, memberPath } from "../tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
-import { definitionDocument } from "./definition.js";
+import { definitionDocument } from "../definition/definition.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { sizeLabel } from "@intentic/base/format";
@@ -129,6 +129,26 @@ const allowed = (placed: Placed, isDirectory: boolean, secrets: boolean): boolea
     return carries(placed.root === "workspace" ? workspacePortability(relPath) : historyPortability(relPath), secrets);
 };
 
+// Every proper ancestor of a member path, nearest first.
+const ancestorsOf = (path: string): string[] => {
+    const ancestors: string[] = [];
+    for (let at = path.lastIndexOf("/"); at > 0; at = path.lastIndexOf("/", at - 1)) {
+        ancestors.push(path.slice(0, at));
+    }
+    return ancestors;
+};
+
+// Whether a symlink at `relPath` names something inside the root it lands in, judged on its text alone: an absolute
+// target names the source machine's tree (or /etc), and a relative one may not climb above the root. A target that
+// passes this can still escape through another link on disk; the apply pass checks every real destination for that.
+const linkStaysInside = (relPath: string, linkname: string | undefined): boolean => {
+    if (linkname === undefined || linkname === "" || posix.isAbsolute(linkname)) {
+        return false;
+    }
+    const target = posix.normalize(posix.join(posix.dirname(relPath), linkname));
+    return target !== ".." && !target.startsWith("../");
+};
+
 // What one row would land, counted by the index pass rather than estimated.
 interface Tally {
     files: number;
@@ -154,7 +174,7 @@ const countLabel = (tally: Tally | undefined): string =>
 const walkBundle = async (
     source: Readable,
     onManifest: (manifest: BundleManifest) => void,
-    visit: (placed: Placed, header: Header, stream: Readable, refuse: (name: string) => void) => Promise<void>,
+    visit: (placed: Placed, header: Header, stream: Readable) => Promise<void>,
 ): Promise<void> => {
     const ex = extract();
     let manifest: BundleManifest | undefined;
@@ -170,6 +190,9 @@ const walkBundle = async (
 
     const refused: string[] = [];
     const refuse = (name: string): void => void refused.push(name);
+    // Every symlink the bundle declares, kept or refused: the packer stores a link as a leaf and never descends it, so
+    // an entry beneath one is a crafted path through it, refused before anything is written.
+    const links = new Set<string>();
 
     const handleEntry = async (header: Header, stream: Readable): Promise<void> => {
         if (header.name === BUNDLE_MANIFEST_ENTRY) {
@@ -187,13 +210,24 @@ const walkBundle = async (
         if (manifest === undefined) {
             throw new BundleFormatError(`expected ${BUNDLE_MANIFEST_ENTRY} first: this does not look like an intentic environment bundle`);
         }
-        const placed = place(header.name, repos);
-        if (placed === undefined || !allowed(placed, header.type === "directory", true)) {
+        const name = memberPath(header.name);
+        const placed = name === undefined ? undefined : place(name, repos);
+        // The name itself too: a legit bundle never carries one path twice, so a second entry over a link is crafted.
+        const throughLink = name !== undefined && [name, ...ancestorsOf(name)].some((path) => links.has(path));
+        if (name !== undefined && header.type === "symlink") {
+            links.add(name);
+        }
+        if (
+            placed === undefined ||
+            throughLink ||
+            !allowed(placed, header.type === "directory", true) ||
+            (header.type === "symlink" && !linkStaysInside(placed.relPath, header.linkname))
+        ) {
             refuse(header.name);
             await drain(stream);
             return;
         }
-        await visit(placed, header, stream, refuse);
+        await visit(placed, header, stream);
     };
 
     // Decoder failures mean the upload isn't a bundle: a 400, not an unhandled 500. `handleEntry` failures propagate
@@ -404,6 +438,14 @@ export const applyBundle = async (
     let remaining = limit;
     let withheld = 0;
 
+    // The roots for real, resolved once: either may itself be a symlinked mount.
+    const realRoots = { workspace: await realPathOf(roots.workspaceRoot), history: await realPathOf(roots.historyRoot) };
+    // Whether the write really stays inside its root, judged on disk rather than on the path's text: a link already
+    // there (one boot converged, one the owner made) would carry a write through it. A file or symlink entry is judged
+    // by its directory, since a link standing at the path itself is replaced rather than followed (writeEntry).
+    const landsInside = async (root: Placed["root"], target: string, header: Header): Promise<boolean> =>
+        isUnder(realRoots[root], await realPathOf(header.type === "directory" ? target : dirname(target))) !== undefined;
+
     // One entry to one path, split out of the visitor so its three decisions (ticked? consented? inside the root?)
     // aren't buried beside the four write shapes.
     const writeEntry = async (target: string, header: Header, stream: Readable): Promise<void> => {
@@ -418,6 +460,10 @@ export const applyBundle = async (
             await symlink(header.linkname ?? "", target);
             return;
         }
+        // A link already at the path is replaced, never written through: it could name anything, dangling or not.
+        if ((await lstat(target).catch(undefinedIfMissing))?.isSymbolicLink() === true) {
+            await rm(target);
+        }
         remaining -= await writeStreamCounted(stream, target, () => remaining);
         if (header.mtime !== undefined) {
             await setWorkspaceMtime(target, header.mtime.getTime());
@@ -431,7 +477,7 @@ export const applyBundle = async (
     await walkBundle(
         createReadStream(held.spool).pipe(createGunzip()),
         () => {},
-        async (placed, header, stream, refuse) => {
+        async (placed, header, stream) => {
             const skip = (): Promise<void> =>
                 new Promise((resolve, reject) => {
                     stream.on("end", resolve);
@@ -447,8 +493,10 @@ export const applyBundle = async (
                 return skip();
             }
             const target = destinationOf(placed, header, roots, arrivedDatabase);
-            if (target === undefined) {
-                refuse(header.name);
+            if (target === undefined || !(await landsInside(placed.root, target, header))) {
+                if (!refused.includes(header.name)) {
+                    refused.push(header.name);
+                }
                 return skip();
             }
             // Sockets, fifos and device nodes have no meaning on the other side of an arrival.

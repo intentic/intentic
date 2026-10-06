@@ -2,12 +2,11 @@
      with one press. A turn already running keeps what it mounted; the conversation's next turn runs without it. -->
 <script setup lang="ts">
 import type { GrantRevoke, StandingGrants } from "@intentic/sandbox-contract";
-import { Notice, ui } from "@intentic/ui";
+import { Notice, timeAgo, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { relativeTime } from "../chat/models/catalog";
 import { useStandingGrants } from "./useStandingGrants";
 
 const t = useT();
@@ -42,7 +41,7 @@ const itemsOf = (conversation: StandingConversation): readonly Item[] => {
         ...conversation.releases.map((release) => ({
             grant: at(`release`, release.subject),
             label: t(`needs.grants.release`, { what: release.subject }),
-            note: t(`needs.grants.releasedBy`, { who: release.approvedBy, when: relativeTime(release.at) }),
+            note: t(`needs.grants.releasedBy`, { who: release.approvedBy, when: timeAgo(release.at, { days: true }) }),
         })),
     ];
 };
@@ -74,7 +73,7 @@ const chatOf = (conversationId: string) => ({ path: `/`, query: { conversation: 
             <div class="flex items-center justify-between gap-3">
                 <RouterLink :to="chatOf(row.conversation.conversationId)" class="min-w-0 truncate text-xs font-medium text-content hover:underline">{{ row.title }}</RouterLink>
                 <span v-if="row.conversation.by && row.conversation.updatedAt" class="shrink-0 text-2xs text-subtle">
-                    {{ t(`needs.grants.allowedBy`, { who: row.conversation.by, when: relativeTime(row.conversation.updatedAt) }) }}
+                    {{ t(`needs.grants.allowedBy`, { who: row.conversation.by, when: timeAgo(row.conversation.updatedAt, { days: true }) }) }}
                 </span>
             </div>
             <ul class="flex flex-col">

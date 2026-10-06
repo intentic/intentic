@@ -3,7 +3,7 @@ import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { commandShortcut } from "../../../shell/commands/useCommands";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { copySelection, pasteIntoTerminal, type TerminalSession } from "../terminalSession";
 
 // Right-click inside a terminal: the clipboard verbs, a split, and the pane's history beyond what an attach replays,

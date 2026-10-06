@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { EnvironmentItem } from "@intentic/api-contract";
+import type { EnvironmentItem } from "@intentic/sandbox-contract";
 import {
     BrandMark,
     Button,

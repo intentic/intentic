@@ -1,9 +1,11 @@
+import { CONNECT_TOKEN_HEADER } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import { TRIAL_LABEL, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
+import { ingressServer } from "../ingress.js";
 import { withImagesInUserMessages } from "./trial-images.js";
 import { createTrialLadder } from "./trial-ladder.js";
 import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
@@ -41,7 +43,7 @@ export interface TrialDeps {
     readonly now?: () => Date;
 }
 
-// Bearer for an OpenAI-shaped client, or `x-intentic-connect`, used by every other sandbox-authenticated route.
+// Bearer for an OpenAI-shaped client, or CONNECT_TOKEN_HEADER, used by every other sandbox-authenticated route.
 const connectToken = (authorization: string | undefined, header: string | undefined): string | undefined => {
     const bearer = authorization?.startsWith(`Bearer `) === true ? authorization.slice(`Bearer `.length).trim() : undefined;
     const token = bearer !== undefined && bearer !== `` ? bearer : header;
@@ -50,13 +52,14 @@ const connectToken = (authorization: string | undefined, header: string | undefi
 
 export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new Date() }: TrialDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
+    const ingress = ingressServer(app, `/trial`);
     const pool = createTrialPool(config, fetchFn, () => now().getTime());
     const ladder = createTrialLadder(config, pool, () => now().getTime());
 
     // Resolves the caller to the account that pays, or refuses. 404, not 401, for an unknown token or a switched-off
     // trial: a 401 would confirm to a probe that the route exists and the token is merely wrong.
     const ownerOf = async (c: { req: { header: (name: string) => string | undefined } }): Promise<string | undefined> => {
-        const token = connectToken(c.req.header(`authorization`), c.req.header(`x-intentic-connect`));
+        const token = connectToken(c.req.header(`authorization`), c.req.header(CONNECT_TOKEN_HEADER));
         if (token === undefined) {
             return undefined;
         }
@@ -65,21 +68,21 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
     };
 
     // What this account has left today; polled by the daemon for the model picker's badge, and spends nothing.
-    app.get(`/status`, async (c) => {
+    ingress(`trialStatus`, async (c, kit) => {
         if (!trialEnabled(config)) {
-            return c.json({ error: `the free trial is not enabled on this platform` }, 404);
+            return kit.refuse(404, `the free trial is not enabled on this platform`);
         }
         const ownerId = await ownerOf(c);
         if (ownerId === undefined) {
-            return c.json({ error: `unknown sandbox` }, 404);
+            return kit.refuse(404, `unknown sandbox`);
         }
-        return c.json({ ...(await trialStatus(prisma, config, ownerId, now())), ...pool.status() });
+        return kit.answer({ ...(await trialStatus(prisma, config, ownerId, now())), ...pool.status() });
     });
 
     // A constant list, not discovery: the old catalog could be empty, full of models that fail their first message, or
     // drift out of sync with the translator's routing table. One id can't be empty, unvouched-for, or go stale; which
     // real model runs is decided per message on the chat route.
-    app.get(`/v1/models`, async (c) => {
+    ingress(`trialModels`, async (c) => {
         if (!trialEnabled(config)) {
             return c.json({ error: `the free trial is not enabled on this platform` }, 404);
         }
@@ -91,7 +94,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
 
     // Allowance is spent before the upstream call and refunded unless it returns a successful completion: billing on
     // success can't be made atomic across a response that may fail mid-stream.
-    app.post(`/v1/chat/completions`, async (c) => {
+    ingress(`trialChat`, async (c) => {
         if (!trialEnabled(config)) {
             return c.json({ error: `the free trial is not enabled on this platform` }, 404);
         }

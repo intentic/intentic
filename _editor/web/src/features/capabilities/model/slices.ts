@@ -1,4 +1,4 @@
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";

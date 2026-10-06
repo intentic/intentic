@@ -1,7 +1,7 @@
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 const recordUsage = jest.fn(async (_input: unknown) => ({ ok: true as const }));
-jest.mock(`../../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { recordUsage } }) }));
+jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { recordUsage } }) }));
 
 const { flushSandboxUsage, recordSandboxCall } = await import(`../sandboxUsage`);
 

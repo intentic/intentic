@@ -1,5 +1,5 @@
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import {
     type AgentProvider,
     type KeyedProvider,
@@ -15,8 +15,8 @@ import { active } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
 import { accountBusy, addAccount, error, managedProvider, refreshAccounts, refreshTranslatorAccounts } from "../accounts/useChat-accounts";
 import { translatorAccounts } from "../accounts/providerAccounts";
-import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // In-flight subscription login, identified by the translator's own attempt state.
 // `catchers` are the owner's devices and browsers watching where a redirect lands, so it finishes without the paste;
@@ -109,7 +109,7 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
         translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
         translatorPollTimer.value = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
     } catch (caught) {
-        error.value = errorMessage(caught, `Could not start the subscription connection: is your sandbox online?`);
+        error.value = messageOr(caught, `Could not start the subscription connection: is your sandbox online?`);
     } finally {
         accountBusy.value = undefined;
     }
@@ -141,7 +141,7 @@ export const completeTranslator = async (redirectUrl: string): Promise<boolean> 
         void loadProviderModels(flow.provider);
         return true;
     } catch (caught) {
-        error.value = errorMessage(caught, `That sign-in link could not be completed: copy the whole URL and try again.`);
+        error.value = messageOr(caught, `That sign-in link could not be completed: copy the whole URL and try again.`);
         return false;
     } finally {
         accountBusy.value = undefined;
@@ -324,7 +324,7 @@ export const startConnect = async (variant?: string): Promise<void> => {
             // Which estate to sign in to (Z.ai sells several); absent takes the provider's default.
             body = await orRefusal(sandboxRpc.accounts.start({ provider: target as NativeProvider, variant }));
         } catch (err) {
-            error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
+            error.value = messageOr(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
             return;
         }
         if (!current()) {
@@ -390,7 +390,7 @@ export const completeConnect = async (pasted: string): Promise<boolean> => {
         try {
             completed = await orRefusal(sandboxRpc.accounts.complete({ provider: flow.provider as NativeProvider, ...body }));
         } catch (err) {
-            error.value = errorMessage(err, `Could not finish the ${providerLabel(flow.provider)} sign-in: is your sandbox online?`);
+            error.value = messageOr(err, `Could not finish the ${providerLabel(flow.provider)} sign-in: is your sandbox online?`);
             return false;
         }
         if (completed instanceof SandboxHttpError) {

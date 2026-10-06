@@ -14,7 +14,7 @@ const active = ref<SandboxSummary | undefined>(undefined);
 const update = jest.fn<(sandboxId: string, input: { name?: string; image?: string | null }) => Promise<void>>().mockResolvedValue(undefined);
 // Undefined by default, which leaves the facts block (image, version, URL) undrawn; a test about one of its lines sets it.
 const daemonUrl = ref<string | undefined>(undefined);
-jest.mock(`../client/useSandbox`, () => ({
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active, update, daemonUrl, reachable: ref(true) }),
 }));
 // This container as its machine lists it. Undefined is a sandbox whose machine is not a connected device, which draws
@@ -254,12 +254,12 @@ it(`states this sandbox's own hours on the hosted card, with Billing where a pla
     planOffered.value = true;
     const root = mount(sandboxRow({ role: `owner`, hosted: { region: `arn`, warm: true } }));
     await nextTick();
-    expect(root.textContent).toContain(`Free hours · 12 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Free hours · 12h of 40h left this month`);
     expect(root.textContent).toContain(`Billing`);
 
     planOffered.value = false;
     await nextTick();
-    expect(root.textContent).toContain(`Free hours · 12 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Free hours · 12h of 40h left this month`);
     expect(root.textContent).not.toContain(`Billing`);
 });
 

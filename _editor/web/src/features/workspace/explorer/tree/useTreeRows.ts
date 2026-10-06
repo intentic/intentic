@@ -1,5 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";
 import { opensAsFolder } from "../../files/archiveEntries";

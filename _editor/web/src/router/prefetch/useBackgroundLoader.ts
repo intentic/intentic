@@ -1,8 +1,8 @@
 import { toValue } from "vue";
 import { useChat } from "../../features/chat/run/useChat";
-import { onScreen } from "../../shell/window/onScreen";
+import { onScreen } from "../../workbench/window/onScreen";
 import { queryClient } from "../../lib/queryPersistence";
-import { useSandbox } from "../../features/sandbox/client/useSandbox";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import { browserPace, runBackgroundLoader, type LoaderGates } from "./backgroundLoader";
 import { agentsWarmSource } from "./sources/agentsWarm";
 import { changesWarmSource } from "./sources/changesWarm";

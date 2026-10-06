@@ -6,8 +6,8 @@ import DevRebuild from "../../environment/rebuild/DevRebuild.vue";
 import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
 import { turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
-import { useSandbox } from "../../client/useSandbox";
-import { useRole } from "../../secrets/useRole";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { useRole } from "../../../../client/sandbox/useRole";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
 import UpdateDownloadProgress from "./UpdateDownloadProgress.vue";
@@ -22,7 +22,7 @@ import { updateCardPlan } from "./updateOutcome";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { UPDATE_ACTION_ANCHOR } from "./updateAnchor";
 import { apiClient } from "../../../../lib/useApi";
-import { useHubWork } from "../../../../shell/hub/hubWork";
+import { useHubWork } from "../../../../workbench/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 // Update prompt on the sandbox hub. Updates run on the host, not the sandbox (no host Docker socket; see

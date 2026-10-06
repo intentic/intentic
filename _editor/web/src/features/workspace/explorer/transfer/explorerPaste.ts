@@ -1,8 +1,6 @@
-import { basename, parentDir } from "@intentic/ui/path";
+import { basename, joinPath, parentDir } from "@intentic/ui/path";
 // Pure paste planning for the file explorer, no Vue. `taken` is the set of names already in the target directory, read
 // off the loaded tree by the caller.
-
-const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 
 // Splits at the last dot, never a leading one, matching VSCode: `.gitignore` keeps its whole name as the stem.
 const splitExtension = (name: string): readonly [string, string] => {

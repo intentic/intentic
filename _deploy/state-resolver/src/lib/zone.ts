@@ -1,4 +1,4 @@
-import type { IntentSet } from "@intentic/need-resolver";
+import type { IntentSet } from "../intent/intent.js";
 
 // Every domain the author declared across apps and services; derived platform domains
 // (git.<zone>/deploy.<zone>) are excluded, since they hang off the zone rather than determine it.

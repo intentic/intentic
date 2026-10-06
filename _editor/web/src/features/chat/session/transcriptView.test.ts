@@ -1,8 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { SessionRef } from "../run/turnRequest";
@@ -13,7 +13,7 @@ import { type ChatMessage, turnsOf } from "../transcript/transcript";
 
 // The daemon's rewind, the one call these ways back make; a test refuses it.
 const { rewind } = { rewind: jest.fn<SandboxRpc["agent"]["rewind"]>(async () => ({ snapshot: `cp-1`, dropped: 2 })) };
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { rewind } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { rewind } }) }));
 
 const { TranscriptView } = await import("./transcriptView");
 type Host = ConstructorParameters<typeof TranscriptView>[1];

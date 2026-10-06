@@ -1,8 +1,8 @@
 import { createBackoff, sleep } from "@intentic/base/async";
 import type { AgentHarness, AgentProvider, AttachFrame } from "@intentic/sandbox-contract";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { acquireStreamSlot } from "../../sandbox/client/streamBudget";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { acquireStreamSlot } from "../../../lib/streamBudget";
 import type { ChatAttachment } from "../transcript/transcript";
 
 // Attach reads a running turn's rows from the daemon and every change after (/agent/attach); the side channel

@@ -8,7 +8,7 @@ import { otherBoxes } from "../../../sandbox/live/fleetAcross";
 import { hydrateOnce, refreshAfterSleep } from "../../run/useChat-sessions";
 import type { Conversation } from "../../session/conversation";
 import { newerQueue } from "../../session/turnClient";
-import { onScreen } from "../../../../shell/window/onScreen";
+import { onScreen } from "../../../../workbench/window/onScreen";
 
 // What keeps a pane attached to the chat it shows: the typewriter runs in the focused pane alone; a chat the daemon hadn't
 // created when the pane first read it hydrates once the roster says it exists, or that its turn moved; a chat the roster

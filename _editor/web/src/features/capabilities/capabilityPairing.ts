@@ -1,10 +1,9 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { CapabilityKind, HostSummary, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, HostSummary, PhoneSummary, WebExtSummary, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type Ref, ref } from "vue";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import type { usePeerConnect } from "../sandbox/devices/usePeerConnect";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { awaitingLogin, browserGrants, machineGrants, phoneGrants, signsInByHand } from "./model/connections";

@@ -1,8 +1,7 @@
 // Pins two wordings that cost something if wrong: marking a persona whose accounts are all signed out, and saving both
 // accounts on a persona that spans sites. jsdom: renders and reads the mounted DOM.
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
+import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
@@ -72,12 +71,12 @@ jest.mock(`./usePersonaKit`, () => {
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
 // <FolderPicker>'s lazy listing, the one daemon call the page itself makes.
-jest.mock(`../client/sandboxRpc`, () => ({
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
     sandboxRpc: fakeSandboxRpc({ workspace: { children: jest.fn(async () => ({ entries: [], hidden: 0 })) } }),
 }));
 // Every name the graph imports from the raw client, since bun links an ESM import against exactly what this factory
 // returns; nothing here calls it.
-jest.mock(`../client/sandboxClient`, () => ({
+jest.mock(`../../../client/sandbox/sandboxClient`, () => ({
     sandboxJson: jest.fn(),
     sandboxRequest: jest.fn(),
     sandboxError: jest.fn(async () => new Error(`unused`)),
@@ -86,7 +85,7 @@ jest.mock(`../client/sandboxClient`, () => ({
 // Holds the `docs` folder of the tree below, so a persona starting there is one this area hands over.
 const areas = ref([{ id: `handbook`, label: `Handbook`, folders: [`docs`] }]);
 jest.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
-jest.mock(`../client/useSandboxQuery`, () => {
+jest.mock(`../../../client/sandbox/useSandboxQuery`, () => {
     return {
         useSandboxQuery: () => ({
             query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0 })), isPending: shallow(false) },

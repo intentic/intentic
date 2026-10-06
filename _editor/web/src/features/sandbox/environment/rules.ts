@@ -1,4 +1,4 @@
-import type { Rule } from "@intentic/api-contract";
+import type { Rule } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Pure functions over a rule list, no browser imports, so the agent menu and chat notice read rules without

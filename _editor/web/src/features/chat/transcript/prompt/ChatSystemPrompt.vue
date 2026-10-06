@@ -3,8 +3,8 @@ import type { ConversationPrompt, PromptSection } from "@intentic/sandbox-contra
 import { CopyButton, MarkdownDocument, Modal, Notice } from "@intentic/ui";
 import { formatTokens, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { rpcQuery } from "../../../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
 // THE ONE PART OF A TURN THE TRANSCRIPT CANNOT SHOW. A preamble note rides the message and is drawn beside it; the

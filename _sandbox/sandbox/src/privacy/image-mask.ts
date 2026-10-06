@@ -1,7 +1,7 @@
 import sharp from "sharp";
-import { distance, fillPolygon, type Point, type Quad } from "../ocr/geometry.js";
-import { type OcrLine, pageText, stretchOf } from "../ocr/paddle-ocr.js";
-import { decodeImage } from "../ocr/raster.js";
+import { distance, fillPolygon, type Point, type Quad } from "@intentic/ocr/geometry";
+import { type OcrLine, pageText, stretchOf } from "@intentic/ocr/paddle-ocr";
+import { decodeImage } from "@intentic/ocr/raster";
 import { GLYPH_HEIGHT, textCoverage, textUnits } from "./token-glyphs.js";
 
 // An image bound for an untrusted provider, sent with its personal data painted over: the text read off it on this
@@ -22,7 +22,7 @@ export interface MaskRegion {
     readonly token: string;
 }
 
-// What the checker reads: the page's text, rows kept together so a label stands beside its value (src/ocr/).
+// What the checker reads: the page's text, rows kept together so a label stands beside its value (@intentic/ocr).
 export const readingText = pageText;
 
 // How tall a token is drawn against its line's thickness, and the smallest font unit it shrinks to before it would

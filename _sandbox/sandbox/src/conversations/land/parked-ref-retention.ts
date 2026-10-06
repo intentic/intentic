@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
-import { defaultGit, GIT_GLOBAL_ARGS, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, GIT_GLOBAL_ARGS, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import type { Chore } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
-import { carriedRef, parkedAgentRefs, parkedRefOf } from "./agent-refs.js";
+import { carriedRef, parkedAgentRefs, parkedRefOf } from "../../git/agent-refs.js";
 
 // HOW LONG AN ARCHIVED CONVERSATION'S BRANCH IS KEPT (2026-10-05). Archiving parks `agent/<id>` on `refs/agent/<id>`
 // (agent-refs.ts) so the work survives, and until now only the owner's Purge dropped it: this sandbox held 3,301 of

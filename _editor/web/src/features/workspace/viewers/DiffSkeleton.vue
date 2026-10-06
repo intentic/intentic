@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { useT } from "@intentic/ui/i18n";
 
 // Outline of a diff whose content hasn't arrived: what a `pending` tab shows until that file's diff has been seen once

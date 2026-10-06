@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { byNaturalName, homeGroups, homeOrder, groupOf, labelsShown } from "./homeOrder";
 
 const file = (name: string): WorkspaceTreeEntry => ({ name, path: name, type: `file` });

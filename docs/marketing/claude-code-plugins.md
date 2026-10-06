@@ -40,7 +40,7 @@ build.
 - **The output cleaner is plugin-shaped by accident.** The whole pipeline is dependency-free `.mjs` on node
   builtins only: [`cleaners.mjs`](../../_sandbox/output-cleaners/src/cleaners.mjs) (692 lines, the registry),
   [`agent-output-filter.mjs`](../../_sandbox/output-cleaners/src/agent-output-filter.mjs) (189 lines, exports
-  `filterOutput`), [`retrieve-output.mjs`](../../_sandbox/output-cleaners/src/retrieve-output.mjs) (44 lines), each
+  `filterOutput`), [`retrieve-output.mjs`](../../_sandbox/output-cleaners/src/retrieve-output.mjs) (51 lines), each
   with tests beside it. Only the *plumbing* is sandbox-specific (`tmux-run` tees pane logs; the daemon's
   PreToolUse rewrite threads env). Claude Code's hook API now supports exactly the missing piece:
   a PostToolUse hook may **replace a tool's output** (`updatedToolOutput`) before the model sees it.
@@ -103,7 +103,7 @@ source. The sandbox consumes them from there (image copy paths in the Dockerfile
 filter command, test imports: all mechanical). No copies, no build step; the sandbox and an external user
 run byte-identical cleaners, same as the iq plugin already does for the skill. Proposed home:
 `_sandbox/sandbox/plugin/` (the sandbox package stays the owner and the benchmark harness stays where the
-corpus is), listed in the root `marketplace.json` beside iq.
+corpus is), listed in the root `marketplace.json` beside iq. It landed as its own package instead, `_sandbox/claude-plugin`.
 
 **Explicitly out of v1:**
 

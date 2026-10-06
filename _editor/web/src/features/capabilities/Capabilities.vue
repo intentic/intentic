@@ -18,14 +18,14 @@ import {
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import LiveLinkRows from "../../components/LiveLinkRows.vue";
+import LiveLinkRows from "./LiveLinkRows.vue";
 import { startAgent } from "../agents/fleet/agentActions";
 import { useExtensions } from "../extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../sandbox/devices/useDevices";
 import { HOST_DOOR, PHONE_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
 import { useLiveLinks } from "../sandbox/devices/useLiveLinks";
-import { useRole } from "../sandbox/secrets/useRole";
+import { useRole } from "../../client/sandbox/useRole";
 import { useBackgroundProcesses, viewProcessLogs } from "../terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";

@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, ref, shallowRef } from "vue";
 import { noteArriving } from "../../files/provisionalEntries";

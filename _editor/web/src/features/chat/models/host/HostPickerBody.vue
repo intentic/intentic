@@ -10,7 +10,7 @@ import { usePickerRunSettings } from "../run-settings/pickerRunSettings";
 import ModelPicker from "../ModelPicker.vue";
 import PickerAccounts from "../../accounts/PickerAccounts.vue";
 import PickerRunSettings from "../run-settings/PickerRunSettings.vue";
-import { formatChord, isApplePlatform } from "../../../../shell/commands/keybindings";
+import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

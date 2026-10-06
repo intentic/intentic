@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { withConversationTrust } from "@intentic/sandbox-contract";
-import { Button, Icon } from "@intentic/ui";
+import { Button, Icon, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { usePrivacyShield } from "../../sandbox/agent-settings/safety/usePrivacyShield";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { privacyStanding } from "./privacyStanding";
 import { usePaneView } from "./useChat-view";
 
@@ -45,18 +45,11 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
 </script>
 
 <template>
-    <div
-        v-if="standing?.kind === `refused`"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-    >
-        <Icon name="shield" class="shrink-0" />
-        <!-- A floor, not `min-w-0`: every control beside this is `shrink-0` (ChatPaneNotices' strips). -->
-        <span class="min-w-[14rem] flex-1">
-            {{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}
-            <template v-if="!owner">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
-            <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
-        </span>
-        <div class="flex shrink-0 items-center gap-1">
+    <Notice v-if="standing?.kind === `refused`" tone="warning" icon="shield" size="sm">
+        {{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}
+        <template v-if="!owner">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
+        <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
+        <template #actions>
             <Button
                 v-if="owner"
                 size="small"
@@ -72,8 +65,8 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
                 {{ t(`chat.chatPaneNotices.privacyLetRead`, { provider: standing.label }) }}
             </Button>
             <Button :as="RouterLink" :to="safety" size="small" severity="secondary" :text="true">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
-        </div>
-    </div>
+        </template>
+    </Notice>
     <!-- Granted: said for as long as it holds, since this conversation's reads leave unmasked while it does. -->
     <div v-else-if="standing?.kind === `granted`" class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-card px-3 py-2 text-left text-2xs text-muted shadow-sm">
         <Icon name="shield" class="shrink-0" />

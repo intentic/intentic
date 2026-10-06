@@ -1,14 +1,13 @@
 // Pins the windows a connection is finished in: which one a pending add opens at once (a device's command, a browser's
 // code, a hand-driven sign-in) and on what, what each dialog is told, and the rosters and list re-read after each.
 import "@intentic/testing/dom";
-import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import type { CapabilityKind, HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, HostSummary, WebExtSummary, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";
-import * as actualSandboxRpc from "../sandbox/client/sandboxRpc";
-import type { ProcedureInput } from "../sandbox/client/sandboxRpc";
+import * as actualSandboxRpc from "../../client/sandbox/sandboxRpc";
+import type { ProcedureInput } from "../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 
@@ -16,7 +15,7 @@ import { useTerminalPanel } from "../terminal/useTerminalPanel";
 const login = jest.fn<(input: ProcedureInput<`capabilities.login`>) => Promise<{ session: string }>>();
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock(`../sandbox/client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { login } }) }));
+jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { login } }) }));
 
 const { handOffOf, useCapabilityPairing } = await import("./capabilityPairing");
 

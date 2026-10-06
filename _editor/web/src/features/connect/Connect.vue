@@ -10,7 +10,7 @@ import {
     ProviderKeysSchema,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, Icon, Notice, Page, PageHeader, ui } from "@intentic/ui";
+import { Button, Icon, Notice, Page, PageHeader, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -20,9 +20,9 @@ import { accessKnown, accessStateFor, providerReady } from "../chat/session/acce
 import { rememberPick } from "../chat/run/turnDefaults";
 import { useChat } from "../chat/run/useChat";
 import ProviderLogo from "../chat/accounts/ProviderLogo.vue";
-import { sandboxJson } from "../sandbox/client/sandboxClient";
-import { useSandbox } from "../sandbox/client/useSandbox";
-import { useRole } from "../sandbox/secrets/useRole";
+import { sandboxJson } from "../../client/sandbox/sandboxClient";
+import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useRole } from "../../client/sandbox/useRole";
 import { foundToOffer } from "../../lib/foundOnComputer";
 import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
 import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
@@ -371,11 +371,7 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
                 <template #badge>
                     <!-- What is in it wins over what it costs: a lane already holding something is past the price. -->
                     <span v-if="laneHolds(lane.key)" class="min-w-0 max-w-[40%] truncate text-2xs text-success">{{ laneHolds(lane.key) }}</span>
-                    <span
-                        v-else-if="lane.free"
-                        class="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[0.6rem] font-medium text-success"
-                        >{{ t(`connect.connect.free`) }}</span
-                    >
+                    <StatusBadge v-else-if="lane.free" variant="success" size="xs" class="shrink-0" :label="t(`connect.connect.free`)" />
                 </template>
 
                 <LocalModelLane v-if="lane.key === `local`" :fit="fit" @ready="onLocalReady" @stop-prefetch="stopFetching" />

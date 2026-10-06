@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { Cron } from "croner";
 import type { AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
 import { cronOptions, wallClockIn } from "@intentic/sandbox-contract";
@@ -20,17 +18,17 @@ import { type AutomationRecord, consecutiveFailures } from "./automations-store.
 import type { ScheduleMark } from "./schedule-coverage.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import type { SenderLane } from "./senders.js";
-
-const execFileAsync = promisify(execFile);
+import { outputTail, runCheck, shellArgv } from "../workload/run-check.js";
+import { TITLE_MAX } from "../seams/conversation-title.js";
 
 // How long a guard command may run before it counts as failed (skipping the wake).
 const GUARD_TIMEOUT_MS = 60_000;
+// Output a guard may print per stream; past it the guard fails (execFile's default maxBuffer, which it ran under).
+const GUARD_CAPTURE_BYTES = 1024 * 1024;
 // How much guard output survives into the run's detail.
 const GUARD_DETAIL_TAIL = 500;
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
-// The contract's cap on AgentTurn.title, a surfaced wake's title is built from a message, so it's clamped here.
-export const TITLE_MAX = 80;
 
 // Live sink for a turn's assistant text; undefined means the agent sends its own reply. `failed` distinguishes no
 // output from an error, carrying the raw reason for each sink to redact; always followed by `end`.
@@ -79,22 +77,27 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
 // Runs the guard command in the workspace root; exit 0 wakes the agent, with the payload in AUTOMATION_PAYLOAD. On
 // failure, the stderr/stdout tail becomes the run's detail.
 const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
-    try {
-        await execFileAsync("sh", ["-c", command], {
-            cwd,
-            timeout: GUARD_TIMEOUT_MS,
-            env: {
-                ...process.env,
-                [WORKSPACE_ROOT_EXCLUDE_ENV]: REFERENCE_DIR,
-                ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}),
-            },
-        });
+    const ran = await runCheck({
+        argv: shellArgv(command, "sh"),
+        cwd,
+        timeoutMs: GUARD_TIMEOUT_MS,
+        env: {
+            ...process.env,
+            // A guard runs at the workspace root, where refs/ is reference material its scanners skip.
+            [WORKSPACE_ROOT_EXCLUDE_ENV]: REFERENCE_DIR,
+            ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}),
+        },
+        workload: { class: "command" },
+        kind: "automation-guard",
+        captureBytes: GUARD_CAPTURE_BYTES,
+        // Output past the cap fails the guard, as execFile's maxBuffer did.
+        killOnOverflow: true,
+    });
+    if (ran.exitCode === 0 && !ran.truncated) {
         return { pass: true };
-    } catch (error) {
-        const { stdout, stderr } = error as { stdout?: string; stderr?: string };
-        const detail = `${stderr ?? ""}${stdout ?? ""}`.trim().slice(-GUARD_DETAIL_TAIL);
-        return { pass: false, ...(detail !== "" ? { detail } : {}) };
     }
+    const detail = outputTail(ran, GUARD_DETAIL_TAIL) || (ran.spawnError ?? "");
+    return { pass: false, ...(detail !== "" ? { detail } : {}) };
 };
 
 // Run in progress per automation; a queued fire awaits it. Shared by the tick, dispatchers and fire route.

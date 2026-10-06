@@ -2,6 +2,9 @@ import { HOST_STATE_ROOT } from "@intentic/constants";
 import { pollUntil } from "@intentic/base/async";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
+import { HASH_KEY } from "@intentic/graph";
+import { containerLabel } from "../core/backing-ssh.js";
+import { guardedUpdate } from "../core/guarded-update.js";
 import { type EnvEntry, type HostFile, writeEnvOnce, writeHostFiles } from "../core/host-files.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
@@ -15,6 +18,18 @@ export const serviceSchema = sshSchema.extend({
     domain: z.string(),
 });
 
+// A stateful service's opt-in transaction around an image bump (guarded-update.ts): snapshot `volumes`, recreate, and
+// on a failed health gate restore them and bring the previously running images back. Returned only when the inputs
+// carry a backup to snapshot into.
+export interface ComposeServiceGuard {
+    readonly repo: string;
+    readonly resticImage: string;
+    // Full docker volume names, `<kind>_<volume>` for a compose-declared one.
+    readonly volumes: readonly string[];
+    // The restic tag of this attempt's snapshot; defaults to `intentic-preupdate-<id>`.
+    readonly tag?: string;
+}
+
 // Everything that distinguishes one compose-stack service from another; the surrounding provider skeleton
 // (read/diff/apply/delete) is identical across the catalog. backing-provider.ts is the per-instance twin.
 export interface ComposeServiceSpec<S extends z.ZodType> {
@@ -27,7 +42,8 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
     readonly healthPath: string;
     readonly readyTimeoutMs?: number;
     // filename -> content, written every apply; must include compose.yaml, its stamped service carrying `stampLabels`.
-    readonly files: (parsed: z.infer<S>, stamp: ContainerStamp) => Record<string, string | HostFile>;
+    // `images` is what to render: spec.images(parsed), or the previous images when a guarded update rolls back.
+    readonly files: (parsed: z.infer<S>, stamp: ContainerStamp, images: Record<string, string>) => Record<string, string | HostFile>;
     readonly env?: (parsed: z.infer<S>) => readonly EnvEntry[];
     // Extra outputs merged over url/internalUrl, derived from inputs alone; e.g. signoz's `otlpEndpoint`.
     readonly extraOutputs?: (parsed: z.infer<S>) => Record<string, unknown>;
@@ -35,7 +51,16 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
     readonly images: (parsed: z.infer<S>) => Record<string, string>;
     // Runs after the stack is healthy; the seam for admin seeding. Must tolerate an already-seeded instance.
     readonly seed?: (session: SshSession, parsed: z.infer<S>, log: (message: string) => void) => Promise<void>;
+    // Input keys that may still be pending refs; read reports "not yet created" until all resolve. Default internalIp.
+    readonly pendingRefs?: readonly string[];
+    // Whether read reports the owner stamp, so a missing owner drives an update that adopts the stack. Off for a
+    // service whose update is too heavy to run just to add a label (komodo's guarded control-plane recreate).
+    readonly adoptsOwner?: boolean;
+    readonly guard?: (parsed: z.infer<S>) => ComposeServiceGuard | undefined;
 }
+
+const isImageMap = (value: unknown): value is Record<string, string> =>
+    typeof value === "object" && value !== null && Object.values(value).every((image) => typeof image === "string");
 
 const READY_INTERVAL_MS = 4_000;
 
@@ -88,15 +113,23 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
 
     // Config files are rewritten every apply; the .env is write-once, since re-keying would invalidate sessions and
     // database credentials. Both come from host-files.ts.
-    const ensureFiles = async (session: SshSession, parsed: z.infer<S>, stamp: ContainerStamp): Promise<void> => {
-        await writeHostFiles(session, spec.kind, stateDir, spec.files(parsed, stamp));
+    const ensureFiles = async (session: SshSession, parsed: z.infer<S>, stamp: ContainerStamp, images: Record<string, string>): Promise<void> => {
+        await writeHostFiles(session, spec.kind, stateDir, spec.files(parsed, stamp, images));
         await writeEnvOnce(session, spec.kind, stateDir, spec.env?.(parsed) ?? []);
+    };
+
+    const observedOwner = async (session: SshSession, id: string): Promise<{ stampHash?: string; stampOwner?: string }> => {
+        if (spec.adoptsOwner === false) {
+            const stampHash = await containerLabel(session, id, HASH_KEY);
+            return stampHash === "" ? {} : { stampHash };
+        }
+        return observedStamp(await containerStampOf(session, id));
     };
 
     return {
         read: async (inputs, ctx) => {
             // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
-            if (hasPendingRef(inputs, "internalIp")) {
+            if (hasPendingRef(inputs, ...(spec.pendingRefs ?? ["internalIp"]))) {
                 return undefined;
             }
             const parsed = parse(inputs);
@@ -116,7 +149,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
                 return {
                     outputs: outputsFor(parsed),
                     detail: { images: await runningImages(session) },
-                    ...observedStamp(await containerStampOf(session, ctx.id)),
+                    ...(await observedOwner(session, ctx.id)),
                 };
             } finally {
                 await session.dispose();
@@ -135,34 +168,59 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
             }
             return { action: "noop" };
         },
-        apply: async (inputs, _observed, ctx) => {
+        apply: async (inputs, observed, ctx) => {
             const parsed = parse(inputs);
             const session = await executor.connect(sshTarget(parsed));
             try {
-                await ensureFiles(session, parsed, stampOf(ctx));
-                // Streams compose's progress line-by-line, so a slow first pull shows live instead of one blob at the
-                // end.
-                let pending = "";
-                const streamLines = (chunk: string): void => {
-                    pending += chunk;
-                    const lines = pending.split("\n");
-                    pending = lines.pop() ?? "";
-                    for (const text of lines) {
-                        if (text.trim() !== "") {
-                            ctx.log(`${spec.kind}: ${text}`);
+                const stamp = stampOf(ctx);
+                // Renders the files for `images`, runs `up -d`, and waits healthy; throws if it never comes up.
+                const bringUp = async (images: Record<string, string>): Promise<void> => {
+                    await ensureFiles(session, parsed, stamp, images);
+                    // Streams compose's progress line-by-line, so a slow first pull shows live instead of one blob at
+                    // the end.
+                    let pending = "";
+                    const streamLines = (chunk: string): void => {
+                        pending += chunk;
+                        const lines = pending.split("\n");
+                        pending = lines.pop() ?? "";
+                        for (const text of lines) {
+                            if (text.trim() !== "") {
+                                ctx.log(`${spec.kind}: ${text}`);
+                            }
                         }
+                    };
+                    const up = await session.exec(
+                        `docker compose -p ${spec.kind} --project-directory ${stateDir} -f ${stateDir}/compose.yaml up -d`,
+                        streamLines,
+                    );
+                    streamLines("\n");
+                    if (up.code !== 0) {
+                        throw new Error(`failed to bring up ${spec.kind} stack: exited ${up.code}: ${up.stderr.trim()}`);
                     }
+                    ctx.log(`${spec.kind}: waiting for ${internalUrl(parsed)}${spec.healthPath} (up to ${readyTimeoutMs / 1000}s)`);
+                    await waitHealthy(session, parsed);
                 };
-                const up = await session.exec(
-                    `docker compose -p ${spec.kind} --project-directory ${stateDir} -f ${stateDir}/compose.yaml up -d`,
-                    streamLines,
-                );
-                streamLines("\n");
-                if (up.code !== 0) {
-                    throw new Error(`failed to bring up ${spec.kind} stack: exited ${up.code}: ${up.stderr.trim()}`);
+                const guard = spec.guard?.(parsed);
+                const oldImages = observed?.detail?.["images"];
+                if (guard !== undefined && observed !== undefined && isImageMap(oldImages)) {
+                    await guardedUpdate({
+                        session,
+                        repo: guard.repo,
+                        resticImage: guard.resticImage,
+                        volumes: guard.volumes,
+                        tag: guard.tag ?? `intentic-preupdate-${ctx.id}`,
+                        recreate: () => bringUp(spec.images(parsed)),
+                        stop: async () => {
+                            await session.exec(
+                                `ids=$(docker ps -aq -f label=com.docker.compose.project=${spec.kind}); [ -n "$ids" ] && docker rm -f $ids || true`,
+                            );
+                        },
+                        rollback: () => bringUp(oldImages),
+                        log: ctx.log,
+                    });
+                } else {
+                    await bringUp(spec.images(parsed));
                 }
-                ctx.log(`${spec.kind}: waiting for ${internalUrl(parsed)}${spec.healthPath} (up to ${readyTimeoutMs / 1000}s)`);
-                await waitHealthy(session, parsed);
                 await spec.seed?.(session, parsed, ctx.log);
                 return outputsFor(parsed);
             } finally {

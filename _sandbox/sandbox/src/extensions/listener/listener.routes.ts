@@ -2,6 +2,7 @@ import {
     type ListenerDispatchFrame,
     type ListenerMessage,
     ListenerMessageSchema,
+    type ListenerState,
     type ListenerStatus,
     ListenerStatusSchema,
 } from "@intentic/sandbox-contract";
@@ -45,7 +46,9 @@ export const createListenerRoutes = (services: Services) => ({
         if (caller instanceof Response) {
             return caller;
         }
-        return c.json(await listenerStateOf(services, c.req.param("provider"), caller.id));
+        // Held to the contract's feed shape, which the gateway parses with (connector-runtime's daemon client).
+        const state: ListenerState = await listenerStateOf(services, c.req.param("provider"), caller.id);
+        return c.json(state);
     },
 
     // One inbound event routed to matching listener automations; plain calls fire-and-return.

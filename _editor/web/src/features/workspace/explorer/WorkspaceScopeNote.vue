@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { setProjectScope } from "../../../app/projectScope";
-import { workspaceDir } from "../health/workspaceScope";
+import { workspaceDir } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
 
 // Opening a project, which creating one does, narrows the whole workspace to it (the files, the agents, the checks),

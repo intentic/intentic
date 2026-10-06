@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { kindLabel, QUICK_LOOK_LINES, quickLookLines, quickLookPlan } from "./quickLookContent";
 
 // A size only when the case gives one: the listing leaves it out for a file it could not stat.

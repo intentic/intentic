@@ -1,7 +1,7 @@
 import { countParser } from "@intentic/agent-cli/flags";
 import { estimateTokens } from "@intentic/base/format";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
-import { createRecall, parseLine, readLines, type Recall, type SessionMatch, typedPromptOf } from "@intentic/iq-recall";
+import { createRecall, parseLine, readLines, type Recall, type SessionMatch, typedPromptOf } from "../../recall/recall.js";
 import { loadConfig } from "../../env.config.js";
 
 const recallFor = (root: string): Recall => {

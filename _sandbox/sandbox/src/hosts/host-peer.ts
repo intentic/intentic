@@ -26,6 +26,7 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
 import { commandInCall, judgeHostCommand, typedInCall } from "./host-command-guard.js";
+import type { HostGuardDeps } from "./host-guard-deps.js";
 import { DeviceToolCallSchema, judgeHostRestart, restartInCall } from "./host-restart-guard.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
@@ -193,7 +194,8 @@ export const revokeCardlessHost = async (services: Services, id: string): Promis
     return true;
 };
 
-export const hostPeerRoutes = (services: Services) =>
+// `guards` is what the device gates take from above the host layer, filled where app.ts mounts these routes.
+export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
     createPeerRoutes(services, HOST_PEER, {
         store: services.hosts,
         hub: services.hostHub,
@@ -214,16 +216,16 @@ export const hostPeerRoutes = (services: Services) =>
             const toolCall = DeviceToolCallSchema.safeParse(payload);
             const restart = toolCall.success ? restartInCall(toolCall.data, sandboxSlugOf(services.config.sandbox.name)) : undefined;
             if (restart !== undefined) {
-                return judgeHostRestart(services, { machine: call.id, call: restart, conversationId: call.conversationId });
+                return judgeHostRestart(services, guards, { machine: call.id, call: restart, conversationId: call.conversationId });
             }
             const command = commandInCall(payload);
             if (command !== undefined) {
-                return judgeHostCommand(services, { machine: call.id, command, conversationId: call.conversationId });
+                return judgeHostCommand(services, guards, { machine: call.id, command, conversationId: call.conversationId });
             }
             const typed = toolCall.success ? typedInCall(toolCall.data) : undefined;
             if (typed === undefined) {
                 return undefined;
             }
-            return judgeHostCommand(services, { machine: call.id, command: typed, conversationId: call.conversationId, typed: true });
+            return judgeHostCommand(services, guards, { machine: call.id, command: typed, conversationId: call.conversationId, typed: true });
         },
     });

@@ -1,6 +1,6 @@
 import type { DeviceConfig } from "@intentic/sandbox-contract";
-import { revokeSyncEnrollmentsOf } from "../../hosts/desktop-sync.js";
-import { HOST_TOOLS_NOTE } from "../../hosts/host-skills.js";
+import { revokeSyncEnrollmentsOf } from "../../peers/desktop-sync.js";
+import { HOST_TOOLS_NOTE } from "./host-skills.js";
 import { peerHandler } from "./peer.handler.js";
 
 /* A device of the user's OWN, one capability per machine, the id being its name: the peer handler (peers/) over the host door. */
@@ -14,7 +14,7 @@ export const deviceHandler = peerHandler<DeviceConfig>({
     added: (id) => `Added "${id}". Run the one-time command its entry is offering on that device, the agent can work on it from the next turn.`,
     store: (ctx) => ctx.hosts,
     hub: (ctx) => ctx.hostHub,
-    // (2026-10-05) The card's computers sync with this sandbox through a key of their own (hosts/desktop-sync.ts), which
+    // (2026-10-05) The card's computers sync with this sandbox through a key of their own (peers/desktop-sync.ts), which
     // removing the card left authorized for good. Each OS install the card held is read off its enrollment before the
     // card goes, and that same computer and environment's sync key goes after it.
     // A list that cannot be read costs only this: the card still goes, as it did before, and the keys stay.

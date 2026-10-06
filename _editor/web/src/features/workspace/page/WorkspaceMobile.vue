@@ -1,26 +1,26 @@
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import {
     BottomSheet,
     Button,
-    FloatingAction,
     clipboardOf,
+    FloatingAction,
+    formatCount,
+    iconForEntry,
     Modal,
     type NoticeModel,
     NoticeStack,
     PullToRefresh,
     SegmentedControl,
     SkeletonSnapshot,
+    ui,
     useLoadingReveal,
     usePageBack,
-    iconForEntry,
-    ui,
     vSkeletonSource,
 } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type SidebarPanel, useLayout } from "../../../shell/window/useLayout";
-import { reportOpenPath } from "../../../shell/presence/usePresence";
+import { type SidebarPanel, useLayout } from "../../../workbench/window/useLayout";
+import { reportOpenPath } from "../../../workbench/presence/usePresence";
 import { outgoingMark, outgoingSummary } from "../push/outgoingWork";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../changes/useChanges";
@@ -31,7 +31,7 @@ import { matchToggles } from "../search/useSearchOptions";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { useNotifications } from "../../../shell/notifications/notifications";
+import { useNotifications } from "../../../workbench/notifications/notifications";
 import DiffToolbar from "../viewers/DiffToolbar.vue";
 import DiffSkeleton from "../viewers/DiffSkeleton.vue";
 import FileDiffPane from "../viewers/FileDiffPane.vue";
@@ -39,8 +39,8 @@ import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { specialChip } from "../explorer/specialPaths";
 import { useAudience } from "../../../app/useAudience";
-import { useVocabulary } from "../../../core-views/vocabulary";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import { opensAsFolder } from "../files/archiveEntries";
 import { downloadEntries } from "../files/downloadEntries";
@@ -57,10 +57,10 @@ import SaveActions from "../changes/save/SaveActions.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
-import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
+import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
 import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
-import { parentDir } from "@intentic/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
 
 // Drill-down file browser (one directory per screen) plus Changes/Restore Points panels and a full-screen
@@ -146,7 +146,6 @@ onBeforeUnmount(() => reportOpenPath(undefined));
 onMounted(() => void useMonaco().ensureMonaco());
 
 const openMeta = computed(() => entry(openPath.value));
-const fileName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 
 // The current directory's listing.
 // Which panel shows is part of the address (`?panel=`), like `?dir=`/`?diff=` above it, so back and deep links
@@ -346,7 +345,7 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
-                <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ fileName(openPath ?? "") }}</span>
+                <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ basename(openPath ?? "") }}</span>
                 <WorkspaceScopeChip />
             </div>
             <div class="min-h-0 flex-1">
@@ -629,7 +628,7 @@ const onPick = (event: Event): void => {
                             {{ filter ? t(`workspace.workspaceMobile.noMatchingEntries`) : t(`workspace.workspaceMobile.directoryEmpty`) }}
                         </p>
                         <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
-                            {{ t(`workspace.workspaceMobile.moreEntries`, { count: dirHidden.toLocaleString() }, dirHidden) }}
+                            {{ t(`workspace.workspaceMobile.moreEntries`, { count: formatCount(dirHidden) }, dirHidden) }}
                         </p>
                         <!-- The technical switch's own receipt; a tap is the way back. -->
                         <button

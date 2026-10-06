@@ -18,8 +18,8 @@ stubGlobal(`localStorage`, {
 });
 // The daemon's session list, scripted per case by daemonLists.
 const terminals = jest.fn();
-jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals } }) }));
-jest.mock("../sandbox/client/useSandbox", () => ({
+jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals } }) }));
+jest.mock("../../client/sandbox/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));

@@ -1,24 +1,16 @@
-import { createBackoff } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
+import { onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
 import { keyMessage, pointerMessage, wheelGauge, type DesktopKey, type DesktopMouse, type DesktopPointerAction, type DesktopText } from "./desktopInput";
 import { videoTag } from "../browsers/frameUrls";
 import { canDecodeVideo, videoSink } from "../browsers/videoSink";
-import { useSandbox } from "../sandbox/client/useSandbox";
+import { useLiveSocket, webSocketChannel } from "../../client/session/liveSocket";
 import { socketUrl } from "../sandbox/session/wsTicket";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
 // display into a canvas, and, once the owner takes over, their pointer and keys back onto it. One desktop per sandbox,
 // so the only thing followed is which sandbox is active; nothing reaches the desktop until the owner takes over.
 
-const PING_MS = 30_000;
-const RETRY_MS = 1000;
-const MAX_RETRY_MS = 30_000;
-// A connection alive this long was healthy; its drop resets the backoff (useBrowserView's rule).
-const STABLE_MS = 5000;
-// The daemon pongs every ping, so silence this long means a half-open socket.
-const STALE_MS = 90_000;
 // The desktop's size (agent-desktop.ts DESKTOP_SIZE), assumed only until `ready` says.
 const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
@@ -29,8 +21,6 @@ const MOVE_THROTTLE_MS = 16;
 export const HOLD_MS = 20_000;
 // What the daemon closes with when the ticket is not enough to drive the desktop: a policy refusal, not a drop.
 const CLOSE_REFUSED = 1008;
-
-const { reachable } = useSandbox();
 
 // What to say while there is no picture; the view words it. `detail` is the failure's own sentence.
 export type DesktopStatus =
@@ -108,21 +98,14 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
     const driving = ref(false);
     const held = ref(false);
     const hold = holdClock(held);
-    const socket = shallowRef<WebSocket | undefined>();
     const video = videoSink(() => {
         status.value = { kind: `unsupported` };
     });
-    const ladder = createBackoff({ floorMs: RETRY_MS, capMs: MAX_RETRY_MS, stableMs: STABLE_MS });
     const wheel = wheelGauge();
-    let reconnect: number | undefined;
-    let closing = false;
     let lastMove = 0;
 
-    const send = (message: Outgoing): void => {
-        if (socket.value?.readyState === WebSocket.OPEN) {
-            socket.value.send(JSON.stringify(message));
-        }
-    };
+    // The live socket below, declared ahead so every verb can say something on it.
+    const send = (message: Outgoing): void => live.send(message);
 
     // Each input renews the daemon's hold, so the local one is renewed with it; a lapsed one comes back as `held`.
     const sendInput = (message: DesktopMouse | DesktopKey | DesktopText): void => {
@@ -159,7 +142,7 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
             hold.set(message.owner === true);
         } else if (message.type === `error`) {
             // The desktop could not start; dialling again would only ask the same question.
-            closing = true;
+            live.end();
             status.value = { kind: `failed`, detail: message.message ?? `` };
         }
     };
@@ -178,122 +161,53 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
     const syncVisibility = (): void => send({ type: document.hidden ? `pause` : `resume` });
     document.addEventListener(`visibilitychange`, syncVisibility);
 
-    const connect = async (): Promise<void> => {
-        window.clearTimeout(reconnect);
-        reconnect = undefined;
-        const key = sandbox.value;
-        if (closing || key === undefined) {
-            return;
-        }
-        let url: string | undefined;
-        try {
-            url = await socketUrl(`/system/desktop-view`);
-        } catch (error) {
-            if (closing || key !== sandbox.value) {
-                return;
-            }
+    const live = useLiveSocket<string, Outgoing>({
+        mint: () => socketUrl(`/system/desktop-view`),
+        open: webSocketChannel({ text: handleJson, binary: takePicture }),
+        onMintFailed: (error) => {
             status.value = { kind: `authFailed`, detail: errorMessage(error) };
-            reconnect = window.setTimeout(() => void connect(), ladder.next());
-            return;
-        }
-        // The sandbox may have changed while the ticket was in flight; that switch owns the socket now.
-        if (closing || key !== sandbox.value) {
-            return;
-        }
-        if (url === undefined) {
+        },
+        onUnreachable: () => {
             status.value = { kind: `unreachable` };
-            reconnect = window.setTimeout(() => void connect(), ladder.next());
-            return;
-        }
-        const ws = new WebSocket(url);
-        ws.binaryType = `arraybuffer`;
-        socket.value?.close();
-        socket.value = ws;
-        let ping: number | undefined;
-        let openedAt = 0;
-        let heardAt = 0;
-        ws.addEventListener(`open`, () => {
-            if (closing || socket.value !== ws) {
-                ws.close();
-                return;
-            }
-            openedAt = Date.now();
-            heardAt = openedAt;
+        },
+        onOpen: () => {
             syncVisibility();
             // A drop handed the desktop back; an owner still driving takes it again rather than clicking into nothing.
             if (driving.value) {
                 send({ type: `control`, driving: true });
             }
-            ping = window.setInterval(() => {
-                if (Date.now() - heardAt > STALE_MS) {
-                    ws.close();
-                    return;
-                }
-                send({ type: `ping` });
-            }, PING_MS);
-        });
-        ws.addEventListener(`message`, (event) => {
-            heardAt = Date.now();
-            if (event.data instanceof ArrayBuffer) {
-                takePicture(event.data);
-                return;
-            }
-            handleJson(String(event.data));
-        });
-        ws.addEventListener(`close`, (event) => {
-            window.clearInterval(ping);
-            if (socket.value !== ws || closing) {
-                return;
-            }
+        },
+        onDrop: (code) => {
             hold.set(false);
-            if (event.code === CLOSE_REFUSED) {
-                closing = true;
+            if (code === CLOSE_REFUSED) {
+                live.end();
                 status.value = { kind: `refused` };
                 return;
             }
             status.value = { kind: `reconnecting` };
-            reconnect = window.setTimeout(() => void connect(), ladder.next(openedAt === 0 ? 0 : Date.now() - openedAt));
-        });
-    };
-
-    const teardown = (): void => {
-        window.clearTimeout(reconnect);
-        reconnect = undefined;
-        socket.value?.close();
-        socket.value = undefined;
-    };
-
-    // The sandbox's event stream answering again is the news a view waiting out a rung of its ladder is waiting for:
-    // without it, one whose ladder had climbed to MAX_RETRY_MS stayed dark that long after the rest of the page was
-    // back. `reconnect` is set only while a retry is pending.
-    watch(reachable, (up) => {
-        if (up && reconnect !== undefined) {
-            ladder.reset();
-            void connect();
-        }
+        },
     });
 
     watch(
         sandbox,
         () => {
-            teardown();
-            closing = false;
-            ladder.reset();
+            live.close();
             // The old socket's close handed that desktop back; the next one is not being driven yet.
             driving.value = false;
             hold.set(false);
             video.close();
             status.value = sandbox.value === undefined ? undefined : { kind: `connecting` };
-            void connect();
+            if (sandbox.value !== undefined) {
+                live.connect();
+            }
         },
         { immediate: true },
     );
 
     onScopeDispose(() => {
-        closing = true;
         document.removeEventListener(`visibilitychange`, syncVisibility);
         hold.set(false);
-        teardown();
+        live.close();
         video.close();
     });
 

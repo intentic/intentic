@@ -1,5 +1,5 @@
 import type { Loop, LoopRecord } from "@intentic/sandbox-contract";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // Loop mutations only. Loop state rides the fleet roster's `AgentSummary.loop` via the `/events` stream, not a
 // separate store or query.

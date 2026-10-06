@@ -1,10 +1,10 @@
 import type { Persona } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Named personas (`.intentic/config/personas.json`) via the daemon's personas routes; saving or removing is a
 // plain mutation plus refetch, no apply or stream. `connected` lists which named accounts this sandbox is actually

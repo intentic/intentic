@@ -5,7 +5,7 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 // Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client. Any call it
 // did make would throw naming its procedure.
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 // Effort scale is a property of the model, not the provider (Kimi K2.7 stops at 'high', K3 at 'max'), so a pick carried
 // across models is routinely off-scale. Every read goes through the clamp.

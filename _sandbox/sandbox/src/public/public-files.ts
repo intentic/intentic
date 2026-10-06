@@ -1,6 +1,7 @@
 import { open, realpath, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
+import { holdsCredentialToken } from "@intentic/sandbox-contract";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { escapeHtml } from "@intentic/base/format";
 import type { Refusal } from "../panels/interstitial.js";
@@ -12,8 +13,8 @@ import { walkTree } from "../system/resources/storage/storage-walk.js";
 // 2. Hidden segments: any path component starting with "." is refused (.env, .git, .ssh, .npmrc).
 // 3. Credential-shaped names (*.pem, *.key, id_rsa, credentials): high recall, catches files that are wholly a secret.
 // 4. No directory listing, ever: a directory serves only its index.html.
-// 5. Content sniff, high precision: only self-identifying patterns (PEM block, AWS key, gh_/sk-/xox token), never a
-//    generic secret-near-a-value rule.
+// 5. Content sniff, high precision: only self-identifying shapes (a private key, an issuer-prefixed token, a URL's
+//    password), never a generic secret-near-a-value rule.
 // 6. A size ceiling, so the outbox can't become someone's CDN.
 
 // The outbox on disk; its existence is the publish switch, absent until the user publishes something.
@@ -64,18 +65,8 @@ const DOWNLOAD = { type: "application/octet-stream", inline: false } as const;
 const CREDENTIAL_NAMES = /^(?:id_[rd]sa|id_ecdsa|id_ed25519|credentials|\.?netrc|\.?htpasswd)$/i;
 const CREDENTIAL_EXTS = new Set([".pem", ".key", ".p12", ".pfx", ".ppk", ".jks", ".keystore", ".kdbx", ".asc", ".gpg"]);
 
-// Rule 5: self-identifying patterns only, each naming its own issuer. Exported so src/share redacts against this same
-// list, not a shorter one that would leave a redacted page still refused.
-export const SECRET_PATTERNS = [
-    // The whole armored block, not only its header, since redaction replaces the match; lines split by newlines or `\n`.
-    /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----(?:(?:\s|\\[nr])+(?:[A-Za-z-]+:[^\n\\]*|[A-Za-z0-9+/=]+))*(?:(?:\s|\\[nr])+-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----)?/,
-    /\bAKIA[0-9A-Z]{16}\b/,
-    /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
-    /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}\b/,
-    /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/,
-    /\bAIza[0-9A-Za-z_-]{35}\b/,
-    /\bglpat-[A-Za-z0-9_-]{20,}\b/,
-];
+// Rule 5 judges with the contract's credential vocabulary (`holdsCredentialToken`), the same one src/share masks a page
+// with, so a page the share has masked is never then refused here; a shorter list of its own would drift from it.
 // How much of a file the sniff reads; a credential dump announces itself in its first lines.
 const SNIFF_BYTES = 8192;
 // Only text-like types are sniffed; scanning binaries would only false-positive on compressed bytes.
@@ -116,7 +107,7 @@ const blockByContent = async (absPath: string, contentType: string): Promise<Pub
         const buffer = Buffer.alloc(SNIFF_BYTES);
         const { bytesRead } = await handle.read(buffer, 0, SNIFF_BYTES, 0);
         const head = buffer.subarray(0, bytesRead).toString("utf8");
-        return SECRET_PATTERNS.some((pattern) => pattern.test(head)) ? "credential-content" : undefined;
+        return holdsCredentialToken(head) ? "credential-content" : undefined;
     } finally {
         await handle.close();
     }

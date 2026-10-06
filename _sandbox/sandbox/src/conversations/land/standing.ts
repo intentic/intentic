@@ -1,10 +1,10 @@
 import type { LandConflictReason } from "@intentic/sandbox-contract";
 import { mapPool } from "@intentic/base/async";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { anchorOf, carriesContent } from "./agent-changes.js";
-import { agentBranchTips } from "./agent-refs.js";
+import { agentBranchTips } from "../../git/agent-refs.js";
 import { dirtyPaths } from "./land.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 

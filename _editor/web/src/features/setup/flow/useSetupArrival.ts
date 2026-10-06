@@ -2,7 +2,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { computed, ref, type Ref, watch } from "vue";
 import type { RouteLocationNormalizedLoaded } from "vue-router";
 import type { apiClient } from "../../../lib/useApi";
-import type { useSandbox } from "../../sandbox/client/useSandbox";
+import type { useSandbox } from "../../../client/sandbox/useSandbox";
 import { type Arrival, arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, rowToOpen, touched } from "../setupArrival";
 import { lanesFor, readOffer } from "../setupLanes";
 import { type Machine, type MachineOption, requestedRung } from "./machineLadder";

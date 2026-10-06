@@ -1,9 +1,8 @@
-import { EnvironmentSchema } from "@intentic/api-contract";
 import { ORIGIN_HOST, sandboxSlugOf } from "@intentic/sandbox-run";
 import { computed } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The sandbox's composed environment overlay (.intentic/local/environment.approved.Dockerfile), read via /environment.
 // Shared by the Environment card, the shell's rebuild banner and the capabilities page, so they derive from one deduped
@@ -14,7 +13,7 @@ export const ENVIRONMENT_KEY = ENVIRONMENT.of();
 export function useEnvironment() {
     const { query } = useSandboxQuery({
         queryKey: ENVIRONMENT_KEY,
-        queryFn: async () => EnvironmentSchema.parse(await sandboxJson(`/environment`)),
+        queryFn: () => sandboxRaw(`GET /environment`),
     });
     const state = computed(() => query.data.value);
 

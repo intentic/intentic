@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { ManifestProblem } from "../schemas/system.js";
 import { type Conversion, convertDocument, type Granularity } from "./conversions.js";
 import { carryUnknown, type IdKeys, reemitQuarantined } from "./passthrough.js";
@@ -35,8 +36,6 @@ export interface DocumentRead<T> {
     readonly problems: readonly ManifestProblem[];
 }
 
-const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
 const unreadable = <T>(reason: NonNullable<ManifestProblem["reason"]>, detail: string): DocumentRead<T> => ({
     value: undefined,
     carry: (updated) => updated,
@@ -67,7 +66,7 @@ export const readDocument = <T>(text: string, shape: DocumentShape, how: Documen
                 const converted = convertDocument(shape.history, shape.granularity, raw, checkSettles).value;
                 whole = Array.isArray(converted) ? converted : [];
             } catch (error) {
-                return unreadable("conversion-failed", `a conversion to this build's shape failed (${message(error)})`);
+                return unreadable("conversion-failed", `a conversion to this build's shape failed (${errorMessage(error)})`);
             }
         }
         whole.forEach((written, index) => {
@@ -80,7 +79,7 @@ export const readDocument = <T>(text: string, shape: DocumentShape, how: Documen
                 report({
                     kind: "invalidEntry",
                     reason: "conversion-failed",
-                    detail: `entry ${index} could not be converted to this build's shape (${message(error)}); it is kept as written`,
+                    detail: `entry ${index} could not be converted to this build's shape (${errorMessage(error)}); it is kept as written`,
                 });
                 return;
             }
@@ -104,7 +103,7 @@ export const readDocument = <T>(text: string, shape: DocumentShape, how: Documen
     try {
         raw = convertDocument(shape.history, shape.granularity, raw, checkSettles).value;
     } catch (error) {
-        return unreadable("conversion-failed", `a conversion to this build's shape failed (${message(error)})`);
+        return unreadable("conversion-failed", `a conversion to this build's shape failed (${errorMessage(error)})`);
     }
     const value = how.parse(raw, report);
     if (value === undefined) {

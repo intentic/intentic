@@ -1,6 +1,6 @@
 import type { FleetConfig } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { cardDeps } from "../conversations/actor/card-offers.js";
+import { cardDeps } from "../conversations/actor/card-deps.js";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { answerResponse, cliBody } from "../http/cli-answer.js";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SafetyLogEntry } from "@intentic/api-contract";
+import type { SafetyLogEntry } from "@intentic/sandbox-contract";
 import {
     Code,
     DisclosureRow,

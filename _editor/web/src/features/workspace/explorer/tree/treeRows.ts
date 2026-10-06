@@ -1,4 +1,4 @@
-import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";

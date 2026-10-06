@@ -3,7 +3,7 @@
 // the same Product Hunt skill under four connected logins, and the two the reader had written themselves were
 // somewhere in the middle of it. What is pinned here is the line the fold is drawn on and the order either side
 // of it: plus the reason the filter reads more than the name.
-import type { SkillSummary } from "@intentic/api-contract";
+import type { SkillSummary } from "@intentic/sandbox-contract";
 import { bySection, isTunable, matchesSkill } from "./skillList";
 
 const skill = (over: Partial<SkillSummary> & Pick<SkillSummary, `name`>): SkillSummary => ({

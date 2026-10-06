@@ -6,10 +6,10 @@ import type { SandboxSummary } from "@intentic/api-contract";
 
 const active = ref<SandboxSummary | undefined>({ id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary);
 const reachable = ref(true);
-jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ active, reachable }) }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ active, reachable }) }));
 
 const sandboxJson = jest.fn<(_path: string) => Promise<unknown>>();
-jest.mock("../client/sandboxClient", () => ({ sandboxJson: (...args: Parameters<typeof sandboxJson>) => sandboxJson(...args) }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxJson: (...args: Parameters<typeof sandboxJson>) => sandboxJson(...args) }));
 
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useSandboxSharedAccess } = await import("./useSandboxSharedAccess");
@@ -70,7 +70,7 @@ describe("useSandboxSharedAccess", () => {
 describe("before the answer arrives", () => {
     it("stands on the last answer for this sandbox, and remembers the new one", async () => {
         localStorage.setItem(`intentic.sharedAccess.sbx-1`, `1`);
-        const { activeSandboxId } = await import("../overview/activeSandbox");
+        const { activeSandboxId } = await import("../../../lib/activeSandbox");
         activeSandboxId.value = `sbx-1`;
         active.value = undefined;
         const { sharedAccess } = mounted();

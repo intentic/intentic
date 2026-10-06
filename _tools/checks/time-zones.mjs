@@ -39,8 +39,8 @@ const DAEMON_ROOTS = ["_sandbox/sandbox/src/", "_platform/api/src/", "_devices/"
 
 const LOCAL_COMPONENTS = /\.(?:get|set)(?:Hours|Minutes|Seconds|Date|Month|FullYear|Day)\(/;
 const BARE_CRON = /new Cron\(\s*[^,)]+\)/;
-// Dates only. `.toLocaleString()` on a NUMBER is a different subject (thousands separators) and belongs to whatever
-// check owns number formatting, not this one; a bare `toLocaleString` counts only when the line also handles a Date.
+// Dates only. `.toLocaleString()` on a NUMBER is a different subject (thousands separators) and belongs to
+// format-tiers.mjs, which owns every number and date the editor and the extensions show; a bare `toLocaleString` counts only when the line also handles a Date.
 const TO_LOCALE = /\.toLocale(?:Date|Time)String\(|new Date\([^)]*\)\s*\.toLocaleString\(/;
 const UTC_DAY = /toISOString\(\)\s*\.\s*(?:slice|substring)\(\s*0\s*,\s*10\s*\)/;
 

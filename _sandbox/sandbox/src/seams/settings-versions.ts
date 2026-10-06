@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 

@@ -1,6 +1,6 @@
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useEndpoint } from "../../sandbox/secrets/useEndpoint";
-import { scopeQuery, type ViewScope, workspaceScope } from "../health/workspaceScope";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useEndpoint } from "../../../client/endpoint/useEndpoint";
+import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
 
 // Only daemon URL handed straight to an element (/workspace/media): a <video>/<audio> issues its own byte-range
 // requests, with no way to add an Authorization header. A short-lived, file-scoped ticket (POST

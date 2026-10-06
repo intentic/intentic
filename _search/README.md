@@ -6,7 +6,7 @@ The tools an agent uses to find the right code instead of reading everything: ra
 flowchart LR
     agent["Agent<br/>Claude Code · Codex"] -- "iq '…'" --> iq(["iq"])
     iq --> engine(["iq-engine"])
-    iq -- "iq sessions" --> recall(["iq-recall"])
+    iq -- "iq sessions" --> recall["session recall<br/>inside iq"]
     daemon["Sandbox daemon<br/>search box · turn context"] --> engine
     engine --> index[".intentic/local/cache/iq<br/>SQLite index"]
     recall --> transcripts["~/.claude/projects<br/>transcripts"]
@@ -17,9 +17,8 @@ flowchart LR
 
 | Package | Role |
 | --- | --- |
-| [iq](iq) | The `iq` CLI and the Claude Code plugin that teaches agents to use it. |
+| [iq](iq) | The `iq` CLI, its recall of past sessions, and the Claude Code plugin that teaches agents to use it. |
 | [iq-engine](iq-engine) | Index, retrieval engines, rank fusion and the token-budgeted renderer. |
-| [iq-recall](iq-recall) | Indexes past session transcripts for topic-to-file recall and forking. |
 | [lsp](lsp) | The `lsp` CLI: TypeScript rename and diagnostics over the native compiler. |
 | [iq-bench](iq-bench) | Benchmarks retrieval configs and paired agent runs with and without iq. |
 

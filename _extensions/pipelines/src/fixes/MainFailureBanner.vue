@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { FixResume, MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract";
 import {
-    activeLocale,
-    AgentRunButton,
     type AgentRunAttempt,
+    AgentRunButton,
     type AgentRunChoice,
     appLink,
     fixStanceLook,
+    formatClock,
     formatDate,
     formatDayMonthTime,
     formatTimestamp,
@@ -153,11 +153,9 @@ const pressFix = (): void => {
     }
 };
 
-// The wall-clock minute it started failing, with its day once it is not today's: "10:20", "Sep 24, 09:10". The house
-// clock is 24-hour in every language (format.ts), so the hour is pinned rather than left to the locale.
-const clockOf = (at: number): string => new Intl.DateTimeFormat(activeLocale.value, { hour: `2-digit`, minute: `2-digit`, hour12: false }).format(at);
+// The wall-clock minute it started failing, with its day once it is not today's: "10:20", "Sep 24, 09:10".
 const since = computed(() =>
-    formatDate(failure.value.since) === formatDate(Date.now()) ? clockOf(failure.value.since) : formatDayMonthTime(failure.value.since),
+    formatDate(failure.value.since) === formatDate(Date.now()) ? formatClock(failure.value.since) : formatDayMonthTime(failure.value.since),
 );
 
 // THE LANE: a trunk down from the header's glyph and an elbow into each covered row's status glyph (`data-lane-node`,

@@ -2,9 +2,9 @@ import type { LoopDesign } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { pushedKeys } from "../../../lib/queryKeys";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Saved loop designs, read by the composer's loop picker and edited on their own page. Lives in core rather than
 // the workflows extension so composers still list them when workflows is off. Not polled: the daemon pushes

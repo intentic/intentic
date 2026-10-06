@@ -9,11 +9,22 @@ import {
     providerLabel,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Notice, type NoticeModel, RowGroup, RowNote, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
+import {
+    Button,
+    formatMoney,
+    formatTokens,
+    Notice,
+    type NoticeModel,
+    RowGroup,
+    RowNote,
+    SkeletonSnapshot,
+    StatusBadge,
+    timeAgo,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { hasSignIn, providerReady } from "../../chat/session/access";
-import { relativeTime } from "../../chat/models/catalog";
 import { providerTabs } from "../../chat/accounts/providerCatalog";
 import { useChat } from "../../chat/run/useChat";
 import { refreshConnections, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
@@ -27,7 +38,7 @@ import {
     planHeadroom,
     routedAccountFacts,
 } from "../../chat/session/usageStatus";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import EstatePicker from "./EstatePicker.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -139,7 +150,7 @@ const identityNote = (account: OauthAccount): string | undefined => {
     if (identity.length > 0) {
         return identity.join(` · `);
     }
-    return ambiguousLabels.value.has(account.label) ? `connected ${relativeTime(account.connectedAt)}` : undefined;
+    return ambiguousLabels.value.has(account.label) ? `connected ${timeAgo(account.connectedAt, { days: true })}` : undefined;
 };
 
 // Per-account usage summary, shown in the meter's card rather than permanently on the row. Always a line once
@@ -149,7 +160,7 @@ const usageLine = (id: string): string => {
     if (usage === undefined || usage.turns === 0) {
         return `No turns on this account yet.`;
     }
-    const cost = usage.costUsd > 0 ? ` · $${usage.costUsd.toFixed(2)}` : ``;
+    const cost = usage.costUsd > 0 ? ` · ${formatMoney(usage.costUsd)}` : ``;
     // Cache rate: cacheReadTokens / (cacheReadTokens + inputTokens), the share of prompt input served from cache.
     const cacheDenom = usage.cacheReadTokens + usage.inputTokens;
     const cache =
@@ -440,12 +451,13 @@ watch(() => route.query[`connect`], focusConnect);
                     />
                     {{ tab.label }}
                     <!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->
-                    <span
+                    <StatusBadge
                         v-if="accountsLoaded && isFreeProvider(tab.value) && !providerReady(tab.value)"
-                        class="shrink-0 rounded-sm bg-success/15 px-1 font-semibold text-success"
-                    >
-                        {{ t(`sandbox.aiAccountSection.free`) }}
-                    </span>
+                        variant="success"
+                        size="xs"
+                        class="shrink-0"
+                        :label="t(`sandbox.aiAccountSection.free`)"
+                    />
                 </button>
             </div>
         </template>

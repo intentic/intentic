@@ -1,4 +1,4 @@
-import { createFloatingSurface, type FloatingSurface } from "../../shell/window/floating";
+import { createFloatingSurface, type FloatingSurface } from "../../workbench/window/floating";
 import { markPreviewOpened } from "./previewSurface";
 
 // Preview panel's own window, on the chat's floating mechanism (composables/floating.ts owns the window contract).

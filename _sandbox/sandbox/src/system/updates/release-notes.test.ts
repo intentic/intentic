@@ -1,5 +1,7 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { expireTimeouts, stalledFetch } from "../../testing.js";
 import { isDevBuild } from "../../version.js";
+import { RELEASE_FETCH_TIMEOUT_MS } from "./version-check.js";
 import {
     breakingNotes,
     parseBreakingNotes,
@@ -118,6 +120,20 @@ test("a failed refresh keeps the previous cached notes", async () => {
     });
     await refreshReleaseNotes();
     expect(updateNotes("1.186.0")).toEqual(["Still here."]);
+});
+
+test("a GitHub that never answers times the refresh out and keeps the cached notes", async () => {
+    stubGlobal("fetch", async () => releasesResponse([{ tag_name: "v1.187.0", body: "## What's new\n\n- Kept through a stall.\n" }]));
+    await refreshReleaseNotes();
+    stubGlobal("fetch", stalledFetch);
+    const timeouts = expireTimeouts();
+    try {
+        await refreshReleaseNotes();
+        expect(timeouts.asked).toEqual([RELEASE_FETCH_TIMEOUT_MS]);
+    } finally {
+        timeouts.mockRestore();
+    }
+    expect(updateNotes("1.186.0")).toEqual(["Kept through a stall."]);
 });
 
 test("a dev build never fetches, for the same reason it is never offered an update", async () => {

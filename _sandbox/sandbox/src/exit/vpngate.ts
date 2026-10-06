@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
-import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import type { IntenticLine } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { halt as haltClient, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
+import { providerCatalog } from "./exit-catalog.js";
 import { rankCountries, VPNGATE_FALLBACK } from "./exit-countries.js";
 import type { ExitDriver, ExitProbe } from "./exit-driver.js";
 import { observeThroughAddress } from "./exit-observe.js";
-import { catalogPath, exitDir, exitInterface, exitProxyPort, exitStateDir, logPath, ovpnPath, pidPath } from "./exit-paths.js";
+import { exitInterface, exitProxyPort, exitStateDir, logPath, ovpnPath, pidPath } from "./exit-paths.js";
 import { readSelection, writeSelection } from "./exit-state.js";
 import { dropProxy, ensureProxy, proxyBound, tunnelAddress, tunnelResolver } from "./exit-tunnel.js";
 
@@ -21,13 +23,8 @@ const CATALOG_URL = "https://www.vpngate.net/api/iphone/";
 const CATALOG_TTL_MS = 30 * 60 * 1000;
 const DIAL_TIMEOUT_MS = 90_000;
 
-interface VpngateServer {
-    readonly host: string;
-    readonly ip: string;
-    readonly country: string;
-    readonly score: number;
-    readonly config: string;
-}
+const VpngateServerSchema = z.object({ host: z.string(), ip: z.string(), country: z.string(), score: z.number(), config: z.string() });
+type VpngateServer = z.infer<typeof VpngateServerSchema>;
 
 // Parsed positionally since the header format hasn't changed in a decade; a row under 15 fields is a truncated
 // transfer, dropped rather than half-read.
@@ -58,21 +55,9 @@ const fetchServers = async (): Promise<VpngateServer[] | undefined> => {
     return servers.length === 0 ? undefined : servers;
 };
 
-const cachedServers = async (): Promise<{ servers: VpngateServer[]; live: boolean }> => {
-    const path = catalogPath("vpngate");
-    const cached = await readFile(path, "utf8")
-        .then((raw) => JSON.parse(raw) as { at: number; servers: VpngateServer[] })
-        .catch(() => undefined);
-    if (cached !== undefined && Date.now() - cached.at < CATALOG_TTL_MS) {
-        return { servers: cached.servers, live: true };
-    }
-    const fresh = await fetchServers();
-    if (fresh === undefined) {
-        return cached === undefined ? { servers: [], live: false } : { servers: cached.servers, live: false };
-    }
-    await mkdir(exitDir(), { recursive: true, mode: 0o700 }).catch(() => undefined);
-    await writeFile(path, JSON.stringify({ at: Date.now(), servers: fresh }), { mode: 0o600 }).catch(() => undefined);
-    return { servers: fresh, live: true };
+const cachedServers = async (): Promise<{ servers: readonly VpngateServer[]; live: boolean }> => {
+    const { entries, live } = await providerCatalog("vpngate", "servers", VpngateServerSchema, CATALOG_TTL_MS, fetchServers);
+    return { servers: entries ?? [], live };
 };
 
 // Highest score in the country, skipping one to avoid: on a pool this small, a new address is just a different server,

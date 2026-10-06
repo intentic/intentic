@@ -1,6 +1,6 @@
 // The kit's export names: the single source consumed by the web app's shim generator
 // (_editor/web/scripts/generate-ext-shims.mjs) and hostModules' dev-time coverage assertion. Update alongside
-// src/index.ts; the assertion catches drift on the next dev boot.
+// src/index.ts; the assertion catches drift on the next dev boot, and extensionUiNames.test.ts fails it in CI.
 export const extensionUiNames = [
     "AgentRunButton",
     "AnchoredOverlay",
@@ -33,8 +33,15 @@ export const extensionUiNames = [
     "FilterBar",
     "fixStanceLook",
     "formatBytes",
+    "formatClock",
+    "formatCompact",
+    "formatCount",
+    "formatElapsed",
+    "formatMoney",
+    "formatPercent",
     "formatOf",
     "formatDate",
+    "formatDateLong",
     "formatDateTime",
     "formatDayMonth",
     "formatDayMonthTime",
@@ -48,6 +55,7 @@ export const extensionUiNames = [
     "serveWorkerCall",
     "WorkerCallError",
     "activeLocale",
+    "extensionI18n",
     "extensionT",
     "Icon",
     "ImageView",
@@ -57,6 +65,7 @@ export const extensionUiNames = [
     "Markdown",
     "MarkdownDocument",
     "MarkdownFigure",
+    "messageOr",
     "Modal",
     "NavRail",
     "NoteEditor",

@@ -29,7 +29,6 @@ itself depends on a package outside `_shared/` and `_tools/` loses that standing
 | [desktop-smoke-windows](desktop-smoke-windows) | Installs the shipped Windows installer on a real machine and drives it |
 | [dind-host](dind-host) | Docker-in-Docker plus sshd, standing in for a deploy host |
 | [e2e](e2e) | Browser tiers against a local stack, plus screenshots, mobile gate, promo |
-| [examples](examples) | Example intent files for the deploy engine, type-checked by the build |
 | [extension-example](extension-example) | Seed of the reference extension, one contribution of every kind |
 | [fake-model](fake-model) | A scripted model that drives a provider's real CLI offline |
 | [fake-upstream](fake-upstream) | Local deterministic stand-in for the model the free trial spends |

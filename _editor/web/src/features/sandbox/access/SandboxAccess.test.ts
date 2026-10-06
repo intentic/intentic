@@ -13,10 +13,10 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
 const sandboxJson = jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
-jest.mock(`../client/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
+jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
 // The door inventory's reads (automations, workflows, CI) go unstubbed: each names itself and counts as unknown, which
 // is all this suite asks of them.
-jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 const create = jest.fn();
 const list = jest.fn(async (): Promise<{ members: unknown[] }> => ({ members: [] }));
@@ -25,9 +25,9 @@ jest.mock(`../../../lib/useApi`, () => ({
     apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a), setRole: (...a: unknown[]) => setRole(...a) } },
 }));
 
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<MemberRole>(`owner`);
-jest.mock(`../client/useSandbox`, () => ({
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
         active: computed(() => ({ name: `radarsu-mig`, role: role.value })),
         activeSandboxId: ref(`s1`),
@@ -47,10 +47,10 @@ const areas = ref([
 jest.mock(`../areas/useAreas`, () => ({
     useAreas: () => ({ areas, labelOf: (id: string) => areas.value.find((area) => area.id === id)?.label ?? id }),
 }));
-jest.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
+jest.mock(`../../../workbench/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
-jest.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
+jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 

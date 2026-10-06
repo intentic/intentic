@@ -23,7 +23,7 @@ import { clockOffset, resetSandboxClock } from "../../../agents/fleet/sandboxClo
 import { IconStub } from "@intentic/ui/testing";
 import { scrollersUnderShut } from "../../../../testing/scrollersUnderShut";
 import { shownText } from "../../../../testing/shownText";
-import { agentStatusMeta, CLOCK_FROM_MS, type EndingByHand, formatElapsed } from "../../../agents/fleet/agentStatus";
+import { agentStatusMeta, CLOCK_FROM_MS, type EndingByHand } from "../../../agents/fleet/agentStatus";
 import { setLocale } from "@intentic/ui/i18n";
 import { useAudience } from "../../../../app/useAudience";
 
@@ -61,7 +61,7 @@ const beginEdit = jest.fn();
 const reply = jest.fn(async () => true);
 // What useMarkdown hands the row under test (prose runs, figures); empty unless the test is about the answer body.
 const markdown = {
-    parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
+    parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string; readonly items?: readonly { readonly label: string; readonly value: string }[] } }[],
 };
 const openLoopbackPreview = jest.fn();
 
@@ -107,7 +107,11 @@ const resizers = [] as { readonly targets: Element[]; readonly fire: () => void 
 // shadow.
 jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
+    // The kit's real formatters, from the subpath this mock does not replace: a row words its times through them.
+    const { formatElapsed, timeAgo } = await import("@intentic/ui/format");
     return {
+        formatElapsed,
+        timeAgo,
         useDevice: () => ({ mobile: vue.ref(false) }),
         // Real `<button>` with attrs passthrough, since card answers are asserted by click; the kit's own press-lock
         // has its own suite.
@@ -118,14 +122,9 @@ jest.mock("@intentic/ui", async () => {
                 () =>
                     vue.h(`button`, attrs, slots[`default`]?.()),
         }),
-        // Stands in for the figure kind only: this row cares whether a figure part reaches the bubble, not which
-        // picture it renders as.
-        MarkdownFigure: vue.defineComponent({
-            props: { figure: { type: Object, required: true } },
-            render(): unknown {
-                return vue.h(`div`, { class: `figure-stub` }, String(this.figure[`kind`]));
-            },
-        }),
+        // The kit's real parts loop, from the subpath this mock does not replace: the bubble's prose runs and figures are
+        // what it draws.
+        MarkdownParts: (await import("@intentic/ui/markdown-parts")).default,
         // The kit's own stub, not a copy of it: a card reaches Icon through this import OR through the app's global
         // registration, and `marks()` has to read one shape either way.
         Icon: (await import(`@intentic/ui/testing`)).IconStub,
@@ -174,13 +173,11 @@ jest.mock("../../drafts/attachmentPreviews", () => ({
     rememberMedia: () => undefined,
     forgetMedia: () => undefined,
 }));
-// formatElapsed stays real, since the loader's readout is exactly that format.
 jest.mock("../../../agents/fleet/agentStatus", () => ({
     agentStatusMeta,
     CLOCK_FROM_MS,
     effectiveAutoLand: () => false,
     effectiveOutageResume: () => false,
-    formatElapsed,
 }));
 // changedNothing stays real: it decides whether a checklist is drawn at all, which is a card's own reading.
 jest.mock("../transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
@@ -847,13 +844,14 @@ describe(`ChatMessageView answer body`, () => {
     it(`draws a figure the answer wrote, in its place among the prose`, () => {
         markdown.parts = [
             { kind: `html`, html: `<p>Here it is.</p>` },
-            { kind: `figure`, figure: { kind: `mermaid` } },
+            // A stats strip: the one figure kind that draws synchronously with no chart engine behind it.
+            { kind: `figure`, figure: { kind: `stats`, items: [{ label: `Coverage`, value: `92%` }] } },
             { kind: `html`, html: `<p>And after.</p>` },
         ];
         const element = mount(body);
         const rendered = element.querySelector(`.chat-markdown`)?.children ?? [];
-        expect([...rendered].map((child) => child.className)).toEqual([`md-part`, `figure-stub`, `md-part`]);
-        expect(rendered[1]?.textContent).toBe(`mermaid`);
+        expect([...rendered].map((child) => `${child.tagName}.${child.classList[0] ?? ``}`)).toEqual([`DIV.md-run`, `DL.my-4`, `DIV.md-run`]);
+        expect(rendered[1]?.textContent).toContain(`92%`);
     });
 
     it(`keeps a figure-free answer as plain prose wrappers`, () => {
@@ -862,8 +860,8 @@ describe(`ChatMessageView answer body`, () => {
             { kind: `html`, html: `<p>Still writing</p>` },
         ];
         const element = mount(body);
-        expect(element.querySelectorAll(`.chat-markdown > .md-part`)).toHaveLength(2);
-        expect(element.querySelector(`.figure-stub`)).toBeNull();
+        expect(element.querySelectorAll(`.chat-markdown > .md-run`)).toHaveLength(2);
+        expect(element.querySelector(`.chat-markdown dl`)).toBeNull();
     });
 
     it(`opens a localhost link through the sandbox's forwarded port`, () => {

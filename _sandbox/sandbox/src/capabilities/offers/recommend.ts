@@ -1,7 +1,7 @@
 import { access, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Capability, CapabilityRecommendation } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { parseRemote, remoteUrlsOf } from "../../git/remote/remote-urls.js";
 import { discoverRepos, hasGitEntry } from "../../workspace/layout/repo-discovery.js";

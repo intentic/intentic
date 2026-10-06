@@ -2,9 +2,9 @@ import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { adoptProjectScope } from "../../../app/projectScope";
-import { contributedFileBindings } from "../../../extension-host/fileBindings";
-import { emitFilesChanged } from "../../../extension-host/fileEvents";
-import { emitRefsChanged, emitReposChanged } from "../../../extension-host/repoEvents";
+import { contributedFileBindings } from "../../../workbench/workspace-events/fileBindings";
+import { emitFilesChanged } from "../../../workbench/workspace-events/fileEvents";
+import { emitRefsChanged, emitReposChanged } from "../../../workbench/workspace-events/repoEvents";
 import { dropEditBuffers } from "../../workspace/files/useEditBuffers";
 import { desyncAgents } from "../../agents/fleet/useAgents";
 import { auditRoster, refreshAgents, setAgents } from "../../agents/fleet/useAgents-registry";
@@ -13,14 +13,14 @@ import { useChat } from "../../chat/run/useChat";
 import { agentReviewPrefixes, pushedKeys, rpcPrefix } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
-import { setPresenceUsers } from "../../../shell/presence/usePresence";
+import { setPresenceUsers } from "../../../workbench/presence/usePresence";
 import { landingNow } from "../../workspace/changes/landing";
 import { applyTreeChanged, markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/live/useWorkspaceLive";
 import { emitRuntimeChanged } from "./runtimeEvents";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
-import { setDaemonBoot } from "../overview/useDaemonBoot";
-import { setDaemonRoutes } from "../overview/useDaemonRoutes";
-import { useSandbox } from "../client/useSandbox";
+import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
+import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // Routes a daemon `/events` frame to whatever it invalidates; connection liveness lives elsewhere (see
 // useSandboxLiveness). The switch is exhaustive over the `SystemEvent` union, so an unhandled frame kind is a
@@ -181,7 +181,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // Watcher never sees `.git` paths, so no workspaceChanged batch covers this; the daemon diffs its own repo
             // discovery.
             void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`panels.list`) });
-            // Extensions own their own caches; this only announces the new set (see extension-host/repoEvents).
+            // Extensions own their own caches; this only announces the new set (see workbench/workspace-events/repoEvents).
             emitReposChanged(event.repos);
             return;
         case `refsChanged`: {
@@ -194,7 +194,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             if (worktreeMovedRecently()) {
                 dropEditBuffers();
             }
-            // Extensions own their own caches; this only announces that a ref moved (see extension-host/repoEvents).
+            // Extensions own their own caches; this only announces that a ref moved (see workbench/workspace-events/repoEvents).
             emitRefsChanged(event.repos);
             return;
         }

@@ -1,5 +1,6 @@
 import { sameAccount } from "../../agent/providers/accounts/account-identity.js";
 import { randomUUID } from "node:crypto";
+import { serialLock } from "@intentic/base/async";
 import type { MintedProvider, OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -72,13 +73,8 @@ export const fileMintedStore = (input: {
     // Connects run one at a time: the stamp is read from what's already on disk, and two landing together (two estates
     // approved the same second, a scripted seed) would tie. Only connect needs the queue; rename keeps its stamp,
     // disconnect removes by name.
-    let queue: Promise<unknown> = Promise.resolve();
-    const serialized = <T>(step: () => Promise<T>): Promise<T> => {
-        // Both arms are `step`, so one caller's rejection does not cancel the next one's turn.
-        const next = queue.then(step, step);
-        queue = next.catch(() => undefined);
-        return next;
-    };
+    // serialLock runs each step after the last however it ended, so one caller's rejection does not cancel the next one's turn.
+    const serialized = serialLock();
     return {
         list: async () => (await files.list()).map((stored) => toMintedAccount(stored, providerName)),
         credentials: files.list,

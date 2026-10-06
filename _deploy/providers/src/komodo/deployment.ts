@@ -3,7 +3,6 @@ import { z } from "zod";
 import { hasPendingRef, parseInputs, registryImage, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { DeploymentConfig, KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
@@ -80,7 +79,7 @@ const observedKey = (config: DeploymentConfig): string => JSON.stringify(normali
 // One Komodo Deployment per environment (name = ctx.id), pulled from the CI-pushed registry image; API calls go
 // over an SSH port-forward to Core, never the public route. `apply` only registers it; CI and Komodo's auto_update roll
 // it out.
-export const createDeploymentProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createDeploymentProvider = (api: KomodoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;

@@ -1,7 +1,6 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import { plainText } from "@intentic/base/plain-text";
-import { detachedStamp } from "../seams/workload-stamp.js";
-import { spawnAs } from "../workload/workload-class.js";
+import { runCheck, shellArgv } from "../workload/run-check.js";
 import { conditionHolds, reposOf, standing } from "./rules.js";
 import { workspaceRelative } from "./workspace-relative.js";
 
@@ -115,44 +114,23 @@ export const fileEditedReviewer = (
 // running, holding the output pipe and with it the edit's answer.
 export const spawnEditCommand =
     (cwd: string): EditCommandRunner =>
-    (command, timeoutMs) =>
-        new Promise((resolve) => {
-            let output = "";
-            let timedOut = false;
-            // Its deadline rides along, so the reaper ends it even when the daemon that set it is gone.
-            const child = spawnAs({ class: "command" }, "bash", ["-c", command], {
-                cwd,
-                env: { ...process.env, ...detachedStamp("edit-rule", Date.now() + timeoutMs) },
-                detached: true,
-                stdio: ["ignore", "pipe", "pipe"],
-            });
-            const keep = (chunk: Buffer): void => {
-                output = `${output}${chunk.toString("utf8")}`.slice(-OUTPUT_BYTES * 4);
-            };
-            child.stdout.on("data", keep);
-            child.stderr.on("data", keep);
-            const watchdog = setTimeout(() => {
-                timedOut = true;
-                // Never without a pid: a group of -0 would be the daemon's own.
-                if (child.pid !== undefined) {
-                    try {
-                        process.kill(-child.pid, "SIGKILL");
-                    } catch {
-                        // allow(silent-catch): the group is already gone, which is what the kill was for.
-                    }
-                }
-            }, timeoutMs);
-            watchdog.unref();
-            child.on("error", (error) => {
-                clearTimeout(watchdog);
-                resolve({ status: "error", output: error.message });
-            });
-            child.on("close", (code) => {
-                clearTimeout(watchdog);
-                if (timedOut) {
-                    resolve({ status: "error", output: `did not finish within ${Math.round(timeoutMs / 1000)}s` });
-                    return;
-                }
-                resolve({ status: code === 0 ? "passed" : "failed", output: plainText(output) });
-            });
+    async (command, timeoutMs) => {
+        const ran = await runCheck({
+            argv: shellArgv(command, "bash"),
+            cwd,
+            timeoutMs,
+            workload: { class: "command" },
+            kind: "edit-rule",
+            // The tail is what names a failure; a rolling window past it keeps memory flat for a chatty linter.
+            captureBytes: OUTPUT_BYTES * 4,
+            keep: "tail",
+            interleave: true,
         });
+        if (ran.spawnError !== undefined) {
+            return { status: "error", output: ran.spawnError };
+        }
+        if (ran.ended === "timeout") {
+            return { status: "error", output: `did not finish within ${Math.round(timeoutMs / 1000)}s` };
+        }
+        return { status: ran.exitCode === 0 ? "passed" : "failed", output: plainText(ran.stdout) };
+    };

@@ -95,7 +95,7 @@ export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DE
 
 /**
  * Where a door marked "sandbox" leads for this reader. The hub's own default is a section a guest is refused, and the
- * shell fence (shell/guestPaths.ts) sends it home from the hub root before the hub can redirect — so a guest's door
+ * shell fence (lib/routes/guestPaths.ts) sends it home from the hub root before the hub can redirect — so a guest's door
  * names its one section outright rather than opening on a bounce.
  */
 export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectionPath(GUEST_SECTION) : `/sandbox`);

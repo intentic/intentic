@@ -4,7 +4,6 @@ import { normalize, SECRET_KOMODO, starterDockerfile } from "../core/ci-yaml.js"
 import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
@@ -78,7 +77,7 @@ const workflowYaml = (parsed: CiInputs): string => {
 
 // App's CI/CD wiring: commits the build-and-deploy workflow and sets the registry-push + Komodo-login secrets it
 // consumes. `read` keys off the committed workflow file, since secrets can't be read back and are re-set every apply.
-export const createCiProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createCiProvider = (api: ForgejoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         if (hasPendingRef(inputs, "komodoUrl", "packagesToken")) {
             return undefined;

@@ -121,7 +121,7 @@ jest.mock(`./usePeerConnect`, () => ({
 // machine and revoking another device's access are maintainer and up at the daemon (its operating gate, `ownerDenied`),
 // so a maintainer who is not the owner is the reader that tells the two flags apart.
 const role = ref<MemberRole>(`owner`);
-jest.mock(`../secrets/useRole`, () => ({
+jest.mock(`../../../client/sandbox/useRole`, () => ({
     useRole: () => ({
         canShip: computed(() => roleAtLeast(role.value, `maintainer`)),
         isOwner: computed(() => role.value === `owner`),
@@ -132,7 +132,7 @@ jest.mock(`../secrets/useRole`, () => ({
 const daemon = ref<string | undefined>();
 // The account's sandbox list: what a container's row is named from, matched by the first label of each daemon URL.
 const account = ref<{ name: string; daemonUrl: string | null }[]>([]);
-jest.mock(`../client/useSandbox`, () => ({
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ daemonUrl: daemon, sandboxes: account }),
     sandboxKey: (name: string) => [name],
 }));

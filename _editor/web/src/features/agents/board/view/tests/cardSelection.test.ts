@@ -6,7 +6,7 @@ import { type EffectScope, effectScope, nextTick, reactive, ref, shallowRef } fr
 import type { LocationQuery, RouteLocationRaw, Router } from "vue-router";
 import { quickBarShowAsk } from "../../../../chat/panel/chatPanelLayout";
 import { agentTabOf } from "../../../../chat/panel/useChat-reveal";
-import { useLayout } from "../../../../../shell/window/useLayout";
+import { useLayout } from "../../../../../workbench/window/useLayout";
 import type { Summons } from "../../../../chat/run/summon";
 import { EMPTY_STRIP, type Strip, type TabFacts } from "../../../../chat/tabs/tabFacts";
 import { NO_ATTENTION } from "../../../fleet/agentStatus";

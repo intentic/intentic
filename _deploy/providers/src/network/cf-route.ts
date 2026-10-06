@@ -49,6 +49,21 @@ const waitForDnsPropagation: DnsPropagationWait = async (hostname, log) => {
     }
 };
 
+// Points `name` at `content` with a proxied CNAME stamped `comment`: an update when the record exists, else a create.
+// Idempotent. The route provider's apply and the CLI's host SSH tunnel both upsert through this.
+export const upsertCname = async (
+    api: CloudflareApi,
+    args: { readonly apiToken: string; readonly zoneId: string; readonly name: string; readonly content: string; readonly comment: string },
+): Promise<void> => {
+    const { apiToken, zoneId, name, content, comment } = args;
+    const record = await api.findDnsRecord({ apiToken, zoneId, name });
+    if (record === undefined) {
+        await api.createDnsRecord({ apiToken, zoneId, name, content, comment });
+    } else {
+        await api.updateDnsRecord({ apiToken, zoneId, recordId: record.id, name, content, comment });
+    }
+};
+
 // One public hostname's proxied CNAME, pointed at the host tunnel's cfargotunnel hostname. `read` surfaces the
 // current target; `diff` compares it to the tunnel's cname; `apply` upserts the stamped CNAME and awaits propagation.
 export const createCfRouteProvider = (
@@ -88,12 +103,7 @@ export const createCfRouteProvider = (
     apply: async (inputs, _observed, ctx) => {
         const { hostname, zoneId, apiToken, cname } = parse(inputs);
         const { comment } = stampComment(ctx.id, ctx.owner);
-        const record = await api.findDnsRecord({ apiToken, zoneId, name: hostname });
-        if (record === undefined) {
-            await api.createDnsRecord({ apiToken, zoneId, name: hostname, content: cname, comment });
-        } else {
-            await api.updateDnsRecord({ apiToken, zoneId, recordId: record.id, name: hostname, content: cname, comment });
-        }
+        await upsertCname(api, { apiToken, zoneId, name: hostname, content: cname, comment });
         await awaitPropagation(hostname, ctx.log);
         return { url: `https://${hostname}` };
     },

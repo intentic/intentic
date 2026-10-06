@@ -1,11 +1,11 @@
 import type { RepoChecksSummary } from "@intentic/sandbox-contract";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // What each repository asks to have run on its own code, and whether the owner has said yes. Read separately from the
 // settings, because the declaration is a tracked file inside the repository: it changes with a commit or a pull, while

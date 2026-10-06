@@ -3,12 +3,12 @@
 import { AppBrand, Button, vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAuth } from "./useAuth";
+import { useAuth } from "../../client/auth/useAuth";
 import { useBrowserHandoff } from "./browserHandoff";
-import { useGoogleIdentity } from "./useGoogleIdentity";
+import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { desktopVersion } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
-import { returnPath } from "../../router/signIn";
+import { returnPath } from "../../lib/routes/signIn";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -18,7 +18,7 @@ const { getIdToken, renderButton } = useGoogleIdentity();
 const router = useRouter();
 const route = useRoute();
 
-// Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (router/signIn.ts).
+// Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (lib/routes/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
 
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.

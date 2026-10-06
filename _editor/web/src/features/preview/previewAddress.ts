@@ -1,5 +1,5 @@
 import { probePreviewOnce } from "@intentic/ui";
-import { useEndpoint } from "../sandbox/secrets/useEndpoint";
+import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { loopbackPreviewUrl } from "./previewLane";
 
 // The address to frame or open a preview at, for this browser: the loopback twin when the app is on the daemon's

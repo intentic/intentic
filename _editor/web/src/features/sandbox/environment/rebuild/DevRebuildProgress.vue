@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { DeviceRunLog, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
+import { DeviceRunLog, formatElapsed, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { DEV_REBUILD_STEPS, type DevRebuildStage, stageStart } from "./devRebuildStages";
-import { type DevRebuildRun, rebuildElapsedLabel, rebuildRunning } from "./useDevRebuild";
+import { type DevRebuildRun, rebuildRunning } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
 // A REBUILD DRAWN AS THE THREE THINGS IT DOES, not as a wall of somebody else's build output. The log is what a reader
@@ -77,7 +77,7 @@ const steps = computed(() =>
 const ICONS: Record<StepState, IconName> = { done: `check-circle`, running: `spinner`, pending: `circle`, stopped: `exclamation-triangle` };
 const TONES: Record<StepState, string> = { done: `text-success`, running: `text-info`, pending: `text-muted`, stopped: `text-warning` };
 
-const elapsedLabel = computed(() => rebuildElapsedLabel(props.elapsed));
+const elapsedLabel = computed(() => (props.elapsed === undefined ? undefined : formatElapsed(props.elapsed)));
 
 // What the step is on this second, in the tool's own words: the package turbo is compiling, docker's layer count, the
 // sentence ic printed. Only ever beside the running step, since it describes this instant and nothing else.
@@ -191,7 +191,7 @@ const logLabel = computed(() => (showLog.value ? `Hide the build log` : `Show th
                     <span v-if="step.state === 'running'" class="block truncate text-2xs text-subtle">{{ detail ?? step.note }}</span>
                 </span>
                 <span v-if="step.seconds !== undefined" class="shrink-0 font-mono text-2xs tabular-nums text-muted">{{
-                    rebuildElapsedLabel(step.seconds)
+                    formatElapsed(step.seconds)
                 }}</span>
             </li>
         </ol>

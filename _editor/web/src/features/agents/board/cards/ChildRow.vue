@@ -2,11 +2,11 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
-import { formatElapsed } from "../../fleet/agentStatus";
 import AgentCardDate from "./AgentCardDate.vue";
-import { markSegments } from "../../review/markSegments";
+import { markSegments } from "../../../../lib/markSegments";
 import { inProcess, type TrayChild } from "../view/childFold";
 import { childLook } from "./childLook";
+import { formatElapsed } from "@intentic/ui";
 import RunFacts from "./RunFacts.vue";
 
 // One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
@@ -83,7 +83,7 @@ const menu = (event: MouseEvent): void => {
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
             <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
             <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
-                formatElapsed(look.since, now)
+                formatElapsed((now - look.since) / 1000)
             }}</span>
             <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">
                 <AgentCardDate :at="look.at" />

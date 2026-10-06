@@ -1,4 +1,4 @@
-import { errorMessage, useNow } from "@intentic/ui/async";
+import { messageOr, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref } from "vue";
 import { type LimitGroup, limitGroups, limited } from "../../fleet/agentStatus";
@@ -35,7 +35,7 @@ export const useResumeAll = (host: ResumeAllHost) => {
             const answers = await Promise.allSettled(group.ids.map((id) => press(id)));
             const refused = answers.find((answer): answer is PromiseRejectedResult => answer.status === `rejected`);
             if (refused !== undefined) {
-                host.notice.value = errorMessage(refused.reason, t(`agents.resumeAll.couldntResumeEvery`));
+                host.notice.value = messageOr(refused.reason, t(`agents.resumeAll.couldntResumeEvery`));
             }
         } finally {
             const left = new Set(busy.value);

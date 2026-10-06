@@ -1,6 +1,9 @@
 import { join } from "node:path";
-import { extensionRuntimeDir, type ListenerPairing } from "@intentic/sandbox-contract";
-import { type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";
+import type { ListenerPairing } from "@intentic/sandbox-contract";
+// The subpath, not the package root: the root loads every schema in the contract, tens of megabytes this process never
+// uses.
+import { extensionRuntimeDir } from "@intentic/sandbox-contract/workspace-state";
+import { deliverChunked, type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";
 import {
     closeWhatsAppConnection,
     forgetWhatsAppConnection,
@@ -110,9 +113,8 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 if (target.kind !== "jid") {
                     throw new GatewayRefusal(`No single WhatsApp chat matches ${channelId}.`);
                 }
-                for (let base = 0; base < text.length; base += WHATSAPP_MAX) {
-                    await connection.sendText(target.jid, text.slice(base, base + WHATSAPP_MAX));
-                }
+                const jid = target.jid;
+                await deliverChunked([connection], (each, chunk) => each.sendText(jid, chunk), text, WHATSAPP_MAX, () => new GatewayRefusal("WhatsApp is not connected."));
             },
             // Loopback control surface the `whatsapp` CLI drives (routes.ts).
             routes: createControlRoutes({ ready: firstReady, connections: whatsappConnections, mediaDir, log: ctx.log }),

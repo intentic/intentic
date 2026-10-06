@@ -2,6 +2,7 @@ export * from "./bundle.js";
 export * from "./contribution-point.js";
 export * from "./json-schema.js";
 export * from "./manifest.js";
+export { ART_MAX_BYTES } from "./mark.js";
 export * from "./meaning.js";
 export * from "./permissions.js";
 export * from "./points/index.js";

@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { TrialStatusSchema } from "@intentic/sandbox-contract";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Simulates a real page refresh, which resetSandboxScope() can't: a fresh module graph means useChat's
@@ -9,7 +9,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The reads a reachable daemon answers: the two accounts behind the seeded tabs, and every other connection empty. A
 // catalog is refused, as for a provider the daemon cannot list.
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         accounts: {
             accounts: async ({ provider }) => ({
@@ -36,7 +36,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
 }));
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     // Already bound when the module graph loads, the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);

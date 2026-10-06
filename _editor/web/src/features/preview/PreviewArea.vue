@@ -1,11 +1,11 @@
 <!-- Desktop /preview route that hosts the preview panel and its detached-window recall. -->
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
-import { onMounted, onUnmounted, useTemplateRef, watch } from "vue";
+import { Button, EmptyState } from "@intentic/ui";
+import { useTemplateRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { markPreviewOpened, selectPreviewTarget } from "./previewSurface";
 import { usePreviewFloating } from "./previewFloating";
-import { previewSlot } from "../../shell/window/panelSlots";
+import { previewSlot, publishSlot } from "../../workbench/window/panelSlots";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -32,25 +32,24 @@ watch(
 );
 
 const slot = useTemplateRef(`slot`);
-onMounted(() => {
-    previewSlot.value = slot.value;
-});
-onUnmounted(() => {
-    previewSlot.value = null;
-});
+publishSlot(previewSlot, () => slot.value);
 </script>
 
 <template>
     <div class="relative h-full w-full">
         <!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
         <div ref="slot" class="contents"></div>
-        <div v-if="floats" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-            <Icon name="external-link" class="text-3xl text-subtle" />
-            <div>
-                <p class="text-sm font-medium text-content">{{ t(`preview.previewArea.previewInOwnWindow`) }}</p>
-                <p class="mt-1 text-xs text-muted">{{ t(`preview.previewArea.bringBackToFill`) }}</p>
-            </div>
-            <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`preview.previewArea.bringBackHere`) }} </Button>
-        </div>
+        <EmptyState
+            v-if="floats"
+            icon="external-link"
+            :title="t(`preview.previewArea.previewInOwnWindow`)"
+            :line="t(`preview.previewArea.bringBackToFill`)"
+            size="page"
+            class="absolute inset-0 p-6"
+        >
+            <template #actions>
+                <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`preview.previewArea.bringBackHere`) }} </Button>
+            </template>
+        </EmptyState>
     </div>
 </template>

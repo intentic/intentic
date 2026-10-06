@@ -2,8 +2,10 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { sleep } from "@intentic/base/async";
-import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract";
+// The subpath, not the package root: the root loads every schema in the contract, tens of megabytes a gateway never uses.
+import { extensionGatewayUrlFile } from "@intentic/sandbox-contract/workspace-state";
 import { type DaemonClient, createDaemonClient } from "./daemon.js";
 import type { GatewayCtx } from "./context.js";
 import { createLog } from "./log.js";
@@ -50,6 +52,12 @@ export class GatewayRefusal extends Error {
 export const deliveryErrorResponse = (provider: string, error: unknown): string =>
     error instanceof GatewayRefusal ? error.response : `the ${provider} connector could not deliver that message`;
 
+// What a delivery may say about the message it posted; /deliver answers it as JSON. `url` is a link to the first
+// message, for a caller that shows the owner where it went (the approvals queue's posted row).
+export interface Delivered {
+    readonly url?: string;
+}
+
 // The per-provider half of a gateway, returned by the spec's create(ctx), closing over the listener and connection pool
 // it builds.
 export interface GatewayHooks<TConfig, THandle> {
@@ -70,7 +78,7 @@ export interface GatewayHooks<TConfig, THandle> {
     // Per-gateway extras riding the status snapshot (discord: voice + whisper presence; whatsapp: pairing codes).
     readonly statusExtras?: () => Omit<ListenerStatus, "connections">;
     // Delivers a message into a channel between turns; channelId is the provider's own listener-reported id.
-    readonly deliver?: (channelId: string, text: string) => Promise<void>;
+    readonly deliver?: (channelId: string, text: string) => Promise<Delivered | void>;
     // The connector's loopback control surface; undefined means unmatched, throwing sends a 500 with the message.
     readonly routes?: (req: IncomingMessage, body: () => Promise<string>) => Promise<{ status?: number; body: string } | undefined>;
     // Overrides the default shutdown (close every held connection); use for a connector with its own teardown.
@@ -89,7 +97,7 @@ export interface GatewaySpec<TConfig extends { readonly provider: string }, THan
     readonly connectWithoutAutomations?: boolean;
     // Status cadence override (whatsapp: 5s).
     readonly statusMs?: number;
-    // Writes .intentic/local/runtime/extensions/<provider>/gateway.url so the agent's CLI can find the control surface.
+    // Writes the provider's extensionGatewayUrlFile so the agent's CLI can find the control surface (readGatewayUrl).
     readonly publishGatewayUrl?: boolean;
     readonly create: (ctx: GatewayCtx<TConfig>, control: GatewayControl) => GatewayHooks<TConfig, THandle>;
 }
@@ -234,10 +242,33 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         await daemon.status({ connections, ...hooks.statusExtras?.() });
     };
 
+    // The /deliver door: what it answers for a request body. A failed deliver answers 502 with the provider's bare
+    // sentence, not the generic `error:`-prefixed line; a delivered one answers what the hook said about it, as JSON.
+    const deliverAnswer = async (raw: string): Promise<{ status: number; body: string; type: string }> => {
+        const plain = (status: number, body: string) => ({ status, body, type: "text/plain" });
+        if (hooks.deliver === undefined) {
+            return plain(501, `the ${spec.provider} connector cannot post into a channel on its own`);
+        }
+        // SAFETY: an untrusted body; both fields are checked as non-empty strings before either is used.
+        const { channelId, text } = JSON.parse(raw || "{}") as { channelId?: unknown; text?: unknown };
+        if (typeof channelId !== "string" || channelId === "" || typeof text !== "string" || text === "") {
+            return plain(400, "channelId and text required");
+        }
+        try {
+            const delivered: Delivered | void = await hooks.deliver(channelId, text);
+            return { status: 200, body: JSON.stringify(delivered ?? {}), type: "application/json" };
+        } catch (error) {
+            if (!(error instanceof GatewayRefusal)) {
+                log.error({ err: error }, "delivery failed");
+            }
+            return plain(502, deliveryErrorResponse(spec.provider, error));
+        }
+    };
+
     // Loopback surface: /health always, plus the connector's control routes when it has a CLI; binds PORT.
     const server: Server = createServer((req, res) => {
-        const send = (text: string, status = 200): void => {
-            res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+        const send = (text: string, status = 200, type = "text/plain"): void => {
+            res.writeHead(status, { "content-type": `${type}; charset=utf-8` });
             res.end(text);
         };
         void (async () => {
@@ -252,25 +283,9 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                     await reconcileNow();
                     return send("ok");
                 }
-                // A failed deliver answers 502 with the provider's bare sentence, not the generic `error:`-prefixed
-                // line.
                 if (req.method === "POST" && path === "/deliver") {
-                    if (hooks.deliver === undefined) {
-                        return send(`the ${spec.provider} connector cannot post into a channel on its own`, 501);
-                    }
-                    const { channelId, text } = JSON.parse((await readBody(req)) || "{}") as { channelId?: unknown; text?: unknown };
-                    if (typeof channelId !== "string" || channelId === "" || typeof text !== "string" || text === "") {
-                        return send("channelId and text required", 400);
-                    }
-                    try {
-                        await hooks.deliver(channelId, text);
-                    } catch (error) {
-                        if (!(error instanceof GatewayRefusal)) {
-                            log.error({ err: error }, "delivery failed");
-                        }
-                        return send(deliveryErrorResponse(spec.provider, error), 502);
-                    }
-                    return send("ok");
+                    const answer = await deliverAnswer(await readBody(req));
+                    return send(answer.body, answer.status, answer.type);
                 }
                 const handled = await hooks.routes?.(req, () => readBody(req));
                 if (handled !== undefined) {
@@ -286,7 +301,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
 
     // Publishes the control address for the agent's CLI to read.
     if (spec.publishGatewayUrl === true) {
-        const urlFile = join(workspaceRoot, STATE_DIR, "local", "runtime", "extensions", spec.provider, "gateway.url");
+        const urlFile = join(workspaceRoot, extensionGatewayUrlFile(spec.provider));
         await mkdir(dirname(urlFile), { recursive: true });
         await writeFile(urlFile, `http://127.0.0.1:${port}`);
     }

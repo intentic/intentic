@@ -306,6 +306,6 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-<!-- Every press here is the editor's: its gutter selects lines under an arrow cursor (shell/window/windowGesture.ts). -->
+<!-- Every press here is the editor's: its gutter selects lines under an arrow cursor (workbench/window/windowGesture.ts). -->
     <div ref="host" class="h-full w-full bg-canvas" data-window-no-drag></div>
 </template>

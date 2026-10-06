@@ -1,6 +1,6 @@
 import { MEMORY_FILE } from "@intentic/constants";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
-import { vocabularyFor } from "../../../../core-views/vocabulary";
+import { vocabularyFor } from "../../../../workbench/views/vocabulary";
 import { specialChip } from "../specialPaths";
 
 // A role the sandbox enforces and the name doesn't state: the chip is the only place the tree says so.

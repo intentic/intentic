@@ -11,10 +11,10 @@ import { installI18n } from "@intentic/ui/i18n";
 
 // The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
 // built here.
-jest.mock(`../../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
 // The roster a test connects a machine into; the pair route answers a token regardless.
 const roster = ref<unknown[]>([]);
-jest.mock(`../../../sandbox/client/sandboxClient`, () => ({
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
     sandboxRequest: jest.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
 }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.

@@ -4,6 +4,7 @@ import Icon from "@intentic/ui/icon";
 import Markdown from "@intentic/ui/markdown-view";
 import { formatDate, formatDateTime } from "@intentic/ui/format";
 import { CHAT_SURFACE } from "@intentic/web/features/chat/tools/chatToolSurface";
+import { dayMarksOf, turnsOf } from "@intentic/web/features/chat/transcript/transcript";
 import ChatToolCard from "@intentic/web/features/chat/tools/ChatToolCard.vue";
 import { computed, provide, ref } from "vue";
 import { readPayload } from "./payload";
@@ -31,26 +32,15 @@ const subtitle = computed(() => {
         return "";
     }
     const count = shared.messages.length;
-    return `${count} message${count === 1 ? "" : "s"} · shared ${formatDate(shared.sharedAt)}`;
+    return t(`share.shareApp.subtitle`, { count, date: formatDate(shared.sharedAt) }, count);
 });
 
-// Marks where the day changes, using only user rows' timestamps (a turn's answers belong to the day it was
-// asked). A conversation from before timestamps existed just gets no markers, not guesses.
-const dayMarks = computed(() => {
-    const marks = new Map<number, string>();
-    let last: string | undefined;
-    (payload.value?.messages ?? []).forEach((message, index) => {
-        if (message.sentAt === undefined) {
-            return;
-        }
-        const day = formatDate(message.sentAt);
-        if (day !== last) {
-            marks.set(index, day);
-            last = day;
-        }
-    });
-    return marks;
-});
+// Marks where the day changes, the app's own rule (a turn's answers belong to the day it was asked). Rows are keyed by
+// their index here, so a turn's id is its opening row's index, which is what the template looks up. A conversation
+// from before timestamps existed just gets no markers, not guesses.
+const dayMarks = computed(() =>
+    dayMarksOf(turnsOf((payload.value?.messages ?? []).map((message, index) => ({ ...message, id: index })))),
+);
 
 // Always false: a settled record has nothing in flight, so no card may animate.
 const LIVE = false;

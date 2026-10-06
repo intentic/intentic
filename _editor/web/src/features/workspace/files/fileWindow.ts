@@ -1,6 +1,6 @@
-import type { WorkspaceFileResponse } from "@intentic/api-contract";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { type ViewScope, workspaceScope } from "../health/workspaceScope";
+import type { WorkspaceFile } from "@intentic/sandbox-contract";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { type ViewScope, workspaceScope } from "../../../app/workspaceScope";
 
 // The only way the browser reads workspace text: a bounded window, never the whole file. The daemon clamps `limit` to
 // its own MAX_TEXT_BYTES and reports the range it served, so this is a request, not a guarantee. Larger than
@@ -14,7 +14,7 @@ export const FILE_WINDOW_BYTES = 4 * 1024 * 1024;
 export const readFileWindow = (
     path: string,
     opts?: { offset?: number; limit?: number; signal?: AbortSignal; scope?: ViewScope },
-): Promise<WorkspaceFileResponse> =>
+): Promise<WorkspaceFile> =>
     sandboxRpc.workspace.file(
         { path, limit: opts?.limit ?? FILE_WINDOW_BYTES, offset: opts?.offset, agent: (opts?.scope ?? workspaceScope()).agent },
         { signal: opts?.signal },

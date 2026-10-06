@@ -22,7 +22,7 @@ import SecretField from "../../capabilities/connect/SecretField.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../extensions/useExtensions";
 import { readIntenticLines } from "../../../lib/intenticStream";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";

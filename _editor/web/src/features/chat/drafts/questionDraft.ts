@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // Picks for an AskUserQuestion card, kept outside its component so they survive a reload while the run (daemon-side)
 // stays parked. Keyed by requestId, matching the replayed frame, so a draft finds its own card and no other. Dropped
 // once the card stops being pending; the age sweep below catches the ones a closed tab left behind.
@@ -37,6 +39,24 @@ interface StoredDraft extends QuestionDraft {
 
 const EMPTY: QuestionDraft = { selections: {}, otherTexts: {} };
 
+// A stored draft as this build reads it back. Every field but the age is optional, as older builds wrote fewer of them;
+// one of the wrong shape (another build's, a hand edit) is no draft at all rather than a card drawn from garbage.
+const StoredDraftSchema = z.object({
+    selections: z.record(z.string(), z.array(z.string())).optional(),
+    otherTexts: z.record(z.string(), z.string()).optional(),
+    otherFiles: z.record(z.string(), z.array(z.object({ name: z.string(), path: z.string() }))).optional(),
+    savedAt: z.number().optional(),
+});
+
+const parseStored = (raw: string): z.infer<typeof StoredDraftSchema> | undefined => {
+    try {
+        return StoredDraftSchema.safeParse(JSON.parse(raw)).data;
+    } catch {
+        // allow(silent-catch): text that is not JSON is no draft, the same answer as one of the wrong shape.
+        return undefined;
+    }
+};
+
 const key = (requestId: string): string => `${PREFIX}${requestId}`;
 
 // A draft replays into a live card, so only picks that card would still accept survive: the first still-legal
@@ -63,7 +83,10 @@ export const readQuestionDraft = (requestId: string, questions: readonly DraftQu
         if (raw === null) {
             return EMPTY;
         }
-        const stored = JSON.parse(raw) as StoredDraft;
+        const stored = parseStored(raw);
+        if (stored === undefined) {
+            return EMPTY;
+        }
         return normalize(
             {
                 selections: stored.selections ?? {},
@@ -104,13 +127,8 @@ const sweep = (): void => {
             if (!storageKey.startsWith(PREFIX)) {
                 return false;
             }
-            try {
-                const stored = JSON.parse(localStorage.getItem(storageKey) ?? `{}`) as Partial<StoredDraft>;
-                return (stored.savedAt ?? 0) < cutoff;
-            } catch {
-                // Unparseable entry under this prefix is dead weight by definition.
-                return true;
-            }
+            // An entry this build cannot read under this prefix is dead weight by definition.
+            return (parseStored(localStorage.getItem(storageKey) ?? `{}`)?.savedAt ?? 0) < cutoff;
         });
         for (const storageKey of stale) {
             localStorage.removeItem(storageKey);

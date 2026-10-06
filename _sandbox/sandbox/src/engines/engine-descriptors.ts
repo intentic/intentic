@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { type EngineId, isNewer } from "@intentic/sandbox-contract";
-import { readPack } from "../environment/packs.js";
+import { readPack } from "../image/packs.js";
 
 // Per-engine table: what package upstream publishes it as, what a working install looks like, and what proves a copy
 // still works. The floor is read from the pack that installs it (or Claude's own npm dependency), never restated by

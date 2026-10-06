@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { type KeyIntent, type KeyPress, keyIntent, type KeyView } from "./treeKeys";
 import type { MoreRow, Row } from "./treeRows";
 

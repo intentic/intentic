@@ -2,6 +2,7 @@ import type { AutoUpdate, AutoUpdateHold } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { formatUntil } from "@intentic/ui/time";
+import { formatDuration } from "@intentic/ui/format";
 
 // WHAT AN UPDATE THAT TAKES ITSELF SAYS. The daemon decides the moment (system/updates/auto-update.ts) and says where it
 // stands on /info: waiting and on what, counting down, handing itself to the machine. This turns that into the card's
@@ -72,10 +73,8 @@ export const holdLine = (hold: AutoUpdateHold, me: readonly string[], now: numbe
 };
 
 /** "1:30", "0:07": what is left of a countdown, never below zero. */
-export const countdownClock = (startsAt: number, now: number): string => {
-    const seconds = Math.max(0, Math.ceil((startsAt - now) / 1000));
-    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, `0`)}`;
-};
+// Rounded up: a countdown that reads "0:00" has run out, not got under a second left.
+export const countdownClock = (startsAt: number, now: number): string => formatDuration(Math.max(0, Math.ceil((startsAt - now) / 1000)));
 
 /**
  * "Not today", as a moment: the next 04:00 on the reader's own clock that is at least four hours off. Overnight is

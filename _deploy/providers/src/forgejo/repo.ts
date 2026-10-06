@@ -3,7 +3,6 @@ import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
@@ -33,7 +32,7 @@ const outputsFor = (parsed: RepoInputs): Record<string, unknown> => ({
 // The app's source repository, created under its owner (a team's org, or the admin user when team-less). read
 // returns undefined while Forgejo is unreachable, so a plan proceeds; apply create-or-skips. The org-vs-admin
 // endpoint is picked by whether the owner is the admin user.
-export const createRepoProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createRepoProvider = (api: ForgejoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         try {

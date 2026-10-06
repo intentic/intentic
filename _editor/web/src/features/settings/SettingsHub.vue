@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { type NavGroup, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import HubLayout from "../../shell/hub/HubLayout.vue";
-import type { HubTab } from "../../shell/hub/hubNav";
-import { hubWorkKey, hubWorkRunning } from "../../shell/hub/hubWork";
+import HubLayout from "../../workbench/hub/HubLayout.vue";
+import type { HubTab } from "../../workbench/hub/hubNav";
+import { hubWorkKey, hubWorkRunning } from "../../workbench/hub/hubWork";
 import { computed } from "vue";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import SettingsAppearance from "./SettingsAppearance.vue";

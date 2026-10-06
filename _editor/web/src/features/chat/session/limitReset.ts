@@ -1,7 +1,7 @@
 import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
 import { ref } from "vue";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { t } from "@intentic/ui/i18n";
 
 // Client side of the session-limit reset: the provider can reopen a spent five-hour window once a week per account

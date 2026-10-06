@@ -1,7 +1,7 @@
 import type { DesktopState } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { rpcQuery } from "../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 // The sandbox's own desktop as the rail tile and the Desktop view both read it (like browsersQuery): whether it is up and
 // how many windows are open on it. Nothing polls; the daemon pushes the `desktop` domain as a window opens or closes

@@ -4,7 +4,7 @@
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { type SshKey, stashedMarker, stashedToken } from "@intentic/sandbox-contract";
 import { Button, Code, ui } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { authorizeCommand } from "../model/sshKey";
@@ -47,7 +47,7 @@ const generate = async (): Promise<void> => {
         values[field.key] = stashedMarker(key.token);
         emit(`left`);
     } catch (error) {
-        failure.value = errorMessage(error, t(`capabilities.sshKeyField.couldntGenerate`));
+        failure.value = messageOr(error, t(`capabilities.sshKeyField.couldntGenerate`));
     } finally {
         generating.value = false;
     }

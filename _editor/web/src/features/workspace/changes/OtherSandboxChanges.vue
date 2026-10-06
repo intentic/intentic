@@ -16,8 +16,8 @@ import {
     subscribeChanges,
     uncommittedAcross,
 } from "./changesAcross";
-import { landOnAfterSwitch } from "../../sandbox/client/sandboxScreen";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { landOnAfterSwitch } from "../../sandbox/switching/sandboxScreen";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
 // Ledger of what other sandboxes hold: one line per repo, showing unpushed or uncommitted work with no merged tree to

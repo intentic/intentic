@@ -1,7 +1,7 @@
 import { ref, shallowRef } from "vue";
 import { onRuntimeChanged } from "../live/runtimeEvents";
-import { sandboxRequest } from "../client/sandboxClient";
-import { refusalText, SandboxHttpError, wordsOf } from "../client/sandboxHttpError";
+import { sandboxRequest } from "../../../client/sandbox/sandboxClient";
+import { refusalText, SandboxHttpError, wordsOf } from "../../../client/sandbox/sandboxHttpError";
 
 // Drives Connect for a peer capability (host, browser or phone) sharing one door shape. Connect mints a single-use
 // token bound to this capability; the door pushes a runtime-change event on pairing, so the card updates

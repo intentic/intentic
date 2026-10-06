@@ -1,4 +1,4 @@
-import type { SkillOrigin, SkillSummary } from "@intentic/api-contract";
+import type { SkillOrigin, SkillSummary } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 
 // Words for each skill origin; skillVisual.ts owns what it looks like. A chip is all a row says about

@@ -8,7 +8,7 @@ use crate::state::{AppState, CloseAction, Face, SessionEnd, Settings};
 type CommandResult<T> = Result<T, String>;
 
 // The prefix @intentic/sandbox-run derives every per-sandbox object from, duplicated here because this process has
-// no Node. It is the ONLY thing about the container shape this app knows (to find the sandbox a setup just made, and
+// no Node, and held to the run contract's names.fixture.json by a test below. It is the ONLY thing about the container shape this app knows (to find the sandbox a setup just made, and
 // to tail a log): what runs and what should run is `ic`'s to say, and this app asks it.
 const CONTAINER_PREFIX: &str = "intentic-sandbox-";
 
@@ -100,11 +100,11 @@ pub async fn docker_listening() -> bool {
 }
 
 /// How far a start got, for the card to switch on: the wire spelling of [`scripts::EngineOutcome`], with the
-/// reason carried beside it rather than inside it so one shape covers all five.
+/// reason carried beside it rather than inside it so one shape covers all six.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DockerStart {
-    /// `ready` | `notInstalled` | `wouldNotStart` | `notAllowed` | `tookTooLong`.
+    /// `ready` | `notInstalled` | `wouldNotStart` | `notAllowed` | `tookTooLong` | `broken`.
     pub outcome: &'static str,
     /// Docker's own last words. The card shows them under its sentence; empty when there are none.
     pub detail: String,
@@ -112,13 +112,16 @@ pub struct DockerStart {
 
 impl From<scripts::EngineOutcome> for DockerStart {
     fn from(outcome: scripts::EngineOutcome) -> DockerStart {
-        use scripts::EngineOutcome::{NotAllowed, NotInstalled, Ready, TookTooLong, WouldNotStart};
+        use scripts::EngineOutcome::{
+            Broken, NotAllowed, NotInstalled, Ready, TookTooLong, WouldNotStart,
+        };
         let (outcome, detail) = match outcome {
             Ready => ("ready", String::new()),
             NotInstalled(detail) => ("notInstalled", detail),
             WouldNotStart(detail) => ("wouldNotStart", detail),
             NotAllowed(detail) => ("notAllowed", detail),
             TookTooLong(detail) => ("tookTooLong", detail),
+            Broken(detail) => ("broken", detail),
         };
         DockerStart { outcome, detail }
     }
@@ -1054,6 +1057,17 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The run contract's own record of the prefix (`@intentic/sandbox-run`), which `ic` and its TypeScript are held
+    /// to as well, so the copy above cannot drift from the containers it finds.
+    #[test]
+    fn the_container_prefix_is_the_one_the_run_contract_records() {
+        let shared: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../_shared/sandbox-run/src/names.fixture.json"
+        ))
+        .unwrap();
+        assert_eq!(shared["containerPrefix"], CONTAINER_PREFIX);
+    }
 
     /* Argument vectors are tested on both host types. */
 

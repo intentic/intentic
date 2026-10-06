@@ -1,4 +1,5 @@
-import type { DeviceAgentState, DeviceFolderRow, DevicePortRow, DeviceSandboxResources, ResourcesForm } from "@intentic/ui";
+import type { ResourcesForm } from "@intentic/ui";
+import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { LocalFound } from "@intentic/web/local-host";
@@ -47,27 +48,12 @@ export interface SyncArgs {
     mirror: boolean;
 }
 
-// One sandbox as `ic sandbox list --json` reports it (the sandbox contract's DeviceSandbox), with the name this app
-// remembers for it: the same rows the machine agent hands the web, so this app's list and the Devices view describe
-// one container alike. `resources` carries the shape it runs with and the shape saved for its next restart; absent
-// when ic could not inspect the container.
-export interface SandboxStatus {
-    slug: string;
-    container: string;
-    name?: string;
-    running: boolean;
-    image: string;
-    tunnelRunning?: boolean;
-    resources?: DeviceSandboxResources;
-    // The other side of this computer that keeps it (`windows`, `linux`), absent for this side's own: on Windows, ic in
-    // WSL and ic on Windows each list every sandbox on the one Docker engine, and only the side that created one runs its
-    // background care. A person's start, stop and restart still reach it from here.
-    keptElsewhere?: string;
-    // The environment that keeps it by name (the WSL distro), where ic stamps one (HOST_ENV) and lists it.
-    hostEnv?: string;
-    // How a person reads the side that keeps it ("WSL (archlinux)", "Windows"), from an ic that says (2026-10-05).
-    keptElsewhereName?: string;
-}
+// One sandbox as `ic sandbox list --json` reports it, with the name this app remembers for it (commands.rs
+// `sandbox_list` passes ic's rows through and adds only `name`): the contract's own DeviceSandbox, the same rows the
+// machine agent hands the web, so this app's list and the Devices view describe one container alike, `staged` and
+// `keptElsewhere` included. Typed off the contract rather than restated, since a hand copy had already lost fields ic
+// sends and gained one (`hostEnv`) it never did.
+export type SandboxStatus = DeviceSandbox;
 
 // One environment of this computer and what of Intentic's machine side it holds (src-tauri/src/agents.rs): this app's
 // own (`windows` or `linux`, `here`), and on Windows each WSL distro that is running.
@@ -111,19 +97,6 @@ export interface DesktopInfo {
 // menu's Quit.
 export type CloseAction = `tray` | `quit`;
 
-// Sync half of `intentic-machine status --json`. Row types come from @intentic/ui, the same shape the renderer
-// needs. `sandboxes` is deliberately absent; use sandboxList for that.
-export interface DeviceReport {
-    hostname: string;
-    os: string;
-    pairings: DeviceFolderRow[];
-    ports: DevicePortRow[];
-    // installed is the file on disk; build is what's actually running — they drift when the binary is replaced live.
-    agent: DeviceAgentState & { build?: string; installed?: string };
-    // When the agent took the reading; always moments old since this app asks on demand.
-    capturedAt: number;
-}
-
 // Everything the machine agent knows: sandboxes that may work on this device (links only, never tokens) and the
 // sync report. `summary` is the agent's own one-liner, also used by the tray row.
 export interface DeviceStatus {
@@ -131,6 +104,9 @@ export interface DeviceStatus {
     running?: number;
     summary: string;
     device: { links: { sandboxUrl: string; id: string }[] };
+    // The contract's DeviceReport, as the machine agent builds it (_devices/machine/src/sync/report.ts) and commands.rs
+    // `machine_report` hands it over, raw. Its `agent.lastTickAt` is what tells a stalled loop from a running one
+    // (`agentStalled`). No `sandboxes` here; sandboxList has those.
     sync: DeviceReport;
 }
 
@@ -182,7 +158,7 @@ export const dockerReady = (): Promise<boolean> => invoke(`docker_ready`);
 // screen asks before it can afford to wait, and the one the launch itself is decided on.
 export const dockerListening = (): Promise<boolean> => invoke(`docker_listening`);
 /** How far starting the engine got. Mirrors commands.rs `DockerStart`, same strings, same meanings. */
-export type DockerOutcome = `ready` | `notInstalled` | `wouldNotStart` | `notAllowed` | `tookTooLong`;
+export type DockerOutcome = `ready` | `notInstalled` | `wouldNotStart` | `notAllowed` | `tookTooLong` | `broken`;
 export interface DockerStart {
     readonly outcome: DockerOutcome;
     /** Docker's own last words, shown under the card's sentence. Empty when there are none. */

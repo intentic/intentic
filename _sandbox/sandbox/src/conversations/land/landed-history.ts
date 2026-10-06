@@ -1,5 +1,5 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { isAncestor } from "./agent-refs.js";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { isAncestor } from "../../git/agent-refs.js";
 
 // Where absorbed agent work landed in the user's own history: once a path's content matches main's HEAD
 // (agent-changes.ts presentInMain), the newest commit in landedHead..HEAD to touch it is reported as the carrier, not

@@ -1,9 +1,8 @@
-import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { isolationScript, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
-import { detachedStamp } from "../../seams/workload-stamp.js";
+import { runCheck } from "../../workload/run-check.js";
 
 // A watch check runs in the world its arming turn saw: that turn's namespace rebuilt, or its paths rewritten likewise.
 
@@ -11,7 +10,7 @@ import { detachedStamp } from "../../seams/workload-stamp.js";
 const CHECK_TIMEOUT_MS = 60_000;
 // Characters of output a check reports, from the end.
 const OUTPUT_TAIL = 3_000;
-// Characters captured per stream before capture stops.
+// Bytes captured per stream before capture stops.
 const MAX_CAPTURE = 1024 * 1024;
 
 // Printed once the namespace is up; absent from stdout means the namespace failed, not the check.
@@ -45,55 +44,22 @@ interface Spawned {
     readonly code: number | undefined;
     readonly stdout: string;
     readonly stderr: string;
-    readonly failed?: string;
+    readonly failed?: string | undefined;
 }
 
-// Its own process group, so the deadline kills the check's whole tree, not just its shell.
-const run = (argv: readonly string[], options: { readonly cwd: string; readonly env: Readonly<Record<string, string>> }): Promise<Spawned> =>
-    new Promise((resolve) => {
-        const [program, ...args] = argv;
-        if (program === undefined) {
-            resolve({ code: undefined, stdout: "", stderr: "", failed: "no command" });
-            return;
-        }
-        let stdout = "";
-        let stderr = "";
-        let settled = false;
-        const child = spawn(program, args, {
-            cwd: options.cwd,
-            // Its deadline rides along, so the reaper ends it even when the daemon that set it is gone.
-            env: { ...process.env, ...options.env, ...detachedStamp("watch-check", Date.now() + CHECK_TIMEOUT_MS) },
-            detached: true,
-            stdio: ["ignore", "pipe", "pipe"],
-        });
-        const kill = (): void => {
-            if (child.pid !== undefined) {
-                try {
-                    process.kill(-child.pid, "SIGKILL");
-                } catch {
-                    // Already gone, which is the goal.
-                }
-            }
-        };
-        const deadline = setTimeout(kill, CHECK_TIMEOUT_MS);
-        deadline.unref();
-        const finish = (result: Spawned): void => {
-            if (settled) {
-                return;
-            }
-            settled = true;
-            clearTimeout(deadline);
-            resolve(result);
-        };
-        child.stdout.on("data", (chunk: Buffer) => {
-            stdout = stdout.length < MAX_CAPTURE ? stdout + chunk.toString() : stdout;
-        });
-        child.stderr.on("data", (chunk: Buffer) => {
-            stderr = stderr.length < MAX_CAPTURE ? stderr + chunk.toString() : stderr;
-        });
-        child.on("error", (error: Error) => finish({ code: undefined, stdout, stderr, failed: error.message }));
-        child.on("close", (code: number | null) => finish({ code: code ?? undefined, stdout, stderr }));
+// Its own process group, so the deadline kills the check's whole tree, not just its shell; an agent's command in class.
+const run = async (argv: readonly string[], options: { readonly cwd: string; readonly env: Readonly<Record<string, string>> }): Promise<Spawned> => {
+    const ran = await runCheck({
+        argv,
+        cwd: options.cwd,
+        env: { ...process.env, ...options.env },
+        timeoutMs: CHECK_TIMEOUT_MS,
+        workload: { class: "command" },
+        kind: "watch-check",
+        captureBytes: MAX_CAPTURE,
     });
+    return { code: ran.exitCode, stdout: ran.stdout, stderr: ran.stderr, failed: ran.spawnError };
+};
 
 const exists = (path: string): Promise<boolean> =>
     access(path).then(

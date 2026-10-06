@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
     HEALTH,
     hostRuntimeOf,
@@ -13,12 +14,42 @@ import {
     parseNulEnv,
     replayableEnv,
     runtimeDirectivesOf,
+    SANDBOX_CONTAINER_PREFIX,
+    SANDBOX_TUNNEL_PREFIX,
     sandboxNames,
     sandboxRunArgv,
     sandboxRunCommand,
 } from "./index.js";
 
 const names = sandboxNames("abc-123");
+
+// The name and port facts ic and the desktop app spell again in Rust, each held to this one record by a test of its own.
+// SAFETY: the fixture is this package's own file, and the tests below compare every field this type names against code.
+const SHARED = JSON.parse(readFileSync(new URL("./names.fixture.json", import.meta.url), "utf8")) as {
+    readonly containerPrefix: string;
+    readonly tunnelPrefix: string;
+    readonly slug: string;
+    readonly names: ReturnType<typeof sandboxNames>;
+    readonly portBands: Record<"daemonLoopback" | "syncSsh", { readonly base: number; readonly span: number }>;
+};
+
+test("the names every language spells are the ones the shared record holds", () => {
+    expect(SANDBOX_CONTAINER_PREFIX).toBe(SHARED.containerPrefix);
+    expect(SANDBOX_TUNNEL_PREFIX).toBe(SHARED.tunnelPrefix);
+    expect(sandboxNames(SHARED.slug)).toEqual(SHARED.names);
+});
+
+test("the daemon's loopback ports stay in the band the record names, and that band does not overlap the sync SSH one", () => {
+    const { daemonLoopback, syncSsh } = SHARED.portBands;
+    const ports = ["000000aaaaaa", "0f9fff000000", "ffffffffffff", "2c8eb2c5b3a5", "123456abcdef"].map((id) => localDaemonPort(id));
+    for (const port of ports) {
+        expect(port).toBeGreaterThanOrEqual(daemonLoopback.base);
+        expect(port).toBeLessThan(daemonLoopback.base + daemonLoopback.span);
+    }
+    expect(localDaemonPort("000000aaaaaa")).toBe(daemonLoopback.base);
+    const [low, high] = [daemonLoopback, syncSsh].toSorted((a, b) => a.base - b.base);
+    expect((low?.base ?? 0) + (low?.span ?? 0)).toBeLessThanOrEqual(high?.base ?? 0);
+});
 
 test("every per-sandbox object derives from the slug the way connect.sh always derived it", () => {
     expect(names).toEqual({

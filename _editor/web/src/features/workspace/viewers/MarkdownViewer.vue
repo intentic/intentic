@@ -3,9 +3,9 @@ import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow } from
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
 import { computed, inject, onMounted, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { openFileRefFromEvent } from "../files/refs/openFileRef";
-import { useViewScope } from "../health/workspaceScope";
+import { useViewScope } from "../../../app/workspaceScope";
 import { picture } from "../home/thumbnails";
 import type { LineJump } from "../tabs/workspaceTabs";
 import CodeView from "./CodeView.vue";

@@ -17,7 +17,8 @@ import type {
     TurnProfile,
 } from "@intentic/sandbox-contract";
 import { capabilitiesOf, childRunOf, DEFAULT_HARNESS, newConversationId, PROVIDERS, sameChildRun } from "@intentic/sandbox-contract";
-import { cardDeps, raiseRequest } from "../../conversations/actor/card-offers.js";
+import { cardDeps } from "../../conversations/actor/card-deps.js";
+import { raiseRequest } from "../../guard/card-offers.js";
 import { type Holding, type LiveRun, liveRunOf, turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";

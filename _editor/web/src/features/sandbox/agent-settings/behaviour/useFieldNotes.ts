@@ -1,7 +1,7 @@
 import type { FieldNotesStatus } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { rpcQuery } from "../../client/rpcQuery";
-import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 
 /* The state of this sandbox's field notes: whether there is a brief, how much of it the budget reaches, and whether
    anything is scheduled to rewrite it. Its own route rather than a settings field, because none of it is a choice

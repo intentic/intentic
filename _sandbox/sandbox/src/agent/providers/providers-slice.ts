@@ -5,7 +5,7 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 import { createEndpointCatalog, type EndpointCatalog } from "../../endpoints/endpoint-catalog.js";
 import type { AcpConnections } from "../../runtimes/acp/acp-connection.js";
 import type { OpenCodeService } from "../../runtimes/opencode/opencode.js";
-import { PROVIDER_MODULES, type ProviderDeps, RUNTIME_ADAPTERS, type RuntimeAdapters } from "../../runtimes/runtime-table.js";
+import type { ProviderDeps, RuntimeAdapters } from "../../runtimes/runtime-table.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomService } from "../../usage/headroom.js";
 import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore } from "../../usage/model-cooldowns.js";
@@ -76,12 +76,24 @@ export interface ProvidersSlice {
 }
 
 // What the slice is built from: the members built before it, since the provider areas and the headroom read them too;
-// the one whose code this directory may not import (wakeLocalModel, above); and the ACP and Pi adapters, whose
-// runtimes import agent/ back, so building them here would close a cycle.
+// the one whose code this directory may not import (wakeLocalModel, above); and the runtimes themselves (the provider
+// modules and adapters of runtimes/runtime-table.ts, the ACP and Pi adapters), whose directories import agent/ back, so
+// naming them here would close a cycle.
 export interface ProvidersDeps
     extends Pick<
         ProvidersSlice,
-        "cliProxy" | "openCode" | "authRoot" | "accountUsage" | "headroom" | "observedLimits" | "acpConnections" | "acpAgent" | "piAgent" | "wakeLocalModel"
+        | "cliProxy"
+        | "openCode"
+        | "authRoot"
+        | "accountUsage"
+        | "headroom"
+        | "observedLimits"
+        | "acpConnections"
+        | "acpAgent"
+        | "piAgent"
+        | "wakeLocalModel"
+        | "providerModules"
+        | "adapters"
     > {
     readonly historyRoot: string;
     // The actors that hold the children and background commands a Claude Code turn starts.
@@ -98,10 +110,8 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
     providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path)),
     modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path)),
     modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),
-    providerCatalogs: providerCatalogsOf(PROVIDER_MODULES, whole),
+    providerCatalogs: providerCatalogsOf(built.providerModules, whole),
     providerReadiness: () => providerReadiness(whole()),
-    providerModules: PROVIDER_MODULES,
-    adapters: RUNTIME_ADAPTERS,
     judgeCommand: (input, signal) => judgeCommand(whole(), input, signal),
     endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints")),
     // The Claude Code loop over these actors, which hold the children and background commands a turn starts.

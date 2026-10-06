@@ -24,7 +24,7 @@ what connecting a VPN means (the browser on `/vpn`, the agent on `/usr/local/bin
 dials appears in your UI with nothing syncing the two), one `tmux` server behind your terminals and
 its shell commands, one `iq` index behind `/workspace/search` and its Bash calls, and one tree: each
 agent on its own git worktree, landing its delta into your Changes panel as the review boundary
-(`_sandbox/sandbox/src/conversations/worktrees.ts`, `land.ts`). A window opened anywhere shows the run as
+(`_sandbox/sandbox/src/conversations/worktrees/worktrees.ts`, `conversations/land/land.ts`). A window opened anywhere shows the run as
 it actually is, not a replay of it.
 
 But an autonomous agent is not fire-and-forget. AI still needs its context configured, its work
@@ -66,7 +66,7 @@ so I can use full autonomy without betting the company on a vendor's security."*
 
 **Primary, the operator running a team of specialized agents.** Wants more than one chat window: a
 fleet of purpose-built agents (one per role or project), each with its own sandbox, context, and
-capabilities, all configured once and supervised from a single fleet board (`_editor/web/src/pages/Agents.vue`).
+capabilities, all configured once and supervised from a single fleet board (`_editor/web/src/features/agents/fleet/Agents.vue`).
 Job to be done: *"Stand up an agent per job, wire it to the right systems, and steer the whole
 workforce from one place."*
 
@@ -83,12 +83,12 @@ payment event, a GitHub push, a new email: with a guard command deciding whether
 | # | Pain | Promise | Proof |
 |---|------|---------|-------|
 | P1 | Cloud AI dev environments want your code, secrets, and prod access on their servers | The agent's sandbox runs on your machine; the platform stores only identity + a sandbox URL, sits off the command path (except the optional, clearly-labelled free trial), and cannot reach your daemon | `README.md`, `ARCHITECTURE.md` |
-| P2 | A generic chat box isn't an autonomous employee, no real tools, no persistent context, no way to supervise it on real work | A specialized agent: dev-tools really installed, wired to your systems, context curated for one job, configured and steered from a real workspace (IDE + observability), not a prompt window | `_editor/web/src/pages/workspace/`, `_editor/web/src/pages/Agents.vue`, `_shared/capability-catalog/src/index.ts` |
-| P3 | Setting up a private agent environment is an evening of DevOps | Minutes to a live sandbox: Google sign-in → one copy-paste command. No Cloudflare account required; Docker auto-installed; no open inbound ports | `_editor/web/src/pages/Setup.vue` |
-| P4 | Agent autonomy is scary on real systems, you can't just fire-and-forget | Co-piloting: every agent works in its own branch and lands nothing until you accept it, a changes-review panel (diff → discard or commit), per-turn permission modes (plan, the default on the shared tree / auto / manual, which asks per tool), owner-approved environment changes, a transcript per run | `_editor/web/src/features/chat/models/catalog.ts`, `_editor/web/src/pages/workspace/ReviewPanel.vue`, `_editor/web/src/pages/sandbox/EnvironmentCard.vue` |
-| P5 | Wiring the agent to your tools (repos, DBs, chat, monitoring) is N one-off integrations | A capabilities catalog: GitHub/GitLab/Redmine, SQL databases, Sentry/SigNoz, Discord/IMAP, Stripe, SSH/VPN, custom MCP servers, Claude plugins, credentials stay inside the sandbox | `_shared/capability-catalog/src/index.ts` (CAPABILITY_CATALOG), `_editor/web/src/pages/Capabilities.vue` |
+| P2 | A generic chat box isn't an autonomous employee, no real tools, no persistent context, no way to supervise it on real work | A specialized agent: dev-tools really installed, wired to your systems, context curated for one job, configured and steered from a real workspace (IDE + observability), not a prompt window | `_editor/web/src/features/workspace/`, `_editor/web/src/features/agents/fleet/Agents.vue`, `_shared/capability-catalog/src/index.ts` |
+| P3 | Setting up a private agent environment is an evening of DevOps | Minutes to a live sandbox: Google sign-in → one copy-paste command. No Cloudflare account required; Docker auto-installed; no open inbound ports | `_editor/web/src/features/setup/Setup.vue` |
+| P4 | Agent autonomy is scary on real systems, you can't just fire-and-forget | Co-piloting: every agent works in its own branch and lands nothing until you accept it, a changes-review panel (diff → discard or commit), per-turn permission modes (plan, the default on the shared tree / auto / manual, which asks per tool), owner-approved environment changes, a transcript per run | `_editor/web/src/features/chat/models/catalog.ts`, `_editor/web/src/features/workspace/changes/ReviewPanel.vue`, `_editor/web/src/features/sandbox/environment/EnvironmentCard.vue` |
+| P5 | Wiring the agent to your tools (repos, DBs, chat, monitoring) is N one-off integrations | A capabilities catalog: GitHub/GitLab/Redmine, SQL databases, Sentry/SigNoz, Discord/IMAP, Stripe, SSH/VPN, custom MCP servers, Claude plugins, credentials stay inside the sandbox | `_shared/capability-catalog/src/index.ts` (CAPABILITY_CATALOG), `_editor/web/src/features/capabilities/Capabilities.vue` |
 | P6 | The agent only works while you sit there, close the laptop and the session dies with the tab | The runs live on your machine, not in the browser: close every window and the agents keep working; reopen from any device onto the same board. Automations go further and start them without you, a schedule, a webhook, or live events (GitHub/GitLab push, Sentry alert, Stripe payments, new email, Discord), each run a fresh session with a transcript, optionally gated by a guard command | `_sandbox/sandbox/src/agent/`, `_shared/api-contract/src/schemas.ts` (Automation schemas) |
-| P7 | AI SaaS lock-in: models, data, exit | BYO agent (Claude Code, Codex, or Grok), your repos are plain git on your machine, GDPR export + account deletion, MIT sandbox + CLI on GitHub if you leave the app entirely | `_editor/web/src/composables/chat/conversation.ts`, `_platform/api/src/router.ts` (me.export), `LICENSE` |
+| P7 | AI SaaS lock-in: models, data, exit | BYO agent (Claude Code, Codex, or Grok), your repos are plain git on your machine, GDPR export + account deletion, MIT sandbox + CLI on GitHub if you leave the app entirely | `_editor/web/src/features/chat/session/conversation.ts`, `_platform/api/src/router.ts` (me.export), `LICENSE` |
 
 ## Selling points, ranked
 
@@ -105,7 +105,7 @@ below, so that is what the page now claims and proves; the rest support it or li
    unread**: one sandbox and one git worktree per agent, run ten at once; the runs live on your
    machine, not in the tab, so any browser or phone reopens onto the same board; and the review
    boundary is a real branch: land it into your tree or discard it
-   (`_sandbox/sandbox/src/conversations/worktrees.ts`, `land.ts`, `_editor/web/src/pages/Agents.vue`).
+   (`_sandbox/sandbox/src/conversations/worktrees/worktrees.ts`, `conversations/land/land.ts`, `_editor/web/src/features/agents/fleet/Agents.vue`).
    Local orchestrators share the ownership instinct; none of them pair it with the persistence, the
    reach and the environment below. (P1, P2, P4, P6)
 2. **Ownership without giving up the cloud UX**, the moat: the only agent workspace where the
@@ -145,7 +145,7 @@ band argues).
 
 | Family | Examples | The verdict | Why |
 |---|---|---|---|
-| **Agent CLIs** | Claude Code, Codex, Grok, Kimi Code, Gemini CLI, OpenCode, Goose, Qwen Code | *intentic runs these* | A harness is the engine, not the garage. Five are native (`_shared/sandbox-contract/src/agent-catalog.ts`); any ACP agent is one capability away (`_shared/capability-catalog/src/index.ts`: `opencode-acp`, `gemini-acp`, `acp-agent`). |
+| **Agent CLIs** | Claude Code, Codex, Grok, Kimi Code, Gemini CLI, OpenCode, Goose, Qwen Code | *intentic runs these* | A harness is the engine, not the garage. Five are native (`_shared/sandbox-contract/src/models/agent-catalog.ts`); any ACP agent is one capability away (`_shared/capability-catalog/src/index.ts`: `opencode-acp`, `gemini-acp`, `acp-agent`). |
 | **AI editors** | Cursor, Windsurf, VS Code + Copilot, Zed, JetBrains AI | *keep yours* | Different primary operator: they put the human at the keyboard. Composes for real via desktop sync (`_devices/machine/`) and `@intentic/acp-bridge`, not diplomatically. |
 | **Personal AI assistants** | OpenClaw, Hermes, Khoj, Leon | *a different job* | Self-hosted on your hardware and your accounts (the same conviction) but pointed at a life rather than a repository. The unit of work is a reply, not a diff. Composes: an assistant that can call a webhook can start an agent here. |
 | **Local orchestrators** | Conductor, Nimbalyst, Crystal, Vibe Kanban, Sculptor | *same instinct, wider scope* | The closest neighbours; they got ownership right. The gap is everything around the agent: the image (overlay Dockerfile), capabilities, automations, browser/phone reach, team sharing. |

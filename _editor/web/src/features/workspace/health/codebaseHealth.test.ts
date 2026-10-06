@@ -1,5 +1,5 @@
-import type { WorkspaceHotspot } from "@intentic/api-contract";
-import { formatCount, hotspotRows, median, moduleRows, perFile, splitPath } from "./codebaseHealth";
+import type { WorkspaceHotspot } from "@intentic/sandbox-contract";
+import { hotspotRows, median, moduleRows, perFile, splitPath } from "./codebaseHealth";
 
 const hotspot = (path: string, score: number): WorkspaceHotspot => ({
     path,
@@ -85,15 +85,6 @@ describe(`median`, () => {
         expect(median([4, 1, 9])).toBe(4);
         expect(median([1, 2, 3, 10])).toBe(2.5);
         expect(median([])).toBe(0);
-    });
-});
-
-describe(`formatCount`, () => {
-    it(`stays exact while the number fits, then compacts`, () => {
-        expect(formatCount(0)).toBe(`0`);
-        expect(formatCount(9999)).toBe(`9,999`);
-        expect(formatCount(12_400)).toBe(`12,400`);
-        expect(formatCount(2_450_000)).toBe(`2.5M`);
     });
 });
 

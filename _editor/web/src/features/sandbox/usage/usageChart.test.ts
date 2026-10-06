@@ -7,10 +7,7 @@ import {
     cacheHitRate,
     daySpan,
     deltaPercent,
-    formatCompact,
     formatDelta,
-    formatUsd,
-    formatUsdHero,
     inWindow,
     niceMax,
     previousWindow,
@@ -317,25 +314,6 @@ describe(`axis and formatting`, () => {
     it(`never returns a zero axis top: a flat chart still needs somewhere to draw`, () => {
         expect(niceMax(0)).toBe(1);
         expect(niceMax(-5)).toBe(1);
-    });
-
-    it(`says a tiny non-zero cost is tiny rather than printing it as free`, () => {
-        expect(formatUsd(0)).toBe(`$0.00`);
-        expect(formatUsd(0.004)).toBe(`<$0.01`);
-        expect(formatUsd(47.2)).toBe(`$47.20`);
-    });
-
-    it(`keeps the hero amount inside its tile by stepping precision down with magnitude`, () => {
-        expect(formatUsdHero(36.62)).toBe(`$36.62`);
-        expect(formatUsdHero(9_999.99)).toBe(`$9,999.99`);
-        expect(formatUsdHero(12_480.4)).toBe(`$12,480`);
-        expect(formatUsdHero(1_240_000)).toBe(`$1.2M`);
-    });
-
-    it(`compacts counts past a thousand`, () => {
-        expect(formatCompact(999)).toBe(`999`);
-        expect(formatCompact(1_284)).toBe(`1.3K`);
-        expect(formatCompact(18_400_000)).toBe(`18.4M`);
     });
 
     it(`signs a delta with a real minus and one decimal only while it is small`, () => {

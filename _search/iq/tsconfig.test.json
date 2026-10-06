@@ -10,5 +10,5 @@
         "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/__fixtures__/**"]
+    "exclude": ["./src/**/__fixtures__/**"]
 }

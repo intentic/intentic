@@ -1,9 +1,9 @@
 import { sandboxRef } from "@intentic/extension-api";
-import type { RepoTarget } from "@intentic/api-contract";
+import type { RepoTarget } from "@intentic/sandbox-contract";
 import type { TooltipValue } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useVocabulary } from "../../../../core-views/vocabulary";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { ahead, behind, syncable, unpublished } from "../../push/outgoingWork";
 import { usePushFlow } from "../../push/usePushFlow";
 import { fileRows, type ChangedFile } from "./changedFiles";

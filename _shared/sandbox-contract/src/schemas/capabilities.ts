@@ -454,6 +454,7 @@ export const CapabilitySummarySchema = z.object({
         .default([])
         .describe("Which credentials it holds, by name. The values are on one route only, and it is not this one."),
 });
+export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
 // A capability the workspace asks for but the manifest doesn't carry, derived from what's checked out under /work, not
 // from configuration; prevents illegible failures like a missing docker socket with no pointer back to the fix. Keyed
 // by catalog card, not kind, since several cards share one kind. Re-derived on every read, so it drops out once its

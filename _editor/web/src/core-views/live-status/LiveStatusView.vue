@@ -3,15 +3,15 @@ import { ResourceGroupSchema, type Deployment } from "@intentic/api-contract";
 import { Button, Card, ui, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, reactive, ref } from "vue";
-import PlanStepRow from "../../components/PlanStepRow.vue";
+import PlanStepRow from "../PlanStepRow.vue";
 import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
 import { groupAccent } from "../../features/extensions/resourceVisual";
 import { reveal } from "../../features/capabilities/connect/useSecrets";
-import { SandboxHttpError } from "../../features/sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useDeployments } from "../../features/extensions/useDeployments";
 import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
-import { useRole } from "../../features/sandbox/secrets/useRole";
+import { useRole } from "../../client/sandbox/useRole";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -130,13 +130,9 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
             <Notice v-if="wsNotice" :of="wsNotice" class="mb-4" />
 
             <!-- Engine declared but down on a previously-applied setup: "Not deployed" below is meaningless until it's back. -->
-            <div
-                v-if="komodoReachable === false && state?.converged !== undefined"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
-            >
-                <Icon name="exclamation-triangle" class="shrink-0" />
-                <span>{{ t(`views.liveStatusView.deploymentEngineKomodoUnreachable`) }}</span>
-            </div>
+            <Notice v-if="komodoReachable === false && state?.converged !== undefined" tone="warning" size="lg" class="mb-4">{{
+                t(`views.liveStatusView.deploymentEngineKomodoUnreachable`)
+            }}</Notice>
 
             <div class="flex flex-col gap-4">
                 <!-- TOP, desired state: the dependency graph, nodes colored by their last reconcile status. -->

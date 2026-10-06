@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { ChangeStatusMark, type IconName, ResponsiveOverlay, SegmentedControl, type Tip, ui, useDevice } from "@intentic/ui";
 import { computed, ref, useSlots } from "vue";
-import type { DiffLayout } from "../../../shell/window/useLayout";
-import { useLayout } from "../../../shell/window/useLayout";
+import type { DiffLayout } from "../../../workbench/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
-import ReviewStat from "../../../components/ReviewStat.vue";
+import ReviewStat from "../changes/ReviewStat.vue";
 import type { LineStat } from "@intentic/code-read";
 import { extensionOf, formatOf } from "@intentic/ui/file-format";
 import { rendersAsBytes } from "../explorer/fileType";
-import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
+import { compareViewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
 // Bar above a diff: which file, and how it's read. Shared by every diff surface (workspace tab, agent review,

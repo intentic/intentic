@@ -1,15 +1,15 @@
 import { lstat, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { gitProcessRunning, STALE_LOCK_MS } from "@intentic/scaffold";
+import { gitProcessRunning, STALE_LOCK_MS } from "@intentic/base/git";
 import type { Logger } from "pino";
 import type { Chore } from "../../system/chore-clock.js";
 
 // WHAT A DEAD GIT LEAVES ON THE HISTORY VOLUME (2026-10-05). A git killed mid-write (a container stop, an OOM kill)
 // leaves its `<file>.lock`, which fails every later git that needs that file, and a half-written `tmp_pack_*` or
 // `tmp_idx_*` that nothing will finish. A 0-byte objects/maintenance.lock beside a 55 MB tmp_pack kept this sandbox's
-// hourly maintenance a silent no-op for days. Cleared only while no git process runs at all (@intentic/scaffold
-// git-locks.ts, where a /proc that cannot be read counts as a git that may be running): a lock older than ten minutes,
+// hourly maintenance a silent no-op for days. Cleared only while no git process runs at all (@intentic/base/git
+// locks.ts, where a /proc that cannot be read counts as a git that may be running): a lock older than ten minutes,
 // a temporary pack older than a day.
 
 // The clock's units, spelled here: a value import from system/ would close a cycle (system/ imports git/).

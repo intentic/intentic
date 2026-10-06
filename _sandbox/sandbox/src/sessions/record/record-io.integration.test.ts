@@ -1,7 +1,7 @@
-import { mkdtemp, open, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { syncParents, writeAll } from "./record-io.js";
+import { syncParents, writeAll, writeDurable } from "./record-io.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -45,4 +45,32 @@ test("rejects a write that stops making progress instead of acknowledging a part
 
 test("propagates a directory sync setup failure", async () => {
     await expect(syncParents(join(dir, "missing", "record"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("a durable write puts every chunk down in order, under directories it makes", async () => {
+    const path = join(dir, "nested", "record.zst");
+    await writeDurable(path, [Buffer.from("one "), Buffer.from("two")]);
+    expect(await readFile(path, "utf8")).toBe("one two");
+    expect(await readdir(join(dir, "nested"))).toEqual(["record.zst"]);
+});
+
+// A blob, a log and a converted record all go down through this one write; a failed rename must not leave its
+// temporary beside the record, where nothing would ever reuse or remove it.
+test("a durable write whose rename fails leaves no temporary behind", async () => {
+    const path = join(dir, "record.zst");
+    // A directory holding a file: nothing can be renamed over it.
+    await mkdir(path);
+    await writeFile(join(path, "occupied"), "");
+    await expect(writeDurable(path, [Buffer.from("bytes")])).rejects.toThrow();
+    expect(await readdir(dir)).toEqual(["record.zst"]);
+});
+
+test("a durable write whose bytes fail to land leaves no temporary behind", async () => {
+    const path = join(dir, "record.zst");
+    const failing = (function* () {
+        yield Buffer.from("half");
+        throw new Error("compression failed");
+    })();
+    await expect(writeDurable(path, failing)).rejects.toThrow("compression failed");
+    expect(await readdir(dir)).toEqual([]);
 });

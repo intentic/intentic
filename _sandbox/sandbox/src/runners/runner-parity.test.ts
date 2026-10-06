@@ -1,7 +1,7 @@
 import { runnerSlug, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { adoptDefinitionSettings } from "../portability/apply-definition.js";
-import { emitDefinitionToml, parseDefinitionToml, settingsDefinition } from "../portability/definition.js";
+import { adoptDefinitionSettings } from "../definition/apply-definition.js";
+import { emitDefinitionToml, parseDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { runnerParity } from "./runner-parity.js";
 import { runnerSummaries } from "./runner-peer.js";
 

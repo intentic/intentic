@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 
 // A manifest edit and its lockfile must leave the worktree in the same patch: reconciled here, before the land commits
 // the remainder, for a turn that edited a manifest by hand rather than through its package manager. Runs only when the

@@ -10,9 +10,6 @@ export const BACKEND_HOST_HEADER = "x-intentic-backend";
 // other way in has it stripped.
 export const BACKEND_CARD_HEADER = "x-intentic-card";
 
-// Header carrying an extension's minted token, checked against permissions.daemon (auth/grants.ts).
-export const EXTENSION_TOKEN_HEADER = "x-intentic-extension";
-
 export interface BackendHostExtension {
     // Routing handle: the /x/<id> namespace segment (ExtensionSummary.id).
     readonly id: string;

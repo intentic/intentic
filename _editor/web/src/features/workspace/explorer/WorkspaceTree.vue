@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import {
     ContextMenu,
     explorerColorClass,
     type ExplorerTreatment,
     explorerTreatment,
-    type IconName,
+    formatCount,
     iconForEntry,
+    type IconName,
     type Tip,
     useExplorerStyle,
     vAction,
@@ -16,11 +16,11 @@ import { useT } from "@intentic/ui/i18n";
 import { localFace } from "../../../app/environments/local";
 import { mapPool } from "@intentic/base/async";
 import { computed, nextTick, ref, watch } from "vue";
-import { useVocabulary } from "../../../core-views/vocabulary";
-import { commandShortcut } from "../../../shell/commands/useCommands";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
-import { viewersOfPath } from "../../../shell/presence/usePresence";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
+import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
+import { viewersOfPath } from "../../../workbench/presence/usePresence";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
 import { lensRefuses } from "../directory-ui/personaReach";
@@ -332,7 +332,7 @@ defineExpose({ focusTree });
                     >
                         <span class="w-[0.7rem] shrink-0"></span>
                         <span class="min-w-0 flex-1 truncate">{{
-                            t(`workspace.workspaceTree.moreItems`, { count: row.more.toLocaleString() }, row.more)
+                            t(`workspace.workspaceTree.moreItems`, { count: formatCount(row.more) }, row.more)
                         }}</span>
                     </div>
                     <template v-else>

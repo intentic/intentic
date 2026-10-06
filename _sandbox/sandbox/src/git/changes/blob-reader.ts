@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { gitBytes } from "@intentic/scaffold";
+import { serialLock } from "@intentic/base/async";
+import { gitBytes } from "@intentic/base/git";
 
 // Object bytes for a review's sides, read from one long-lived `git cat-file --batch-command` per repository instead
 // of a process per blob: a 400-row review reads up to 800 of them. Only names that can never move are read this way (a
@@ -18,7 +19,7 @@ class BatchReader {
     private readonly child: ChildProcessWithoutNullStreams;
     private buffered: Buffer = Buffer.alloc(0);
     private waiting: { readonly contents: boolean; readonly resolve: (reply: Reply) => void; readonly reject: (error: Error) => void } | undefined;
-    private chain: Promise<unknown> = Promise.resolve();
+    private readonly serially = serialLock();
     private idle: ReturnType<typeof setTimeout> | undefined;
     ended = false;
 
@@ -42,7 +43,7 @@ class BatchReader {
 
     // Size first, so an object over `maxBytes` is refused before any of it is buffered.
     read(spec: string, maxBytes: number): Promise<Buffer | undefined> {
-        const next = this.chain.then(async () => {
+        return this.serially(async () => {
             clearTimeout(this.idle);
             try {
                 const info = await this.command(`info ${spec}`, false);
@@ -56,9 +57,6 @@ class BatchReader {
                 this.idle.unref();
             }
         });
-        // allow(silent-catch): this read's caller has its rejection from `next`; the chain only orders the reads after it.
-        this.chain = next.catch(() => undefined);
-        return next;
     }
 
     private command(line: string, contents: boolean): Promise<Reply> {

@@ -2,15 +2,14 @@ import { spawn } from "node:child_process";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { sleep } from "@intentic/base/async";
-import type { ExitPoint, IntenticLine } from "@intentic/sandbox-contract";
+import { type ExitPoint, ExitPointSchema, type IntenticLine } from "@intentic/sandbox-contract";
 import { halt as haltClient, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
+import { providerCatalog } from "./exit-catalog.js";
 import { rankCountries, TOR_FALLBACK } from "./exit-countries.js";
 import type { ExitDriver, ExitProbe } from "./exit-driver.js";
 import { observeThroughSocks } from "./exit-observe.js";
 import {
-    catalogPath,
     exitControlPort,
-    exitDir,
     exitProxyPort,
     exitStateDir,
     logPath,
@@ -169,21 +168,8 @@ const fetchCatalog = async (): Promise<ExitPoint[] | undefined> => {
 };
 
 const cachedCatalog = async (): Promise<{ countries: readonly ExitPoint[]; live: boolean }> => {
-    const path = catalogPath("tor");
-    const cached = await readFile(path, "utf8")
-        .then((raw) => JSON.parse(raw) as { at: number; countries: ExitPoint[] })
-        .catch(() => undefined);
-    if (cached !== undefined && Date.now() - cached.at < CATALOG_TTL_MS) {
-        return { countries: cached.countries, live: true };
-    }
-    const fresh = await fetchCatalog();
-    if (fresh === undefined) {
-        // A cache past its TTL still beats the baked list: it's this network, only a few hours stale.
-        return cached === undefined ? { countries: TOR_FALLBACK, live: false } : { countries: cached.countries, live: false };
-    }
-    await mkdir(exitDir(), { recursive: true, mode: 0o700 }).catch(() => undefined);
-    await writeFile(path, JSON.stringify({ at: Date.now(), countries: fresh }), { mode: 0o600 }).catch(() => undefined);
-    return { countries: fresh, live: true };
+    const { entries, live } = await providerCatalog("tor", "countries", ExitPointSchema, CATALOG_TTL_MS, fetchCatalog);
+    return { countries: entries ?? TOR_FALLBACK, live };
 };
 
 const launch = async (id: string, country: string | undefined): Promise<void> => {

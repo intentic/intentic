@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SkillDraft, SkillSummary } from "@intentic/api-contract";
+import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract";
 import { DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../../capabilities/connect/useCapabilities";

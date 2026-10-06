@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Composes a Dockerfile for a profile: the core Dockerfile with each pack spliced at its marker, each followed by a RUN
 // stamping the pack's content hash to /opt/packs/<name>, so a daemon knows what its base image already bakes. Placement
-// (pre- or post-trees) is inferred from pack content, mirroring src/environment/packs.ts.
+// (pre- or post-trees) is inferred from pack content, mirroring src/image/packs.ts.
 // packs:pre-trees pinned installs, above the tree COPYs
 // packs:post-trees packs that read /opt/sandbox or COPY --from=trees
 import { createHash } from "node:crypto";

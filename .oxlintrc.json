@@ -420,7 +420,7 @@
                 "_tools/fake-upstream/**",
                 "_platform/example-provider/**",
                 "_shared/connector-runtime/**",
-                "_sandbox/acp-bridge/**",
+                "_devices/acp-bridge/**",
                 "_sandbox/sandbox/src/extensions/backend/**",
                 "_editor/web/src/app/perf.ts",
                 "_editor/web/src/app/renderTrace.ts",

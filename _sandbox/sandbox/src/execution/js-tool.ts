@@ -2,16 +2,13 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import { sdk } from "../engines/claude-sdk.js";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
+import { JS_SERVER_NAME, JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { resolveCommandSecrets, type SecretAccess } from "../secrets/secret-access.js";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
 // One tool, a peer of Bash, mounted by agent.ts from the request's own `jsExecution` field; the SDK server is only the
 // wire. Planning lives in turn-plan, fencing in js-runtime, gated by the same command gate and secret exit Bash rides.
-// Name constants live here since the mount, the `Code` alias, and the command-guard matcher must agree.
-export const JS_SERVER_NAME = "code";
-export const JS_TOOL_NAME = "mcp__code__run";
-export const JS_TOOL_ALIAS = "Code";
 
 export interface JsToolDeps {
     readonly plan: JsExecutionPlan;

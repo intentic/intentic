@@ -1,4 +1,4 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract";
 import { gitAuthHeader } from "./git-checkout.js";
 

@@ -2,7 +2,7 @@
 import { ProjectChip } from "@intentic/ui";
 import { computed } from "vue";
 import { setProjectScope } from "../../../app/projectScope";
-import { workspaceDir } from "../health/workspaceScope";
+import { workspaceDir } from "../../../app/workspaceScope";
 
 // Says which project the tree is rooted at, and is the way back to the whole workspace. The project is the shell's
 // (app/projectScope.ts), so clearing it here clears it for the agents board and every other view too. Absent on the

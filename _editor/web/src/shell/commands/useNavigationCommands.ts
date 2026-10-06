@@ -1,18 +1,18 @@
 import type { Disposable } from "@intentic/extension-api";
 import { computed, onMounted, onUnmounted, watch, type WatchStopHandle } from "vue";
 import { useRouter } from "vue-router";
-import { detectActivations, extensionPath } from "../../core-views/registry";
-import { useVocabulary } from "../../core-views/vocabulary";
+import { detectActivations, extensionPath } from "../../workbench/views/registry";
+import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../../features/extensions/usePanels";
 import { openPreview } from "../../features/preview/previewSurface";
 import { DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
 import { sandboxBuiltInSlugs, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
-import { useRole } from "../../features/sandbox/secrets/useRole";
+import { useRole } from "../../client/sandbox/useRole";
 import { useHostedPlan } from "../../features/settings/hosted-plan/useHostedPlan";
 import { settingsSectionPath, settingsSections } from "../../features/settings/settingsNav";
-import { GO_TO, SANDBOX, SETTINGS } from "./categories";
-import { registerCommand } from "./useCommands";
+import { GO_TO, SANDBOX, SETTINGS } from "../../workbench/commands/categories";
+import { registerCommand } from "../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";
 
 // Every place the shell can take you, as a command. Derived from the same tables the rail and the two hubs draw

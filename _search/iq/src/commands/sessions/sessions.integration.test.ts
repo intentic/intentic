@@ -1,6 +1,6 @@
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
 import { existsSync } from "node:fs";
-import { makeRecallFixture } from "@intentic/iq-recall/testing";
+import { makeRecallFixture } from "../../recall/testing.js";
 import { app } from "../../app.js";
 import { runHookMatch } from "./sessions.routes.js";
 

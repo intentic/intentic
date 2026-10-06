@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
-import { defaultGit } from "@intentic/scaffold";
+import { defaultGit } from "@intentic/base/git";
 import { isolatedAgent, noIsolation } from "../../../testing.js";
 import { changesAgainstBase } from "../../../git/changes/changes.js";
 import { stagePaths } from "../../../git/changes/changes-index.js";

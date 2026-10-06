@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { nextTick } from "vue";
 import { dir, file, type StoreOptions, treeSurface } from "../../../../testing/treeSurface";

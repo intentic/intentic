@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { RunnerCommand, RunnerCommandFrame } from "@intentic/sandbox-contract";
 import { endSession } from "../seams/session-processes.js";
 
@@ -227,7 +227,7 @@ export const createRunnerCommands = (deps: RunnerCommandDeps): RunningCommands =
                 try {
                     tree = await prepareTree(deps, input, say, controller.signal);
                 } catch (error) {
-                    out.push({ kind: "exit", code: 1, failure: error instanceof Error ? error.message : String(error), ran: false, files: {} });
+                    out.push({ kind: "exit", code: 1, failure: errorMessage(error), ran: false, files: {} });
                     return;
                 }
                 const exported = Object.fromEntries(input.exports.map((name) => [name, join(scratch, `export-${name}`)]));
@@ -284,7 +284,7 @@ export const createRunnerCommands = (deps: RunnerCommandDeps): RunningCommands =
                     files,
                 });
             } catch (error) {
-                out.push({ kind: "exit", code: 1, failure: error instanceof Error ? error.message : String(error), ran: true, files: {} });
+                out.push({ kind: "exit", code: 1, failure: errorMessage(error), ran: true, files: {} });
             } finally {
                 clearTimeout(timer);
                 running.delete(input.runId);

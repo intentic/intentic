@@ -9,7 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 // Same reason as the other viewer suites: the import chain reads browser globals (useDevice's matchMedia,
 // environment.ts's window.env), which the package preload stubs package-wide. Desktop, so Split|Unified is on offer.
 const { default: DiffToolbar } = await import("../DiffToolbar.vue");
-const { showComments, toggleShowComments } = (await import("../../../../shell/window/useLayout")).useLayout();
+const { showComments, toggleShowComments } = (await import("../../../../workbench/window/useLayout")).useLayout();
 
 let app: App | undefined;
 const mount = async (path: string): Promise<HTMLElement> => {

@@ -1,0 +1,123 @@
+{
+    "$comment": "The setup-progress lines a setup prints (ic's ui.rs `step`, `intentic: [<phase>] <sentence>`, and docker's pull, one line per layer per state) and how every reader takes them: ic's ui.rs, the desktop app's machine_sandbox.rs, desktop.ts and setupPlan.ts, and the web's agentHouse.ts. Each reader's tests read this file, so a phase, a weight or a layer state changed in one place and not the others fails a test.",
+    "phases": [
+        "fetching-ic",
+        "checking-docker",
+        "installing-docker",
+        "preflight",
+        "claiming-code",
+        "pulling-image",
+        "creating-tunnel",
+        "starting-sandbox",
+        "waiting-health",
+        "verifying",
+        "desktop-sync",
+        "connecting-machine"
+    ],
+    "plans": [
+        {
+            "input": { "os": "windows", "dockerReady": true, "syncing": true, "imageReady": false },
+            "steps": [
+                ["fetching-ic", 15],
+                ["checking-docker", 12],
+                ["preflight", 10],
+                ["claiming-code", 5],
+                ["pulling-image", 240],
+                ["starting-sandbox", 25],
+                ["waiting-health", 40],
+                ["verifying", 20],
+                ["desktop-sync", 45],
+                ["connecting-machine", 75]
+            ]
+        },
+        {
+            "input": { "os": "linux", "dockerReady": true, "syncing": true, "imageReady": true },
+            "steps": [
+                ["checking-docker", 5],
+                ["fetching-ic", 15],
+                ["preflight", 10],
+                ["claiming-code", 5],
+                ["pulling-image", 2],
+                ["starting-sandbox", 25],
+                ["waiting-health", 40],
+                ["verifying", 20],
+                ["desktop-sync", 45],
+                ["connecting-machine", 75]
+            ]
+        },
+        {
+            "input": { "os": "windows", "dockerReady": false, "syncing": false, "imageReady": false },
+            "steps": [
+                ["fetching-ic", 15],
+                ["checking-docker", 12],
+                ["installing-docker", 600],
+                ["preflight", 10],
+                ["claiming-code", 5],
+                ["pulling-image", 240],
+                ["starting-sandbox", 25],
+                ["waiting-health", 40],
+                ["verifying", 20],
+                ["connecting-machine", 75]
+            ]
+        },
+        {
+            "input": { "os": "macos", "dockerReady": false, "syncing": true, "imageReady": true },
+            "steps": [
+                ["checking-docker", 5],
+                ["installing-docker", 420],
+                ["fetching-ic", 15],
+                ["preflight", 10],
+                ["claiming-code", 5],
+                ["pulling-image", 2],
+                ["starting-sandbox", 25],
+                ["waiting-health", 40],
+                ["verifying", 20],
+                ["desktop-sync", 45],
+                ["connecting-machine", 75]
+            ]
+        }
+    ],
+    "steps": [
+        {
+            "line": "intentic: [pulling-image] pulling sandbox image ghcr.io/intentic/sandbox:stable (first run can take a minute)…",
+            "phase": "pulling-image",
+            "message": "pulling sandbox image ghcr.io/intentic/sandbox:stable (first run can take a minute)…"
+        },
+        { "line": "intentic: [checking-docker] Docker is ready.  ", "phase": "checking-docker", "message": "Docker is ready." },
+        { "line": "intentic: [preflight] ", "phase": "preflight", "message": "" },
+        { "line": "intentic: [preflight]", "phase": null },
+        { "line": "intentic: [Preflight] x", "phase": null },
+        { "line": "intentic: [pulling_image] x", "phase": null },
+        { "line": "intentic: [] x", "phase": null },
+        { "line": "intentic-requirement: {\"id\":\"virtualization\"}", "phase": null },
+        { "line": "stable: Pulling from intentic/sandbox", "phase": null }
+    ],
+    "layerDone": {
+        "Pulling fs layer": 0,
+        "Waiting": 0,
+        "Downloading": 0.15,
+        "Verifying Checksum": 0.6,
+        "Download complete": 0.6,
+        "Extracting": 0.8,
+        "Pull complete": 1,
+        "Already exists": 1
+    },
+    "layers": [
+        { "line": "6e3729cf69e0: Pull complete", "id": "6e3729cf69e0", "done": 1 },
+        { "line": "a1f1879bd7bf: Downloading [====>    ]  12.3MB/45.6MB", "id": "a1f1879bd7bf", "done": 0.15 },
+        { "line": "c4e6c4d4ab21: Already exists", "id": "c4e6c4d4ab21", "done": 1 },
+        { "line": "9f0a1b2c3d4e: Waiting", "id": "9f0a1b2c3d4e", "done": 0 },
+        { "line": "abcdef123456: Extracting [=====>   ]  1.2MB/3.4MB", "id": "abcdef123456", "done": 0.8 },
+        { "line": "abcdef: Verifying Checksum", "id": "abcdef", "done": 0.6 },
+        { "line": "6E3729CF69E0: Pull complete", "id": "6E3729CF69E0", "done": 1 },
+        { "line": "Status: Downloaded newer image for ghcr.io/intentic/sandbox:stable", "id": null },
+        { "line": "stable: Pulling from intentic/sandbox", "id": null },
+        { "line": "Digest: sha256:6a1f0e4b", "id": null },
+        { "line": "error: unauthorized", "id": null },
+        { "line": "", "id": null },
+        { "line": "note: Waiting", "id": null },
+        { "line": "abc: Waiting", "id": null },
+        { "line": "a1b2: Pull complete", "id": null },
+        { "line": "6e3729cf69e0: something else entirely", "id": null }
+    ]
+}

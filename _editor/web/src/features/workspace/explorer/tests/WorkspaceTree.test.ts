@@ -2,7 +2,7 @@
 // file), not just composable state.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import type { RowAction } from "../rowActions";
@@ -11,11 +11,11 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import type { TooltipValue } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
-import { ACTIVE_KEY, activeSandboxId } from "../../../sandbox/overview/activeSandbox";
+import { ACTIVE_KEY, activeSandboxId } from "../../../../lib/activeSandbox";
 import { useEntryDrag } from "../transfer/useEntryDrag";
-import * as actualSandboxClient from "../../../sandbox/client/sandboxClient";
-import * as actualSandboxRpc from "../../../sandbox/client/sandboxRpc";
-import type { ProcedureName } from "../../../sandbox/client/sandboxRpc";
+import * as actualSandboxClient from "../../../../client/sandbox/sandboxClient";
+import * as actualSandboxRpc from "../../../../client/sandbox/sandboxRpc";
+import type { ProcedureName } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 // jsdom implements no scrollIntoView; spied rather than stubbed so calls can be inspected.
@@ -64,14 +64,14 @@ const OK = { ok: true } as const;
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in. The factory is synchronous, since awaiting in one that replaces a loaded module never returns.
 const realSandboxClient = { ...actualSandboxClient };
-jest.mock("../../../sandbox/client/sandboxClient", () => {
+jest.mock("../../../../client/sandbox/sandboxClient", () => {
     return {
         ...realSandboxClient,
         sandboxJson: (path: string): Promise<unknown> => exchange({ path }, OK),
     };
 });
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../../sandbox/client/sandboxRpc", () => {
+jest.mock("../../../../client/sandbox/sandboxRpc", () => {
     return {
         ...realSandboxRpc,
         sandboxRpc: fakeSandboxRpc({
@@ -95,8 +95,8 @@ const inputsTo = (procedure: ProcedureName): unknown[] =>
 const { default: WorkspaceTree } = await import("../WorkspaceTree.vue");
 const { markFailed, noteArriving, reconcileProvisional } = await import("../../files/provisionalEntries");
 const { queryClient } = await import("../../../../lib/queryPersistence");
-const { useLayout } = await import("../../../../shell/window/useLayout");
-const { useNotifications } = await import("../../../../shell/notifications/notifications");
+const { useLayout } = await import("../../../../workbench/window/useLayout");
+const { useNotifications } = await import("../../../../workbench/notifications/notifications");
 const { useWorkspaceTabs } = await import("../../tabs/useWorkspaceTabs");
 
 const layout = useLayout();

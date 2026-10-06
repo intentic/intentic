@@ -22,9 +22,10 @@ export const HOUSE_STAGES = [
 
 export type HouseStage = (typeof HOUSE_STAGES)[number];
 
-// The setup's phase ids (the desktop app's setupPlan.ts, which `ic` and the scripts print) to what they build. A phase
+// The setup's phase ids (the desktop app's setupPlan.ts, which `ic` and the scripts print; sandbox-contract's
+// setup-progress.fixture.json lists them, and a test holds this table to it) to what they build. A phase
 // this list does not know is narration under the stage already reached, never a step back.
-const STAGE_OF_PHASE: Readonly<Record<string, HouseStage>> = {
+export const STAGE_OF_PHASE: Readonly<Record<string, HouseStage>> = {
     "fetching-ic": `plan`,
     "checking-docker": `plan`,
     "installing-docker": `plan`,

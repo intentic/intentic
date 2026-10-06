@@ -14,7 +14,7 @@ const newChat = () => {
 };
 
 import { queryClient } from "../../../../lib/queryPersistence";
-import { chatFullSlot } from "../../../../shell/window/panelSlots";
+import { chatFullSlot } from "../../../../workbench/window/panelSlots";
 import { router } from "../../../../router/index";
 import ChatTabList from "../ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";

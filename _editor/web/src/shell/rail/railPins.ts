@@ -1,7 +1,7 @@
 import { computed, type ComputedRef, shallowRef } from "vue";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../lib/browserStorage";
-import { useSandbox } from "../../features/sandbox/client/useSandbox";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 
 // A reader's per-tile override of the default rail table (registry.ts's `RAIL_GROUPS`), for the one tile the
 // default is wrong about for them. Kept by route, not view id, so pinning one of an extension's several same-id

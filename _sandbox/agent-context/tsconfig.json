@@ -8,6 +8,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
-    "references": [{ "path": "../../_shared/workspace-ignore" }],
+    "references": [{ "path": "../../_search/iq" }, { "path": "../../_shared/workspace-ignore" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

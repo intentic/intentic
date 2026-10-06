@@ -1,24 +1,26 @@
 <script setup lang="ts">
+import type { BundleExport, DefinitionDiff, DefinitionExport, WorkspaceRemote } from "@intentic/sandbox-contract";
 import {
-    DefinitionDiffSchema,
-    DefinitionExportSchema,
-    WorkspacePublishResultSchema,
-    WorkspaceRemoteSchema,
-    type BundleExport,
-    type DefinitionDiff,
-    type DefinitionExport,
-    type WorkspaceRemote,
-} from "@intentic/api-contract";
-import { Button, CopyButton, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
+    Button,
+    CopyButton,
+    formatBytes,
+    formatDateTime,
+    type NoticeModel,
+    NoticeStack,
+    Row,
+    RowGroup,
+    StatusBadge,
+    ui,
+    vAction,
+} from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { sandboxJson } from "../client/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { bundleDownloadUrl, useBundleExports } from "./useBundleExports";
 import ExportBundleDialog from "./ExportBundleDialog.vue";
 import { workspaceRepoOf } from "../overview/workspaceRepo";
 import { PUBLISH_ANCHOR } from "./publishAnchor";
-import { sizeLabel } from "@intentic/base/format";
 import { useT } from "@intentic/ui/i18n";
 
 // Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
@@ -39,7 +41,7 @@ const host = computed(() => workspace.value?.hosts[0]);
 
 const loadWorkspace = (): Promise<void> =>
     runWorkspace(async () => {
-        workspace.value = WorkspaceRemoteSchema.parse(await sandboxJson(`/definition/workspace`));
+        workspace.value = await sandboxRaw(`GET /definition/workspace`);
     }, `Could not read the workspace repo.`);
 
 onMounted(() => {
@@ -49,13 +51,7 @@ onMounted(() => {
 // Confirmed, not one-click: publishing creates a repository on someone's account and pushes to it.
 const publish = (): Promise<void> =>
     runPublish(async () => {
-        const result = WorkspacePublishResultSchema.parse(
-            await sandboxJson(`/definition/workspace/publish`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({}),
-            }),
-        );
+        const result = await sandboxRaw(`POST /definition/workspace/publish`, { input: {} });
         workspace.value = { remote: result.remote, branch: result.branch, hosts: workspace.value?.hosts ?? [] };
         confirmingPublish.value = false;
     }, `Could not publish the workspace.`);
@@ -67,7 +63,7 @@ const { busy: deriving, notice: deriveError, run: runDerive } = useAsyncAction()
 // The document is small text, so unlike a bundle it downloads through an object URL rather than a ticket.
 const downloadDefinition = (): Promise<void> =>
     runDerive(async () => {
-        const answer = DefinitionExportSchema.parse(await sandboxJson(`/definition`));
+        const answer = await sandboxRaw(`GET /definition`);
         derived.value = answer;
         const url = URL.createObjectURL(new Blob([answer.toml], { type: `application/toml` }));
         const anchor = document.createElement(`a`);
@@ -116,7 +112,7 @@ const compare = (event: Event): Promise<void> =>
         if (file === undefined) {
             return;
         }
-        diff.value = DefinitionDiffSchema.parse(await sandboxJson(`/definition/diff`, { method: `POST`, body: await file.text() }));
+        diff.value = await sandboxRaw(`POST /definition/diff`, { input: await file.text() });
     }, `Could not compare against that definition.`);
 </script>
 
@@ -227,10 +223,10 @@ const compare = (event: Event): Promise<void> =>
                 >
                 <template #description>
                     <template v-if="entry.status === 'packing'">{{
-                        t(`sandbox.moveOutPanel.packingFar`, { bytes: sizeLabel(entry.bytes) })
+                        t(`sandbox.moveOutPanel.packingFar`, { bytes: formatBytes(entry.bytes) })
                     }}</template>
                     <template v-else-if="entry.status === 'failed'">{{ entry.error ?? t(`sandbox.moveOutPanel.exportFailed`) }}</template>
-                    <template v-else>{{ sizeLabel(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
+                    <template v-else>{{ formatBytes(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
                 </template>
                 <template #meta>
                     <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" :label="t(`sandbox.moveOutPanel.secrets`)" />

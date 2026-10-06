@@ -2,13 +2,13 @@
 // member below the write tier sees in the explorer, not just the daemon's 403.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { ACTIVE_KEY, activeSandboxId } from "../../../sandbox/overview/activeSandbox";
-import * as actualSandboxRpc from "../../../sandbox/client/sandboxRpc";
-import type { ProcedureName } from "../../../sandbox/client/sandboxRpc";
+import { ACTIVE_KEY, activeSandboxId } from "../../../../lib/activeSandbox";
+import * as actualSandboxRpc from "../../../../client/sandbox/sandboxRpc";
+import type { ProcedureName } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
@@ -24,7 +24,7 @@ const daemon = { calls: [] as { procedure: ProcedureName; input: unknown }[] };
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../../sandbox/client/sandboxRpc", () => {
+jest.mock("../../../../client/sandbox/sandboxRpc", () => {
     return {
         ...realSandboxRpc,
         sandboxRpc: fakeSandboxRpc({
@@ -41,7 +41,7 @@ jest.mock("../../../sandbox/client/sandboxRpc", () => {
 // Signed-in member's tier, switched per test; mocked directly since the subject is what the explorer does with it.
 // The tier that writes is `writer`, below the operating one: a collaborator is read-only in the tree.
 const role = { canWrite: false };
-jest.mock("../../../sandbox/secrets/useRole", () => {
+jest.mock("../../../../client/sandbox/useRole", () => {
     return {
         useRole: () => ({
             role: computed(() => (role.canWrite ? `writer` : `collaborator`)),

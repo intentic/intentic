@@ -4,8 +4,7 @@ import { createHash } from "node:crypto";
 // hashes, hashline anchors). node:crypto makes this subpath node-only.
 export const sha256Hex = (value: string): string => createHash("sha256").update(value).digest("hex");
 
-// Twelve lowercase hex characters, a gate applied before trusting an id off the wire (a hostname, a ticket).
-export const SANDBOX_ID = /^[0-9a-f]{12}$/;
+export { SANDBOX_ID } from "./sandbox-id.js";
 
 // The sandbox's stable 12-hex id, digested from the connect token; every public hostname embeds it, and the platform's
 // grant mint, tunnelId lookup and the desktop agent's loopback dial all must derive the identical value.

@@ -5,12 +5,15 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { repoRoot as findRepoRoot } from "@intentic/constants/node";
-import { cloudflareApi, forgejoApi, sshExecutor } from "@intentic/providers";
+import { cloudflareApi, createSshExecutor, forgejoApi, inMemoryHostKeyStore } from "@intentic/providers";
 import { deploymentId, deploymentPort } from "@intentic/state-resolver";
 import { e2eTier } from "@intentic/testing/e2e";
 import { utils } from "ssh2";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
+
+// A throwaway local container: its first key is the only one it will ever present, so trust-on-first-use is right here.
+const sshExecutor = createSshExecutor(inMemoryHostKeyStore());
 
 // Manual, real-infra E2E: gates on `secrets`, not the token, so a missing credential skips only this tier.
 const tier = e2eTier("intentic CLI end-to-end (manual, real Cloudflare + DinD)", {

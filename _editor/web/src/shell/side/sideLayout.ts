@@ -1,7 +1,7 @@
 import { computed } from "vue";
 import { chatInSidePanel } from "../../features/chat/panel/chatPanelLayout";
-import { useSidePanel } from "./sideTabs";
-import { shownSideTabs } from "./sideViews";
+import { useSidePanel } from "../../workbench/side/sideTabs";
+import { shownSideTabs } from "../../workbench/side/sideViews";
 
 // HOW THE SHELL LAYS OUT WHAT WAS OPENED BESIDE A SIDE-DOCKED CHAT, read by the shell's grid and the side panel alike.
 // Opening something beside the chat means the reader wants to look at it now, so it takes the whole middle: in a column

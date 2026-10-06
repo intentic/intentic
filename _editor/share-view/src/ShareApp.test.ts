@@ -4,6 +4,7 @@
 import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
 import { type App, createApp } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { formatDate } from "@intentic/ui/format";
 
 const { default: ShareApp } = await import("./ShareApp.vue");
 const { ELEMENT_ID } = await import("./payload");
@@ -113,4 +114,35 @@ it(`renders a page with no conversation in it as a page with nothing to show, no
     const element = publish(null);
     expect(element.querySelector(`.chat-markdown`)).toBeNull();
     expect(element.textContent?.trim().length ?? 0).toBeGreaterThan(0);
+});
+
+// The subtitle comes from the catalog, plural forms included, not a string built in English on a translated page.
+it(`counts its messages in the page's language, singular and plural`, () => {
+    const day = formatDate(1786372320000);
+    const one = publish(conversation([{ role: `user`, text: `hi` }]));
+    expect(one.querySelector(`header p span`)?.textContent).toBe(`1 message · shared ${day}`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+    document.head.innerHTML = ``;
+
+    const two = publish(conversation([{ role: `user`, text: `hi` }, { role: `assistant`, text: `hello` }]));
+    expect(two.querySelector(`header p span`)?.textContent).toBe(`2 messages · shared ${day}`);
+});
+
+// Same rule as the app's transcript (dayMarksOf): a day is named above the turn first sent on it, and a later turn on
+// that day gets no second marker, nor does an answer stamped after midnight.
+it(`names a day above the first turn sent on it and nowhere else`, () => {
+    const monday = Date.UTC(2026, 8, 7, 12);
+    const tuesday = Date.UTC(2026, 8, 8, 12);
+    const element = publish(
+        conversation([
+            { role: `user`, text: `first`, sentAt: monday },
+            { role: `assistant`, text: `one`, sentAt: tuesday },
+            { role: `user`, text: `second`, sentAt: monday + 60_000 },
+            { role: `assistant`, text: `two` },
+            { role: `user`, text: `third`, sentAt: tuesday },
+        ]),
+    );
+    const marks = [...element.querySelectorAll(`main > div.items-center:not(.justify-center)`)].map((mark) => mark.textContent?.trim());
+    expect(marks).toEqual([formatDate(monday), formatDate(tuesday)]);
 });

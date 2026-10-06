@@ -5,7 +5,7 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import MobileTabBar from "./MobileTabBar.vue";
 import { useTabRoots } from "./mobileTabs";
-import { onTabRoot } from "./tabRoots";
+import { onTabRoot } from "../lib/routes/tabRoots";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 
 // Mobile chrome: full-screen views over a bottom tab bar. h-dvh tracks the browser's UI chrome; the

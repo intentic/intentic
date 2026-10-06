@@ -17,10 +17,10 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
 import { assignAgent, requestLandAgent, startAgent } from "../fleet/agentActions";
-import { errorMessage } from "@intentic/ui/async";
-import { presenceOthers } from "../../../shell/presence/usePresence";
+import { messageOr } from "@intentic/ui/async";
+import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
-import { mobileChatPath } from "../../../shell/tabRoots";
+import { mobileChatPath } from "../../../lib/routes/tabRoots";
 import { afterPaint } from "../../../lib/afterPaint";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../chat/transcript/transcriptWait";
@@ -28,9 +28,9 @@ import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
 import { otherBoxes, refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { useAgentChanges } from "./useAgentChanges";
 import { useAgents } from "../fleet/useAgents";
-import { useSandbox } from "../../sandbox/client/useSandbox";
-import { useRole } from "../../sandbox/secrets/useRole";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
@@ -396,7 +396,7 @@ const confirmHandOver = async (): Promise<void> => {
         await assignAgent(agentId.value, to, remoteBox.value);
         pendingHandOver.value = false;
     } catch (error) {
-        handOverError.value = errorMessage(error, t(`agents.agentDetail.handOverFailed`));
+        handOverError.value = messageOr(error, t(`agents.agentDetail.handOverFailed`));
     } finally {
         handOverBusy.value = false;
     }

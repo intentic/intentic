@@ -5,9 +5,11 @@ import { repoRoot } from "@intentic/constants/node";
 import type { Capability } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
+import { environmentSourcesOf } from "../environment-composers.js";
+import { environmentSourcesFake } from "../testing.js";
 import { unstubbed } from "@intentic/testing";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
-import { packFragment } from "./packs.js";
+import { packFragment } from "../image/packs.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 import { hasOfficialBase } from "@intentic/sandbox-contract";
@@ -43,8 +45,10 @@ const RELEASE = "ghcr.io/intentic/sandbox:stable";
 // The real first-party connectors/discord extensions, so a cli capability's image fragment resolves.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
-const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services =>
-    unstubbed<Services>("services", {
+const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services => {
+    const services: Services = unstubbed<Services>("services", {
+        // The real fragment sources over these very services, as composition.ts fills the port.
+        environmentSources: environmentSourcesOf(() => services),
         // The real module list: which packs a connected provider wants is each module's own answer.
         providerModules: PROVIDER_MODULES,
         config: unstubbed<Services["config"]>("config", {
@@ -84,6 +88,8 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
         authRoot: mkdtempSync(join(tmpdir(), "environment-auth-")),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
+    return services;
+};
 
 const vpn = (id: string): Capability => ({
     id,
@@ -198,6 +204,32 @@ test("compose folds a capability's fragment (install + runtime directives) into 
     expect(approved).toContain("wireguard-tools");
     expect(approved).toContain("# intentic:runtime --device=/dev/net/tun");
     expect(approved).toContain("# intentic:runtime --cap-add=NET_ADMIN");
+});
+
+// The environment reads what capabilities, extensions and connected providers contribute only through its port: a
+// source the port names rides the overlay, attributed to nothing the environment knows of itself.
+test("compose takes every contributed fragment from the environment sources port", async () => {
+    const real = stubServices("", [vpn("office")]);
+    const asked: string[] = [];
+    const services: Services = {
+        ...real,
+        environmentSources: environmentSourcesFake({
+            capabilityFragments: async (capability) => {
+                asked.push(capability.id);
+                return [`# ${capability.id} from the port\nRUN echo capability`];
+            },
+            workspaceExtensionFragments: async () => ["# extension from the port\nRUN echo extension"],
+            providerPackFragments: async () => ["# provider from the port\nRUN echo provider"],
+        }),
+    };
+    await composeEnvironment(services);
+    const approved = (await services.files.read(approvedPath(services)))!;
+    expect(asked).toEqual(["office"]);
+    expect(approved).toContain("# office from the port\nRUN echo capability");
+    expect(approved).toContain("# extension from the port\nRUN echo extension");
+    expect(approved).toContain("# provider from the port\nRUN echo provider");
+    // The vpn handler's own fragment is the real source's answer, which this port did not give.
+    expect(approved).not.toContain("wireguard-tools");
 });
 
 test("compose dedupes identical fragments and orders distinct ones canonically", async () => {

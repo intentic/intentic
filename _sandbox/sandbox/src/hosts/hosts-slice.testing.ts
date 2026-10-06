@@ -1,7 +1,7 @@
 import { unstubbed } from "@intentic/testing";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
 import { pairings } from "../peers/enrollment.js";
-import { enrolledFleet, syncPairBurns, type SyncMode } from "./desktop-sync.js";
+import { enrolledFleet, syncPairBurns, type SyncMode } from "../peers/desktop-sync.js";
 import type { HostsSlice } from "./hosts-slice.js";
 
 // The hosts slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.

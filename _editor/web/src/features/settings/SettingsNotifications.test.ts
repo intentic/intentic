@@ -7,7 +7,7 @@ import { waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, nextTick, ref } from "vue";
-import type { PushState } from "../../push/usePushNotifications";
+import type { PushState } from "../../workbench/push/usePushNotifications";
 
 const state = ref<PushState>(`off`);
 const busy = ref(false);
@@ -29,7 +29,7 @@ const chain = (): Promise<void> => {
 const enable = jest.fn(chain);
 const disable = jest.fn(chain);
 
-jest.mock(`../../push/usePushNotifications`, () => ({
+jest.mock(`../../workbench/push/usePushNotifications`, () => ({
     usePushNotifications: () => ({
         state,
         busy,

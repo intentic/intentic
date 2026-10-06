@@ -5,13 +5,13 @@ import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../features/agents/board/agentsTile";
 import { watchDeviceReturns } from "../features/sandbox/devices/useDeviceReturns";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
-import { useMainWindow } from "./window/mainWindow";
+import { useMainWindow } from "../workbench/window/mainWindow";
 import { openInWorkspace, openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
 import { openPreviewBeside } from "../features/preview/previewSurface";
-import { revealSideView } from "./side/sideViews";
+import { revealSideView } from "../workbench/side/sideViews";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 import { useChat } from "../features/chat/run/useChat";
-import { mobileChatPath } from "./tabRoots";
+import { mobileChatPath } from "../lib/routes/tabRoots";
 import { useGuestFence } from "./guestFence";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a

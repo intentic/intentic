@@ -6,7 +6,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { createLogger } from "../logger.js";
 import { privacyShieldDocument } from "../privacy/privacy-policy.js";
-import { packFragment } from "./packs.js";
+import { packFragment } from "../image/packs.js";
 import { privacyPackFragments, privacyPackWanted } from "./privacy-pack.js";
 
 /* The privacy pack rides the overlay exactly when the shield's policy asks for one of its readers. */

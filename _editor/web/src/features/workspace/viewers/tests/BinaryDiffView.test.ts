@@ -18,7 +18,7 @@ import { IconStub } from "@intentic/ui/testing";
 // Daemon fetch stubbed at the viewer's seam (bytes only, not auth). `same` returns one identical body for both
 // sides, the case this viewer must call out explicitly.
 const fetched: string[] = [];
-jest.mock("../../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
         fetched.push(path);
         if (path.includes(`missing`)) {
@@ -32,7 +32,7 @@ jest.mock("../../../sandbox/client/sandboxClient", () => ({
 }));
 
 const { default: BinaryDiffView } = await import("../BinaryDiffView.vue");
-const { registerViewer } = await import("../../../../core-views/viewerRegistry");
+const { registerViewer } = await import("../../../../workbench/views/viewerRegistry");
 
 // A stand-in for an extension's document viewer: draws the byte count of what it was handed, so a test can tell
 // which side each instance got and that it got a blob, not a URL.

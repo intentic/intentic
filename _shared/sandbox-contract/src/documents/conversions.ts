@@ -1,3 +1,5 @@
+import { errorMessage } from "@intentic/base/errors";
+
 // A stored document's history as data: each conversion is a guarded, pure rewrite of the raw JSON a store reads, run
 // before the schema on every read. The guard makes a conversion a no-op on a document already past it, so running the
 // whole list over a document from any era converges on today's shape without the document carrying a version, and
@@ -355,7 +357,7 @@ export class ConversionError extends Error {
     readonly conversion: string;
 
     constructor(conversion: string, cause: unknown) {
-        super(`conversion "${conversion}" failed: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+        super(`conversion "${conversion}" failed: ${errorMessage(cause)}`, { cause });
         this.name = "ConversionError";
         this.conversion = conversion;
     }

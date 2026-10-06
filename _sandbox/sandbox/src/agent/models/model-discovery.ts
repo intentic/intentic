@@ -17,10 +17,14 @@ export const idCatalog = (ids: readonly string[]): { models: { id: string; label
 
 export const authHeader = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 
-// GETs a JSON endpoint, returning undefined for every way it can fail (unreachable, non-2xx, not JSON) rather than
-// throwing, so a ladder rung that can't answer lets the caller fall to the next one.
+// How long one model-catalog request may take, headers and body together, before its rung counts as failed and the
+// caller falls to the next: the same 10 s a local endpoint's discovery gets (endpoints/endpoint-catalog.ts).
+export const DISCOVERY_TIMEOUT_MS = 10_000;
+
+// GETs a JSON endpoint, returning undefined for every way it can fail (unreachable, stalled past DISCOVERY_TIMEOUT_MS,
+// non-2xx, not JSON) rather than throwing, so a ladder rung that can't answer lets the caller fall to the next one.
 export const getJson = async <T>(url: string, token: string, fetchImpl: typeof fetch): Promise<T | undefined> => {
-    const response = await fetchImpl(url, { headers: authHeader(token) }).catch(() => undefined);
+    const response = await fetchImpl(url, { headers: authHeader(token), signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS) }).catch(() => undefined);
     if (response === undefined || !response.ok) {
         return undefined;
     }

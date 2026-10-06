@@ -1,19 +1,17 @@
 import { hostRunningSandbox } from "@intentic/sandbox-contract";
 import { ORIGIN_HOST } from "@intentic/sandbox-run";
-import { listSubagentSessions } from "../agent/subagents/subagents.js";
-import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
+import { fileRestartResume } from "../system/restart-resume.js";
 import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
 import { nextOneTimeWakeAt, nextRunOf } from "../automations/scheduler.js";
 import { sandboxZone } from "../automations/schedule-zone.js";
 import type { BootPhase } from "./boot-phase.js";
+import { workingNames } from "./working-now.js";
 import type { Services } from "../composition.js";
 import { containerFacts } from "../environment/environment.js";
 import { devices, manageDeviceSandbox } from "../hosts/device-reports.js";
-import { agentsMidTurn } from "../hosts/host-restart-guard.js";
 import { hostRunningSelf, ownSlug } from "../hosts/self-host.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { isDevBuild } from "../version.js";
-import { runningWorkflowIds } from "../workflows/workflow-runner.js";
 import { lastTerminalActivity } from "../system/idle-stop.js";
 import { connectedCount, peopleAtEditor, subscribePresence } from "../system/presence.js";
 import { type AutoUpdateActivity, type AutoUpdateOffer, createAutoUpdater, holdAutoUpdater } from "../system/updates/auto-update.js";
@@ -28,27 +26,6 @@ import { latestVersion } from "../system/updates/version-check.js";
 // machine (the platform moves its image), a checkout-built base (an update would replace what the checkout built), a dev
 // build, or a container no machine knows by name.
 
-// Everything mid-flight that a restart would cut, by the name the board or the run shows it under, once each.
-const workingNow = async (services: Services): Promise<string[]> => {
-    const working = new Set(agentsMidTurn(services));
-    for (const agent of services.agents.list()) {
-        if (services.conversations.landing(agent.id)) {
-            working.add(agent.title ?? agent.id);
-        }
-    }
-    // Only one actually running: a subagent parked on a question or a spent allowance waits as well across a restart.
-    for (const session of listSubagentSessions(services.conversations)) {
-        if (session.status === "running") {
-            working.add(session.description ?? session.agentType ?? "a subagent");
-        }
-    }
-    for (const runId of runningWorkflowIds()) {
-        const run = await services.workflowRuns.get(runId);
-        working.add(run?.workflow.name ?? "a workflow");
-    }
-    return [...working];
-};
-
 // The soonest moment the sandbox promised somebody: an automation's next run (a cron's too, unlike idle-stop: a restart
 // landing on its minute would fire it late for nothing) and a scheduled message.
 const soonestDue = async (services: Services): Promise<number> => {
@@ -61,7 +38,9 @@ const soonestDue = async (services: Services): Promise<number> => {
 };
 
 const activityOf = async (services: Services): Promise<AutoUpdateActivity> => {
-    const [working, terminalAt, dueAt] = await Promise.all([workingNow(services), lastTerminalActivity(), soonestDue(services)]);
+    const [terminalAt, dueAt] = await Promise.all([lastTerminalActivity(), soonestDue(services)]);
+    // Everything mid-flight that a restart would cut, by the name the board or the run shows it under, once each.
+    const working = workingNames(services, "restart");
     return { working, people: peopleAtEditor(), connected: connectedCount(), terminalAt, dueAt };
 };
 

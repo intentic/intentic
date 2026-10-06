@@ -4,7 +4,7 @@ import { pathExists } from "@intentic/base/fs";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
-import { onPath } from "../../system/boot/on-path.js";
+import { onPath } from "../../image/on-path.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import {
     type OutdatedDependency,

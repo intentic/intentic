@@ -1,18 +1,19 @@
 import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
-import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
+import { type AgentSummary, AgentSummarySchema, type AutomationApproval } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, watch } from "vue";
 import { agentTranscriptKey } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
 import { reportClient } from "../../../app/clientDiagnostics";
 import { buildId } from "../../../app/buildEpoch";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { onScreen } from "../../../shell/window/onScreen";
+import { onScreen } from "../../../workbench/window/onScreen";
 import { AGENT_REVIEW, rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import type { FleetAgent } from "./useAgents-fleet";
 import { observeRoster } from "./sandboxClock";
 
@@ -29,19 +30,22 @@ const ROSTER_PREFIX = `intentic.roster.`;
 // Past this, a roster is not worth a synchronous write on the way out; the next start simply waits for the stream.
 const ROSTER_MAX_CHARS = 1_000_000;
 const { activeSandboxId } = useSandbox();
+// The stamp is read first, so a record from another build is turned away before its agents are parsed at all.
+const StoredStamp = z.object({ build: z.string() });
+const StoredAgents = z.object({ agents: z.array(AgentSummarySchema) });
 
 export const readStoredRoster = (sandboxId: string | undefined, build: string): AgentSummary[] => {
     if (sandboxId === undefined) {
         return [];
     }
     try {
-        // SAFETY: only saveRoster writes this key, as `{ build, agents }` from the registry; a record from another build is
-        // refused by its build stamp before its agents are trusted, and anything unparsable lands in the catch.
-        const stored = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`) as {
-            build?: string;
-            agents?: AgentSummary[];
-        } | null;
-        return stored?.build === build && Array.isArray(stored.agents) ? stored.agents : [];
+        // Only saveRoster writes this key, as `{ build, agents }` from the registry; a record from another build is refused
+        // by its build stamp before its agents are read, and a record that is not this shape is no roster at all.
+        const stored: unknown = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`);
+        if (StoredStamp.safeParse(stored).data?.build !== build) {
+            return [];
+        }
+        return StoredAgents.safeParse(stored).data?.agents ?? [];
         // allow(silent-catch): Unreadable storage discards only the cached roster; the live stream remains authoritative.
     } catch {
         return [];
@@ -468,7 +472,7 @@ export const loadArchived = async (): Promise<void> => {
         } catch (error) {
             // Leave whatever was listed last, and say why: an empty archive view would claim nothing was ever filed.
             if (current()) {
-                archiveFailure.value = errorMessage(error, `Couldn't read the archive.`);
+                archiveFailure.value = messageOr(error, `Couldn't read the archive.`);
             }
             return;
         } finally {

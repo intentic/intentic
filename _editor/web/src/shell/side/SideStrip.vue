@@ -2,7 +2,7 @@
 import { type Tip, ui, vMiddleclick } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { type ComponentPublicInstance, nextTick, useTemplateRef, watch } from "vue";
-import type { SideViewLabel } from "./sideViews";
+import type { SideViewLabel } from "../../workbench/side/sideViews";
 
 // The side panel's strip: one tab per thing opened beside, in the workspace file strip's idiom (FileTabs.vue) so the two
 // read as one habit. Presentational: the panel owns the list and answers every gesture. The peek draws italic until

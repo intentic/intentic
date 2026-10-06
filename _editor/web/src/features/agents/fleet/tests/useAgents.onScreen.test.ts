@@ -5,7 +5,7 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 // Same edges useAgents.test.ts cuts: importing the fleet store pulls in useChat and the app shell behind it.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../../../sandbox/client/useSandbox", () => {
+jest.mock("../../../../client/sandbox/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -13,8 +13,8 @@ jest.mock("../../../sandbox/client/useSandbox", () => {
 });
 // The read marker, the one daemon write this gate decides.
 const seen = jest.fn();
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { seen } }) }));
-jest.mock("../../../sandbox/client/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { seen } }) }));
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { nextTick, ref } from "vue";

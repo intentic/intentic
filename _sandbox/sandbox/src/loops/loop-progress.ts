@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
 // Detects a stalled loop: iterations that succeed yet change nothing on disk. Tracks each repo's HEAD sha plus

@@ -1,5 +1,5 @@
 import type { RewindResult } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 

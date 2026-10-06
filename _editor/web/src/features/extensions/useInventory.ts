@@ -1,10 +1,10 @@
-import type { AddInventoryInput, InventoryEntry } from "@intentic/api-contract";
+import type { AddInventoryInput, InventoryEntry } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcKey } from "../../lib/queryKeys";
-import { rpcQuery } from "../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 /* The sandbox's inventory, the i.have.* / i.want.service entries in its intent repo deploy.config.ts. Every write
    answers with the whole updated list, which replaces the cached one. */

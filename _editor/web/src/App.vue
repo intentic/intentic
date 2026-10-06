@@ -3,14 +3,14 @@
 import HostModelPicker from "./features/chat/models/host/HostModelPicker.vue";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAuth } from "./features/auth/useAuth";
+import { useAuth } from "./client/auth/useAuth";
 import { HANDOFF_ROUTE } from "./features/auth/handoffSpent";
-import { useSandbox } from "./features/sandbox/client/useSandbox";
+import { useSandbox } from "./client/sandbox/useSandbox";
 import { startNotificationSources } from "./shell/notifications/notificationSources";
 import { startRememberingSandboxes } from "./features/sandbox/recovery/rememberSandboxes";
-import NotificationHost from "./shell/notifications/NotificationHost.vue";
+import NotificationHost from "./workbench/notifications/NotificationHost.vue";
 import SignInWall from "./features/sandbox/gates/SignInWall.vue";
-import WindowControls from "./shell/window/WindowControls.vue";
+import WindowControls from "./workbench/window/WindowControls.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 import LocalRuntime from "./local/LocalRuntime.vue";
 import { localFace } from "./app/environments/local";
@@ -47,6 +47,6 @@ watch(user, (current, previous) => {
     <HostModelPicker />
 <!-- THE ONE LANE. -->
     <NotificationHost />
-<!-- THE WINDOW'S OWN THREE BUTTONS, in the app's top row, inside the desktop app and nowhere else (shell/window/WindowControls.vue). -->
+<!-- THE WINDOW'S OWN THREE BUTTONS, in the app's top row, inside the desktop app and nowhere else (workbench/window/WindowControls.vue). -->
     <WindowControls />
 </template>

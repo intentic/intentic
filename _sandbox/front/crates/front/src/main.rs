@@ -149,7 +149,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
                     listeners.apply(&listen).await;
                 }
                 Pushed::Certificate(certificate) => {
-                    if let Err(error) = certificates.replace(certificate.as_ref()) {
+                    if let Err(error) = tls::apply(&certificates, certificate.as_ref()) {
                         tracing::error!(%error, "the loopback certificate is unusable; keeping the one held");
                     }
                 }

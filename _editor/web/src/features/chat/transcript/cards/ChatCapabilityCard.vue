@@ -3,7 +3,7 @@ import { CAPABILITY_CATALOG } from "@intentic/capability-catalog";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { navigateInApp } from "../../../../shell/window/mainWindow";
+import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { entryDescription } from "../../../capabilities/model/catalogCopy";
 import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";

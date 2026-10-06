@@ -17,7 +17,10 @@ flowchart LR
   through one typed client.
 - Policy sits beside each route: `procedure()` declares how a request authenticates, which member tier it needs and how
   far a control token reaches. Routes outside oRPC (streams, WebSocket upgrades, `/health`) are listed in
-  `RAW_ROUTES`.
+  `RAW_ROUTES`. One that answers plain JSON (`/members`, `/environment`, `/engines`, `/definition`) has its input and
+  answer schemas in `RAW_JSON_ROUTES` under the same key, which the editor's `sandboxRaw` fetches by and parses with;
+  any other caller builds the path with `rawRouteUrl` (or `procedurePath` for a procedure it calls without oRPC's
+  client), so no route is spelled a second time.
 - Four contracts run the other way. `deviceContract`, `webextContract`, `phoneContract` and `runnerContract` are served
   by a user's machine, the browser extension, the phone app and a runner over the socket each one opens, with the
   daemon as the client. The phone's is carried as plain JSON-RPC (`src/protocol/phone-protocol.ts`), since its far end is
@@ -77,7 +80,7 @@ flowchart LR
 
 - [src/index.ts](src/index.ts) — `sandboxContract`, the route tables derived from it, and every public export.
 - [src/protocol/route-meta.ts](src/protocol/route-meta.ts) — the per-route policy fields and their defaults.
-- [src/protocol/raw-routes.ts](src/protocol/raw-routes.ts) — every route the daemon serves outside oRPC.
+- [src/protocol/raw/raw-routes.ts](src/protocol/raw/raw-routes.ts) — every route the daemon serves outside oRPC, and `rawRouteUrl`.
 - [src/protocol/routes.ts](src/protocol/routes.ts) — route naming, `streamOf` for streamed routes, and the route list a daemon advertises.
 - [contract.lock.json](contract.lock.json) — the committed fingerprint of the wire surface.
 - [src/webext/index.ts](src/webext/index.ts) — a narrow entry point, one of several that keep small bundles off the barrel.

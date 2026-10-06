@@ -1,5 +1,6 @@
 import { unlink } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { errorMessage } from "@intentic/base/errors";
 import { COST_BYTES, needBytes, ROOM_SOCKET, type RoomSize, type RoomWorkload } from "@intentic/constants/memory-room";
 import type { Logger } from "pino";
 import type { PerfTracker } from "../system/resources/perf.js";
@@ -82,7 +83,7 @@ export const createRoomServer = (budget: ResourceBudget, perf?: Pick<PerfTracker
                 reservedBytes: snapshot.reservedBytes,
                 ...(admission.verdict === "run" ? {} : { diagnosis: admission.message }),
             });
-        })().catch((error: unknown) => answer(500, { error: error instanceof Error ? error.message : String(error) }));
+        })().catch((error: unknown) => answer(500, { error: errorMessage(error) }));
     });
 
 /** Serves the budget on `path`; a sandbox without /run/intentic (a dev daemon on a laptop) goes without, and says so. */

@@ -4,12 +4,18 @@
 // names.
 export {
     formatBytes,
+    formatClock,
+    formatCompact,
+    formatCount,
     formatDate,
     formatDateLong,
     formatDateTime,
     formatDayMonth,
     formatDayMonthTime,
     formatDuration,
+    formatElapsed,
+    formatMoney,
+    formatPercent,
     formatTime,
     formatTimestamp,
     formatTokens,

@@ -1,4 +1,4 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { OriginAgent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";

@@ -32,7 +32,7 @@ jest.mock("@intentic/ui", () => {
 jest.mock("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
 jest.mock("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
 jest.mock("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: jest.fn() }));
-jest.mock("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
+jest.mock("../../../../client/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
 
 const { default: AgentReactions } = await import("./AgentReactions.vue");
 

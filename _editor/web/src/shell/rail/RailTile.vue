@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
 import { RouterLink } from "vue-router";
-import ViewBadgeChip from "../../core-views/ViewBadgeChip.vue";
-import { RUNNING_MARK_CLASS } from "../../core-views/viewBadge";
+import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
+import { RUNNING_MARK_CLASS } from "../../workbench/views/viewBadge";
 import RailIcon from "./RailIcon.vue";
-import TileMark from "./TileMark.vue";
+import TileMark from "../../components/TileMark.vue";
 
 // ONE TILE OF THE RAIL, as a link: the section's glyph, its badge in the top corner, and the spinning mark in the bottom
 // one while work runs behind it. The sandbox shell draws its tiles inline (ShellDesktop.vue); a desktop window on a local

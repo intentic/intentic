@@ -13,27 +13,16 @@ fn docker(args: &[&str]) -> Command {
     cmd
 }
 
-/// Docker Desktop's CLI folder beside `desktop_exe` (empty for unknown) or under the default install root.
+/// Docker Desktop's CLI folder beside `desktop_exe` (empty for unknown) or beside a default install: the shared
+/// discovery's cheap half (`intentic_docker_host::desktop_app`), since every `ic` run asks this before anything else.
 #[cfg(windows)]
 pub fn program_folder(desktop_exe: &str) -> Option<std::path::PathBuf> {
-    let mut roots: Vec<std::path::PathBuf> = Vec::new();
-    if let Some(dir) = std::path::Path::new(desktop_exe)
-        .parent()
-        .filter(|_| !desktop_exe.is_empty())
-    {
-        roots.push(dir.join("resources").join("bin"));
-    }
-    if let Ok(program_files) = std::env::var("ProgramFiles") {
-        roots.push(
-            std::path::Path::new(&program_files)
-                .join("Docker")
-                .join("Docker")
-                .join("resources")
-                .join("bin"),
-        );
-    }
-    roots
-        .into_iter()
+    use intentic_docker_host::desktop_app;
+    std::iter::once(desktop_exe.to_string())
+        .filter(|exe| !exe.is_empty())
+        .chain(desktop_app::default_installs_here())
+        .filter_map(|app| desktop_app::cli_folder_beside(&app))
+        .map(std::path::PathBuf::from)
         .find(|dir| dir.join("docker.exe").exists())
 }
 
@@ -122,22 +111,18 @@ pub fn engine(limit: Duration) -> Engine {
     refusal_kind(&ran.stderr)
 }
 
-/// Which of the three refusals docker's own words describe. Pure. An answer with an error in it outranks the rest:
-/// a pipe that answered 500 is an engine that exists and is broken, which no start fixes. Anything unrecognised is
-/// read as down, the reading whose fix (start it) is the safe one to try.
+/// Which of the three refusals docker's own words describe, by the classifier the desktop app reads them with too
+/// (`intentic_docker_host::refusal`). An answer with an error in it outranks the rest: a pipe that answered 500 is an
+/// engine that exists and is broken, which no start fixes. Anything unrecognised is read as down, the reading whose fix
+/// (start it) is the safe one to try.
 pub fn refusal_kind(stderr: &str) -> Engine {
+    use intentic_docker_host::refusal::{classify, Refusal};
     let said = stderr.trim().to_string();
-    let lower = said.to_ascii_lowercase();
-    if lower.contains("500 internal server error")
-        || lower.contains("error response from daemon")
-        || lower.contains("request returned 5")
-    {
-        return Engine::Erroring(said);
+    match classify(&said) {
+        Refusal::Erroring => Engine::Erroring(said),
+        Refusal::Denied => Engine::Denied(said),
+        Refusal::Down => Engine::Down(said),
     }
-    if lower.contains("access is denied") || lower.contains("permission denied") {
-        return Engine::Denied(said);
-    }
-    Engine::Down(said)
 }
 
 /// `docker info` aggregates CLI-plugin data and can hang (docker-scout/buildx); `docker version` with a

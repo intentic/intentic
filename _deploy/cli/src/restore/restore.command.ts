@@ -1,10 +1,10 @@
 import { dirname } from "node:path";
 import { createStore, resolveInputs } from "@intentic/engine";
-import { createSshExecutor, hostTarget, type RestoreScope, restoreBackup } from "@intentic/providers";
+import { hostTarget, type RestoreScope, restoreBackup } from "@intentic/providers";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_PATH, loadEnvFile, readArtifact } from "../lib/artifact.js";
-import { createKnownHostsStore } from "../lib/known-hosts.js";
+import { pinnedSshExecutor } from "../lib/known-hosts.js";
 import { createOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 import { ensureGeneratedSecrets } from "../secrets/generated-secrets.js";
@@ -56,7 +56,7 @@ export const restore = buildCommand<RestoreFlags>({
         const graph = await readArtifact(artifact);
         // Recovery re-applies against the same host, so read the admin passwords from the host-authoritative
         // store (no backfill, restore reads what's there rather than reconciling layers).
-        const ssh = createSshExecutor(createKnownHostsStore(dir));
+        const ssh = pinnedSshExecutor(dir);
         try {
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, out.log), collectSecrets(graph).generated, process.env);
             const backupNode = Object.values(graph.resources).find((node) => node.type === "backup");

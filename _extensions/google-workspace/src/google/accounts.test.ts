@@ -1,4 +1,4 @@
-import { connectionsFrom, credentialOf, selectConnection } from "./accounts.js";
+import { connectionsFrom, credentialOf, retargetAs, selectConnection } from "./accounts.js";
 
 // The daemon writes these; the shape of the fixture IS the contract with cli-env.ts (envSuffix + one var per
 // manifest env key), so it is spelled out rather than built by a helper that could drift from it.
@@ -94,5 +94,21 @@ describe("selectConnection", () => {
 
     it("names what IS connected when the wanted one is not", () => {
         expect(() => selectConnection(both, "personal")).toThrow(/No connected Google account called "personal"/);
+    });
+});
+
+describe("retargetAs", () => {
+    const [personal] = connectionsFrom(userEnv("GOOGLE"));
+    const [company] = connectionsFrom({ GOOGLE_MODE_CO: "domain", GOOGLE_EMAIL_CO: "ana@company.com", GOOGLE_SERVICE_ACCOUNT_KEY_CO: SERVICE_KEY });
+
+    it("acts as another address only on a company connection", () => {
+        expect(retargetAs(company!, "bo@example.com").email).toBe("bo@example.com");
+        expect(() => retargetAs(personal!, "bo@example.com")).toThrow(/only works on a company/);
+    });
+
+    // `gw drive get <id> --as md` was refused on a personal grant, and on a company one impersonated a user called "md".
+    it("leaves a value that is no address to the command that reads it", () => {
+        expect(retargetAs(personal!, "md")).toBe(personal!);
+        expect(retargetAs(company!, "pdf")).toBe(company!);
     });
 });

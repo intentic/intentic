@@ -1,4 +1,4 @@
-import type { WorkspaceFileResponse } from "@intentic/api-contract";
+import type { WorkspaceFile } from "@intentic/sandbox-contract";
 import {
     createPeekCache,
     PEEK_FIRST_BYTES,
@@ -26,7 +26,7 @@ const numbered = (count: number, width = 20): string =>
 
 // The daemon's window (workspace-files.ts readWorkspaceFileWindow), for ASCII: a read that stops short of the end is cut
 // back to its last newline, and one that starts mid-line skips to the next line.
-const windowOf = (path: string, text: string, offset: number, limit: number): WorkspaceFileResponse => {
+const windowOf = (path: string, text: string, offset: number, limit: number): WorkspaceFile => {
     let start = Math.min(offset, text.length);
     if (start > 0 && text[start - 1] !== `\n`) {
         const newline = text.indexOf(`\n`, start);

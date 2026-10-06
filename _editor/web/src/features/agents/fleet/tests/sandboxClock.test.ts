@@ -1,5 +1,5 @@
 import { clockOffset, observeRoster, offsetOf, resetSandboxClock, SAMPLE_TTL_MS, sandboxNow } from "../sandboxClock";
-import { formatElapsed } from "../agentStatus";
+import { formatElapsed } from "@intentic/ui/format";
 
 // The sandbox's clock read off the roster: a browser clock 96 s fast drew a turn one second old as "1m 36s".
 const NOW = 1_700_000_000_000;
@@ -27,7 +27,7 @@ describe("observeRoster", () => {
         observeRoster([entry(`a`, sandboxTime - 5_000)], [entry(`a`, sandboxTime)], NOW);
         expect(clockOffset.value).toBe(96_000);
         // The turn started on the sandbox a second ago; the card reads it against the corrected clock.
-        expect(formatElapsed(sandboxTime - 1_000, sandboxNow(NOW))).toBe(`1s`);
+        expect(formatElapsed((sandboxNow(NOW) - (sandboxTime - 1_000)) / 1000)).toBe(`1s`);
     });
 
     it("corrects a slow one the other way", () => {

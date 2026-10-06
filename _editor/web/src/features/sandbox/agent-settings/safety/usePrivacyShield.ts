@@ -1,9 +1,9 @@
 import type { PrivacyDictionary, PrivacyKnownSource, PrivacyLedgerEntry, PrivacyShieldPolicy, PrivacyShieldStatus } from "@intentic/sandbox-contract";
 import { keepPreviousData, useMutation } from "@tanstack/vue-query";
 import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
-import { rpcQuery } from "../../client/rpcQuery";
-import { sandboxRpc } from "../../client/sandboxRpc";
-import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
 

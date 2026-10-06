@@ -188,6 +188,8 @@ pub fn farewell(
         )
         .build()
         .new_agent();
+    // The path and the header are api-contract's (`PLATFORM_INGRESS.farewell`, `CONNECT_TOKEN_HEADER`), spelled here
+    // because Rust cannot import them; its ingress.test.ts reads both off this file and fails when they drift.
     match agent
         .post(format!("{from_host}/sandbox/farewell"))
         .header("x-intentic-connect", connect_token)

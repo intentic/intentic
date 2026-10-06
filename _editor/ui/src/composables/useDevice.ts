@@ -1,4 +1,5 @@
 import { computed, readonly, ref, type ComputedRef, type Ref } from "vue";
+import { isTypingTarget } from "../lib/eventTarget.js";
 
 export type Device = "mobile" | "tablet" | "desktop";
 
@@ -41,10 +42,7 @@ const vv = window.visualViewport;
 if (vv) {
     let unfocusedHeight = vv.height;
     let unfocusedWidth = vv.width;
-    const editing = (): boolean => {
-        const active = document.activeElement;
-        return active instanceof HTMLElement && (active.isContentEditable || active.matches(`input, textarea, select, [role="textbox"]`));
-    };
+    const editing = (): boolean => isTypingTarget(document.activeElement);
     const update = (): void => {
         const typing = editing();
         if (!typing) {

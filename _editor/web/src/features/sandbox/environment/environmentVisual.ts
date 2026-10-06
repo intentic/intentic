@@ -1,4 +1,4 @@
-import type { EnvironmentItem } from "@intentic/api-contract";
+import type { EnvironmentItem } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 
 // Marks derived in the browser, not sent over the wire, so they work against a daemon that predates them. Matched per

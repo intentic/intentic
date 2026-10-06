@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
+    hostOwnerId,
     labelHostname,
     panelFromHost,
     portHostname,
@@ -12,6 +13,7 @@ import {
     publicSlotFromHost,
     sandboxHostname,
     sandboxIdFromUrl,
+    sandboxIdOfDaemonUrl,
     syncFolder,
 } from "./hostnames.js";
 
@@ -24,6 +26,9 @@ interface HostCase {
     readonly panel?: string;
     readonly port?: string;
     readonly public?: string;
+    // The sandbox the name routes to (hostOwnerId), and the minted id it carries as a daemon's own address.
+    readonly owner?: string;
+    readonly daemon?: string;
 }
 const HOST_CASES = JSON.parse(readFileSync(new URL("./hostnames.fixture.json", import.meta.url), "utf8")) as HostCase[];
 
@@ -33,6 +38,20 @@ test.each(HOST_CASES)("the shared host cases parse as the front parses them: $ho
         port: portSlotFromHost(hostCase.host, hostCase.sandboxId),
         public: publicSlotFromHost(hostCase.host, hostCase.sandboxId),
     }).toEqual({ panel: hostCase.panel, port: hostCase.port, public: hostCase.public });
+});
+
+test.each(HOST_CASES)("the shared host cases name their owner, and a daemon address its minted id: $host", (hostCase) => {
+    expect({ owner: hostOwnerId(hostCase.host), daemon: sandboxIdOfDaemonUrl(hostCase.host) }).toEqual({
+        owner: hostCase.owner,
+        daemon: hostCase.daemon,
+    });
+});
+
+test("a daemon address is read with or without its scheme, and an unparsable one names no sandbox", () => {
+    expect(sandboxIdOfDaemonUrl(`https://sandbox-82789f4106b4.radarsu.com`)).toBe(`82789f4106b4`);
+    expect(sandboxIdOfDaemonUrl(`sandbox-82789f4106b4.radarsu.com/`)).toBe(`82789f4106b4`);
+    expect(sandboxIdOfDaemonUrl(`https://sandbox.example.com`)).toBeUndefined();
+    expect(sandboxIdOfDaemonUrl(`http://[not a host`)).toBeUndefined();
 });
 
 test("preview and port hostnames round-trip through their Host-header parsers", () => {

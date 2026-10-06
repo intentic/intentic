@@ -3,7 +3,6 @@ import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
@@ -20,7 +19,7 @@ const parse = (inputs: ResolvedInputs): ForgejoOrgInputs => parseInputs(forgejoO
 // A team's Forgejo organization, the namespace its apps' repos + registry images live under. Created owned by
 // the admin so the admin stays in the org Owners team and its git + packages tokens keep full access (what
 // Komodo clones and pulls with). read returns undefined while Forgejo is unreachable; apply create-or-skips.
-export const createForgejoOrgProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createForgejoOrgProvider = (api: ForgejoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         try {

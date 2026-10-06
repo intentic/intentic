@@ -5,12 +5,12 @@
         "interface": true,
         "type": true
     },
-    // `@intentic/house-css` is a stylesheet reached by a relative `@import` from a consumer's own CSS, which is
+    // `@intentic/entry-css` is a stylesheet package reached by a relative `@import` from a consumer's own CSS, which is
     // this repo's convention for cross-package CSS and is invisible to a module graph. The dependency is
     // declared so the edge is stated in the manifest, not so anything imports the package by name.
     // `@stryker-mutator/command-runner` is core's built-in runner (stryker.conf.mjs `testRunner: "command"`), not a package;
     // core itself is run by the test-strength chore (sandbox-contract/src/chores/probes.ts) through `pnpm exec`, which no script names.
-    "ignoreDependencies": ["tslib", "@intentic/house-css", "@stryker-mutator/command-runner", "@stryker-mutator/core"],
+    "ignoreDependencies": ["tslib", "@intentic/entry-css", "@stryker-mutator/command-runner", "@stryker-mutator/core"],
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
         ".": {
@@ -122,6 +122,9 @@
         "_devices/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
+        "_deploy/examples": {
+            "entry": ["*.config.ts"]
+        },
         "_deploy/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
@@ -134,10 +137,10 @@
         "_sandbox/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
-        // A stylesheet, not a module: no `src/`, no TypeScript. Empty rather than `["house.css"]` because knip's
+        // Stylesheets, not modules: no `src/`, no TypeScript. Empty rather than `["entry.css", "house.css"]` because knip's
         // own defaults already find the file — what has to be overridden is the `_shared/*` default below, which
         // would look for a `src/index.ts` that does not exist and report the package as unreachable.
-        "_shared/house-css": {
+        "_shared/entry-css": {
             "entry": []
         },
         "_shared/*": {
@@ -157,9 +160,6 @@
         },
         "_tools/*": {
             "entry": ["src/{index,cli,main}.ts", "src/**/*.test.ts"]
-        },
-        "_tools/examples": {
-            "entry": ["*.config.ts"]
         },
         // The probe is spawned under Valgrind by path and each scenario is imported by its file name, so neither is
         // reachable through an import.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RowGroup, RowNote } from "@intentic/ui";
-import { useRole } from "../secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import MoveOutPanel from "./MoveOutPanel.vue";
 import { useT } from "@intentic/ui/i18n";
 

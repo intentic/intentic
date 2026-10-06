@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { noticeOf, type NoticeModel } from "@intentic/ui/async";
 import { unstubbed } from "@intentic/testing";
 import { mock } from "bun:test";

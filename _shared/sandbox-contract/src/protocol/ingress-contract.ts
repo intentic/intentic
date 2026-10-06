@@ -53,13 +53,9 @@ export const verifyReachabilityGrant = (publicKeyPem: string, token: string): Re
 
 // Host to owner routing
 
-// Resolves which sandbox owns a Host: the leftmost DNS label is `sandbox-<id>` or ends in `-<id>` (12-hex); anything
-// else, including the loopback `<id>.local.<zone>` label, returns undefined.
-export const hostOwnerId = (host: string): string | undefined => {
-    const label = host.split(":")[0]?.split(".")[0] ?? "";
-    const match = /-([0-9a-f]{12})$/.exec(label);
-    return match === null ? undefined : match[1];
-};
+// Which sandbox owns a Host, declared with the names it parses (ids/hostnames.ts) and re-exported for this subpath's
+// callers: the leftmost DNS label is `sandbox-<id>` or ends in `-<id>` (12-hex).
+export { hostOwnerId } from "../ids/hostnames.js";
 
 // Wire constants
 

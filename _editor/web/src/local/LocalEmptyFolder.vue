@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, freshness, Notice, ui } from "@intentic/ui";
+import { Button, EmptyState, freshness, Notice, StatusBadge, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref } from "vue";
 import { askLocalApp, localFace } from "../app/environments/local";
@@ -108,9 +108,7 @@ const pickFolder = async (): Promise<void> => {
                             <span v-if="project.wsl" class="shrink-0 rounded bg-overlay px-1 py-px text-[0.6rem] text-subtle">{{
                                 t(`local.foundProjects.inWsl`, { distro: project.wsl })
                             }}</span>
-                            <span v-if="project.sandbox" class="shrink-0 rounded bg-success/15 px-1 py-px text-[0.6rem] text-success">{{
-                                t(`local.foundProjects.hasSandbox`)
-                            }}</span>
+                            <StatusBadge v-if="project.sandbox" variant="success" size="xs" class="shrink-0" :label="t(`local.foundProjects.hasSandbox`)" />
                         </span>
                         <span class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom="project.path">{{ project.shown }}</span>
                         <span class="truncate text-2xs text-muted">{{ origin(project) }}</span>
@@ -148,27 +146,28 @@ const pickFolder = async (): Promise<void> => {
         </div>
     </div>
 
-    <div v-else class="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
-        <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-600/10 text-link">
-            <Icon name="folder-open" class="text-2xl" />
-        </span>
-        <div class="flex max-w-md flex-col gap-1.5">
-            <p class="text-base font-semibold text-content">{{ t(`local.emptyFolder.title`) }}</p>
-            <p class="text-xs text-muted">{{ t(`local.emptyFolder.lead`, { name: face?.name ?? `` }) }}</p>
-            <p v-if="face" class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom="face.path">{{ face.path }}</p>
-        </div>
-        <div class="flex flex-wrap items-center justify-center gap-2">
+    <EmptyState v-else size="page" :title="t(`local.emptyFolder.title`)" class="h-full">
+        <template #icon>
+            <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-600/10 text-link">
+                <Icon name="folder-open" class="text-2xl" />
+            </span>
+        </template>
+        <template #line>
+            {{ t(`local.emptyFolder.lead`, { name: face?.name ?? `` }) }}
+            <span v-if="face" class="mt-1.5 block truncate font-mono text-2xs text-subtle" v-tooltip.bottom="face.path">{{ face.path }}</span>
+        </template>
+        <template #actions>
             <Button :label="t(`local.emptyFolder.openFolder`)" size="small" @click="pickFolder">
                 <template #icon><Icon name="folder-open" /></template>
             </Button>
             <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" severity="secondary" @click="askLocalApp(`reveal`)">
                 <template #icon><Icon name="external-link" /></template>
             </Button>
-        </div>
+        </template>
         <Notice v-if="failure" tone="danger" class="max-w-md text-2xs">{{ failure }}</Notice>
         <!-- The list put away, and the way back to it: a hide is a preference, not a loss. -->
         <button v-if="hidden && offered.length > 0" type="button" :class="ui.textAction(`text-2xs`)" @click="unhide">
             {{ t(`local.foundProjects.show`) }}
         </button>
-    </div>
+    </EmptyState>
 </template>

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { Button, CopyButton, formatTokens, Markdown, timeAgo } from "@intentic/ui";
-import { errorMessage, useLatest } from "@intentic/ui/async";
-import { computed, onUnmounted, ref, watch } from "vue";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
+import { Button, CopyButton, EmptyState, formatElapsed, formatTokens, Markdown, timeAgo } from "@intentic/ui";
+import { messageOr, useLatest, useNow } from "@intentic/ui/async";
+import { computed, ref, watch } from "vue";
 import { changeEpochOf, derivedEpochOf } from "../changes/live/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
@@ -26,32 +25,26 @@ const error = ref<string | null>(null);
 /* HOW LONG THIS HAS BEEN GOING. A derivation runs in a child process this pane cannot see into, so there is no
    progress to report — only elapsed time, which is the one thing that distinguishes working from hung. */
 
-// Ticks only while something is in flight, so an idle pane holds no timer.
+// Follows the shared clock only while something is in flight, so an idle pane holds no timer.
 const busySince = ref(0);
-const now = ref(0);
-let ticker: ReturnType<typeof setInterval> | undefined;
+const ticking = ref(false);
+const now = useNow(ticking, 250);
 
 const startClock = (): void => {
     busySince.value = Date.now();
-    now.value = busySince.value;
-    ticker ??= setInterval(() => (now.value = Date.now()), 250);
-};
-const clearTicker = (): void => {
-    clearInterval(ticker);
-    ticker = undefined;
+    ticking.value = true;
 };
 // Called when either the read or the derivation lands, so it has to check the other: a re-read finishing under a
 // running derivation must not freeze the count the reader is watching.
 const stopClock = (): void => {
     if (!loading.value && !deriving.value) {
-        clearTicker();
+        ticking.value = false;
     }
 };
-// Unconditional, unlike the above: a pane closed mid-derivation would otherwise leave its timer running for the tab.
-onUnmounted(clearTicker);
 
-const waitedMs = computed(() => (busySince.value === 0 ? 0 : now.value - busySince.value));
-const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(busySince.value, now.value)));
+// Never below zero: the shared clock may not have ticked since this wait began.
+const waitedMs = computed(() => (busySince.value === 0 ? 0 : Math.max(0, now.value - busySince.value)));
+const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(waitedMs.value / 1000)));
 // Reading an existing shadow is a round trip, usually a few frames: labelling it instantly would flash a sentence at
 // a reader who never waited for anything.
 const slowRead = computed(() => waitedMs.value >= 400);
@@ -84,7 +77,7 @@ const derive = (target: string): void => {
             }
             deriving.value = false;
             stopClock();
-            error.value = errorMessage(err, `Could not render this file as text.`);
+            error.value = messageOr(err, `Could not render this file as text.`);
         },
     );
 };
@@ -124,7 +117,7 @@ const load = (target: string): void => {
             }
             loading.value = false;
             stopClock();
-            error.value = errorMessage(err, `Could not read this file's text.`);
+            error.value = messageOr(err, `Could not read this file's text.`);
         },
     );
 };
@@ -257,17 +250,11 @@ const emptyMessage = computed(() => {
             <p v-else-if="slowRead" class="text-2xs text-subtle">{{ t(`workspace.derivedTextView.lookingFilesText`) }}</p>
         </div>
 
-        <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="text-sm text-danger">{{ error }}</p>
-        </div>
+        <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full" />
 
         <!-- No text yet, which is four different situations: being read, never read, read to nothing, or unreadable here. -->
-        <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <Icon :name="emptyIcon" :spin="waiting" class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">{{ emptyMessage }}</p>
-            <p v-if="shadow?.reason !== undefined" class="max-w-sm text-2xs text-subtle">{{ shadow.reason }}</p>
-            <div class="mt-1 flex items-center gap-2">
+        <EmptyState v-else :icon="emptyIcon" :spin="waiting" :title="emptyMessage" :line="shadow?.reason ?? ``" class="h-full">
+            <template v-if="canDerive || downloadable" #actions>
                 <Button v-if="canDerive" severity="secondary" :disabled="deriving || waiting" @click="derive(path)">
                     <Icon name="align-left" class="text-xs" />
                     {{ t(`workspace.derivedTextView.renderText`) }}
@@ -276,7 +263,7 @@ const emptyMessage = computed(() => {
                     <Icon name="download" class="text-xs" />
                     {{ t(`ui.action.download`) }}
                 </Button>
-            </div>
-        </div>
+            </template>
+        </EmptyState>
     </div>
 </template>

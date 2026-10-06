@@ -7,8 +7,8 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type Device, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
-import { setDaemonRoutes } from "../useDaemonRoutes";
-import { resetContractFreshness } from "../contractFreshness";
+import { setDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
+import { resetContractFreshness } from "../../../../client/sandbox/contractFreshness";
 import { IconStub } from "@intentic/ui/testing";
 
 // Sandbox slug the printed restart command names, so it targets this machine's sandbox specifically, and the checkout

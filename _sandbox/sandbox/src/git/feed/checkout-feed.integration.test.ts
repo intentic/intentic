@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { FromNode } from "@intentic/sandbox-contract/front-wire";
-import { defaultGit, type GitRunner, observeGitCommands } from "@intentic/scaffold";
+import { defaultGit, type GitRunner, observeGitCommands } from "@intentic/base/git";
 import { statusPaths } from "../changes/changes.js";
 import { type CheckoutFeed, frontCheckoutFeed, readOnFeed, useCheckoutFeed } from "./checkout-feed.js";
 

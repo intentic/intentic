@@ -1,5 +1,6 @@
 import { generated } from "@intentic/graph";
-import type { ForgejoRole, HostInput, IntentSet, KomodoRole } from "@intentic/need-resolver";
+import type { ForgejoRole, HostInput, KomodoRole } from "../intent/inputs.js";
+import type { IntentSet } from "../intent/intent.js";
 import type { ResolvedNode } from "@intentic/resources";
 import {
     adminUsername,

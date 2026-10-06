@@ -3,7 +3,7 @@
 import { type IconName, iconForEntry, ResponsiveOverlay, type Tip, ui, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, watch } from "vue";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { withinScope } from "../../../app/projectScope";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { coverChoices } from "./homeCover";

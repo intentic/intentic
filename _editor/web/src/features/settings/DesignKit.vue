@@ -15,6 +15,7 @@ import {
     CopyButton,
     StatusTally,
     DiffStat,
+    EmptyState,
     FilterBar,
     InfoDialog,
     InfoHint,
@@ -385,6 +386,48 @@ const pickedTier = ref(`collaborator`);
                         strings can carry.
                     </Notice>
                     <Notice tone="warning" icon="clock">An icon override, for when the glyph says something the tone does not.</Notice>
+                </div>
+                <p class="text-xs text-muted">
+                    Sizes: `xs` inside a list or popover, `sm` a strip in a narrow column, `md` the default, `lg` a page's own banner. `#actions` holds
+                    the view's own buttons, and wraps them under the sentence when the column is narrow.
+                </p>
+                <div class="flex max-w-read-lg flex-col gap-2">
+                    <Notice tone="warning" size="xs">Showing the first 500 matches only.</Notice>
+                    <Notice tone="warning" icon="clock" size="sm">
+                        Two hours left on the free plan this month.
+                        <template #actions><Button size="small" severity="secondary" :text="true">Billing</Button></template>
+                    </Notice>
+                    <Notice tone="info" size="md">The default size.</Notice>
+                    <Notice tone="danger" size="lg">The deployment engine is unreachable.</Notice>
+                </div>
+            </section>
+
+            <section class="flex flex-col gap-4">
+                <h2 :class="ui.sectionLabel()">EmptyState</h2>
+                <p class="text-xs text-muted">
+                    What a surface shows in place of its content: nothing yet, a read that failed, a wait. The fill is the caller's (flex-1, h-full, an
+                    overlay's inset-0); `panel` for a pane or tab, `page` for the whole of one.
+                </p>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <Card class="h-56 p-0">
+                        <EmptyState icon="eye" title="Nothing to preview yet." line="Start a dev server in the terminal and it shows here." class="h-full">
+                            <template #actions><Button size="small" severity="secondary" label="Preview an address" /></template>
+                        </EmptyState>
+                    </Card>
+                    <Card class="h-56 p-0">
+                        <EmptyState tone="danger" title="The file could not be read." line="EACCES: permission denied" class="h-full" />
+                    </Card>
+                    <Card class="h-56 p-0">
+                        <EmptyState icon="spinner" spin role="status" title="Looking for this sandbox's terminals…" class="h-full" />
+                    </Card>
+                    <Card class="h-56 p-0">
+                        <EmptyState icon="robot" size="page" title="No working copy to show." line="The agent was archived; its work stays on its branch." class="h-full">
+                            <template #actions>
+                                <Button size="small" label="See changes" />
+                                <Button size="small" severity="secondary" label="Back to the shared workspace" />
+                            </template>
+                        </EmptyState>
+                    </Card>
                 </div>
             </section>
 

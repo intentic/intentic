@@ -1,0 +1,24 @@
+{
+    "features/agents -> router": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
+    "features/chat -> router": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
+    "features/extensions -> core-views": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
+    "features/extensions -> extension-host": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
+    "features/sandbox -> core-views": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
+    "features/sandbox -> extension-host": {
+        "count": 5,
+        "why": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)"
+    },
+    "features/sandbox -> router": {
+        "count": 3,
+        "why": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)"
+    },
+    "features/settings -> shell": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
+    "features/workspace -> core-views": {
+        "count": 2,
+        "why": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)"
+    },
+    "features/workspace -> router": {
+        "count": 2,
+        "why": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)"
+    }
+}

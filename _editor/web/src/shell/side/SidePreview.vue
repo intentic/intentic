@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
+import { Button, EmptyState } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { onMounted, onUnmounted, useTemplateRef } from "vue";
+import { useTemplateRef } from "vue";
 import { usePreviewFloating } from "../../features/preview/previewFloating";
 import { markPreviewOpened } from "../../features/preview/previewSurface";
 import type { LineJump } from "../../features/workspace/tabs/workspaceTabs";
-import { sidePreviewSlot } from "../window/panelSlots";
-import type { SideInput } from "./sideTabs";
+import { publishSlot, sidePreviewSlot } from "../../workbench/window/panelSlots";
+import type { SideInput } from "../../workbench/side/sideTabs";
 
 // The running app beside the section: this tab publishes the preview's side slot and the one preview panel a window has
 // moves in (PoppablePanels.vue). Which target it shows is the panel's own picker, so the tab holds no input of its own.
@@ -23,24 +23,22 @@ const { floats, dock } = usePreviewFloating();
 markPreviewOpened();
 
 const slot = useTemplateRef(`slot`);
-onMounted(() => {
-    sidePreviewSlot.value = slot.value;
-});
-onUnmounted(() => {
-    if (sidePreviewSlot.value === slot.value) {
-        sidePreviewSlot.value = null;
-    }
-});
+publishSlot(sidePreviewSlot, () => slot.value);
 </script>
 
 <template>
     <div class="relative flex min-h-0 flex-1 flex-col">
         <!-- Published even while another window holds the panel, so "Bring it back here" lands it in this tab. -->
         <div ref="slot" class="contents"></div>
-        <div v-if="floats" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-            <Icon name="external-link" class="text-3xl text-subtle" />
-            <p class="text-sm font-medium text-content">{{ t(`preview.previewArea.previewInOwnWindow`) }}</p>
-            <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`preview.previewArea.bringBackHere`) }} </Button>
-        </div>
+        <EmptyState
+            v-if="floats"
+            icon="external-link"
+            :title="t(`preview.previewArea.previewInOwnWindow`)"
+            class="absolute inset-0 p-6"
+        >
+            <template #actions>
+                <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`preview.previewArea.bringBackHere`) }} </Button>
+            </template>
+        </EmptyState>
     </div>
 </template>

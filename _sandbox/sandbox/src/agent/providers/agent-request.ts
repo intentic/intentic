@@ -18,7 +18,7 @@ import type { CommandGuardOptions } from "../../guard/command-guard.js";
 import type { MountedPlugin } from "../../guard/settings-hooks.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
-import type { HeavyCommands } from "../../system/resources/heavy-commands.js";
+import type { HeavyCommands } from "../../workload/heavy-commands.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";

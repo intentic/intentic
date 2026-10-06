@@ -10,12 +10,12 @@
 import { computed, ref, shallowRef, watch } from "vue";
 import type { AgentReaction } from "@intentic/sandbox-contract";
 import { ResponsiveOverlay, ui } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { reactToAgent } from "../../fleet/agentActions";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
 import { useAgents } from "../../fleet/useAgents";
-import { useSandboxSession } from "../../../sandbox/session/sandboxSession";
+import { useSandboxSession } from "../../../../client/session/sandboxSession";
 import { PICKER_EMOJI, QUICK_EMOJI, reactionChips, withPress } from "./reactions";
 
 const t = useT();
@@ -79,7 +79,7 @@ const press = async (emoji: string, on: boolean): Promise<void> => {
         await (sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
     } catch (caught) {
         ahead.value = undefined;
-        notice.value = errorMessage(caught, t(`agents.agentReactions.couldNotReact`));
+        notice.value = messageOr(caught, t(`agents.agentReactions.couldNotReact`));
     } finally {
         pending.value = undefined;
     }

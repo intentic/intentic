@@ -33,6 +33,8 @@ export const WorkspaceSearchQuerySchema = z.object({
     limit: z.coerce.number().int().positive().optional().describe("How many results to return."),
     after: z.string().optional().describe("Resume from the cursor a previous answer handed back."),
 });
+// The query's verb enum.
+export type WorkspaceSearchMode = NonNullable<z.infer<typeof WorkspaceSearchQuerySchema>["mode"]>;
 export const WorkspaceSearchTagSchema = z.object({
     kind: z
         .enum(["def", "text", "sem", "bm25", "rerank", "path", "import", "call", "type", "write", "fuzzy", "heuristic"])

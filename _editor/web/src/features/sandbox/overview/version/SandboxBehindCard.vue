@@ -11,12 +11,12 @@ import {
     driftScope,
     missingRoutes,
     unknownDaemonRoutes,
-} from "../useDaemonRoutes";
+} from "../../../../client/sandbox/useDaemonRoutes";
 import { appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
-import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../contractFreshness";
+import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../../../../client/sandbox/contractFreshness";
 import { useEnvironment } from "../../environment/useEnvironment";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
-import { useHubWork } from "../../../../shell/hub/hubWork";
+import { useHubWork } from "../../../../workbench/hub/hubWork";
 import ConnectDeviceHint from "../../devices/ConnectDeviceHint.vue";
 import { useT } from "@intentic/ui/i18n";
 

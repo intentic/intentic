@@ -5,6 +5,7 @@ import {
     ContextMenu,
     CopyButton,
     Notice,
+    EmptyState,
     noticeOf,
     Picker,
     type PickerGroup,
@@ -18,14 +19,14 @@ import {
     ui,
     useNarrow,
 } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
+import { useNow, usePoll } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import type { PanelLaunch } from "@intentic/api-contract";
+import type { PanelLaunch } from "@intentic/sandbox-contract";
 import { frameSandbox, pickTarget, type PreviewTarget } from "./previewModel";
 import { loopbackPreviewUrl } from "./previewLane";
-import { useEndpoint } from "../sandbox/secrets/useEndpoint";
+import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { usePreviewTargets } from "./usePreviewTargets";
 import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "./previewSurface";
 import { togglePreviewFloating, usePreviewFloating } from "./previewFloating";
@@ -403,23 +404,25 @@ const restart = (): Promise<void> =>
 
 /* THE WAIT'S OWN FALLBACK. */
 const STARTING_POLL_MS = 10_000;
-let startingPoll: ReturnType<typeof setInterval> | undefined;
-const stopStartingPoll = (): void => {
-    clearInterval(startingPoll);
-    startingPoll = undefined;
-};
+// Asks again for as long as the start is waited on; a refused read is "not yet", the next tick asks again.
+const startingPoll = usePoll({
+    everyMs: STARTING_POLL_MS,
+    check: async () => {
+        await refresh();
+    },
+    immediate: false,
+});
 watch(
     () => target.value?.running === true && previewSrc.value === undefined && reach.value?.outcome !== `unreachable`,
     (waiting) => {
-        stopStartingPoll();
+        startingPoll.stop();
         waitingSince.value = waiting ? Date.now() : undefined;
         if (waiting) {
-            startingPoll = setInterval(() => void refresh().catch(() => undefined), STARTING_POLL_MS);
+            startingPoll.start();
         }
     },
     { immediate: true },
 );
-onUnmounted(stopStartingPoll);
 </script>
 
 <template>
@@ -578,16 +581,19 @@ onUnmounted(stopStartingPoll);
             <Notice v-if="actionError" :of="noticeOf(actionError)" class="mx-3 mt-3" />
 
             <!-- Claimed only once the lists have answered; always offers a typed address, the one preview needing nothing discovered. -->
-            <div v-if="!target && settled" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <Icon name="eye" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">{{ t(`preview.previewPanel.nothingToPreviewYet`) }}</p>
-                <p class="max-w-sm text-2xs text-subtle">
-                    {{ t(`preview.previewPanel.startDevServerIn`) }}
-                </p>
-                <Button :label="t(`preview.previewPanel.previewAddress`)" size="small" severity="secondary" @click="openAddress">
-                    <template #icon><Icon name="link" /></template>
-                </Button>
-            </div>
+            <EmptyState
+                v-if="!target && settled"
+                icon="eye"
+                :title="t(`preview.previewPanel.nothingToPreviewYet`)"
+                :line="t(`preview.previewPanel.startDevServerIn`)"
+                class="flex-1"
+            >
+                <template #actions>
+                    <Button :label="t(`preview.previewPanel.previewAddress`)" size="small" severity="secondary" @click="openAddress">
+                        <template #icon><Icon name="link" /></template>
+                    </Button>
+                </template>
+            </EmptyState>
             <div v-else-if="!target" class="flex flex-1 items-center justify-center" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`preview.previewPanel.readingWhatPreviewed`) }}</span>
                 <Icon name="spinner" spin class="text-2xl text-subtle" aria-hidden="true" />
@@ -608,42 +614,42 @@ onUnmounted(stopStartingPoll);
             </PreviewStage>
 
             <!-- A missing route means this sandbox has no preview proxy. -->
-            <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">{{ t(`preview.previewPanel.previewAddressDoesntReach`) }}</p>
-                <i18n-t keypath="preview.previewPanel.addressAnswersElsewhere" tag="p" class="max-w-sm text-2xs text-subtle" scope="global">
-                    <template #url
-                        ><span class="font-mono">{{ target.url }}</span></template
-                    >
-                </i18n-t>
-                <div class="flex items-center gap-2">
+            <EmptyState
+                v-else-if="reach?.outcome === `unreachable`"
+                icon="exclamation-triangle"
+                :title="t(`preview.previewPanel.previewAddressDoesntReach`)"
+                class="flex-1"
+            >
+                <template #line>
+                    <i18n-t keypath="preview.previewPanel.addressAnswersElsewhere" scope="global">
+                        <template #url
+                            ><span class="font-mono">{{ target.url }}</span></template
+                        >
+                    </i18n-t>
+                </template>
+                <template #actions>
                     <Button :label="t(`ui.action.tryAgain`)" size="small" severity="secondary" @click="resolvePreview()" />
-                    <RouterLink
-                        to="/sandbox/ports"
-                        class="rounded-md border border-line px-2.5 py-1 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
-                    >
-                        {{ t(`preview.previewPanel.openPorts`) }}
-                    </RouterLink>
-                </div>
-            </div>
+                    <Button :as="RouterLink" to="/sandbox/ports" :label="t(`preview.previewPanel.openPorts`)" size="small" severity="secondary" />
+                </template>
+            </EmptyState>
 
             <!-- Ordinary monorepo shape: `dev` fans out across packages on their own ports, so no single preview address applies. -->
-            <div v-else-if="!target.url && target.servers.length > 0" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <Icon name="globe" class="text-2xl text-subtle" />
+            <EmptyState
+                v-else-if="!target.url && target.servers.length > 0"
+                icon="globe"
+                :line="t(`preview.previewPanel.previewingOneForwardsPort`)"
+                class="flex-1"
+            >
                 <!-- One message, not seven fragments: the count decides the form, and only a whole sentence lets a
                      translator put the number, the noun and the possessive where their own grammar needs them. -->
-                <i18n-t
-                    keypath="preview.previewPanel.serversOnOwnPorts"
-                    tag="p"
-                    class="text-sm text-muted"
-                    scope="global"
-                    :plural="target.servers.length"
-                >
-                    <template #label
-                        ><span class="font-mono">{{ target.label }}</span></template
-                    >
-                    <template #count>{{ target.servers.length }}</template>
-                </i18n-t>
+                <template #title>
+                    <i18n-t keypath="preview.previewPanel.serversOnOwnPorts" scope="global" :plural="target.servers.length">
+                        <template #label
+                            ><span class="font-mono">{{ target.label }}</span></template
+                        >
+                        <template #count>{{ target.servers.length }}</template>
+                    </i18n-t>
+                </template>
                 <ul class="flex w-full max-w-md flex-col gap-1">
                     <li
                         v-for="server in target.servers"
@@ -662,16 +668,17 @@ onUnmounted(stopStartingPoll);
                         />
                     </li>
                 </ul>
-                <p class="max-w-sm text-2xs text-subtle">
-                    {{ t(`preview.previewPanel.previewingOneForwardsPort`) }}
-                </p>
-            </div>
+            </EmptyState>
 
             <!-- A server an agent left running for the person, not forwarded yet: forwarding publishes it, so it waits for their press. -->
-            <div v-else-if="target.job !== undefined && !target.url" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <Icon name="server" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">{{ t(`preview.previewPanel.leftRunningForYou`, { label: target.detail ?? target.label }) }}</p>
-                <div class="flex items-center gap-2">
+            <EmptyState
+                v-else-if="target.job !== undefined && !target.url"
+                icon="server"
+                :title="t(`preview.previewPanel.leftRunningForYou`, { label: target.detail ?? target.label })"
+                :line="t(`preview.previewPanel.previewingItForwardsPort`)"
+                class="flex-1"
+            >
+                <template #actions>
                     <Button
                         :label="forwarding !== undefined ? t(`preview.previewPanel.opening`) : t(`shared.preview`)"
                         size="small"
@@ -679,26 +686,26 @@ onUnmounted(stopStartingPoll);
                         @click="previewServer(target.job.port)"
                     />
                     <Button :label="t(`ui.action.stop`)" size="small" severity="secondary" :disabled="busy" @click="act(stop)" />
-                </div>
-                <p class="max-w-sm text-2xs text-subtle">{{ t(`preview.previewPanel.previewingItForwardsPort`) }}</p>
-            </div>
+                </template>
+            </EmptyState>
 
             <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one place that says which. -->
-            <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                <Icon v-if="target.launch === `exited` || waitingLong" name="exclamation-triangle" class="text-2xl text-subtle" />
-                <Icon v-else name="spinner" class="text-muted" spin />
-                <!-- The heading identifies the preview's verdict, timeout, or active wait state. -->
-                <p class="text-sm text-muted">
-                    {{
-                        target.launch === `exited`
-                            ? t(`preview.previewPanel.devServerStopped`)
-                            : waitingLong
-                              ? t(`preview.previewPanel.takingTooLong`)
-                              : t(`preview.previewPanel.preparingPreview`)
-                    }}
-                </p>
-                <p v-if="launchHint" class="max-w-sm text-2xs text-subtle">{{ launchHint }}</p>
-                <div class="flex flex-wrap items-center justify-center gap-2">
+            <!-- The heading identifies the preview's verdict, timeout, or active wait state. -->
+            <EmptyState
+                v-else-if="probing || target.running"
+                :icon="target.launch === `exited` || waitingLong ? `exclamation-triangle` : `spinner`"
+                :spin="!(target.launch === `exited` || waitingLong)"
+                :title="
+                    target.launch === `exited`
+                        ? t(`preview.previewPanel.devServerStopped`)
+                        : waitingLong
+                          ? t(`preview.previewPanel.takingTooLong`)
+                          : t(`preview.previewPanel.preparingPreview`)
+                "
+                :line="launchHint ?? ``"
+                class="flex-1"
+            >
+                <template v-if="target.session || (target.startable && (waitingLong || target.launch === `exited`))" #actions>
                     <Button
                         v-if="target.session"
                         :label="t(`preview.previewPanel.openTerminal`)"
@@ -716,25 +723,31 @@ onUnmounted(stopStartingPoll);
                     >
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
-                </div>
-            </div>
+                </template>
+            </EmptyState>
 
             <!-- The stopped state explains the next action and its destination. -->
-            <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                <i18n-t keypath="preview.previewPanel.labelIsntRunning" tag="p" class="text-sm text-muted" scope="global">
-                    <template #label
-                        ><span class="font-mono">{{ target.label }}</span></template
-                    >
-                </i18n-t>
-                <p v-if="startHint" class="max-w-md text-2xs text-subtle">{{ startHint }}</p>
-                <i18n-t v-else keypath="preview.previewPanel.noDevServerToStart" tag="p" class="max-w-md text-2xs text-subtle" scope="global">
-                    <template #operator><span class="font-mono">operator/</span></template>
-                    <template #dev><span class="font-mono">dev</span></template>
-                </i18n-t>
-                <Button v-if="target.startable" :label="t(`ui.action.start`)" size="small" :disabled="busy" class="mt-1" @click="act(start)">
-                    <template #icon><Icon name="play" /></template>
-                </Button>
-            </div>
+            <EmptyState v-else class="flex-1">
+                <template #title>
+                    <i18n-t keypath="preview.previewPanel.labelIsntRunning" scope="global">
+                        <template #label
+                            ><span class="font-mono">{{ target.label }}</span></template
+                        >
+                    </i18n-t>
+                </template>
+                <template #line>
+                    <template v-if="startHint">{{ startHint }}</template>
+                    <i18n-t v-else keypath="preview.previewPanel.noDevServerToStart" scope="global">
+                        <template #operator><span class="font-mono">operator/</span></template>
+                        <template #dev><span class="font-mono">dev</span></template>
+                    </i18n-t>
+                </template>
+                <template v-if="target.startable" #actions>
+                    <Button :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(start)">
+                        <template #icon><Icon name="play" /></template>
+                    </Button>
+                </template>
+            </EmptyState>
         </div>
     </div>
 </template>

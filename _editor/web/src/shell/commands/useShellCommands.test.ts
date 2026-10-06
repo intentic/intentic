@@ -2,8 +2,8 @@ import "@intentic/testing/dom";
 import { createApp, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 // bun.setup.ts installs window.env and ui's useDevice media queries at module scope before this file loads.
-import { receiveFloatingNote } from "../window/floating";
-import { boundCommand, commands, commandShortcut } from "./useCommands";
+import { receiveFloatingNote } from "../../workbench/window/floating";
+import { boundCommand, commands, commandShortcut } from "../../workbench/commands/useCommands";
 import { useShellCommands } from "./useShellCommands";
 
 // Pins the chat pop-out command: one findable wording across the palette and menu, a shared F9 chord, and a title

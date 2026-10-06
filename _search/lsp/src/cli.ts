@@ -9,22 +9,26 @@ import type { Diagnostic } from "./report.js";
 // lsp: TypeScript rename and diagnostics for the agent, over the native compiler; nothing stays resident.
 //   lsp rename <file> <symbol> <newName> rename a declared symbol across its TS project
 //   lsp diag <file...> print diagnostics for the given files
-// Exit 0 on success, 1 on a usage error, 2 on an internal failure, including an unloadable project.
+// The agent-CLI contract (@intentic/agent-cli's run.ts): everything, errors included, goes to stdout, because an agent
+// drops stderr and would read a refusal as an empty answer. Exit 0 is an answer ("no diagnostics" included), 2 is
+// anything else: a usage error, an unloadable project, an internal failure. There is no "found nothing" 1.
 
 const USAGE = "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>";
+
+const say = (text: string): void => void process.stdout.write(text);
 
 const runRename = async (args: readonly string[]): Promise<number> => {
     const [file, symbol, newName] = args;
     if (file === undefined || symbol === undefined || newName === undefined) {
-        process.stderr.write(`rename needs <file> <symbol> <newName>\n${USAGE}\n`);
-        return 1;
+        say(`lsp: rename needs <file> <symbol> <newName>\n${USAGE}\n`);
+        return 2;
     }
     const path = resolve(file);
     // A rename on a half-loaded program could silently rename a subset of usages; refuse first, like diag.
     const report = await checkProject(findTsconfig(path), [path], undefined);
     const [unavailable] = report.unavailable;
     if (unavailable !== undefined) {
-        process.stderr.write(`rename unavailable, the project cannot be loaded well enough to find every usage: ${unavailable.reason}\n`);
+        say(`lsp: rename unavailable, the project cannot be loaded well enough to find every usage: ${unavailable.reason}\n`);
         return 2;
     }
     const result = await rename(path, symbol, newName);
@@ -48,8 +52,8 @@ const printDiagnostics = (diagnostics: readonly Diagnostic[]): number => {
 const runDiag = async (args: readonly string[]): Promise<number> => {
     const [first] = args;
     if (first === undefined) {
-        process.stderr.write(`diag needs at least one <file>\n${USAGE}\n`);
-        return 1;
+        say(`lsp: diag needs at least one <file>\n${USAGE}\n`);
+        return 2;
     }
     const paths = args.map((arg) => resolve(arg));
     const report = await diagnose({ files: paths });
@@ -58,14 +62,14 @@ const runDiag = async (args: readonly string[]): Promise<number> => {
         const alone = await Promise.all(paths.map((path) => checkProject(undefined, [path], undefined)));
         const [refused] = alone.flatMap((r) => r.unavailable);
         if (refused !== undefined) {
-            process.stderr.write(`diagnostics unavailable: ${refused.reason}\n`);
+            say(`lsp: diagnostics unavailable: ${refused.reason}\n`);
             return 2;
         }
         return printDiagnostics(alone.flatMap((r) => r.diagnostics));
     }
     const [unavailable] = report.unavailable;
     if (unavailable !== undefined) {
-        process.stderr.write(`diagnostics unavailable, the project cannot be loaded well enough to answer: ${unavailable.reason}\n`);
+        say(`lsp: diagnostics unavailable, the project cannot be loaded well enough to answer: ${unavailable.reason}\n`);
         return 2;
     }
     return printDiagnostics(report.diagnostics);
@@ -79,13 +83,21 @@ const main = async (argv: readonly string[]): Promise<number> => {
     if (verb === "diag") {
         return await runDiag(rest);
     }
-    process.stderr.write(`${verb === undefined ? "" : `unknown command: ${verb}\n`}${USAGE}\n`);
-    return 1;
+    say(`${verb === undefined ? "" : `lsp: unknown command: ${verb}\n`}${USAGE}\n`);
+    return 2;
 };
+
+// Piping into `head` closes stdout mid-write; that is a clean stop, not a crash.
+process.stdout.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") {
+        process.exit(Number(process.exitCode ?? 0));
+    }
+    throw error;
+});
 
 try {
     process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-    process.stderr.write(`lsp: ${errorMessage(error)}\n`);
+    say(`lsp: ${errorMessage(error)}\n`);
     process.exitCode = 2;
 }

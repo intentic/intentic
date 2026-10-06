@@ -14,8 +14,8 @@ import { AsyncIteratorClass } from "@orpc/client";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { computed, ref, shallowRef, watch } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { runningTurn } from "../../../testing/runningTurn";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
@@ -26,7 +26,7 @@ import type { ChatMessage } from "../transcript/transcript";
 import type { ComposerSelection } from "./composerSelection";
 import { IDLE } from "./runPhase";
 import type { PickAction, Selection } from "./selectionReducer";
-import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
+import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
 import { setLocale } from "@intentic/ui/i18n";
 
 // One conversation's runs through their phases (runPhase.ts), and the doors into the daemon's queue they share, against
@@ -42,7 +42,7 @@ const queueRemove = jest.fn<SandboxRpc["agent"]["queueRemove"]>();
 const queueEdit = jest.fn<SandboxRpc["agent"]["queueEdit"]>();
 const switchAccount = jest.fn<SandboxRpc["agent"]["switchAccount"]>();
 const queueSchedule = jest.fn<SandboxRpc["agent"]["queueSchedule"]>();
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit, switchAccount, queueSchedule } }),
 }));
 

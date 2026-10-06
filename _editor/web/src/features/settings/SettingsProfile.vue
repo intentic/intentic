@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Avatar, InlineRename, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { ref } from "vue";
 import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
-import { useAccount } from "../../shell/useAccount";
+import { useAccount } from "../../client/auth/useAccount";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 
@@ -42,7 +42,7 @@ const pickAvatar = async (event: Event): Promise<void> => {
     try {
         await updateProfile({ image: square });
     } catch (error) {
-        avatarError.value = errorMessage(error, `Profile update failed.`);
+        avatarError.value = messageOr(error, `Profile update failed.`);
     } finally {
         avatarBusy.value = false;
     }

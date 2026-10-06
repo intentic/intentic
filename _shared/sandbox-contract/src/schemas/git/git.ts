@@ -135,15 +135,19 @@ export const RepoTargetSchema = z
     .extend(GitTargetSchema.shape)
     .refine(oneTarget, ONE_TARGET);
 export type RepoTarget = z.infer<typeof RepoTargetSchema>;
+// Git's vocabulary for what happened to a file, the one every change list, diff tab and status letter reads. Conflicted is
+// git's unmerged state (`U`), not a kind of modification.
+export const ChangeStatusSchema = z.enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"]);
+export type ChangeStatus = z.infer<typeof ChangeStatusSchema>;
 // One change to a file: an uncommitted working-tree change, an agent worktree's delta vs its base, or a file in a
 // commit. `additions`/`deletions` are numstat counts, absent for binary or untracked files.
 export const GitChangeSchema = z.object({
     // Forward slashes; for a rename this is the new path (`from` holds the old one).
     path: z.string().describe("The path, relative to the repository root. For a rename this is the new one."),
     // Git's unmerged state (`U`): stages 2/3 hold "ours"/"theirs", no stage 0 to commit.
-    status: z
-        .enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"])
-        .describe("What happened to it. Conflicted is not a kind of edit: nothing can be committed anywhere in the repository while one exists."),
+    status: ChangeStatusSchema.describe(
+        "What happened to it. Conflicted is not a kind of edit: nothing can be committed anywhere in the repository while one exists.",
+    ),
     from: z.string().optional().describe("Where a renamed file came from."),
     additions: z
         .number()
@@ -208,6 +212,7 @@ export const GitBranchesSchema = z.object({
         .array(GitRemoteBranchSchema)
         .describe("Branches on its remotes, as last seen. Sent together with the locals so a switcher never draws a half-filled list."),
 });
+export type GitBranches = z.infer<typeof GitBranchesSchema>;
 // Creates at `start` (sha or ref; absent means HEAD); `checkout` switches to it immediately.
 export const GitBranchCreateAtSchema = RepoParamSchema.extend({
     name: RefNameSchema.describe("The new branch's name."),

@@ -14,7 +14,7 @@ import { RouterLinkStub } from "../../../testing/routerLinkStub";
 // nothing gets no card at all.
 
 const active = ref<Partial<SandboxSummary> | undefined>(undefined);
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);
 jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
@@ -68,7 +68,7 @@ it(`shows a hosted sandbox's owner the free hours its machine spends, and when t
     const root = mount();
     await nextTick();
     expect(root.textContent).toContain(`Free hours`);
-    expect(root.textContent).toContain(`12 h of 40 h left this month`);
+    expect(root.textContent).toContain(`12h of 40h left this month`);
     expect(root.textContent).toContain(`shared by every hosted sandbox of yours that isn't on a paid slot`);
     expect(root.querySelector(`a`)?.getAttribute(`href`)).toBe(`/settings/billing`);
 });
@@ -79,7 +79,7 @@ it(`shows a machine on a paid slot its own month, named by its rung`, async () =
     const root = mount();
     await nextTick();
     expect(root.textContent).toContain(`Standard hours`);
-    expect(root.textContent).toContain(`210 h of 220 h left this month`);
+    expect(root.textContent).toContain(`210h of 220h left this month`);
     expect(root.textContent).toContain(`This sandbox's own hours, on its Standard slot`);
 });
 
@@ -89,7 +89,7 @@ it(`says a comped owner's hours are counted against no limit, with no bar to fil
     const root = mount();
     await nextTick();
     expect(root.textContent).toContain(`On the house`);
-    expect(root.textContent).toContain(`2 h awake this month`);
+    expect(root.textContent).toContain(`2h awake this month`);
     expect(root.querySelector(`[role="presentation"]`)).toBeNull();
 });
 

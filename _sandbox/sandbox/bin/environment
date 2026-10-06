@@ -18,7 +18,7 @@ const COMMAND = "environment";
 const MAIN_TREE = "/mnt/intentic-main";
 const DRAFTS = join(".intentic", "config", "environment.d");
 // The image's feature packs (image-packs/*.Dockerfile, shipped beside the daemon) and the content hash the base image
-// stamps for each one it bakes (src/environment/packs.ts reads the same two). Overridable so a suite can point elsewhere.
+// stamps for each one it bakes (src/image/packs.ts reads the same two). Overridable so a suite can point elsewhere.
 const PACKS = process.env.INTENTIC_PACKS_DIR ?? "/opt/sandbox/image-packs";
 const PACK_STAMPS = process.env.INTENTIC_PACK_STAMPS_DIR ?? "/opt/packs";
 

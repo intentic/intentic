@@ -81,3 +81,14 @@ it("keeps the files uploaded for a free-text row, and counts one as an answer st
     expect(answerStarted({ selections: {}, otherTexts: {}, otherFiles })).toBe(true);
     expect(answerStarted({ selections: {}, otherTexts: {}, otherFiles: { 0: [] } })).toBe(false);
 });
+
+// The record was cast, not read: a typed answer stored as a number came back as one, and the card's "has the reader
+// started answering" check threw on it.
+it("starts a card empty when its stored draft is not the shape this build writes", () => {
+    localStorage.setItem(`intentic.questionDraft.req-a`, JSON.stringify({ selections: { 0: [`Postgres`] }, otherTexts: { 0: 42 }, savedAt: Date.now() }));
+
+    const draft = readQuestionDraft(`req-a`, CARD);
+    expect(draft).toEqual({ selections: {}, otherTexts: {} });
+    expect(answerStarted(draft)).toBe(false);
+});
+

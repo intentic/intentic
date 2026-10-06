@@ -112,7 +112,7 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.9.1 SHELL=/b
     && pnpm --version
 
 # The privacy shield's text reader: PaddleOCR's PP-OCRv6 medium detector and recognizer, the ONNX files the privacy
-# image pack installs, at the same path, so src/ocr/ and the shield's image masking are proved against the real models
+# image pack installs, at the same path, so _sandbox/ocr and the shield's image masking are proved against the real models
 # rather than a stand-in (~132 MB, a few seconds of build). onnxruntime-node itself comes with the workspace's install.
 # ponytail: keep the revisions and digests in lockstep with _sandbox/sandbox/image-packs/privacy.Dockerfile
 # (packs.integration.test.ts holds the two in step).

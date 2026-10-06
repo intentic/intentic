@@ -39,7 +39,7 @@ jest.mock(`./useChat-view`, () => ({
 }));
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
 const active = ref<{ id: string; hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
-jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
 // The plan state as the strip reads it: settable, so what counts as low is hostedHours.ts's own rule.
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);
@@ -208,7 +208,7 @@ it(`warns a hosted sandbox's owner about its machine's last hours, and nobody el
     active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `owner` };
     const root = mount();
     await nextTick();
-    expect(root.textContent).toContain(`Free hours · 4 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Free hours · 4h of 40h left this month`);
     expect(root.textContent).toContain(`Billing`);
 
     // A guest on the same sandbox is told nothing: the hours are the owner's to buy back.

@@ -1,7 +1,7 @@
 import { cp, lstat, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";

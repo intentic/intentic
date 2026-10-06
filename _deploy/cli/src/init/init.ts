@@ -2,15 +2,8 @@ import { execFile } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import {
-    gitInit,
-    INTENT_GITIGNORE,
-    INTENT_TSCONFIG,
-    intentPackageJson,
-    libsLinkSpec,
-    scaffoldDeployConfig,
-    TARGET_GITIGNORE,
-} from "@intentic/scaffold";
+import { INTENT_GITIGNORE, INTENT_TSCONFIG, intentPackageJson, libsLinkSpec, scaffoldDeployConfig, TARGET_GITIGNORE } from "@intentic/scaffold";
+import { gitInit } from "@intentic/base/git";
 import { APP_DIR, CONFIG_FILE, INTENT_DIR, TARGET_DIR } from "../lib/artifact.js";
 import { renderTemplate } from "../lib/templates.js";
 import { scaffoldApp } from "./scaffold-app.js";

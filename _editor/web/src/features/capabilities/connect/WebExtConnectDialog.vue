@@ -3,7 +3,7 @@ import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, type WebExtSummary, webextP
 import { Button, Code, Modal } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { usePeerConnect, WEBEXT_DOOR } from "../../sandbox/devices/usePeerConnect";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
 // "Connect this browser" for a webext-kind capability: hands over a code to paste into a browser this tab may not

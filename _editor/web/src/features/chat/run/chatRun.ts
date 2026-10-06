@@ -1,6 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { AgentHarness, WorkflowRun } from "@intentic/sandbox-contract";
-import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../../lib/activeSandbox";
 import { readTabSnapshot } from "../tabs/tabSnapshot";
 
 // A workflow run's view state inside the chat panel: sessions are chats, so a live run's panes move with it instead of

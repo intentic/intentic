@@ -1,7 +1,7 @@
 import type { WalletConfig } from "@intentic/sandbox-contract";
 import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
 import type { Context } from "hono";
-import { cardDeps } from "../conversations/actor/card-offers.js";
+import { cardDeps } from "../conversations/actor/card-deps.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { answerResponse, cliBody } from "../http/cli-answer.js";

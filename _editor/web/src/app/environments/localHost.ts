@@ -241,7 +241,7 @@ export interface LocalHost {
     /** The workspace (agents and sandboxes), in this window's place, at its root or a path under it. */
     openWorkspace(path?: string): Promise<void>;
     /**
-     * Who is signed in, asked of the platform now (shell/useAccount.ts): null when nobody is. Rejects when the
+     * Who is signed in, asked of the platform now (client/auth/useAccount.ts): null when nobody is. Rejects when the
      * platform cannot be reached, which says nothing about whether anyone is.
      */
     account(): Promise<User | null>;

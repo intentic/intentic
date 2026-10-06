@@ -7,7 +7,7 @@ import type { Strip, TabFacts } from "../tabs/tabFacts";
 
 // Sandbox id is pinned, since every case here turns on which sandbox a strip is believed to name; useSandbox reaches
 // window.env through useApi, which no node suite has.
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });
@@ -33,8 +33,8 @@ jest.useFakeTimers();
 const { drawsChat, elsewherePreviews, elsewhereStrip, publishPreviews, publishStrip } = await import("./chatEcho");
 const { receiveChatNote } = await import("./chatChannel");
 const { EMPTY_STRIP } = await import("../tabs/tabFacts");
-const { claimFloating, receiveFloatingNote } = await import("../../../shell/window/floating");
-const { useSandbox } = await import("../../sandbox/client/useSandbox");
+const { claimFloating, receiveFloatingNote } = await import("../../../workbench/window/floating");
+const { useSandbox } = await import("../../../client/sandbox/useSandbox");
 
 // One heartbeat from the floating window is what flips this window from drawing the panel to believing what it's told
 // about the strip.

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Picker, SegmentedControl } from "@intentic/ui";
+import { formatCount, Picker, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useCodebaseHealth } from "./useCodebaseHealth";
 import { useRepos } from "../explorer/useRepos";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { type ChurnWindow, churnWindows, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
+import { type ChurnWindow, churnWindows, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
 import { useT } from "@intentic/ui/i18n";
 
 // A repository's Health tab in the management panel, and the workspace root's own health tab; answers where the risk

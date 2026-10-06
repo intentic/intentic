@@ -32,7 +32,7 @@ const PROMPT: ConversationPrompt = {
 let asked: { enabled?: unknown } | undefined;
 const data = ref<ConversationPrompt | undefined>(undefined);
 
-jest.mock(`../../../sandbox/client/useSandboxQuery`, () => ({
+jest.mock(`../../../../client/sandbox/useSandboxQuery`, () => ({
     useSandboxQuery: (options: { enabled?: unknown }) => {
         asked = options;
         return {
@@ -41,7 +41,7 @@ jest.mock(`../../../sandbox/client/useSandboxQuery`, () => ({
         };
     },
 }));
-jest.mock(`../../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 let app: App | undefined;
 

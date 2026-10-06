@@ -5,8 +5,8 @@ import type { InvitePreview } from "@intentic/api-contract";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
-import { useAuth } from "../auth/useAuth";
-import { useSandbox } from "../sandbox/client/useSandbox";
+import { useAuth } from "../../client/auth/useAuth";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
 // Public accept-invite landing for /invite/:token: previews the token without a session, resolves the current session,

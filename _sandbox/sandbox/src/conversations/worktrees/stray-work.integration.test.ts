@@ -8,7 +8,7 @@ import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../system/resources/perf.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { carriedRef, dropAgentRef } from "../land/agent-refs.js";
+import { carriedRef, dropAgentRef } from "../../git/agent-refs.js";
 import { landAgent } from "../land/land.js";
 import { carryStrayWork, snapshotRefs, strayStandings } from "./stray-work.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";

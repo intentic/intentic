@@ -1,8 +1,8 @@
 import type { WorkspaceModule, WorkspaceModules } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Every repo's modules as /work has them (main tree only); the fleet's agent review reads its own worktree
 // layout instead. Held long, since layout rarely changes, but invalidated by a push rather than time, so a

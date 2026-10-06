@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { STALE_LOCK_MS } from "@intentic/scaffold";
+import { STALE_LOCK_MS } from "@intentic/base/git";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
 import { clearStaleGitLocks, findStaleGitEntries, historyGitDirs, STALE_TMP_PACK_MS, staleGitEntry } from "./stale-git-locks.js";
 

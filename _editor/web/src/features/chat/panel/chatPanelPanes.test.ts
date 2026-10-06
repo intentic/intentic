@@ -17,7 +17,7 @@ const newChat = () => {
 };
 
 import { queryClient } from "../../../lib/queryPersistence";
-import { MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
+import { MIN_PANE_PX, useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";

@@ -3,7 +3,7 @@ import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { environment } from "../../app/environments/environment";
-import { useAuth } from "../auth/useAuth";
+import { useAuth } from "../../client/auth/useAuth";
 
 // The setup page's way out of the account: who is signed in, and signing out. The page sits outside the shell, so the
 // rail's account menu is not on it, and a reader signed in as the wrong Google account had no way off the page.

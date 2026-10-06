@@ -1,5 +1,5 @@
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import type { Summons } from "./summon";
 import type { DraftPreviews } from "../drafts/draftPreview";
 import type { Strip } from "../tabs/tabFacts";

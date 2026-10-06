@@ -1,6 +1,5 @@
 import type { IconName, Tip } from "@intentic/ui";
-import { briefDuration } from "@intentic/base/format";
-import { formatClock, formatWhen } from "@intentic/ui/format";
+import { formatClock, formatElapsed, formatWhen } from "@intentic/ui/format";
 import {
     type AgentAttention,
     type AgentJob,
@@ -20,7 +19,7 @@ import {
     type SubagentStatus,
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { parentOf } from "../board/ownership";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
@@ -1077,19 +1076,6 @@ export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">
     return [`${running} subagent${running === 1 ? `` : `s`}`, own].filter(Boolean).join(` · `);
 };
 
-// Dollars with sensible precision: sub-cent turns still show something, big totals stay short.
-export const formatCost = (usd: number): string => (usd >= 10 ? `$${usd.toFixed(0)}` : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`);
-
-// Elapsed readout for a running turn's startedAt (ms since epoch).
-export const formatElapsed = (startedAt: number, now: number): string => {
-    const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
-    if (seconds < 60) {
-        return `${seconds}s`;
-    }
-    const minutes = Math.floor(seconds / 60);
-    return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-};
-
 // Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
 export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
     tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
@@ -1275,16 +1261,15 @@ export const watchLine = (
     if (watches === undefined || soonest === undefined) {
         return undefined;
     }
-    // `formatElapsed` measures the second argument from the first, so `now → deadline` gives the time left, in the
-    // same vocabulary as a running turn's elapsed readout.
-    const countdown = formatElapsed(now, soonest.deadlineAt);
+    // The time left, in the same vocabulary as a running turn's elapsed readout.
+    const countdown = formatElapsed((soonest.deadlineAt - now) / 1000);
     const hint: Tip =
         watches.length === 1
             ? {
                   title: t(`agents.childRows.watching`),
                   tone: `info`,
                   rows: [
-                      { label: t(`agents.agentStatus.checksEvery`), value: briefDuration(soonest.intervalSeconds) },
+                      { label: t(`agents.agentStatus.checksEvery`), value: formatElapsed(soonest.intervalSeconds) },
                       { label: t(`agents.agentStatus.givesUpIn`), value: countdown },
                   ],
                   note: t(`agents.agentStatus.wakesThisChat`),
@@ -1295,8 +1280,8 @@ export const watchLine = (
                   rows: watches.map((watch) => ({
                       label: watch.note,
                       value: t(`agents.agentStatus.watchPace`, {
-                          interval: briefDuration(watch.intervalSeconds),
-                          left: formatElapsed(now, watch.deadlineAt),
+                          interval: formatElapsed(watch.intervalSeconds),
+                          left: formatElapsed((watch.deadlineAt - now) / 1000),
                       }),
                   })),
                   note: t(`agents.agentStatus.firstWakesChat`),
@@ -1319,7 +1304,7 @@ export const promptLine = (
     if (job?.inputWait === undefined) {
         return undefined;
     }
-    const elapsed = formatElapsed(job.inputWait.since, now);
+    const elapsed = formatElapsed((now - job.inputWait.since) / 1000);
     return {
         jobId: job.id,
         program: job.inputWait.program,

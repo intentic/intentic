@@ -1,6 +1,8 @@
+import { diffSequence, type Op } from "@intentic/ui/diff";
+
 // Line-level diff rows for chat's inline tool cards, a lightweight render of a tool_call's structured diff.
 // Monaco stays the full-screen reviewer; a diff editor per card would be too heavy. Common prefix/suffix trim
-// plus an LCS walk over the middle keeps an ordinary Edit snippet cheap.
+// plus the kit's LCS edit script over the middle keeps an ordinary Edit snippet cheap.
 
 export interface DiffRow {
     readonly type: "context" | "add" | "del" | "skip";
@@ -20,43 +22,12 @@ const add = (text: string): DiffRow => ({ type: "add", text });
 const context = (text: string): DiffRow => ({ type: "context", text });
 const skip = (count: number): DiffRow => ({ type: "skip", text: `⋯ ${count} unchanged lines` });
 
-// Interleaves the trimmed middle by longest common subsequence: a bottom-up table, then a walk back through it.
-const lcsRows = (dels: string[], adds: string[]): DiffRow[] => {
-    if (dels.length * adds.length > MAX_LCS_CELLS) {
-        return [...dels.map(del), ...adds.map(add)];
-    }
-    const width = adds.length + 1;
-    const table = new Uint32Array((dels.length + 1) * width);
-    for (let i = dels.length - 1; i >= 0; i--) {
-        for (let j = adds.length - 1; j >= 0; j--) {
-            table[i * width + j] =
-                dels[i] === adds[j] ? table[(i + 1) * width + j + 1]! + 1 : Math.max(table[(i + 1) * width + j]!, table[i * width + j + 1]!);
-        }
-    }
-    const rows: DiffRow[] = [];
-    let i = 0;
-    let j = 0;
-    while (i < dels.length && j < adds.length) {
-        if (dels[i] === adds[j]) {
-            rows.push(context(dels[i]!));
-            i++;
-            j++;
-        } else if (table[(i + 1) * width + j]! >= table[i * width + j + 1]!) {
-            rows.push(del(dels[i]!));
-            i++;
-        } else {
-            rows.push(add(adds[j]!));
-            j++;
-        }
-    }
-    while (i < dels.length) {
-        rows.push(del(dels[i++]!));
-    }
-    while (j < adds.length) {
-        rows.push(add(adds[j++]!));
-    }
-    return rows;
-};
+const rowOf = (op: Op<string>): DiffRow => (op.kind === `same` ? context(op.after) : op.kind === `removed` ? del(op.item) : add(op.item));
+
+// Interleaves the trimmed middle by longest common subsequence, under this card's own (smaller) budget: past it
+// (two huge dissimilar sides), every old line is deleted and every new one added.
+const lcsRows = (dels: string[], adds: string[]): DiffRow[] =>
+    diffSequence(dels, adds, (left, right) => left === right, MAX_LCS_CELLS)?.map(rowOf) ?? [...dels.map(del), ...adds.map(add)];
 
 // Collapses long unchanged runs to their edges so the changed lines stay in view.
 const collapse = (rows: DiffRow[]): DiffRow[] => {

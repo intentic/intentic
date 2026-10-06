@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import { agentDisplayTitle } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { openById } from "../../../agents/fleet/useAgents-actions";
-import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import ComposerSendLater from "../../composer/later/ComposerSendLater.vue";
 import { bookingOf, laterOfQueue, type SendLater } from "../../composer/later/sendLater";
 import { usePaneView } from "../../panel/useChat-view";

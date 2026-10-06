@@ -1,7 +1,7 @@
 import { type DeviceFlowLine, type DeviceSandboxFlowInput, type DeviceSandboxOp, systemContract } from "@intentic/sandbox-contract";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { implement, ORPCError } from "@orpc/server";
-import { askedRestart, fileRestartResume } from "../agent/run/turn/restart-resume.js";
+import { askedRestart, fileRestartResume } from "../system/restart-resume.js";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";

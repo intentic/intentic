@@ -1,30 +1,29 @@
-import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, GatewayRefusal, type ListenerMessage, recentKeys } from "@intentic/connector-runtime";
+import {
+    deliverChunked,
+    type GatewayCtx,
+    GatewayRefusal,
+    HISTORY_LIMIT,
+    type ListenerHistoryEntry,
+    type ListenerMessage,
+    MESSAGE_LIMITS,
+    paintReply,
+    recentKeys,
+} from "@intentic/connector-runtime";
 import type { SlackConnection } from "./client.js";
 
 // Inbound half of the gateway: every Socket Mode envelope becomes a normalized message posted to the daemon's dispatch
 // route. On a mention, holds the streaming response and paints the reply into the thread live, one painter per
 // automation. :eyes: is Slack's stand-in for a typing indicator, added on tag and removed at turn end.
 
-// Slack truncates messages beyond ~4000 chars; a longer reply spills into follow-up messages in the thread.
-const SLACK_MAX = 3_800;
+// A longer reply spills into follow-up messages in the thread.
+const SLACK_MAX = MESSAGE_LIMITS.slack;
 // Min gap between edits; chat.update is rate-limited, and :eyes: covers the gap until the first paint.
 const EDIT_INTERVAL_MS = 1_500;
-// Recent `channel:ts` keys dedupe shared channels and message+app_mention double-delivery; lost on restart.
-const RECENT_MAX = 500;
-// Prior messages pulled for context when the bot is tagged.
-const HISTORY_LIMIT = 20;
 // 'Working on it' reaction name (not an emoji); Slack's reactions API is keyed by shortcode.
 const ACK_REACTION = "eyes";
 
 // Allowlist, not denylist: Slack keeps adding bookkeeping subtypes; third-party `bot_message` can trigger us.
 const WAKING_SUBTYPES = new Set(["file_share", "thread_broadcast", "bot_message"]);
-
-interface HistoryEntry {
-    author: { id: string; name: string };
-    content: string;
-    timestamp: string;
-    self?: boolean;
-}
 
 // One raw Slack message, in the shape both the event payload and the history APIs deliver it.
 export interface SlackMessage {
@@ -68,10 +67,10 @@ export const toHistory = (
     order: "newest-first" | "oldest-first",
     selfIds: ReadonlySet<string>,
     nameOf: (message: SlackMessage) => string,
-): HistoryEntry[] =>
+): ListenerHistoryEntry[] =>
     (order === "newest-first" ? messages.toReversed() : [...messages]).map((message) => {
         const id = message.user ?? message.bot_id ?? "";
-        const entry: HistoryEntry = {
+        const entry: ListenerHistoryEntry = {
             author: { id, name: nameOf(message) },
             content: message.text ?? "",
             timestamp: tsToIso(message.ts),
@@ -85,24 +84,14 @@ export const toHistory = (
 // Posts into a channel outside any live turn (the daemon's speak-as-the-agent path), top-level since only the channel
 // was recorded. Tries the next app only if nothing posted yet, so a partial spill is never duplicated.
 export const deliverToChannel = async (connections: ReadonlyMap<string, SlackConnection>, channel: string, text: string): Promise<void> => {
-    let refusal: unknown = new GatewayRefusal("no Slack app is connected");
-    for (const connection of connections.values()) {
-        let posted = false;
-        try {
-            for (let base = 0; base < text.length; base += SLACK_MAX) {
-                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
-                await connection.web.chat.postMessage({ channel, text: text.slice(base, base + SLACK_MAX) });
-                posted = true;
-            }
-            return;
-        } catch (error) {
-            if (posted) {
-                throw error;
-            }
-            refusal = error;
-        }
-    }
-    throw refusal;
+    await deliverChunked(
+        connections.values(),
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
+        (connection, chunk) => connection.web.chat.postMessage({ channel, text: chunk }),
+        text,
+        SLACK_MAX,
+        () => new GatewayRefusal("no Slack app is connected"),
+    );
 };
 
 export interface SlackListener {
@@ -110,7 +99,7 @@ export interface SlackListener {
 }
 
 export const createSlackListener = (ctx: GatewayCtx, connections: () => ReadonlyMap<string, SlackConnection>): SlackListener => {
-    const recent = recentKeys(RECENT_MAX);
+    const recent = recentKeys();
     // User id to display name, one lookup per user then cached for the process's life; a restart is a fine refresh.
     const names = new Map<string, string>();
 
@@ -135,7 +124,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
     const localName = (message: SlackMessage): string =>
         message.username ?? (message.user !== undefined ? (names.get(message.user) ?? message.user) : (message.bot_id ?? "unknown"));
 
-    const fetchHistory = async (connection: SlackConnection, message: SlackMessage, channel: string): Promise<HistoryEntry[] | undefined> => {
+    const fetchHistory = async (connection: SlackConnection, message: SlackMessage, channel: string): Promise<ListenerHistoryEntry[] | undefined> => {
         try {
             // In a thread the thread IS the context; in a channel it's what was said just before.
             if (message.thread_ts !== undefined) {
@@ -216,34 +205,27 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             await ctx.daemon.dispatch(payload);
             return;
         }
-        // One painter per matched automation (framePainter), so two automations answering one mention don't collide.
         const threadTs = message.thread_ts ?? message.ts;
-        const onError = (error: unknown): void => ctx.log.warn({ err: error }, "slack stream paint failed");
-        const poster = {
-            post: async (body: string): Promise<string> => {
-                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
-                const posted = await connection.web.chat.postMessage({ channel, thread_ts: threadTs, text: body });
-                if (posted.ts === undefined) {
-                    throw new Error("slack chat.postMessage returned no ts");
-                }
-                return posted.ts;
+        await paintReply(ctx.daemon, payload, {
+            surface: {
+                stream: {
+                    post: async (body: string): Promise<string> => {
+                        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
+                        const posted = await connection.web.chat.postMessage({ channel, thread_ts: threadTs, text: body });
+                        if (posted.ts === undefined) {
+                            throw new Error("slack chat.postMessage returned no ts");
+                        }
+                        return posted.ts;
+                    },
+                    update: (ts: string, body: string) => connection.web.chat.update({ channel, ts, text: body }),
+                },
+                editIntervalMs: EDIT_INTERVAL_MS,
             },
-            update: (ts: string, body: string) => connection.web.chat.update({ channel, ts, text: body }),
-        };
-        try {
-            await ctx.daemon.dispatchStreaming(
-                payload,
-                framePainter(
-                    () => createStreamingPainter(poster, onError, { maxChars: SLACK_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
-                    // Posted directly, not through the painter, which owns reply text; a failed turn usually has none
-                    // to flush.
-                    (reason) => void poster.post(failureNotice(reason, SLACK_MAX)).catch(onError),
-                ),
-            );
-        } finally {
+            maxChars: SLACK_MAX,
+            onError: (error) => ctx.log.warn({ err: error }, "slack stream paint failed"),
             // The turn(s) ended (or the stream broke), the reply is there, so retire the acknowledgement.
-            await react(connection, channel, message.ts, false);
-        }
+            settle: () => react(connection, channel, message.ts, false),
+        });
     };
 
     const onReaction = async (connection: SlackConnection, reaction: SlackReaction): Promise<void> => {

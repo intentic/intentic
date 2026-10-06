@@ -1,4 +1,4 @@
-import type { GitChange, LandedMessage, RepoChanges } from "@intentic/api-contract";
+import type { GitChange, LandedMessage, RepoChanges } from "@intentic/sandbox-contract";
 import { OWN_EDITS_SUBJECT, savedMessage, soleOrigin } from "./savedMessage";
 
 const change = (path: string, status: GitChange[`status`] = `modified`): GitChange => ({ path, status });

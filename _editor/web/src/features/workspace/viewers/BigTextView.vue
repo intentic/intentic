@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { WorkspaceFileWindow } from "@intentic/api-contract";
+import type { WorkspaceFileWindow } from "@intentic/sandbox-contract";
 import { Button, formatBytes, vAction } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../files/fileWindow";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
-import { useViewScope } from "../health/workspaceScope";
+import { useViewScope } from "../../../app/workspaceScope";
 import CodeView from "./CodeView.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -66,7 +66,7 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow
     } catch (err) {
         // An abort is this component replacing its own request, never a failure to report.
         if (!controller.signal.aborted) {
-            error.value = errorMessage(err, `Could not read the file.`);
+            error.value = messageOr(err, `Could not read the file.`);
         }
         return undefined;
     } finally {

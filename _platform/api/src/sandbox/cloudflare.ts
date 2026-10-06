@@ -1,96 +1,60 @@
-import { LOCAL_ADDRESS, LOCAL_LABEL, localWildcardHostname } from "@intentic/sandbox-contract";
+import {
+    type CloudflareInit,
+    CloudflareError,
+    CloudflareTokenError as SharedTokenError,
+    CloudflareZoneFullError,
+    cloudflareCall,
+    cloudflarePages,
+} from "@intentic/base/cloudflare";
+import { hostOwnerId, LOCAL_ADDRESS, LOCAL_LABEL, localWildcardHostname } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 // Cloudflare zone listing for the setup screen (user's token) and DNS for sandboxes' loopback certs (intentic's token);
 // tunnels are provisioned in sandbox/reachability.ts. Pre-migration sandboxes are still reachable only through old
 // tunnel DNS records, which the sweep below treats as live. No dependency on @intentic/providers.
 
-const BASE = "https://api.cloudflare.com/client/v4";
-
 // Cloudflare rejected the token (invalid, inactive, or missing Zone:Read); the router maps this to a user-facing
 // BAD_REQUEST.
 export class CloudflareTokenError extends Error {}
 
-// A non-2xx Cloudflare response other than the token case (see CloudflareTokenError). `codes` are the numeric error
-// codes from the response envelope, since Cloudflare rewords messages.
-class CloudflareApiError extends Error {
-    constructor(
-        message: string,
-        readonly codes: number[],
-    ) {
-        super(message);
+// The bearer, the envelope, the 30 s deadline and the paging are @intentic/base/cloudflare's, the one client the deploy
+// engine calls Cloudflare with too. What is this platform's own is the wording a refusal reaches a person in: a bad
+// token is the caller's 400, and a zone out of records (81045) blocks every sandbox's loopback certificate.
+const refusal = (cause: unknown, tokenMessage: string): Error => {
+    if (cause instanceof SharedTokenError) {
+        return new CloudflareTokenError(tokenMessage, { cause });
     }
-}
+    if (cause instanceof CloudflareZoneFullError) {
+        // Do not suggest deleting sandbox-*/ssh-* records: pre-migration sandboxes are reachable only through those.
+        return new CloudflareError(
+            `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota), so no sandbox in it can be issued a loopback certificate. The daily sweep reclaims what is genuinely unused (the records of sandboxes that no longer exist, and the per-sandbox local-* records one wildcard replaced) and logs what it found; deletions need INTENTIC_CLOUDFLARE_REAP=true on the deployment that owns this zone. Do not clear sandbox-*/ssh-*/port-slot records by hand: a sandbox created before the tunnel migration is reachable through exactly those. Raising the zone's plan limit is the other way out.`,
+            cause.status,
+            cause.codes,
+        );
+    }
+    return cause instanceof Error ? cause : new Error(String(cause));
+};
 
-// `result` stays unknown so an error envelope's `errors` surface before the result-shape check runs.
-const envelopeSchema = z.object({
-    success: z.boolean(),
-    errors: z.array(z.object({ code: z.number(), message: z.string() })),
-    result: z.unknown(),
-    result_info: z.object({ total_pages: z.number() }).partial().optional(),
-});
 const zonesResultSchema = z.array(z.object({ name: z.string() }));
 
 // Every zone name the token can see, paginated at 50/page. A 401/403 becomes a CloudflareTokenError.
 export const listZoneNames = async (token: string): Promise<string[]> => {
-    const names: string[] = [];
-    let page = 1;
-    let totalPages = 1;
-    do {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Each page reveals whether another page exists.
-        const response = await fetch(`${BASE}/zones?per_page=50&page=${page}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (response.status === 401 || response.status === 403) {
-            throw new CloudflareTokenError("the Cloudflare API token is invalid or lacks the Zone:Read scope");
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- reading this page's body before deciding whether a next page exists
-        const envelope = envelopeSchema.parse(await response.json());
-        if (!response.ok || !envelope.success) {
-            const detail = envelope.errors.map((error) => `${error.code} ${error.message}`).join("; ");
-            throw new Error(`Cloudflare GET /zones failed (HTTP ${response.status}): ${detail}`);
-        }
-        for (const zone of zonesResultSchema.parse(envelope.result)) {
-            names.push(zone.name);
-        }
-        totalPages = envelope.result_info?.total_pages ?? 1;
-        page += 1;
-    } while (page <= totalPages);
-    return names;
+    try {
+        return zonesResultSchema.parse(await cloudflarePages(token, `/zones`)).map((zone) => zone.name);
+    } catch (error) {
+        throw refusal(error, "the Cloudflare API token is invalid or lacks the Zone:Read scope");
+    }
 };
 
-// Fetches and validates a Cloudflare success envelope, returning the parsed `result`. A 401/403 becomes a
-// CloudflareTokenError; any other failure propagates unchanged.
-const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>, init?: RequestInit): Promise<T> => {
-    const response = await fetch(`${BASE}${path}`, {
-        ...init,
-        headers: {
-            Authorization: `Bearer ${token}`,
-            ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-        },
-        // A stalled Cloudflare API must fail rather than hang the caller forever.
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (response.status === 401 || response.status === 403) {
-        throw new CloudflareTokenError("the intentic Cloudflare API token is invalid or lacks the required scope");
+// One Cloudflare call's validated `result`. A 401/403 becomes a CloudflareTokenError; any other failure propagates.
+const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>, init?: CloudflareInit): Promise<T> => {
+    let result: unknown;
+    try {
+        result = await cloudflareCall(token, path, init);
+    } catch (error) {
+        throw refusal(error, "the intentic Cloudflare API token is invalid or lacks the required scope");
     }
-    const envelope = envelopeSchema.parse(await response.json());
-    if (!response.ok || !envelope.success) {
-        const detail = envelope.errors.map((error) => `${error.code} ${error.message}`).join("; ");
-        const codes = envelope.errors.map((error) => error.code);
-        // 81045 means the zone is out of DNS records, which blocks ACME issuance for every sandbox, not just one.
-        if (codes.includes(81045)) {
-            // Do not suggest deleting sandbox-*/ssh-* records: pre-migration sandboxes are reachable only through
-            // those.
-            throw new CloudflareApiError(
-                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota), so no sandbox in it can be issued a loopback certificate. The daily sweep reclaims what is genuinely unused (the records of sandboxes that no longer exist, and the per-sandbox local-* records one wildcard replaced) and logs what it found; deletions need INTENTIC_CLOUDFLARE_REAP=true on the deployment that owns this zone. Do not clear sandbox-*/ssh-*/port-slot records by hand: a sandbox created before the tunnel migration is reachable through exactly those. Raising the zone's plan limit is the other way out.`,
-                codes,
-            );
-        }
-        throw new CloudflareApiError(`Cloudflare ${init?.method ?? "GET"} ${path} failed (HTTP ${response.status}): ${detail}`, codes);
-    }
-    return resultSchema.parse(envelope.result);
+    return resultSchema.parse(result);
 };
 
 // One wildcard A record (`*.local.<zone>` to 127.0.0.1, unproxied) answers every sandbox's loopback hostname. Asserted
@@ -104,14 +68,14 @@ export const ensureLocalDnsRecord = async (apiToken: string, zone: string): Prom
         z.array(z.object({ id: z.string() })),
     );
     // A day: the content never changes, so a long TTL only helps caching, never risks staleness.
-    const body = JSON.stringify({
+    const body = {
         type: "A",
         name: hostname,
         content: LOCAL_ADDRESS,
         proxied: false,
         ttl: 86_400,
         comment: "intentic sandbox loopback",
-    });
+    };
     const recordId = records[0]?.id;
     await cfCall(
         apiToken,
@@ -143,7 +107,7 @@ export const setAcmeChallenge = async (apiToken: string, zone: string, recordNam
     await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records`, z.unknown(), {
         method: "POST",
         // 60s: the record is withdrawn right after validation, so nothing needs a longer TTL.
-        body: JSON.stringify({ type: "TXT", name: recordName, content: value, ttl: 60, comment: "intentic sandbox acme" }),
+        body: { type: "TXT", name: recordName, content: value, ttl: 60, comment: "intentic sandbox acme" },
     });
 };
 
@@ -183,9 +147,9 @@ const MAX_RECORD_PAGES = 200;
 export const DNS_REAP_PER_PASS = 100;
 const zoneRecordSchema = z.object({ id: z.string(), type: z.string(), name: z.string(), content: z.string() });
 
-// Extracts the trailing 12-hex sandbox id from a tunnel record's name (`sandbox-<id>`, `ssh-<id>`, `<slot>-<id>`, ...),
-// or undefined if absent.
-const recordSandboxId = (record: z.infer<typeof zoneRecordSchema>): string | undefined => /^[^.]*-([0-9a-f]{12})\./.exec(record.name)?.[1];
+// The sandbox a tunnel record's name belongs to (`sandbox-<id>`, `ssh-<id>`, `<slot>-<id>`, ...), by the rule the edge
+// routes a Host by, or undefined if it carries no id.
+const recordSandboxId = (record: z.infer<typeof zoneRecordSchema>): string | undefined => hostOwnerId(record.name);
 
 // The sandbox id a record of a sandbox-keyed shape belongs to: a CNAME onto a Cloudflare tunnel, or a loopback
 // `_acme-challenge` TXT. Undefined for any other record, and for a name with no id, which this platform did not mint.
@@ -252,7 +216,7 @@ export const reapOrphanDnsRecords = async (args: {
     deletedAmong: (ids: readonly string[]) => Promise<ReadonlySet<string>>;
     dryRun: boolean;
     log: (record: { name: string; type: string; content: string }) => void;
-    onError: (record: { name: string }, error: unknown) => void;
+    onError: (record: { name: string }, cause: unknown) => void;
     // How many records one pass deletes; DNS_REAP_PER_PASS unless a caller says otherwise.
     perPass?: number;
 }): Promise<{ total: number; orphaned: number; reaped: number; failed: number; deferred: number; forgotten: number }> => {

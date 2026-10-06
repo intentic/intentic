@@ -5,8 +5,8 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
-import { useAuth } from "./useAuth";
-import { useGoogleIdentity } from "./useGoogleIdentity";
+import { useAuth } from "../../client/auth/useAuth";
+import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
 import { useT } from "@intentic/ui/i18n";
 

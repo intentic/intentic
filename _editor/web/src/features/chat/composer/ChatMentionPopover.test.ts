@@ -10,7 +10,7 @@ import type { QuickPick, QuickPickSources } from "./composerQuickPick";
 // Needs jsdom: the kit's barrel reads matchMedia at import time (its device tracker), which jsdom lacks.
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
 jest.mock("../models/useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 // The other-boxes poll is the placement menu's concern; here it only has to be started and stopped.
 jest.mock("../../sandbox/live/fleetAcross", () => ({ subscribe: () => () => {} }));

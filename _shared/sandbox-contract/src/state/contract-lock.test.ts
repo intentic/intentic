@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { shrunkSurfaces } from "@intentic/constants/contract-shrink";
 import { packageRoot } from "@intentic/constants/node";
-import { RAW_ROUTE_LIST } from "../protocol/raw-routes.js";
+import { RAW_ROUTE_LIST } from "../protocol/raw/raw-routes.js";
 import type { RouteMeta } from "../protocol/route-meta.js";
 import { accessChanges, currentLock, serializeLock } from "./contract-lock.js";
 

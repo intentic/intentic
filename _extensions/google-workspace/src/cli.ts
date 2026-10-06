@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Args, UsageError, bool, flag, parseArgs } from "./cli/args.js";
+import { type Args, bool, flag, parseArgs, rejectUnknownFlags } from "./cli/args.js";
 import type { Command, CommandGroup, RootCommand, RootContext } from "./cli/command.js";
-import { type Connection, connectionsFrom, describe, selectConnection } from "./google/accounts.js";
+import { type Connection, connectionsFrom, describe, retargetAs, selectConnection } from "./google/accounts.js";
 import { openSession } from "./google/session.js";
 import { accountsCommand, authGroup, whoamiCommand } from "./services/auth.js";
 import { calendarGroup } from "./services/calendar.js";
@@ -14,6 +14,9 @@ import { sheetsGroup } from "./services/sheets.js";
 // `gw`: one command for the whole of Google Workspace, reached through bin/gw on the agent's PATH. The router decides
 // once what a switch elsewhere would repeat: which account, whether it may write, and what a failure looks like; a
 // command below is only the API call and how to print it.
+// The agent-CLI contract: everything, errors included, goes to stdout, since an agent drops stderr and would read a
+// failure as an empty answer. Exit 0 is an answer (an empty search says so in words), 2 is anything else: a usage error,
+// a refusal, a failed call.
 
 const GROUPS: readonly CommandGroup[] = [mailGroup, calendarGroup, driveGroup, docsGroup, sheetsGroup, contactsGroup, authGroup];
 const ROOT_COMMANDS: readonly RootCommand[] = [accountsCommand];
@@ -46,21 +49,8 @@ const groupUsage = (group: CommandGroup, out: (line: string) => void): void => {
     }
 };
 
-// `--as` retargets a company connection at another person in the domain; a personal grant has nobody else it could act
-// as.
-const retarget = (connection: Connection, as: string | undefined): Connection => {
-    if (as === undefined) {
-        return connection;
-    }
-    if (connection.mode !== "domain") {
-        throw new UsageError(
-            `--as only works on a company (service account) connection. "${describe(connection)}" is one person's own grant, so it can only act as ${connection.email}.`,
-        );
-    }
-    return { ...connection, email: as };
-};
-
 const run = async (args: Args, out: (line: string) => void): Promise<number> => {
+    rejectUnknownFlags(args);
     const json = bool(args, "json");
     const connections = connectionsFrom(process.env);
     const context: RootContext = { args, json, out, connections };
@@ -79,7 +69,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
 
     // The account this run acts as, resolved lazily so a group's help and its connectionless subcommands work with
     // nothing connected.
-    const chosen = (): Connection => retarget(selectConnection(connections, flag(args, "account")), flag(args, "as"));
+    const chosen = (): Connection => retargetAs(selectConnection(connections, flag(args, "account")), flag(args, "as"));
 
     const sessionCommand = SESSION_COMMANDS.find((command) => command.name === head);
     if (sessionCommand !== undefined) {
@@ -119,7 +109,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
     if (command.writes === true && connection.access === "read") {
         out(`"${describe(connection)}" is connected read-only, so ${head} ${second} is not available.`);
         out("Change it to Read & write on the Google Workspace card if that is what you want.");
-        return 1;
+        return 2;
     }
     await command.run({ ...context, connection, session: openSession(connection, process.env, process.cwd(), Date.now) });
     return 0;
@@ -146,7 +136,7 @@ const out = (line: string): void => {
 try {
     process.exitCode = await run(args, out);
 } catch (error) {
-    const message = errorMessage(error);
-    process.stderr.write(`${message}\n`);
-    process.exitCode = error instanceof UsageError ? 2 : 1;
+    // stdout, never stderr: `gw … 2>/dev/null` is an agent reflex. 2 for every failure, so none reads as an answer.
+    out(`gw: ${errorMessage(error)}`);
+    process.exitCode = 2;
 }

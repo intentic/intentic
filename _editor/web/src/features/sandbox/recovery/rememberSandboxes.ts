@@ -4,10 +4,11 @@ import { watch } from "vue";
 import { environment } from "../../../app/environments/environment";
 import { queryClient } from "../../../lib/queryPersistence";
 import { apiClient } from "../../../lib/useApi";
-import { useAuth } from "../../auth/useAuth";
-import { SANDBOX_LIST_KEY } from "../client/useSandbox";
-import { forgetSandbox, missingSandboxes, noteUnknown, rememberListed, sandboxIdOfUrl } from "./deviceDirectory";
-import { directMode } from "./directState";
+import { useAuth } from "../../../client/auth/useAuth";
+import { SANDBOX_LIST_KEY } from "../../../client/sandbox/useSandbox";
+import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract";
+import { forgetSandbox, missingSandboxes, noteUnknown, rememberListed } from "../../../client/directory/deviceDirectory";
+import { directMode } from "../../../client/directory/directState";
 
 // Keeps the device's memory (deviceDirectory.ts) up with every list the platform answers, and asks the platform about
 // any remembered sandbox a list lacks: deleted or someone else's is let go of here, unknown is marked, and only that is
@@ -38,7 +39,7 @@ const platformIdentity = (): Promise<string | undefined> => {
 // failure (asked again after the next one).
 const askAboutMissing = async (email: string): Promise<void> => {
     const asked = missingSandboxes(email).flatMap((entry) => {
-        const sandboxId = entry.standing === undefined ? sandboxIdOfUrl(entry.daemonUrl) : undefined;
+        const sandboxId = entry.standing === undefined ? sandboxIdOfDaemonUrl(entry.daemonUrl) : undefined;
         return sandboxId === undefined ? [] : [{ sandboxId, entry }];
     });
     if (asked.length === 0) {

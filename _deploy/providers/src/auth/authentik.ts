@@ -2,7 +2,6 @@ import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "authentik";
@@ -59,7 +58,7 @@ const composeYaml = (parsed: AuthentikInputs, stamp: ContainerStamp): string =>
 
 // An Authentik auth backing instance (i.want.auth). read returns the resource once the server answers its health
 // endpoint; per-app OIDC clients are the authentik-client binding's job, over the API.
-export const createAuthentikProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createAuthentikProvider = (executor: SshExecutor): Provider =>
     createBackingProvider(
         {
             kind: KIND,

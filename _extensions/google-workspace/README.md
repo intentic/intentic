@@ -11,7 +11,7 @@ flowchart LR
     watcher -->|"mail · event"| daemon["Daemon<br/>automations"]
 ```
 
-- `gw` reaches the agent's PATH through `contributes.bin`. Its router picks the account, applies the read-only switch and formats failures once; each command in `src/services/` is only the API call and its output. Several accounts can be connected, and a company connection can act as anyone in the domain with `--as`.
+- `gw` reaches the agent's PATH through `contributes.bin`. Its router picks the account, applies the read-only switch and formats failures once; each command in `src/services/` is only the API call and its output. Several accounts can be connected, and a company connection can act as anyone in the domain with `--as`. It keeps the agent-CLI contract: failures print to stdout (an agent drops stderr) with exit 2, and a flag no command reads is refused before anything runs rather than dropped.
 - Read-only is enforced twice: the card asks Google for read scopes, and every command marked `writes` is refused by the router.
 - Access tokens are cached per credential fingerprint in a `0600` file under the workspace runtime tree, since each `gw` call is a fresh process.
 - The watcher polls because Gmail push needs a public endpoint the sandbox lacks. Mail follows Gmail's `history.list` cursor; calendar looks a short window ahead. A watermark file per connection means a restart neither replays the inbox nor skips mail. It runs only while an automation listens to `google`.

@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, type Tip, useNarrow } from "@intentic/ui";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { Button, clipboardOf, ui, ContextMenu, type IconName, ResizeSeam, SegmentedControl, type Tip, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
-import { WORKSPACE } from "../../../shell/commands/categories";
-import { commandShortcut, type CommandRegistration, registerCommand } from "../../../shell/commands/useCommands";
-import { publishContextKey } from "../../../shell/commands/contextKeys";
+import { WORKSPACE } from "../../../workbench/commands/categories";
+import { commandShortcut, type CommandRegistration, registerCommand } from "../../../workbench/commands/useCommands";
+import { publishContextKey } from "../../../workbench/commands/contextKeys";
 import { deleteUndoable } from "../explorer/undo/deleteUndo";
 import { UNDO_DELETE, useDeleteUndo } from "../explorer/undo/useDeleteUndo";
 import { useAudience } from "../../../app/useAudience";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { usePanels } from "../../extensions/usePanels";
 import { personaStartDirs } from "../../sandbox/personas/personaRules";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachTip } from "../directory-ui/personaReach";
-import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
-import { detectActivations } from "../../../core-views/registry";
-import { useEditBuffers } from "../files/useEditBuffers";
+import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { detectActivations } from "../../../workbench/views/registry";
 import { useMonaco } from "../files/useMonaco";
 import {
     defaultSidebarWidth,
@@ -29,9 +28,9 @@ import {
     MIN_SIDEBAR_WIDTH,
     type SidebarPanel,
     useLayout,
-} from "../../../shell/window/useLayout";
-import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
-import { reportOpenPath } from "../../../shell/presence/usePresence";
+} from "../../../workbench/window/useLayout";
+import { toAppPx, toScreenPx, uiLength } from "../../../workbench/window/uiScale";
+import { reportOpenPath } from "../../../workbench/presence/usePresence";
 import { outgoingMark, outgoingSummary } from "../push/outgoingWork";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../changes/useChanges";
@@ -40,6 +39,8 @@ import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import type { SearchScope } from "../search/useWorkspaceSearch";
 import { matchToggles } from "../search/useSearchOptions";
+import CloseGuardDialog from "../tabs/CloseGuardDialog.vue";
+import { useCloseGuard } from "../tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
@@ -101,7 +102,6 @@ const scopedBarren = computed(() =>
     workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`)),
 );
 const { enqueue } = useUploadQueue();
-const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
 
 const openReview = (): void => layout.setSidebarPanel(`changes`);
@@ -158,7 +158,6 @@ const {
     deselect,
     keepTab,
     closedTabs,
-    closeTabIds,
     reopenClosedTab,
     strip,
     splitOpen,
@@ -437,39 +436,14 @@ const lensTip = computed(() =>
 const rootEl = ref<HTMLElement>();
 const tabMenu = ref<{ show: (event: Event) => void }>();
 const menuTabId = ref<string>();
-const pendingClose = ref<ReadonlySet<string>>();
 
-// Every open tab across both panes: what a close confirm must check (a companion pane's unsaved work is easy
-// to miss) and what "Close All" means.
+// Every open tab across both panes: what "Close All" means.
 const allTabs = computed(() => [...strip.value.main.tabs, ...strip.value.side.tabs]);
 
-// The store drops the tabs (kept for Reopen Closed Tab); this layer also forgets their edit buffers.
-const applyClose = (ids: ReadonlySet<string>): void => {
-    closeTabIds(ids).forEach(forget); // drop unsaved edit buffers for the closed files
-};
-// A lone close stays silent (the dirty dot already shows); a bulk close confirms first if any tab going away is dirty.
-const closeTab = (id: string): void => applyClose(new Set([id]));
-const requestClose = (ids: ReadonlySet<string>): void => {
-    const hasDirty = allTabs.value.some((tab) => ids.has(tab.id) && tab.kind === `file` && dirtyPaths.value.has(tab.path));
-    if (!hasDirty) {
-        applyClose(ids);
-        return;
-    }
-    pendingClose.value = ids;
-};
-const confirmClose = (): void => {
-    if (pendingClose.value !== undefined) {
-        applyClose(pendingClose.value);
-    }
-    pendingClose.value = undefined;
-};
-const pendingCloseDirty = computed(() =>
-    pendingClose.value === undefined
-        ? []
-        : allTabs.value.flatMap((tab) =>
-              pendingClose.value?.has(tab.id) === true && tab.kind === `file` && dirtyPaths.value.has(tab.path) ? [tab.path] : [],
-          ),
-);
+// Every close goes through the workspace's one guard (tabs/useCloseGuard.ts): a close that would discard unsaved
+// edits, the editor's own or an extension editor's, waits for the reader's word, a lone × included. The store keeps the
+// closed tabs for Reopen Closed Tab; the guard forgets their edits and dirty flags.
+const { question: closeQuestion, asking: askingToClose, closeTab, closeTabs: requestClose, closeAnyway, keepOpen } = useCloseGuard();
 // The strip-wide rows (shared with chat/terminal menus); Reopen survives an empty strip, since a mis-close
 // leaves nothing else to right-click.
 const stripItems = computed<MenuItem[]>(() => [
@@ -1179,25 +1153,7 @@ const includeTip = computed(
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <!-- The explorer toolbar's funnel, opened by a left click rather than a row's right click. -->
         <ContextMenu ref="filterMenu" :model="filterMenuItems" :min-width="11" />
-        <ConfirmDialog
-            :open="pendingClose !== undefined"
-            :header="
-                pendingCloseDirty.length === 1
-                    ? t(`workspace.workspaceDesktop.discardUnsavedChanges`)
-                    : t(`workspace.workspaceDesktop.discardUnsavedChangesIn`, { count: pendingCloseDirty.length })
-            "
-            :confirm-label="t(`workspace.workspaceDesktop.closeAnyway`)"
-            confirm-icon="times"
-            :items="pendingCloseDirty"
-            @cancel="pendingClose = undefined"
-            @confirm="confirmClose"
-        >
-            <template #item="{ item }">
-                <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
-                <span class="truncate text-content">{{ item }}</span>
-            </template>
-            <p class="mt-3 text-xs text-muted">{{ t(`workspace.workspaceDesktop.closingTabsDiscardsUnsaved`) }}</p>
-        </ConfirmDialog>
+        <CloseGuardDialog :open="askingToClose" :question="closeQuestion" @cancel="keepOpen" @confirm="closeAnyway" />
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
         <DirectoryChecks v-model="checksDir" />

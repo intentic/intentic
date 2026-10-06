@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { Services } from "../composition.js";
-import { cardDeps, raiseRequest } from "../conversations/actor/card-offers.js";
-import { type LiveRun, liveRunOf, turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import { raiseRequest } from "../guard/card-offers.js";
+import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
+import { createOpenAsks } from "../guard/open-asks.js";
 import { conversationUnattended } from "../guard/turn-taint.js";
 import type { HostGateRefusal } from "./host-command-guard.js";
+import type { HostGuardDeps } from "./host-guard-deps.js";
 
 // AN AGENT RESTARTING THE SANDBOX EVERY OTHER AGENT RUNS IN. swap_sandbox, manage_sandbox and reshape_sandbox reach the
 // device's `ic` for a sandbox by its slug, and on this sandbox's own slug each ends by replacing or stopping the
@@ -71,43 +73,18 @@ export const restartInCall = (call: DeviceToolCall, ownSlug: string | undefined)
 const refusal = (text: string): HostGateRefusal => ({ refusal: text });
 
 /** The agents mid-turn in this sandbox, by the title the board shows them under; `except` leaves out the caller's own. */
-export const agentsMidTurn = (services: Pick<Services, "agents" | "conversations">, except?: string): string[] =>
-    services.agents
+export const agentsMidTurn = (agents: Pick<Services["agents"], "list">, turnRun: HostGuardDeps["turnRun"], except?: string): string[] =>
+    agents
         .list()
-        .filter((agent) => agent.id !== except && liveRunOf(services.conversations, agent.id) !== undefined)
+        .filter((agent) => agent.id !== except && turnRun(agent.id)?.done === false)
         .map((agent) => agent.title ?? agent.id);
 
-// Cards still open (or answered and not yet collected) by the call that raised them, so the same call again waits on the
-// same card, and a yes given after the first call gave up is still used, once.
-const openAsks = new Map<string, Promise<HostGateRefusal | undefined>>();
+// Cards still open (or answered and not yet collected) by the call that raised them (guard/open-asks.ts).
+const openAsks = createOpenAsks<HostGateRefusal | undefined>();
 
 const stillWaiting = (machine: string, call: RestartCall): string =>
     `Still waiting for the owner: a card asks them to approve ${call.tool} ${call.op} on "${machine}", and nothing has run yet. ` +
     `Their answer is kept for this exact call: make it again with the same arguments to wait for it. Do not restart the sandbox another way.`;
-
-const awaitAnswer = async (
-    key: string,
-    asking: Promise<HostGateRefusal | undefined>,
-    waiting: string,
-    budgetMs: number,
-): Promise<HostGateRefusal | undefined> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const waited = new Promise<"waiting">((resolve) => {
-        timer = setTimeout(() => resolve("waiting"), Math.max(0, budgetMs));
-    });
-    try {
-        const outcome = await Promise.race([asking, waited]);
-        if (outcome === "waiting") {
-            return refusal(waiting);
-        }
-        if (openAsks.get(key) === asking) {
-            openAsks.delete(key);
-        }
-        return outcome;
-    } finally {
-        clearTimeout(timer);
-    }
-};
 
 interface RestartAsk {
     readonly conversationId: string;
@@ -133,13 +110,13 @@ const stoppingSaid = (ask: RestartAsk): string => {
     return `It restarts the sandbox on ${ask.machine}, which stops ${who} working in it now: ${ask.stopping.join(", ")}. ${after}`;
 };
 
-const askOwner = async (services: Services, run: LiveRun, ask: RestartAsk): Promise<HostGateRefusal | undefined> => {
+const askOwner = async (guards: HostGuardDeps, run: LiveRun, ask: RestartAsk): Promise<HostGateRefusal | undefined> => {
     // The turn's end settles the card at once: a yes given after it would restart the sandbox for nobody.
     const ended = new AbortController();
     void run.waitUntilFinished().then(() => ended.abort());
     const { doing } = ask.call;
     const answered = await raiseRequest(
-        cardDeps(services),
+        guards.cards,
         { conversationId: ask.conversationId, push: (event) => run.push(event) },
         {
             kind: "permission",
@@ -180,7 +157,8 @@ const askOwner = async (services: Services, run: LiveRun, ask: RestartAsk): Prom
  * call to the device, whose own switch still decides.
  */
 export const judgeHostRestart = async (
-    services: Services,
+    services: Pick<Services, "agents" | "sandboxSettings">,
+    guards: HostGuardDeps,
     input: { readonly machine: string; readonly call: RestartCall; readonly conversationId: string | undefined },
     budgetMs: number = CALL_BUDGET_MS,
 ): Promise<HostGateRefusal | undefined> => {
@@ -189,13 +167,13 @@ export const judgeHostRestart = async (
     const key = conversationId === undefined ? undefined : `${conversationId}\u0000${machine}\u0000${call.tool}\u0000${call.op}`;
     const open = key === undefined ? undefined : openAsks.get(key);
     if (key !== undefined && open !== undefined) {
-        return awaitAnswer(key, open, stillWaiting(machine, call), budgetMs - (Date.now() - at));
+        return openAsks.await(key, open, budgetMs - (Date.now() - at), refusal(stillWaiting(machine, call)));
     }
-    const stopping = agentsMidTurn(services, conversationId);
+    const stopping = agentsMidTurn(services.agents, guards.turnRun, conversationId);
     if (stopping.length === 0) {
         return undefined;
     }
-    const run = conversationId === undefined ? undefined : turnRunOf(services.conversations, conversationId);
+    const run = conversationId === undefined ? undefined : guards.turnRun(conversationId);
     if (key === undefined || conversationId === undefined || run === undefined || run.done || conversationUnattended(conversationId)) {
         return refusal(
             `Held for the owner: this would restart the sandbox you run in, which stops ${stopping.length} other ` +
@@ -204,13 +182,8 @@ export const judgeHostRestart = async (
         );
     }
     const { autoResumeOnRestart } = await services.sandboxSettings.get();
-    const asking = askOwner(services, run, { conversationId, machine, call, stopping, resumes: autoResumeOnRestart });
-    openAsks.set(key, asking);
+    const asking = askOwner(guards, run, { conversationId, machine, call, stopping, resumes: autoResumeOnRestart });
     // An answer nobody came back for is dropped with its turn: a later turn's same call is asked about afresh.
-    void run.waitUntilFinished().then(() => {
-        if (openAsks.get(key) === asking) {
-            openAsks.delete(key);
-        }
-    });
-    return awaitAnswer(key, asking, stillWaiting(machine, call), budgetMs - (Date.now() - at));
+    openAsks.hold(key, asking, run.waitUntilFinished());
+    return openAsks.await(key, asking, budgetMs - (Date.now() - at), refusal(stillWaiting(machine, call)));
 };

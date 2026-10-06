@@ -1,7 +1,7 @@
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import type { useSandbox } from "../../sandbox/client/useSandbox";
+import type { useSandbox } from "../../../client/sandbox/useSandbox";
 import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
 import { type AttachOutcome, daemonUrlProblem, ownAddressProblem, type probeDaemon } from "../setupAttach";
 import type { SetupRow } from "./useSetupRow";

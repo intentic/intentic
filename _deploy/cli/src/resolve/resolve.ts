@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { errorMessage } from "@intentic/base/errors";
 import { isOwnerId } from "@intentic/graph";
-import type { IntentSet } from "@intentic/need-resolver";
+import type { IntentSet } from "@intentic/state-resolver";
 import { cloudflareApi } from "@intentic/providers";
 import { collectDomains, selectZone } from "@intentic/state-resolver";
 import { readBaseline } from "../apply/baseline.js";

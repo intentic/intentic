@@ -1,18 +1,17 @@
 import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import * as actualDiscordPost from "./discord-post.js";
 
 // Tests when the executor wakes and which door each item goes through, both decided from the queue on disk.
 // The fake store below behaves like the real one (read, write, read back); only the two doors themselves are stubbed.
 
 const startTurn = jest.fn(async () => undefined);
-const sendDiscord = jest.fn(async () => ({ url: "https://discord.com/channels/1/2/3" }));
+// The gateway's /deliver door: the one network hop a direct post makes. Whether a post can go the fast way, and what
+// the daemon refuses before asking, are themselves under test.
+const sendDiscord = jest.fn(async (..._args: unknown[]): Promise<{ url?: string } | undefined> => ({ url: "https://discord.com/channels/1/2/3" }));
 
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: jest.fn() }));
-jest.mock("./discord-post.js", () => ({
-    // Whether a post can go the fast way is itself under test; only the network call is replaced.
-    ...actualDiscordPost,
-    postToDiscord: (...args: unknown[]) => sendDiscord(...(args as [])),
+jest.mock("../extensions/listener/listener-deliver.js", () => ({
+    deliverThroughGateway: (...args: unknown[]) => sendDiscord(...args),
 }));
 
 const { createApprovalsExecutor, nextDueAt } = await import("./approvals-executor.js");
@@ -51,7 +50,6 @@ const servicesWith = (...seed: ApprovalSummary[]) => {
             upsert: async (entry: ApprovalSummary) => void rows.set(entry.id, entry),
             remove: async (id: string) => rows.delete(id),
         },
-        capabilities: { get: async () => ({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } }) },
         // The cast the executor checks `actsAs` against: the default face plus the ones the multi-persona tests use.
         personas: {
             list: async () => [
@@ -148,7 +146,7 @@ test("two faces are two turns, each carrying only its own posts", async () => {
     expect(turnOf(0).conversationId).not.toBe(turnOf(1).conversationId);
 });
 
-test("a Discord post needs no persona: the daemon sends it with a stored key, not a browser", async () => {
+test("a Discord post needs no persona: the daemon sends it through the gateway's bot, not a browser", async () => {
     const services = servicesWith(
         post({ id: "d", platform: "discord", actsAs: undefined, target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
     );
@@ -169,11 +167,39 @@ test("a Discord post the fast path cannot carry falls back to the turn instead o
 });
 
 test("a refused Discord post lands as a failure the owner can read, not a silent drop", async () => {
-    sendDiscord.mockRejectedValueOnce(new Error("Discord refused the post (HTTP 403): missing access"));
+    sendDiscord.mockRejectedValueOnce(new Error("Discord refused the message (HTTP 403): Missing Access"));
     const services = servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(services.rows.get("d")).toMatchObject({ status: "failed" });
-    expect(services.rows.get("d")?.error).toContain("403");
+    expect(services.rows.get("d")).toMatchObject({ status: "failed", error: "Discord refused the message (HTTP 403): Missing Access" });
+});
+
+test("a Discord post goes to the discord gateway's channel as written, and its link is what the posted row shows", async () => {
+    const services = servicesWith(post({ id: "d", platform: "Discord", target: "123456789", content: "v2 is out", status: "approved", scheduledAt: NOW - 1 }));
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(sendDiscord.mock.calls[0]?.slice(1)).toEqual(["discord", "123456789", "v2 is out"]);
+    expect(services.rows.get("d")).toMatchObject({ status: "done", result: "https://discord.com/channels/1/2/3" });
+});
+
+test("with no Discord gateway listening, the post fails saying there is no bot to post as", async () => {
+    sendDiscord.mockResolvedValueOnce(undefined);
+    const services = servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(services.rows.get("d")).toMatchObject({ status: "failed", error: "Discord isn't connected in this workspace, so there is no bot to post as." });
+});
+
+test("a post past Discord's ceiling is refused before it is sent, not split into several messages", async () => {
+    const services = servicesWith(post({ id: "d", platform: "discord", target: "123456789", content: "a".repeat(2_001), status: "approved", scheduledAt: NOW - 1 }));
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(sendDiscord).not.toHaveBeenCalled();
+    expect(services.rows.get("d")).toMatchObject({ status: "failed", error: "Discord caps a message at 2,000 characters and this one is 2,001." });
+});
+
+test("a gateway that posted but named no link still settles the post as done", async () => {
+    sendDiscord.mockResolvedValueOnce({});
+    const services = servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(services.rows.get("d")?.status).toBe("done");
+    expect(services.rows.get("d")).not.toHaveProperty("result");
 });
 
 test("an approved action is a turn of its own, briefed from the file and wearing the face it named", async () => {

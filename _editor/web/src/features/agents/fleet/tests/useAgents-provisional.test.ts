@@ -9,12 +9,12 @@ const daemon = { rename: jest.fn(), autoLand: jest.fn(), breakPolicy: jest.fn(),
 // analytics, sandbox client, diagnostics) without touching the merge under test. The same cuts as useAgents.test.ts.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../../../sandbox/client/useSandbox", () => ({
+jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
 }));
-jest.mock("../../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: daemon }) }));
-jest.mock("../../../sandbox/client/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+jest.mock("../../../../lib/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: daemon }) }));
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 jest.mock("../../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";

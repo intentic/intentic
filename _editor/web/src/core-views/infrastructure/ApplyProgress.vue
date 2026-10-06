@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Button, Card, ui, Notice, type NoticeModel, ProgressRing } from "@intentic/ui";
-import PlanStepRow from "../../components/PlanStepRow.vue";
+import PlanStepRow from "../PlanStepRow.vue";
 import type { useApplyProgress } from "./useApplyProgress";
 import { useT } from "@intentic/ui/i18n";
 

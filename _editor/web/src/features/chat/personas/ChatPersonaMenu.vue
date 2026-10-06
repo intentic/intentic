@@ -4,7 +4,7 @@ import { browserOwnsClick, FACE_SIZES, PersonaFace, StatusBadge } from "@intenti
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
 
 // The composer's persona picker: who this chat speaks as to the outside world. "Anyone" is a real row, not the absence

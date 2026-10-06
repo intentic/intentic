@@ -20,7 +20,7 @@
         "@intentic/astro-integrations": "workspace:*",
         "@intentic/site-content": "workspace:*",
         "@intentic/constants": "workspace:*",
-        "@intentic/house-css": "workspace:*",
+        "@intentic/entry-css": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@intentic/sandbox-openapi": "workspace:*",
         "@tailwindcss/vite": "catalog:",

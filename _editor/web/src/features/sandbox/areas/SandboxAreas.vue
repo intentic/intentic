@@ -19,7 +19,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import FolderPicker from "../devices/FolderPicker.vue";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { usePersonaReach } from "../access/usePersonaReach";
 import { useAreas } from "./useAreas";

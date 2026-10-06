@@ -11,7 +11,7 @@ import { sandboxSummary } from "../../../../testing/sandboxSummary";
 const hostedRollback = jest.fn(async (_input: { sandboxId: string }): Promise<{ ok: boolean }> => ({ ok: true }));
 jest.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRollback } } }));
 const refresh = jest.fn(async (): Promise<SandboxSummary[]> => []);
-jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ refresh }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ refresh }) }));
 
 const { forgetRestarts, restartExpected } = await import("../../live/sandboxRestart");
 const { default: HostedRollbackDialog } = await import("./HostedRollbackDialog.vue");

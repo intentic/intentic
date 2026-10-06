@@ -34,3 +34,18 @@ test("a site that says why it spells the route is excused, on its line or in the
     assert.deepEqual(spelled("// allow(contract-paths): a directory under the state dir, not a route\nconst dir = `${STATE_DIR}/secrets/auth`;"), []);
     assert.deepEqual(spelled("// allow(contract-paths):\nconst dir = `${STATE_DIR}/secrets/auth`;"), [{ line: 2, route: "/secrets/{key}" }]);
 });
+
+test("a platform route spelled in the daemon is judged against the ingress table the same way", () => {
+    const platform = { routes: ["/sandbox/announce", "/host-report", "/api/reachability/{sandboxId}"], appRoutes: [] };
+    assert.deepEqual(spelledRoutes('await post("/sandbox/announce", body);', platform), [{ line: 1, route: "/sandbox/announce" }]);
+    assert.deepEqual(spelledRoutes("fetch(`${config.platform.url}/api/reachability/${id}`);", platform), [
+        { line: 1, route: "/api/reachability/{sandboxId}" },
+    ]);
+    assert.deepEqual(spelledRoutes('await post("/sandbox/announce", body); // allow(contract-paths): a stand-in platform', platform), []);
+});
+
+test("a segment built around punctuation alone spells no route, one carrying a word still does", () => {
+    const platform = { routes: ["/host-report"], appRoutes: [] };
+    assert.deepEqual(spelledRoutes("const file = `${SHARE_FILES_DIR}/${count}-${base}`;", platform), []);
+    assert.deepEqual(spelledRoutes("const url = `${platform}/host-${kind}`;", platform), [{ line: 1, route: "/host-report" }]);
+});

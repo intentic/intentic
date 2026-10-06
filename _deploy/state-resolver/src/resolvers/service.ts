@@ -1,6 +1,7 @@
 import type { SecretRef } from "@intentic/graph";
 import { generated, httpOk, makeRef } from "@intentic/graph";
-import type { HostInput, ServiceIntent, ServiceKind } from "@intentic/need-resolver";
+import type { HostInput, ServiceKind } from "../intent/inputs.js";
+import type { ServiceIntent } from "../intent/intent.js";
 import type { ResolvedNode, ResourceType } from "@intentic/resources";
 import { IMAGES } from "../lib/images.js";
 import { sshOf } from "../lib/ssh.js";

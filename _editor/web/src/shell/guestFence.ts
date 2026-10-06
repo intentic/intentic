@@ -1,7 +1,7 @@
 import { watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRole } from "../features/sandbox/secrets/useRole";
-import { GUEST_HOME, guestAllowedPath } from "./guestPaths";
+import { useRole } from "../client/sandbox/useRole";
+import { GUEST_HOME, guestAllowedPath } from "../lib/routes/guestPaths";
 
 // Keeps a guest member on the screens the daemon answers it on (guestPaths.ts). The tier arrives after the first paint
 // (the summary loads, then corrects a default of owner), so a watch and not a guard: the redirect has to fire when

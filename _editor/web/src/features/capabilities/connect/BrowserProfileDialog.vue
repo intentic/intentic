@@ -5,13 +5,16 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FRAME_WEBP, videoTag } from "../../browsers/frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
+import { selectionCopy } from "../../browsers/selectionCopy";
 import { videoSink } from "../../browsers/videoSink";
+import { useLiveSocket, webSocketChannel } from "../../../client/session/liveSocket";
 import { socketUrl as wsSocketUrl } from "../../sandbox/session/wsTicket";
 import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input
 // replayed via XTEST and CDP). `capability` picks which connection's browser to open, since a site may be connected
-// more than once; `label` names the account. `login` opens sign-in; `browse` reopens the same signed-in profile.
+// more than once; `label` names the account. `login` opens sign-in; `browse` reopens the same signed-in profile. The
+// socket is a live one (liveSocket.ts): pinged, and redialled after a drop, which reopens the same profile.
 
 const t = useT();
 
@@ -20,8 +23,6 @@ const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (eve
 
 // Throttles pointer moves to roughly one display frame, so a drag isn't traced at network-call granularity.
 const MOVE_THROTTLE_MS = 16;
-// How long a Ctrl+C waits for the page's selection before the keystroke proceeds without it.
-const SELECTION_TIMEOUT_MS = 1500;
 // A size is asked once the surface has held still this long; the modal only changes shape with the window.
 const RESIZE_DEBOUNCE_MS = 250;
 
@@ -47,21 +48,17 @@ const canvasEl = ref<HTMLCanvasElement | null>(null);
 const stillEl = ref<HTMLCanvasElement | null>(null);
 // Canvases mount with the dialog; the decoder outlives them, so the two are wired together here.
 watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas, still));
-let socket: WebSocket | undefined;
 let lastMove = 0;
-// Ctrl+C in flight, waiting on the page's answer; one at a time.
-let pendingSelection: ((text: string) => void) | undefined;
 // Keystrokes go to the display while Chromium's find bar has them.
 let rawKeys = false;
 let resizeTimer: number | undefined;
 let observer: ResizeObserver | undefined;
 const browsing = computed(() => props.mode === "browse");
 
-const sendMsg = (message: object): void => {
-    if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(message));
-    }
-};
+// The live socket below, declared ahead so every verb can say something on it.
+const sendMsg = (message: object): void => live.send(message);
+// Ctrl+C over the picture puts the page's selection on the user's own clipboard.
+const copy = selectionCopy(sendMsg);
 
 // The box inside the surface's border, where the canvases are, so the viewport is exactly what the modal shows
 // rather than scaled into it: the border box is two pixels larger each way, which resampled every pixel of the picture.
@@ -87,11 +84,8 @@ watch(surface, (element) => {
 });
 
 const close = (): void => {
-    // A pending copy on a closing socket resolves empty instead of hanging to its timeout.
-    pendingSelection?.("");
-    pendingSelection = undefined;
-    socket?.close();
-    socket = undefined;
+    copy.cancel();
+    live.close();
 };
 
 // Sets the picture's size and configures the decoder. Codec is read out of the stream by the daemon rather than
@@ -99,6 +93,7 @@ const close = (): void => {
 const onReady = (message: { width?: number; height?: number; scale?: number; codec?: string }): void => {
     const first = status.value !== "ready";
     status.value = "ready";
+    errorMsg.value = undefined;
     viewW.value = message.width ?? viewW.value;
     viewH.value = message.height ?? viewH.value;
     viewScale.value = message.scale !== undefined && message.scale > 0 ? message.scale : 1;
@@ -107,11 +102,6 @@ const onReady = (message: { width?: number; height?: number; scale?: number; cod
         surface.value?.focus();
         askSize();
     }
-};
-
-const onSelection = (text: string | undefined): void => {
-    pendingSelection?.(text ?? "");
-    pendingSelection = undefined;
 };
 
 const onSaved = (): void => {
@@ -140,14 +130,16 @@ const handleJson = (raw: string): void => {
             cursor.value = message.cursor ?? "default";
             break;
         case "selection":
-            onSelection(message.text);
+            copy.answer(message.text);
             break;
         case "saved":
             onSaved();
             break;
+        case "pong":
+            live.ponged();
+            break;
         case "error":
-            status.value = "error";
-            errorMsg.value = noticeOf(message.message ?? t(`capabilities.browserProfileDialog.couldntStartBrowser`));
+            fail(noticeOf(message.message ?? t(`capabilities.browserProfileDialog.couldntStartBrowser`)));
             break;
         default:
             break;
@@ -167,48 +159,59 @@ const takePicture = (data: ArrayBuffer): void => {
     }
 };
 
-const connect = async (): Promise<void> => {
+// What the window says while it is not showing the picture: starting (again), or why it stopped for good.
+const restart = (): void => {
     status.value = "connecting";
-    errorMsg.value = undefined;
     painting.value = false;
-    let url: string | undefined;
-    try {
-        url = await wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode });
-    } catch (error) {
-        // A session that couldn't be minted is a failed start, said as one rather than left connecting forever.
-        status.value = "error";
+};
+const fail = (notice: NoticeModel): void => {
+    live.end();
+    status.value = "error";
+    errorMsg.value = notice;
+};
+
+// The daemon closes with this when it refuses the window outright (a revoked ticket, an unknown account, a profile open
+// elsewhere); asking again would get the same answer.
+const CLOSE_REFUSED = 1008;
+
+const live = useLiveSocket<string>({
+    mint: () => wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode }),
+    open: webSocketChannel({ text: handleJson, binary: takePicture }),
+    // A daemon from before this route answered pings says nothing back, and a still sign-in page sends no frames.
+    staleCheck: "once-ponged",
+    // A session that couldn't be minted is said, and asked again on the ladder rather than left as a dead window.
+    onMintFailed: (error) => {
+        restart();
         errorMsg.value = noticeFrom(error, t(`capabilities.browserProfileDialog.couldntStartBrowser`));
-        return;
-    }
-    if (url === undefined) {
-        status.value = "error";
+    },
+    onUnreachable: () => {
+        restart();
         errorMsg.value = noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
-        return;
-    }
-    const ws = new WebSocket(url);
-    // Frames arrive as binary; everything else on this socket is JSON, told apart by `event.data`.
-    ws.binaryType = "arraybuffer";
-    socket = ws;
-    ws.addEventListener("message", (event) => {
-        if (event.data instanceof ArrayBuffer) {
-            takePicture(event.data);
-            return;
+    },
+    onDrop: (code) => {
+        if (status.value === "saving") {
+            // The profile may or may not have been saved; a fresh window would hide which.
+            fail(noticeOf(t(`capabilities.browserProfileDialog.droppedWhileSaving`)));
+        } else if (code === CLOSE_REFUSED || status.value === "error") {
+            // Refused, or the daemon already said why it is giving up (`error`, then a close).
+            fail(errorMsg.value ?? noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`)));
+        } else {
+            restart();
         }
-        handleJson(String(event.data));
-    });
-    ws.addEventListener("error", () => {
-        if (status.value !== "saving") {
-            status.value = "error";
-            errorMsg.value = errorMsg.value ?? noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
-        }
-    });
+    },
+});
+
+const connect = (): void => {
+    restart();
+    errorMsg.value = undefined;
+    live.connect();
 };
 
 // Immediate, since an instance can mount already visible (a remount under it, an HMR replacement): waiting for a flip
 // that already happened leaves a dialog open on no socket, with no picture and no way to drive it.
 watch(
     () => props.visible,
-    (open) => (open ? void connect() : close()),
+    (open) => (open ? connect() : close()),
     { immediate: true },
 );
 onBeforeUnmount(() => {
@@ -252,32 +255,6 @@ const onMouseDown = (event: MouseEvent): void => {
 };
 const onMouseUp = (event: MouseEvent): void => sendPointer("up", event);
 const onWheel = (event: WheelEvent): void => sendPointer("wheel", event);
-// Asks the page for its selection; the timeout keeps a slow tunnel from stranding the keystroke.
-const askSelection = (): Promise<string> =>
-    new Promise((resolve) => {
-        pendingSelection?.("");
-        pendingSelection = resolve;
-        sendMsg({ type: "selection" });
-        window.setTimeout(() => {
-            if (pendingSelection === resolve) {
-                pendingSelection = undefined;
-                resolve("");
-            }
-        }, SELECTION_TIMEOUT_MS);
-    });
-
-// Copying inside that Chromium writes to the sandbox's clipboard, unreadable to the user's machine, so the
-// selection is fetched and written to theirs here. The chord still reaches the page afterwards, never before (a cut
-// would delete what's being read).
-const copyOut = async (chord: KeyFrame): Promise<void> => {
-    const text = await askSelection();
-    if (text !== "") {
-        // Clipboard write is unavailable outside a secure context and may be refused; don't let that eat the keystroke.
-        await navigator.clipboard?.writeText(text).catch(() => undefined);
-    }
-    sendMsg(chord);
-};
-
 // The browser verbs this window has: history and reload, and Chromium's find bar. No tab strip here, so the tab
 // verbs are nobody's.
 const onCommand = (command: BrowserCommand): void => {
@@ -310,7 +287,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
     } else if (intent.kind === "key") {
         sendKey(intent.frame);
     } else {
-        void copyOut(intent.frame);
+        void copy.copyOut(intent.frame, surface.value);
     }
 };
 
@@ -331,7 +308,7 @@ const cancel = (): void => {
 };
 // Hand the window back: the daemon flushes the profile and answers `saved`; a socket that never opened just cancels.
 const finish = (): void => {
-    if (socket?.readyState !== WebSocket.OPEN) {
+    if (!live.isOpen()) {
         cancel();
         return;
     }

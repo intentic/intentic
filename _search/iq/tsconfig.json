@@ -7,13 +7,12 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
+    "exclude": ["./src/**/*.test.ts", "./src/**/__fixtures__/**", "./src/recall/testing.ts"],
     "references": [
         { "path": "../../_tools/agent-cli" },
         { "path": "../../_tools/constants" },
         { "path": "../../_tools/base" },
-        { "path": "../../_search/iq-engine" },
-        { "path": "../../_search/iq-recall" }
+        { "path": "../../_search/iq-engine" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

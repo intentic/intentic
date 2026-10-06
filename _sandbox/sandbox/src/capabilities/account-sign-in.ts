@@ -2,7 +2,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { browserUrls, contributionKey, type ResolvedContribution } from "./contributions.js";
 import { identityLoginUrl } from "./handlers/identity.handler.js";
 
-// The addresses an account signs in on, the same ones its guided login opens (browser-profile.ts): a browser account's
+// The addresses an account signs in on, the same ones its guided login opens (browser-profile.routes.ts): a browser account's
 // card URLs with its config's overrides, an identity's email-provider sign-in page. Empty when nothing on record names
 // a site: a platform whose extension is gone and no URL of its own.
 export const accountSignInUrls = async (

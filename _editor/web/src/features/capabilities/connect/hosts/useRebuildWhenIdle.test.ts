@@ -14,7 +14,7 @@ jest.mock(`../../../sandbox/environment/useEnvironment`, () => ({
 const written: unknown[] = [];
 jest.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: (_key: unknown, value: unknown) => written.push(value) }) }));
 const sandboxJson = jest.fn(async (_path: string, _init?: RequestInit): Promise<Environment> => ({ waitsForAgents: true }));
-jest.mock(`../../../sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
 
 const { useRebuildWhenIdle } = await import("./useRebuildWhenIdle");
 

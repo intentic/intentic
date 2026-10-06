@@ -1,19 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-    HOST_REPORT_KEY_LABEL,
-    type HostReport,
-    type HostReportClaimed,
-    HostReportClaimSchema,
-    type HostReportInput,
-    HostReportPostSchema,
-    HostReportSchema,
-} from "@intentic/api-contract";
+import { HOST_REPORT_KEY_LABEL, type HostReport, type HostReportInput, HostReportSchema } from "@intentic/api-contract";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
+import { ingressServer } from "../ingress.js";
 import { bearerOf } from "../tokens/api-tokens.js";
 import { mintSetupCode } from "./mint-sandbox.js";
 
@@ -127,55 +120,54 @@ export interface HostReportDeps {
  * for half an hour. */
 export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
+    const ingress = ingressServer(app, `/host-report`);
 
     // A live fix code buys its sandbox's tunnel id and report key. Re-claimable until it expires, since the owner may
     // run the command again; 404 for unknown, expired, removed and hosted alike.
-    app.post(`/claim`, async (c) => {
-        // allow(silent-catch): a body that is not JSON carries no code, which the parse below refuses.
-        const body = HostReportClaimSchema.safeParse(await c.req.json().catch(() => undefined));
-        if (!body.success) {
-            return c.text(`error: missing code`, 400);
+    ingress(`hostReportClaim`, async (c, kit) => {
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `missing code`);
         }
         const sandbox = await prisma.sandbox.findUnique({
-            where: { fixCode: body.data.code },
+            where: { fixCode: body.code },
             select: { id: true, tunnelId: true, token: true, fixCodeExpiresAt: true, removedAt: true, hosted: { select: { id: true } } },
         });
         const live = sandbox !== null && sandbox.fixCodeExpiresAt !== null && sandbox.fixCodeExpiresAt > new Date();
         if (!live || sandbox.removedAt !== null || sandbox.hosted !== null) {
-            return c.text(`error: fix code invalid or expired`, 404);
+            return kit.refuse(404, `fix code invalid or expired`);
         }
         const key = reportKeyOf(config, sandbox.token);
         if (key === undefined) {
             c.get(`logger`).error({ sandboxId: sandbox.id }, `host report claim: the sandbox's connect token could not be decrypted`);
-            return c.text(`error: this sandbox's report key cannot be derived`, 500);
+            return kit.refuse(500, `this sandbox's report key cannot be derived`);
         }
-        return c.json({ sandbox: sandbox.tunnelId, key } satisfies HostReportClaimed);
+        return kit.answer({ sandbox: sandbox.tunnelId, key });
     });
 
     // The report itself, under the report key. 401 alike for an unknown sandbox and a wrong key (existence is public
     // anyway, at /api/reachability); 204 for a report stored and for one the throttle skipped, so `ic` never retries.
-    app.post(`/`, async (c) => {
+    ingress(`hostReport`, async (c, kit) => {
         const presented = bearerOf(c.req.header(`authorization`));
         if (presented === ``) {
-            return c.text(`error: missing report key`, 401);
+            return kit.refuse(401, `missing report key`);
         }
-        // allow(silent-catch): a body that is not JSON is a malformed report, which the parse below refuses.
-        const body = HostReportPostSchema.safeParse(await c.req.json().catch(() => undefined));
-        if (!body.success) {
-            return c.text(`error: malformed report`, 400);
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `malformed report`);
         }
         const sandbox = await prisma.sandbox.findUnique({
-            where: { tunnelId: body.data.sandbox },
+            where: { tunnelId: body.sandbox },
             select: { id: true, token: true, tokenDigest: true, hostReport: true, hosted: { select: { id: true } } },
         });
         const expected = sandbox === null ? undefined : reportKeyOf(config, sandbox.token);
         if (sandbox === null || expected === undefined || !keysMatch(presented, expected)) {
-            return c.text(`error: that report key is not this sandbox's`, 401);
+            return kit.refuse(401, `that report key is not this sandbox's`);
         }
         if (sandbox.hosted !== null) {
-            return c.text(`error: a sandbox intentic hosts has no host report`, 404);
+            return kit.refuse(404, `a sandbox intentic hosts has no host report`);
         }
-        const { report } = body.data;
+        const { report } = body;
         const held = hostReportsOf(sandbox.hostReport).find((stored) => reporterOf(stored) === reporterOf(report)) ?? null;
         if (skipsWrite(held, report, Date.now())) {
             return c.body(null, 204);
@@ -185,7 +177,7 @@ export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
             where: { id: sandbox.id, tokenDigest: sandbox.tokenDigest },
             data: { hostReport: withHostReport(sandbox.hostReport, { ...report, at: new Date().toISOString() }) },
         });
-        return written.count === 0 ? c.text(`error: that report key is not this sandbox's`, 401) : c.body(null, 204);
+        return written.count === 0 ? kit.refuse(401, `that report key is not this sandbox's`) : c.body(null, 204);
     });
 
     return app;

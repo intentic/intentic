@@ -9,19 +9,21 @@ import {
     WEB_SESSION_PREFIX,
 } from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
-import {
-    closeBrowserSession,
-    closeBrowserSessionsFor,
-    idleBrowserSessionNames,
-    runningBrowserOwners,
-} from "../../browser/sessions/browser-sessions.js";
-import { forkedExec } from "@intentic/scaffold";
+import { errnoCode } from "@intentic/base/errors";
+import { forkedExec } from "@intentic/base/git";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { SERVICE_SESSION_PREFIX } from "../../terminal/terminal-session.js";
-import { HOLDER_SESSION } from "../../terminal/tmux-server.js";
+import { HOLDER_SESSION, isNoTmuxServer } from "../../terminal/tmux-server.js";
 import { type ScannedProcess, scanProcesses } from "../resources/process-scan.js";
 import { endProcess, overdueDetached, processAges } from "./generation-sweep.js";
 import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor, type SweptProcess } from "./leftovers.js";
+
+// A signal sent to a process that exited meanwhile (ESRCH), or whose id now names someone else's (EPERM), lost a race
+// the next pass settles; any other refusal is a fault worth surfacing.
+const signalRaced = (error: unknown): boolean => {
+    const code = errnoCode(error);
+    return code === "ESRCH" || code === "EPERM";
+};
 
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
 // turn registry reports it stopped, on one clock instead of one policy per resource kind. Archive and discard bypass
@@ -183,7 +185,17 @@ export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[]
         })
         .map((session) => session.name);
 
+// The browser records the reaper closes (browser/sessions/browser-sessions.ts), handed in since browsers sit above
+// system/: the owners with a browser running, the sessions nobody has driven for `idleMs`, and closing either.
+export interface ReaperBrowsers {
+    readonly runningOwners: () => readonly string[];
+    readonly idleNames: (now: number, idleMs: number) => readonly string[];
+    readonly close: (name: string) => Promise<void>;
+    readonly closeFor: (owner: string) => Promise<void>;
+}
+
 export interface ReaperDeps {
+    readonly browsers: ReaperBrowsers;
     // Whether this owner still has a run in flight, per the turn registry (plus the reserved owners).
     readonly ownerLive: (owner: string) => boolean;
     // The same question for its processes alone: a turn in flight, not a watch the conversation waits on. A watch keeps
@@ -229,9 +241,13 @@ const listSessions = async (now: number): Promise<AgentSessionState[]> => {
     try {
         const { stdout } = await forkedExec("tmux", ["list-sessions", "-F", SESSION_FORMAT]);
         return parseSessions(stdout, now);
-    } catch {
-        // No tmux server: nothing of ours runs in a terminal.
-        return [];
+    } catch (error) {
+        // No tmux server: nothing of ours runs in a terminal. Any other failure left the question unanswered, so the
+        // pass fails (its caller logs it) rather than sweeping as if no terminal shielded anything.
+        if (isNoTmuxServer(error)) {
+            return [];
+        }
+        throw error;
     }
 };
 
@@ -384,8 +400,11 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                 process.kill(leftover.pid, signalFor(leftover.pid, asked));
                 reclaimed.push(leftover);
                 asked.add(leftover.pid);
-            } catch {
-                // Already gone, or not ours to signal; the next pass sees the truth.
+            } catch (error) {
+                // Already gone, or not ours to signal; the next pass sees the truth. Anything else is not a race.
+                if (!signalRaced(error)) {
+                    throw error;
+                }
             }
         }
         if (reclaimed.length > 0) {
@@ -433,16 +452,16 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     // PreToolUse hook already does on the next browser call, so a closed idle session costs a relaunch, not an error.
     const sweepBrowsers = async (now: number): Promise<void> => {
         const owners = new Set<string>();
-        for (const owner of runningBrowserOwners()) {
+        for (const owner of deps.browsers.runningOwners()) {
             const since = ownerStoppedSince(owner, now);
             if (since !== undefined && now - since >= processGraceMs) {
                 owners.add(owner);
             }
         }
-        await Promise.all([...owners].map((owner) => closeBrowserSessionsFor(owner)));
-        const idle = idleBrowserSessionNames(now, browserIdleMs);
+        await Promise.all([...owners].map((owner) => deps.browsers.closeFor(owner)));
+        const idle = deps.browsers.idleNames(now, browserIdleMs);
         if (idle.length > 0) {
-            await Promise.all(idle.map(closeBrowserSession));
+            await Promise.all(idle.map((name) => deps.browsers.close(name)));
             logger.info({ count: idle.length, sessions: idle.slice(0, 10) }, "reaper: closed idle browsers");
         }
     };
@@ -544,7 +563,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             const sessions = await listAgentSessions(now);
             const mine = sessions.filter((session) => session.owner === owner && (options.force === true || !session.attached));
             await Promise.all(mine.map((session) => killSession(session.name)));
-            await closeBrowserSessionsFor(owner);
+            await deps.browsers.closeFor(owner);
             if (group !== undefined && process.platform === "linux") {
                 // The conversation is over: SIGTERM its processes now; survivors meet SIGKILL on the interval sweep.
                 // A pane listing that fails rejects to the catch below rather than exempting nothing.
@@ -562,8 +581,11 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                         asked.add(leftover.pid);
                         // Already past its grace: the next pass that still finds it sends the SIGKILL.
                         unownedSince.set(leftover.pid, now - processGraceMs);
-                    } catch {
+                    } catch (error) {
                         // Already gone, which is the goal.
+                        if (!signalRaced(error)) {
+                            throw error;
+                        }
                     }
                 }
                 if (mineToo.length > 0) {

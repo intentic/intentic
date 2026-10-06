@@ -1,5 +1,5 @@
 import { AGENTS_DOCKER_HOST, DOCKER_PRUNES, dockerPruneChore, reclaimedSpace, shouldPruneDocker } from "./docker-prune.js";
-import { DOCKER_PANEL_KEY } from "./docker.handler.js";
+import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 
 const DAY_MS = 24 * 60 * 60_000;
 

@@ -1,4 +1,4 @@
-import type { GitDiffSide, RepoChanges } from "@intentic/api-contract";
+import type { GitDiffSide, RepoChanges } from "@intentic/sandbox-contract";
 
 // Which rows of a review are worth reading ahead, and in what order. Pure projection over the change
 // list, no store, no Vue, so the wish-builder, the panel and the ordering test all agree without pulling in the app

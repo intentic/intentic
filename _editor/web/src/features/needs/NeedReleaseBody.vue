@@ -6,7 +6,7 @@ import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
-import { useSandboxSession } from "../sandbox/session/sandboxSession";
+import { useSandboxSession } from "../../client/session/sandboxSession";
 import { useNeeds } from "./useNeeds";
 
 const t = useT();

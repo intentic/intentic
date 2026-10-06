@@ -1,25 +1,25 @@
-import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
+import type { WorkspaceChildren, WorkspaceTreeEntry, WorkspaceTree } from "@intentic/sandbox-contract";
 import { type NoticeModel, noticeFrom, noticeOf, useConcurrentActions } from "@intentic/ui/async";
 import { mapPool } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
-import { sandboxBlob, sandboxJson } from "../../sandbox/client/sandboxClient";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxBlob, sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { opensAsFolder } from "../files/archiveEntries";
 import { readFileWindow } from "../files/fileWindow";
-import { useSandbox } from "../../sandbox/client/useSandbox";
-import { useRole } from "../../sandbox/secrets/useRole";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./undo/deleteUndo";
 import { changedDirs } from "../changes/live/useWorkspaceLive";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
-import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
-import { basename, parentDir } from "@intentic/ui/path";
+import { scopeQuery, workspaceAgent } from "../../../app/workspaceScope";
+import { basename, joinPath, parentDir } from "@intentic/ui/path";
 import { rpcPrefix } from "../../../lib/queryKeys";
 import { workspaceTreeKey } from "../health/workspaceTreeKey";
 import { t } from "@intentic/ui/i18n";
@@ -123,15 +123,14 @@ const buildMap = (nodes: readonly WorkspaceTreeEntry[]): Map<string, WorkspaceTr
     return map;
 };
 
-const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
 // A folder can't move into itself, its own parent (a no-op), or one of its own descendants.
 const canMoveInto = (source: string, targetDir: string): boolean =>
     !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));
 
 // One directory's listing, retried once if the request never reached the daemon. A SandboxHttpError (the daemon refused
 // it) is rethrown immediately, not retried.
-const childrenOf = async (path: string): Promise<WorkspaceChildrenResponse> => {
-    const request = (): Promise<WorkspaceChildrenResponse> => sandboxRpc.workspace.children({ path, agent: workspaceAgent.value });
+const childrenOf = async (path: string): Promise<WorkspaceChildren> => {
+    const request = (): Promise<WorkspaceChildren> => sandboxRpc.workspace.children({ path, agent: workspaceAgent.value });
     try {
         return await request();
     } catch (failure) {
@@ -153,7 +152,7 @@ const readFile = async (path: string): Promise<string | undefined> => {
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
 
-export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> => sandboxRpc.workspace.tree({ agent: workspaceAgent.value });
+export const fetchWorkspaceTree = (): Promise<WorkspaceTree> => sandboxRpc.workspace.tree({ agent: workspaceAgent.value });
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();

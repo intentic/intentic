@@ -49,8 +49,9 @@ test("a relative specifier resolves as the bundler does here, and a package or a
     assert.equal(resolveIn(modules, "app/a.ts", "@intentic/ui"), undefined);
 });
 
-test("each top-level directory is a subsystem, each feature its own, and a root file none", () => {
-    assert.equal(subsystemOf("shell/window/floating.ts"), "shell");
+test("each top-level directory is a subsystem, each feature and workbench service its own, and a root file none", () => {
+    assert.equal(subsystemOf("shell/window/PoppablePanels.vue"), "shell");
+    assert.equal(subsystemOf("workbench/window/floating.ts"), "workbench/window");
     assert.equal(subsystemOf("features/chat/panel/ChatPane.vue"), "features/chat");
     assert.equal(subsystemOf("main.ts"), undefined);
 });

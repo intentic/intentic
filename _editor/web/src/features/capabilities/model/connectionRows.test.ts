@@ -2,9 +2,17 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 // Pins what a connection's row says beyond its stored config: the state a roster overrules, the facts only a live
 // source knows (a machine's OS and its other doors, a browser's sites, a tunnel's address), and how the Connected
 // slice orders the inventory it builds from them.
-import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import type { Device, HostSummary, NetdiskLink, PhoneSummary, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
+import type {
+    Device,
+    HostSummary,
+    NetdiskLink,
+    PhoneSummary,
+    VpnLink,
+    WebExtSummary,
+    CapabilityStatus,
+    CapabilitySummary,
+} from "@intentic/sandbox-contract";
 import {
     type ConnectionRow,
     type ConnectionSources,

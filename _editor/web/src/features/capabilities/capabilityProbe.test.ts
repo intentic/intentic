@@ -1,19 +1,19 @@
 // Pins the form's Test: what it asks the daemon to dial, that a second press while one is in flight does nothing, that
 // the service naming the account renames a name nobody chose, and that "no test exists" retires the button.
 import "@intentic/testing/dom";
-import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";
-import * as actualSandboxRpc from "../sandbox/client/sandboxRpc";
-import type { ProcedureInput } from "../sandbox/client/sandboxRpc";
+import * as actualSandboxRpc from "../../client/sandbox/sandboxRpc";
+import type { ProcedureInput } from "../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 // The one daemon call under test; each case says what it answers.
 const probe = jest.fn<(input: ProcedureInput<`capabilities.probe`>) => Promise<CapabilityProbe>>();
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock(`../sandbox/client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { probe } }) }));
+jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { probe } }) }));
 
 const { useCapabilityForm } = await import("./capabilityForm");
 const { useCapabilityProbe } = await import("./capabilityProbe");

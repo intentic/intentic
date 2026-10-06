@@ -3,7 +3,7 @@ import { RUNNER_HEARTBEAT_MS, runnerConnectUrl } from "@intentic/sandbox-contrac
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import type { Services } from "../composition.js";
-import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
+import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { version } from "../version.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { createRunnerService } from "./runner-service.js";

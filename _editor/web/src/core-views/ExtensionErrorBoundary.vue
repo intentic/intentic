@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { EmptyState } from "@intentic/ui";
 import { onErrorCaptured, shallowRef } from "vue";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -16,9 +17,12 @@ onErrorCaptured((captured) => {
 </script>
 
 <template>
-    <div v-if="error !== undefined" class="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-sm text-muted">
-        <p>{{ t(`views.extensionErrorBoundary.extensionCrashedRenderingView`, { extensionId }) }}</p>
-        <p class="text-xs">{{ errorMessage(error, String(error)) }}</p>
-    </div>
+    <EmptyState
+        v-if="error !== undefined"
+        tone="danger"
+        :title="t(`views.extensionErrorBoundary.extensionCrashedRenderingView`, { extensionId })"
+        :line="messageOr(error, String(error))"
+        class="h-full"
+    />
     <slot v-else />
 </template>

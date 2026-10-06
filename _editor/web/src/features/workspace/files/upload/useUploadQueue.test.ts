@@ -13,7 +13,7 @@ const sandboxJson = jest.fn((path: string, init?: RequestInit) =>
     Promise.resolve(path === `/workspace/upload-diff` ? { skip: [] } : { ok: true as const, method: init?.method }),
 );
 const sandboxUpload = jest.fn((path: string, body: Blob, options?: { readonly signal?: AbortSignal }) => Promise.resolve(void [path, body, options]));
-jest.mock(`../../../sandbox/client/sandboxClient`, () => ({
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
     sandboxJson,
     sandboxUpload,
     sandboxRequest: () => Promise.reject(new Error(`sandboxRequest is not this suite's`)),
@@ -21,9 +21,9 @@ jest.mock(`../../../sandbox/client/sandboxClient`, () => ({
     sandboxBlob: () => Promise.reject(new Error(`sandboxBlob is not this suite's`)),
 }));
 const install = jest.fn((input: { readonly dirs: readonly string[] }) => Promise.resolve({ queued: [...input.dirs] }));
-jest.mock(`../../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { install } }) }));
+jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { install } }) }));
 
-const { setDaemonRoutes } = await import(`../../../sandbox/overview/useDaemonRoutes`);
+const { setDaemonRoutes } = await import(`../../../../client/sandbox/useDaemonRoutes`);
 const { useUploadQueue } = await import(`./useUploadQueue`);
 
 // The routes the sidecar's hello names for a folder window (local-files procedures.ts): the write, and no helper.

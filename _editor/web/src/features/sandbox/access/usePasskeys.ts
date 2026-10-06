@@ -2,11 +2,11 @@ import { type PasskeysList, PasskeysListSchema, type RegistrationOptionsJSON } f
 import { type NoticeModel, noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { ref, watch } from "vue";
-import { jsonBody } from "../client/jsonBody";
-import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../session/passkeySignIn";
-import { sandboxJson } from "../client/sandboxClient";
-import { useSandboxSession } from "../session/sandboxSession";
-import { useSandbox } from "../client/useSandbox";
+import { jsonBody } from "../../../client/sandbox/jsonBody";
+import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../../../client/session/passkeySignIn";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { useSandboxSession } from "../../../client/session/sandboxSession";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // The passkeys registered with the active sandbox, as the Access tab manages them: one's own (everyone's, for the
 // owner), the owner's require switch, and the recovery codes that switch hands out. Adding one rides the ordinary

@@ -3,7 +3,7 @@ import { standingFrom, unregistered } from "./agentStatus";
 import { useChat } from "../../chat/run/useChat";
 import { agentTabOf, type AgentTabSeed } from "../../chat/panel/useChat-reveal";
 import { summonChat } from "../../chat/run/summon";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { uuid } from "../../../lib/uuid";
 import { agentById, type FleetAgent } from "./useAgents-fleet";
 import { optimistic, underClaim } from "./useAgents-provisional";

@@ -6,24 +6,24 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
-import type { SandboxRpc } from "../../client/sandboxRpc";
+import type { SandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 
 // Every window's header holds this condition, so what it costs is a read per window: the tree is the whole workspace,
 // refetched on every write burst, and it can only change the answer once no repository has a remote.
 
 const remoteRepos = jest.fn<SandboxRpc[`git`][`remoteRepos`]>();
 const tree = jest.fn<SandboxRpc[`workspace`][`tree`]>();
-jest.mock("../../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ git: { remoteRepos }, workspace: { tree } }) }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ git: { remoteRepos }, workspace: { tree } }) }));
 // Every name the import graph takes from the raw client, since bun links an ESM import against exactly what this
 // factory returns; nothing here calls it.
-jest.mock("../../client/sandboxClient", () => ({
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: jest.fn(),
     sandboxRequest: jest.fn(),
     sandboxBlob: jest.fn(),
     sandboxUpload: jest.fn(),
     sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
-jest.mock("../../client/useSandbox", () => ({
+jest.mock("../../../../client/sandbox/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ activeSandboxId: ref(`sbx-1`), reachable: ref(true) }),
 }));

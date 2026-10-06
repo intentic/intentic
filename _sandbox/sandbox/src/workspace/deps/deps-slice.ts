@@ -9,7 +9,7 @@ import {
     type HeavyCommandsStore,
     QUEUE_RUN_BIN,
     queueRunEnabled,
-} from "../../system/resources/heavy-commands.js";
+} from "../../workload/heavy-commands.js";
 import type { WorkspacePaths } from "../workspace.js";
 import { createDependencyCoordinator, type DependencyCoordinator, dependencyRequestsDocument } from "./reconcile-deps.js";
 

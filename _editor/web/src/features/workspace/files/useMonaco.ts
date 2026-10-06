@@ -5,7 +5,7 @@ import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
 import { reportIncompleteBundle } from "../../../app/appUpdate";
 import { describeError, reportClient } from "../../../app/clientDiagnostics";
-import { toScreenPx } from "../../../shell/window/uiScale";
+import { toScreenPx } from "../../../workbench/window/uiScale";
 import { EDITOR_ICON_CSS } from "./monacoIcons";
 
 // Single Monaco integration point for the code surface (CodeView + DiffView), lazy-loaded on first use so other

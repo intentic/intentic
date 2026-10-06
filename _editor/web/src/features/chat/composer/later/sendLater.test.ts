@@ -1,4 +1,4 @@
-import { formatClock, formatDayMonthTime, formatWeekdayTime } from "@intentic/ui/format";
+import { formatUntil } from "@intentic/ui/time";
 import {
     bookable,
     bookingOf,
@@ -8,7 +8,6 @@ import {
     laterOfQueue,
     localInputOf,
     SOONEST_SEND_MS,
-    sendTimeLabel,
     timeChoices,
 } from "./sendLater";
 
@@ -51,19 +50,11 @@ describe(`the quick times`, () => {
 });
 
 describe(`a picked time, said`, () => {
-    it(`reads as a calendar does: the clock today, tomorrow's by name, then the weekday, then the date`, () => {
-        const now = at(FRIDAY, 14);
-        expect(sendTimeLabel(at(FRIDAY, 22), now)).toBe(formatClock(at(FRIDAY, 22)));
-        expect(sendTimeLabel(at(3, 9), now)).toBe(`Tomorrow ${formatClock(at(3, 9))}`);
-        expect(sendTimeLabel(at(5, 9), now)).toBe(formatWeekdayTime(at(5, 9)));
-        expect(sendTimeLabel(at(20, 9), now)).toBe(formatDayMonthTime(at(20, 9)));
-    });
-
     it(`names the agent a message waits on by its card, or as another agent once no card does`, () => {
         const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined);
         expect(laterLabel({ kind: `after`, conversationId: `brave-otter` }, 0, titleOf)).toBe(`After Fix the login bug lands`);
         expect(laterLabel({ kind: `after`, conversationId: `gone-fox` }, 0, titleOf)).toBe(`After another agent lands`);
-        expect(laterLabel({ kind: `at`, at: at(3, 9) }, at(FRIDAY, 14), titleOf)).toBe(`Tomorrow ${formatClock(at(3, 9))}`);
+        expect(laterLabel({ kind: `at`, at: at(3, 9) }, at(FRIDAY, 14), titleOf)).toBe(formatUntil(at(3, 9), at(FRIDAY, 14)));
     });
 });
 

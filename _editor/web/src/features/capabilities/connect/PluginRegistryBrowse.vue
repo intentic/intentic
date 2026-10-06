@@ -1,8 +1,7 @@
 <!-- Lists what a plugin registry repository publishes; picking a row fills the url, commit and path fields of the install form below it. -->
 <script setup lang="ts">
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
-import type { Marketplace } from "@intentic/api-contract";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind, Marketplace } from "@intentic/sandbox-contract";
 import { BrandMark, Button, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";

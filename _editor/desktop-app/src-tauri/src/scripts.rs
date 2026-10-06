@@ -7,6 +7,7 @@ use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use intentic_docker_host::refusal::Refusal;
 use serde::Serialize;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager};
@@ -442,40 +443,6 @@ fn listening_at(endpoint: &str) -> bool {
     }
 }
 
-/// Where Docker Desktop's own launcher lives on Windows, in the order worth trying: the default install, the
-/// per-user one newer builds make, and its Programs sibling.
-///
-/// Only CALLED on Windows, and asserted everywhere: this spelling is cross-built on a Linux runner and first
-/// executes on somebody's PC, which is [`Host`]'s whole argument.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn docker_app_candidates(
-    program_files: Option<&str>,
-    local_app_data: Option<&str>,
-) -> Vec<String> {
-    let mut found = Vec::new();
-    for base in [program_files, local_app_data] {
-        if let Some(base) = base.filter(|base| !base.is_empty()) {
-            found.push(format!("{base}\\Docker\\Docker\\Docker Desktop.exe"));
-        }
-    }
-    if let Some(base) = local_app_data.filter(|base| !base.is_empty()) {
-        found.push(format!(
-            "{base}\\Programs\\Docker\\Docker\\Docker Desktop.exe"
-        ));
-    }
-    found
-}
-
-/// Docker Desktop's launcher beside the CLI that shipped inside it — `<app>\resources\bin\docker.exe` — which
-/// is how an install in a folder nobody guessed still gets found. Cut by separator rather than by `Path`, so
-/// the Windows spelling is asserted on the Linux runner that cross-builds it.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn docker_app_beside(cli: &str) -> Option<String> {
-    let (app, leaf) = cli.rsplit_once("\\resources\\bin\\")?;
-    leaf.eq_ignore_ascii_case("docker.exe")
-        .then(|| format!("{app}\\Docker Desktop.exe"))
-}
-
 /// Why Docker Desktop did not start. The two differ on screen: one is a missing install and the other is an
 /// install that would not run, and only the first of those is something to go and get.
 ///
@@ -495,18 +462,11 @@ pub fn start_docker_desktop(foreground: bool) -> Result<(), StartTrouble> {
     // Windows has one way to launch an app and it raises the window either way; the flag only means something
     // where `open` has a switch for it.
     let _ = foreground;
-    let program_files = std::env::var("ProgramFiles").ok();
-    let local_app_data = std::env::var("LOCALAPPDATA").ok();
-    let mut candidates = docker_app_candidates(program_files.as_deref(), local_app_data.as_deref());
-    candidates.extend(docker_cli_path().as_deref().and_then(docker_app_beside));
-    let exe = candidates
-        .into_iter()
-        .find(|path| Path::new(path).exists())
-        .ok_or_else(|| {
-            StartTrouble::NotInstalled(
-                "Docker Desktop is not installed where this app can find it.".to_string(),
-            )
-        })?;
+    let exe = docker_desktop_exe().ok_or_else(|| {
+        StartTrouble::NotInstalled(
+            "Docker Desktop is not installed where this app can find it.".to_string(),
+        )
+    })?;
     quiet(Command::new(&exe))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -516,29 +476,45 @@ pub fn start_docker_desktop(foreground: bool) -> Result<(), StartTrouble> {
         .map_err(|error| StartTrouble::Failed(format!("{exe} would not start: {error}")))
 }
 
-/// The CLI Docker Desktop ships inside itself, beside its launcher: `<app>\resources\bin\docker.exe`, the inverse
-/// of [`docker_app_beside`]. Cut by separator for the same reason.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn docker_cli_beside(app: &str) -> Option<String> {
-    let (dir, leaf) = app.rsplit_once('\\')?;
-    leaf.eq_ignore_ascii_case("Docker Desktop.exe")
-        .then(|| format!("{dir}\\resources\\bin\\docker.exe"))
+/// Docker Desktop's launcher, by the discovery `ic` runs too (`intentic_docker_host::desktop_app`): a default install
+/// or the app the CLI on PATH shipped inside (a file check each), else the whole probe — the registry, the uninstall
+/// entry, the Start-menu shortcuts — which costs a PowerShell start and is only reached when the cheap half found nothing.
+#[cfg(windows)]
+fn docker_desktop_exe() -> Option<String> {
+    use intentic_docker_host::{desktop_app, powershell};
+    let cheap = desktop_app::default_installs_here()
+        .into_iter()
+        .chain(
+            docker_cli_path()
+                .as_deref()
+                .and_then(desktop_app::app_beside_cli),
+        )
+        .find(|path| Path::new(path).exists());
+    if cheap.is_some() {
+        return cheap;
+    }
+    let mut command = quiet(Command::new("powershell.exe"));
+    command.args(powershell::args(&desktop_app::locate_script()));
+    capture("locating Docker Desktop", command, Duration::from_secs(30))
+        .ok()
+        .filter(|answer| answer.success)
+        .and_then(|answer| desktop_app::located(&answer.stdout))
 }
 
 /// Docker Desktop's own CLI, when this process's PATH cannot find one. A PATH is copied into a process when it
 /// starts, so the minutes after this app's own setup installs Docker Desktop are exactly the minutes its PATH
 /// predates the install: every `docker` this app spawned then failed to start, and the card read "Docker wouldn't
-/// start" over an engine that was up. ic adopts the same folder for its own process (`docker::adopt_program_folder`).
+/// start" over an engine that was up. ic adopts the same folder for its own process (`docker::adopt_program_folder`),
+/// from the same default installs: this runs before every `docker` spawn, so it is file checks and nothing slower.
 #[cfg(windows)]
 fn docker_cli_fallback() -> Option<String> {
+    use intentic_docker_host::desktop_app;
     if docker_cli_path().is_some() {
         return None;
     }
-    let program_files = std::env::var("ProgramFiles").ok();
-    let local_app_data = std::env::var("LOCALAPPDATA").ok();
-    docker_app_candidates(program_files.as_deref(), local_app_data.as_deref())
+    desktop_app::default_installs_here()
         .iter()
-        .filter_map(|app| docker_cli_beside(app))
+        .filter_map(|app| desktop_app::cli_beside(app))
         .find(|cli| Path::new(cli).exists())
 }
 
@@ -557,7 +533,7 @@ fn docker() -> Command {
     quiet(Command::new("docker"))
 }
 
-/// The docker CLI on this PATH, which names its own installation (see [`docker_app_beside`]).
+/// The docker CLI on this PATH, which names its own installation (`desktop_app::app_beside_cli`).
 #[cfg(windows)]
 fn docker_cli_path() -> Option<String> {
     std::env::var("PATH").ok().and_then(|path| {
@@ -638,14 +614,24 @@ pub fn docker_cli_present() -> bool {
     )
 }
 
-/// Whether a refusal is the engine turning THIS ACCOUNT away rather than not being there at all. Windows
-/// spells a permission failure on a named pipe exactly one way and Linux spells its socket's exactly one
-/// other; waiting longer fixes neither. Mirrors ic's `prepare::plan::engine_denied`, which decides the same
-/// thing for the setup flow.
-pub fn engine_denied(refusal: &str) -> bool {
-    let refusal = refusal.to_ascii_lowercase();
-    refusal.contains("access is denied") || refusal.contains("permission denied")
+/// Which of the three refusals docker's words describe: the classifier `ic` reads them with
+/// (`intentic_docker_host::refusal`), so the two never disagree on whether an engine is broken, refusing this account,
+/// or not there yet.
+fn refusal_kind(refusal: &str) -> Refusal {
+    intentic_docker_host::refusal::classify(refusal)
 }
+
+/// Whether a refusal is the engine turning THIS ACCOUNT away rather than not being there at all. Windows spells a
+/// permission failure on a named pipe exactly one way and Linux spells its socket's exactly one other; waiting longer
+/// fixes neither.
+pub fn engine_denied(refusal: &str) -> bool {
+    refusal_kind(refusal) == Refusal::Denied
+}
+
+/// How long an engine may go on answering with errors before the wait stops calling it a start still under way. A
+/// Docker Desktop whose VM went away answers 500 for as long as anybody asks; one that is booting can answer one or two
+/// in passing, which is why `ic` also watches an erroring engine a while before calling it wedged.
+const ERRORING_GRACE: Duration = Duration::from_secs(20);
 
 /// How far bringing the engine up got. A closed set, because "Docker did not start" with no reason is a dead
 /// end wearing an error message — each of these is a different sentence and a different button.
@@ -661,6 +647,9 @@ pub enum EngineOutcome {
     NotAllowed(String),
     /// Started, and its engine never came up — a welcome screen, a sign-in, or a first start still going.
     TookTooLong(String),
+    /// The engine is there and answers every request with an error: the 500 a Docker Desktop answers forever once its
+    /// VM went away. Waiting changes nothing; quitting Docker Desktop and starting it again does.
+    Broken(String),
 }
 
 /// Wait for the engine. The socket is polled rather than `docker info`, so a stopped daemon costs nothing per
@@ -668,9 +657,11 @@ pub enum EngineOutcome {
 fn wait_for_engine(limit: Duration) -> EngineOutcome {
     let started = Instant::now();
     let mut last = String::new();
+    let mut erroring = Erroring::default();
     while started.elapsed() < limit {
         if engine_listening() {
-            match daemon_refusal() {
+            let refusal = daemon_refusal();
+            match refusal {
                 None => return EngineOutcome::Ready,
                 Some(refusal) if engine_denied(&refusal) => {
                     return EngineOutcome::NotAllowed(refusal)
@@ -680,12 +671,37 @@ fn wait_for_engine(limit: Duration) -> EngineOutcome {
                 Some(refusal) if refusal.starts_with(CLI_MISSING) => {
                     return EngineOutcome::WouldNotStart(refusal)
                 }
-                Some(refusal) => last = refusal,
+                Some(refusal) => {
+                    if erroring.broken(&refusal, Instant::now()) {
+                        return EngineOutcome::Broken(refusal);
+                    }
+                    last = refusal;
+                }
             }
+        } else {
+            erroring = Erroring::default();
         }
         std::thread::sleep(Duration::from_secs(2));
     }
     EngineOutcome::TookTooLong(last)
+}
+
+/// How long the engine has been answering with errors, without a break: the clock [`ERRORING_GRACE`] is read against.
+#[derive(Default)]
+struct Erroring {
+    since: Option<Instant>,
+}
+
+impl Erroring {
+    /// Take one refusal. True once errors have run on unbroken for the grace: a broken engine rather than a slow one.
+    fn broken(&mut self, refusal: &str, now: Instant) -> bool {
+        if refusal_kind(refusal) != Refusal::Erroring {
+            self.since = None;
+            return false;
+        }
+        let since = *self.since.get_or_insert(now);
+        now.duration_since(since) >= ERRORING_GRACE
+    }
 }
 
 /// Start the engine if it is not up, then wait for it. BLOCKING, for minutes by design — call it from
@@ -1865,45 +1881,6 @@ mod tests {
         assert!(engine_endpoints(Host::Windows, Some("ssh://box"), None).is_empty());
     }
 
-    /* THE REPORTED SHAPE OF A WINDOWS INSTALL — Program Files, the per-user one, and a folder only the CLI knows about. */
-    #[test]
-    fn docker_desktop_is_looked_for_everywhere_an_install_puts_it() {
-        let found = docker_app_candidates(
-            Some("C:\\Program Files"),
-            Some("C:\\Users\\radar\\AppData\\Local"),
-        );
-        assert_eq!(
-            found,
-            vec![
-                "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe".to_string(),
-                "C:\\Users\\radar\\AppData\\Local\\Docker\\Docker\\Docker Desktop.exe".to_string(),
-                "C:\\Users\\radar\\AppData\\Local\\Programs\\Docker\\Docker\\Docker Desktop.exe"
-                    .to_string(),
-            ]
-        );
-        assert!(docker_app_candidates(None, None).is_empty());
-    }
-
-    #[test]
-    fn the_docker_cli_names_the_installation_it_came_from() {
-        assert_eq!(
-            docker_app_beside("D:\\Tools\\Docker\\Docker\\resources\\bin\\docker.exe").as_deref(),
-            Some("D:\\Tools\\Docker\\Docker\\Docker Desktop.exe")
-        );
-        // A docker.exe that is not the one inside Docker Desktop names no app at all.
-        assert_eq!(docker_app_beside("C:\\bin\\docker.exe"), None);
-        assert_eq!(
-            docker_cli_beside("C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe").as_deref(),
-            Some("C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe")
-        );
-        assert_eq!(docker_cli_beside("C:\\Tools\\docker.exe"), None);
-        assert_eq!(docker_cli_beside("Docker Desktop.exe"), None);
-        assert_eq!(
-            docker_app_beside("C:\\Docker\\resources\\bin\\compose.exe"),
-            None
-        );
-    }
-
     /* The one refusal that a longer wait cannot fix, in both spellings a real machine produces. */
     #[test]
     fn an_engine_that_refuses_this_account_is_told_from_one_that_is_not_there() {
@@ -1916,6 +1893,59 @@ mod tests {
         assert!(
             !engine_denied("error during connect: ... The system cannot find the file specified."),
             "a daemon that is not there is a wait, not a group membership"
+        );
+    }
+
+    /* A DOCKER DESKTOP ANSWERING 500: a broken engine, which the wait used to sit out for its whole five minutes. */
+    const ANSWERED_500: &str = "request returned 500 Internal Server Error for API route and version http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.47/info, check if the server supports the requested API version";
+
+    #[test]
+    fn an_engine_erroring_past_the_grace_is_broken_rather_than_slow() {
+        let start = Instant::now();
+        let mut erroring = Erroring::default();
+        assert!(
+            !erroring.broken(ANSWERED_500, start),
+            "one 500 is a boot in passing"
+        );
+        assert!(!erroring.broken(
+            ANSWERED_500,
+            start + ERRORING_GRACE - Duration::from_secs(1)
+        ));
+        assert!(
+            erroring.broken(ANSWERED_500, start + ERRORING_GRACE),
+            "errors without a break for the whole grace are an engine no wait will fix"
+        );
+    }
+
+    #[test]
+    fn any_other_answer_restarts_the_grace() {
+        let start = Instant::now();
+        let mut erroring = Erroring::default();
+        assert!(!erroring.broken(ANSWERED_500, start));
+        // Not there for a moment: Docker Desktop restarting its VM, which is a start under way again.
+        assert!(!erroring.broken(
+            "error during connect: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
+            start + Duration::from_secs(10)
+        ));
+        assert!(!erroring.broken(ANSWERED_500, start + ERRORING_GRACE));
+        assert!(erroring.broken(ANSWERED_500, start + ERRORING_GRACE * 2));
+    }
+
+    #[test]
+    fn the_desktop_reads_refusals_with_ics_classifier() {
+        assert_eq!(refusal_kind(ANSWERED_500), Refusal::Erroring);
+        assert_eq!(
+            refusal_kind("Error response from daemon: Docker Desktop is unable to start"),
+            Refusal::Erroring
+        );
+        // A refusal this app phrased itself, around a silence or a missing CLI, is never read as broken.
+        assert_eq!(
+            refusal_kind(&format!("{CLI_MISSING}: program not found")),
+            Refusal::Down
+        );
+        assert_eq!(
+            refusal_kind("Docker's engine is up but it did not answer within 10 seconds"),
+            Refusal::Down
         );
     }
 

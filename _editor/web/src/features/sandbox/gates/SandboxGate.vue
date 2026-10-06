@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { sandboxRequiresGate } from "../overview/availability";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxEstablished } from "./established";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";

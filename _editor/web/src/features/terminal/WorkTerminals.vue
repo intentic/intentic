@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { AnchoredOverlay, ui } from "@intentic/ui";
+import { AnchoredOverlay, timeAgo, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
-import { relativeTime } from "../chat/models/catalog";
 import { KINDS } from "./terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "./useWorkTerminals";
 import { useT } from "@intentic/ui/i18n";
@@ -28,9 +27,9 @@ const open = (row: WorkTerminalRow): void => {
 
 // Time since last output, the one signal that separates a mid-command turn from a quietly-compiling install; no stamp
 // just means running.
-const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `running · ${relativeTime(row.activityAt)}` : `running`);
+const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `running · ${timeAgo(row.activityAt, { days: true })}` : `running`);
 // A finished job's last output is when it ended, since the pane went quiet with it.
-const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finished · ${relativeTime(row.activityAt)}` : `finished`);
+const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finished · ${timeAgo(row.activityAt, { days: true })}` : `finished`);
 </script>
 
 <template>

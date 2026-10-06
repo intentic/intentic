@@ -1,5 +1,5 @@
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { OpenFile } from "../viewers/openFile";
 import { rememberDerived } from "./derivedCache";
 

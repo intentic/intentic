@@ -1,4 +1,4 @@
-import { REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
@@ -24,7 +24,7 @@ import { createDiffRawRoute } from "./git/changes/diff-raw.js";
 import { createSpeechRoute } from "./speech/speech.routes.js";
 import { createEnrollRoute } from "./inventory/enroll.routes.js";
 import { createRouter } from "./router.js";
-import { verifySyncToken } from "./hosts/desktop-sync.js";
+import { verifySyncToken } from "./peers/desktop-sync.js";
 import { createSyncRoutes } from "./hosts/desktop-sync.routes.js";
 import { createSyncSshRoute } from "./hosts/desktop-sync-ssh.js";
 import { createSandboxesRoutes } from "./sandboxes/sandboxes.routes.js";
@@ -34,13 +34,13 @@ import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
 import { resolveHarnessCredentials } from "./agent/providers/harness-credentials.js";
 import { createEnvironmentRoutes } from "./environment/environment.routes.js";
 import { manageDeviceSandbox } from "./hosts/device-reports.js";
-import { agentsMidTurn } from "./hosts/host-restart-guard.js";
+import { workingNames } from "./bootstrap/working-now.js";
 import { createRebuildWhenIdle } from "./hosts/rebuild-when-idle.js";
-import { fileRestartResume } from "./agent/run/turn/restart-resume.js";
+import { fileRestartResume } from "./system/restart-resume.js";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { createEnginesRoutes } from "./engines/engines.routes.js";
 import { createBundleRoutes } from "./portability/bundle.routes.js";
-import { createDefinitionRoutes } from "./portability/definition.routes.js";
+import { createDefinitionRoutes } from "./definition/definition.routes.js";
 import { createArrivalRoutes } from "./portability/arrival.routes.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.routes.js";
@@ -48,8 +48,11 @@ import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "./exte
 import { createTurnMountRoute } from "./agent/tools/turn-mounts.routes.js";
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener/listener.routes.js";
-import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
+import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.routes.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
+import { judgeCommand } from "./agent/tools/command-judge.js";
+import { cardDeps } from "./conversations/actor/card-deps.js";
+import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "./runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "./webext/webext-peer.js";
@@ -182,7 +185,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             },
             allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             // REQUEST_ID_HEADER must be allow-listed too, or the preflight drops it and the correlation stays empty.
-            allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash", REQUEST_ID_HEADER],
+            allowHeaders: ["authorization", "content-type", CONNECT_TOKEN_HEADER, "x-intentic-base-hash", REQUEST_ID_HEADER],
             // Chrome's own ceiling. Every call carries `authorization`, so each distinct URL (and a route's inputs are in
             // its URL) is asked about once before it is sent, and a phone on a cellular link pays that round trip again
             // for every URL whose answer has expired: ten minutes made most of a working session's reads two trips.
@@ -220,7 +223,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 return next();
             }
             try {
-                const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined, {
+                const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header(CONNECT_TOKEN_HEADER) ?? undefined, {
                     enrolment: policy.enrolment === true,
                 });
                 c.set("identity", caller);
@@ -357,11 +360,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /platform/relink", createRelinkRoute(services));
 
     // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, runtime-installs a line, takes
-    // one tool out, or has the rebuild wait until no agent is mid-turn.
+    // one tool out, or has the rebuild wait until nothing a restart would cut is in flight.
     const environment = createEnvironmentRoutes(
         services,
         createRebuildWhenIdle({
-            midTurn: () => agentsMidTurn(services),
+            working: () => workingNames(services, "restart"),
             relay: (host, flow) => manageDeviceSandbox(services, host, flow),
             restartResume: fileRestartResume(services.config.historyRoot),
             slug: () => sandboxSlugOf(services.config.sandbox.name),
@@ -474,7 +477,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /system/sync/pair", sync.pair);
 
     // The peer doors: each device, browser, phone and runner gets pairing, enrollment, roster, revoke and socket.
-    const hostRoutes = hostPeerRoutes(services);
+    // A device gate's turn, cards and judge come from above hosts/, so they are handed in here.
+    const hostRoutes = hostPeerRoutes(services, {
+        cards: cardDeps(services),
+        turnRun: (conversationId) => turnRunOf(services.conversations, conversationId),
+        judge: (input, signal) => judgeCommand(services, input, signal),
+    });
     const webextRoutes = webextPeerRoutes(services);
     const phoneRoutes = phonePeerRoutes(services);
     mountPeerRoutes(serve, HOST_PEER, hostRoutes);

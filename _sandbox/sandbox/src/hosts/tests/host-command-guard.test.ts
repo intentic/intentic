@@ -2,11 +2,13 @@ import { type Capability, DEFAULT_SAFETY_POLICY, DeviceConfigSchema, type Safety
 import { unstubbed } from "@intentic/testing";
 import { startTurnRun } from "../../agent/run/turn/turn-runs.js";
 import type { Services } from "../../composition.js";
+import { cardDeps } from "../../conversations/actor/card-deps.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
+import type { HostGuardDeps } from "../host-guard-deps.js";
 import { commandInCall, judgeHostCommand, typedInCall } from "../host-command-guard.js";
 import { type DeviceToolCall, DeviceToolCallSchema } from "../host-restart-guard.js";
 
@@ -51,6 +53,16 @@ const services = unstubbed<Services>("services", {
     }),
     logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
 });
+
+// What the gate takes from above the host layer, as app.ts fills it: the real cards and the published turn.
+const guards: HostGuardDeps = {
+    cards: cardDeps(services),
+    turnRun: (conversationId) => turnRunOf(fleet.conversations, conversationId),
+    // Never asked: the judge is off, so the hard rule alone decides.
+    judge: async () => {
+        throw new Error("the judge is off in these tests");
+    },
+};
 
 // The conversation's turn, held open by the real pump until the test ends it, and attended, so there is someone to ask.
 let endTurn = (): void => {};
@@ -106,7 +118,7 @@ afterEach(async () => {
 
 describe("nobody answers the card", () => {
     it("says so, and what to do next, when the deadline passes with the turn still running", async () => {
-        const judged = judgeHostCommand(services, ASKED);
+        const judged = judgeHostCommand(services, guards, ASKED);
         await cardUp();
         deadline.abort();
 
@@ -122,7 +134,7 @@ describe("nobody answers the card", () => {
     });
 
     it("settles the card when the turn ends, and says the turn ended rather than that time ran out", async () => {
-        const judged = judgeHostCommand(services, ASKED);
+        const judged = judgeHostCommand(services, guards, ASKED);
         const requestId = await cardUp();
         endTurn();
 
@@ -136,7 +148,7 @@ describe("nobody answers the card", () => {
 
 describe("somebody answers the card", () => {
     it("hands the agent the owner's own words when they decline this one call and let the turn go on", async () => {
-        const judged = judgeHostCommand(services, ASKED);
+        const judged = judgeHostCommand(services, guards, ASKED);
         const requestId = await cardUp();
         expect(cards.resolve({ kind: "permission", requestId, decision: "deny", feedback: "Keep the builds; clear the cache instead." })).toBe(
             "settled",
@@ -147,7 +159,7 @@ describe("somebody answers the card", () => {
     });
 
     it("tells the agent not to look for a way around a bare decline", async () => {
-        const judged = judgeHostCommand(services, ASKED);
+        const judged = judgeHostCommand(services, guards, ASKED);
         expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "deny" })).toBe("settled");
 
         expect(await judged).toEqual({
@@ -157,7 +169,7 @@ describe("somebody answers the card", () => {
     });
 
     it("forwards the command to the machine once the owner allows it", async () => {
-        const judged = judgeHostCommand(services, ASKED);
+        const judged = judgeHostCommand(services, guards, ASKED);
         expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
 
         expect(await judged).toBeUndefined();
@@ -168,7 +180,7 @@ describe("somebody answers the card", () => {
 describe("the device would refuse it anyway", () => {
     it("refuses at once, naming the switch, and raises no card", async () => {
         destructive = "off";
-        expect(await judgeHostCommand(services, { ...ASKED, command: "find ~/old-builds -depth -delete" })).toEqual({
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "find ~/old-builds -depth -delete" })).toEqual({
             refusal:
                 'Refused: this command would delete files recursively on "rog", and its "Run destructive commands" switch is off, so the device ' +
                 'would refuse it even if the owner approved. Ask the owner to turn on "Run destructive commands" in rog\'s capability card, or run ' +
@@ -181,7 +193,7 @@ describe("the device would refuse it anyway", () => {
 
 describe("the card outlives the call", () => {
     it("answers the call before its client gives up, keeps the card, and runs the command once on the same call again", async () => {
-        const first = await judgeHostCommand(services, ASKED, 20);
+        const first = await judgeHostCommand(services, guards, ASKED, 20);
         expect(first).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve running this on "rog", and it has not run yet. Their answer is kept ' +
@@ -192,10 +204,10 @@ describe("the card outlives the call", () => {
         // The press after the call gave up is recorded, not refused.
         expect(cards.resolve({ kind: "permission", requestId, decision: "once" })).toBe("settled");
 
-        expect(await judgeHostCommand(services, ASKED, 20)).toBeUndefined();
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toBeUndefined();
         expect(answers).toEqual([{ answer: "allowed", outcome: "allowed" }]);
         // Collected once: the same command after that is a new question with its own card.
-        const again = judgeHostCommand(services, ASKED);
+        const again = judgeHostCommand(services, guards, ASKED);
         expect(await cardUp()).not.toBe(requestId);
         endTurn();
         expect(await again).toEqual({ refusal: 'The turn ended before anyone answered, so it was not run on "rog". Do not retry it unasked.' });
@@ -227,8 +239,8 @@ describe("text typed into the device", () => {
     });
 
     it("passes at no cost when it is not a command, and is asked about on a card worded for typing when it is", async () => {
-        expect(await judgeHostCommand(services, { ...ASKED, command: "Dear team, the builds are tidy now.", typed: true })).toBeUndefined();
-        const judged = judgeHostCommand(services, { ...ASKED, typed: true }, 20);
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "Dear team, the builds are tidy now.", typed: true })).toBeUndefined();
+        const judged = judgeHostCommand(services, guards, { ...ASKED, typed: true }, 20);
         expect(await judged).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve typing this on "rog", and nothing has been typed yet. Their answer is ' +
@@ -244,7 +256,7 @@ describe("text typed into the device", () => {
 
     it("is refused at once, naming the switch, when the device would refuse it", async () => {
         destructive = "off";
-        expect(await judgeHostCommand(services, { ...ASKED, command: "find ~/old-builds -depth -delete", typed: true })).toMatchObject({
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "find ~/old-builds -depth -delete", typed: true })).toMatchObject({
             refusal: expect.stringMatching(/^Refused: typed into a terminal, this would delete files recursively on "rog"/),
         });
     });
@@ -271,24 +283,24 @@ describe("a command for a phone attached to the device", () => {
     });
 
     it("passes at no cost when it deletes nothing, and is refused at once when the device's switch would refuse it", async () => {
-        expect(await judgeHostCommand(services, { ...ASKED, command: "adb shell pm list packages -3" })).toBeUndefined();
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "adb shell pm list packages -3" })).toBeUndefined();
         destructive = "off";
-        expect(await judgeHostCommand(services, { ...ASKED, command: "adb -s R58M12ABCDE shell rm -rf /sdcard/DCIM/old" })).toMatchObject({
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "adb -s R58M12ABCDE shell rm -rf /sdcard/DCIM/old" })).toMatchObject({
             refusal: expect.stringMatching(/^Refused: this command would delete files recursively on "rog"/),
         });
     });
 
     it("is asked about on a card showing the adb program, and its answer is kept for that program alone", async () => {
         const phone = { ...ASKED, command: "adb shell rm -rf /sdcard/Download/old" };
-        expect(await judgeHostCommand(services, phone, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting for the owner/) });
+        expect(await judgeHostCommand(services, guards, phone, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting for the owner/) });
         const card = turnRunOf(fleet.conversations, CONVERSATION)
             ?.rows.map((row) => row.permission)
             .find((permission) => permission?.status === "pending");
         expect(card).toMatchObject({ title: "Run this on rog?", program: { text: "adb shell rm -rf /sdcard/Download/old" } });
         expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
         // The same words sent to the machine's own shell are a different program, asked about afresh.
-        const machine = judgeHostCommand(services, { ...ASKED, command: "rm -rf /sdcard/Download/old" }, 20);
+        const machine = judgeHostCommand(services, guards, { ...ASKED, command: "rm -rf /sdcard/Download/old" }, 20);
         expect(await machine).toMatchObject({ refusal: expect.stringMatching(/^Still waiting for the owner/) });
-        expect(await judgeHostCommand(services, phone, 20)).toBeUndefined();
+        expect(await judgeHostCommand(services, guards, phone, 20)).toBeUndefined();
     });
 });

@@ -9,10 +9,10 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Mocks the query client and the daemon client, neither of which the derivation under test touches.
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
 const list = jest.fn();
 const seen = jest.fn();
-jest.mock("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
 
 const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");

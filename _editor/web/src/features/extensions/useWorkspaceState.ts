@@ -1,9 +1,9 @@
 import type { WorkspaceState } from "@intentic/api-contract";
 import { computed } from "vue";
-import { SandboxHttpError } from "../sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { WORKSPACE_STATE } from "../../lib/queryKeys";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { projectWorkspaceState } from "./workspaceStateProjection";
 
 /* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result. */

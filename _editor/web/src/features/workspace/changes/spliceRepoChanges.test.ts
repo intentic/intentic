@@ -1,4 +1,4 @@
-import type { CommitResult, GitChangesResponse, RepoChanges } from "@intentic/api-contract";
+import type { CommitResult, GitChanges, RepoChanges } from "@intentic/sandbox-contract";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 
 // Pins that a commit's one-repo answer can stand in for a full rescan: it replaces only its own repo, drops it
@@ -11,7 +11,7 @@ const repo = (name: string, unstaged: RepoChanges["unstaged"] = []): RepoChanges
     unstaged,
 });
 
-const held = (repos: readonly RepoChanges[], originAgents?: GitChangesResponse["originAgents"]): GitChangesResponse => ({
+const held = (repos: readonly RepoChanges[], originAgents?: GitChanges["originAgents"]): GitChanges => ({
     repos: [...repos],
     ...(originAgents === undefined ? {} : { originAgents }),
 });

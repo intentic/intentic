@@ -7,15 +7,15 @@ import {
     type ArrivalPlan,
     type ArrivalReport,
     type AssistantSource,
-} from "@intentic/api-contract";
+} from "@intentic/sandbox-contract";
 import { Button, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { useSandbox } from "../client/useSandbox";
-import { useHubWork } from "../../../shell/hub/hubWork";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useHubWork } from "../../../workbench/hub/hubWork";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 import { useT } from "@intentic/ui/i18n";
 

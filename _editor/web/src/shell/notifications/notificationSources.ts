@@ -7,23 +7,23 @@ import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../feat
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
-import { hold, type NotificationInput, type NotificationTone } from "./notifications";
+import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
 import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
 import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
-import { useLocalShortcut } from "../../features/sandbox/devices/loopback/localShortcut";
-import { useEndpoint } from "../../features/sandbox/secrets/useEndpoint";
-import { useSandbox } from "../../features/sandbox/client/useSandbox";
+import { useLocalShortcut } from "../../client/endpoint/localShortcut";
+import { useEndpoint } from "../../client/endpoint/useEndpoint";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useSandboxAvailability } from "../../features/sandbox/overview/useSandboxAvailability";
-import { useAuth } from "../../features/auth/useAuth";
-import { useGoogleIdentity } from "../../features/auth/useGoogleIdentity";
-import { useSandboxSession } from "../../features/sandbox/session/sandboxSession";
+import { useAuth } from "../../client/auth/useAuth";
+import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
+import { useSandboxSession } from "../../client/session/sandboxSession";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
 import { useSandboxEstablished } from "../../features/sandbox/gates/established";
 import { t } from "@intentic/ui/i18n";
 import { useRouter } from "vue-router";
-import { useDeviceDirectory } from "../../features/sandbox/recovery/deviceDirectory";
-import { directMode } from "../../features/sandbox/recovery/directState";
+import { useDeviceDirectory } from "../../client/directory/deviceDirectory";
+import { directMode } from "../../client/directory/directState";
 
 // Every standing fact and open question this app floats, declared in one place as pure conditions fed to `hold`;
 // the lane draws them, in this file's registration order. Registered once from the root, above the router and

@@ -7,7 +7,7 @@ import { answerStarted, clearQuestionDraft, type DraftFile, OTHER_LABEL, readQue
 import { claimDrop, type PendingAttachment, useChatAttachments } from "../../drafts/useChatAttachments";
 import ChatAttachmentStrip from "../../composer/ChatAttachmentStrip.vue";
 import { PANE_VIEW } from "../../panel/useChat-view";
-import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { uuid } from "../../../../lib/uuid";
 import ChatCard from "./ChatCard.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";

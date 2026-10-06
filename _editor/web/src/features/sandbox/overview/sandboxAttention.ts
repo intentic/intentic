@@ -5,7 +5,7 @@ import { providerAccounts, translatorAccounts } from "../../chat/accounts/provid
 import { acpProviders, endpointProviders } from "../../chat/accounts/providerCatalog";
 import { accessKnown, providerReady } from "../../chat/session/access";
 import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
-import { useRole } from "../secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import { DEVICES_PATH } from "../devices/deviceLinks";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";

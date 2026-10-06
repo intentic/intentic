@@ -1,10 +1,10 @@
 import { definePreference } from "@intentic/ui/preference";
 import { computed, type Ref, watch } from "vue";
 import { boxAttention, markSeenAcross, otherBoxes, silentBoxes } from "../../sandbox/live/fleetAcross";
-import { onScreen } from "../../../shell/window/onScreen";
+import { onScreen } from "../../../workbench/window/onScreen";
 import { connectedSandboxes } from "../../sandbox/live/roster";
-import { landOnAfterSwitch } from "../../sandbox/client/sandboxScreen";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { landOnAfterSwitch } from "../../sandbox/switching/sandboxScreen";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
 import { endedHere, overlaid } from "./useAgents-provisional";

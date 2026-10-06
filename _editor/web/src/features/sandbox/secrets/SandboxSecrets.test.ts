@@ -1,8 +1,7 @@
 // needs jsdom: renders the real page. Pins that the list stays short as accounts grow, what's owed rises to the
 // top, and a truncated or filtered account stays reachable, never silently dropped.
 import "@intentic/testing/dom";
-import type { CapabilitySummary } from "@intentic/api-contract";
-import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -44,7 +43,7 @@ const extensions = ref<ExtensionSummary[]>([]);
 jest.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
 
 // Reached only by the CI push, which nothing here presses: faked because the client has no environment here.
-jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 // The two "Manage..." controls are links now, so the mock carries a stand-in for them. No `?add=` on the address: the
 // page arrives with the add row folded, as from the rail.

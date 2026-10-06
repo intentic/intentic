@@ -6,18 +6,18 @@ import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { editsRefusal, turnInFlight } from "../../agents/fleet/agentStatus";
 import { settingsChip, useSettingsRefusal } from "../../agents/review/settingsRefusal";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import OriginMark from "../../../components/OriginMark.vue";
-import RailCard from "../../../components/RailCard.vue";
+import OriginMark from "../../agents/fleet/OriginMark.vue";
+import RailCard from "./RailCard.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../components/WorkflowMark.vue";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
-import { viewersOfSession } from "../../../shell/presence/usePresence";
-import { relativeTime } from "../models/catalog";
+import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
+import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import { draftPreview } from "../drafts/draftPreview";
 import type { Conversation } from "../session/conversation";
 import { computed } from "vue";
 import { type CardView, modelOrProvider } from "./cardView";
 import { isArchived, originOf, tabLabel, twinTitles } from "./tabs";
+import { timeAgo } from "@intentic/ui";
 
 // One open chat as the rail draws it. A component rather than a block of ChatTabList's template because the card is
 // named by its own composer while nothing else has named it (tabLabel → draftPreview): read from the list, that one
@@ -192,7 +192,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <span v-else-if="twinFact !== undefined" class="max-w-24 truncate">{{ twinFact }}</span>
             <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
             <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
-                relativeTime(props.agent.updatedAt)
+                timeAgo(props.agent.updatedAt, { days: true })
             }}</span>
         </template>
     </RailCard>

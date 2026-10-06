@@ -1,6 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, watch, type Ref } from "vue";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // The commit box's draft: one value, empty until a From-chip click fills it as a subject line; typing is
 // always untouchable, a fill may only replace its own output. Lives as a per-sandbox, localStorage-backed

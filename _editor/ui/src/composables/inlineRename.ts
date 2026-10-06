@@ -1,5 +1,5 @@
 import { nextTick, reactive, ref, type VNode } from "vue";
-import { errorMessage } from "./useAsyncAction.js";
+import { messageOr } from "./useAsyncAction.js";
 
 // The state behind <InlineRename>: a name that reads as text until it is pressed. Per-instance factory, returned
 // reactive() so refs unwrap in templates; what a commit writes is left to the caller. Conventions: focus+select on
@@ -59,7 +59,7 @@ export const createInlineRename = (
             await write(trimmed);
             editing.value = false;
         } catch (caught) {
-            error.value = errorMessage(caught, failure);
+            error.value = messageOr(caught, failure);
         } finally {
             busy.value = false;
         }

@@ -367,6 +367,10 @@ export const AutomationApprovalSchema = z.object({
         ),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
+
+// Whether a held wake waits on a person. A countdown hold (`autoRunAt`) releases itself, so counting it would ask the
+// owner about something already about to happen on its own.
+export const awaitsOwner = (wake: Pick<AutomationApproval, "autoRunAt">): boolean => wake.autoRunAt === undefined;
 // `rev` is the registry revision this roster was read at: fleet snapshots are last-frame-wins, so the browser drops any
 // roster older than the newest it applied and holds a pending change until a roster past `rev` arrives. `held` is the
 // approvals queue projected onto the board, defaulted for an older daemon's roster.

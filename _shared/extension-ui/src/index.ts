@@ -154,7 +154,10 @@ export {
     useNow,
     // Drops an answer a newer request has superseded: `const current = begin(); …; if (!current()) return;`.
     useLatest,
-    errorMessage,
+    // The thrown thing's message, or a fallback when it has none.
+    messageOr,
+    // Deprecated: the old name of `messageOr`, kept so extensions built against it still link.
+    messageOr as errorMessage,
     noticeFrom,
     noticeOf,
     useAsyncAction,
@@ -172,11 +175,18 @@ export {
 // Also reachable as `@intentic/extension-ui/format`, without the components attached.
 export {
     formatBytes,
+    formatClock,
+    formatCompact,
+    formatCount,
     formatDate,
+    formatDateLong,
     formatDateTime,
     formatDayMonth,
     formatDayMonthTime,
     formatDuration,
+    formatElapsed,
+    formatMoney,
+    formatPercent,
     formatTime,
     formatTimestamp,
     formatTokens,
@@ -193,7 +203,9 @@ export { createWorkerCall, serveWorkerCall, WorkerCallError } from "./worker.js"
 // `messages` export; `activeLocale` is the language on screen, for a contribution that formats something itself.
 // The `Locale` type comes off `@intentic/extension-ui/i18n`, not from here: this file's re-exports become runtime
 // bindings on the host bridge, and a type has none.
-export { activeLocale, extensionT } from "./i18n.js";
+// `extensionI18n` is the one-call form of the same translator. `registerExtensionMessages` stays off: mounting a
+// catalog is the host's job, and on the bridge it would let one extension overwrite another's words.
+export { activeLocale, extensionI18n, extensionT } from "./i18n.js";
 // Types only, so an extension can build a figure straight from facts it holds instead of round-tripping through
 // markdown. The parser and document splitter stay in `<Markdown>`, not here.
 export type {

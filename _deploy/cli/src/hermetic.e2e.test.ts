@@ -5,13 +5,16 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { repoRoot as findRepoRoot } from "@intentic/constants/node";
-import { forgejoApi, type SshResult, sshExecutor } from "@intentic/providers";
+import { createSshExecutor, forgejoApi, inMemoryHostKeyStore, type SshResult } from "@intentic/providers";
 import { adminUsername, deploymentId, forgejoId, komodoId, runnerId, tunnelId } from "@intentic/state-resolver";
 import { e2eTier } from "@intentic/testing/e2e";
 import { utils } from "ssh2";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { APPLY_WORKFLOW_PATH, forgejoSecretName, GIT_TOKEN_SECRET, GIT_USER_SECRET, INTENT_WORKFLOW_PATH } from "./pipelines/adopt-pipelines.js";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
+
+// A throwaway local container: its first key is the only one it will ever present, so trust-on-first-use is right here.
+const sshExecutor = createSshExecutor(inMemoryHostKeyStore());
 
 // Own gate (INTENTIC_E2E_HERMETIC): naming no secrets is what lets this run on every merge request.
 const tier = e2eTier("intentic CLI hermetic end-to-end (DinD, no external services)", { enabledBy: "INTENTIC_E2E_HERMETIC" });

@@ -5240,20 +5240,16 @@
             "clearEsc": "Effacer (Échap)",
             "closeAll": "Tout fermer",
             "closeAllTabs": "Fermer tous les onglets",
-            "closeAnyway": "Fermer quand même",
             "closeOtherTabs": "Fermer les autres onglets",
             "closeOthers": "Fermer les autres",
             "closeSplit": "Fermer la division",
             "closeTab": "Fermer l'onglet",
             "closeTabsToRight": "Fermer les onglets à droite",
-            "closingTabsDiscardsUnsaved": "Fermer ces onglets jette leurs modifications non enregistrées. C'est irréversible.",
             "codebaseHealth": "Santé du code",
             "collapseAll": "Tout replier",
             "collapseAllFolders": "Replier tous les dossiers",
             "commaSeparated": "Séparés par des virgules",
             "copyPath": "Copier le chemin",
-            "discardUnsavedChanges": "Jeter les modifications non enregistrées ?",
-            "discardUnsavedChangesIn": "Jeter les modifications non enregistrées de {count} fichiers ?",
             "dropFilesToAdd": "Déposez des fichiers pour les ajouter à la racine de l'espace de travail",
             "excluded": "Exclu",
             "filterFiles": "Filtrer les fichiers…",
@@ -5431,6 +5427,12 @@
             "acrossRepos": "{summary}, {count} dépôts",
             "toPush": "{count} commit à pousser | {count} commits à pousser",
             "unpushedBranch": "Branche non poussée | {count} branches non poussées"
+        },
+        "closeGuard": {
+            "discardUnsavedChanges": "Jeter les modifications non enregistrées ?",
+            "discardUnsavedChangesIn": "Jeter les modifications non enregistrées de {count} fichiers ?",
+            "closeAnyway": "Fermer quand même",
+            "closingTabsDiscardsUnsaved": "Fermer ces onglets jette leurs modifications non enregistrées. C'est irréversible."
         }
     },
     "needs": {

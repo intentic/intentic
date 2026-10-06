@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, timeAgo, ui } from "@intentic/ui";
+import { formatMoney, Icon, timeAgo, ui } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../../fleet/useWorkflowRuns";
@@ -145,7 +145,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted">
             <span :class="TONE[run.state]">{{ run.state === `running` ? t(`agents.workflowRunCard.live`, { count: live.length }) : run.state }}</span>
             <span>{{ t(`agents.workflowRunCard.steps`, { done, count: run.steps.length }) }}</span>
-            <span v-if="spent > 0">${{ spent.toFixed(2) }}</span>
+            <span v-if="spent > 0">{{ formatMoney(spent) }}</span>
             <!-- Archived rows date by filing, not start, like the agent card: "when" means "when I put it away". -->
             <span v-if="run.archivedAt !== undefined">{{ t(`agents.workflowRunCard.archived`, { archivedAt: timeAgo(run.archivedAt) }) }}</span>
             <span v-else>{{ timeAgo(run.startedAt) }}</span>

@@ -2,10 +2,10 @@ import type { AutoUpdateInput } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
-import { useAuth } from "../../../auth/useAuth";
-import { sandboxRpc } from "../../client/sandboxRpc";
-import { useRole } from "../../secrets/useRole";
-import { supportsRoute } from "../useDaemonRoutes";
+import { useAuth } from "../../../../client/auth/useAuth";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useRole } from "../../../../client/sandbox/useRole";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { NOT_NOW_MS, notTodayUntil } from "./autoUpdate";
 import { useSandboxVersion } from "./useSandboxVersion";
 

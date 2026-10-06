@@ -6,7 +6,7 @@ import type { PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
-import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../portability/definition.js";
+import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../definition/definition.js";
 import { runnerParity } from "./runner-parity.js";
 import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/enrollment.js";
 

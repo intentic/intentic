@@ -1,6 +1,6 @@
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { useExtensions } from "../extensions/useExtensions";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { KINDS } from "./terminalMeta";
 import { useTerminalsQuery } from "./terminalsQuery";
 import { useTerminalPanel } from "./useTerminalPanel";

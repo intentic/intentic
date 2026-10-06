@@ -1,6 +1,6 @@
 import { sleep } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
-import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { SANDBOX_ID, sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
 
 // Resolves which address reaches a sandbox's daemon: loopback when the container publishes one, else the public URL.
@@ -15,11 +15,9 @@ const PROBE_TIMEOUT_MS = 1500;
 export type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 // Port and /health's answer derive from this id, read off the public URL's label (the only source here).
-const DAEMON_ID = /^[0-9a-f]{12}$/;
-
 export const daemonIdOf = (sandboxUrl: string): string | undefined => {
     const label = sandboxIdFromUrl(sandboxUrl);
-    return label !== undefined && DAEMON_ID.test(label) ? label : undefined;
+    return label !== undefined && SANDBOX_ID.test(label) ? label : undefined;
 };
 
 // Best address first, public URL always last as the floor since it's the one that always works. Normalized of its

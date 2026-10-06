@@ -1,7 +1,7 @@
 import { type CacheClock, type KeepWarm, keepWarmLeadMs, keepWarmRefreshes } from "@intentic/sandbox-contract";
 import type { Tip } from "@intentic/ui";
-import { formatClock, formatTokens } from "@intentic/ui/format";
-import { type AgentStanding, formatElapsed, laneOf, turnInFlight } from "../agentStatus";
+import { formatClock, formatElapsed, formatTokens } from "@intentic/ui/format";
+import { type AgentStanding, laneOf, turnInFlight } from "../agentStatus";
 import { t } from "@intentic/ui/i18n";
 
 // Whether picking a conversation up is about to stop being cheap. The daemon publishes a deadline
@@ -147,7 +147,7 @@ export const cacheCooling = (agent: CacheStanding, now: number): CacheCooling | 
     if (left <= 0 || left > window) {
         return undefined;
     }
-    const countdown = formatElapsed(now, deadline);
+    const countdown = formatElapsed((deadline - now) / 1000);
     const near = left <= window / 2;
     return {
         text: `Cooling`,

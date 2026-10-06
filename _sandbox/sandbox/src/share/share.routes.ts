@@ -5,7 +5,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { publishShare, unpublishShare, viewerDist } from "./share-publish.js";
-import { shareTranscript } from "./share-payload.js";
+import { redactSecrets, shareTranscript } from "./share-payload.js";
 import type { StoredShare } from "./share-store.js";
 import { publicAddressOf } from "../env.config.js";
 import { redactStrings } from "../privacy/privacy-shield.js";
@@ -56,7 +56,8 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
         // kind it was, as a native push notification's is.
         const redact = services.privacyShield.redactForDisplay;
         const shown = {
-            title: await redact(title),
+            // Masked like every string of the payload: the title rides the same published page the outbox sniffs.
+            title: await redact(redactSecrets(title)),
             // SAFETY: redactStrings returns the same shape it was given, only its strings changed.
             messages: (await redactStrings(messages, redact)) as typeof messages,
         };

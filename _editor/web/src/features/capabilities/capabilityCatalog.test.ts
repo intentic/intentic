@@ -1,7 +1,7 @@
 // Pins the catalog pane's wiring: the rail's slice read from and written to the URL, the grid a slice and the filter
 // leave, the Connected slice's rows (synced machines included) under the same filter, and what "nothing matches" is
 // judged against on each.
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { effectScope, type EffectScope, ref } from "vue";

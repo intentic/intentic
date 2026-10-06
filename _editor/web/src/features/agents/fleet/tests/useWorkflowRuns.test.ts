@@ -3,8 +3,8 @@ import { mocked, waitFor } from "@intentic/testing/bun";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, effectScope, ref } from "vue";
 import { rpcKey } from "../../../../lib/queryKeys";
-import type { ProcedureOutput } from "../../../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
+import type { ProcedureOutput } from "../../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 import type { FleetAgent } from "../useAgents-fleet";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, useWorkflowRuns } from "../useWorkflowRuns";
@@ -16,8 +16,8 @@ jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
 // The two filing verbs this file presses; any other call names itself.
 const archiveRun = jest.fn();
 const unarchiveRun = jest.fn();
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workflows: { archiveRun, unarchiveRun } }) }));
-jest.mock("../../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: jest.fn() }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workflows: { archiveRun, unarchiveRun } }) }));
+jest.mock("../../../../client/sandbox/useSandboxQuery", () => ({ useSandboxQuery: jest.fn() }));
 
 // The grouping rule alone: the pure half of a run row shared by the board's lanes, the board's archive, and the
 // floating rail.

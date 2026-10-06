@@ -1,0 +1,486 @@
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { type Capability, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { defaultGit, gitClone } from "@intentic/base/git";
+import { fileAutomationsStore } from "../automations/automations-store.js";
+import type { Services } from "../composition.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
+import { services } from "../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
+import { testConfig } from "../testing.js";
+import { workspacePaths } from "../workspace/workspace.js";
+import { applyDefinitionItems } from "./apply-definition.js";
+import { createArrivals } from "../portability/arrival.js";
+import { deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
+import { rootExcludes } from "../workspace/layout/git-layout.js";
+import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
+import { workspaceRemoteUrl } from "./workspace-repo.js";
+
+// Round-trips sandbox.toml through real git and disk: derive, apply to an empty workspace, check the two refusals
+// (remoteless repo, occupied id). Pure-format cases live in definition.test.ts.
+
+// Definitions arrive as an upload; this turns a toml string into that stream shape for tests.
+const LIMIT = 64 * 1024 * 1024;
+const streamOf = (toml: string): ReadableStream<Uint8Array> => new Blob([toml]).stream();
+
+const roots: string[] = [];
+const makeRoots = async (): Promise<{ work: string; history: string }> => {
+    const dir = await mkdtemp(join(tmpdir(), "intentic-definition-"));
+    roots.push(dir);
+    const work = join(dir, "work");
+    const history = join(dir, "history");
+    await mkdir(work, { recursive: true });
+    await mkdir(history, { recursive: true });
+    return { work, history };
+};
+
+const cleanup = async (): Promise<void> => {
+    for (const dir of roots.splice(0)) {
+        await rm(dir, { recursive: true, force: true });
+    }
+};
+
+// Real git repo with one commit; branches and remotes behave as they do live.
+const makeRepo = async (parent: string, name: string, remote?: string): Promise<string> => {
+    const dir = join(parent, name);
+    await mkdir(dir, { recursive: true });
+    await defaultGit(dir, ["init", "-b", "main"]);
+    await writeFile(join(dir, "README.md"), `# ${name}\n`);
+    await defaultGit(dir, ["add", "."]);
+    await defaultGit(dir, ["-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "first"]);
+    if (remote !== undefined) {
+        await defaultGit(dir, ["remote", "add", "origin", remote]);
+    }
+    return dir;
+};
+
+const filesOnDisk = (): Services["files"] =>
+    fakeFiles({
+        read: async (absPath) => readFile(absPath, "utf8").catch(() => undefined),
+        write: async (absPath, content) => {
+            await mkdir(dirname(absPath), { recursive: true });
+            await writeFile(absPath, content);
+        },
+        remove: async (absPath) => {
+            await rm(absPath, { recursive: true, force: true });
+        },
+    });
+
+const AUTHOR = ["-c", "user.email=test@example.com", "-c", "user.name=test"];
+
+// A workspace repo shaped like real /work: only the daemon's baseline commit, plus any commits the test asks for.
+const makeWorkspaceRepo = async (work: string, commits = 1): Promise<void> => {
+    await defaultGit(work, ["init", "-b", "main"]);
+    await writeFile(join(work, ".git/info/exclude"), `${rootExcludes([]).join("\n")}\n`);
+    for (let index = 0; index < commits; index++) {
+        if (index === 0) {
+            await defaultGit(work, ["add", "-A"]);
+        }
+        await defaultGit(work, [...AUTHOR, "commit", "-q", "--allow-empty", "-m", index === 0 ? "Initialize workspace" : `later ${index}`]);
+        if (index === 0) {
+            await defaultGit(work, ["config", ROOT_BASELINE_CONFIG, (await defaultGit(work, ["rev-parse", "HEAD"])).stdout.trim()]);
+        }
+    }
+};
+
+// A bare repo standing in for the host, carrying content that acts by itself (an automation, a workspace extension, an
+// overlay) that arrival must switch off, plus plain content (a note, a skill).
+const publishedWorkspace = async (mutate?: (work: string) => Promise<void>): Promise<string> => {
+    const dirs = await makeRoots();
+    const bare = join(dirs.history, "workspace.git");
+    await defaultGit(dirs.history, ["init", "--bare", "-q", "-b", "main", bare]);
+    const work = dirs.work;
+    await defaultGit(work, ["init", "-b", "main"]);
+    await writeFile(join(work, "notes.md"), "workspace notes\n");
+    await mkdir(join(work, ".intentic/config/skills/mine"), { recursive: true });
+    await writeFile(join(work, ".intentic/config/skills/mine/SKILL.md"), "# mine\n");
+    await writeFile(
+        join(work, ".intentic/config/automations.json"),
+        JSON.stringify(
+            [
+                {
+                    id: "nightly",
+                    trigger: { kind: "schedule", cron: "0 9 * * *" },
+                    prompt: "sweep the inbox",
+                    // An automation always names the models it may spend.
+                    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+                    enabled: true,
+                },
+            ],
+            null,
+            2,
+        ),
+    );
+    await writeFile(join(work, ".intentic/config/settings.json"), JSON.stringify({ workspaceMap: true }, null, 2));
+    await writeFile(
+        join(work, ".intentic/config/capabilities.json"),
+        JSON.stringify([{ id: "remote-only", kind: "mcp", config: { url: "https://example.com/mcp" } }], null, 2),
+    );
+    await mkdir(join(work, ".intentic/config/workspace-extensions/hello"), { recursive: true });
+    await writeFile(
+        join(work, ".intentic/config/workspace-extensions/hello/intentic-extension.json"),
+        JSON.stringify({ publisher: "acme", name: "hello", version: "1.0.0", engines: { intentic: "^0.2.0" } }),
+    );
+    await writeFile(join(work, ".intentic/config/environment.custom.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    await mutate?.(work);
+    await defaultGit(work, ["add", "-A"]);
+    await defaultGit(work, [...AUTHOR, "commit", "-q", "-m", "workspace"]);
+    await defaultGit(work, ["remote", "add", "origin", bare]);
+    await defaultGit(work, ["push", "-q", "-u", "origin", "main"]);
+    return bare;
+};
+
+const servicesFor = (dirs: { work: string; history: string }, overrides: Record<string, unknown> = {}): Services =>
+    services({
+        workspace: workspacePaths(dirs.work),
+        config: { ...testConfig, workspaceRoot: dirs.work, historyRoot: dirs.history },
+        files: filesOnDisk(),
+        capabilities: memoryCapabilitiesStore(),
+        vaultManifestSecrets: async () => [],
+        vaultExtensionSettingSecrets: async () => [],
+        ...overrides,
+    } as Parameters<typeof services>[0]);
+
+test("derive reads the live stores: remotes become references, a remoteless repo is omitted with its reason", async () => {
+    const source = await makeRoots();
+    await makeRepo(source.work, "app", "https://github.com/example/app.git");
+    await makeRepo(source.work, "scratch");
+    await mkdir(join(source.work, ".intentic/config"), { recursive: true });
+    await writeFile(join(source.work, ".intentic/config/environment.custom.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+
+    const sourceServices = servicesFor(source, {
+        capabilities: memoryCapabilitiesStore([{ id: "linear", kind: "mcp", config: { url: "https://mcp.linear.app/sse" } } as Capability]),
+        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ workspaceMap: true }) },
+        secretRegistry: async () => [{ name: "OPENAI_API_KEY", value: "sk-test", source: "env" as const }],
+    });
+    const { definition, omitted } = await deriveDefinition(sourceServices);
+
+    expect(definition.repositories).toEqual([{ id: "app", remote: "https://github.com/example/app.git", ref: "main" }]);
+    expect(omitted.map((entry) => entry.subject)).toContain("Repository scratch");
+    expect(definition.capabilities.map((capability) => capability.id)).toEqual(["linear"]);
+    expect(definition.secrets).toEqual(["OPENAI_API_KEY"]);
+    // Definition settings include only non-default values.
+    expect(definition.settings).toEqual({ workspaceMap: true });
+    expect(definition.environment.dockerfile).toBe("RUN apt-get install -y ffmpeg\n");
+    await cleanup();
+});
+
+test("a connection travels by shape: the credential it holds is never in the definition", async () => {
+    const source = await makeRoots();
+    const sourceServices = servicesFor(source, {
+        capabilities: memoryCapabilitiesStore([
+            { id: "tools", kind: "plugin", config: { url: "https://github.com/example/tools.git", token: "ghp_live_0011223344556677" } } as Capability,
+        ]),
+        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
+        secretRegistry: async () => [],
+    });
+    const { definition, omitted } = await deriveDefinition(sourceServices);
+
+    expect(definition.capabilities).toEqual([{ id: "tools", kind: "plugin", config: { url: "https://github.com/example/tools.git" } }]);
+    expect(emitDefinitionToml(definition, omitted)).not.toContain("ghp_live_0011223344556677");
+    await cleanup();
+});
+
+test("plan → apply lands every piece through the native paths, and a re-plan marks them inapplicable", async () => {
+    // Local repo standing in for the remote a definition would name.
+    const upstream = await makeRoots();
+    const upstreamDir = await makeRepo(upstream.work, "app");
+
+    const target = await makeRoots();
+    let settings = SandboxSettingsSchema.parse({});
+    const targetServices = servicesFor(target, {
+        git: { clone: gitClone },
+        sandboxSettings: {
+            get: async () => settings,
+            set: async (next: typeof settings) => {
+                settings = next;
+            },
+        },
+    });
+    const arrivals = createArrivals(targetServices);
+
+    const toml = [
+        "schemaVersion = 1",
+        'secrets = ["OPENAI_API_KEY"]',
+        "",
+        "[environment]",
+        "dockerfile = '''",
+        "RUN apt-get install -y ffmpeg",
+        "'''",
+        "",
+        "[settings]",
+        "workspaceMap = true",
+        "",
+        "[[repositories]]",
+        'id = "app"',
+        `remote = ${JSON.stringify(upstreamDir)}`,
+        'ref = "main"',
+        "",
+        "[[capabilities]]",
+        'id = "linear"',
+        'kind = "mcp"',
+        'config = { url = "https://mcp.linear.app/sse" }',
+        "",
+    ].join("\n");
+
+    const plan = await arrivals.plan(streamOf(toml), LIMIT);
+    expect(plan.items.map((item) => [item.id, item.applicable])).toEqual([
+        ["repo:app", true],
+        ["environment", true],
+        ["capability:linear", true],
+        ["settings", true],
+    ]);
+    expect(plan.needsAction.map((action) => action.subject)).toEqual([
+        "Approve and rebuild the environment",
+        "Reconnect capabilities",
+        "Enter secret values",
+    ]);
+
+    const report = await arrivals.apply({ token: plan.token, items: plan.items.map((item) => item.id), includeSecrets: false });
+    expect(report.failed).toEqual([]);
+    expect(report.applied.map((entry) => entry.id)).toEqual(["repo:app", "environment", "capability:linear", "settings"]);
+
+    // Checkout uses the daemon's shape: its real git dir lives under history, not work.
+    expect(await readFile(join(target.work, "app/README.md"), "utf8")).toBe("# app\n");
+    expect((await readFile(join(target.work, "app/.git"), "utf8")).trim().startsWith("gitdir:")).toBe(true);
+    expect(existsSync(join(target.history, "gits/app"))).toBe(true);
+    // The overlay lands as a draft for the approval gate, not as an approved custom section.
+    expect(await readFile(join(target.work, ".intentic/config/environment.d/definition.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
+    expect(existsSync(join(target.work, ".intentic/config/environment.custom.Dockerfile"))).toBe(false);
+    // A landed capability is the manifest entry only, unauthenticated; settings merge over the defaults.
+    expect((await targetServices.capabilities.get("linear"))?.kind).toBe("mcp");
+    expect(settings.workspaceMap).toBe(true);
+
+    // Re-planning the same document marks already-landed items inapplicable; it never lands over them.
+    const replan = await arrivals.plan(streamOf(toml), LIMIT);
+    expect(replan.items.find((item) => item.id === "repo:app")?.applicable).toBe(false);
+    expect(replan.items.find((item) => item.id === "capability:linear")?.applicable).toBe(false);
+    await cleanup();
+});
+
+test("a stale or consumed token is refused, and the boot-seed path applies everything applicable", async () => {
+    const upstream = await makeRoots();
+    const upstreamDir = await makeRepo(upstream.work, "app");
+
+    const target = await makeRoots();
+    const targetServices = servicesFor(target, { git: { clone: gitClone } });
+    const arrivals = createArrivals(targetServices);
+    const toml = ["schemaVersion = 1", "[[repositories]]", 'id = "app"', `remote = ${JSON.stringify(upstreamDir)}`, ""].join("\n");
+
+    const plan = await arrivals.plan(streamOf(toml), LIMIT);
+    await arrivals.apply({ token: plan.token, items: [], includeSecrets: false });
+    // A token is consumed on apply; reusing it must re-plan.
+    await expect(arrivals.apply({ token: plan.token, items: [], includeSecrets: false })).rejects.toThrow(/no held arrival/);
+
+    // The seed path: no browser, no token; everything applicable lands (main.ts's definitionSeed step).
+    const seeded = await makeRoots();
+    const seededServices = servicesFor(seeded, { git: { clone: gitClone } });
+    const report = await applyDefinitionItems(seededServices, parseDefinitionToml(toml), () => true);
+    expect(report.failed).toEqual([]);
+    expect(existsSync(join(seeded.work, "app/README.md"))).toBe(true);
+    await cleanup();
+});
+
+// Workspace repo: carries a sandbox's own way of working.
+
+const workspaceToml = (remote: string, ref?: string): string =>
+    [
+        "schemaVersion = 1",
+        "",
+        "[workspace]",
+        `remote = ${JSON.stringify(remote)}`,
+        ...(ref === undefined ? [] : [`ref = ${JSON.stringify(ref)}`]),
+        "",
+    ].join("\n");
+
+test("the workspace travels by reference: its content arrives, and everything in it that acts by itself arrives off", async () => {
+    const remote = await publishedWorkspace();
+
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    const targetServices = servicesFor(target, {
+        automations: fileAutomationsStore(
+            join(target.work, ".intentic/config/automations.json"),
+            join(target.work, ".intentic/records/automation-runs.json"),
+        ),
+        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
+        secretRegistry: async () => [],
+    });
+    const arrivals = createArrivals(targetServices);
+
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    expect(plan.items.map((item) => [item.id, item.applicable])).toEqual([["workspace", true]]);
+    // Preview says only that things arrive switched off; it cannot know which things the tree carries yet.
+    expect(plan.needsAction.map((action) => action.subject)).toEqual(["What the workspace brings arrives switched off"]);
+
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
+    expect(report.failed).toEqual([]);
+
+    expect(await readFile(join(target.work, "notes.md"), "utf8")).toBe("workspace notes\n");
+    expect(existsSync(join(target.work, ".intentic/config/skills/mine/SKILL.md"))).toBe(true);
+    // Settings and capabilities are their own checklist items; selecting workspace can't smuggle their copies in.
+    expect(existsSync(join(target.work, ".intentic/config/settings.json"))).toBe(false);
+    expect(existsSync(join(target.work, ".intentic/config/capabilities.json"))).toBe(false);
+
+    // The automation the tree carried lands off; the scheduler fires enabled ones unattended.
+    expect((await targetServices.automations.list()).map((automation) => [automation.id, automation.enabled])).toEqual([["nightly", false]]);
+    // Workspace extension lands off: an absent enablement entry means enabled by default.
+    expect(JSON.parse(await readFile(join(target.work, ".intentic/config/extension-enablement.json"), "utf8"))).toEqual({ "acme.hello": false });
+    // The overlay lands as a draft for the approval gate, not pre-approved.
+    expect(existsSync(join(target.work, ".intentic/config/environment.custom.Dockerfile"))).toBe(false);
+    expect(await readFile(join(target.work, ".intentic/config/environment.d/workspace.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
+    expect(report.needsAction.map((action) => action.subject)).toEqual([
+        "What the workspace brings arrives switched off",
+        "Approve and rebuild the environment",
+        "Turn on the automations you want",
+        "Enable the workspace extensions you trust",
+    ]);
+
+    // A definition derived here now names the same remote.
+    const { definition, omitted } = await deriveDefinition(targetServices);
+    expect(definition.workspace).toEqual({ remote, ref: "main" });
+    expect(omitted).toEqual([]);
+    await cleanup();
+});
+
+test("an unpublished workspace is named as the export's first omission, with what publishing would buy", async () => {
+    const source = await makeRoots();
+    await makeWorkspaceRepo(source.work);
+    const { definition, omitted } = await deriveDefinition(
+        servicesFor(source, { sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) }, secretRegistry: async () => [] }),
+    );
+    expect(definition.workspace).toBeUndefined();
+    expect(omitted[0]?.subject?.toLowerCase()).toContain("workspace");
+    expect(omitted[0]?.detail?.length).toBeGreaterThan(0);
+    await cleanup();
+});
+
+test("a workspace with a history of its own, or one already published, is never taken over", async () => {
+    const remote = await publishedWorkspace();
+
+    // Two commits mark this workspace as already worked in, not fresh.
+    const worked = await makeRoots();
+    await makeWorkspaceRepo(worked.work, 2);
+    const workedPlan = await createArrivals(servicesFor(worked)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(workedPlan.items[0]?.applicable).toBe(false);
+    expect(workedPlan.items[0]?.reason?.length).toBeGreaterThan(0);
+
+    // Already published: a definition lands beside an existing clone, never over it.
+    const published = await makeRoots();
+    await makeWorkspaceRepo(published.work);
+    await defaultGit(published.work, ["remote", "add", "origin", remote]);
+    const publishedPlan = await createArrivals(servicesFor(published)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(publishedPlan.items[0]?.applicable).toBe(false);
+    expect(publishedPlan.items[0]?.reason).not.toBe(workedPlan.items[0]?.reason);
+    await cleanup();
+});
+
+test("one commit is not provenance: only the daemon-marked baseline is pristine", async () => {
+    const remote = await publishedWorkspace();
+
+    const unmarked = await makeRoots();
+    await makeWorkspaceRepo(unmarked.work);
+    await defaultGit(unmarked.work, ["config", "--unset-all", ROOT_BASELINE_CONFIG]);
+    const unmarkedPlan = await createArrivals(servicesFor(unmarked)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(unmarkedPlan.items[0]?.applicable).toBe(false);
+
+    const dirty = await makeRoots();
+    await makeWorkspaceRepo(dirty.work);
+    await writeFile(join(dirty.work, "notes.md"), "mine\n");
+    const dirtyPlan = await createArrivals(servicesFor(dirty)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(dirtyPlan.items[0]?.applicable).toBe(false);
+
+    const baseline = await makeRoots();
+    await makeWorkspaceRepo(baseline.work);
+    const baselinePlan = await createArrivals(servicesFor(baseline)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(baselinePlan.items[0]?.applicable).toBe(true);
+
+    const unborn = await makeRoots();
+    await defaultGit(unborn.work, ["init", "-b", "main"]);
+    const unmarkedUnborn = await createArrivals(servicesFor(unborn)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(unmarkedUnborn.items[0]?.applicable).toBe(false);
+    await defaultGit(unborn.work, ["config", ROOT_FRESH_CONFIG, "true"]);
+    const markedUnborn = await createArrivals(servicesFor(unborn)).plan(streamOf(workspaceToml(remote)), LIMIT);
+    expect(markedUnborn.items[0]?.applicable).toBe(true);
+    await cleanup();
+});
+
+test("workspace selection preserves the target files owned by unticked definition sections", async () => {
+    const remote = await publishedWorkspace();
+    const target = await makeRoots();
+    await mkdir(join(target.work, ".intentic/config"), { recursive: true });
+    const settings = '{"workspaceMap":false}\n';
+    const capabilities = '[{"id":"mine","kind":"mcp","config":{"url":"https://mine.example/mcp"}}]\n';
+    const overlay = "RUN echo target-approved\n";
+    await writeFile(join(target.work, ".intentic/config/settings.json"), settings);
+    await writeFile(join(target.work, ".intentic/config/capabilities.json"), capabilities);
+    await writeFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), overlay);
+    await makeWorkspaceRepo(target.work);
+
+    const arrivals = createArrivals(
+        servicesFor(target, {
+            sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
+            secretRegistry: async () => [],
+        }),
+    );
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
+
+    expect(report.failed).toEqual([]);
+    expect(await readFile(join(target.work, ".intentic/config/settings.json"), "utf8")).toBe(settings);
+    expect(await readFile(join(target.work, ".intentic/config/capabilities.json"), "utf8")).toBe(capabilities);
+    expect(await readFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), "utf8")).toBe(overlay);
+    // An unticked workspace item still lands its overlay only as a draft proposal, never trusted.
+    expect(await readFile(join(target.work, ".intentic/config/environment.d/workspace.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
+    await cleanup();
+});
+
+test("private ignored state in a remote is refused before checkout and the target secret is untouched", async () => {
+    const remote = await publishedWorkspace(async (work) => {
+        await mkdir(join(work, ".intentic/secrets/auth"), { recursive: true });
+        await writeFile(join(work, ".intentic/secrets/auth/token.json"), '{"token":"foreign"}\n');
+    });
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    await mkdir(join(target.work, ".intentic/secrets/auth"), { recursive: true });
+    await writeFile(join(target.work, ".intentic/secrets/auth/token.json"), '{"token":"mine"}\n');
+
+    const arrivals = createArrivals(servicesFor(target));
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    expect(plan.items[0]?.applicable).toBe(true); // the private file is ignored; the marked baseline stays clean
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
+
+    expect(report.applied).toEqual([]);
+    expect(report.failed[0]?.error).toContain(".intentic/secrets/auth/token.json");
+    expect(await readFile(join(target.work, ".intentic/secrets/auth/token.json"), "utf8")).toBe('{"token":"mine"}\n');
+    expect(await workspaceRemoteUrl(target.work)).toBeUndefined();
+    await cleanup();
+});
+
+test("symlinks and unreadable active manifests fail closed before the workspace lands", async () => {
+    const linkedRemote = await publishedWorkspace(async (work) => {
+        await symlink("notes.md", join(work, "linked-notes.md"));
+    });
+    const linkedTarget = await makeRoots();
+    await makeWorkspaceRepo(linkedTarget.work);
+    const linkedArrivals = createArrivals(servicesFor(linkedTarget));
+    const linkedPlan = await linkedArrivals.plan(streamOf(workspaceToml(linkedRemote, "main")), LIMIT);
+    const linkedReport = await linkedArrivals.apply({ token: linkedPlan.token, items: ["workspace"], includeSecrets: false });
+    expect(linkedReport.failed[0]?.error).toContain("120000");
+    expect(existsSync(join(linkedTarget.work, "notes.md"))).toBe(false);
+
+    const brokenRemote = await publishedWorkspace(async (work) => {
+        await writeFile(join(work, ".intentic/config/automations.json"), "not json\n");
+    });
+    const brokenTarget = await makeRoots();
+    await makeWorkspaceRepo(brokenTarget.work);
+    const brokenArrivals = createArrivals(servicesFor(brokenTarget));
+    const brokenPlan = await brokenArrivals.plan(streamOf(workspaceToml(brokenRemote, "main")), LIMIT);
+    const brokenReport = await brokenArrivals.apply({ token: brokenPlan.token, items: ["workspace"], includeSecrets: false });
+    expect(brokenReport.failed[0]?.error).toContain("automations.json");
+    expect(existsSync(join(brokenTarget.work, "notes.md"))).toBe(false);
+    expect(await workspaceRemoteUrl(brokenTarget.work)).toBeUndefined();
+    await cleanup();
+});

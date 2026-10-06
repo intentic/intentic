@@ -6,6 +6,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { errnoCode } from "@intentic/base/errors";
 import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
+import { isUtf8, trimUtf8Window } from "@intentic/base/utf8-text";
 import { nodeStream, webStream } from "@intentic/base/web-stream";
 
 // Reads and writes of one file, with the daemon's semantics for /work (_sandbox/sandbox/src/workspace/files/
@@ -31,59 +32,6 @@ export interface FileWindow {
     // The window's bytes are not UTF-8, so `content` holds replacement characters where they failed to decode.
     readonly lossy?: true;
 }
-
-// Whether bytes decode as UTF-8 with nothing replaced. A window is cut on character boundaries (below), so a UTF-8
-// file's window always passes and a failure is the file's own.
-export const isUtf8 = (bytes: Uint8Array): boolean => {
-    try {
-        new TextDecoder(`utf-8`, { fatal: true }).decode(bytes);
-        return true;
-    } catch {
-        // allow(silent-catch): the decoder's only complaint is the one this answers.
-        return false;
-    }
-};
-
-// A utf8 continuation byte (0b10xxxxxx): the middle of a character, never a cut point.
-const isContinuation = (byte: number): boolean => (byte & 0b1100_0000) === 0b1000_0000;
-
-// Bytes in a character from its lead byte.
-const sequenceLength = (byte: number): number => (byte >= 0b1111_0000 ? 4 : byte >= 0b1110_0000 ? 3 : byte >= 0b1100_0000 ? 2 : 1);
-
-// Where a window's clean text starts and ends inside the bytes read for it.
-interface ByteRange {
-    readonly start: number;
-    readonly end: number;
-}
-
-// Trims a byte window to a clean decode: no partial character or line at a boundary that is not the file's own end.
-const trimToBoundaries = (buffer: Buffer, atStart: boolean, atEnd: boolean): ByteRange => {
-    let start = 0;
-    let end = buffer.length;
-    if (!atStart) {
-        while (start < end && isContinuation(buffer[start] ?? 0)) {
-            start += 1;
-        }
-        const newline = buffer.indexOf(0x0a, start);
-        if (newline !== -1) {
-            start = newline + 1;
-        }
-    }
-    if (!atEnd) {
-        const newline = buffer.lastIndexOf(0x0a, end - 1);
-        if (newline !== -1 && newline >= start) {
-            return { start, end: newline + 1 };
-        }
-        let lead = end - 1;
-        while (lead > start && isContinuation(buffer[lead] ?? 0)) {
-            lead -= 1;
-        }
-        if (end - lead < sequenceLength(buffer[lead] ?? 0)) {
-            end = lead;
-        }
-    }
-    return { start, end };
-};
 
 // A window of a file's text; undefined when it is missing or not a file. A negative offset reads the tail.
 export const readWindow = async (abs: string, offset = 0, limit = MAX_TEXT_BYTES): Promise<FileWindow | undefined> => {
@@ -113,7 +61,7 @@ export const readWindow = async (abs: string, offset = 0, limit = MAX_TEXT_BYTES
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, from - probe);
         const slice = buffer.subarray(probe, bytesRead);
         const atStart = probe === 0 || buffer[0] === 0x0a;
-        const { start, end } = trimToBoundaries(slice, atStart, from + slice.length >= size);
+        const { start, end } = trimUtf8Window(slice, atStart, from + slice.length >= size);
         const read = { content: slice.toString(`utf8`, start, end), size, offset: from + start, bytes: end - start };
         return isUtf8(slice.subarray(start, end)) ? read : { ...read, lossy: true };
     } catch {

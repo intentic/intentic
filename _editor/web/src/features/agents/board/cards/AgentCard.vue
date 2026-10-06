@@ -2,32 +2,34 @@
 import {
     type ActionItem,
     Button,
+    formatMoney,
     OverflowActions,
     ProgressRing,
     ResponsiveOverlay,
     SandboxLogo,
     SegmentRing,
+    timeAgo,
     type Tip,
     type TooltipValue,
     ui,
     useDevice,
 } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
 import { requestLandAgent } from "../../fleet/agentActions";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
-import { useRole } from "../../../sandbox/secrets/useRole";
+import { useRole } from "../../../../client/sandbox/useRole";
 import { useAudience } from "../../../../app/useAudience";
-import { useVocabulary } from "../../../../core-views/vocabulary";
-import OriginMark from "../../../../components/OriginMark.vue";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
+import OriginMark from "../../fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
 import { parentOf, sessionMark } from "../ownership";
-import { useAuth } from "../../../auth/useAuth";
-import { presenceOthers } from "../../../../shell/presence/usePresence";
+import { useAuth } from "../../../../client/auth/useAuth";
+import { presenceOthers } from "../../../../workbench/presence/usePresence";
 import UnsentMark from "../../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
@@ -41,7 +43,6 @@ import {
     contextPct,
     type FamilyChip,
     type FleetLane,
-    formatCost,
     landedAway,
     landedDelivery,
     landFailure,
@@ -75,14 +76,13 @@ import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
 import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../chat/panel/useChat-strip";
 import { providerAccounts } from "../../../chat/accounts/providerAccounts";
-import { markSegments } from "../../review/markSegments";
+import { markSegments } from "../../../../lib/markSegments";
 import { settingsChip, useSettingsRefusal } from "../../review/settingsRefusal";
 import { useAgents } from "../../fleet/useAgents";
 import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
-import { relativeTime } from "../../../chat/models/catalog";
 import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
-import { formatChord, isApplePlatform } from "../../../../shell/commands/keybindings";
+import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 
 // One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,
 // drill-in, and either the running elapsed or the settled date).
@@ -314,7 +314,7 @@ const requestLand = async (): Promise<void> => {
         await requestLandAgent(props.agent.id, props.agent.sandboxId);
         await (props.agent.sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
     } catch (caught) {
-        agentsNotice.value = errorMessage(caught, `Couldn't send the land request.`);
+        agentsNotice.value = messageOr(caught, `Couldn't send the land request.`);
     } finally {
         requesting.value = false;
     }
@@ -432,7 +432,7 @@ const sendAgain = async (): Promise<void> => {
         await useAgents().resumeHeldTurn(props.agent.id);
     } catch (caught) {
         // The card is left as it was and the words are still safe in the composer; the strip says why nothing moved.
-        agentsNotice.value = errorMessage(caught, `Couldn't send that again.`);
+        agentsNotice.value = messageOr(caught, `Couldn't send that again.`);
     } finally {
         resending.value = false;
     }
@@ -468,7 +468,7 @@ const chipHint = computed(
         chip.value?.hint ??
         (chip.value?.seenAt === undefined
             ? undefined
-            : { title: t(`agents.agentCard.newActivity`), rows: [{ label: t(`agents.agentCard.lastOpened`), value: relativeTime(chip.value.seenAt) }] }),
+            : { title: t(`agents.agentCard.newActivity`), rows: [{ label: t(`agents.agentCard.lastOpened`), value: timeAgo(chip.value.seenAt, { days: true }) }] }),
 );
 
 const edit = createInlineRename(
@@ -895,7 +895,7 @@ const grab = (event: PointerEvent): void => {
                     <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                 </span>
                 <!-- Lifetime cost total, read-only here. -->
-                <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
+                <span v-if="agent.costUsd !== undefined">{{ formatMoney(agent.costUsd) }}</span>
                 <!-- Opt-in geek metrics, beside what it cost: what its processes hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                 <SessionMetrics v-if="localOnly" :conversation-id="agent.id" />
                 <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->

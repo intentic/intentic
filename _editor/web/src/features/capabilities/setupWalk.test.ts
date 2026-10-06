@@ -1,7 +1,7 @@
 // Pins the recommended-setup walk: its queue (recommended tiles nothing is connected on, derived, never snapshotted),
 // the tile after the one on screen, where a finished or skipped tile goes, and "Not needed" moving on only once the
 // daemon took it.
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { CapabilityCatalogEntry, CapabilityCategory } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";

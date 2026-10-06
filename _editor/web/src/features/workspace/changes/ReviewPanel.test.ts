@@ -3,28 +3,27 @@
 // second — so a clean tree blinked between its answer and its waiting line for as long as the writes lasted. Only a
 // render can tell those two sentences apart.
 import "@intentic/testing/dom";
-import type { GitChangesResponse } from "@intentic/api-contract";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary, GitChanges } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
-import { signalConnection } from "../../sandbox/client/useSandbox";
+import { signalConnection } from "../../../client/sandbox/useSandbox";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { changesKey } from "./useChanges";
-import * as actualSandboxRpc from "../../sandbox/client/sandboxRpc";
+import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Every daemon read in the panel's graph goes through the typed client. `git.changes` is handed out a request at a
 // time, so a read can be held open while the assertions run; every other procedure throws naming itself, since no
 // other read decides anything here.
-const held: ((response: GitChangesResponse) => void)[] = [];
-const changes = jest.fn(() => new Promise<GitChangesResponse>((resolve) => held.push(resolve)));
+const held: ((response: GitChanges) => void)[] = [];
+const changes = jest.fn(() => new Promise<GitChanges>((resolve) => held.push(resolve)));
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes } }) }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 
@@ -53,7 +52,7 @@ const settle = async (): Promise<void> => {
 };
 
 // Settles the oldest held read, then lets the render catch up.
-const answer = async (response: GitChangesResponse): Promise<void> => {
+const answer = async (response: GitChanges): Promise<void> => {
     held.shift()?.(response);
     await settle();
 };

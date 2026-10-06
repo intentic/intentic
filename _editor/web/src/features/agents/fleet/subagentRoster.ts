@@ -1,7 +1,7 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The sandbox's roster of every subagent its conversations started, in-process and spawned alike: one cache for the
 // board, whose cards carry them in their trays (childFold), and for the chat's delegation cards, which read how one is

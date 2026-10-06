@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { promisify } from "node:util";
 import { byteName, escapeFor, isBinaryPath, isForbiddenByte } from "@intentic/constants/control-bytes";
+import { gitIgnores } from "../git-ignores.js";
 
 // The byte scan every edit gets, in every repository: a tool call's JSON spells the escape `\u0000` as the byte itself,
 // so one missing backslash writes the very byte the escape exists to avoid, and every later Read renders it as nothing.
@@ -10,14 +9,6 @@ import { byteName, escapeFor, isBinaryPath, isForbiddenByte } from "@intentic/co
 // Enough to send someone to every one of them; a file with more has a different problem.
 const MAX_REPORTED = 10;
 
-const run = promisify(execFile);
-
-// Ignored files (logs, caches, bytecode) are nobody's source; a failed ask reads as not ignored, the stricter answer.
-const ignored = (file: string): Promise<boolean> =>
-    run("git", ["check-ignore", "-q", file], { cwd: dirname(file) }).then(
-        () => true,
-        () => false,
-    );
 
 interface Finding {
     readonly line: number;
@@ -65,7 +56,8 @@ export const editBytesReviewer =
         }
         const onDisk = deps.onDisk(file);
         const content = await readFile(onDisk).catch(() => undefined);
-        if (content === undefined || !content.some(isForbiddenByte) || (await ignored(onDisk))) {
+        // Ignored files (logs, caches, bytecode) are nobody's source.
+        if (content === undefined || !content.some(isForbiddenByte) || (await gitIgnores(dirname(onDisk), onDisk))) {
             return undefined;
         }
         return messageOf(relative, how, findingsIn(content));

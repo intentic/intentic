@@ -51,6 +51,9 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # The time-limited child every short read here goes through, shared with `ic` so a fix to it reaches both.
 intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
+# What docker's refusals mean and where Docker Desktop lives, the one reading `ic` makes too (a broken engine is told
+# from a slow one the same way in both, and Docker Desktop is found wherever `ic`'s probe would find it).
+intentic-docker-host = { path = "../../../_sandbox/ic/docker-host" }
 # A delete in a local window goes to the Recycle Bin or the Trash, never straight off the disk (local.rs): the one
 # platform API behind a crate rather than written here, because each OS spells it differently (the freedesktop
 # trash spec on Linux, the shell's IFileOperation on Windows). MIT. Default features: `chrono` is what writes the

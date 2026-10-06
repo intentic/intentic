@@ -3,7 +3,7 @@
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { workspaceDir } from "../health/workspaceScope";
+import { workspaceDir } from "../../../app/workspaceScope";
 import { useCover } from "./useCover";
 import { useHome } from "./useHome";
 import HomeCoverDocument from "./HomeCoverDocument.vue";

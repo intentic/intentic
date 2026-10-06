@@ -1,12 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { constants, zstdCompressSync } from "node:zlib";
-import { mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { openLog, readFrame, writeLog } from "./record-log.js";
 import { keptLine } from "./record-rows.js";
-import { syncParents, writeAll } from "./record-io.js";
+import { writeDurable } from "./record-io.js";
 
 // Turning a plain JSONL record into the log (record-log.ts): the one conversion this format asks of records written
 // before it, run once per record by the migration (record-migration.ts) and by the record itself when it must change
@@ -55,19 +54,8 @@ export interface Converted {
 }
 
 // Writes `bytes` zstd-compressed to `path`, durable before this resolves, never leaving a half-written file there.
-const writeCompressed = async (path: string, bytes: Buffer): Promise<void> => {
-    await mkdir(dirname(path), { recursive: true });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    const handle = await open(temporary, "w");
-    try {
-        await writeAll(handle, zstdCompressSync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }));
-        await handle.datasync();
-    } finally {
-        await handle.close();
-    }
-    await rename(temporary, path);
-    await syncParents(path);
-};
+const writeCompressed = (path: string, bytes: Buffer): Promise<void> =>
+    writeDurable(path, [zstdCompressSync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } })]);
 
 export interface Conversion {
     readonly historyRoot: string;

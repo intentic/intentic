@@ -1,11 +1,11 @@
-import type { PanelSummary } from "@intentic/api-contract";
+import type { PanelSummary } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { withinScope } from "../../app/projectScope";
 import { rpcKey } from "../../lib/queryKeys";
-import { rpcQuery } from "../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 // Workspace repos' runtime status and content facts, via the daemon's /panels routes; list/start/stop only, since
 // discovery is convention-only and panel lifecycle lives in the daemon (no clock here). Source for the rail's extension

@@ -1,8 +1,7 @@
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { RegistryEntry } from "@intentic/registry";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
 import type { BackgroundProcessRow } from "../terminal/useBackgroundProcesses";
 import { rebuildStep } from "./model/connections";

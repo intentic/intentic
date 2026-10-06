@@ -1,5 +1,4 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
-import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary } from "@intentic/sandbox-contract";
 import { capabilityTile } from "../../capabilities/model/tiles";
 import { type ConnectionState, connectionFacts, connectionState } from "../../capabilities/model/connections";
 

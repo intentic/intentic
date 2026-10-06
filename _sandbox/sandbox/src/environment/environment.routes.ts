@@ -116,7 +116,7 @@ export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenI
             }
             return c.json(await environmentNow());
         },
-        // Rebuild once no agent is mid-turn, by the device named, as its Rebuild button would; at once when none is now.
+        // Rebuild once nothing a restart would cut is in flight, by the device named, as its Rebuild button would; at once when none is now.
         // The same floor as that button's door (the device routes).
         rebuildWhenIdle: async (c: Context<AppEnv>): Promise<Response> => {
             const denied = await ownerDenied(services, c);

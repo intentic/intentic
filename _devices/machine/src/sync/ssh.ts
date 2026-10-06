@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { withManagedInclude, withoutManagedIncludes } from "@intentic/base/ssh-config";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
 import { SshHostKeySchema, STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
@@ -213,13 +215,10 @@ export const INCLUDE_MARKER = `Include ${sshConfigName}`;
 
 // Every include spelling this agent has ever written, stripped rather than left alone: an old file's Host blocks
 // share this agent's aliases, and whichever include ssh reads first wins.
-const MANAGED_INCLUDE = /^[ \t]*Include[ \t]+"?(?:intentic-machine\.conf|intentic-sync\.conf|.*[/\\]\.intentic[/\\]sync[/\\]ssh_config)"?[ \t]*$/;
+const MANAGED_INCLUDE = /^(?:intentic-machine\.conf|intentic-sync\.conf|.*[/\\]\.intentic[/\\]sync[/\\]ssh_config)$/;
+const isManagedInclude = (path: string): boolean => MANAGED_INCLUDE.test(path);
 
-export const stripManagedIncludes = (config: string): string =>
-    config
-        .split("\n")
-        .filter((line) => !MANAGED_INCLUDE.test(line))
-        .join("\n");
+export const stripManagedIncludes = (config: string): string => withoutManagedIncludes(config, isManagedInclude);
 
 // A local ssh call that reads config or writes a key: it answers in milliseconds, and past this it is stuck.
 const SSH_CALL_TIMEOUT_MS = 30_000;
@@ -269,14 +268,12 @@ export const writeManagedSshConfig = async (fragment: string): Promise<void> => 
     await writeFile(sshConfigPath, fragment, { mode: 0o600 });
     // Only an absent config starts empty: the rename below replaces the file, and one that could not be read is the user's.
     const current = (await readFile(userSshConfigPath, "utf8").catch(undefinedIfMissing)) ?? "";
-    const desired = `${INCLUDE_MARKER}\n${stripManagedIncludes(current)}`;
+    const desired = withManagedInclude(current, INCLUDE_MARKER, isManagedInclude);
     if (desired === current) {
         return;
     }
-    // Temp file + rename: a crash mid-write must never truncate the user's whole ssh config.
-    const tmp = `${userSshConfigPath}.intentic-tmp`;
-    await writeFile(tmp, desired, { mode: 0o600 });
-    await rename(tmp, userSshConfigPath);
+    // Staged and renamed over: a crash mid-write must never truncate the user's whole ssh config.
+    await writeFileAtomic(userSshConfigPath, desired, 0o600);
 };
 
 // Undo exactly what writeManagedSshConfig did, our fragment and our include line, nothing else of the user's.
@@ -285,7 +282,8 @@ export const removeManagedSshConfig = async (): Promise<void> => {
     const current = await readFile(userSshConfigPath, "utf8").catch(() => "");
     const stripped = stripManagedIncludes(current);
     if (stripped !== current) {
-        await writeFile(userSshConfigPath, stripped, { mode: 0o600 });
+        // Atomic for the same reason as the write above: this is the user's whole ssh config.
+        await writeFileAtomic(userSshConfigPath, stripped, 0o600);
     }
 };
 

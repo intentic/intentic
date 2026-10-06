@@ -166,3 +166,46 @@ test("what the gateway watched go by becomes the history a later mention carries
     ]);
     listener.stopAll();
 });
+
+// Telegram never hands a bot its own messages as updates, so the ring would otherwise hold only the other side of the
+// conversation; Discord's and Slack's history APIs and WhatsApp's store all carry our replies, marked `self`.
+test("our painted reply is in the history the next mention carries, marked as ours", async () => {
+    const calls: { method: string; body: object }[] = [];
+    const fake = fakeCtx();
+    const connection = fakeConnection(calls);
+    const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
+    listener.onUpdate(connection, { update_id: 1, message: message({ message_id: 1, text: `@${SELF_NAME} status?` }) });
+    await waitFor(() => expect(calls.some((call) => call.method === "sendMessage")).toBe(true));
+    listener.onUpdate(connection, { update_id: 2, message: message({ message_id: 2, text: `@${SELF_NAME} and now?` }) });
+    await waitFor(() => expect(fake.streamed).toHaveLength(2));
+    expect(fake.streamed[1]?.["history"]).toEqual([
+        { author: { id: "42", name: "Ada Lovelace" }, content: `@${SELF_NAME} status?`, timestamp: "2025-08-13T16:20:30.000Z" },
+        { author: { id: String(SELF_ID), name: SELF_NAME }, content: "on it", timestamp: expect.any(String), self: true },
+    ]);
+    listener.stopAll();
+});
+
+test("a message the daemon delivers between turns is history too, one entry per message it took", async () => {
+    const calls: { method: string; body: object }[] = [];
+    const fake = fakeCtx();
+    const connection = fakeConnection(calls);
+    const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
+    await listener.deliver("-100123", `${"x".repeat(4_096)  }tail`);
+    expect(calls.map((call) => call.body)).toEqual([
+        { chat_id: "-100123", text: "x".repeat(4_096) },
+        { chat_id: "-100123", text: "tail" },
+    ]);
+    listener.onUpdate(connection, { update_id: 1, message: message({ message_id: 3, text: `@${SELF_NAME} did that land?` }) });
+    await waitFor(() => expect(fake.streamed).toHaveLength(1));
+    const ours = { author: { id: String(SELF_ID), name: SELF_NAME }, timestamp: expect.any(String), self: true };
+    expect(fake.streamed[0]?.["history"]).toEqual([
+        { ...ours, content: "x".repeat(4_096) },
+        { ...ours, content: "tail" },
+    ]);
+    listener.stopAll();
+});
+
+test("with no bot connected a delivery is refused in words the owner can act on", async () => {
+    const listener = createTelegramListener(fakeCtx().ctx, () => new Map());
+    await expect(listener.deliver("1", "hi")).rejects.toThrow("no Telegram bot is connected");
+});

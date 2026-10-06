@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type OffloadFrame, type OffloadRecord, type OffloadTarget, offloadContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -34,7 +35,7 @@ export const offloadTarget = async (deps: OffloadDeps, runner: string): Promise<
 };
 
 // A runner that predates offloading has no such procedure; oRPC says so in its own words.
-const isMissingProcedure = (error: unknown): boolean => /not.?found|no procedure|unknown procedure/iu.test(error instanceof Error ? error.message : String(error));
+const isMissingProcedure = (error: unknown): boolean => /not.?found|no procedure|unknown procedure/iu.test(errorMessage(error));
 
 export const createOffloadRoutes = (deps: OffloadDeps) => {
     const i = implement(offloadContract).$context<OrpcContext>();
@@ -87,7 +88,7 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
             } catch (error) {
                 const why = isMissingProcedure(error)
                     ? `the runner on ${target.name} predates offloading; update it from Devices`
-                    : `the link to ${target.name} failed: ${error instanceof Error ? error.message : String(error)}`;
+                    : `the link to ${target.name} failed: ${errorMessage(error)}`;
                 Object.assign(entry, { endedAt: Date.now(), failure: why });
                 deps.logger.warn({ err: error, runner, runId: command.runId }, "offload: run failed");
                 // Before anything ran there, the line can still run here; after, the output already came from there.

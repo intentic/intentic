@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MarkdownFigure } from "@intentic/ui";
+import { MarkdownParts } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { planParts } from "@intentic/sandbox-contract";
 import { computed } from "vue";
@@ -42,10 +42,7 @@ const needs = openFor(() => conversation.value.conversationId);
     <!-- The plan's own heading, not prose; the body below repeats it. -->
     <ChatCard icon="list-check" icon-class="text-link" :title="title" :status="planStatus(card)">
         <div class="md-prose chat-markdown chat-markdown-compact chat-card-body">
-            <template v-for="(part, index) in plan" :key="index">
-                <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
-                <MarkdownFigure v-else :figure="part.figure" />
-            </template>
+            <MarkdownParts :parts="plan" />
         </div>
         <!-- Shown only when the model wrote the plan to a file and summarized it in the adjacent prose (agent.ts). -->
         <ChatDocumentBody

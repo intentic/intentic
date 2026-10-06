@@ -36,7 +36,7 @@ jest.mock(`../../app/environments/desktop`, () => ({
 
 const renderButton = jest.fn<() => Promise<boolean>>();
 const needsSignIn = ref(true);
-jest.mock(`./useGoogleIdentity`, () => ({
+jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({
         needsSignIn,
         renderButton,
@@ -45,10 +45,10 @@ jest.mock(`./useGoogleIdentity`, () => ({
         adoptIdToken: jest.fn(),
     }),
 }));
-jest.mock(`./useAuth`, () => ({
+jest.mock(`../../client/auth/useAuth`, () => ({
     useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: jest.fn(), signInWithGoogleCredential: jest.fn() }),
 }));
-jest.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
+jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
 jest.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: jest.fn() } } }));
 
 const { default: Login } = await import("./Login.vue");

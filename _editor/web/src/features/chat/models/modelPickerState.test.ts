@@ -18,7 +18,7 @@ import { endpointProviders, LOCAL_MODELS_GROUP } from "../accounts/providerCatal
 // during the window before catalogs adopt it.
 
 // modelPicker imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
 jest.mock("./useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });

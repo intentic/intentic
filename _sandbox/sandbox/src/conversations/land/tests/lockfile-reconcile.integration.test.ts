@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GitRunner } from "@intentic/scaffold";
+import type { GitRunner } from "@intentic/base/git";
 import { lockfileBehind, reconcileLockfile } from "../lockfile-reconcile.js";
 
 // A fake tree: what `git status` and `git diff --name-only` answer, and whether a lockfile exists on disk.

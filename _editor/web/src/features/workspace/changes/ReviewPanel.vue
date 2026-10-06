@@ -1,33 +1,41 @@
 <script setup lang="ts">
-import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
-import { isScratch } from "@intentic/sandbox-contract";
+import {
+    isScratch,
+    type GitChange,
+    type GitDiffSide,
+    type LandedMessage,
+    type LandedMessageDraft,
+    type RepoChanges,
+    type RepoTarget,
+} from "@intentic/sandbox-contract";
 import {
     Button,
     ChangeStatusMark,
     clipboardOf,
     ContextMenu,
+    formatElapsed,
     growTextarea,
-    ui,
+    type IconName,
     Modal,
     timeAgo,
-    useDevice,
-    type IconName,
     type Tip,
     type TipRow,
     type TooltipValue,
+    ui,
+    useDevice,
     vAction,
 } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
-import HoverCard from "../../../components/HoverCard.vue";
-import ReviewStat from "../../../components/ReviewStat.vue";
+import HoverCard from "../../chat/tabs/HoverCard.vue";
+import ReviewStat from "./ReviewStat.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../explorer/fileType";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useChat } from "../../chat/run/useChat";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commitMessage";
 import {
     ALL_SIDES,
@@ -42,7 +50,7 @@ import {
     summarizeOrigins,
     YOURS,
 } from "./changeOrigins";
-import { currentAction, formatElapsed, unfinishedMark } from "../../agents/fleet/agentStatus";
+import { currentAction, unfinishedMark } from "../../agents/fleet/agentStatus";
 import { diffRawUrls } from "./diffRaw";
 import { repoOfPath, turnWrites } from "../files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../push/outgoingWork";
@@ -59,13 +67,13 @@ import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { changeRowMenuItems } from "./changeRowMenu";
 import { useHome } from "../home/useHome";
-import { useNotifications } from "../../../shell/notifications/notifications";
-import { formatChord, isApplePlatform } from "../../../shell/commands/keybindings";
+import { useNotifications } from "../../../workbench/notifications/notifications";
+import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
 // sides (a path can be on both with different content). Staging IS the selection — no checkboxes; git already
@@ -160,7 +168,7 @@ const originNote = (id: string): string | undefined => {
     }
     const turn = agent.turns !== undefined && agent.turns > 0 ? `turn ${agent.turns + 1}` : undefined;
     const doing = currentAction(agent.activity);
-    const since = agent.startedAt !== undefined ? formatElapsed(agent.startedAt, Date.now()) : undefined;
+    const since = agent.startedAt !== undefined ? formatElapsed((Date.now() - agent.startedAt) / 1000) : undefined;
     return [mark.label, turn, doing, since].filter((part) => part !== undefined && part !== ``).join(` · `);
 };
 
@@ -939,7 +947,7 @@ const stageLine = computed<string | undefined>(() => {
         // The run carries the label it was asked with; the verb that label belongs to says its running word.
         const verb = pushFlow.pending.value?.verb;
         const running = Object.values(SYNC_VERB.value).find((entry) => entry.label === verb)?.running ?? SYNC_VERB.value.push.running;
-        return t(`workspace.reviewPanel.runningFor`, { running, elapsed: formatElapsed(pushFlow.since.value, now.value) });
+        return t(`workspace.reviewPanel.runningFor`, { running, elapsed: formatElapsed((now.value - pushFlow.since.value) / 1000) });
     }
     const sent = pushFlow.pushed.value;
     return sent === undefined ? undefined : t(`workspace.reviewPanel.pushedWhat`, { what: sent.what });

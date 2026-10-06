@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { type Capability, capabilitiesContract, CapabilitySchema, collidesWithReservedServer, isVaulted } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import { callingExtension } from "../auth/grants.js";
 import type { Services } from "../composition.js";
@@ -10,7 +10,6 @@ import { capabilityJobSession } from "../terminal/terminal-session.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
-import { capabilityFragments } from "../environment/fragment-sources.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
 import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { type CapabilityCtx, capabilityCtx } from "./capability.js";
@@ -230,7 +229,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 // Folds this entry's image fragments into the overlay; upsert happens first so compose can see them.
                 const composedHash = await composeEnvironment(services);
                 if (
-                    (await capabilityFragments(services, entry)).length > 0 &&
+                    (await services.environmentSources.capabilityFragments(entry)).length > 0 &&
                     composedHash !== undefined &&
                     composedHash !== services.config.sandbox.environmentHash
                 ) {

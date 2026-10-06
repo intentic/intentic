@@ -1,19 +1,19 @@
 // Pins the optimistic write and rollback the settings page relies on; jsdom mounts a component so vue-query's injection
 // is in place.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import { SandboxHttpError } from "../client/sandboxHttpError";
-import type { SandboxRpc } from "../client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 const get = jest.fn<SandboxRpc[`settings`][`get`]>();
 const set = jest.fn<SandboxRpc[`settings`][`set`]>();
-jest.mock("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
-jest.mock("../client/useSandbox", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));

@@ -122,12 +122,13 @@ export const codeOf = (path, text) =>
 const isParam = (segment) => (segment.startsWith("{") && segment.endsWith("}")) || segment.startsWith(":");
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // A route's literal segment is matched by the same text, or by a partly substituted one that could spell it; a whole
-// substitution is a value, so it only ever stands where the route has a parameter.
+// substitution is a value, so it only ever stands where the route has a parameter, and so is one whose own text is only
+// punctuation (`${n}-${name}`, a file name being built), which says nothing of any route.
 const spells = (wanted, actual) => {
     if (wanted === actual || isParam(wanted)) {
         return wanted === actual || actual !== "";
     }
-    return actual.replaceAll(HOLE, "") !== "" && new RegExp(`^${actual.split(HOLE).map(escape).join(".+")}$`).test(wanted);
+    return /[A-Za-z0-9]/.test(actual.replaceAll(HOLE, "")) && new RegExp(`^${actual.split(HOLE).map(escape).join(".+")}$`).test(wanted);
 };
 const pathOf = (value) => value.split("?")[0];
 // An app route's `:param?` may be absent; any param takes any one segment, since a screen is named by value.

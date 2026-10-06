@@ -1,4 +1,3 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { builtinModules } from "@intentic/web/builtins";
 import type {
     Environment,
@@ -7,6 +6,7 @@ import type {
     LocalModelFitResponse,
     PanelSummary,
     UsageRollupRow,
+    CapabilitySummary,
 } from "@intentic/sandbox-contract";
 import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract";
 import { deskEdition, enabledExtensions } from "../mode";

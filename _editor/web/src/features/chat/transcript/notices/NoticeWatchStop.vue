@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAgents } from "../../../agents/fleet/useAgents";
@@ -22,7 +22,7 @@ const refused = ref<string | undefined>(undefined);
 const stop = async (): Promise<void> => {
     refused.value = undefined;
     await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch((error: unknown) => {
-        refused.value = errorMessage(error, `The watch could not be stopped.`);
+        refused.value = messageOr(error, `The watch could not be stopped.`);
     });
 };
 </script>

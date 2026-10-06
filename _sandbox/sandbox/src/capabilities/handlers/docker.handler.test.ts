@@ -1,4 +1,4 @@
-import { packFragment, readPack } from "../../environment/packs.js";
+import { packFragment, readPack } from "../../image/packs.js";
 import { registry } from "../registry.js";
 import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.handler.js";
 

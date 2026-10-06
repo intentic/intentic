@@ -179,6 +179,27 @@ pub fn print_recoverable() {
 mod tests {
     use super::*;
 
+    /// The run contract's own record of these names (`@intentic/sandbox-run`), which its TypeScript and the desktop
+    /// app's Rust are held to as well: a prefix that moves in one place fails here instead of orphaning containers.
+    #[test]
+    fn the_name_prefixes_are_the_ones_the_run_contract_records() {
+        let shared: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../_shared/sandbox-run/src/names.fixture.json"
+        ))
+        .unwrap();
+        assert_eq!(shared["containerPrefix"], CONTAINER_PREFIX);
+        assert_eq!(shared["tunnelPrefix"], TUNNEL_PREFIX);
+        let slug = shared["slug"].as_str().unwrap();
+        assert_eq!(
+            shared["names"]["container"],
+            format!("{CONTAINER_PREFIX}{slug}")
+        );
+        assert_eq!(
+            shared["names"]["tunnelContainer"],
+            format!("{TUNNEL_PREFIX}{slug}")
+        );
+    }
+
     fn names(list: &[&str]) -> Vec<String> {
         list.iter().map(|name| name.to_string()).collect()
     }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract";
 import { STATE_DIR } from "@intentic/constants";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { materializedPaths } from "./changes-porcelain.js";
 import { readOnFeed } from "../feed/checkout-feed.js";

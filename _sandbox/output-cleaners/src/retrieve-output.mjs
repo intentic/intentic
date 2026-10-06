@@ -4,6 +4,8 @@
 // (case-insensitive regex, falling back to a literal substring), and caps the result to a token budget so retrieval
 // never re-floods context. This is the reversible half of lossy display / lossless storage: the footer prints the
 // exact command to run. Copied into the image as /usr/local/bin/retrieve-output.
+// The agent-CLI contract (@intentic/agent-cli's run.ts): everything, errors included, goes to stdout, since an agent
+// drops stderr; exit 0 is output, 1 a pattern that matched no line, 2 anything else (usage, an unreadable log).
 
 import { readFileSync } from "node:fs";
 
@@ -12,16 +14,16 @@ const MAX_CHARS = BUDGET_TOKENS * 4;
 
 const [logPath, pattern] = process.argv.slice(2);
 if (logPath === undefined) {
-    process.stderr.write("usage: retrieve-output <log-file> [pattern]\n");
-    process.exit(1);
+    process.stdout.write("usage: retrieve-output <log-file> [pattern]\n");
+    process.exit(2);
 }
 
 let text;
 try {
     text = readFileSync(logPath, "utf8");
 } catch (error) {
-    process.stderr.write(`retrieve-output: cannot read ${logPath}: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(1);
+    process.stdout.write(`retrieve-output: cannot read ${logPath}: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(2);
 }
 
 let lines = text.split("\n");
@@ -34,6 +36,11 @@ if (pattern !== undefined && pattern !== "") {
     }
     const needle = pattern.toLowerCase();
     lines = lines.filter((line) => (regex !== undefined ? regex.test(line) : line.toLowerCase().includes(needle)));
+    if (lines.length === 0) {
+        // Said in words: an empty answer would read the same as a log that never held the line.
+        process.stdout.write(`retrieve-output: no line in ${logPath} matches ${JSON.stringify(pattern)}\n`);
+        process.exit(1);
+    }
 }
 
 let out = lines.join("\n");

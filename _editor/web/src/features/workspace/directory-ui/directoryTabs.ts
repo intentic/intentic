@@ -1,4 +1,4 @@
-import type { ActiveExtension } from "../../../core-views/registry";
+import type { ActiveExtension } from "../../../workbench/views/registry";
 
 // Which tabs one directory's management panel shows, and in what order. Everything a repository offers to be read or
 // run is a tab here, which is why its tree row carries one cog rather than an icon per surface. Pure: the live read is

@@ -100,9 +100,13 @@ const uiDeclaration = (spec) => {
 // What the kit re-exports, values and types, read off its own emitted declaration rather than off names.mjs, which
 // lists only runtime names.
 // The narrowed entry points beside the barrel: each is the same host bridge holding one slice, for logic that wants
-// that slice without the component graph attached. A name here needs a `src/<name>.ts`, an `exports` entry in
-// package.json, and a re-export block in src/index.ts — the bridge below is generated off that block.
-const SUBPATHS = [`diff`, `format`, `i18n`, `worker`];
+// that slice without the component graph attached. Read off package.json's `exports` (every entry with a source
+// condition other than `.`), so a new one cannot be published without its bridge. Each needs a `src/<name>.ts` and a
+// re-export block in src/index.ts — the bridge below is generated off that block, and extensionUiNames.test.ts fails
+// a subpath export the block leaves out.
+const SUBPATHS = Object.entries(JSON.parse(readFileSync(join(PKG, `package.json`), `utf8`)).exports)
+    .filter(([key, entry]) => key !== `.` && entry?.[`@intentic/src`] !== undefined)
+    .map(([key]) => key.slice(`./`.length));
 
 const exportedNames = (source, fromPattern) => {
     const names = new Set();

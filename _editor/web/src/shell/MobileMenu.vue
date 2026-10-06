@@ -4,7 +4,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { Avatar, type IconName, Row, RowGroup, SandboxLogo, vAction } from "@intentic/ui";
 import { computed, onMounted } from "vue";
 import { useAudience } from "../app/useAudience";
-import { useAuth } from "../features/auth/useAuth";
+import { useAuth } from "../client/auth/useAuth";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import {
     type ActiveExtension,
@@ -16,19 +16,19 @@ import {
     tabBarIds,
     WORKSPACE_VIEW_ID,
     DEVICES_VIEW_ID,
-} from "../core-views/registry";
+} from "../workbench/views/registry";
 import { sandboxHubPath } from "../features/sandbox/sandboxNav";
 import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
 import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
-import { useVocabulary } from "../core-views/vocabulary";
-import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
+import { useVocabulary } from "../workbench/views/vocabulary";
+import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
-import { useRole } from "../features/sandbox/secrets/useRole";
+import { useRole } from "../client/sandbox/useRole";
 import { useInbox } from "../features/needs/inbox/useInbox";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { identityHue } from "../lib/identityHue";
-import { presenceActivity, presenceOthers } from "./presence/usePresence";
-import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
+import { useSandbox } from "../client/sandbox/useSandbox";
 import { connectedSandboxes, unfinishedSandboxes } from "../features/sandbox/live/roster";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
 import { placementOf, type SandboxPlacement } from "../features/sandbox/overview/placement";
@@ -36,7 +36,7 @@ import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlac
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
-import { usePushNotifications } from "../push/usePushNotifications";
+import { usePushNotifications } from "../workbench/push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";
 import MenuRow from "./MenuRow.vue";
 import RailIcon from "./rail/RailIcon.vue";

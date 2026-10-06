@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { dir, file, treeSurface } from "../../../../testing/treeSurface";
 import { markFailed, noteArriving, noteLeaving } from "../../files/provisionalEntries";

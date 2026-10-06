@@ -4,7 +4,7 @@ import { type AccountAnswer, type AccountAsk, accountRelay } from "./desktop";
 
 // THE ACCOUNT, AS A LOCAL WINDOW ASKS FOR IT (the web's localHost.ts `account`, `updateAccount`, `signOut`): Better
 // Auth's own three calls, sent by the app with the workspace's session (src-tauri/src/account.rs), and their answers
-// read the way the editor's auth client reads them (the web's features/auth/useAuth.ts).
+// read the way the editor's auth client reads them (the web's client/auth/useAuth.ts).
 
 type Relay = (ask: AccountAsk) => Promise<AccountAnswer>;
 

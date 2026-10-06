@@ -1,6 +1,6 @@
 <!-- One folder's cover on the home: the chosen file read and drawn in place, or, when the folder has none, where one is. -->
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { Code, formatBytes, Markdown, SkeletonSnapshot, ui, useLatest, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
@@ -8,7 +8,7 @@ import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { resolveFile } from "../explorer/fileType";
 import { readFileWindow } from "../files/fileWindow";
 import { openFileRefFromEvent } from "../files/refs/openFileRef";
-import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
+import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { quickLookPlan } from "./quickLookContent";
 import { picture } from "./thumbnails";

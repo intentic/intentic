@@ -84,7 +84,7 @@ self.addEventListener("notificationclick", (event) => {
                 }
                 // allow(silent-catch): A browser may refuse focus; still route the notification to the existing client.
                 await client.focus().catch(() => undefined);
-                // The open app routes there itself (shell/notifications/notificationTaps.ts), keeping its streams and
+                // The open app routes there itself (workbench/notifications/notificationTaps.ts), keeping its streams and
                 // what it has painted; a navigation reloads the whole app. A window that does not answer (a page
                 // from before this worker) still gets the navigation, where the browser has `navigate`; where it
                 // does not, focusing is still the win.

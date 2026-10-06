@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { HostedBuildState, HostedBuildStatus } from "@intentic/api-contract";
+import { errorMessage } from "@intentic/base/errors";
 import { hostedTier } from "@intentic/constants";
 import type { HostedBuild, PrismaClient } from "@intentic/prisma";
 import { isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } from "@intentic/sandbox-contract";
@@ -290,7 +291,7 @@ const finishHostedBuild = async (
             logger.error({ err, build: build.id }, `hosted build: applying the built image failed`);
             await prisma.hostedBuild.update({
                 where: { id: build.id },
-                data: { error: `built, but the machine could not be switched to it: ${err instanceof Error ? err.message : String(err)}` },
+                data: { error: `built, but the machine could not be switched to it: ${errorMessage(err)}` },
             });
         }
     }

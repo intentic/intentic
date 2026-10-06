@@ -1,4 +1,7 @@
-import { blocksStacked, HOUSE_STAGES, houseStageOf, reached } from "./agentHouse";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
+import { blocksStacked, HOUSE_STAGES, houseStageOf, reached, STAGE_OF_PHASE } from "./agentHouse";
 
 // The house on a folder's build card is drawn by what the setup has really reached: each phase builds one part, and a
 // build that is ready stands finished whatever phase it ended on.
@@ -47,4 +50,17 @@ it(`stacks the materials as the image arrives, the first as soon as it starts`, 
     expect(blocksStacked(`ground`, 1, 6)).toBe(6);
     expect(blocksStacked(`ground`, Number.NaN, 6)).toBe(1);
     expect(blocksStacked(`walls`, 0, 6)).toBe(6);
+});
+
+// The phase ids are sandbox-run's setup-progress.fixture.json, which ic and the desktop app are tested against too:
+// a phase this table names that the record does not, or one the desktop's plan draws that this table cannot place, fails.
+// SAFETY: the fixture is this repository's own file, and the assertions below fail on any field it lacks.
+const SHARED = JSON.parse(
+    readFileSync(join(repoRoot(import.meta.url), `_shared/sandbox-run/src/setup-progress.fixture.json`), `utf8`),
+) as { phases: string[]; plans: { steps: [string, number][] }[] };
+
+it(`places exactly the phases the shared setup-progress record lists for a setup's plan`, () => {
+    expect(Object.keys(STAGE_OF_PHASE).filter((phase) => !SHARED.phases.includes(phase))).toEqual([]);
+    const planned = new Set(SHARED.plans.flatMap(({ steps }) => steps.map(([phase]) => phase)));
+    expect([...planned].filter((phase) => !(phase in STAGE_OF_PHASE))).toEqual([]);
 });

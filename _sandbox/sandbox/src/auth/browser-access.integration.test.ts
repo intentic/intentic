@@ -23,3 +23,11 @@ test("a missing marker enables browser auth; any persisted marker disables it", 
     await writeFile(path, "");
     await expect(access.enabled()).resolves.toBe(false);
 });
+
+// A parent that is a file (ENOTDIR) is as certain an absence as a missing one: no marker can be there.
+test("a marker under a parent that is a file reads as absent, not as a failure", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-browser-access-"));
+    roots.push(root);
+    await writeFile(join(root, "nested"), "a file, not a folder");
+    await expect(fileBrowserAccess(join(root, "nested", "browser-access-disabled")).enabled()).resolves.toBe(true);
+});

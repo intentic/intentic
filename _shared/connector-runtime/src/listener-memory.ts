@@ -1,3 +1,5 @@
+import { RECENT_KEYS_MAX, TYPING_MAX_MS } from "./reply.js";
+
 // What a listener remembers between messages: recent delivery keys, per-chat history stand-ins, typing heartbeats.
 // Bounded and best-effort; a restart forgets all of it.
 
@@ -7,7 +9,7 @@ export interface RecentKeys {
     readonly duplicate: (key: string) => boolean;
 }
 
-export const recentKeys = (max: number): RecentKeys => {
+export const recentKeys = (max: number = RECENT_KEYS_MAX): RecentKeys => {
     const keys = new Set<string>();
     return {
         duplicate: (key) => {
@@ -62,7 +64,8 @@ export interface TypingHeartbeat {
     readonly stopAll: () => void;
 }
 
-export const typingHeartbeat = (timing: { readonly intervalMs: number; readonly maxMs: number }): TypingHeartbeat => {
+export const typingHeartbeat = (timing: { readonly intervalMs: number; readonly maxMs?: number }): TypingHeartbeat => {
+    const maxMs = timing.maxMs ?? TYPING_MAX_MS;
     const live = new Map<string, { readonly timer: NodeJS.Timeout; readonly onStop: (() => void) | undefined }>();
     const stop = (room: string): void => {
         const entry = live.get(room);
@@ -89,7 +92,7 @@ export const typingHeartbeat = (timing: { readonly intervalMs: number; readonly 
             send();
             const startedAt = Date.now();
             const timer = setInterval(() => {
-                if (Date.now() - startedAt > timing.maxMs) {
+                if (Date.now() - startedAt > maxMs) {
                     stop(room);
                     return;
                 }

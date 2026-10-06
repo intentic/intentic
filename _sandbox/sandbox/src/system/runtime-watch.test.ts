@@ -129,3 +129,61 @@ test("a new listening port refreshes the panels above it as well as the ports vi
     expect(frames[0]?.toSorted()).toEqual(["panels", "ports"]);
     unsubscribe();
 });
+
+test("a probe that cannot read its state keeps the baseline, so the failed reading publishes nothing", async () => {
+    const unsubscribe = listen();
+    const probes = fakeProbes();
+    let broken = false;
+    const sampler = createRuntimeSampler(
+        {
+            ...probes,
+            terminals: async () => {
+                if (broken) {
+                    throw new Error("tmux: server exited unexpectedly");
+                }
+                return probes.terminals();
+            },
+        },
+        60_000,
+    );
+    probes.set("terminals", "web-a\t0\t\t1");
+    await sampler.sample();
+    broken = true;
+    await expect(sampler.sample()).rejects.toThrow("server exited unexpectedly");
+    broken = false;
+    await sampler.sample();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(frames).toEqual([]);
+    unsubscribe();
+});
+
+test("a timed sample that keeps failing is said once per spell, and again after one that answered", async () => {
+    jest.useFakeTimers();
+    let broken = true;
+    const said: unknown[] = [];
+    const sampler = createRuntimeSampler(
+        {
+            terminals: async () => {
+                if (broken) {
+                    throw new Error("tmux: server exited unexpectedly");
+                }
+                return "";
+            },
+            ports: async () => "",
+        },
+        1_000,
+    );
+    sampler.start({
+        warn: (payload: unknown) => {
+            said.push(payload);
+        },
+    });
+    await advanceTimersByTimeAsync(2_500);
+    expect(said).toHaveLength(1);
+    broken = false;
+    await advanceTimersByTimeAsync(1_000);
+    broken = true;
+    await advanceTimersByTimeAsync(1_000);
+    expect(said).toHaveLength(2);
+    sampler.stop();
+});

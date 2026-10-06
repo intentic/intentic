@@ -1,7 +1,6 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
@@ -52,7 +51,7 @@ const composeYaml = (parsed: PaperlessInputs, stamp: ContainerStamp): string =>
 
 // Paperless-ngx (documents): scan, index and archive. The root URL redirects to the login page, which
 // answers 200 once the app is migrated and up, that redirect chain is the readiness probe.
-export const createPaperlessProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createPaperlessProvider = (executor: SshExecutor): Provider =>
     createComposeServiceProvider(
         {
             kind: "paperless",

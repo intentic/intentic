@@ -4,7 +4,7 @@
 import type { RemoteRefs } from "@intentic/sandbox-contract";
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { Picker, ui } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { isCommitSha } from "../model/form";
 import { initialChoice, MANUAL_KEY, refFor, refGroups, refKey, refSummary, shortSha } from "../model/refs";
@@ -87,7 +87,7 @@ const read = async (): Promise<void> => {
         refs.value = undefined;
         // A repository that cannot be read is not a dead end: the raw box is still there, and so is the reason.
         manual.value = true;
-        failure.value = errorMessage(error, `Could not read that repository.`);
+        failure.value = messageOr(error, `Could not read that repository.`);
     } finally {
         if (asked === asking) {
             reading.value = false;

@@ -16,7 +16,7 @@ import {
     revokeEnrollmentByMachine,
     revokeEnrollmentByToken,
     type SyncMode,
-} from "./desktop-sync.js";
+} from "../peers/desktop-sync.js";
 
 // Desktop sync's enrollment surface: a browser-minted pairing token is redeemed at /system/authorized-key to land an SSH
 // key, once per machine key. The pairing carries the mode: a maintainer or the owner gets sync, anyone below only ever

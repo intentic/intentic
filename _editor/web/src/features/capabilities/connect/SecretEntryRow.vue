@@ -7,7 +7,7 @@ import { RouterLink } from "vue-router";
 import type { CredentialGateScope } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { reveal, useCredentialGates, useSecrets } from "./useSecrets";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
 import SecretHostsEditor from "./SecretHostsEditor.vue";

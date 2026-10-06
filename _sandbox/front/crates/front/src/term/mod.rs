@@ -489,8 +489,9 @@ mod tests {
 
     #[test]
     fn the_routes_the_front_serves_are_the_ones_the_contract_marks_front() {
-        let table =
-            include_str!("../../../../../../_shared/sandbox-contract/src/protocol/raw-routes.ts");
+        let table = include_str!(
+            "../../../../../../_shared/sandbox-contract/src/protocol/raw/raw-routes.ts"
+        );
         let marked: Vec<String> = table
             .lines()
             .filter(|line| line.contains("front: true"))

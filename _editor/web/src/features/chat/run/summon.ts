@@ -2,7 +2,7 @@ import { onChatNote, postChatNote } from "./chatChannel";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { claimClosedDrafts } from "../drafts/closedDrafts";
 import { drawsChat } from "./chatEcho";
-import { floatingWindowPanel, raiseFloating } from "../../../shell/window/floating";
+import { floatingWindowPanel, raiseFloating } from "../../../workbench/window/floating";
 import { Conversation } from "../session/conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";

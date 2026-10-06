@@ -3,14 +3,14 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { collectOrphans, type EngineConfig, plan, rewriteGraphForMoves } from "@intentic/engine";
 import { collectSecretUsage, subgraph } from "@intentic/graph";
-import { createProviders, createSshExecutor } from "@intentic/providers";
+import { createProviders } from "@intentic/providers";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { type Baseline, pruneBase, readBaseline, removedNodes } from "../apply/baseline.js";
 import { scanRetiredHosts } from "../apply/retired-hosts.js";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_PATH, LAST_APPLIED_FILE, loadEnvFile, readArtifact } from "../lib/artifact.js";
 import { createEventsFileSink } from "../lib/events-file.js";
-import { createKnownHostsStore } from "../lib/known-hosts.js";
+import { pinnedSshExecutor } from "../lib/known-hosts.js";
 import { createOutput, createRedactor, teeOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 import { type Named, pendingBlock, planSummary, planTable, type RetiredReport, retiredBlock, scanGapBlock, unownedBlock } from "../lib/tables.js";
@@ -95,7 +95,7 @@ export const planCommand = buildCommand<PlanFlags>({
             .map((id) => id.trim())
             .filter((id) => id !== "");
         const graph = targets === undefined ? full : subgraph(full, targets);
-        const ssh = createSshExecutor(createKnownHostsStore(dir));
+        const ssh = pinnedSshExecutor(dir);
         // A plan never stops on its baseline: it reports one it cannot read, and a drift check fails on it.
         const baselinePath = flags.previous ?? join(dir, LAST_APPLIED_FILE);
         let previous: Baseline | undefined;

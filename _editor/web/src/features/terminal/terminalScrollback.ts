@@ -1,5 +1,5 @@
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 
 /* One session's pane history, read on demand for the panel's "Full scrollback" view. */
 

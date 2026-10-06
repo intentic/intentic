@@ -7,7 +7,7 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
 
 // Settings already loaded and sandbox reachable, so the blocked notice never renders.
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
 jest.mock(`./useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings: ref({}), error: ref(undefined), dropped: ref(undefined), patch: async () => undefined }),
 }));

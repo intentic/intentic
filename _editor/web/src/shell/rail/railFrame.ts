@@ -1,4 +1,4 @@
-import { ICON_RAIL_WIDTH_REM, type IconRailSize } from "./useIconRailSize";
+import { ICON_RAIL_WIDTH_REM, type IconRailSize } from "../../workbench/window/useIconRailSize";
 
 // The rail's measures as the custom properties its stylesheet reads (iconRail.css), for the shell to set on its grid: one
 // table for every shell that draws a rail, so a tile in a window on a folder is the tile the sandbox shell draws. Rail

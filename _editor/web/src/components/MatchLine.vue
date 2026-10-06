@@ -3,7 +3,7 @@
 // wrapper, icon and clamp are the caller's.
 import type { MatchSnippet } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { markSegments } from "../features/agents/review/markSegments";
+import { markSegments } from "../lib/markSegments";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

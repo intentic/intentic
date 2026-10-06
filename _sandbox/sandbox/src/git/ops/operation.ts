@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { gitDirOf } from "../git-dir.js";
 
 // The operation a worktree is halted in, and the way out. Only external actors (a terminal rebase, a user's shell, a

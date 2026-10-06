@@ -3,7 +3,6 @@ import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { AlerterConfig, KomodoApi, ResourceTarget } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
@@ -44,7 +43,7 @@ const sameTargets = (a: readonly ResourceTarget[], b: readonly ResourceTarget[])
 // deployments. Reached over an SSH port-forward to Core. read returns undefined until the Discord webhook
 // resolves (its ref is PENDING) or while Komodo is unreachable; diff detects drift in the webhook url,
 // scope, or enabled flag.
-export const createKomodoNotifyProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createKomodoNotifyProvider = (api: KomodoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         if (hasPendingRef(inputs, "webhook")) {
             return undefined;

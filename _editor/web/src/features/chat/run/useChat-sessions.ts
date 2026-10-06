@@ -1,7 +1,7 @@
 import { type Backoff, createBackoff } from "@intentic/base/async";
 import type { MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { useDevice } from "@intentic/ui";
 import { watch } from "vue";
@@ -11,8 +11,8 @@ import { agentTranscript, type AgentTranscript, freshAgentTranscript } from "../
 import type { Conversation } from "../session/conversation";
 import type { PickUp } from "./pickUp";
 import { activeId, conversations, scopedSandboxId, setConversations } from "../tabs/useChat-tabs";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
 export interface ChatSession {
@@ -47,7 +47,7 @@ export const loadSessions = async (query?: string): Promise<void> => {
     } catch (error) {
         // Our own abort means a newer read owns the menu; anything else is this read's failure to say.
         if (!controller.signal.aborted) {
-            sessionsFailure.value = errorMessage(error, `Couldn't read your past chats.`);
+            sessionsFailure.value = messageOr(error, `Couldn't read your past chats.`);
         }
     }
 };
@@ -66,7 +66,7 @@ export const fetchTranscript = async (conversation: Conversation, id: string): P
     try {
         return await readSession(conversation, id);
     } catch (error) {
-        conversation.error.value = `${t(`chat.chatPaneTurns.couldntOpen`)} ${errorMessage(error, noAnswer())}`;
+        conversation.error.value = `${t(`chat.chatPaneTurns.couldntOpen`)} ${messageOr(error, noAnswer())}`;
         return undefined;
     }
 };
@@ -92,7 +92,7 @@ const fetchAgentTranscript = async (conversation: Conversation, current: () => b
     try {
         return await (fresh ? freshAgentTranscript : agentTranscript)(conversation.conversationId, conversation.box.value);
     } catch (error) {
-        return current() ? readFailed(conversation, errorMessage(error, noAnswer())) : undefined;
+        return current() ? readFailed(conversation, messageOr(error, noAnswer())) : undefined;
     }
 };
 
@@ -144,7 +144,7 @@ const sessionRows = async (conversation: Conversation, current: () => boolean): 
     try {
         return await readSession(conversation, session.id);
     } catch (error) {
-        return current() ? readFailed(conversation, errorMessage(error, noAnswer())) : undefined;
+        return current() ? readFailed(conversation, messageOr(error, noAnswer())) : undefined;
     }
 };
 
@@ -227,7 +227,7 @@ export const hydrateOnce = (conversation: Conversation): void => {
             // Logged, since a tab that never fills says nothing; the pane says the read failed rather than going blank.
             console.warn(`hydrateOnce: ${conversation.conversationId} did not hydrate`, error);
             if (current()) {
-                readFailed(conversation, errorMessage(error, noAnswer()));
+                readFailed(conversation, messageOr(error, noAnswer()));
             }
         }
         if (!current()) {

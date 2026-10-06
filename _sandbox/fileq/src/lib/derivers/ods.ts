@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { markdownTable } from "@intentic/webq/markdown";
 import { unzipSync } from "fflate";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 import { attributeOf, decodeEntities } from "../xml.js";
@@ -65,8 +66,6 @@ const rowsOf = (xml: string): string[][] => {
     return trimEnd(rows, (row) => row.length === 0);
 };
 
-const tableRow = (cells: string[]): string => `| ${cells.map((cell) => cell.replaceAll("|", "\\|")).join(" | ")} |`;
-
 const sectionOf = (name: string, rows: string[][], notes: string[]): string => {
     if (rows.length === 0) {
         return `## ${name}\n\n(empty sheet)`;
@@ -79,8 +78,7 @@ const sectionOf = (name: string, rows: string[][], notes: string[]): string => {
         notes.push(`sheet "${name}": showing ${MAX_ROWS_PER_SHEET} of ${rows.length} rows`);
     }
     const kept = rows.slice(0, MAX_ROWS_PER_SHEET).map((row) => Array.from({ length: width }, (_, index) => row[index] ?? ""));
-    const [header, ...body] = kept as [string[], ...string[][]];
-    return `## ${name}\n\n${[tableRow(header), tableRow(header.map(() => "---")), ...body.map(tableRow)].join("\n")}`;
+    return `## ${name}\n\n${markdownTable(kept)}`;
 };
 
 export const odsDeriver: Deriver = {

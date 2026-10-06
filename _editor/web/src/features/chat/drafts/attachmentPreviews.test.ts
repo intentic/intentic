@@ -4,7 +4,7 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 
 const blob = jest.fn<(path: string) => Promise<Blob>>();
 // The resolved daemon address, exactly as useEndpoint hands it out: undefined until sandbox.list lands.
@@ -13,8 +13,8 @@ const daemonBase = ref<string | undefined>(undefined);
 // A daemon refusal, as the raw client throws it.
 const refusal = (status: number): SandboxHttpError => new SandboxHttpError(status, `Request failed (${status}).`);
 
-jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path) }));
-jest.mock("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path) }));
+jest.mock("../../../client/endpoint/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentAudio, attachmentPreview, forgetMedia, rememberMedia } = await import("./attachmentPreviews");
 

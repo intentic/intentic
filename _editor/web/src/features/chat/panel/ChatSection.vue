@@ -1,10 +1,10 @@
 <!-- Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/panelSlots.ts). -->
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
-import { onMounted, onUnmounted, useTemplateRef } from "vue";
+import { Button, EmptyState } from "@intentic/ui";
+import { useTemplateRef } from "vue";
 import { useChatFloating } from "./chatFloating";
-import { useLayout } from "../../../shell/window/useLayout";
-import { chatFullSlot } from "../../../shell/window/panelSlots";
+import { useLayout } from "../../../workbench/window/useLayout";
+import { chatFullSlot, publishSlot } from "../../../workbench/window/panelSlots";
 import { useT } from "@intentic/ui/i18n";
 import { useChatFocusLink } from "./chatFocusLink";
 
@@ -19,12 +19,7 @@ useLayout().setChatHome(`rail`);
 useChatFocusLink();
 
 const slot = useTemplateRef(`slot`);
-onMounted(() => {
-    chatFullSlot.value = slot.value;
-});
-onUnmounted(() => {
-    chatFullSlot.value = null;
-});
+publishSlot(chatFullSlot, () => slot.value);
 </script>
 
 <template>
@@ -33,13 +28,17 @@ onUnmounted(() => {
         <div class="grid h-full w-full" style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr">
             <div ref="slot" class="contents"></div>
         </div>
-        <div v-if="floats" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-            <Icon name="external-link" class="text-3xl text-subtle" />
-            <div>
-                <p class="text-sm font-medium text-content">{{ t(`chat.chatArea.chatInOwnWindow`) }}</p>
-                <p class="mt-1 text-xs text-muted">{{ t(`chat.chatArea.bringBackToFill`) }}</p>
-            </div>
-            <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`chat.chatArea.bringBackHere`) }} </Button>
-        </div>
+        <EmptyState
+            v-if="floats"
+            icon="external-link"
+            :title="t(`chat.chatArea.chatInOwnWindow`)"
+            :line="t(`chat.chatArea.bringBackToFill`)"
+            size="page"
+            class="absolute inset-0 p-6"
+        >
+            <template #actions>
+                <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`chat.chatArea.bringBackHere`) }} </Button>
+            </template>
+        </EmptyState>
     </div>
 </template>

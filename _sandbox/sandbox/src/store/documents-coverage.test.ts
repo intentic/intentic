@@ -41,8 +41,6 @@ const HAND_KEPT = [
     "agent/providers/accounts/account-files.ts",
     // The exit node's live state, rewritten on every poll; nothing reads it across a restart but the next poll.
     "exit/exit-state.ts",
-    // The owner's credential gates, a policy file read through its own refusing parse.
-    "secrets/credential-gates.ts",
     // Boot's own marker of what a prewarm left behind, read once by the next boot.
     "system/boot/prewarm.ts",
 ];
@@ -51,9 +49,17 @@ test("no module outside the store opens a file without the document that describ
     expect(calling(/\b(jsonFile|jsonEntries|jsonDir|idListFile)\s*(<[^>]*>)?\(/).filter((module) => !module.startsWith("store/"))).toEqual([]);
 });
 
-test("a file no document describes is a runtime's cache, and only a runtime keeps one", () => {
+// Caches kept outside a runtime, each a network answer the daemon refetches whenever the file is gone or unreadable.
+const CACHES_OUTSIDE_RUNTIMES = [
+    // A custom endpoint's last discovered model list, standing in while its server is down.
+    "endpoints/endpoint-catalog.ts",
+    // A geo exit provider's relay or server catalog, refreshed past its TTL.
+    "exit/exit-catalog.ts",
+];
+
+test("a file no document describes is a cache, kept by a runtime or one of the few named above", () => {
     const caches = calling(/\bcacheFile\s*(<[^>]*>)?\(/).filter((module) => module !== "store/open-document.ts");
-    expect(caches.filter((module) => !module.startsWith("runtimes/"))).toEqual([]);
+    expect(caches.filter((module) => !module.startsWith("runtimes/"))).toEqual(CACHES_OUTSIDE_RUNTIMES);
     // Guards the pattern: a rename of the opener would otherwise make this pass on nothing.
     expect(caches.length).toBeGreaterThan(3);
 });

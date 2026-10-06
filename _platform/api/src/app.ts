@@ -1,14 +1,14 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic/api-contract";
+import { API_BASE_PATH, type BootReport, type SetupReport } from "@intentic/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
-import { type Context, Hono, type HonoRequest, type MiddlewareHandler } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
 import { adminUpstreamRoutes } from "./admin/admin-upstream.routes.js";
-import { localHostname } from "@intentic/sandbox-contract";
+import { localHostname, SANDBOX_ID } from "@intentic/sandbox-contract";
 import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { hostReportHttpRoutes } from "./sandbox/host-report.js";
@@ -20,6 +20,7 @@ import { claimerOf, heldClaimerOf, namesMachine, secondMachine } from "./sandbox
 import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
+import { ingressServer } from "./ingress.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { decryptSecret } from "./crypto.js";
@@ -63,15 +64,6 @@ const keepMachineChangesOpen: MiddlewareHandler<AppEnv> = async (c, next) => {
         c.env?.timeout?.(c.req.raw, 0);
     }
     await next();
-};
-
-// Accept only a valid https origin so a bogus value can't be stored as the sandbox's address.
-const isHttpsUrl = (value: string): boolean => {
-    try {
-        return new URL(value).protocol === `https:`;
-    } catch {
-        return false;
-    }
 };
 
 const hostOf = (url: string): string | undefined => {
@@ -171,15 +163,17 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // `code`, an `ic` new enough names the machine claiming (`host`, `os`, `instance`; setup-code.ts): the first claim
     // that does is recorded, and the same code claimed by a different machine is refused with 409 while it lives, so one
     // pasted command cannot start two copies of a sandbox (2026-10-05). The same machine running it again is let through.
-    app.post(`/setup/claim`, async (c) => {
-        const form = await c.req.parseBody();
-        const code = form[`code`];
-        if (typeof code !== `string` || code === ``) {
-            return c.text(`error: missing code`, 400);
+    // Every route a machine calls is registered under its entry in api-contract's PLATFORM_INGRESS (ingress.ts).
+    const ingress = ingressServer(app);
+
+    ingress(`setupClaim`, async (c, kit) => {
+        const form = await kit.body();
+        if (form === undefined) {
+            return kit.refuse(400, `missing code`);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { setupCode: code } });
+        const sandbox = await prisma.sandbox.findUnique({ where: { setupCode: form.code } });
         if (!sandbox || !sandbox.setupCodeExpiresAt || sandbox.setupCodeExpiresAt < new Date()) {
-            return c.text(`error: setup code invalid or expired`, 404);
+            return kit.refuse(404, `setup code invalid or expired`);
         }
         const claimer = claimerOf(form);
         const refusal = secondMachine(sandbox, claimer);
@@ -188,7 +182,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 { sandboxId: sandbox.id, held: sandbox.setupClaimedBy, claimer },
                 `setup claim refused: the code was already used on another machine`,
             );
-            return c.text(`error: ${refusal}`, 409);
+            return kit.refuse(409, refusal);
         }
         // token/setupPayload are encrypted at rest (crypto.ts); payload is the decrypted JSON sandbox.setupCode stored.
         const payload =
@@ -221,21 +215,17 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     // The machine-side setup narrator; possession of a live setup code is the auth, same trust as the claim.
-    app.post(`/setup/report`, async (c) => {
-        const body = (await c.req.json().catch(() => undefined)) as { code?: unknown; stage?: unknown; failed?: unknown } | undefined;
-        const code = body?.code;
-        if (typeof code !== `string` || code === ``) {
-            return c.text(`error: missing code`, 400);
+    ingress(`setupReport`, async (c, kit) => {
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `malformed report: a setup report names its live code, its stage and what failed`);
         }
-        const report = SetupReportSchema.safeParse({ stage: body?.stage, failed: body?.failed ?? [], at: new Date().toISOString() });
-        if (!report.success) {
-            return c.text(`error: malformed report`, 400);
-        }
-        const sandbox = await prisma.sandbox.findUnique({ where: { setupCode: code } });
+        const sandbox = await prisma.sandbox.findUnique({ where: { setupCode: body.code } });
         if (!sandbox || !sandbox.setupCodeExpiresAt || sandbox.setupCodeExpiresAt < new Date()) {
-            return c.text(`error: setup code invalid or expired`, 404);
+            return kit.refuse(404, `setup code invalid or expired`);
         }
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupReport: report.data } });
+        const report: SetupReport = { stage: body.stage, failed: body.failed, at: new Date().toISOString() };
+        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupReport: report } });
         return c.text(`ok`);
     });
 
@@ -250,20 +240,19 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // (2026-10-05) A daemon sends it again every hour once registered, so `lastSeenAt` is its heartbeat rather than its
     // registration; and one new enough names which copy it is, which the row keeps to tell two containers on one token
     // apart from one that restarted (announce-copies.ts).
-    app.post(`/sandbox/announce`, async (c) => {
-        const token = c.req.header(`x-intentic-connect`);
-        if (token === undefined || token === ``) {
-            return c.text(`error: missing token`, 400);
+    ingress(`announce`, async (c, kit) => {
+        const token = kit.connectToken;
+        if (token === undefined) {
+            return kit.refuse(400, `missing token`);
         }
-        const body = (await c.req.json().catch(() => undefined)) as
-            { daemonUrl?: unknown; version?: unknown; instance?: unknown; host?: unknown; os?: unknown } | undefined;
-        const daemonUrl = body?.daemonUrl;
-        if (typeof daemonUrl !== `string` || !isHttpsUrl(daemonUrl)) {
-            return c.text(`error: daemonUrl must be an https URL`, 400);
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `daemonUrl must be an https URL`);
         }
+        const { daemonUrl } = body;
         // Stored as the daemon names itself; null for a daemon too old to say, so the row never keeps a stale one.
-        const version = DaemonVersionSchema.safeParse(body?.version);
-        if (!version.success && body?.version !== undefined) {
+        const version = DaemonVersionSchema.safeParse(body.version);
+        if (!version.success && body.version !== undefined) {
             c.get(`logger`).warn({ version: String(body.version).slice(0, 80) }, `announce: the version named is not one; not stored`);
         }
         // `hosted` rides along: a hosted machine's address is ours by construction, and its row is what says so.
@@ -274,8 +263,8 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (!sandbox) {
             const tunnelId = sandboxIdFromToken(token);
             return tunnelId !== undefined && (await isTombstoned(prisma, tunnelId))
-                ? c.text(`error: this sandbox was deleted`, 410)
-                : c.text(`error: unknown sandbox`, 404);
+                ? kit.refuse(410, `this sandbox was deleted`)
+                : kit.refuse(404, `unknown sandbox`);
         }
         // Pinned to the address already known for this sandbox; a mismatch is refused and recorded, nothing else moves.
         const expected = expectedDaemonHost(config, sandbox);
@@ -285,7 +274,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
                 data: { announceRefusal: { announced: hostOf(daemonUrl) ?? daemonUrl, expected } },
             });
-            return c.text(`error: this sandbox announces at ${expected}`, 409);
+            return kit.refuse(409, `this sandbox announces at ${expected}`);
         }
         // Which copy this is, beside the last other one that announced; a daemon too old to say leaves the record as it is.
         const now = new Date();
@@ -317,104 +306,99 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             },
         });
         if (announced.count === 0) {
-            return c.text(`error: unknown sandbox`, 404);
+            return kit.refuse(404, `unknown sandbox`);
         }
-        return c.json({ ok: true, ...(await identityField(prisma)) });
+        return kit.answer({ ok: true, ...(await identityField(prisma)) });
     });
 
     // The doors a platform that forgot a sandbox needs: adoption, and which database this is (recovery.routes.ts).
     app.route(`/`, recoveryHttpRoutes({ config, prisma }));
 
     /* A deletion report records that the container is gone when absence alone is ambiguous. */
-    app.post(`/sandbox/farewell`, async (c) => {
-        const token = c.req.header(`x-intentic-connect`);
-        if (token === undefined || token === ``) {
-            return c.text(`error: missing token`, 400);
+    ingress(`farewell`, async (_c, kit) => {
+        const token = kit.connectToken;
+        if (token === undefined) {
+            return kit.refuse(400, `missing token`);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { removedBy?: unknown } | undefined;
-        const claimed = typeof body?.removedBy === `string` ? body.removedBy.trim().slice(0, 120) : ``;
+        // Who removed it is a courtesy: a body that does not say is still a farewell.
+        const claimed = (await kit.body())?.removedBy ?? ``;
         const removed = await prisma.sandbox.updateMany({
             where: { tokenDigest: sha256Hex(token) },
             data: { removedAt: new Date(), removedBy: claimed === `` ? null : claimed, daemonUrl: null },
         });
-        return removed.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
+        return removed.count === 0 ? kit.refuse(404, `unknown sandbox`) : kit.answer({ ok: true });
     });
 
     /* The sandbox presents itself through the same sessionless credentialed door as announce. */
-    app.post(`/sandbox/presentation`, async (c) => {
-        const token = c.req.header(`x-intentic-connect`);
-        if (token === undefined || token === ``) {
-            return c.text(`error: missing token`, 400);
+    ingress(`presentation`, async (_c, kit) => {
+        const token = kit.connectToken;
+        if (token === undefined) {
+            return kit.refuse(400, `missing token`);
         }
         const sandbox = await prisma.sandbox.findUnique({
             where: { tokenDigest: sha256Hex(token) },
             select: { name: true, image: true },
         });
         if (!sandbox) {
-            return c.text(`error: unknown sandbox`, 404);
+            return kit.refuse(404, `unknown sandbox`);
         }
-        return c.json({ name: sandbox.name, ...(sandbox.image === null ? {} : { image: sandbox.image }) });
+        return kit.answer({ name: sandbox.name, ...(sandbox.image === null ? {} : { image: sandbox.image }) });
     });
 
     // A builder's report, authenticated by its per-build secret; body capped twice against an abusive caller.
-    app.post(`/sandbox/hosted-build-report/:buildId`, bodyLimit({ maxSize: 2 * LOG_TAIL_BYTES }), async (c) => {
-        const secret = c.req.header(REPORT_HEADERS.secret);
-        if (secret === undefined || secret === ``) {
-            return c.text(`error: missing build secret`, 400);
-        }
-        const exitHeader = c.req.header(REPORT_HEADERS.exitCode) ?? ``;
-        const exitCode = /^-?\d+$/.test(exitHeader) ? Number(exitHeader) : undefined;
-        const digest = c.req.header(REPORT_HEADERS.digest) ?? ``;
-        const log = await c.req.text().catch(() => ``);
-        const answer = await reportHostedBuild(prisma, config, c.get(`logger`), c.req.param(`buildId`), secret, {
-            exitCode,
-            digest: /^sha256:[0-9a-f]{64}$/.test(digest) ? digest : undefined,
-            log,
-        });
-        switch (answer) {
-            case `unknown`:
-                return c.text(`error: unknown build`, 404);
-            case `forbidden`:
-                return c.text(`error: wrong build secret`, 403);
-            case `stale`:
-                return c.text(`error: this build has already ended`, 409);
-            default:
-                return c.json({ ok: true });
-        }
-    });
+    ingress(
+        `hostedBuildReport`,
+        async (c, kit) => {
+            const secret = c.req.header(REPORT_HEADERS.secret);
+            if (secret === undefined || secret === ``) {
+                return kit.refuse(400, `missing build secret`);
+            }
+            const exitHeader = c.req.header(REPORT_HEADERS.exitCode) ?? ``;
+            const exitCode = /^-?\d+$/.test(exitHeader) ? Number(exitHeader) : undefined;
+            const digest = c.req.header(REPORT_HEADERS.digest) ?? ``;
+            const log = await c.req.text().catch(() => ``);
+            const answer = await reportHostedBuild(prisma, config, c.get(`logger`), c.req.param(`buildId`) ?? ``, secret, {
+                exitCode,
+                digest: /^sha256:[0-9a-f]{64}$/.test(digest) ? digest : undefined,
+                log,
+            });
+            switch (answer) {
+                case `unknown`:
+                    return kit.refuse(404, `unknown build`);
+                case `forbidden`:
+                    return kit.refuse(403, `wrong build secret`);
+                case `stale`:
+                    return kit.refuse(409, `this build has already ended`);
+                default:
+                    return kit.answer({ ok: true });
+            }
+        },
+        bodyLimit({ maxSize: 2 * LOG_TAIL_BYTES }),
+    );
 
     // The announce's other half: whether the public address answers, authenticated the same way, same path.
-    app.post(`/sandbox/boot-report`, async (c) => {
-        const token = c.req.header(`x-intentic-connect`);
-        if (token === undefined || token === ``) {
-            return c.text(`error: missing token`, 400);
+    ingress(`bootReport`, async (_c, kit) => {
+        const token = kit.connectToken;
+        if (token === undefined) {
+            return kit.refuse(400, `missing token`);
         }
-        const body = (await c.req.json().catch(() => undefined)) as
-            { reach?: unknown; detail?: unknown; retrying?: unknown; boot?: unknown; cpu?: unknown; drift?: unknown } | undefined;
-        // Every field the schema states, named one by one so nothing else a body carries is stored. (2026-10-05)
-        // `retrying` and `drift` were left out, so the editor's "unreachable for good" card, which waits for
-        // `retrying: false`, never showed, and no setup's missing environment ever reached it.
-        const report = BootReportSchema.safeParse({
-            reach: body?.reach,
-            detail: body?.detail,
-            retrying: body?.retrying,
-            boot: body?.boot,
-            cpu: body?.cpu,
-            drift: body?.drift,
-            at: new Date().toISOString(),
-        });
-        if (!report.success) {
-            return c.text(`error: malformed report`, 400);
+        // The whole body, as the contract states it, with the moment it arrived. (2026-10-05) The fields were once
+        // named one by one here, and `retrying` and `drift` were left out: the editor's "unreachable for good" card,
+        // which waits for `retrying: false`, never showed, and no setup's missing environment ever reached it.
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `malformed report`);
         }
+        const report: BootReport = { ...body, at: new Date().toISOString() };
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
-            return c.text(`error: unknown sandbox`, 404);
+            return kit.refuse(404, `unknown sandbox`);
         }
         const updated = await prisma.sandbox.updateMany({
             where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
-            data: { bootReport: report.data },
+            data: { bootReport: report },
         });
-        return updated.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
+        return updated.count === 0 ? kit.refuse(404, `unknown sandbox`) : kit.answer({ ok: true });
     });
 
     // Unauthenticated by design (existence isn't secret); matches `tunnelId` exactly, never a prefix over it. The edge
@@ -423,11 +407,11 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // `known: false` with a 200: the edge could only be asked about it by a daemon holding a grant this platform signed,
     // and refusing it turned a restore or a wrong DATABASE_URL into every sandbox going dark within a minute. Rejected:
     // keeping 404 for both, which is what made forgetting a sandbox indistinguishable from deleting it.
-    app.get(`/api/reachability/:sandboxId`, async (c) => {
-        const sandboxId = c.req.param(`sandboxId`);
+    ingress(`reachability`, async (c, kit) => {
+        const sandboxId = c.req.param(`sandboxId`) ?? ``;
         // Shape-checked before the query: outside the fixed alphabet/length can't be a sandbox, skip the database.
-        if (!/^[0-9a-f]{12}$/.test(sandboxId)) {
-            return c.json({ error: `not a sandbox id` }, 404);
+        if (!SANDBOX_ID.test(sandboxId)) {
+            return kit.refuse(404, `not a sandbox id`);
         }
         const sandbox = await prisma.sandbox.findUnique({
             where: { tunnelId: sandboxId },
@@ -435,35 +419,26 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         });
         if (sandbox === null) {
             return (await isTombstoned(prisma, sandboxId))
-                ? c.json({ error: `deleted sandbox` }, 404)
-                : c.json({ ok: true, lane: `tunnel`, known: false });
+                ? kit.refuse(404, `deleted sandbox`)
+                : kit.answer({ ok: true, lane: `tunnel`, known: false });
         }
         // Today's edge reads only the status. `lane` stays for an edge build from before the replay lane went, which
         // replays a sandbox unless it is named `tunnel`: without it, a rolled-back edge would replay tunnel sandboxes.
-        return c.json({ ok: true, lane: sandbox.hosted === null ? `tunnel` : `hosted` });
+        return kit.answer({ ok: true, lane: sandbox.hosted === null ? `tunnel` : `hosted` });
     });
 
     // The edge's certificate, to an edge machine presenting the platform token (edge-certificate.ts).
-    app.get(`/api/ingress/certificate`, async (c) => {
+    ingress(`edgeCertificate`, async (c, kit) => {
         const answer = await edgeCertificateFor(prisma, config, c.req.header(`authorization`));
         c.header(`cache-control`, `no-store`);
-        return answer.status === 200 ? c.json(answer.body) : c.json({ error: answer.error }, answer.status);
+        return answer.status === 200 ? kit.answer(answer.body) : kit.refuse(answer.status, answer.error);
     });
 
     // The loopback certificate's DNS relay: a same-machine sandbox still needs a real cert for 127.0.0.1. Both routes take
     // `{ challenge? }` from a sandbox presenting its connect token, and act only on that sandbox's own record.
-    const loopbackRequest = async (
-        request: HonoRequest,
-    ): Promise<{ hostname: string; challenge: string | undefined } | { error: string; status: 400 | 404 }> => {
-        const token = request.header(`x-intentic-connect`);
-        if (token === undefined || token === ``) {
+    const loopbackHostname = async (token: string | undefined): Promise<{ hostname: string } | { error: string; status: 400 | 404 }> => {
+        if (token === undefined) {
             return { error: `missing token`, status: 400 };
-        }
-        // allow(silent-catch): a body that is not JSON carries no challenge, the same as an empty one.
-        const body = (await request.json().catch(() => undefined)) as { challenge?: unknown } | undefined;
-        const challenge = body?.challenge;
-        if (challenge !== undefined && (typeof challenge !== `string` || challenge.length > 128)) {
-            return { error: `challenge must be a string of at most 128 characters`, status: 400 };
         }
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
@@ -477,53 +452,63 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (sandboxId === undefined) {
             return { error: `this sandbox has no connect token to derive a hostname from`, status: 404 };
         }
-        return { hostname: localHostname(sandboxId, zone), challenge };
+        return { hostname: localHostname(sandboxId, zone) };
     };
 
     // Runs a Cloudflare call for a route: its answer, or the failure as the route's error (a bad token is the caller's 400).
-    const viaCloudflare = async <T extends object>(
-        work: () => Promise<T>,
-    ): Promise<{ body: T; status: 200 } | { body: { error: string }; status: 400 | 502 }> => {
+    const viaCloudflare = async <T>(work: () => Promise<T>): Promise<{ body: T } | { error: string; status: 400 | 502 }> => {
         try {
-            return { body: await work(), status: 200 };
+            return { body: await work() };
         } catch (error) {
             if (error instanceof CloudflareTokenError) {
-                return { body: { error: error.message }, status: 400 };
+                return { error: error.message, status: 400 };
             }
-            return { body: { error: error instanceof Error ? error.message : `local DNS update failed` }, status: 502 };
+            return { error: error instanceof Error ? error.message : `local DNS update failed`, status: 502 };
         }
     };
 
+    const CHALLENGE_REFUSAL = `challenge must be a string of at most 128 characters`;
+
     // Publishes `challenge` as the sandbox's DNS-01 record, or withdraws it when absent, asserting the loopback A record.
-    app.post(`/sandbox/local-dns`, async (c) => {
-        const request = await loopbackRequest(c.req);
+    ingress(`localDns`, async (_c, kit) => {
+        if (kit.connectToken === undefined) {
+            return kit.refuse(400, `missing token`);
+        }
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, CHALLENGE_REFUSAL);
+        }
+        const request = await loopbackHostname(kit.connectToken);
         if (`error` in request) {
-            return c.json({ error: request.error }, request.status);
+            return kit.refuse(request.status, request.error);
         }
         const { apiToken, zone } = config.intenticCloudflare;
         const answer = await viaCloudflare(async () => {
             await ensureLocalDnsRecord(apiToken, zone);
-            await setAcmeChallenge(apiToken, zone, `_acme-challenge.${request.hostname}`, request.challenge);
-            return { ok: true, hostname: request.hostname };
+            await setAcmeChallenge(apiToken, zone, `_acme-challenge.${request.hostname}`, body.challenge);
+            return { ok: true as const, hostname: request.hostname };
         });
-        return c.json(answer.body, answer.status);
+        return `error` in answer ? kit.refuse(answer.status, answer.error) : kit.answer(answer.body);
     });
 
     // Cloudflare's own word on whether the sandbox's DNS-01 record holds `challenge`: the proof a sandbox whose network
     // cannot see the zone's nameservers orders on (obtainCertificate's `confirmChallenge`). Read-only.
-    app.post(`/sandbox/local-dns/confirm`, async (c) => {
-        const request = await loopbackRequest(c.req);
-        if (`error` in request) {
-            return c.json({ error: request.error }, request.status);
+    ingress(`localDnsConfirm`, async (_c, kit) => {
+        if (kit.connectToken === undefined) {
+            return kit.refuse(400, `missing token`);
         }
-        if (request.challenge === undefined) {
-            return c.json({ error: `challenge is required` }, 400);
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `challenge is required: ${CHALLENGE_REFUSAL}`);
+        }
+        const request = await loopbackHostname(kit.connectToken);
+        if (`error` in request) {
+            return kit.refuse(request.status, request.error);
         }
         const { apiToken, zone } = config.intenticCloudflare;
         const recordName = `_acme-challenge.${request.hostname}`;
-        const challenge = request.challenge;
-        const answer = await viaCloudflare(async () => ({ confirmed: await acmeChallengeHolds(apiToken, zone, recordName, challenge) }));
-        return c.json(answer.body, answer.status);
+        const answer = await viaCloudflare(async () => ({ confirmed: await acmeChallengeHolds(apiToken, zone, recordName, body.challenge) }));
+        return `error` in answer ? kit.refuse(answer.status, answer.error) : kit.answer(answer.body);
     });
 
     const orpcHandler = new OpenAPIHandler(router, {

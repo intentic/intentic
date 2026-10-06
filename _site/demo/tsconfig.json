@@ -10,6 +10,7 @@
             "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"],
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
             "@intentic/ui/async": ["../../_editor/ui/src/lib/async.ts"],
+            "@intentic/ui/clipboard": ["../../_editor/ui/src/lib/clipboard.ts"],
             "@intentic/ui/brand-color": ["../../_editor/ui/src/lib/brandColor.ts"],
             "@intentic/ui/brand-mark": ["../../_editor/ui/src/components/brand/brandMark.ts"],
             "@intentic/ui/dag": ["../../_editor/ui/src/components/charts/dagLayout.ts"],

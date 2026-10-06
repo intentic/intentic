@@ -1,5 +1,8 @@
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { z } from "zod";
-import { type Conversion, type Granularity, isJsonObject } from "./evolution/conversions.js";
+import { type Conversion, convertDocument, type Granularity, isJsonObject } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
 import { type IdListStore, idListFile } from "./id-list-file.js";
 import { type JsonDir, jsonDir } from "./json-dir.js";
@@ -188,9 +191,53 @@ export const openDirectory = <D extends AnyDocument<Granularity, true>>(spec: D,
     return jsonDir<DocumentUnit<D>>(dir, parse, spec);
 };
 
+// An append-only ledger: written a line at a time, read whole.
+export interface Ledger<E> {
+    // Every entry this build can read, oldest first; [] for an absent ledger, and a throw for one that exists and cannot
+    // be read, never an empty answer.
+    readonly read: () => Promise<E[]>;
+    // One line at the end; the store serializes its own appends.
+    readonly append: (entry: E) => Promise<void>;
+}
+
+// One line of a ledger as today's entry: through the document's conversions, then its schema. Undefined for a torn line
+// (a crash mid-append), one whose conversion fails, or one this build cannot read: it costs itself, never the ledger.
+const ledgerEntry = <D extends AnyDocument<"entries", false>>(spec: D, line: string): DocumentUnit<D> | undefined => {
+    try {
+        // SAFETY: an "entries" conversion maps each element of the array it is given, so it answers an array.
+        const [converted] = convertDocument(spec.history, "entries", [JSON.parse(line)]).value as unknown[];
+        const parsed = spec.schema.safeParse(converted);
+        // SAFETY: parsed by the document's own schema, whose output is DocumentUnit<D>.
+        return parsed.success ? (parsed.data as DocumentUnit<D>) : undefined;
+    } catch {
+        // allow(silent-catch): an unreadable line is one lost entry by design, the rest of the ledger still reads
+        return undefined;
+    }
+};
+
+// A document stored as JSON Lines, one entry per line, appended and never rewritten whole by this layer (usage.jsonl,
+// activity.jsonl): its document is `boot: false`, since the boot step reads whole JSON files, and every read converts
+// each line instead. Lines this build cannot read stay in the file for the build that wrote them.
+export const openLedger = <D extends AnyDocument<"entries", false>>(spec: D, path: string): Ledger<DocumentUnit<D>> => {
+    if (spec.directory || spec.granularity !== "entries") {
+        throw layoutError(spec, "a ledger of lines");
+    }
+    return {
+        read: async () => {
+            const text = await readFile(path, "utf8").catch(undefinedIfMissing);
+            return text === undefined ? [] : text.split("\n").flatMap((line) => (line === "" ? [] : (ledgerEntry(spec, line) ?? [])));
+        },
+        append: async (entry) => {
+            await mkdir(dirname(path), { recursive: true });
+            await appendFile(path, `${JSON.stringify(entry)}\n`);
+        },
+    };
+};
+
 // A file no document describes: a cache the daemon regrows (a provider's model catalog), read through a parse of its
 // own and never converted. What a later build cannot read it simply refills.
-export const cacheFile = <T>(path: string, options: Pick<JsonFileOptions<T>, "parse" | "fallback" | "mode">): JsonFile<T> => jsonFile<T>(path, options);
+export const cacheFile = <T>(path: string, options: Pick<JsonFileOptions<T>, "parse" | "fallback" | "mode">): JsonFile<T> =>
+    jsonFile<T>(path, options);
 
 // The owner's yes to what an agent can write, one pin per key, kept under the history root where no workspace write
 // reaches: a document of `{ approved: { [key]: pin } }`.

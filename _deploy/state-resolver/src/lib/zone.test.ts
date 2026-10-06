@@ -1,4 +1,4 @@
-import type { IntentSet } from "@intentic/need-resolver";
+import type { IntentSet } from "../intent/intent.js";
 
 import { collectDomains, selectZone } from "./zone.js";
 

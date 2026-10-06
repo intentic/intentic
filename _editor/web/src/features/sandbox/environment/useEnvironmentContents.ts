@@ -1,9 +1,9 @@
-import { EnvironmentContentsSchema, type EnvironmentItem } from "@intentic/api-contract";
+import type { EnvironmentItem } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { SandboxHttpError } from "../client/sandboxHttpError";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { t } from "@intentic/ui/i18n";
 
 // This sandbox's contents, grouped by whose decision put it there. A separate, on-demand query from useEnvironment,
@@ -30,7 +30,7 @@ export function useEnvironmentContents(enabled: () => boolean) {
     const reprobe = ref(0);
     const { query, error } = useSandboxQuery({
         queryKey: ENVIRONMENT_CONTENTS_KEY,
-        queryFn: async () => EnvironmentContentsSchema.parse(await sandboxJson(`/environment/contents${reprobe.value > 0 ? `?refresh` : ``}`)),
+        queryFn: () => sandboxRaw(`GET /environment/contents`, reprobe.value > 0 ? { query: { refresh: `` } } : {}),
         enabled: computed(enabled),
         // A 4xx is a verdict, not a hiccup: no extra retries; anything else still gets one.
         retry: (attempts, failure) => !(failure instanceof SandboxHttpError && failure.status >= 400 && failure.status < 500) && attempts < 1,

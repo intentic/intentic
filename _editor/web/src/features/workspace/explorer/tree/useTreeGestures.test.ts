@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { computed, effectScope, ref, shallowRef } from "vue";
 import type { OpenMode } from "../../tabs/workspaceTabs";
 import { beginEntryDrag } from "../transfer/useEntryDrag";

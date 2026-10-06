@@ -49,3 +49,18 @@ test("linkSshHosts repoints a stale link and refuses to replace a real directory
     mkdirSync(join(home, ".ssh", "intentic-hosts"), { recursive: true });
     await expect(linkSshHosts(history)).rejects.toThrow(/not a symlink/);
 });
+
+// The Include was once detected with a substring test, so a line the user had commented out read as present and every
+// managed alias silently stopped resolving.
+test("a commented-out Include is not taken for the live one: the live line is put first and the user's lines kept", async () => {
+    const history = mkdtempSync(join(tmpdir(), "ssh-hosts-history-"));
+    const home = tempHome();
+    mkdirSync(join(home, ".ssh"), { recursive: true });
+    writeFileSync(join(home, ".ssh", "config"), "# Include intentic-hosts/*.conf\nHost box\n    HostName 10.0.0.2\n");
+
+    await linkSshHosts(history);
+
+    expect(readFileSync(join(home, ".ssh", "config"), "utf8")).toBe(
+        "Include intentic-hosts/*.conf\n# Include intentic-hosts/*.conf\nHost box\n    HostName 10.0.0.2\n",
+    );
+});

@@ -21,5 +21,10 @@
         "connections": "Connexions"
     },
     "sourceLabel": "Source de l'activité",
+    "sources": {
+        "schedule": "Planification",
+        "webchat": "Chat web",
+        "you": "Vous"
+    },
     "title": "Activité"
 }

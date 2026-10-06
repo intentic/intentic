@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { createBranch, deleteBranch, listBranches } from "../ops/branches.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./remote.js";
 

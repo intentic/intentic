@@ -1,5 +1,5 @@
 import { dropPartialFirst, dropPartialLast, type FileQuickLook, isAudioPath, isImagePath } from "./fileQuickLook";
-import { lazyByPath } from "../../sandbox/client/lazyByPath";
+import { lazyByPath } from "../../../client/sandbox/lazyByPath";
 import { readFileWindow } from "../../workspace/files/fileWindow";
 
 // Head and tail windows per attachment path, shared by the composer chip, sent bubbles and session hover cards — the

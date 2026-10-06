@@ -1948,6 +1948,84 @@ mod tests {
 
     /* THE SETUP'S LINES. */
 
+    /// The setup-progress record ic, desktop.ts, setupPlan.ts and the web's agentHouse.ts are tested against too.
+    fn progress_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!(
+            "../../../../_shared/sandbox-run/src/setup-progress.fixture.json"
+        ))
+        .expect("the setup-progress fixture is JSON")
+    }
+
+    #[test]
+    fn step_and_layer_lines_read_as_the_shared_record_says() {
+        let fixture = progress_fixture();
+        for case in fixture["steps"].as_array().expect("steps") {
+            let line = case["line"].as_str().expect("line");
+            let expected = case["phase"].as_str().map(|phase| {
+                (
+                    phase.to_string(),
+                    case["message"].as_str().expect("message").to_string(),
+                )
+            });
+            assert_eq!(parse_step(line), expected, "{line:?}");
+        }
+        for case in fixture["layers"].as_array().expect("layers") {
+            let line = case["line"].as_str().expect("line");
+            let expected = case["id"]
+                .as_str()
+                .map(|id| (id.to_string(), case["done"].as_f64().expect("done") as f32));
+            assert_eq!(parse_layer(line), expected, "{line:?}");
+        }
+        let states = fixture["layerDone"].as_object().expect("layerDone");
+        assert_eq!(states.len(), LAYER_DONE.len());
+        for (state, done) in LAYER_DONE {
+            assert_eq!(
+                states[state].as_f64().map(|value| value as f32),
+                Some(done),
+                "{state}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_plan_is_the_shared_records_phases_and_weights() {
+        let fixture = progress_fixture();
+        let phases = fixture["phases"].as_array().expect("phases");
+        let mut checked = 0;
+        for case in fixture["plans"].as_array().expect("plans") {
+            let input = &case["input"];
+            // This app's own setup never installs Docker and always syncs: only the plans of that shape are its.
+            if input["dockerReady"] != true || input["syncing"] != true {
+                continue;
+            }
+            let expected: Vec<(String, u32)> = case["steps"]
+                .as_array()
+                .expect("steps")
+                .iter()
+                .map(|step| {
+                    (
+                        step[0].as_str().expect("phase").to_string(),
+                        step[1].as_u64().expect("weight") as u32,
+                    )
+                })
+                .collect();
+            let drawn: Vec<(String, u32)> =
+                plan(input["os"] == "windows", input["imageReady"] == true)
+                    .into_iter()
+                    .map(|(phase, weight)| (phase.to_string(), weight))
+                    .collect();
+            assert_eq!(drawn, expected, "{input}");
+            assert!(drawn
+                .iter()
+                .all(|(phase, _)| phases.iter().any(|known| known == phase.as_str())));
+            checked += 1;
+        }
+        assert!(
+            checked >= 2,
+            "the record has to hold this app's plans at all"
+        );
+    }
+
     #[test]
     fn a_step_is_the_scripts_own_marker_and_nothing_else() {
         assert_eq!(

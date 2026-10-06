@@ -18,7 +18,7 @@ type NoticeRow = Pick<TranscriptRow, "noticeCode" | "watchWake" | "needWake" | "
 type Failure = { readonly message: string; readonly error?: string | undefined };
 
 // The land outcomes, whole sentences per audience rather than a word swapped into one: "land" and "branch" for a
-// developer, "accept" and "draft" for a maker (core-views/vocabulary.ts).
+// developer, "accept" and "draft" for a maker (workbench/views/vocabulary.ts).
 interface LandWords {
     readonly landed: () => string;
     readonly landHeld: () => string;

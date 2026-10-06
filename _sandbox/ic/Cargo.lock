@@ -360,6 +360,7 @@ dependencies = [
  "clap",
  "http",
  "intentic-bounded",
+ "intentic-docker-host",
  "serde",
  "serde_json",
  "sha2",
@@ -483,6 +484,10 @@ dependencies = [
 
 [[package]]
 name = "intentic-bounded"
+version = "0.0.0"
+
+[[package]]
+name = "intentic-docker-host"
 version = "0.0.0"
 
 [[package]]

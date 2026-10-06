@@ -1,6 +1,7 @@
 import { type AgentSummary, type AgentTurn, type FixAttemptPlan, type FixResume, planFixAttempt, type TurnErrand } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
+import { TITLE_MAX } from "../../seams/conversation-title.js";
 import { archiveAgents } from "../registry/archive.js";
 
 /* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts: a failed CI
@@ -42,8 +43,6 @@ export type FixAttemptOutcome =
     // The latest attempt is still in play, or a turn took the conversation between the plan and the start.
     | { readonly kind: "busy"; readonly conversationId: string; readonly reason: string };
 
-// The registry's own cap on a title, so an appended attempt number never pushes one past it.
-const TITLE_MAX = 80;
 
 type StartingPlan = Exclude<FixAttemptPlan, { readonly kind: "busy" }>;
 

@@ -1,0 +1,11 @@
+[package]
+name = "intentic-docker-host"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "What docker's refusals mean and where Docker Desktop lives: the readings `ic` and the desktop app share."
+
+# std only, for `bounded`'s reasons: `ic` is downloaded on every run of a bootstrap shim, and the desktop crate keeps
+# its dependency list short on purpose. Pure readings, no process spawned here: each caller runs the probe with its
+# own deadline and hands the answer in.
+[dependencies]

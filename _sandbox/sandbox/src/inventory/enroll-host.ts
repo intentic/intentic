@@ -4,7 +4,7 @@ import type { EnrollHostInput, InventoryEntry } from "@intentic/sandbox-contract
 import { ENV_FILE, hostSshKeyVar } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import { upsertEnv } from "../secrets/secrets.routes.js";
+import { upsertEnv } from "../secrets/env-text.js";
 import { textFile } from "../store/text-file.js";
 import { createConfigStore } from "./config-store.js";
 import { hasManagedEntry, upsertManagedEntry } from "./managed-region.js";

@@ -2,12 +2,12 @@
 
 What the editor does when the platform is down or has forgotten an account's sandboxes: it opens them from what this device remembers, and has the platform take back the ones it lost.
 
-- **What this device remembers** (`deviceDirectory.ts`): per account, every sandbox the platform last listed, by its
+- **What this device remembers** (`client/directory/deviceDirectory.ts`): per account, every sandbox the platform last listed, by its
   normalized address, with its name, logo, role and last-seen time, never a token. A list never makes it forget: a
   sandbox the list lacks is kept and marked missing, since a platform that forgot it lists nothing. It is let go of
   when the platform says it was deleted or is someone else's (`rememberSandboxes.ts` asks `sandbox.lookup` after each
   list that lacks one), when its owner deletes it here, after a month missing, or on an explicit sign-out. A refused
-  session's teardown (`authLifecycle.ts`) keeps it, since that is exactly when it is needed.
+  session's teardown (`lib/authLifecycle.ts`) keeps it, since that is exactly when it is needed.
 - **Which database.** Each list is remembered with the platform's identity (`GET /api/identity`). A list from another
   database than the one remembered is a reset, and the recovery screen says so.
 - **Never empty** (`router/index.ts` `requireSetup`): a list that offers nothing to open while this device remembers
@@ -33,7 +33,7 @@ What the editor does when the platform is down or has forgotten an account's san
 
 ## Key files
 
-- [deviceDirectory.ts](deviceDirectory.ts) — what this device remembers per account, and the merge every list goes through.
+- [client/directory/deviceDirectory.ts](../../../client/directory/deviceDirectory.ts) — what this device remembers per account, and the merge every list goes through.
 - [rememberSandboxes.ts](rememberSandboxes.ts) — remembers each list the platform answers, and asks about what it lacks.
 - [useRecovery.ts](useRecovery.ts) — probe, look up, sort, and the Reconnect sequence, every effect a dependency.
 - [directMode.ts](directMode.ts) — opening a remembered sandbox without the platform.

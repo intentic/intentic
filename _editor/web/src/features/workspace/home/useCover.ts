@@ -1,11 +1,10 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { computed } from "vue";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { explorerShows } from "../explorer/explorerFilter";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { workspaceDir } from "../health/workspaceScope";
+import { workspaceDir } from "../../../app/workspaceScope";
 import { coverIn, coverIndex, coversBelow, NO_COVERS } from "./homeCover";
 
 // What the loaded tree knows of one cover name (homeCover.ts), for the two surfaces that draw it: the explorer marks

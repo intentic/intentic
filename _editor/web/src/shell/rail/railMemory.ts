@@ -2,7 +2,7 @@ import type { IconName } from "@intentic/ui";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../lib/browserStorage";
-import { useSandbox } from "../../features/sandbox/client/useSandbox";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 
 // Rail tiles arrive in waves, each pushing everything below it down as it lands. Once a load completes, the layout
 // is remembered per sandbox in localStorage (readable before anything connects) and drawn as dim placeholders next

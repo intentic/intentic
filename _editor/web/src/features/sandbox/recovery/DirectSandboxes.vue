@@ -3,9 +3,9 @@ import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
-import { healthAnswers } from "../secrets/endpoint";
-import { type RememberedSandbox, rememberedAccount } from "./deviceDirectory";
+import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
+import { healthAnswers } from "../../../client/endpoint/endpoint";
+import { type RememberedSandbox, rememberedAccount } from "../../../client/directory/deviceDirectory";
 import { accountFromGoogle, enterDirectMode, sandboxAt } from "./directMode";
 
 // The outage screen's way through (PlatformUnavailable.vue): the sandboxes this device remembers, each checked from

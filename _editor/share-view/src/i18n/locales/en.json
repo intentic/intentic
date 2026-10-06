@@ -10,6 +10,7 @@
         "nothingToShow": "Nothing to show",
         "runOwnAgents": ": run your own agents →",
         "shared": "Shared from",
+        "subtitle": "{count} message · shared {date} | {count} messages · shared {date}",
         "thinking": "Thinking"
     }
 }

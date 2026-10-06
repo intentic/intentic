@@ -25,8 +25,8 @@ import {
 } from "../accounts/providerCatalog";
 import { active, conversations } from "../tabs/useChat-tabs";
 import { withConcurrency } from "../../../lib/concurrency";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // A read whose failure is not news: a failed read leaves the ref at its last value, as does an answer from a sandbox
 // the scope has since left. Only the read is forgiven: an `apply` that throws is a bug, not an unreachable daemon.

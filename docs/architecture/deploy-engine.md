@@ -4,7 +4,7 @@ A bundled tool that turns an intent file into a desired-state graph and reconcil
 
 ```mermaid
 flowchart LR
-    intent["intent/deploy.config.ts<br/>defineIntent"] --> needs["resolveNeeds<br/>need-resolver"]
+    intent["intent/deploy.config.ts<br/>defineIntent"] --> needs["resolveNeeds<br/>state-resolver"]
     needs --> state["resolveState<br/>state-resolver"]
     state --> artifact["desired-state.json"]
     artifact --> engine(["plan · apply · reconcile<br/>engine"])

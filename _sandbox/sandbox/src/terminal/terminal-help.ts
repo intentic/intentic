@@ -1,5 +1,5 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { sdk } from "../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";

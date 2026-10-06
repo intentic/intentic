@@ -1,5 +1,4 @@
-import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
-import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
+import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { panelState } from "./system.routes.js";

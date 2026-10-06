@@ -1,8 +1,8 @@
 import type { PortSummary } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { PORTS } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The sandbox's exposed ports, read at the shell so the rail shows public exposure from any view. Pushed on
 // forward-table changes rather than polled; keyed PORTS.of(), not by procedure, since ext-preview's own ports view

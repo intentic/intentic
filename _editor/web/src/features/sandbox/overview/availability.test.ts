@@ -1,4 +1,4 @@
-import { applyConnectionSignal, classifyFailure, initialConnection, type ConnectionSignal, type ConnectionState } from "../live/connection";
+import { applyConnectionSignal, classifyFailure, initialConnection, type ConnectionSignal, type ConnectionState } from "../../../client/sandbox/connection";
 import { DETACHED_AFTER_MS, SANDBOX_BUSY_AFTER_MS, sandboxAvailability, sandboxRequiresGate } from "./availability";
 
 const drive = (...signals: readonly ConnectionSignal[]): ConnectionState => signals.reduce(applyConnectionSignal, initialConnection);

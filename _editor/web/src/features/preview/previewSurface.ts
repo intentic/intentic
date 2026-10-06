@@ -1,11 +1,11 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { Router } from "vue-router";
 import { storedValue, storeValue } from "../../lib/browserStorage";
-import { guestAllowedPath } from "../../shell/guestPaths";
-import { openBeside, sideDocked } from "../../shell/side/sideTabs";
-import { handOffToMainWindow } from "../../shell/window/mainWindow";
-import { useSandbox } from "../sandbox/client/useSandbox";
-import { useRole } from "../sandbox/secrets/useRole";
+import { guestAllowedPath } from "../../lib/routes/guestPaths";
+import { openBeside, sideDocked } from "../../workbench/side/sideTabs";
+import { handOffToMainWindow } from "../../workbench/window/mainWindow";
+import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useRole } from "../../client/sandbox/useRole";
 import { ADDRESS_TARGET_ID } from "./previewModel";
 
 // The preview panel's own state (target, whether it exists), module-level like useChat/useLayout since the panel mounts

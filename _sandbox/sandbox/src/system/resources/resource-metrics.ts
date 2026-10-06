@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
 import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
-import { gitRunCounts, gitSpawnStats } from "@intentic/scaffold";
+import { gitRunCounts, gitSpawnStats } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { logsRoot } from "../../logs/log-files.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";

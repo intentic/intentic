@@ -24,5 +24,10 @@
         "direct": "Directo"
     },
     "sourceLabel": "Origen de la actividad",
+    "sources": {
+        "schedule": "Programación",
+        "webchat": "Chat web",
+        "you": "Tú"
+    },
     "title": "Actividad"
 }

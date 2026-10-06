@@ -27,6 +27,17 @@ test("readWorkspaceFileWindow reads a UTF-16 file behind its BOM as text, marked
     await rm(dir, { recursive: true, force: true });
 });
 
+// A Latin-1 file once opened editable: decoded as UTF-8 its é became U+FFFD, and a save wrote that over the byte. Any
+// window that is not UTF-8 is lossy, the desktop folder server's rule too.
+test("readWorkspaceFileWindow marks a Latin-1 file lossy, and a UTF-8 one not", async () => {
+    const latin1 = Buffer.from("café\nnaïve\n", "latin1");
+    const { dir, path } = await fileWith("notes.txt", latin1);
+    expect(await readWorkspaceFileWindow(path)).toEqual({ content: "caf\uFFFD\nna\uFFFDve\n", size: 11, offset: 0, bytes: 11, lossy: true });
+    await writeFile(path, "café\nnaïve\n");
+    expect(await readWorkspaceFileWindow(path)).toEqual({ content: "café\nnaïve\n", size: 13, offset: 0, bytes: 13 });
+    await rm(dir, { recursive: true, force: true });
+});
+
 test("readWorkspaceFileWindow bounds the read to `limit` and reports the file's TOTAL size", async () => {
     // 100 lines of 10 bytes. A 25-byte window can only hold two whole ones.
     const lines = Array.from({ length: 100 }, (_, i) => `line-${String(i).padStart(3, "0")}`).join("\n");

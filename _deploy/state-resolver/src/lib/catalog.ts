@@ -1,4 +1,5 @@
-import type { Capability, IntentSet } from "@intentic/need-resolver";
+import type { IntentSet } from "../intent/intent.js";
+import type { Capability } from "../intent/needs.js";
 
 // A concrete way to satisfy one or more capabilities; one option can fill several needs at once, e.g. forgejo
 // provides both source-control and docker-registry.

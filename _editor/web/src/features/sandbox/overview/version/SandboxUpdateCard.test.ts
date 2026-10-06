@@ -55,7 +55,7 @@ jest.mock(`./useBackgroundDownload`, () => ({
 jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
 type ActiveRow = { id: string; role: string; hosted?: { region: string; warm: boolean; canRollBack?: boolean } };
 const active = ref<ActiveRow>({ id: `sb1`, role: `owner` });
-jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 jest.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
 // Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own. It
 // draws what the card lays in its row (`beside`), and a press on its own fold stands in for the command it would open.

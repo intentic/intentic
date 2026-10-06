@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 
@@ -104,8 +105,9 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     // What each failing check last reported, keyed `${owner}\0${check}`: a violation standing unchanged across passes
     // is recorded once, or one stuck check fills the log and evicts every other violation from `seen`.
     const standing = new Map<string, string>();
-    // Serializes runs: concurrent passes over shared state could double-report or catch a subsystem mid-write.
-    let queue: Promise<readonly InvariantViolation[]> = Promise.resolve([]);
+    // Serializes runs: concurrent passes over shared state could double-report or catch a subsystem mid-write. Each pass
+    // runs after the last however it ended, so a pass that throws past `runOne` (a logger that fails) loses only itself.
+    const serially = serialLock();
 
     const record = (violation: InvariantViolation): void => {
         const key = `${violation.owner}\u0000${violation.check}`;
@@ -189,10 +191,7 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
                 }
             };
         },
-        run: (moment) => {
-            queue = queue.then(() => pass(moment));
-            return queue;
-        },
+        run: (moment) => serially(() => pass(moment)),
         violations: () => [...seen],
         owners: () => [...registered.keys()].toSorted(),
     };

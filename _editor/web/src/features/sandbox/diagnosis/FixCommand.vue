@@ -3,9 +3,9 @@ import { Button, Code, type CommandOs, commandLang, osOptions, SegmentedControl,
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { desktopFixLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useServingSlug } from "../environment/servingSlug";
-import { phoneBrowser } from "../secrets/endpoint";
+import { phoneBrowser } from "../../../client/endpoint/endpoint";
 import { fixCommand, useFixCode } from "./fixCommand";
 
 // THE ONE COMMAND, as the recovery panel offers it: where to run it, what it will do, and the command itself in the

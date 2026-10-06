@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf, HARNESSES, MINTED_PROVIDERS, NATIVE_PROVIDERS, PROVIDERS } from "@intentic/sandbox-contract";
-import * as onPathOriginal from "../system/boot/on-path.js";
+import * as onPathOriginal from "../image/on-path.js";
 import * as engineResolveOriginal from "../engines/engine-resolve.js";
 
 // opencode's health checks whether the feature pack is installed on the machine running the suite (present locally,
@@ -10,7 +10,7 @@ jest.mock("../engines/engine-resolve.js", async () => ({
     engineBinary: async () => "/usr/bin/opencode",
     engineReady: async () => true,
 }));
-jest.mock("../system/boot/on-path.js", async () => ({
+jest.mock("../image/on-path.js", async () => ({
     ...onPathOriginal,
     onPath: async () => true,
 }));

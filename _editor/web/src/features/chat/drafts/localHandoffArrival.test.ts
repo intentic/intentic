@@ -11,7 +11,7 @@ const drawsChat = ref(true);
 const currentRoute = ref({ matched: [{ path: `/` }, { path: `/workspace/:path(.*)*` }] });
 const started: string[] = [];
 const said: { kind: string; text: string }[] = [];
-jest.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId: ref(`box-1`), reachable }) }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId: ref(`box-1`), reachable }) }));
 jest.mock("../run/chatEcho", () => ({ drawsChat }));
 jest.mock("../../../router", () => ({ router: { currentRoute } }));
 jest.mock("../../agents/fleet/agentActions", () => ({
@@ -20,7 +20,7 @@ jest.mock("../../agents/fleet/agentActions", () => ({
         return `c-${started.length}`;
     },
 }));
-jest.mock("../../../shell/notifications/notifications", () => ({
+jest.mock("../../../workbench/notifications/notifications", () => ({
     useNotifications: () => ({
         say: (text: string) => said.push({ kind: `say`, text }),
         warn: (text: string) => said.push({ kind: `warn`, text }),

@@ -28,7 +28,11 @@ const uses = (second: number, ...blocks: object[]): string =>
     JSON.stringify({ type: "assistant", sessionId: "s-1", timestamp: at(second), message: { role: "assistant", content: blocks } });
 const tool = (id: string, name: string, input: object): object => ({ type: "tool_use", id, name, input });
 const result = (second: number, id: string, content: string, isError = false): string =>
-    JSON.stringify({ type: "user", timestamp: at(second), message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] } });
+    JSON.stringify({
+        type: "user",
+        timestamp: at(second),
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] },
+    });
 
 const SESSION = [
     JSON.stringify({ type: "queue-operation", operation: "enqueue", timestamp: at(0) }),
@@ -76,8 +80,18 @@ test("a subagent's calls count in the turn that was running when it made them", 
         join(dir, "s-1", "subagents", "agent-a.jsonl"),
         [
             JSON.stringify({ type: "user", isSidechain: true, timestamp: at(8), message: { role: "user", content: "look around" } }),
-            JSON.stringify({ type: "assistant", isSidechain: true, timestamp: at(9), message: { content: [tool("s1", "Bash", { command: "rg parse" })] } }),
-            JSON.stringify({ type: "user", isSidechain: true, timestamp: at(10), message: { content: [{ type: "tool_result", tool_use_id: "s1", content: "boom", is_error: true }] } }),
+            JSON.stringify({
+                type: "assistant",
+                isSidechain: true,
+                timestamp: at(9),
+                message: { content: [tool("s1", "Bash", { command: "rg parse" })] },
+            }),
+            JSON.stringify({
+                type: "user",
+                isSidechain: true,
+                timestamp: at(10),
+                message: { content: [{ type: "tool_result", tool_use_id: "s1", content: "boom", is_error: true }] },
+            }),
         ].join("\n"),
     );
     const session = readClaudeSession(file, { root: ROOT });
@@ -89,6 +103,26 @@ test("a subagent's calls count in the turn that was running when it made them", 
     ]);
     expect(session?.turns[0]?.failures.map((failure) => failure.id)).toEqual(["t3", "s1"]);
     expect(session?.turns[1]?.calls.map((call) => call.id)).toEqual(["t4"]);
+});
+
+test("a slash command and an image-only prompt start turns; a compaction summary and an interruption do not", () => {
+    const text = [
+        prompt(1, "first"),
+        uses(2, tool("t1", "Bash", { command: "ls" })),
+        prompt(3, [{ type: "text", text: "[Request interrupted by user]" }]),
+        prompt(4, "<command-message>review</command-message>\n<command-name>/review</command-name>"),
+        uses(5, tool("t2", "Read", { file_path: "/repo/a.ts" })),
+        prompt(6, "This session is being continued from a previous conversation.", { isCompactSummary: true }),
+        uses(7, tool("t3", "Grep", { pattern: "x" })),
+        prompt(8, [{ type: "image", source: { type: "base64", data: "" } }]),
+        uses(9, tool("t4", "Bash", { command: "pwd" })),
+    ].join("\n");
+    const turns = readClaudeTranscript(text, { root: ROOT }).turns;
+    expect(turns.map((turn) => [turn.prompt, turn.calls.map((call) => call.id)])).toEqual([
+        ["first", ["t1"]],
+        ["<command-message>review</command-message>\n<command-name>/review</command-name>", ["t2", "t3"]],
+        ["", ["t4"]],
+    ]);
 });
 
 test("a session file that cannot be read is no session, and one with no prompt has no turns", () => {

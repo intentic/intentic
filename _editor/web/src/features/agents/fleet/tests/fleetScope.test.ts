@@ -7,7 +7,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 const sandboxes = ref<{ id: string; name: string; image: string | null; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 const select = jest.fn();
-jest.mock("../../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
+jest.mock("../../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
 
 // The store this reads from, stubbed to the shape its surfaces see; what it does with the network is fleetAcross's own
 // business.
@@ -26,7 +26,7 @@ jest.mock("../../../sandbox/live/fleetAcross", () => ({
 }));
 
 const landOnAfterSwitch = jest.fn();
-jest.mock("../../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch }));
+jest.mock("../../../sandbox/switching/sandboxScreen", () => ({ landOnAfterSwitch }));
 
 const { acrossAttention, boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } =
     await import("../fleetScope");

@@ -1,5 +1,5 @@
 import type { GitRemoteState } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { upstreamOf } from "../ops/branches.js";
 import type { ActionResult } from "../changes/changes-commits.js";
 import { gitFailureReason, identity } from "../git.js";

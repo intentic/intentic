@@ -268,22 +268,39 @@ const preTextOf = (node: Node): string => {
     return text;
 };
 
-const renderTable = (el: Element, options: MarkdownOptions): string => {
-    const rows: string[][] = [];
-    for (const tr of collectRows(el)) {
-        const cells = tr.childNodes.filter(isElement).filter((cell) => cell.tagName === "td" || cell.tagName === "th");
-        rows.push(cells.map((cell) => collapse(renderInlineChildren(cell, options)).replaceAll("|", "\\|").replaceAll("\n", " ")));
-    }
+const renderTable = (el: Element, options: MarkdownOptions): string =>
+    markdownTable(
+        collectRows(el).map((tr) =>
+            tr.childNodes
+                .filter(isElement)
+                .filter((cell) => cell.tagName === "td" || cell.tagName === "th")
+                .map((cell) => collapse(renderInlineChildren(cell, options))),
+        ),
+    );
+
+// One cell's text made safe inside a table row: a raw `|` would end the cell and a line break the row, so pipes are
+// escaped and each break (with the blanks around it) folds into one space.
+export const markdownCell = (text: string): string => text.replaceAll(/[ \t]*\r?\n\s*/g, " ").replaceAll("|", "\\|");
+
+export interface MarkdownTableOptions {
+    // Per column; a `right` column gets the `---:` marker, anything else plain `---`.
+    readonly align?: readonly ("left" | "right")[];
+}
+
+// A GFM table from rows of plain cell text, the first row the header, every row padded out to the widest and every cell
+// passed through markdownCell; no rows is no table. The one table writer for webq's pages and fileq's sheets, archives
+// and profiles, so a cell is escaped the same way whatever produced it.
+export const markdownTable = (rows: readonly (readonly string[])[], options: MarkdownTableOptions = {}): string => {
     if (rows.length === 0) {
         return "";
     }
     const width = Math.max(...rows.map((row) => row.length));
-    const pad = (row: string[]): string[] => [...row, ...Array.from({ length: width - row.length }, () => "")];
-    const [header, ...body] = rows.map(pad) as [string[], ...string[][]];
-    return [tableRow(header), tableRow(header.map(() => "---")), ...body.map(tableRow)].join("\n");
+    const line = (cells: readonly string[]): string => `| ${cells.join(" | ")} |`;
+    const cellsOf = (row: readonly string[]): string[] => Array.from({ length: width }, (_, index) => markdownCell(row[index] ?? ""));
+    const [header, ...body] = rows as [readonly string[], ...(readonly string[])[]];
+    const rule = Array.from({ length: width }, (_, index) => (options.align?.[index] === "right" ? "---:" : "---"));
+    return [line(cellsOf(header)), line(rule), ...body.map((row) => line(cellsOf(row)))].join("\n");
 };
-
-const tableRow = (cells: string[]): string => `| ${cells.join(" | ")} |`;
 
 const collectRows = (el: Element): Element[] => {
     const rows: Element[] = [];

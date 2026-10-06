@@ -2,7 +2,7 @@ import type { Activation, ExtensionContext, IntenticApi } from "@intentic/extens
 import { bindHost } from "./host";
 import { t } from "./i18n.js";
 
-/* ext-apps activation: bind the host handle, then register two directory views. */
+/* repo-apps activation: bind the host handle, then register two directory views. */
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
     context.subscriptions.push(

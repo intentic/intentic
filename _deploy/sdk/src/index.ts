@@ -1,5 +1,5 @@
 import type { DesiredStateGraph } from "@intentic/graph";
-import type { IntentSet } from "@intentic/need-resolver";
+import type { IntentSet } from "@intentic/state-resolver";
 import { resolveState } from "@intentic/state-resolver";
 import type { Stack } from "./handles.js";
 import { createStack } from "./stack.js";

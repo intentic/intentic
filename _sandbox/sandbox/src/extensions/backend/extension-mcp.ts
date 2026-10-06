@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { type Capability, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
 import { type ToolServer, toolServerForCard, toolServersOf } from "@intentic/extension-manifest";
 import type { Context } from "hono";
@@ -10,7 +11,7 @@ import type { Services } from "../../composition.js";
 import { extensionProcessKey } from "../extension-processes.js";
 import { type ExtensionHost, extensionGranted, type InstalledExtension } from "../installed-extensions.js";
 import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
-import { forwardToBackend } from "./backend-proxy.routes.js";
+import { forwardToBackend } from "./backend-proxy.js";
 
 // An extension's tools (`contributes.tools`, or a cli card's `mcp`, its alias for one release), mounted into every turn
 // granted them at the daemon's one MCP door on the turn's lease, like peer bridges: the door checks the turn's bearer against
@@ -155,7 +156,7 @@ export const createExtensionToolsEndpoint =
             }
             return ((await answered.json()) as { answer: RpcMessage | null }).answer ?? undefined;
         } catch (error) {
-            return refuse(`${target.extension} did not answer: ${error instanceof Error ? error.message : String(error)}`);
+            return refuse(`${target.extension} did not answer: ${errorMessage(error)}`);
         }
     };
 

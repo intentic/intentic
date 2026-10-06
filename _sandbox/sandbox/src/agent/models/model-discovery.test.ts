@@ -1,5 +1,6 @@
 import { humanizeModelId } from "@intentic/sandbox-contract";
-import { idCatalog, listModels, suggestedModels, unrankedCatalog } from "./model-discovery.js";
+import { expireTimeouts, stalledFetch } from "../../testing.js";
+import { DISCOVERY_TIMEOUT_MS, idCatalog, listModels, suggestedModels, unrankedCatalog } from "./model-discovery.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
@@ -20,6 +21,16 @@ test("listModels answers [] for every way an endpoint can fail, so the caller ca
     expect(await listModels("https://example.test", "tok", unauthorized)).toEqual([]);
     expect(await listModels("https://example.test", "tok", notJson)).toEqual([]);
     expect(await listModels("https://example.test", "tok", offline)).toEqual([]);
+});
+
+test("listModels gives up on an endpoint that never answers, so a stalled rung falls to the next one", async () => {
+    const timeouts = expireTimeouts();
+    try {
+        expect(await listModels("https://example.test/v1/models", "tok", stalledFetch)).toEqual([]);
+        expect(timeouts.asked).toEqual([DISCOVERY_TIMEOUT_MS]);
+    } finally {
+        timeouts.mockRestore();
+    }
 });
 
 test("suggestedModels reads only the clause after 'did you mean', never the id being rejected", () => {

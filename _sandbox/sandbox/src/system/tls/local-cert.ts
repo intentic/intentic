@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import type { Config } from "../../env.config.js";
 import { LETS_ENCRYPT_DIRECTORY, obtainCertificate } from "@intentic/base/acme";
-import { postToPlatform } from "../platform-client.js";
+import { callIngress } from "../platform-client.js";
 
 // Loopback certificate: lets a browser on this machine reach the daemon over HTTPS without Cloudflare, using
 // `<id>.local.<zone>` (one wildcard record) resolving to 127.0.0.1. Failure (no zone, CA down, rate limit) is quiet:
@@ -68,21 +68,19 @@ const accountKeyOf = (config: Config): KeyObject => {
 // Writes/withdraws the DNS-01 record via the platform, keyed off our connect token. Also the only source of the name to
 // certify, since the platform alone owns the zone; undefined means the loopback path is off.
 const relayChallenge = async (config: Config, value: string | undefined): Promise<string | undefined> => {
-    const { status, json } = await postToPlatform(config, "/sandbox/local-dns", value === undefined ? {} : { challenge: value });
-    if (status < 200 || status >= 300) {
-        const detail = (json as { error?: string } | undefined)?.error;
-        throw new Error(`the platform refused the loopback DNS update${detail === undefined ? "" : `: ${detail}`}`);
+    const answer = await callIngress(config, { route: "localDns", input: value === undefined ? {} : { challenge: value }, idleMs: 60_000 });
+    if (answer.refusal !== undefined) {
+        throw new Error(`the platform refused the loopback DNS update: ${answer.refusal}`);
     }
-    const answered = (json as { hostname?: unknown } | undefined)?.hostname;
-    return typeof answered === `string` && answered !== `` ? answered : undefined;
+    const answered = answer.data?.hostname;
+    return answered !== undefined && answered !== `` ? answered : undefined;
 };
 
 // The platform's read-back of the challenge through Cloudflare, for a host whose network cannot see the zone's
 // nameservers. Anything but a plain yes (an older platform without the route, a refusal) is a no.
 const confirmChallenge = async (config: Config, value: string): Promise<boolean> => {
-    const { status, json } = await postToPlatform(config, "/sandbox/local-dns/confirm", { challenge: value });
-    // SAFETY: `confirmed` is only compared with `true`, so any other shape of answer reads as no.
-    return status >= 200 && status < 300 && (json as { confirmed?: unknown } | undefined)?.confirmed === true;
+    const answer = await callIngress(config, { route: "localDnsConfirm", input: { challenge: value }, idleMs: 60_000 });
+    return answer.data?.confirmed === true;
 };
 
 // Obtains or renews the certificate; undefined means the sandbox cannot or need not have one — every branch here is a

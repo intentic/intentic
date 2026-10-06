@@ -1,5 +1,5 @@
 // Which programs are heavy enough to take turns, and how the queue treats them: the one table the daemon
-// (_sandbox/sandbox/src/platform/resources/heavy-commands.ts), the program hook that queues a heavy program as it starts
+// (_sandbox/sandbox/src/workload/heavy-commands.ts), the program hook that queues a heavy program as it starts
 // (heavy-hook.cjs, heavy-exec.cjs), queue-run's callers and the repository's own scripts (_tools/scripts/lib/
 // heavy-slot.mjs) all read. CommonJS with no dependencies, so it loads under `node --require` in any project, on any
 // Node an agent's project pins, and ES modules import it by name.

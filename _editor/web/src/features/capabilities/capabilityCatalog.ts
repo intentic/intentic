@@ -1,4 +1,4 @@
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed, type Ref } from "vue";
 import { type ConnectionSources, connectionRows, groupConnections } from "./model/connectionRows";

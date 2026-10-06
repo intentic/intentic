@@ -2,7 +2,6 @@ import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 
 const peripherySchema = sshSchema.extend({
     coreAddress: z.string(),
@@ -29,7 +28,7 @@ const checkPeriphery = async (session: SshSession, serverName: string): Promise<
 // (the public Komodo URL through the Cloudflare tunnel), registering itself as `serverName`. The container
 // runs with --network host and mounts the Docker socket + /proc so Core can manage containers on the host.
 // Stateless: a version bump just recreates the container; it reconnects to Core automatically.
-export const createKomodoPeripheryProvider = (executor: SshExecutor = sshExecutor): Provider => ({
+export const createKomodoPeripheryProvider = (executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.

@@ -198,7 +198,7 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
             constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
             constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),
             constantValue("desktop/desktop-tools.ts", "DESKTOP_SERVER"),
-            constantValue("execution/js-tool.ts", "JS_SERVER_NAME"),
+            constantValue("seams/js-tool-names.ts", "JS_SERVER_NAME"),
         ]);
         // Sanity: the scans found the blocks at all, so a moved block fails loudly here instead of passing vacuously.
         expect(discovered.size, "server discovery found nothing — the mount blocks moved").toBeGreaterThan(5);

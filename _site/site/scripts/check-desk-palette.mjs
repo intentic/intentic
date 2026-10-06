@@ -155,7 +155,7 @@ if (canvasRecipe === null) {
 
 // ── 4. the entry screens ─────────────────────────────────────────────────────────────────────────────────────────
 // /login and /setup are the site's design worn by the app, so a reader arriving from /desk meets them in the light
-// skin too — and they carry their own copy of the house materials, in a third package, behind a third selector. Only
+// skin too — and they carry their own copy of the house materials, behind a third selector. Only
 // the house metals are copied: everything else in that block hands the app's own light roles back, which cannot drift
 // from the app by construction. desk.css spells its bevels with `--desk-shadow-*`, which do not exist over there, so
 // they are expanded before the two are compared.

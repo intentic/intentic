@@ -1,7 +1,8 @@
 import { DAEMON_PORT, PREVIEW_PORT } from "@intentic/constants";
 import type { SecretRef } from "@intentic/graph";
 import { generated, httpOk, makeRef } from "@intentic/graph";
-import type { HostInput, ServiceKind, WorkspaceIntent } from "@intentic/need-resolver";
+import type { HostInput, ServiceKind } from "../intent/inputs.js";
+import type { WorkspaceIntent } from "../intent/intent.js";
 import type { ResolvedNode } from "@intentic/resources";
 import { previewDomain } from "../lib/ids.js";
 import { IMAGES } from "../lib/images.js";

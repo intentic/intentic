@@ -31,6 +31,17 @@
                 "default": "./dist/index.js"
             }
         },
+        "./transcript": {
+            "types": "./dist/recall/transcript/lines.d.ts",
+            "import": {
+                "@intentic/src": "./src/recall/transcript/lines.ts",
+                "default": "./dist/recall/transcript/lines.js"
+            },
+            "require": {
+                "@intentic/src": "./src/recall/transcript/lines.ts",
+                "default": "./dist/recall/transcript/lines.js"
+            }
+        },
         "./skill": "./plugin/skills/iq/SKILL.md",
         "./nudge": "./plugin/hooks/nudge.txt"
     },
@@ -46,7 +57,6 @@
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/iq-engine": "workspace:*",
-        "@intentic/iq-recall": "workspace:*",
         "@puristic/env": "catalog:",
         "@stricli/core": "catalog:",
         "tslib": "catalog:",

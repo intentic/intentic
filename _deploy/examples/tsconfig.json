@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "outDir": "./dist",
+        "rootDir": "./",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./*.config.ts"],
+    "references": [{ "path": "../graph" }, { "path": "../sdk" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

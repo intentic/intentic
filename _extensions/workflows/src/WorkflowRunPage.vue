@@ -4,7 +4,7 @@ import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 import { host } from "./host";
-import { stepTone, workflowDag } from "./workflowDag";
+import { stepTone, workflowDag } from "./graph/workflowDag";
 import { useWorkflows } from "./useWorkflows";
 import { t } from "./i18n.js";
 

@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import { PeerEnrollmentAnswerSchema } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
@@ -10,7 +11,7 @@ import { auditPath, configPath, type HostLink, readLinks, readLinkStates, remove
 
 // device: setup (redeem a pairing and stay connected) and uninstall (disconnect, keep the audit log); no OAuth, only the pairing token.
 
-const enroll = async (sandboxUrl: string, pairToken: string): Promise<{ id: string; token: string }> => {
+export const enroll = async (sandboxUrl: string, pairToken: string): Promise<{ id: string; token: string }> => {
     const response = await postWhileWarming(
         sandboxUrl,
         "/system/hosts/enroll",
@@ -20,7 +21,12 @@ const enroll = async (sandboxUrl: string, pairToken: string): Promise<{ id: stri
     if (!response.ok) {
         throw new Error(`connecting this device failed (${response.status}): ${await response.text()}`);
     }
-    return (await response.json()) as { id: string; token: string };
+    // allow(silent-catch): a body that is not JSON fails the schema below and is reported as not an enrollment
+    const answer = PeerEnrollmentAnswerSchema.safeParse(await response.json().catch(() => undefined));
+    if (!answer.success) {
+        throw new Error(`connecting this device failed: the sandbox's answer is not an enrollment (${answer.error.issues[0]?.message ?? "unreadable"})`);
+    }
+    return answer.data;
 };
 
 interface SetupFlags {

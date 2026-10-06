@@ -5,10 +5,10 @@ import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
 import { chatInSidePanel } from "../../features/chat/panel/chatPanelLayout";
-import { SIDE_PANEL } from "../commands/categories";
-import { type CommandRegistration, registerCommand } from "../commands/useCommands";
-import { chatSlot } from "../window/panelSlots";
-import { toAppPx, toScreenPx, uiLength } from "../window/uiScale";
+import { SIDE_PANEL } from "../../workbench/commands/categories";
+import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
+import { chatSlot } from "../../workbench/window/panelSlots";
+import { toAppPx, toScreenPx, uiLength } from "../../workbench/window/uiScale";
 import {
     defaultBesideWidth,
     defaultChatWidth,
@@ -19,10 +19,10 @@ import {
     MIN_PANE_PX,
     roomBesideChat,
     useLayout,
-} from "../window/useLayout";
+} from "../../workbench/window/useLayout";
 import { besideChat, besideFills } from "./sideLayout";
-import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, setSplit, type SideTab, useSidePanel } from "./sideTabs";
-import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "./sideViews";
+import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, setSplit, type SideTab, useSidePanel } from "../../workbench/side/sideTabs";
+import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "../../workbench/side/sideViews";
 import SideStrip, { type SideStripItem } from "./SideStrip.vue";
 import SideUnavailable from "./SideUnavailable.vue";
 

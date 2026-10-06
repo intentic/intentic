@@ -1,4 +1,4 @@
-import type { Rule } from "@intentic/api-contract";
+import type { Rule } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 

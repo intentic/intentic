@@ -1,6 +1,6 @@
 import { PRIVACY_REPLACEMENTS_MAX } from "@intentic/sandbox-contract";
 import sharp from "sharp";
-import type { OcrLine } from "../../ocr/paddle-ocr.js";
+import type { OcrLine } from "@intentic/ocr/paddle-ocr";
 import { createMaskMemo, createMasker } from "../masker.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 import type { ImageReading, LocalReaders } from "../readers.js";

@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { errorMessage } from "@intentic/base/errors";
 import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { loadConfig } from "./config.js";
@@ -36,7 +37,6 @@ if (flyApiToken === `` || flyOrg === ``) {
 const out = (line: string): void => {
     process.stdout.write(`${line}\n`);
 };
-const say = (message: unknown): string => (message instanceof Error ? message.message : String(message));
 
 // Answers collected and printed together at the end; a failed probe answers `unanswered` with why, so one bad question
 // never costs the others.
@@ -50,7 +50,7 @@ const probe = async (question: string, what: string, run: () => Promise<string>)
     try {
         answer(question, await run());
     } catch (error) {
-        answer(question, `UNANSWERED (${say(error)})`);
+        answer(question, `UNANSWERED (${errorMessage(error)})`);
     }
 };
 
@@ -208,7 +208,7 @@ try {
         // answer.
         const reach = await manifest(repo, `env`, deployToken, `GET`).then(
             (result) => `the registry accepted it (manifest read answered HTTP ${result.status})`,
-            (error: unknown) => `MINTED BUT THE REGISTRY REFUSED IT: ${say(error)}`,
+            (error: unknown) => `MINTED BUT THE REGISTRY REFUSED IT: ${errorMessage(error)}`,
         );
         return `organizationIdOf answered a node id, profile \`deploy\` + profileParams.app_id minted token ${minted.id}; ${reach}`;
     });
@@ -258,7 +258,7 @@ try {
                       detail.exitCode === undefined
                           ? `the stopped builder carries NO events[].request.exit_event.exit_code, so the reconcile's fallback is blind`
                           : `the stopped builder still carries exit_event.exit_code ${detail.exitCode}`,
-                  (error: unknown) => `the stopped builder could not be re-read: ${say(error)}`,
+                  (error: unknown) => `the stopped builder could not be re-read: ${errorMessage(error)}`,
               ));
         const stray = await createMachine(flyApiToken, appName, {
             name: `${appName}-stray`,
@@ -274,7 +274,7 @@ try {
         await destroyMachine(flyApiToken, appName, stray.machineId, { force: true });
         const gone = await getMachineDetail(flyApiToken, appName, stray.machineId).then(
             (detail) => `still listed in state ${detail.state}`,
-            (error: unknown) => (error instanceof FlyError && error.status === 404 ? `404, gone` : `unreadable: ${say(error)}`),
+            (error: unknown) => (error instanceof FlyError && error.status === 404 ? `404, gone` : `unreadable: ${errorMessage(error)}`),
         );
         return `${stopped}. DELETE /apps/{app}/machines/{id}?force=true killed a RUNNING machine; asking about it after answers ${gone}`;
     });
@@ -288,7 +288,7 @@ try {
         const oldOne = await manifest(repo, firstDigest, deployToken, `GET`);
         const deleted = await manifest(repo, firstDigest, deployToken, `DELETE`).then(
             (result) => `DELETE /v2/<app>/manifests/<digest> answered ${result.status}`,
-            (error: unknown) => `DELETE could not be attempted: ${say(error)}`,
+            (error: unknown) => `DELETE could not be attempted: ${errorMessage(error)}`,
         );
         return `the second build took ${minutes(second.ms)} with the layer cache warm; the tag now names ${moved.digest || `nothing`}; the first digest ${
             oldOne.status === 200 ? `IS STILL THERE unreferenced (HTTP 200)` : `is gone on its own (HTTP ${oldOne.status})`
@@ -307,7 +307,7 @@ try {
         answers.set(`6`, `not run (pass --rootless; it repeats the whole build on <builderImage>-rootless)`);
     }
 } catch (error) {
-    out(`\nThe spike stopped early: ${say(error)}`);
+    out(`\nThe spike stopped early: ${errorMessage(error)}`);
 } finally {
     // Deploy token is revoked last: revoking before asking the registry about the repository would refuse that question
     // instead of answering it.
@@ -316,7 +316,7 @@ try {
     } else {
         await deleteApp(flyApiToken, appName).then(
             () => out(`\nApp ${appName} destroyed.`),
-            (error: unknown) => out(`\nCOULD NOT DESTROY ${appName}: ${say(error)} — delete it by hand, it is costing money.`),
+            (error: unknown) => out(`\nCOULD NOT DESTROY ${appName}: ${errorMessage(error)} — delete it by hand, it is costing money.`),
         );
         // Only askable after the app is gone: does the registry repository survive it, or does the platform keep paying
         // for orphaned images?
@@ -324,14 +324,14 @@ try {
             const after = await manifest(repo, `env`, deployToken, `GET`).then(
                 (result) =>
                     result.status === 200 ? `NO: the repository outlived its app (HTTP 200)` : `yes, the repository answers HTTP ${result.status}`,
-                (error: unknown) => `the repository could not be read after the app went: ${say(error)}`,
+                (error: unknown) => `the repository could not be read after the app went: ${errorMessage(error)}`,
             );
             answers.set(`4 (repository)`, `deleting the app removes its registry repository? ${after}`);
         }
     }
     for (const id of mintedTokens) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- a handful at most, and teardown is not hot
-        await revokeDeployToken(flyApiToken, id).catch((error: unknown) => out(`  could not revoke token ${id}: ${say(error)}`));
+        await revokeDeployToken(flyApiToken, id).catch((error: unknown) => out(`  could not revoke token ${id}: ${errorMessage(error)}`));
     }
 }
 

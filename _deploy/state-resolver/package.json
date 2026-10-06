@@ -39,7 +39,6 @@
     "dependencies": {
         "@intentic/constants": "workspace:*",
         "@intentic/graph": "workspace:*",
-        "@intentic/need-resolver": "workspace:*",
         "@intentic/resources": "workspace:*",
         "tslib": "catalog:"
     },

@@ -1,7 +1,7 @@
 import type { DesiredStateGraph } from "@intentic/graph";
 import { compile, toNodeMap } from "@intentic/graph";
-import type { IntentSet } from "@intentic/need-resolver";
-import { needKey, resolveNeeds } from "@intentic/need-resolver";
+import type { IntentSet } from "./intent/intent.js";
+import { needKey, resolveNeeds } from "./intent/needs.js";
 import { emit } from "./emit/emit.js";
 import type { Catalog } from "./lib/catalog.js";
 import { catalogFor } from "./lib/catalog.js";

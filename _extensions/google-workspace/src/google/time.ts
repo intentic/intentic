@@ -6,6 +6,7 @@ import { UsageError } from "../cli/args.js";
 
 // "+02:00" for a zone at a moment, DST included.
 export const offsetOf = (timeZone: string, at: Date): string => {
+    // allow(format-tiers): reads a zone's offset for Google's API, never shown to a reader
     const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" }).formatToParts(at);
     const name = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+00:00";
     const offset = name.replace("GMT", "");
@@ -13,6 +14,7 @@ export const offsetOf = (timeZone: string, at: Date): string => {
 };
 
 // The calendar date at a moment, in a zone: "today" is a question only a zone can answer.
+// allow(format-tiers): en-CA spells YYYY-MM-DD, a machine date for Google's API, never shown to a reader
 export const dateIn = (timeZone: string, at: Date): string => new Intl.DateTimeFormat("en-CA", { timeZone }).format(at);
 
 const RELATIVE = /^([+-])(\d+)\s*(m|min|h|hour|hours|d|day|days|w|week|weeks)$/i;

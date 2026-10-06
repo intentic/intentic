@@ -4,10 +4,10 @@ import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGr
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { useMintedTokens } from "../../../lib/useMintedTokens";
-import { jsonBody } from "../client/jsonBody";
-import { sandboxJson } from "../client/sandboxClient";
-import { useSandbox } from "../client/useSandbox";
-import { useRole } from "../secrets/useRole";
+import { jsonBody } from "../../../client/sandbox/jsonBody";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
 
 // Program credential minted here by the owner or a maintainer: every scope, every token against this sandbox, and the

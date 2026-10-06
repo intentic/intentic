@@ -5,7 +5,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
+import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
 import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 import { runningTurn } from "../../../testing/runningTurn";
 
@@ -38,7 +38,7 @@ jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // The composer only renders once the sandbox is reachable; mocked online here.
-jest.mock(`../../sandbox/client/useSandbox`, () => {
+jest.mock(`../../../client/sandbox/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
@@ -74,7 +74,7 @@ jest.mock(`../../sandbox/client/useSandbox`, () => {
 const { providerAccounts } = await import("../accounts/providerAccounts");
 const { useChat } = await import("../run/useChat");
 const { queryClient } = await import("../../../lib/queryPersistence");
-const { useLayout } = await import("../../../shell/window/useLayout");
+const { useLayout } = await import("../../../workbench/window/useLayout");
 const { router } = await import("../../../router");
 const { default: ChatPanel } = await import("../panel/ChatPanel.vue");
 

@@ -2,10 +2,15 @@
 // carries and when that name follows the list, how loudly a box objects and when, what a paste unpacks, the fold,
 // the imports that fill it, and what a refused submit shows.
 import "@intentic/testing/dom";
-import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import { type ForticlientConnection, VAULTED } from "@intentic/sandbox-contract";
+import {
+    type ForticlientConnection,
+    VAULTED,
+    type CapabilityProbe,
+    type CapabilityRecommendation,
+    type CapabilitySummary,
+} from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, nextTick, ref } from "vue";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";

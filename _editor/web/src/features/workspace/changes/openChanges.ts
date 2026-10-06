@@ -1,5 +1,5 @@
 import { router } from "../../../router";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 
 // The one way in to the Changes panel from somewhere else in the app. Shared rather than repeated per surface: every
 // place that tells the user only they can clear something (a refused land's report, the card that carries it) has to

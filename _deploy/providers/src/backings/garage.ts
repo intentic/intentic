@@ -3,7 +3,6 @@ import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
 import { containerId, execProbe } from "../core/backing-ssh.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "garage";
@@ -79,7 +78,7 @@ const ensureLayout = async (session: SshSession, id: string): Promise<void> => {
 };
 
 // A Garage object-storage backing instance (i.want.objectStorage). Per-app buckets are the binding's job.
-export const createGarageProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createGarageProvider = (executor: SshExecutor): Provider =>
     createBackingProvider(
         {
             kind: KIND,

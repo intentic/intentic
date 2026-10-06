@@ -1,7 +1,5 @@
 import type { ClientDiagnostic } from "@intentic/sandbox-contract";
 import { buildId } from "./buildEpoch";
-import { sandboxAuthenticatedFetch } from "../features/sandbox/client/sandboxAuthFetch";
-import { currentSandboxTarget } from "../features/sandbox/client/sandboxTarget";
 import { t } from "@intentic/ui/i18n";
 
 // Posts what the browser saw or measured to the daemon (logs/client.jsonl beside its own records), since
@@ -40,10 +38,14 @@ const route = (): string | undefined => {
     }
 };
 
-// `keepalive` is load-bearing: a startup crash or a closing tab cancels an ordinary fetch with the page, but not a
-// keepalive one; `sendBeacon` would survive too but can't carry the daemon's bearer header. Drops on failure rather
-// than retrying. Deliberately not through the typed daemon client: that wraps calls in `trackPerf`, which would
-// make a slow report file a slow span that queues another report.
+// Who carries a batch to the daemon (client/sandbox/clientReport.ts), handed in at boot (main.ts) since the daemon's
+// client sits above this module. Until then, or with no sandbox addressed, a batch is dropped: nothing to report to.
+let post: ((events: readonly ClientDiagnostic[]) => void) | undefined;
+export const sendClientDiagnosticsWith = (send: (events: readonly ClientDiagnostic[]) => void): void => {
+    post = send;
+};
+
+// Drops on failure rather than retrying: the sender never throws back, and a report that cannot go is lost.
 const flush = (): void => {
     if (timer !== undefined) {
         clearTimeout(timer);
@@ -65,25 +67,7 @@ const flush = (): void => {
         dropped = 0;
     }
     try {
-        const target = currentSandboxTarget();
-        if (target === undefined) {
-            // No sandbox addressed yet (the sign-in screens): nothing to report to, and nothing to keep either.
-            return;
-        }
-        void sandboxAuthenticatedFetch(
-            // allow(contract-paths): a keepalive report that must outlive the page, kept off the typed client's trackPerf span (see above)
-            new Request(`${target.base}/logs/client`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ events }),
-                keepalive: true,
-            }),
-            target,
-            // Never worth interrupting anyone for: a missing credential just loses the report, which beats raising a
-            // sign-in
-            // gate from inside an error handler.
-            { background: true },
-        ).catch(() => undefined);
+        post?.(events);
     } catch {
         // Unaddressed, unauthenticated, or unserializable — all mean the report is lost, none worth surfacing to the
         // user.

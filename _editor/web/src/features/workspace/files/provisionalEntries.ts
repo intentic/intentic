@@ -1,6 +1,6 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed } from "vue";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { basename, parentDir } from "@intentic/ui/path";
 
 // What this browser has done to the workspace that the daemon's listing hasn't agreed with yet. That listing is a fresh

@@ -1,15 +1,15 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
-import type { SandboxSettings } from "@intentic/api-contract";
+import type { SandboxSettings } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Active sandbox's agent settings (.intentic/config/settings.json), read/written via the daemon's settings routes. All
 // per-sandbox agent toggles; `save` overwrites the whole object, and the next turn's streamAgent reads it to gate

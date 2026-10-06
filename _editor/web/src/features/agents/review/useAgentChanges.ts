@@ -1,4 +1,3 @@
-import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic/api-contract";
 import { useAsyncAction } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import {
@@ -9,14 +8,18 @@ import {
     type LandMode,
     type LandResult,
     type WorkspaceModule,
+    type AgentChange,
+    type AgentChanges,
+    type AgentRepoChanges,
+    type FileDiff,
 } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, ref, watch, type Ref } from "vue";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import {
     askAgentToResolve,
     deleteAgentScratch,
@@ -30,7 +33,7 @@ import {
 import { landedAway, turnInFlight } from "../fleet/agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
-import { useNotifications } from "../../../shell/notifications/notifications";
+import { useNotifications } from "../../../workbench/notifications/notifications";
 
 // Per-agent review of what a worktree has that main does not (agents.diff): one flat set per repo, no
 // staged/unstaged split. `landed` is read off the tree; committed files drop into `absorbed`. Land/discard replace
@@ -78,7 +81,7 @@ const commitSettings = async (paths: readonly string[], at: string | undefined):
 export const agentChangesKey = (agentId: string, at?: string): unknown[] =>
     at === undefined ? rpcKey(`agents.diff`, { id: agentId }) : rpcKeyAt(at, `agents.diff`, { id: agentId });
 
-export const fetchAgentChanges = (agentId: string, at?: string): Promise<AgentChangesResponse> =>
+export const fetchAgentChanges = (agentId: string, at?: string): Promise<AgentChanges> =>
     sandboxRpc.agents.diff({ id: agentId }, { context: { at } });
 
 // Warmed and clicked reads share one entry; whatever makes the review stale drops these with it (agentReviewKeys).
@@ -96,7 +99,7 @@ export const AGENT_FILE_DIFF_OPTIONS = {
     retry: false as const,
 };
 
-export const readAgentFileDiff = (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> =>
+export const readAgentFileDiff = (agentId: string, repo: string, path: string, at?: string): Promise<FileDiff> =>
     sandboxRpc.agents.fileDiff({ id: agentId, repo, path }, { context: { at } });
 
 // Named apart from the fetch call so the background loader can be handed the query directly.
@@ -107,7 +110,7 @@ export const agentFileDiffQuery = (agentId: string, repo: string, path: string, 
 });
 
 // Module-local; wraps the query above so the panel below is its only caller.
-const agentFileDiff = (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> =>
+const agentFileDiff = (agentId: string, repo: string, path: string, at?: string): Promise<FileDiff> =>
     queryClient.fetchQuery(agentFileDiffQuery(agentId, repo, path, at));
 
 // Totals files and +/- lines for a subset of rows; feeds the header's code/test split chips.
@@ -199,7 +202,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const testStat = computed(() => statOf(files.value.filter((file) => isTestPath(file.change.path))));
 
     // One file's diff via the shared cached read above, so a row the loader already warmed opens without a round trip.
-    const fileDiff = (repo: string, path: string): Promise<FileDiffResponse> => agentFileDiff(agentId.value, repo, path);
+    const fileDiff = (repo: string, path: string): Promise<FileDiff> => agentFileDiff(agentId.value, repo, path);
 
     const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value.get(agentId.value) ?? NONE);
     // Counted over current rows, so a reverted file doesn't inflate progress.

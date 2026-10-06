@@ -1,7 +1,7 @@
 // jsdom for the import chain: the device flow client touches the app's environment at module eval.
 import "@intentic/testing/dom";
 
-jest.mock(`../../client/sandboxClient`, () => ({
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
     sandboxRequest: jest.fn(),
     sandboxJson: jest.fn(),
     sandboxError: jest.fn(),

@@ -7,12 +7,15 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
-import { cloudflareApi, forgejoApi, sshExecutor } from "@intentic/providers";
+import { cloudflareApi, createSshExecutor, forgejoApi, inMemoryHostKeyStore } from "@intentic/providers";
 import { deploymentId, deploymentPort } from "@intentic/state-resolver";
 import { loadConfig } from "./env.config.js";
 import { renderTemplate } from "./lib/templates.js";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+
+// A throwaway local container: its first key is the only one it will ever present, so trust-on-first-use is right here.
+const sshExecutor = createSshExecutor(inMemoryHostKeyStore());
 
 // ssh2 is CommonJS; `import { utils }` can't resolve under ESM, so load it via createRequire.
 const { utils } = createRequire(import.meta.url)("ssh2") as {

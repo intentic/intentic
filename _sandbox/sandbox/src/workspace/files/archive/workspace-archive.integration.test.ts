@@ -88,6 +88,23 @@ test("extractTarToWorkspace rejects an escaping entry path", async () => {
     await rm(root, { recursive: true, force: true });
 });
 
+test("extractTarToWorkspace rejects an absolute entry path, and one that climbs through a folder", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tar-"));
+    await expect(extractTarToWorkspace(root, await tarOf([{ name: "/tmp/evil.txt", content: "no" }]))).rejects.toBeInstanceOf(PathEscapeError);
+    await expect(extractTarToWorkspace(root, await tarOf([{ name: "a/../../evil.txt", content: "no" }]))).rejects.toBeInstanceOf(
+        PathEscapeError,
+    );
+    await rm(root, { recursive: true, force: true });
+});
+
+// `tar -cf x.tar .` writes the archive's own root first; it is /work, already there, not an escape.
+test("extractTarToWorkspace takes an archive that names its own root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tar-"));
+    await extractTarToWorkspace(root, await tarOf([{ name: "./", type: "directory" }, { name: "./a.txt", content: "hi" }]));
+    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("hi");
+    await rm(root, { recursive: true, force: true });
+});
+
 test("extractTarToWorkspace skips a file entry that collides with an existing directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "tar-"));
     // A symlink alias can duplicate a directory as a file entry (Chrome follows symlinks; the packer can't flag it).

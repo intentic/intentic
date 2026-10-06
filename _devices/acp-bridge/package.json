@@ -1,0 +1,44 @@
+{
+    "name": "@intentic/acp-bridge",
+    "version": "0.0.0",
+    "description": "ACP agent bridge for intentic, drive the agents in your intentic sandbox (Claude, Codex, Grok, any ACP agent) from Zed, JetBrains, or any ACP editor",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_devices/acp-bridge"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "bin": {
+        "intentic-acp": "./dist/cli.js"
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@agentclientprotocol/sdk": "catalog:",
+        "@intentic/constants": "workspace:*",
+        "@intentic/local-agent": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

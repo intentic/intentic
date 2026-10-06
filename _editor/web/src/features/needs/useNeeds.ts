@@ -2,8 +2,8 @@ import { isOpenNeed, type Need, type NeedAnswer } from "@intentic/sandbox-contra
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcKey, rpcPrefix } from "../../lib/queryKeys";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 // What agents are waiting on people for (docs/architecture/needs.md), read once for the whole sandbox and kept fresh by
 // the daemon's push of `.intentic/records/needs.json` (the `needs` key). One read serves every card, the conversation's

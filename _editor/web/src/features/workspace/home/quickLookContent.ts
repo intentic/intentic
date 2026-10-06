@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { type FileCategory, formatOf } from "@intentic/ui/file-format";
 import { resolveFile } from "../explorer/fileType";

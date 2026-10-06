@@ -1,10 +1,10 @@
 import type { BrowserSession, BrowsersList } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { queryClient } from "../../lib/queryPersistence";
-import { rpcQuery } from "../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { optimisticUpdate } from "../../lib/optimistic";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 // One shared roster of the agent's browsers for the rail tile and the Browsers view (like terminalsQuery), so they
 // can't disagree. No pending-claim half like terminals need: the daemon mints an agent browser itself, so this
@@ -27,16 +27,17 @@ export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; r
     return { sessions, refetch: () => query.refetch() };
 };
 
-// Drops the row from the shared list the moment the kill is issued, like removeTerminal, so the rail tile doesn't
-// keep counting a browser the user just closed. Refetch restores it if the daemon disagreed.
+// Drops the row from the shared list the moment the close is issued, like killTerminal, so the rail tile doesn't keep
+// counting a browser the user just closed. A refused close puts the row straight back; the list is re-read either way.
 export const closeBrowser = async (name: string): Promise<void> => {
-    queryClient.setQueryData<BrowsersList>(browsersKey, (listed) =>
-        listed === undefined ? undefined : { ...listed, sessions: listed.sessions.filter((session) => session.name !== name) },
-    );
     try {
-        await sandboxRpc.system.closeBrowser({ name });
+        await optimisticUpdate<BrowsersList, unknown>(
+            browsersKey,
+            (listed) => ({ ...listed, sessions: listed.sessions.filter((session) => session.name !== name) }),
+            () => sandboxRpc.system.closeBrowser({ name }),
+            { settle: true },
+        );
     } catch (error) {
         console.error(`browser ${name}: close failed`, error);
     }
-    await queryClient.invalidateQueries({ queryKey: browsersKey });
 };

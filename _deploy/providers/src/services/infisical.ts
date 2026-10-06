@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
@@ -63,7 +62,7 @@ const composeYaml = (parsed: InfisicalInputs, stamp: ContainerStamp): string =>
     ].join("\n");
 
 // Infisical (secrets management). /api/status answers 200 once migrations ran and the server is up.
-export const createInfisicalProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createInfisicalProvider = (executor: SshExecutor): Provider =>
     createComposeServiceProvider(
         {
             kind: "infisical",

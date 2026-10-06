@@ -10,8 +10,8 @@ import { usePreviewFloating } from "../../features/preview/previewFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
 import PreviewPanel from "../../features/preview/PreviewPanel.vue";
 import TerminalPanel from "../../features/terminal/TerminalPanel.vue";
-import { chatBarSlot, chatSlot, chatFullSlot, previewSlot, sidePreviewSlot, terminalSlot } from "./panelSlots";
-import { tabsOfView } from "../side/sideTabs";
+import { chatBarSlot, chatSlot, chatFullSlot, previewSlot, sidePreviewSlot, terminalSlot } from "../../workbench/window/panelSlots";
+import { tabsOfView } from "../../workbench/side/sideTabs";
 
 // The three poppable panels (chat, terminal, preview), mounted once per window, above the router. Each is
 // teleported to wherever it belongs (its section, the side panel, a floating window's slot, or a parking stage) — a

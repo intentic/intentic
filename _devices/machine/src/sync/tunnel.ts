@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { pollUntil } from "@intentic/base/async";
+import { type Pump, pumpTcpWebSocket } from "@intentic/base/ws-tcp-pump";
 import type { Log } from "@intentic/local-agent";
 import type { Dialed } from "../daemon-base.js";
 import { type Pairing, pairingTransport } from "./config.js";
@@ -13,8 +14,10 @@ import { type SyncEnvironment, syncEnvironment } from "./environment.js";
 
 // Loopback port for a sandbox's SSH endpoint, derived from its id: stable, and clear of the sandbox daemon's own
 // loopback band (28000-31999 in @intentic/sandbox-run) derived from the same digest. Below Linux's ephemeral floor.
-const SSH_PORT_BASE = 24000;
-const SSH_PORT_SPAN = 4000;
+// Exported for the test that holds both to `portBands.syncSsh` in sandbox-run's names.fixture.json, the record the
+// daemon band and the Rust readers are checked against too, so moving either band fails a test.
+export const SSH_PORT_BASE = 24000;
+export const SSH_PORT_SPAN = 4000;
 
 // (2026-10-05) A WSL DISTRO DERIVES ITS PORTS IN A BAND OF ITS OWN. Under WSL's mirrored networking a distro's loopback
 // IS the Windows side's, so a PC whose Windows side and a distro both paired one sandbox derived one port twice: the
@@ -52,24 +55,10 @@ export const syncSshPorts = (sandboxId: string, environment: SyncEnvironment = s
 // survives either way.
 export const sshSocketUrl = (base: string): string => `${base.replace(/\/$/, "").replace(/^http/, "ws")}/system/sync/ssh`;
 
-// Backpressure: a WebSocket send never blocks, it buffers, so an unbounded upload would grow the send buffer
-// until the process dies. Past HIGH the TCP socket pauses (so ssh blocks on its own write); resumes under LOW.
-const BUFFER_HIGH = 1_048_576;
-const BUFFER_LOW = 262_144;
-const DRAIN_POLL_MS = 50;
-
 // TCP accept always succeeds locally, so an unreachable sandbox fails only inside a WebSocket that may never
 // resolve, stalling ssh and everything waiting on it. Short, since a healthy sandbox settles under a second and
 // Mutagen redials anyway.
 const OPEN_TIMEOUT_MS = 10_000;
-
-// Copies a chunk out of Node's shared Buffer pool: `send` is async, so handing over the pool's memory directly
-// risks the next read overwriting bytes not yet sent, a silent transport corruption.
-const frameOf = (chunk: Buffer): Uint8Array<ArrayBuffer> => {
-    const frame = new Uint8Array(chunk.byteLength);
-    frame.set(chunk);
-    return frame;
-};
 
 export interface TunnelTarget {
     readonly sandboxId: string;
@@ -100,13 +89,14 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
     // ssh's version banner can arrive before the socket opens, so early bytes are queued, not dropped; the socket
     // stays paused until open, bounding the queue to one read.
     const queued: Buffer[] = [];
-    let open = false;
-    let drain: NodeJS.Timeout | undefined;
+    const early = (chunk: Buffer): void => {
+        queued.push(chunk);
+    };
+    let pump: Pump | undefined;
     socket.pause();
 
     const close = (): void => {
-        clearInterval(drain);
-        drain = undefined;
+        pump?.stop();
         clearTimeout(handshake);
         socket.destroy();
         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -121,42 +111,29 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
         close();
     }, OPEN_TIMEOUT_MS);
 
-    socket.on("data", (chunk: Buffer) => {
-        if (!open) {
-            queued.push(chunk);
-            return;
-        }
-        ws.send(frameOf(chunk));
-        if (drain === undefined && ws.bufferedAmount > BUFFER_HIGH) {
-            socket.pause();
-            drain = setInterval(() => {
-                if (ws.bufferedAmount < BUFFER_LOW) {
-                    clearInterval(drain);
-                    drain = undefined;
-                    socket.resume();
-                }
-            }, DRAIN_POLL_MS);
-        }
-    });
+    socket.on("data", early);
     socket.on("close", close);
     socket.on("error", close);
 
+    // Both directions through the pump the daemon's end runs too (@intentic/base/ws-tcp-pump). This WebSocket cannot
+    // pause, so a Mutagen that stops reading costs this stream past the pump's ceiling rather than unbounded memory.
     ws.addEventListener("open", () => {
-        open = true;
         clearTimeout(handshake); // the stream is up; from here a long-lived connection is the point, not a symptom
-        for (const chunk of queued) {
-            ws.send(frameOf(chunk));
-        }
-        queued.length = 0;
-        socket.resume();
+        socket.off("data", early);
+        pump = pumpTcpWebSocket(
+            socket,
+            { send: (frame) => ws.send(frame), bufferedAmount: () => ws.bufferedAmount },
+            {
+                queued: queued.splice(0),
+                onOverflow: () => {
+                    onError(`the sync transport to ${target.sandboxId} was dropped: ssh stopped reading what the sandbox sent`);
+                    close();
+                },
+            },
+        );
     });
     ws.addEventListener("message", (event: MessageEvent) => {
-        const data: unknown = event.data;
-        if (data instanceof ArrayBuffer) {
-            socket.write(Buffer.from(data));
-        } else if (typeof data === "string") {
-            socket.write(Buffer.from(data, "binary"));
-        }
+        pump?.inbound(event.data);
     });
     ws.addEventListener("error", () => {
         // A WebSocket error event's message says nothing useful; a user needs which sandbox failed, which the log line

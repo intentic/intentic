@@ -1,6 +1,6 @@
 <!-- One home tile: a glyph (or, for a picture or video, the thing itself) over a name; the quick look on hover carries the facts. -->
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";

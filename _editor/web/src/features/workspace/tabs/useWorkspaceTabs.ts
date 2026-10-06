@@ -1,6 +1,6 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref, watch } from "vue";
-import { documentTabId } from "../../../core-views/documentRegistry";
+import { documentTabId } from "../../../workbench/views/documentRegistry";
 import type { DiffPayload } from "@intentic/extension-api";
 import {
     closeTabs,
@@ -17,7 +17,7 @@ import {
     placeTab,
     type WorkspaceTab,
 } from "./workspaceTabs";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useEditBuffers } from "../files/useEditBuffers";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ui, DisclosureRow, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
 import { t } from "./i18n.js";
+import { SOURCE_NAMES } from "./useSourceNames";
 
 // One thing that happened, one line collapsed; expanded shows the daemon's raw events and the transcript link. A
 // `<DisclosureRow>`: lead glyph, title, description, trailing `#meta` facts, and the expanded block are its slots.
@@ -13,6 +14,9 @@ const { episode } = defineProps<{ episode: Episode }>();
 
 const api = host();
 const open = ref(false);
+// The view's source names; absent (a row drawn on its own) means every source reads as its key.
+const names = inject(SOURCE_NAMES, undefined);
+const nameOf = (key: string): string => sourceLabel(key, names?.value);
 
 const KIND_ICONS: Readonly<Record<Episode["kind"], IconName>> = { turn: `sparkles`, message: `arrow-down-left`, event: `cog` };
 const KIND_TINTS: Readonly<Record<Episode["kind"], string>> = { turn: `text-link`, message: `text-info`, event: `text-subtle` };
@@ -38,7 +42,7 @@ const facts = computed(() =>
         episode.typeName,
         episode.author === undefined ? undefined : `from ${episode.author}`,
         episode.channelId === undefined ? undefined : `#${episode.channelId}`,
-        episode.runtime === undefined ? undefined : sourceLabel(episode.runtime),
+        episode.runtime === undefined ? undefined : nameOf(episode.runtime),
         episode.outbound > 0 ? `${episode.outbound} outbound ${episode.outbound === 1 ? `call` : `calls`}` : undefined,
     ].filter((fact): fact is string => fact !== undefined),
 );
@@ -95,7 +99,7 @@ const facts = computed(() =>
                 </div>
                 <div class="flex flex-wrap items-center gap-x-3 font-mono text-2xs text-subtle/70">
                     <span v-if="episode.sessionId">{{ t(`episodeRow.session`, { sessionId: episode.sessionId }) }}</span>
-                    <span>{{ t(`episodeRow.source`, { sourceKey: sourceLabel(episode.sourceKey) }) }}</span>
+                    <span>{{ t(`episodeRow.source`, { sourceKey: nameOf(episode.sourceKey) }) }}</span>
                 </div>
                 <button
                     v-if="episode.sessionId"

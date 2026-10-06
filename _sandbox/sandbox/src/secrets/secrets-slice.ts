@@ -1,13 +1,13 @@
 import { join } from "node:path";
 import type { SecretHostGuard } from "@intentic/sandbox-contract";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
-import type { CardDeps } from "../conversations/actor/card-offers.js";
+import type { CardDeps } from "../guard/card-offers.js";
 import type { ConversationGrants } from "../personas/conversation-grants.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
-import { createCredentialGate, type CredentialGate } from "./credential-gate.js";
+import { createCredentialGate, type CredentialGate } from "./gates/credential-gate.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
-import { createHostGuardGate, type HostGuardGate } from "./host-guard-gate.js";
+import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
 import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./host-guards.js";
 import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";

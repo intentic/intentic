@@ -2,14 +2,14 @@
 // empty, never re-reads once populated, and drops an answer that arrives after a sandbox switch.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 const reads = { answer: [] as { name: string; description: string }[] };
 
 // The one seam under test: a provider's commands as the daemon last recorded them. Any other read throws naming itself.
 const commandReads = jest.fn(async (_input: ProcedureInput<`agent.commands`>) => ({ commands: reads.answer }));
-jest.mock(`../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { commands: commandReads } }) }));
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { commands: commandReads } }) }));
 
 import { providerCommands } from "./providerCatalog";
 import { ensureProviderCommands } from "../models/useChat-catalog";

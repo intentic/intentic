@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { Button, Row, RowGroup } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { localHost } from "../../app/environments/localHost";
 import { apiClient } from "../../lib/useApi";
-import { useAccount } from "../../shell/useAccount";
-import { useAuth } from "../auth/useAuth";
-import { useSandbox } from "../sandbox/client/useSandbox";
-import { useHubWork } from "../../shell/hub/hubWork";
+import { useAccount } from "../../client/auth/useAccount";
+import { useAuth } from "../../client/auth/useAuth";
+import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useHubWork } from "../../workbench/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -30,7 +30,7 @@ const deleteInWorkspace = async (): Promise<void> => {
     try {
         await localHost().openWorkspace(`/settings/data`);
     } catch (error) {
-        deleteError.value = errorMessage(error, `The workspace could not be opened.`);
+        deleteError.value = messageOr(error, `The workspace could not be opened.`);
     } finally {
         handing.value = false;
     }
@@ -69,7 +69,7 @@ const confirmDelete = async (): Promise<void> => {
         await deleteAccount(sandboxes.value);
         await router.push(`/login`);
     } catch (error) {
-        deleteError.value = errorMessage(error, `Account deletion failed.`);
+        deleteError.value = messageOr(error, `Account deletion failed.`);
     } finally {
         deleting.value = false;
     }

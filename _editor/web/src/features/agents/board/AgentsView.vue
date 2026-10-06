@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { Button, ui, ContextMenu, FloatingAction, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
+import {
+    Button,
+    ContextMenu,
+    EmptyState,
+    FloatingAction,
+    Modal,
+    ProjectChip,
+    SearchBar,
+    SegmentedControl,
+    timeAgo,
+    ui,
+    useDevice,
+    useNarrow,
+} from "@intentic/ui";
 import { computed, nextTick, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
@@ -11,17 +24,16 @@ import { useAgentDrag } from "./useAgentDrag";
 import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { useAuth } from "../../auth/useAuth";
+import { useAuth } from "../../../client/auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
 import { agentDisplayTitle } from "../fleet/agentStatus";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
 import { useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { useSubagentRoster } from "../fleet/subagentRoster";
-import { relativeTime } from "../../chat/models/catalog";
 import { chatWide } from "../../chat/panel/chatPanelLayout";
 import { subagentOnScreen } from "../../chat/panel/subagent/subagentView";
 import { openRunInChat } from "../../chat/run/openRun";
@@ -294,22 +306,16 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
         <span class="sr-only" aria-live="polite">{{ foundAnnouncement }}</span>
         <!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
-        <div v-if="screen !== 'lanes'" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
-            <!-- One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once accounts loaded. -->
-            <template v-if="screen === 'first'">
-                <div class="flex w-full max-w-xl flex-col gap-2">
-                    <h2 class="text-sm font-semibold text-content">{{ t(`agents.agentsView.startFirstAgent`) }}</h2>
-                    <p class="text-2xs text-muted">
-                        {{ t(`agents.agentsView.agentsWorkOnOwn`) }}
-                    </p>
-                </div>
-            </template>
-            <!-- A board that's been cleared, not a first run: this user knows what agents are and just needs the way back to the archive. -->
-            <template v-else>
-                <Icon name="sparkles" class="text-3xl text-subtle" />
-                <p class="max-w-sm text-xs text-muted">
-                    {{ t(`agents.agentsView.nothingOnBoardStart`) }}
-                </p>
+        <!-- First run: one heading, one sentence, nothing waiting on a daemon read (it used to swap its lower half once
+             accounts loaded). Cleared: this user knows what agents are and just needs the way back to the archive. -->
+        <EmptyState
+            v-if="screen !== 'lanes'"
+            :icon="screen === 'first' ? undefined : 'sparkles'"
+            :line="screen === 'first' ? t(`agents.agentsView.agentsWorkOnOwn`) : t(`agents.agentsView.nothingOnBoardStart`)"
+            class="min-h-0 flex-1 gap-4 p-4"
+        >
+            <template v-if="screen === 'first'" #title>
+                <h2 class="font-semibold text-content">{{ t(`agents.agentsView.startFirstAgent`) }}</h2>
             </template>
             <!-- Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so the user sends their own first turn. -->
             <div v-if="screen === 'first' && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
@@ -327,7 +333,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             >
                 <Icon name="history" class="text-2xs" />{{ archiveSize }} {{ t(`agents.agentsView.archivedAgent`) }}{{ archiveSize === 1 ? "" : "s" }}
             </button>
-        </div>
+        </EmptyState>
         <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
         <div v-else class="scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
@@ -649,7 +655,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             :match-case="matchCase"
                             class="line-clamp-2 text-2xs text-muted"
                         />
-                        <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
+                        <span class="text-2xs text-subtle">{{ timeAgo(session.updatedAt, { days: true }) }}</span>
                     </button>
                 </section>
             </div>

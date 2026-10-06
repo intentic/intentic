@@ -1,8 +1,8 @@
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
 // Type only: a value import from system/ would close a cycle between the subsystems (daemon-boundaries).
 import type { Chore } from "../../system/chore-clock.js";
-import { DOCKER_PANEL_KEY } from "./docker.handler.js";
+import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 
 // THE AGENTS' DOCKER, KEPT FROM GROWING WITHOUT END (2026-10-05). Nothing removed what the nested engine accumulates:
 // every stopped container an agent left and every image a rebuild replaced stays in its data root (13 GB on one

@@ -1,11 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { PushRefusal } from "@intentic/sandbox-contract";
-import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/scaffold";
+import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/base/git";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // A GitRunner that runs visibly through a terminal session; output is the pane's combined stream (stderr merged), and a
-// non-zero exit throws like defaultGit's. Generic git verbs live in @intentic/scaffold.
+// non-zero exit throws like defaultGit's. Generic git verbs live in @intentic/base/git.
 export const terminalGit =
     (runner: TerminalRunner, session: string): GitRunner =>
     async (dir, args) => ({

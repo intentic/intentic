@@ -123,7 +123,7 @@ flowchart LR
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.
 - A heavy program (a build, a test run, a typecheck) is recognised by what it is as it starts, not by the words of
-  the line that started it: the daemon hands every agent command the table (`system/resources/heavy-commands.ts`,
+  the line that started it: the daemon hands every agent command the table (`workload/heavy-commands.ts`,
   the shared rules in `@intentic/constants/heavy-rules`), and the program queues itself through `bin/queue-run`.
   Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
@@ -176,6 +176,10 @@ flowchart LR
   where any connected page can stop it, and hands the machine the same `update` the button sends, asking the next boot
   to resume what the restart cuts. The owner's switch and pause live in `/history/update-policy.json`; `/info`'s
   `autoUpdate` says where it stands, and the `update` runtime domain tells every page when that moves.
+- Whether the sandbox is busy is one answer asked for a purpose (`bootstrap/working-now.ts`, 2026-10-05). A restart (the
+  automatic update, a device rebuild asked to wait, the host's keeper reading `/run/intentic/work.json`'s `liveTurns`)
+  waits for turns, lands, running subagents and workflow steps; idle-stop waits for those and for parked subagents and
+  armed watches, which only this daemon's clock moves on. The device rebuild used to wait for turns alone.
 - `conversations.db` never keeps the daemon down (`store/conversations-db-recovery.ts`): after a run that died
   unannounced it is quick-checked before anything reads it, and a file that fails to open or to pass is moved aside with
   its sidecars as `conversations.db.corrupt-<ms>` (never deleted), what still reads of it is copied into a new file with
@@ -189,10 +193,13 @@ flowchart LR
   database holds no conversation but directories remain: a lost database is not a fleet of orphans.
 - What a daemon run leaves behind is somebody's to end (2026-10-05). Every process the daemon starts carries its run's
   generation (`INTENTIC_DAEMON_GEN`), and its detached children say what they are (`INTENTIC_DETACHED`: an isolation
-  anchor, a watch check, an edit rule's command, the sign-in Chromium; `seams/workload-stamp.ts`). The boot ends a
+  anchor, the sign-in Chromium, the extension backend host, and every command run to a deadline; `seams/workload-stamp.ts`). The boot ends a
   stamped process of an older run outside tmux unless it is meant to survive (X displays, openbox, VPN and exit
-  clients, dockerd, model servers; `system/boot/generation-sweep.ts`), and the reaper's minute sweep ends a watch check
-  or edit rule past its deadline. Pi turns are stamped with their conversation, a `one-shot` helper is live while its
+  clients, dockerd, model servers; `system/boot/generation-sweep.ts`), and the reaper's minute sweep ends a command past
+  its deadline. A command the daemon waits on (an automation's guard, a loop's stop check, a chore probe, a watch check,
+  an edit rule, a turn's JS run, a Python check) runs through `workload/run-check.ts`: its own process group, ended whole
+  (SIGTERM, then SIGKILL) at its deadline or an abort, in a workload class, its output capped; `process-tiers` in
+  `_tools/checks` ratchets the hand-rolled rest. Pi turns are stamped with their conversation, a `one-shot` helper is live while its
   parent is, a forced reap's SIGKILL follows even after a discard forgot the conversation, an armed watch no longer
   shields a finished turn's processes, and a tmux session an agent made by hand goes with its conversation
   (`system/boot/reaper.ts`). `opencode serve` stops after 30 idle minutes, and with the Cursor runtimes on shutdown.
@@ -233,7 +240,7 @@ flowchart LR
   provider it replaces what the detectors (`privacy/detect/`), the vault of known values and, with the `privacy` image
   pack, a local name model find with tokens like `⟦PERSON_3⟧`, and restores them in the answer as it streams back, so
   the agent's tools run on real values while the provider reads tokens. An image still goes as an image: its text is
-  read on this machine by PaddleOCR (`ocr/`, the pack's PP-OCRv6 models) and every stretch found to be personal data
+  read on this machine by PaddleOCR ([`@intentic/ocr`](../ocr), the pack's PP-OCRv6 models) and every stretch found to be personal data
   is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back. A PDF goes as its
   masked text, or is withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
   credentials, so a resumed or handed-off transcript masks to the same bytes. A runtime the gateway cannot stand in

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, type IconName } from "@intentic/ui";
+import { Button, Icon, type IconName, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { retryHydrate } from "../../run/useChat-sessions";
@@ -113,14 +113,9 @@ const memoryLine = computed(() => {
                 <Button size="small" severity="secondary" :text="true" @click="show">{{ showLabel }}</Button>
             </span>
         </div>
-        <div
-            v-if="memoryShown"
-            role="status"
-            class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-2xs text-warning"
-        >
-            <Icon name="pause" class="shrink-0" />
-            <span class="min-w-[12rem] flex-1">{{ memoryLine }}</span>
-            <span class="flex shrink-0 items-center gap-1">
+        <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
+            {{ memoryLine }}
+            <template #actions>
                 <Button size="small" :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="resumeQueue()">{{
                     t(`chat.chatHeld.sendAnyway`)
                 }}</Button>
@@ -132,7 +127,7 @@ const memoryLine = computed(() => {
                     @click="leftHeld = holdKey"
                     >{{ t(`chat.chatWaitingBar.wait`) }}</Button
                 >
-            </span>
-        </div>
+            </template>
+        </Notice>
     </div>
 </template>

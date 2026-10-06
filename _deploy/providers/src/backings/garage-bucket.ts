@@ -2,7 +2,6 @@ import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import { bindingSchema, createInstanceBindingProvider } from "../core/instance-binding.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { GARAGE_BIN, runGarage } from "./garage.js";
 
 const bucketSchema = bindingSchema.extend({
@@ -37,7 +36,7 @@ const outputsFor = (parsed: BucketInputs, key: { accessKey: string; secretKey: s
 
 // A per-app Garage bucket + access key. Garage generates + persists the key pair, so the access key/secret are
 // stable across applies.
-export const createGarageBucketProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createGarageBucketProvider = (executor: SshExecutor): Provider =>
     createInstanceBindingProvider(
         {
             kind: "garage-bucket",

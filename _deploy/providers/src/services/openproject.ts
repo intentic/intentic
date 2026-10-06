@@ -1,7 +1,6 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
@@ -47,7 +46,7 @@ const composeYaml = (parsed: OpenprojectInputs, stamp: ContainerStamp): string =
 // OpenProject (project management). First boot runs the full database migration + seed before the health
 // endpoint answers, hence the 600s ready budget (read returning undefined while it migrates is the normal
 // not-yet-created signal, not an error).
-export const createOpenprojectProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createOpenprojectProvider = (executor: SshExecutor): Provider =>
     createComposeServiceProvider(
         {
             kind: "openproject",

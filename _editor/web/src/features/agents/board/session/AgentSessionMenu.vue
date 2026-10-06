@@ -6,15 +6,15 @@ import AgentReactions from "../cards/AgentReactions.vue";
 import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../chat/run/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
-import { useRole } from "../../../sandbox/secrets/useRole";
-import { useAuth } from "../../../auth/useAuth";
+import { useRole } from "../../../../client/sandbox/useRole";
+import { useAuth } from "../../../../client/auth/useAuth";
 import { assignAgent } from "../../fleet/agentActions";
 import { mayAssign, ownedBy } from "../ownership";
 import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 import { formatClock } from "@intentic/ui/format";
-import { useVocabulary } from "../../../../core-views/vocabulary";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { keptWarm, warmOffer } from "../../fleet/prompt-cache/promptCache";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session

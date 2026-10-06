@@ -1,7 +1,7 @@
 import { lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { defaultGit, gitProcessRunning, type GitRunner, STALE_LOCK_MS } from "@intentic/scaffold";
+import { defaultGit, gitProcessRunning, type GitRunner, STALE_LOCK_MS } from "@intentic/base/git";
 import type { Logger } from "pino";
 import type { Chore } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
@@ -38,7 +38,7 @@ const runTask = async (dir: string, task: (typeof TASKS)[number], git: GitRunner
  * Whether a `maintenance run` in this checkout's repository would do anything (2026-10-05). git takes
  * objects/maintenance.lock for every run and, with `--quiet`, skips without a word while it exists: a lock left by a run
  * that was killed made every later one a silent no-op. A lock younger than STALE_LOCK_MS is a run in progress, so this
- * one is skipped and says so; an older one no running git can hold (scaffold git-locks.ts) is removed, logged, and the
+ * one is skipped and says so; an older one no running git can hold (@intentic/base/git locks.ts) is removed, logged, and the
  * run goes ahead; an older one a git may hold is left, and the skip is logged.
  */
 export const maintenanceMayRun = async (

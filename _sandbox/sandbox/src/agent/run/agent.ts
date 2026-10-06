@@ -48,7 +48,8 @@ import { outboundGuardHooks } from "../../guard/outbound-guard.js";
 import { outsideResultHooks } from "../../guard/outside-results.js";
 import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { personaScopeHooks } from "../../personas/persona-scope.js";
-import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../../execution/js-tool.js";
+import { jsExecutionServer } from "../../execution/js-tool.js";
+import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 import { mcpServersOf } from "../tools/agent-tools.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
@@ -59,7 +60,7 @@ import type { AgentRequest, HarnessCredential } from "../providers/agent-request
 import { harnessEnv } from "../providers/harness-credentials.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { opt } from "../../opt.js";
-import { readClaudeUsage } from "../../usage/claude-usage.js";
+import { readClaudeUsage } from "../../runtimes/claude/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
@@ -94,7 +95,9 @@ const quietResync = async (
     if (request.spec.conversationId !== undefined && subagentInParentTree(conversations, request.spec.conversationId)) {
         return undefined;
     }
-    if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {
+    // allow(silent-catch): a shell tmux could not be asked about counts as busy, so this optional rebase waits for the
+    // next quiet point instead of running under a shell that may be writing; nothing on this path has a logger.
+    if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId).catch(() => true))) {
         return undefined;
     }
     // Swallowed here so a rebase fault can't fail what called it; resync owns its own logging.

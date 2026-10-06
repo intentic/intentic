@@ -1,5 +1,5 @@
 import type { ViewAsk, ViewBadge, ViewRegistration } from "@intentic/extension-api";
-import type { AutomationApproval, Need, NeedKind, PendingWorkspaceExtension } from "@intentic/sandbox-contract";
+import { type AutomationApproval, awaitsOwner, type Need, type NeedKind, type PendingWorkspaceExtension } from "@intentic/sandbox-contract";
 import { type IconName, isIconName } from "@intentic/ui/icons";
 import { t } from "@intentic/ui/i18n";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
@@ -114,7 +114,7 @@ export const wakeItem = (wake: AutomationApproval): InboxItem => ({
     group: `waiting`,
 });
 
-export const waitingWakes = (held: readonly AutomationApproval[]): readonly AutomationApproval[] => held.filter((wake) => wake.autoRunAt === undefined);
+export const waitingWakes = (held: readonly AutomationApproval[]): readonly AutomationApproval[] => held.filter(awaitsOwner);
 
 // An extension written in this workspace that runs nothing until the owner says yes to what it asks for.
 export const installItem = (extension: PendingWorkspaceExtension): InboxItem => ({

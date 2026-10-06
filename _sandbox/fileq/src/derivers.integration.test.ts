@@ -118,7 +118,7 @@ describe("pdf", () => {
         }
     });
 
-    // A stand-in `ocr` on PATH, speaking the real one's protocol (src/ocr/cli.ts in the sandbox): `--check` answers
+    // A stand-in `ocr` on PATH, speaking the real one's protocol (_sandbox/ocr/src/cli.ts): `--check` answers
     // whether it can read, and a run prints each image's text with a form feed line between images, leaving an image
     // it could not read empty and exiting 1.
     const standIn = (check: number): string => {
@@ -199,7 +199,7 @@ describe("pdf", () => {
     const DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
     const ocr = requires(ocrAvailable() && existsSync(DEJAVU), `an ocr command that can read (the privacy pack's models), and the DejaVu font at ${DEJAVU}`, {
         absentOnCi:
-            "ocr is the sandbox image's own command (_sandbox/sandbox/src/ocr/cli.ts); CI proves that reader against the same models in the sandbox's readers suite",
+            "ocr is the sandbox image's own command (_sandbox/ocr/src/cli.ts); CI proves that reader against the same models in the sandbox's readers suite",
     });
     test.skipIf(!ocr.runs)(ocr.title("a scan is recognised by PaddleOCR when the image carries it, and says so"), async () => {
         const path = join(root, "receipt.pdf");

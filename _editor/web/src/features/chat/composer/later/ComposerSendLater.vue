@@ -7,10 +7,11 @@ import { agentDisplayTitle, agentStatusMeta } from "../../../agents/fleet/agentS
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../../sandbox/environment/rules";
 import { useRules } from "../../../sandbox/environment/useRules";
-import { useRole } from "../../../sandbox/secrets/useRole";
+import { useRole } from "../../../../client/sandbox/useRole";
 import type { Conversation } from "../../session/conversation";
 import { type LandsHow, waitTargets } from "./waitTargets";
-import { bookable, instantOfInput, LATEST_SEND_MS, localInputOf, type SendLater, SOONEST_SEND_MS, sendTimeLabel, timeChoices } from "./sendLater";
+import { bookable, instantOfInput, LATEST_SEND_MS, localInputOf, type SendLater, SOONEST_SEND_MS, timeChoices } from "./sendLater";
+import { formatUntil } from "@intentic/ui/time";
 
 /* When a message goes, when not now: one of a few times, a time of the reader's own, or once another agent's work has
    landed in the workspace, for work that builds on it. The same panel books the composer's next message and re-times
@@ -89,7 +90,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
         >
             <Icon name="clock" class="shrink-0 text-xs text-subtle" />
             <span class="truncate text-sm text-content md:text-xs">{{ choice.label }}</span>
-            <span class="ml-auto shrink-0 text-2xs text-subtle tabular-nums">{{ sendTimeLabel(choice.at, now) }}</span>
+            <span class="ml-auto shrink-0 text-2xs text-subtle tabular-nums">{{ formatUntil(choice.at, now) }}</span>
         </button>
         <!-- The reader's own time: the browser's field, kept to what the sandbox will hold, set by its own press so a half-typed date never books. -->
         <form class="flex flex-col gap-1 px-2.5 py-1.5" @submit.prevent="setCustom()">

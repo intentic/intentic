@@ -1,3 +1,4 @@
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { LoopbackCatch, LoopbackCatchEvent } from "@intentic/sandbox-contract/webext";
 import { catchLoopback, isLanding, loopbackFeatures } from "./loopback-catch.js";
 
@@ -57,4 +58,21 @@ test("hands back the landing on the redirect's own host, closes the dead-end tab
     abort.abort();
     expect(await stream.next()).toEqual({ done: true, value: undefined });
     expect(chrome.listeners.size).toBe(0);
+});
+
+// The browser once watched until whatever `expiresAt` asked, while the device agent capped a watch at 30 minutes: a
+// sandbox that forgot a catch kept this listener on every tab for as long as it had asked.
+test("stops watching at the 30-minute cap however far away expiresAt is", async () => {
+    jest.useFakeTimers();
+    try {
+        const chrome = fakeChrome(["http://localhost/*"]);
+        const stream = catchLoopback({ ...SPEC, expiresAt: Date.now() + 24 * 60 * 60_000 }, undefined);
+        expect(await next(stream)).toEqual({ type: "listening" });
+        const ended = stream.next();
+        await advanceTimersByTimeAsync(30 * 60_000);
+        expect(await ended).toEqual({ done: true, value: undefined });
+        expect(chrome.listeners.size).toBe(0);
+    } finally {
+        jest.useRealTimers();
+    }
 });

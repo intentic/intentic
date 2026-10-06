@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
-import { mkdir, open, readdir, readFile, rename, rm, stat, utimes } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { syncParents, writeAll } from "./record-io.js";
+import { readdir, readFile, rename, rm, stat, utimes } from "node:fs/promises";
+import { join } from "node:path";
+import { syncParents, writeDurable } from "./record-io.js";
 
 // Tool outputs too long to keep in a record's rows, stored once each under the hash of their text, zstd-compressed: a
 // fork shares its source's, and a page reads none of them. Named by content, so a write that finds the name taken is
@@ -28,19 +28,10 @@ const write = async (path: string, text: string): Promise<void> => {
         await syncParents(path);
         return;
     }
-    await mkdir(dirname(path), { recursive: true });
-    // Unique per write, so two processes storing the same text never share a temporary name.
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    const handle = await open(temporary, "w");
-    try {
-        await writeAll(handle, zstdCompressSync(Buffer.from(text, "utf8"), { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }));
-        await handle.datasync();
-    } finally {
-        await handle.close();
-    }
     // Content-addressed: whichever of two racing writers renames last leaves the same bytes behind.
-    await rename(temporary, path);
-    await syncParents(path);
+    await writeDurable(path, [
+        zstdCompressSync(Buffer.from(text, "utf8"), { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }),
+    ]);
 };
 
 // Stores `text`, durable before this resolves, and answers its hash.

@@ -7,7 +7,6 @@ import { guardedUpdate } from "../core/guarded-update.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { stampLabelArgs, stampOf } from "../core/stamp.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -74,7 +73,7 @@ const waitHealthy = async (session: SshSession): Promise<void> => {
 
 // Forgejo (Git + CI) on the host, single SQLite-backed container with an admin user and persisted tokens. `read`
 // gates on container up + healthy + tokens persisted; the SQLite volume and guarded bootstraps make apply idempotent.
-export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Provider => ({
+export const createForgejoProvider = (executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "internalIp")) {

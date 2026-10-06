@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/extension-ui";
 import { t } from "./i18n";
-import { stepSubtitle, toneFor, type WorkflowNode } from "./workflowDag";
+import { stepSubtitle, toneFor, type WorkflowNode } from "./graph/workflowDag";
 
 // Interior of a workflow-step node, shared by the designer's canvas and the run view's graph so a step looks identical
 // whether it's being designed or is mid-run. `node.run` being absent means the designer context; the tone table

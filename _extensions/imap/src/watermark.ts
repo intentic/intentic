@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 
 // Per-account resume state: highest UID dispatched for one capability's watched mailbox, persisted so mail from
@@ -48,13 +48,9 @@ export const readWatermark = async (path: string, onUnreadable: (detail: string)
     return { mailbox, uidValidity, lastUid };
 };
 
-// Written beside and renamed over, so a crash mid-write leaves the previous mark rather than a torn one.
-export const writeWatermark = async (path: string, mark: Watermark): Promise<void> => {
-    await mkdir(dirname(path), { recursive: true });
-    const staged = `${path}.${randomBytes(4).toString("hex")}.tmp`;
-    await writeFile(staged, JSON.stringify(mark));
-    await rename(staged, path);
-};
+// Written beside and renamed over (the shared atomic write, which also makes the directory and clears its staging file
+// on a failed write), so a crash mid-write leaves the previous mark rather than a torn one.
+export const writeWatermark = (path: string, mark: Watermark): Promise<void> => writeFileAtomic(path, JSON.stringify(mark));
 
 // Resume point for a freshly opened mailbox: a UIDVALIDITY change or a changed watched mailbox re-baselines to the
 // current end and dispatches nothing. uidNext is the server's next-to-assign UID at open time.

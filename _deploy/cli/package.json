@@ -47,7 +47,6 @@
         "@intentic/constants": "workspace:*",
         "@intentic/engine": "workspace:*",
         "@intentic/graph": "workspace:*",
-        "@intentic/need-resolver": "workspace:*",
         "@intentic/providers": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",

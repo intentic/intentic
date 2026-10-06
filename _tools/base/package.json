@@ -17,6 +17,17 @@
         "registry": "https://registry.npmjs.org/"
     },
     "exports": {
+        "./dag": {
+            "types": "./dist/dag.d.ts",
+            "import": {
+                "@intentic/src": "./src/dag.ts",
+                "default": "./dist/dag.js"
+            },
+            "require": {
+                "@intentic/src": "./src/dag.ts",
+                "default": "./dist/dag.js"
+            }
+        },
         "./when": {
             "types": "./dist/when.d.ts",
             "import": {
@@ -40,25 +51,36 @@
             }
         },
         "./outside-text": {
-            "types": "./dist/outside-text.d.ts",
+            "types": "./dist/text/outside-text.d.ts",
             "import": {
-                "@intentic/src": "./src/outside-text.ts",
-                "default": "./dist/outside-text.js"
+                "@intentic/src": "./src/text/outside-text.ts",
+                "default": "./dist/text/outside-text.js"
             },
             "require": {
-                "@intentic/src": "./src/outside-text.ts",
-                "default": "./dist/outside-text.js"
+                "@intentic/src": "./src/text/outside-text.ts",
+                "default": "./dist/text/outside-text.js"
             }
         },
         "./acme": {
-            "types": "./dist/acme.d.ts",
+            "types": "./dist/acme/acme.d.ts",
             "import": {
-                "@intentic/src": "./src/acme.ts",
-                "default": "./dist/acme.js"
+                "@intentic/src": "./src/acme/acme.ts",
+                "default": "./dist/acme/acme.js"
             },
             "require": {
-                "@intentic/src": "./src/acme.ts",
-                "default": "./dist/acme.js"
+                "@intentic/src": "./src/acme/acme.ts",
+                "default": "./dist/acme/acme.js"
+            }
+        },
+        "./cloudflare": {
+            "types": "./dist/cloudflare.d.ts",
+            "import": {
+                "@intentic/src": "./src/cloudflare.ts",
+                "default": "./dist/cloudflare.js"
+            },
+            "require": {
+                "@intentic/src": "./src/cloudflare.ts",
+                "default": "./dist/cloudflare.js"
             }
         },
         "./web-stream": {
@@ -139,25 +161,47 @@
             }
         },
         "./plain-text": {
-            "types": "./dist/plain-text.d.ts",
+            "types": "./dist/text/plain-text.d.ts",
             "import": {
-                "@intentic/src": "./src/plain-text.ts",
-                "default": "./dist/plain-text.js"
+                "@intentic/src": "./src/text/plain-text.ts",
+                "default": "./dist/text/plain-text.js"
             },
             "require": {
-                "@intentic/src": "./src/plain-text.ts",
-                "default": "./dist/plain-text.js"
+                "@intentic/src": "./src/text/plain-text.ts",
+                "default": "./dist/text/plain-text.js"
             }
         },
         "./utf16-text": {
-            "types": "./dist/utf16-text.d.ts",
+            "types": "./dist/text/utf16-text.d.ts",
             "import": {
-                "@intentic/src": "./src/utf16-text.ts",
-                "default": "./dist/utf16-text.js"
+                "@intentic/src": "./src/text/utf16-text.ts",
+                "default": "./dist/text/utf16-text.js"
             },
             "require": {
-                "@intentic/src": "./src/utf16-text.ts",
-                "default": "./dist/utf16-text.js"
+                "@intentic/src": "./src/text/utf16-text.ts",
+                "default": "./dist/text/utf16-text.js"
+            }
+        },
+        "./ssh-config": {
+            "types": "./dist/ssh-config.d.ts",
+            "import": {
+                "@intentic/src": "./src/ssh-config.ts",
+                "default": "./dist/ssh-config.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ssh-config.ts",
+                "default": "./dist/ssh-config.js"
+            }
+        },
+        "./utf8-text": {
+            "types": "./dist/text/utf8-text.d.ts",
+            "import": {
+                "@intentic/src": "./src/text/utf8-text.ts",
+                "default": "./dist/text/utf8-text.js"
+            },
+            "require": {
+                "@intentic/src": "./src/text/utf8-text.ts",
+                "default": "./dist/text/utf8-text.js"
             }
         },
         "./held": {
@@ -182,6 +226,17 @@
                 "default": "./dist/node/fs.js"
             }
         },
+        "./ws-tcp-pump": {
+            "types": "./dist/node/ws-tcp-pump.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/ws-tcp-pump.ts",
+                "default": "./dist/node/ws-tcp-pump.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/ws-tcp-pump.ts",
+                "default": "./dist/node/ws-tcp-pump.js"
+            }
+        },
         "./worker-calls": {
             "types": "./dist/workers/worker-calls.d.ts",
             "import": {
@@ -203,6 +258,17 @@
                 "@intentic/src": "./src/node/whisper.ts",
                 "default": "./dist/node/whisper.js"
             }
+        },
+        "./git": {
+            "types": "./dist/git/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/git/index.ts",
+                "default": "./dist/git/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/git/index.ts",
+                "default": "./dist/git/index.js"
+            }
         }
     },
     "scripts": {
@@ -216,6 +282,7 @@
         "tslib": "catalog:"
     },
     "devDependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",

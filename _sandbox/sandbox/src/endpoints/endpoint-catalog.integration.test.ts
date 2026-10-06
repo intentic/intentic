@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { mkdtemp } from "node:fs/promises";
+import { link, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOCAL_MODEL_INSTANT } from "@intentic/sandbox-contract";
@@ -103,4 +103,20 @@ test("the curated quick-jobs model is helper-only by its weights file, and a tur
     expect(catalog.default).toBe("/work/.intentic/local/cache/models/Qwen3.5-9B-Q4_K_M.gguf");
     // A server serving only helper-only rows still names one, which the turn's refusal then explains.
     expect((await catalogOf([{ id: instant }])).default).toBe(instant);
+});
+
+// The persisted list is what answers once the server stops; a write that truncated it in place would leave a crash's
+// half-record there. A rename gives the new list its own file, which the link to the old one shows.
+test("the last known list is replaced whole, never rewritten in place", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "endpoint-catalog-"));
+    await writeFile(join(dir, "local.json"), JSON.stringify([{ id: "old", label: "old" }]));
+    await link(join(dir, "local.json"), join(dir, "before.json"));
+    const fetchImpl = (async () => Response.json({ data: [{ id: "new" }] })) as unknown as typeof fetch;
+    const catalog = createEndpointCatalog(dir, fetchImpl);
+    await catalog.models("local", { baseUrl: "http://127.0.0.1:40100/v1", protocol: "openai" });
+    expect(JSON.parse(await readFile(join(dir, "local.json"), "utf8"))).toEqual([{ id: "new", label: "new" }]);
+    expect(JSON.parse(await readFile(join(dir, "before.json"), "utf8"))).toEqual([{ id: "old", label: "old" }]);
+    // And it is the list that answers when the server no longer does.
+    const offline = createEndpointCatalog(dir, (async () => new Response("down", { status: 503 })) as unknown as typeof fetch);
+    expect((await offline.models("local", { baseUrl: "http://127.0.0.1:40100/v1", protocol: "openai" })).models).toEqual([{ id: "new", label: "new" }]);
 });

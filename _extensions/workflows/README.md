@@ -31,7 +31,7 @@ flowchart LR
 - [src/extension.ts](src/extension.ts) — registers the rail view and starts the in-flight badge.
 - [src/WorkflowsView.vue](src/WorkflowsView.vue) — the page: saved workflows, loops and recent runs.
 - [src/WorkflowDesigner.vue](src/WorkflowDesigner.vue) — the graph editor, step inspector and gate panel.
-- [src/workflowDag.ts](src/workflowDag.ts) — a workflow, with or without a run, as a layered graph.
+- [src/graph/workflowDag.ts](src/graph/workflowDag.ts) — a workflow, with or without a run, as a layered graph.
 - [src/workflowEdit.ts](src/workflowEdit.ts) — the edit operations and the invariants they hold.
 - [src/gateSnippets.ts](src/gateSnippets.ts) — the CI wiring text for a release gate.
 

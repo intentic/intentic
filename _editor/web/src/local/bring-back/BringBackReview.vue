@@ -1,6 +1,6 @@
 <!-- The review before a bring-back: every change the sandbox holds, chosen until the reader unticks it (a change made on both sides starts unticked), and one press that copies exactly the chosen ones into the folder. -->
 <script setup lang="ts">
-import { Button, ChangeStatusMark, Modal } from "@intentic/ui";
+import { Button, ChangeStatusMark, formatCount, Modal } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, watch } from "vue";
@@ -79,7 +79,7 @@ const tooMany = computed(() => chosen.value.size > BRING_BACK_CAP);
         </ul>
         <p v-if="truncated" class="mt-2 text-2xs text-warning">{{ t(`local.bringBackReview.truncated`) }}</p>
         <p v-if="tooMany" class="mt-2 text-2xs text-warning">
-            {{ t(`local.bringBackReview.tooMany`, { max: BRING_BACK_CAP.toLocaleString() }) }}
+            {{ t(`local.bringBackReview.tooMany`, { max: formatCount(BRING_BACK_CAP) }) }}
         </p>
         <p v-if="error" class="mt-2 text-xs text-danger">{{ error }}</p>
         <template #footer>

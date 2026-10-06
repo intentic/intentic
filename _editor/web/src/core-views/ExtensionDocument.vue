@@ -2,7 +2,7 @@
 import type { Component } from "vue";
 import { defineAsyncComponent } from "vue";
 import { loadChunk } from "@intentic/ui";
-import type { RegisteredDocumentProvider } from "./documentRegistry";
+import type { RegisteredDocumentProvider } from "../workbench/views/documentRegistry";
 
 /* Renders one directory's extension-contributed document (documentRegistry) in a Workspace tab, with the directory `path` bound. */
 
@@ -21,7 +21,7 @@ const componentOf = (provider: RegisteredDocumentProvider): Component => {
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
 import { computed } from "vue";
-import { documentProvider } from "./documentRegistry";
+import { documentProvider } from "../workbench/views/documentRegistry";
 import ExtensionErrorBoundary from "./ExtensionErrorBoundary.vue";
 import { useT } from "@intentic/ui/i18n";
 

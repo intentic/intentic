@@ -1,5 +1,5 @@
 import { fetchTerminals, terminalsKey } from "../../../features/terminal/terminalsQuery";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import type { WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 

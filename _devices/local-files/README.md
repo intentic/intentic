@@ -13,6 +13,9 @@ flowchart LR
     files --> office["ONLYOFFICE browser engine<br/>its own loopback listener"]
 ```
 
+- **Office documents are the ONLYOFFICE extension's.** The browser engine that edits them, its bundle download and the
+  originals it keeps, is `@intentic/ext-onlyoffice/local-office`, the one entry that extension exports for a host
+  outside a sandbox; this package imports nothing else of it (`CONSUMERS` in `_tools/checks/lib/extension-deps.mjs`).
 - **Only the app grants.** A folder is served once the app writes a `grant` line on this process's stdin, naming a
   random token and a path the user chose. A page only ever presents its token, so nothing a page sends can widen
   what it reads. The process exits when its stdin closes, so it never outlives the app: it gives its office editor

@@ -4,12 +4,12 @@ import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import type { TranscriptBackgroundJob } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
 import { useChatSurface } from "../tools/chatToolSurface";
 import { jobPhase, type JobStopper, portsLine } from "./jobPhase";
 import { useT } from "@intentic/ui/i18n";
+import { formatElapsed } from "@intentic/ui";
 
 // The row a background job's start left, drawn with the job's live state off the conversation's card (AgentSummary.jobs).
 
@@ -63,16 +63,16 @@ const status = computed(() => {
                 return t(`chat.chatJobRow.stopping`);
             }
             return current.handed === true
-                ? t(`chat.chatJobRow.leftForYou`, { ports: portsLine(current.ports ?? []), elapsed: formatElapsed(current.startedAt, now.value) })
-                : t(`chat.chatJobRow.running`, { elapsed: formatElapsed(current.startedAt, now.value) });
+                ? t(`chat.chatJobRow.leftForYou`, { ports: portsLine(current.ports ?? []), elapsed: formatElapsed((now.value - current.startedAt) / 1000) })
+                : t(`chat.chatJobRow.running`, { elapsed: formatElapsed((now.value - current.startedAt) / 1000) });
         case `stopped`:
-            return stoppedLine(current.by, formatElapsed(...current.took));
+            return stoppedLine(current.by, formatElapsed((current.took[1] - current.took[0]) / 1000));
         case `finished`:
-            return t(`chat.chatJobRow.finished`, { elapsed: formatElapsed(...current.took) });
+            return t(`chat.chatJobRow.finished`, { elapsed: formatElapsed((current.took[1] - current.took[0]) / 1000) });
         case `failed`:
-            return t(`chat.chatJobRow.failed`, { code: current.exitCode, elapsed: formatElapsed(...current.took) });
+            return t(`chat.chatJobRow.failed`, { code: current.exitCode, elapsed: formatElapsed((current.took[1] - current.took[0]) / 1000) });
         case `ended`:
-            return t(`chat.chatJobRow.ended`, { elapsed: formatElapsed(...current.took) });
+            return t(`chat.chatJobRow.ended`, { elapsed: formatElapsed((current.took[1] - current.took[0]) / 1000) });
         default:
             return t(`chat.chatJobRow.untracked`, { clock: formatClock(props.job.startedAt) });
     }

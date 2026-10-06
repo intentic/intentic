@@ -2,12 +2,12 @@
 import { ContextMenu, Icon, type Tip } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { useVocabulary } from "../../../core-views/vocabulary";
-import { useMenuLink } from "../../../shell/menuLink";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { useMenuLink } from "../../../lib/routes/menuLink";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useWorkspaceTree } from "./useWorkspaceTree";
-import { workspaceAgent } from "../health/workspaceScope";
+import { workspaceAgent } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

@@ -1,18 +1,17 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
-import { packFragment } from "../../environment/packs.js";
+import { packFragment } from "../../image/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
+import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 
 // In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
 // boot. No remove: de-privileging live engine state is too destructive to do silently.
 
-// Panel key for the dockerd session; must match what the boot chain's adopt uses.
-export const DOCKER_PANEL_KEY = "docker";
 
 // Always present; the engine half is the docker pack, composed only when the base image lacks it.
 const DOCKER_DIRECTIVE = `# docker capability: this directive grants dockerd the privileges it needs

@@ -24,7 +24,7 @@
     },
     "dependencies": {
         "@intentic/entry-css": "workspace:*",
-        "@intentic/house-css": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "@intentic/ui": "workspace:*",
         "@tauri-apps/api": "catalog:",
         "@tauri-apps/plugin-dialog": "catalog:",

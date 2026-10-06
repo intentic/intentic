@@ -1,5 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { Ref } from "vue";
 import { computed, ref } from "vue";
 import { pathRanker } from "./fuzzyPaths";

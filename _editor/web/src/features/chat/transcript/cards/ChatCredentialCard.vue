@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useSandboxSession } from "../../../sandbox/session/sandboxSession";
+import { useSandboxSession } from "../../../../client/session/sandboxSession";
 import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";
 import ChatCard from "./ChatCard.vue";

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type GitRunner, politeGit } from "@intentic/scaffold";
+import { type GitRunner, politeGit } from "@intentic/base/git";
 import type { Logger } from "pino";
 import type { Chore } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";

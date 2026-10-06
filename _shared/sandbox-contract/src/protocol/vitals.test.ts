@@ -1,4 +1,4 @@
-import { RAW_ROUTES, rawRoutePath } from "./raw-routes.js";
+import { RAW_ROUTES, rawRoutePath } from "./raw/raw-routes.js";
 import { parseVitals, type SandboxVitals, VITALS_PATH } from "./vitals.js";
 
 // The JSON browser-wire's own test pins (`vitals_are_the_camel_case_json_the_editor_parses_with_null_for_what_is_unknown`):

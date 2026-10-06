@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
-import { errorMessage, useNow } from "@intentic/ui/async";
+import { messageOr, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
@@ -12,7 +12,7 @@ import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from ".
 import { pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
 import { breakAnswers, effectivePolicy, sandboxPolicy } from "../run/turnBreak";
 import { usePaneView } from "./useChat-view";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
@@ -178,7 +178,7 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
     } catch (error) {
         // Left as it stands: a control that moved on a failed write would claim an automation nobody armed. The snap
         // back alone is easy to miss, so the card says why.
-        answerRefused.value = errorMessage(error, `That answer didn't save.`);
+        answerRefused.value = messageOr(error, `That answer didn't save.`);
     } finally {
         pending.value = undefined;
     }

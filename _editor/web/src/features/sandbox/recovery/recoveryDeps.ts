@@ -1,9 +1,9 @@
 import { RelinkAnswerSchema, type RelinkAnswer, type RelinkRequest } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { apiClient } from "../../../lib/useApi";
-import { useSandbox } from "../client/useSandbox";
-import { useSandboxSession } from "../session/sandboxSession";
-import { forgetSandbox, missingSandboxes, type RememberedSandbox } from "./deviceDirectory";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useSandboxSession } from "../../../client/session/sandboxSession";
+import { forgetSandbox, missingSandboxes, type RememberedSandbox } from "../../../client/directory/deviceDirectory";
 import { sandboxAt } from "./directMode";
 import type { RecoveryDeps } from "./useRecovery";
 

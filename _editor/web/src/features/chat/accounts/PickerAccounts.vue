@@ -2,7 +2,7 @@
 import { SearchBar, useDevice, vAction, ui } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
-import UsageMeter from "../../../components/UsageMeter.vue";
+import UsageMeter from "../session/UsageMeter.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, usePickerAccounts } from "./pickerAccounts";
 import { providerDisplayLabel } from "./providerCatalog";
 import { servingAccount } from "./servingAccount";

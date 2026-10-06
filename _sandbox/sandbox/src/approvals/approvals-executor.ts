@@ -2,11 +2,11 @@ import type { ActionApprovalSummary, AgentTurn, ApprovalSummary, PostApprovalSum
 import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { canPublishDirectly, postToDiscord } from "./discord-post.js";
+import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
 // agent write the queue.
-// Dispatched by kind: a Discord post takes an authenticated POST, other posts and all actions need an agent turn.
+// Dispatched by kind: a Discord post goes out through its gateway, other posts and all actions need an agent turn.
 // `running` is written before any action starts, so a mid-death daemon leaves a stuck item rather than one done twice.
 
 // How long a turn may sit before another pass reconsiders it; else a dead turn leaves `running` forever.
@@ -67,8 +67,13 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         }
         await mark(post, { status: `running`, startedAt: Date.now() });
         try {
-            const { url } = await postToDiscord(services, post);
-            await mark(post, { status: `done`, finishedAt: Date.now(), result: url });
+            const { url } = await publishDirectly(services, post);
+            const done: Partial<PostApprovalSummary> = { status: `done`, finishedAt: Date.now() };
+            // The posted row links to the message when the gateway could name it; without one it is still done.
+            if (url !== undefined) {
+                done.result = url;
+            }
+            await mark(post, done);
         } catch (error: unknown) {
             // The message is written for the owner's failed row, kept whole rather than reduced to a code.
             await fail(post, error instanceof Error ? error.message : `The post did not go through.`);

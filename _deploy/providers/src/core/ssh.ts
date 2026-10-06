@@ -45,7 +45,9 @@ export interface HostKeyStore {
     readonly set: (host: string, port: number, key: string) => Promise<void>;
 }
 
-// Trusts each host's first key and pins it; nothing persists across process restarts.
+// Trusts each host's first key and pins it; nothing persists across process restarts. For tests and throwaway
+// local containers only: a real deploy pins keys on disk (the CLI's known-hosts store), so the store is a required
+// argument of createSshExecutor rather than a default.
 const hostKeyId = (host: string, port: number): string => `${host}:${port}`;
 
 export const inMemoryHostKeyStore = (): HostKeyStore => {
@@ -184,7 +186,7 @@ export const connectWithRetry = async (
 
 // Verifies the host key via `store` before connecting; a cloudflared target dials a memoized per-host forwarder, but
 // the store stays keyed on the logical address:port.
-export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()): SshExecutor => {
+export const createSshExecutor = (store: HostKeyStore): SshExecutor => {
     const forwarders = new Map<string, Promise<CloudflaredForwarder>>();
 
     const dial = async (target: SshTarget): Promise<{ host: string; port: number; stderr?: () => string }> => {
@@ -384,4 +386,3 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
     };
 };
 
-export const sshExecutor: SshExecutor = createSshExecutor();

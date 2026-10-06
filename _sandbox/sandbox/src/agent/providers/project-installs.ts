@@ -7,6 +7,7 @@ import { writeFileAtomic } from "@intentic/base/fs";
 import type { AgentEvent, ProjectInstallMode } from "@intentic/sandbox-contract";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { inWorktree, type IsolationPlan, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { gitIgnores } from "../../git-ignores.js";
 import { opt } from "../../opt.js";
 import { agentCommand, classifyImageInstalls, type ProjectInstall, projectInstallsOf } from "./agent-installs.js";
 
@@ -141,12 +142,6 @@ export const installRootOf = async (dir: string, ceiling: string): Promise<strin
 
 const git = async (cwd: string, args: readonly string[]): Promise<string> => (await execFileAsync("git", ["-C", cwd, ...args])).stdout.trim();
 
-const ignored = async (cwd: string, path: string): Promise<boolean> =>
-    execFileAsync("git", ["-C", cwd, "check-ignore", "-q", "--", path]).then(
-        () => true,
-        () => false,
-    );
-
 const nearestExisting = async (path: string): Promise<string> => {
     for (let current = path; ; current = dirname(current)) {
         if ((await present(current)) || dirname(current) === current) {
@@ -172,7 +167,7 @@ export const ensureInstallDirIgnored = async (root: string, ecosystem: ProjectIn
     // A line like `mkdir app && cd app && npm install x` names a directory that does not exist yet: git is asked from
     // the nearest one that does, about the path the install will create.
     const standing = await nearestExisting(root);
-    if (await ignored(standing, join(relative(standing, root), `${name}/`))) {
+    if (await gitIgnores(standing, join(relative(standing, root), `${name}/`))) {
         return;
     }
     const top = await git(standing, ["rev-parse", "--show-toplevel"]);

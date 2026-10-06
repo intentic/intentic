@@ -1,10 +1,8 @@
-import { basename } from "@intentic/ui/path";
+import { basename, joinPath } from "@intentic/ui/path";
 import { t } from "@intentic/ui/i18n";
 
 // Wording and checks every file surface (the tree, the home) shares for naming, creating and deleting entries, so a
 // name refused in one place is refused in the other with the same words (workspace.fileVerbs in the catalog).
-
-export const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 
 // Live validation for a name being typed; empty stays error-free, since an empty commit is a silent cancel.
 export const newNameError = (draft: string, dir: string, exists: (path: string) => boolean): string | undefined => {

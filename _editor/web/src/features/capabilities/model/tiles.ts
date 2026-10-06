@@ -1,7 +1,6 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory, contributionEntry } from "@intentic/capability-catalog";
 import { contributionDiscriminator } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, CapabilitySummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { entryDescription, entryHint, entryName } from "./catalogCopy";

@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { ForgejoApi } from "@intentic/providers";
 import { forgejoApi } from "@intentic/providers";
-import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/base/git";
 
 export interface AdoptRepo {
     // Local git repo to push, and the name it takes under the Forgejo admin owner.

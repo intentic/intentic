@@ -60,7 +60,7 @@ const remove = jest.fn<(id: string) => Promise<void>>();
 // The attach lane's one write; named so a test can assert the probe was never even attempted.
 const attach = jest.fn<(id: string, url: string) => Promise<void>>();
 // activeSandboxId/reachable belong to the chat store, read at module scope; omitting them crashes the import.
-jest.mock(`../../sandbox/client/useSandbox`, () => ({
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
         list,
@@ -101,8 +101,8 @@ jest.mock(`../../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToke
 jest.mock(`../../../app/analytics`, () => ({ track: jest.fn() }));
 // The masthead's sign-out; the page's own concern is only what it does before and after the session ends.
 const signOut = jest.fn<() => Promise<void>>();
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }), signOut }) }));
-jest.mock(`../../auth/useGoogleIdentity`, () => ({
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }), signOut }) }));
+jest.mock(`../../../client/auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ getIdToken: jest.fn().mockResolvedValue(`id-token`), warmIdToken: jest.fn() }),
 }));
 // The page's wall clock as a knob: every verdict the wait card reaches by elapsed time reads this, so a test

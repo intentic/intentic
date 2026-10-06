@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import { type JumpScope, jumpScopes, scopedQuery } from "./jumpSearch";
+import { computed, nextTick, ref } from "vue";
+import { type JumpScope, jumpScopes, scopedQuery } from "../../workbench/commands/jumpSearch";
 import { type PaletteRow, useFileJumpRows, useJumpRows } from "./useJumpRows";
-import { useQuickOpen } from "./useQuickOpen";
-import { type IconName, Modal } from "@intentic/ui";
+import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
+import { type IconName, Modal, Notice, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 
 // The jump palette (Ctrl/Cmd+P, and Ctrl/Cmd+Shift+P opened on `>`): one field over agents, files, terminals and
@@ -44,42 +44,18 @@ const sections = computed(() => {
 });
 
 const input = ref<HTMLInputElement | null>(null);
-const activeIndex = ref(0);
-const rowEls = new Map<string, HTMLElement>();
-
-// Resets the highlight to the top when the result set itself changes — keyed on the rows rather than on the array, so
-// a live fleet tick (an agent's status line moving while its row stays put) can't throw the reader back to the top.
-watch(
-    () => rows.value.map((row) => row.key).join(`\u0000`),
-    () => (activeIndex.value = 0),
-);
-
-const setRowEl = (key: string, el: unknown): void => {
-    if (el) {
-        rowEls.set(key, el as HTMLElement);
-    } else {
-        rowEls.delete(key);
-    }
-};
+// The highlight resets to the top only when the result set itself changes (keyed on the rows, not the array), so a live
+// fleet tick (an agent's status line moving while its row stays put) can't throw the reader back to the top.
+const { activeIndex, activeRow, move, setRowEl } = useListNavigation(rows, (row) => row.key);
 
 const run = (row: PaletteRow): void => {
     isOpen.value = false;
     row.run();
 };
 
-const move = (delta: number): void => {
-    const count = rows.value.length;
-    if (count === 0) {
-        return;
-    }
-    activeIndex.value = (activeIndex.value + delta + count) % count;
-    rowEls.get(rows.value[activeIndex.value]?.key ?? ``)?.scrollIntoView({ block: `nearest` });
-};
-
 const openActive = (): void => {
-    const row = rows.value[activeIndex.value];
-    if (row !== undefined) {
-        run(row);
+    if (activeRow.value !== undefined) {
+        run(activeRow.value);
     }
 };
 
@@ -168,12 +144,7 @@ const onShow = async (): Promise<void> => {
                 role="listbox"
                 :aria-label="filesOnly ? t(`local.quickOpen.goToFile`) : t(`shell.quickOpen.jumpTo`)"
             >
-                <p
-                    v-if="truncated"
-                    class="mx-1.5 mb-1 inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-2xs text-warning"
-                >
-                    <Icon name="exclamation-triangle" class="text-[0.6rem]" /> {{ t(`shell.quickOpen.showingFirstMatchesOnly`) }}
-                </p>
+                <Notice v-if="truncated" tone="warning" size="xs" class="mx-1.5 mb-1">{{ t(`shell.quickOpen.showingFirstMatchesOnly`) }}</Notice>
                 <template v-for="section in sections" :key="section.heading">
                     <p class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">{{ section.heading }}</p>
                     <button

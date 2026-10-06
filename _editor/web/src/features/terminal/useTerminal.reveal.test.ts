@@ -12,14 +12,14 @@ stubGlobal(`localStorage`, {
     setItem: (key: string, value: string) => store.set(key, value),
     removeItem: (key: string) => store.delete(key),
 });
-jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // Every remembered key is filed under the sandbox it belongs to; the ids below are this test's sandbox.
-jest.mock("../sandbox/overview/activeSandbox", () => ({
+jest.mock("../../lib/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId: ref(`sbx-1`),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
 }));
-jest.mock("../sandbox/client/useSandbox", () => ({
+jest.mock("../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId: ref(`sbx-1`) }),
 }));
 jest.mock("./terminalSession", () => ({

@@ -2,8 +2,8 @@
 import { ui, Code, commandLang, InfoHint, osOptions, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
-import { onFilesChanged } from "../../extension-host/fileEvents";
-import { useSandbox } from "../../features/sandbox/client/useSandbox";
+import { onFilesChanged } from "../../workbench/workspace-events/fileEvents";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import { bashCommand, psCommand } from "../../app/environments/scriptCommand";
 import ScriptSourceSwitch from "../../features/capabilities/connect/ScriptSourceSwitch.vue";
 import { INVENTORY_PATH, zoneFromUrl } from "@intentic/sandbox-contract";

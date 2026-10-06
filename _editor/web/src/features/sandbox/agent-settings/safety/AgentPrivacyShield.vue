@@ -30,7 +30,7 @@ import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref } from "vue";
 import { useDraft } from "../../../../lib/useDraft";
-import { SandboxHttpError } from "../../client/sandboxHttpError";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { ALLOW_VALUE_MAX, allowListFrom, allowListProblem, allowListText, ledgerTime, sameList, withClass } from "./privacyShield";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
 import PrivacyShieldActivity from "./PrivacyShieldActivity.vue";

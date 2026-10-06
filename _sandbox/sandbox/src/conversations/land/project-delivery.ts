@@ -19,7 +19,7 @@ import {
     sandboxIdFromUrl,
     type WorkspaceEvent,
 } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner, gitBytes } from "@intentic/scaffold";
+import { defaultGit, type GitRunner, gitBytes } from "@intentic/base/git";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
 import { readObject } from "../../git/changes/blob-reader.js";

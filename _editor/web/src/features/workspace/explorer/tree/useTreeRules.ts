@@ -1,6 +1,5 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { noticeOf } from "@intentic/ui/async";
 import type { Ref } from "vue";
 import { archiveAbove, isArchiveContent } from "../../files/archiveEntries";

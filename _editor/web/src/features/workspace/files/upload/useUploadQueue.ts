@@ -1,19 +1,20 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
 import { isBrowsableArchive } from "@intentic/sandbox-contract";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
+import { basename, joinPath } from "@intentic/ui/path";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../explorer/transfer/dropEntries";
 import { packTar } from "../../explorer/transfer/tarStream";
-import { sandboxJson, sandboxUpload } from "../../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../../sandbox/client/jsonBody";
-import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
-import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { sandboxJson, sandboxUpload } from "../../../../client/sandbox/sandboxClient";
+import { jsonBody } from "../../../../client/sandbox/jsonBody";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { rpcPrefix } from "../../../../lib/queryKeys";
-import { workspaceAgent } from "../../health/workspaceScope";
-import { chunkItems, dedupeByPath } from "./uploadChunking";
+import { workspaceAgent } from "../../../../app/workspaceScope";
+import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
@@ -68,13 +69,11 @@ const skippedNotice = sandboxRef<number | undefined>(() => undefined);
 // Files skipped as identical on the sandbox (size + mtime); shown so nothing looks silently dropped.
 const skippedUnchanged = sandboxRef(() => 0);
 
-const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
-
 // Unpacks a just-landed zip or tar ahead of the first click on it. The listing request IS the unpack, so this is the
 // same call the home would make, made early and thrown away; a failure here costs nothing, since the home's own call
 // will report it when someone actually opens the archive.
 const warmArchive = (path: string): void => {
-    if (!isBrowsableArchive(path.slice(path.lastIndexOf(`/`) + 1))) {
+    if (!isBrowsableArchive(basename(path))) {
         return;
     }
     void sandboxRpc.workspace.children({ path, agent: workspaceAgent.value }).catch(() => undefined);
@@ -161,7 +160,7 @@ const runInstall = async (): Promise<void> => {
         }
     } catch (error) {
         if (current()) {
-            installError.value = errorMessage(error, `Couldn't start the install.`);
+            installError.value = messageOr(error, `Couldn't start the install.`);
         }
     } finally {
         if (current()) {
@@ -273,7 +272,7 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
                     return;
                 }
                 setStatus(item, `failed`);
-                item.error = errorMessage(error, `Upload failed.`);
+                item.error = messageOr(error, `Upload failed.`);
             }
         }
     };
@@ -350,7 +349,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
         // Stall or a real error: record it for the give-up message, but leave status alone; a retry resends the chunk.
         for (const item of items) {
             if (item.status !== `done`) {
-                item.error = errorMessage(error, `Upload failed.`);
+                item.error = messageOr(error, `Upload failed.`);
             }
         }
         return `failed`;

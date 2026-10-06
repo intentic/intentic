@@ -10,16 +10,16 @@ import { sandboxSummary } from "../../../testing/sandboxSummary";
 
 const owner: User = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 const user = ref<User | null>(owner);
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
 const lookup = jest.fn<(input: { sandboxIds: string[] }) => Promise<SandboxLookup>>();
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { lookup } } }));
 stubGlobal(`fetch`, async () => new Response(JSON.stringify({ identity: `id-1`, since: `2026-10-01T22:42:40.466Z` }), { status: 200 }));
 
 const { startRememberingSandboxes } = await import(`./rememberSandboxes`);
 const { queryClient } = await import(`../../../lib/queryPersistence`);
-const { SANDBOX_LIST_KEY } = await import(`../client/useSandbox`);
-const { forgetAccount, rememberedAccount } = await import(`./deviceDirectory`);
-const { directMode } = await import(`./directState`);
+const { SANDBOX_LIST_KEY } = await import(`../../../client/sandbox/useSandbox`);
+const { forgetAccount, rememberedAccount } = await import(`../../../client/directory/deviceDirectory`);
+const { directMode } = await import(`../../../client/directory/directState`);
 
 startRememberingSandboxes();
 

@@ -7,7 +7,7 @@ test(`says the wallet policy the numbers add up to`, () => {
         `Every payment asks you in chat first · at most $1.00 each · $5.00 a day.`,
     );
     expect(walletPolicySummary({ perPaymentMaxUsd: `2.50`, dailyCapUsd: `20`, autoApproveUnderUsd: `0.10` })).toBe(
-        `Payments under $0.10 go through on their own, the rest ask you first · at most $2.50 each · $20 a day.`,
+        `Payments under $0.10 go through on their own, the rest ask you first · at most $2.50 each · $20.00 a day.`,
     );
     // A number that does not parse produces no sentence rather than a wrong one.
     expect(walletPolicySummary({ perPaymentMaxUsd: `a lot`, dailyCapUsd: `5`, autoApproveUnderUsd: `0` })).toBeUndefined();

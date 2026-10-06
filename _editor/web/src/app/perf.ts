@@ -76,9 +76,9 @@ const primitives = (fields: PerfFields): Record<string, string | number | boolea
     Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined));
 
 // Injected, not imported: this module sits near the root of the import graph (sandboxRpc wraps every call in
-// `trackPerf`), and importing the reporter directly would cycle back through clientDiagnostics → sandboxAuthFetch
-// → sandboxSession → useSandbox into the app's own graph. `main.ts` hands the sink in (installPerfReporter); until
-// then, or in a test that never calls it, a slow span costs one comparison.
+// `trackPerf`), and the reporter reaches the daemon through its client (clientDiagnostics → client/sandbox/clientReport),
+// which sits above it. `main.ts` hands the sink in (installPerfReporter); until then, or in a test that never calls it,
+// a slow span costs one comparison.
 type SlowReporter = (op: string, ms: number, fields: Record<string, string | number | boolean>, requestId: string | undefined) => void;
 let reportSlow: SlowReporter | undefined;
 export const installPerfReporter = (reporter: SlowReporter): void => {

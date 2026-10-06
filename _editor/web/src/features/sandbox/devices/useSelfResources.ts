@@ -3,7 +3,7 @@ import { type DeviceSandboxResources, type DeviceSandboxRow, type EngineFacts, t
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "./shapeFlow";
 import { manageDeviceSandbox, useDevices } from "./useDevices";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // THE SANDBOX SERVING THIS PAGE, AS SOMETHING THE PAGE CAN RESIZE. The Devices tab can already reshape any
 // container on any connected machine, but it reaches them through a machine the reader picked; the two surfaces that

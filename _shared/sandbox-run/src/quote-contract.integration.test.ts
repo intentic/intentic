@@ -63,8 +63,8 @@ test("the sites that carry secrets to a host still import the quoters", async ()
         "_deploy/providers/src/backup/backup.ts",
         "_deploy/providers/src/backings/postgres-database.ts",
         "_deploy/providers/src/backings/valkey-namespace.ts",
-        "_deploy/providers/src/komodo/komodo.ts",
-        // The write-once .env every provider's secrets cross; naming it holds the floor under all of them.
+        // The write-once .env every provider's secrets cross, Komodo's included since it became a compose-service spec
+        // (2026-10-06); naming it holds the floor under all of them.
         "_deploy/providers/src/core/host-files.ts",
         "_sandbox/sandbox/src/secrets/secrets.routes.ts",
     ];

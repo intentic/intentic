@@ -1,5 +1,11 @@
-import type { GitDiffSide, LandedMessage, LandedMessageDraft, LandedMessageStep, RepoChanges } from "@intentic/api-contract";
-import { landedCommitMessage } from "@intentic/sandbox-contract";
+import {
+    landedCommitMessage,
+    type GitDiffSide,
+    type LandedMessage,
+    type LandedMessageDraft,
+    type LandedMessageStep,
+    type RepoChanges,
+} from "@intentic/sandbox-contract";
 import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";

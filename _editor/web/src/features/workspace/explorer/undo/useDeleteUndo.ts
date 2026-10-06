@@ -1,7 +1,7 @@
-import { commandShortcut } from "../../../../shell/commands/useCommands";
+import { commandShortcut } from "../../../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../../../../app/environments/local";
-import { useNotifications } from "../../../../shell/notifications/notifications";
+import { useNotifications } from "../../../../workbench/notifications/notifications";
 import { type DeleteBatch, takeDelete } from "./deleteUndo";
 import { restoredReceipt } from "../entryNames";
 import { useWorkspaceTree } from "../useWorkspaceTree";

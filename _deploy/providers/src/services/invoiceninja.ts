@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
@@ -107,7 +106,7 @@ const composeYaml = (parsed: InvoiceninjaInputs, stamp: ContainerStamp): string 
     ].join("\n");
 
 // /health answers 200 once first-boot migration and seeding finish; readyTimeoutMs is 600s to cover that.
-export const createInvoiceninjaProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createInvoiceninjaProvider = (executor: SshExecutor): Provider =>
     createComposeServiceProvider(
         {
             kind: "invoiceninja",

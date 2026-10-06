@@ -1,5 +1,4 @@
-import type { SandboxSettings } from "@intentic/api-contract";
-import type { OffloadKind, RunnerSummary } from "@intentic/sandbox-contract";
+import type { OffloadKind, RunnerSummary, SandboxSettings } from "@intentic/sandbox-contract";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

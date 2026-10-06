@@ -1,7 +1,8 @@
 import { sleep } from "@intentic/base/async";
-import { type TrialHealth, TrialStatusSchema } from "@intentic/sandbox-contract";
+import { TrialAllowanceSchema } from "@intentic/api-contract/ingress";
+import type { TrialHealth } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
-import { getFromPlatform } from "../system/platform-client.js";
+import { callIngress } from "../system/platform-client.js";
 
 // Trial is served by the platform, not this daemon, and its existence is the platform operator's decision; a sandbox
 // must probe rather than assume it. Availability is probed at boot and on the allowance poll, then cached; unknown
@@ -32,24 +33,25 @@ export interface TrialService {
 // Bounds the whole exchange (lookup, connect, body): `req.setTimeout` arms only once connected.
 const PROBE_TIMEOUT_MS = 15_000;
 
-const getJson = (config: Config, path: string): Promise<{ status: number; json: unknown }> =>
-    getFromPlatform(config, path, AbortSignal.timeout(PROBE_TIMEOUT_MS));
+// GET /trial/status, its body as JSON for isStatus to judge.
+const getStatus = async (config: Config): Promise<{ status: number; json: unknown }> => {
+    const answer = await callIngress(config, { route: "trialStatus", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    return { status: answer.status, json: answer.data };
+};
 
+// The allowance as the contract states it, with a reset time: a status without one is not one this daemon counts down.
 const isStatus = (value: unknown): value is TrialStatus => {
-    if (typeof value !== "object" || value === null) {
-        return false;
-    }
-    const parsed = TrialStatusSchema.safeParse({ ...value, available: true });
+    const parsed = TrialAllowanceSchema.safeParse(value);
     return parsed.success && typeof parsed.data.resetsAt === "string";
 };
 
-export const createTrialService = (config: Config, get = getJson): TrialService => {
+export const createTrialService = (config: Config, get = getStatus): TrialService => {
     let status: TrialStatus | undefined;
     let available = false;
     // No platform means nobody to ask and no account to meter; same gate announcing uses.
     const configured = config.platform.url !== "" && config.connectToken !== "";
     const probe = async (): Promise<void> => {
-        const response = await get(config, "/trial/status").catch(() => undefined);
+        const response = await get(config).catch(() => undefined);
         if (response === undefined) {
             // Left as-is, not cleared: a blip hasn't withdrawn the trial, and dropping it would strand an in-progress
             // turn.

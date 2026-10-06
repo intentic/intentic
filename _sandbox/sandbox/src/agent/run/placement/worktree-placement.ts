@@ -1,5 +1,5 @@
 import type { AgentEvent, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
-import { settleIndex } from "@intentic/scaffold";
+import { settleIndex } from "@intentic/base/git";
 import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
 import { agentRepoReview, anchorOf } from "../../../conversations/land/agent-changes.js";
 import { headSha } from "../../../git/changes/changes.js";

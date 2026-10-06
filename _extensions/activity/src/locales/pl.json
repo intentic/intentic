@@ -25,5 +25,10 @@
         "direct": "Bezpośrednio"
     },
     "sourceLabel": "Źródło aktywności",
+    "sources": {
+        "schedule": "Harmonogram",
+        "webchat": "Czat w przeglądarce",
+        "you": "Ty"
+    },
     "title": "Aktywność"
 }

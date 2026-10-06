@@ -3,7 +3,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { useT } from "@intentic/ui/i18n";
 import { computed, createApp, h, nextTick, ref, shallowRef } from "vue";
-import { activeSandboxId } from "../../../../sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../../../../lib/activeSandbox";
 import { inputHistoryFor } from "../../../drafts/inputHistory";
 import { Conversation } from "../../../session/conversation";
 import type { ChatMessage } from "../../../transcript/transcript";

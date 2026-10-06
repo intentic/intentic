@@ -1,6 +1,7 @@
-import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/api-contract";
+import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract";
 import { hotspotAsk, moduleAsk, type RefactorAsk } from "./refactorAsk";
 import { t } from "@intentic/ui/i18n";
+import { formatFixed } from "@intentic/ui/format";
 
 // Pure-function arithmetic behind the Codebase Health tab: the component binds, this computes, so the numbers
 // are testable without mounting anything. Each row's refactor offer is derived from these same figures
@@ -88,9 +89,5 @@ export const moduleRows = (modules: readonly WorkspaceKeyModule[]): ModuleRow[] 
     }));
 };
 
-// Thousands-separated up to a million, then compact; these are counts a reader may want to compare or repeat,
-// so early rounding costs real information.
-export const formatCount = (value: number): string => (value < 1_000_000 ? value.toLocaleString(`en-US`) : `${(value / 1_000_000).toFixed(1)}M`);
-
 // Branch points per file, since a raw total is meaningless without the file count and not a repo-level fact on its own.
-export const perFile = (total: number, files: number): string => (files === 0 ? `—` : (total / files).toFixed(1));
+export const perFile = (total: number, files: number): string => (files === 0 ? `—` : formatFixed(total / files, 1));

@@ -1,5 +1,5 @@
 import { bodyOf, parseHtml } from "./dom.js";
-import { renderMarkdown } from "./markdown.js";
+import { markdownTable, renderMarkdown } from "./markdown.js";
 
 const md = (html: string, baseUrl?: string): string => {
     const body = bodyOf(parseHtml(`<html><body>${html}</body></html>`));
@@ -72,5 +72,25 @@ describe("renderMarkdown", () => {
 
     it("skips script, style and their text entirely", () => {
         expect(md("<p>keep</p><script>drop()</script><style>.x{}</style>")).toBe("keep\n");
+    });
+});
+
+// The one table writer webq's pages and fileq's sheets, archives and profiles share.
+describe("markdownTable", () => {
+    it("pads every row to the widest and keeps the first as the header", () => {
+        expect(markdownTable([["a", "b"], ["1"], ["2", "3", "4"]])).toBe("| a | b |  |\n| --- | --- | --- |\n| 1 |  |  |\n| 2 | 3 | 4 |");
+    });
+
+    // fileq's archive listing escaped pipes but not line breaks, and webq's crawl index escaped neither in a url or path:
+    // a tar member named across two lines, or a title with a break in it, split its row in two.
+    it("escapes a pipe and folds a line break, so neither can end a cell or a row early", () => {
+        expect(markdownTable([["path"], ["a|b"], ["first\n  second"], ["crlf\r\nend"]])).toBe(
+            "| path |\n| --- |\n| a\\|b |\n| first second |\n| crlf end |",
+        );
+    });
+
+    it("marks right-aligned columns, and writes nothing for no rows", () => {
+        expect(markdownTable([["n", "name"], ["1", "x"]], { align: ["right"] })).toBe("| n | name |\n| ---: | --- |\n| 1 | x |");
+        expect(markdownTable([])).toBe("");
     });
 });

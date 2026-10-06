@@ -48,6 +48,7 @@
         "test:watch": "suites --watch"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "ignore": "catalog:",
         "tslib": "catalog:"

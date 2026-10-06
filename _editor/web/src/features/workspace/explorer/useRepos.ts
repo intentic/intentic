@@ -1,7 +1,7 @@
 import { computed } from "vue";
 import { projectScope, withinScope } from "../../../app/projectScope";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 /* Every real git repo under /work, "root" (the /work repo itself, implicit) plus each discovered nested repo, as root-relative dir ids. */
 

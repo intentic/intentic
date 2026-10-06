@@ -1,7 +1,9 @@
-import { lstat, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { withManagedInclude } from "@intentic/base/ssh-config";
 
 // Managed ssh-config shared by the `ssh` capability and git-provider key access: `<alias>.conf` plus a 0600 key/pass
 // file per alias. Resolved per call, not cached; symlinked onto /history so credentials survive container recreates.
@@ -14,22 +16,23 @@ export const hostConfPath = (alias: string): string => join(hostsDir(), `${alias
 export const hostKeyPath = (alias: string): string => join(hostsDir(), `${alias}.key`);
 export const hostPassPath = (alias: string): string => join(hostsDir(), `${alias}.pass`);
 
-const INCLUDE = "Include intentic-hosts/*.conf";
+const INCLUDED = "intentic-hosts/*.conf";
+const INCLUDE = `Include ${INCLUDED}`;
 
-// Ensures ~/.ssh/config Includes the managed dir once; a relative Include resolves under ~/.ssh, so a bare glob matches
-// every alias file. Writes via temp file + rename so a crash mid-write cannot truncate the user's config.
+// Ensures ~/.ssh/config Includes the managed dir, first, once; a relative Include resolves under ~/.ssh, so a bare glob
+// matches every alias file. Only a live line counts: one the user commented out is not an include. Written atomically
+// so a crash mid-write cannot truncate the user's config.
 const ensureInclude = async (): Promise<void> => {
     const sshDir = join(homeDir(), ".ssh");
     const userConfig = join(sshDir, "config");
     // Only absence reads as empty: the user's config that cannot be read is never rewritten as just the Include.
     const current = (await readFile(userConfig, "utf8").catch(undefinedIfMissing)) ?? "";
-    if (current.includes(INCLUDE)) {
+    const desired = withManagedInclude(current, INCLUDE, (path) => path === INCLUDED);
+    if (desired === current) {
         return;
     }
     await mkdir(sshDir, { recursive: true, mode: 0o700 });
-    const tmp = `${userConfig}.intentic-tmp`;
-    await writeFile(tmp, `${INCLUDE}\n${current}`, { mode: 0o600 });
-    await rename(tmp, userConfig);
+    await writeFileAtomic(userConfig, desired, 0o600);
 };
 
 // Boot: repoints the managed dir at the /history volume and re-ensures the Include, since ~/.ssh is container-local and

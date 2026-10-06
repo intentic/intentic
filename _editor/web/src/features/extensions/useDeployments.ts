@@ -1,10 +1,10 @@
 import { type Deployment, DeploymentSchema } from "@intentic/api-contract";
 import { computed } from "vue";
 import { readIntenticLines } from "../../lib/intenticStream";
-import { SandboxHttpError } from "../sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { DEPLOYMENTS } from "../../lib/queryKeys";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 /* The live Komodo deployments surfaced by the in-sandbox `intentic deploy deployments` subcommand. */
 

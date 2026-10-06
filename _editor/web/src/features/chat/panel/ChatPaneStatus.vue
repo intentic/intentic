@@ -1,24 +1,24 @@
 <script setup lang="ts">
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import type { KeepWarmEnd } from "@intentic/sandbox-contract";
-import { formatTokens, Icon, ProgressRing, ResponsiveOverlay, type Tip, useDevice } from "@intentic/ui";
+import { formatElapsed, formatTokens, Icon, ProgressRing, ResponsiveOverlay, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import KeepWarmPanel from "../../agents/fleet/prompt-cache/KeepWarmPanel.vue";
-import { contextPct, formatElapsed, turnInFlight } from "../../agents/fleet/agentStatus";
+import { contextPct, turnInFlight } from "../../agents/fleet/agentStatus";
 import { cacheAlive, cacheCooling, keptWarm } from "../../agents/fleet/prompt-cache/promptCache";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { formatRemaining, formatReset, planHeadroom, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
 import { sandboxAvailabilityVisual } from "../../sandbox/overview/availability";
 import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailability";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
-import UsageMeter from "../../../components/UsageMeter.vue";
+import UsageMeter from "../session/UsageMeter.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The pane's status bar: readouts under the composer, the one part of the footer outside the scroller — about the
@@ -111,7 +111,7 @@ const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hi
     if (cache === undefined || !cacheAlive(agent, now.value)) {
         return undefined;
     }
-    const countdown = formatElapsed(now.value, cache.at + cache.ttlMs);
+    const countdown = formatElapsed((cache.at + cache.ttlMs - now.value) / 1000);
     return {
         icon: `bolt`,
         text: t(`chat.chatPaneStatus.cacheCountdown`, { countdown }),

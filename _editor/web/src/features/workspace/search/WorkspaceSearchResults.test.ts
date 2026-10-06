@@ -1,7 +1,7 @@
 // Pins that the panel's build cost (rows rendered, lines tokenized) doesn't scale with result count; a
 // composable test can't see this, since it's a property of how many rows the component builds.
 import "@intentic/testing/dom";
-import type { WorkspaceSearchGroup } from "@intentic/api-contract";
+import type { WorkspaceSearchGroup } from "@intentic/sandbox-contract";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualUi from "@intentic/ui";

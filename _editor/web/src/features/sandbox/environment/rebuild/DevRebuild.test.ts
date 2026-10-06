@@ -8,7 +8,7 @@ import PrimeVue from "primevue/config";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../../shell/hub/hubWork";
+import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../../workbench/hub/hubWork";
 
 const hostId = ref<string | undefined>(`host-1`);
 // What the card asks the door rule about: its own checkout, since one PC answers for this container through several
@@ -23,7 +23,7 @@ jest.mock(`../../devices/useDevices`, () => ({
     useDevices: () => ({ devices: ref([]) }),
     runDeviceCommand,
 }));
-jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
 // What the restart will interrupt, and whether it hands it back: both are read at the moment of asking, so both are
 // driven from here. `turnInFlight` stays real — what counts as mid-turn is not this card's opinion.
 const fleet = ref<{ status: string }[]>([]);
@@ -267,7 +267,7 @@ it(`names the step it is on, with a running clock and the layer docker is on`, a
     expect(hubWorkRunning(hubWorkKey(`sandbox`, `environment`))).toBe(`Rebuilding from your checkout`);
 
     await settleUi(POLL_MS * 16);
-    expect(el.textContent).toMatch(/1m \d\ds/);
+    expect(el.textContent).toMatch(/1m \d{1,2}s/);
 });
 
 // A DOCKER BUILD'S OUTPUT IS NOT PROGRESS, it is the material for the one minute in twenty where something is wrong.
@@ -331,7 +331,7 @@ it(`reports a finished rebuild with how long it took`, async () => {
     runDeviceCommand.mockResolvedValue(log(`0`, `#20 naming to intentic-sandbox:dev`, `${DEV_REBUILD_EXIT_MARK} 0`));
     await settleUi(POLL_MS);
 
-    expect(el.textContent).toMatch(/Rebuilt from your checkout in 2m \d\ds/);
+    expect(el.textContent).toMatch(/Rebuilt from your checkout in 2m \d{1,2}s/);
     expect(el.textContent).toContain(`You're running the new image.`);
     expect(buttonSaying(`Rebuild from checkout`)).toBeInstanceOf(HTMLButtonElement);
     // And the hub row stops turning with it: a mark left over a finished build is worse than none.
@@ -352,7 +352,7 @@ it(`keeps following a build that runs for hours while its log keeps growing`, as
     expect(el.textContent).toContain(`Building the image`);
     expect(el.textContent).toContain(`layer 6 of 9`);
     expect(el.textContent).not.toContain(`stopped reporting`);
-    expect(el.textContent).toMatch(/95m \d\ds/);
+    expect(el.textContent).toMatch(/1h 35m/);
 });
 
 it(`gives a failed rebuild its exit status and points at the whole log`, async () => {

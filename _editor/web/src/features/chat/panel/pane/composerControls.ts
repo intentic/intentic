@@ -8,7 +8,7 @@ import { useRunners } from "../../../sandbox/devices/runners/useRunners";
 import { providerDisplayLabel } from "../../accounts/providerCatalog";
 import { useComposerLanding } from "../../composer/composerLanding";
 import { type ComposerControl, overflowRows, ridesRow } from "../../composer/composerMore";
-import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { composerModelReading } from "../../composer/composerModelLabel";
 import { modeMeta } from "../../models/catalog";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";

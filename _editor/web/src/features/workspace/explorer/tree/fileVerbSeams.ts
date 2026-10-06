@@ -1,5 +1,5 @@
 import { localFace } from "../../../../app/environments/local";
-import { useNotifications } from "../../../../shell/notifications/notifications";
+import { useNotifications } from "../../../../workbench/notifications/notifications";
 import { useTerminalPanel } from "../../../terminal/useTerminalPanel";
 import { downloadEntries } from "../../files/downloadEntries";
 import { useUploadQueue } from "../../files/upload/useUploadQueue";

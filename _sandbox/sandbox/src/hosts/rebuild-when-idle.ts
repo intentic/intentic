@@ -1,9 +1,10 @@
 import type { DeviceFlowLine, DeviceSandboxFlow, EnvironmentRebuildWait } from "@intentic/sandbox-contract";
-import { askedRestart, type RestartResume } from "../agent/run/turn/restart-resume.js";
+import { askedRestart, type RestartResume } from "../system/restart-resume.js";
 import type { Services } from "../composition.js";
 
 // "REBUILD WHEN THEY'RE IDLE". A rebuild restarts the container every turn here runs in, and the owner pressing Rebuild
-// now while four agents were mid-turn cut all four. This holds the rebuild until no agent is mid-turn, then hands it to
+// now while four agents were mid-turn cut all four. This holds the rebuild until nothing a restart would cut is in
+// flight (a turn, a land, a running subagent, a workflow's step: bootstrap/working-now.ts), then hands it to
 // the connected device exactly as the button would. The wait lives in the sandbox, not in the page that asked: that
 // page may be a phone that locks, or a tab closed long before the last agent finishes, and a wait kept there would be
 // lost with it. It is kept in memory only, since the sandbox restarting for any other reason is itself the interruption
@@ -18,8 +19,8 @@ const CUTOVER_GRACE_MS = 2 * 60_000;
 const LOST = "Lost contact with that device before this sandbox restarted. It may still finish; if nothing happens, rebuild again.";
 
 export interface RebuildWhenIdleDeps {
-    // The agents mid-turn now, by the title the board shows them under.
-    readonly midTurn: () => readonly string[];
+    // What a restart would cut now, by the name the board or the run shows it under (workingNames, "restart").
+    readonly working: () => readonly string[];
     // The swap relayed to the device, as the Rebuild button relays it (device-reports.ts manageDeviceSandbox).
     readonly relay: (host: string, flow: DeviceSandboxFlow) => AsyncIterable<DeviceFlowLine>;
     readonly restartResume: RestartResume;
@@ -34,7 +35,7 @@ export interface RebuildWhenIdleDeps {
 export interface RebuildWhenIdle {
     // What the card shows, waiting-on names read fresh; undefined when nothing is asked.
     readonly state: () => EnvironmentRebuildWait | undefined;
-    // Asks for the rebuild of `hash` on `host`, started at once when nobody is mid-turn now. "unnamed": this sandbox
+    // Asks for the rebuild of `hash` on `host`, started at once when nothing is in flight now. "unnamed": this sandbox
     // has no name a device could rebuild it by.
     readonly ask: (request: { readonly host: string; readonly hash: string }) => Promise<"unnamed" | undefined>;
     // Withdraws a waiting ask, or dismisses a failed one; one already with the device is the device's to finish.
@@ -62,7 +63,7 @@ export const createRebuildWhenIdle = (deps: RebuildWhenIdleDeps): RebuildWhenIdl
     const start = async (request: Held, slug: string): Promise<void> => {
         stopPolling();
         held = { ...request, phase: "rebuilding" };
-        deps.logger.info({ host: request.host, hash: request.hash }, "rebuild when idle: no agent is mid-turn, the device rebuilds this sandbox now");
+        deps.logger.info({ host: request.host, hash: request.hash }, "rebuild when idle: nothing is in flight, the device rebuilds this sandbox now");
         const current = (): boolean => held?.phase === "rebuilding" && held.requestedAt === request.requestedAt;
         let answered = false;
         let failure: string | undefined;
@@ -97,14 +98,14 @@ export const createRebuildWhenIdle = (deps: RebuildWhenIdleDeps): RebuildWhenIdl
 
     const check = (): void => {
         const slug = deps.slug();
-        if (held?.phase !== "waiting" || slug === undefined || deps.midTurn().length > 0) {
+        if (held?.phase !== "waiting" || slug === undefined || deps.working().length > 0) {
             return;
         }
         void start(held, slug);
     };
 
     return {
-        state: () => (held === undefined ? undefined : { ...held, waitingOn: held.phase === "waiting" ? [...deps.midTurn()] : [] }),
+        state: () => (held === undefined ? undefined : { ...held, waitingOn: held.phase === "waiting" ? [...deps.working()] : [] }),
         ask: async ({ host, hash }) => {
             if (deps.slug() === undefined) {
                 return "unnamed";

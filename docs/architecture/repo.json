@@ -20,17 +20,20 @@
             "name": "The sandbox",
             "oneLiner": "One private box per project, where your code and the agents live.",
             "packages": [
-                "_sandbox/acp-bridge",
+                "_sandbox/agent-context",
+                "_sandbox/claude-plugin",
                 "_sandbox/fileq",
+                "_sandbox/front",
                 "_sandbox/gate",
                 "_sandbox/gate-action",
                 "_sandbox/ic",
                 "_sandbox/issue-sdk",
+                "_sandbox/ocr",
+                "_sandbox/output-cleaners",
                 "_sandbox/sandbox",
                 "_sandbox/scaffold",
                 "_sandbox/webchat-widget",
-                "_sandbox/webq",
-                "_sandbox/workspace-setup"
+                "_sandbox/webq"
             ]
         },
         {
@@ -43,14 +46,17 @@
                 "_shared/capability-catalog",
                 "_shared/connector-runtime",
                 "_shared/contract-serve",
+                "_shared/entry-css",
                 "_shared/extension-api",
                 "_shared/extension-manifest",
                 "_shared/extension-ui",
                 "_shared/registry",
+                "_shared/relay",
                 "_shared/sandbox-contract",
                 "_shared/sandbox-openapi",
                 "_shared/sandbox-run",
-                "_shared/workspace-ignore"
+                "_shared/workspace-ignore",
+                "_shared/workspace-setup"
             ]
         },
         {
@@ -70,6 +76,7 @@
                 "_extensions/git-history",
                 "_extensions/google-workspace",
                 "_extensions/imap",
+                "_extensions/onlyoffice",
                 "_extensions/phones",
                 "_extensions/pi-agent",
                 "_extensions/pipelines",
@@ -90,6 +97,7 @@
             "name": "Your devices",
             "oneLiner": "How an agent reaches a machine of your own — with your permission, within your switches.",
             "packages": [
+                "_devices/acp-bridge",
                 "_devices/android",
                 "_devices/browser",
                 "_devices/desktop-automation",
@@ -109,7 +117,6 @@
                 "_search/iq",
                 "_search/iq-bench",
                 "_search/iq-engine",
-                "_search/iq-recall",
                 "_search/lsp"
             ]
         },
@@ -121,8 +128,8 @@
             "packages": [
                 "_deploy/cli",
                 "_deploy/engine",
+                "_deploy/examples",
                 "_deploy/graph",
-                "_deploy/need-resolver",
                 "_deploy/providers",
                 "_deploy/resources",
                 "_deploy/sdk",
@@ -136,7 +143,6 @@
             "oneLiner": "Sign-in and the sandbox registry. Off to one side of everything else.",
             "packages": [
                 "_platform/api",
-                "_platform/example-provider",
                 "_platform/ingress",
                 "_platform/prisma"
             ]
@@ -159,22 +165,28 @@
             "name": "Plumbing",
             "oneLiner": "Shared config and test harnesses.",
             "packages": [
+                "_tools/agent-cli",
                 "_tools/base",
+                "_tools/checks",
                 "_tools/code-read",
                 "_tools/constants",
                 "_tools/desktop-smoke",
                 "_tools/desktop-smoke-windows",
                 "_tools/dind-host",
                 "_tools/e2e",
-                "_tools/examples",
+                "_tools/extension-example",
                 "_tools/fake-model",
                 "_tools/fake-upstream",
                 "_tools/localhost-https",
+                "_tools/nav",
                 "_tools/onboarding",
+                "_tools/oxlint",
                 "_tools/perf",
                 "_tools/registry-scan",
+                "_tools/scripts",
                 "_tools/testing",
-                "_tools/tsconfig"
+                "_tools/tsconfig",
+                "_tools/turbo-cache"
             ]
         }
     ],

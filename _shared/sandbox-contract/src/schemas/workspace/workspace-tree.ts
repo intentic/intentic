@@ -182,7 +182,8 @@ export const WorkspaceFilePresentSchema = z.object({
         .describe(
             "Which tree answered. True when no conversation was named, and also when one was but its own copy has no such file, which is the case a reader has to be told about rather than left to assume.",
         ),
-    // Absent means the window decoded cleanly. Set by a server that checks (the desktop app's folder server does).
+    // Absent means the window decoded cleanly. Both servers set it the same way (@intentic/base/utf8-text): the daemon
+    // for /work and the desktop app's folder server, for a UTF-16 file and for any window that is not UTF-8.
     lossy: z
         .literal(true)
         .optional()
@@ -190,6 +191,8 @@ export const WorkspaceFilePresentSchema = z.object({
             "The bytes are not valid UTF-8, so `content` holds replacement characters where they failed to decode. Saving that text back would change the file, so treat it as read-only.",
         ),
 });
+// One window of a file's text; `size` is the whole file, `offset`/`bytes` the byte range `content` decodes from.
+export type WorkspaceFileWindow = z.infer<typeof WorkspaceFilePresentSchema>;
 // Nothing there is an answer, not a failure: most reads here are read-it-if-there, and a 404 would spam the browser's
 // network log per miss. A refused read (an escape, a denylisted path) is still an error.
 export const WorkspaceFileAbsentSchema = z.object({
@@ -201,6 +204,7 @@ export const WorkspaceFileAbsentSchema = z.object({
     path: z.string().describe("The path, as asked for."),
 });
 export const WorkspaceFileSchema = z.discriminatedUnion("present", [WorkspaceFilePresentSchema, WorkspaceFileAbsentSchema]);
+export type WorkspaceFile = z.infer<typeof WorkspaceFileSchema>;
 // A file's derived text: the markdown shadow fileq keeps beside every document, picture, recording and archive, which
 // is what an agent reads instead of the bytes. About the shared tree only, since a conversation's own checkout is never
 // shadowed; no scope field, for that reason.

@@ -1,5 +1,4 @@
-import type { AgentChangesResponse } from "@intentic/api-contract";
-import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { AgentSpan, AgentSummary, LandMode, LandResult, AgentChanges } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../../chat/session/conversation";
 import { errands } from "../../chat/run/errands";
@@ -13,7 +12,7 @@ import { ensureProjectPersona, projectPersonaId } from "../../sandbox/personas/p
 import { router } from "../../../router";
 import { otherBoxes, refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
 import type { FleetAgent } from "./useAgents-fleet";
 import { claim, underClaim } from "./useAgents-provisional";
@@ -195,7 +194,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
 };
 
 // What a freshly read report asks of the press: the prompt to send, or the reason there is none.
-const answerFor = async (id: string, conflicts: AgentChangesResponse[`conflicts`]): Promise<string | ResolveAsk> => {
+const answerFor = async (id: string, conflicts: AgentChanges[`conflicts`]): Promise<string | ResolveAsk> => {
     // Nothing at all in a report re-derived at read time means the stored refusal has since lost its premise, and the
     // card is sitting in Attention over a clash that no longer exists. That is a repair, not a refusal: see `rejudged`.
     if (conflicts === undefined || conflicts.length === 0) {

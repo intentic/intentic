@@ -1,5 +1,5 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { ref, type Ref, watch } from "vue";
 import type { Router } from "vue-router";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
@@ -44,7 +44,7 @@ export const useBoardPresses = (host: PressesHost) => {
             await workflows.stop.mutateAsync(run.runId);
         } catch (error) {
             forgetStopping(run.runId);
-            agents.notice.value = errorMessage(error, `Couldn't stop that run.`);
+            agents.notice.value = messageOr(error, `Couldn't stop that run.`);
         }
     };
     // Held until the ledger says the run stopped, not until the request returns: steps keep finishing for minutes after.
@@ -59,12 +59,12 @@ export const useBoardPresses = (host: PressesHost) => {
     // A refusal puts the row back (useWorkflowRuns), so the strip is what says why it moved twice.
     const archiveRun = async (run: WorkflowRun): Promise<void> => {
         await workflows.archive.mutateAsync(run.runId).catch((error: unknown) => {
-            agents.notice.value = errorMessage(error, `Couldn't archive that run.`);
+            agents.notice.value = messageOr(error, `Couldn't archive that run.`);
         });
     };
     const restoreRun = async (run: WorkflowRun): Promise<void> => {
         await workflows.unarchive.mutateAsync(run.runId).catch((error: unknown) => {
-            agents.notice.value = errorMessage(error, `Couldn't restore that run.`);
+            agents.notice.value = messageOr(error, `Couldn't restore that run.`);
         });
     };
     // A run's design and its history live on the workflows page; this board only answers what it is doing.

@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { effectScope, nextTick, ref } from "vue";
-import { commandShortcut, registerCommand } from "../../../../../shell/commands/useCommands";
+import { commandShortcut, registerCommand } from "../../../../../workbench/commands/useCommands";
 import { usePaneFocus } from "../paneFocus";
 
 // Pins which pane takes the keyboard and where the caret lands: only a pane not already focused raises itself, only

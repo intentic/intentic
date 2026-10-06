@@ -1,5 +1,8 @@
-import type { RunEvent } from "./desktop";
-import { advance, progressView, setupPlan, startProgress, tick } from "./setupPlan";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
+import { parseStep, type RunEvent } from "./desktop";
+import { LAYER_DONE, advance, parseLayer, progressView, setupPlan, startProgress, tick } from "./setupPlan";
 
 // No catalog is registered here, so a step's label reads back as its key; only the numbers are asserted.
 const PLAN = setupPlan({ dockerReady: false, syncing: false, os: `windows` });
@@ -50,4 +53,43 @@ it(`weighs a cached sandbox image as reuse, and an absent or unknown one as a do
         (imageReady) => setupPlan({ dockerReady: true, syncing: true, os: `windows`, imageReady }).find((step) => step.phase === `pulling-image`)?.weight,
     );
     expect(weights).toEqual([240, 240, 2]);
+});
+
+/* THE SETUP-PROGRESS RECORD: the phases, weights and pull lines ic's ui.rs, machine_sandbox.rs and the web's agentHouse.ts
+are tested against as well, so the three tables of docker's layer states cannot drift apart again. */
+// SAFETY: the fixture is this repository's own file, and the assertions below fail on any field it lacks.
+const SHARED = JSON.parse(
+    readFileSync(join(repoRoot(import.meta.url), `_shared/sandbox-run/src/setup-progress.fixture.json`), `utf8`),
+) as {
+    phases: string[];
+    plans: { input: { os: string; dockerReady: boolean; syncing: boolean; imageReady: boolean }; steps: [string, number][] }[];
+    steps: ({ line: string; phase: string; message: string } | { line: string; phase: null })[];
+    layerDone: Record<string, number>;
+    layers: ({ line: string; id: string; done: number } | { line: string; id: null })[];
+};
+
+describe(`the shared setup-progress record`, () => {
+    it(`draws every plan it records, phase by phase and weight by weight`, () => {
+        for (const { input, steps } of SHARED.plans) {
+            expect(setupPlan(input).map((step) => [step.phase, step.weight])).toEqual(steps);
+        }
+    });
+
+    it(`draws only phases it lists`, () => {
+        const drawn = new Set(SHARED.plans.flatMap(({ input }) => setupPlan(input).map((step) => step.phase)));
+        expect([...drawn].filter((phase) => !SHARED.phases.includes(phase))).toEqual([]);
+    });
+
+    it(`reads a step line as it records`, () => {
+        for (const step of SHARED.steps) {
+            expect(parseStep(step.line)).toEqual(step.phase === null ? undefined : { phase: step.phase, message: step.message });
+        }
+    });
+
+    it(`reads a pull line as it records, layer ids in either case`, () => {
+        for (const layer of SHARED.layers) {
+            expect(parseLayer(layer.line)).toEqual(layer.id === null ? undefined : { id: layer.id, done: layer.done });
+        }
+        expect(LAYER_DONE).toEqual(SHARED.layerDone);
+    });
 });

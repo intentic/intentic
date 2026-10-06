@@ -1,8 +1,8 @@
-import { EnvironmentSchema } from "@intentic/api-contract";
+import type { Environment } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
-import { computed, onBeforeUnmount, watch } from "vue";
-import { jsonBody } from "../../../sandbox/client/jsonBody";
-import { sandboxJson } from "../../../sandbox/client/sandboxClient";
+import { usePollWhile } from "@intentic/ui/async";
+import { computed } from "vue";
+import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../../sandbox/environment/useEnvironment";
 
 // "REBUILD WHEN THEY'RE IDLE", as the page sees it. The wait itself is the sandbox's (POST /environment/rebuild-when-idle),
@@ -20,23 +20,21 @@ export function useRebuildWhenIdle() {
     // Whether the sandbox can wait for its agents and resume what a restart cuts; an older one offers neither.
     const supported = computed(() => state.value?.waitsForAgents === true);
 
-    let poll: ReturnType<typeof setInterval> | undefined;
-    watch(
-        () => wait.value?.phase,
-        (phase) => {
-            clearInterval(poll);
-            poll = phase === `waiting` || phase === `rebuilding` ? setInterval(() => void query.refetch(), POLL_MS) : undefined;
+    // Re-read while the wait moves along; /environment says nothing of its own when it does.
+    usePollWhile(() => wait.value?.phase === `waiting` || wait.value?.phase === `rebuilding`, {
+        everyMs: POLL_MS,
+        check: async () => {
+            await query.refetch();
         },
-        { immediate: true },
-    );
-    onBeforeUnmount(() => clearInterval(poll));
+        immediate: false,
+    });
 
-    const send = async (init: RequestInit): Promise<void> => {
-        queryClient.setQueryData(ENVIRONMENT_KEY, EnvironmentSchema.parse(await sandboxJson(`/environment/rebuild-when-idle`, init)));
+    const send = async (answer: Promise<Environment>): Promise<void> => {
+        queryClient.setQueryData(ENVIRONMENT_KEY, await answer);
     };
     // The approved overlay to build, and the device that builds it.
-    const ask = (host: string, hash: string): Promise<void> => send(jsonBody(`POST`, { host, hash }));
-    const cancel = (): Promise<void> => send({ method: `DELETE` });
+    const ask = (host: string, hash: string): Promise<void> => send(sandboxRaw(`POST /environment/rebuild-when-idle`, { input: { host, hash } }));
+    const cancel = (): Promise<void> => send(sandboxRaw(`DELETE /environment/rebuild-when-idle`));
 
     return { wait, supported, ask, cancel };
 }

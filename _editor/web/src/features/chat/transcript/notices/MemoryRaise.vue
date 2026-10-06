@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SandboxResourcesDialog } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { engineMemoryGib, type ResourcesForm } from "@intentic/ui/sandbox-resources";
 import { computed, ref } from "vue";
@@ -31,7 +31,7 @@ const apply = async (resources: ResourcesForm): Promise<void> => {
     try {
         await selfResources.apply(resources);
     } catch (refusal) {
-        failed.value = errorMessage(refusal, `That didn't work on this device.`);
+        failed.value = messageOr(refusal, `That didn't work on this device.`);
     }
 };
 </script>

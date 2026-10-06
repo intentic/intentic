@@ -47,6 +47,8 @@ export const sourceAliases = (): Record<string, string> => ({
     // instead of one per suite.
     "@intentic/ui/testing": fromRoot("_editor/ui/src/testing.ts"),
     "@intentic/ui/markdown-view": fromRoot("_editor/ui/src/components/markdown/Markdown.vue"),
+    // The parts loop alone, so a test that stubs the barrel can still hand a surface the real one.
+    "@intentic/ui/markdown-parts": fromRoot("_editor/ui/src/components/markdown/MarkdownParts.vue"),
     "@intentic/ui/dag": fromRoot("_editor/ui/src/components/charts/dagLayout.ts"),
     // Pure path-splitting helper used by unit-tested modules (fileType.ts, explorerPaste.ts) that must not boot the
     // component graph to reach it.
@@ -72,6 +74,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // The 1h/24h/7d/All window vocabulary, pure arithmetic over a timestamp used by feed projections and their unit
     // tests.
     "@intentic/ui/time": fromRoot("_editor/ui/src/lib/timeWindow.ts"),
+    // Where a key or press landed (a field being typed in, a floating surface), read by the keybinding context and the
+    // desktop link policy, which loads with nothing booted.
+    "@intentic/ui/event-target": fromRoot("_editor/ui/src/lib/eventTarget.ts"),
     // Date/byte/token formatting used by pure projections (history day labels, usage window resets) whose unit tests
     // run without a DOM.
     "@intentic/ui/format": fromRoot("_editor/ui/src/lib/format.ts"),
@@ -81,6 +86,8 @@ export const sourceAliases = (): Record<string, string> => ({
     // Busy-flag and wall-clock composables, plain state over Vue reactivity, reached by node-tested composables that
     // must not boot the component graph (its theme reader touches `document` at module scope).
     "@intentic/ui/async": fromRoot("_editor/ui/src/lib/async.ts"),
+    // The clipboard write and its "Copied" flag, for composables and their tests that must not boot the component graph.
+    "@intentic/ui/clipboard": fromRoot("_editor/ui/src/lib/clipboard.ts"),
     // Gate deciding whether a wait indicator is shown; its test drives fake timers over plain reactivity and must not
     // boot the component graph to ask a question about a clock.
     "@intentic/ui/loading-reveal": fromRoot("_editor/ui/src/composables/loadingReveal.ts"),
@@ -170,6 +177,8 @@ export const sourceAliases = (): Record<string, string> => ({
     // Derives a batch run's ids and manifest paths, shared by acceptance, documentation and maintenance so they can't
     // disagree on where a run lives.
     "@intentic/sandbox-contract/batch-runs": fromRoot("_shared/sandbox-contract/src/policy/batch-runs.ts"),
+    // The per-platform message limits the approvals extension counts a draft against.
+    "@intentic/sandbox-contract/message-limits": fromRoot("_shared/sandbox-contract/src/policy/message-limits.ts"),
     // Zone names, UTC day buckets and the cron-zone pair. Off the barrel because the modules that need it are pure
     // projections (the usage window's day arithmetic, the automations clock) whose unit tests run without a DOM, and
     // because the app's very first sandbox call — offering this browser's zone — must not wait on the whole contract.

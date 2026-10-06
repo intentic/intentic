@@ -20,7 +20,7 @@ export type OutputOf<Procedure extends { readonly "~orpc": { readonly outputSche
     NonNullable<Procedure["~orpc"]["outputSchema"]>
 >;
 
-// GET /api/auth/get-session, as the editor reads it (_editor/web/src/features/auth/useAuth.ts, `refresh`): better-auth's
+// GET /api/auth/get-session, as the editor reads it (_editor/web/src/client/auth/useAuth.ts, `refresh`): better-auth's
 // client hands the body back unvalidated, and the reader takes only `user`, into the contract's User. better-auth's own
 // session type is the editor's dependency and out of this package's reach, so this names what its server sends that
 // the reader or its client looks at, and no more.

@@ -1,13 +1,12 @@
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
-import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary, Marketplace } from "@intentic/api-contract";
-import type { RemoteRefs } from "@intentic/sandbox-contract";
+import type { RemoteRefs, CapabilityProbe, CapabilityRecommendation, CapabilitySummary, Marketplace } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../../../lib/intenticStream";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { ENVIRONMENT, rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The sandbox's unified capability manifest (.intentic/config/capabilities.json), read/written via the daemon's
 // /capabilities routes. `add` streams its apply, like the provision flow. Presence of a kind means it's active (e.g.

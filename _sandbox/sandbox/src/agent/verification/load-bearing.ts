@@ -1,4 +1,4 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 
 // Asks what the repository defends about deleted lines, since every other check here reads only what a turn added. The
 // signal is `git log -S<line>`'s history: how often a line has come and gone, whether it was born fixing an incident,

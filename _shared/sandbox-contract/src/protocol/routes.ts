@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RouteMeta } from "./route-meta.js";
+import { fillRoutePath } from "./raw/route-path.js";
 import { FRAME, streamOf } from "./stream-of.js";
 
 // Named route surface of the daemon's contract (`<group>.<route>`), derived automatically so nothing here is
@@ -37,6 +38,17 @@ export interface ContractRoute {
     readonly path: string;
     readonly meta: RouteMeta;
 }
+
+// The path to call one contract procedure at, its `{param}`s filled and encoded, for a caller that speaks to the daemon
+// without oRPC's client (a stream it reads itself, a published tool keeping its install small): the path comes from
+// the contract, never spelled a second time.
+export const procedurePath = (procedure: unknown, params?: Readonly<Record<string, string>>): string => {
+    const route = procedureRoute(procedure);
+    if (route === undefined) {
+        throw new Error("not a contract procedure with a route");
+    }
+    return fillRoutePath(route.path, params);
+};
 
 // Walks a contract object (group → procedure) into a flat route list, sorted by name for a stable diff.
 export const contractRoutes = (contract: Record<string, unknown>): ContractRoute[] => {

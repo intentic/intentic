@@ -9,7 +9,7 @@ const back = usePageBack();
 </script>
 
 <template>
-    <!-- `ui-page-header` is how the desktop app's window buttons find the row that meets their corner (web's shell/window/controlsReserve.ts). -->
+    <!-- `ui-page-header` is how the desktop app's window buttons find the row that meets their corner (web's workbench/window/controlsReserve.ts). -->
     <header class="ui-page-header" :class="description ? 'mb-6' : 'mb-4'">
         <!-- THE TITLE OUTRANKS THE ACTIONS: when both no longer fit one line, the actions take a line of their own under it
              rather than cutting the page's name down to "Workfl…", which on a phone was every page with a button. -->

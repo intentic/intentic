@@ -1,5 +1,6 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { receivePreferenceChange } from "@intentic/ui/preference";
 import * as actualVueQuery from "@tanstack/vue-query";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -10,17 +11,17 @@ jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, another of those
 // import-time reads.
 jest.mock("../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(`sbx-1`), reachable: ref(true) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
 // The daemon tier never reaches the typed client here (its useQuery is stubbed below); anything else that asks says so.
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // These cases run on fake timers, so useChat's hydrate watch actually runs here; the registered placeholder has an
 // empty transcript and other requests answer 404, irrelevant to the filter but must not unlatch `registered`.
-jest.mock("../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: jest.fn(async () => ({})),
     sandboxRequest: jest.fn(async (path: string) =>
         path === `/agents/blank/transcript`
@@ -281,6 +282,14 @@ describe(`useAgentFilter`, () => {
 
     // The daemon tier is asked under the same case rule, or the half of the fleet this browser never opened would be
     // matched under the other one.
+    // It was written straight to storage, so a window popped out before the switch was flipped kept the old rule.
+    it(`follows the case rule flipped in another window`, async () => {
+        const filter = filterIn();
+        receivePreferenceChange({ key: `ui-fleet-filter-case`, raw: `1` });
+        await nextTick();
+        expect(filter.matchCase.value).toBe(true);
+    });
+
     it(`carries the case rule to the daemon, and re-asks the moment it is flipped`, async () => {
         setAgents([agent(`a1`, { title: `tidy the readme` })], 1);
         const filter = filterIn();

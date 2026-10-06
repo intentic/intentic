@@ -4,7 +4,7 @@ import type { StatusVariant, Tip } from "@intentic/ui";
 // Through `@intentic/ui/format`, not the barrel: this module is plain TypeScript, tested without a DOM, and the
 // barrel drags in the component graph — a chart component reaching for `window.matchMedia` at import time takes the
 // whole suite down before a single assertion runs. Same reason `markdown` and `series` have their own subpaths.
-import { formatDateLong, formatDayMonth } from "@intentic/ui/format";
+import { formatDateLong, formatDayMonth, formatElapsed } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
 // Sentences derived from hosted-plan state so Billing, the account badge, a sandbox's own pages and the chat strip
@@ -13,16 +13,6 @@ import { t } from "@intentic/ui/i18n";
 // Two kinds of hours, and a hosted machine spends exactly one of them (api hosted-usage.ts): the ACCOUNT's free hours,
 // shared by every machine that does not stand on a paid slot, or ONE MACHINE's own month on the slot it stands on. A
 // sandbox on its owner's own computer spends neither, so nothing here is ever said about one.
-
-// Minutes as a person reads them: under an hour in minutes, whole hours plain, otherwise one decimal.
-export const formatMinutes = (minutes: number): string => {
-    const clamped = Math.max(0, Math.round(minutes));
-    if (clamped < 60) {
-        return `${clamped} min`;
-    }
-    const hours = clamped / 60;
-    return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} h`;
-};
 
 /**
  * A calendar day, in the reader's own clock, for "renews on" / "ends on" / "resets on".
@@ -82,7 +72,7 @@ export const hoursLeftLine = (meter: HoursMeter): string => {
         }
         return until === undefined ? t(`settings.hostedHours.freeUsedUpThisMonth`) : t(`settings.hostedHours.freeUsedUpUntil`, { day: until });
     }
-    const figures = { left: formatMinutes(meter.remainingMinutes), allowance: formatMinutes(meter.allowanceMinutes) };
+    const figures = { left: formatElapsed(meter.remainingMinutes * 60, { largest: `hours` }), allowance: formatElapsed(meter.allowanceMinutes * 60, { largest: `hours` }) };
     return until === undefined ? t(`settings.hostedHours.leftThisMonth`, figures) : t(`settings.hostedHours.leftUntil`, { ...figures, day: until });
 };
 
@@ -106,7 +96,7 @@ export const machineHours = (state: HostedPlanState | undefined, machine: Hosted
     if (meter === undefined) {
         return {
             label: state?.comped === true ? t(`settings.hostedHours.onTheHouse`) : t(`settings.hostedHours.noHourLimit`),
-            line: t(`settings.hostedHours.awakeThisMonth`, { used: formatMinutes(machine.hours.usedMinutes) }),
+            line: t(`settings.hostedHours.awakeThisMonth`, { used: formatElapsed(machine.hours.usedMinutes * 60, { largest: `hours` }) }),
             meter,
         };
     }

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Button, ContextMenu, Icon, Modal, ResizeSeam, type Tip, ui, useDevice } from "@intentic/ui";
+import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, type Tip, ui, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { TERMINAL } from "../../shell/commands/categories";
-import { commandShortcut, registerCommand, tipWithShortcut, withShortcut } from "../../shell/commands/useCommands";
-import { formatChord, isApplePlatform } from "../../shell/commands/keybindings";
+import { TERMINAL } from "../../workbench/commands/categories";
+import { commandShortcut, registerCommand, tipWithShortcut, withShortcut } from "../../workbench/commands/useCommands";
+import { formatChord, isApplePlatform } from "../../workbench/commands/keybindings";
 import { postTurnControl } from "../chat/run/turnStream";
-import { useSandbox } from "../sandbox/client/useSandbox";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import BackgroundProcesses from "./BackgroundProcesses.vue";
 import TerminalStrip from "./panel/TerminalStrip.vue";
 import WorkTerminals from "./WorkTerminals.vue";
@@ -269,7 +269,7 @@ watch(
                 </div>
             </div>
             <!-- xterm sizes to this container; each split's fit observer fills its own cell. -->
-            <!-- Every press here is the terminal's: xterm selects under its own cursor rules (shell/window/windowGesture.ts). -->
+            <!-- Every press here is the terminal's: xterm selects under its own cursor rules (workbench/window/windowGesture.ts). -->
             <div
                 ref="container"
                 class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2"
@@ -324,55 +324,57 @@ watch(
                 </button>
             </div>
             <!-- State explicitly when the selected session has no terminals. -->
-            <div
+            <EmptyState
                 v-if="order.length === 0 && pending !== undefined && !waited"
-                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
+                icon="spinner"
+                spin
+                role="status"
+                class="pointer-events-none absolute inset-0 p-6"
             >
-                <Icon name="spinner" spin class="text-lg text-subtle" />
-                <p class="text-sm text-muted">
+                <template #title>
                     <template v-if="about?.title">{{ about.title }}…</template>
                     <template v-else
                         >{{ t(`terminal.terminalPanel.opening`) }} <span class="font-mono text-content">{{ named }}</span
                         >…</template
                     >
-                </p>
+                </template>
                 <!-- Command behind it, so a check that opened this terminal can say what it's running, not just its name. -->
-                <p v-if="about?.detail" class="max-w-md truncate font-mono text-2xs text-subtle">{{ about.detail }}</p>
-            </div>
+                <template v-if="about?.detail" #line>
+                    <span class="block max-w-md truncate font-mono">{{ about.detail }}</span>
+                </template>
+            </EmptyState>
             <!-- Show a distinct state while the daemon identifies the terminals. -->
-            <div
+            <EmptyState
                 v-else-if="order.length === 0 && answer === 'waiting'"
-                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
-            >
-                <Icon name="spinner" spin class="text-lg text-subtle" />
-                <p class="text-sm text-muted">{{ t(`terminal.terminalPanel.lookingSandboxsTerminals`) }}</p>
-            </div>
-            <div
+                icon="spinner"
+                spin
+                role="status"
+                :title="t(`terminal.terminalPanel.lookingSandboxsTerminals`)"
+                class="pointer-events-none absolute inset-0 p-6"
+            />
+            <EmptyState
                 v-else-if="order.length === 0"
-                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
+                :icon="answer === 'refused' ? 'exclamation-triangle' : 'desktop'"
+                :line="emptyHint"
+                class="pointer-events-none absolute inset-0 p-6"
             >
-                <Icon :name="answer === 'refused' ? 'exclamation-triangle' : 'desktop'" class="text-2xl text-subtle" />
-                <p v-if="about?.title" class="text-sm text-muted">{{ about.title }}</p>
-                <p v-else-if="about" class="text-sm text-muted">
-                    <span class="font-mono text-content">{{ named }}</span>
-                    {{ pending === undefined ? t(`terminal.terminalPanel.isntRunning`) : `` }}
-                </p>
-                <!-- 'Nothing runs here' and 'this sandbox never answered' are different sentences; only one is about the terminals. -->
-                <p v-else class="text-sm text-muted">
-                    {{ answer === "refused" ? t(`terminal.terminalPanel.couldntReachSandbox`) : t(`terminal.terminalPanel.noTerminalsOpen`) }}
-                </p>
-                <p class="max-w-md text-2xs text-subtle">{{ emptyHint }}</p>
-                <Button
-                    v-if="newTab !== undefined"
-                    class="pointer-events-auto mt-1"
-                    :label="t(`terminal.terminalPanel.newTerminal`)"
-                    size="small"
-                    severity="secondary"
-                    @click="newTab()"
-                >
-                    <template #icon><Icon name="plus" class="text-2xs" /></template>
-                </Button>
-            </div>
+                <template #title>
+                    <template v-if="about?.title">{{ about.title }}</template>
+                    <template v-else-if="about">
+                        <span class="font-mono text-content">{{ named }}</span>
+                        {{ pending === undefined ? t(`terminal.terminalPanel.isntRunning`) : `` }}
+                    </template>
+                    <!-- 'Nothing runs here' and 'this sandbox never answered' are different sentences; only one is about the terminals. -->
+                    <template v-else>{{
+                        answer === "refused" ? t(`terminal.terminalPanel.couldntReachSandbox`) : t(`terminal.terminalPanel.noTerminalsOpen`)
+                    }}</template>
+                </template>
+                <template v-if="newTab !== undefined" #actions>
+                    <Button class="pointer-events-auto" :label="t(`terminal.terminalPanel.newTerminal`)" size="small" severity="secondary" @click="newTab()">
+                        <template #icon><Icon name="plus" class="text-2xs" /></template>
+                    </Button>
+                </template>
+            </EmptyState>
             <!-- Touch extra keys preserve terminal focus while the keyboard is open. -->
             <div v-if="coarse" class="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
                 <button
@@ -403,7 +405,7 @@ watch(
             <div class="flex h-panel-lg min-h-0 flex-col gap-2">
                 <div class="flex shrink-0 items-center gap-2 text-xs text-muted">
                     <template v-if="scrollback">
-                        <span>{{ t(`terminal.terminalPanel.lines`, { toLocaleString: scrollback.lines.toLocaleString() }) }}</span>
+                        <span>{{ t(`terminal.terminalPanel.lines`, { toLocaleString: formatCount(scrollback.lines) }) }}</span>
                         <span v-if="scrollback.truncated">{{ t(`terminal.terminalPanel.olderLinesBeyondStill`) }}</span>
                         <Button
                             class="ml-auto"

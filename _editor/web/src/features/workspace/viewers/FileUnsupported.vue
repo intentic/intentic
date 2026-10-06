@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
-import { Button, formatBytes } from "@intentic/ui";
+import { Button, EmptyState, formatBytes } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -26,12 +26,12 @@ const message = computed(() => {
 </script>
 
 <template>
-    <div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <Icon :name="icon" class="text-4xl text-subtle" />
-        <p class="max-w-sm text-sm text-muted">{{ message }}</p>
-        <Button v-if="mode !== 'empty'" severity="secondary" class="mt-1" @click="emit('download')">
-            <Icon name="download" class="text-xs" />
-            {{ t(`ui.action.download`) }}
-        </Button>
-    </div>
+    <EmptyState :icon="icon" :title="message" class="h-full">
+        <template v-if="mode !== 'empty'" #actions>
+            <Button severity="secondary" @click="emit('download')">
+                <Icon name="download" class="text-xs" />
+                {{ t(`ui.action.download`) }}
+            </Button>
+        </template>
+    </EmptyState>
 </template>

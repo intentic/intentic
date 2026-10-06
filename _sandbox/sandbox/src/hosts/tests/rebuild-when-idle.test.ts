@@ -1,5 +1,5 @@
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
-import type { RestartResume } from "../../agent/run/turn/restart-resume.js";
+import type { RestartResume } from "../../system/restart-resume.js";
 import { createRebuildWhenIdle, type RebuildWhenIdle } from "../rebuild-when-idle.js";
 
 // E2: "Rebuild now" cut four agents mid-turn. Asked to wait, the sandbox holds the rebuild until no agent is mid-turn,
@@ -25,7 +25,7 @@ const restartResume: RestartResume = {
 
 const make = (slug: () => string | undefined = () => "work"): RebuildWhenIdle => {
     waiter = createRebuildWhenIdle({
-        midTurn: () => busy,
+        working: () => busy,
         async *relay(host, flow) {
             relayed.push({ host, flow });
             yield* answer;
@@ -71,7 +71,7 @@ test("waits while an agent is mid-turn, naming it, and rebuilds by itself once n
 
 test("a stream that stopped without a word, with this sandbox still up long after, is said to have lost contact", async () => {
     const rebuild = createRebuildWhenIdle({
-        midTurn: () => [],
+        working: () => [],
         async *relay() {
             yield { kind: "line", text: "building" } as const;
         },
@@ -90,7 +90,7 @@ test("a stream that stopped without a word, with this sandbox still up long afte
 test("starts at once when nobody is mid-turn, and a started rebuild cannot be withdrawn", async () => {
     // A stream that never ends is a device still building.
     const rebuild = createRebuildWhenIdle({
-        midTurn: () => [],
+        working: () => [],
         async *relay() {
             await new Promise<never>(() => undefined);
             yield* [];

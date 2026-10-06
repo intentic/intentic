@@ -8,7 +8,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // pickerAccounts reaches useChat for live account lists; stub its side-effecting seams so import
 // stays inert.
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 jest.mock("./useChat-accounts", () => ({
     accountsOf: jest.fn(() => []),
     refreshConnections: jest.fn(async () => {}),

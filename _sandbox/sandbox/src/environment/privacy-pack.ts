@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { filePrivacyPolicy, privacyShieldDocument } from "../privacy/privacy-policy.js";
-import { packFragment } from "./packs.js";
+import { packFragment } from "../image/packs.js";
 
 // The privacy pack (the PaddleOCR text reader and the name model) rides the overlay exactly when the shield's policy
 // asks for one of its readers: on or watching, with images masked or names found by the model. The shield turned off,

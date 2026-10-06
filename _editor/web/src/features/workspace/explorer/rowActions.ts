@@ -1,5 +1,5 @@
 import type { IconName, Tip } from "@intentic/ui";
-import { documentsAt } from "../../../core-views/documentRegistry";
+import { documentsAt } from "../../../workbench/views/documentRegistry";
 import { t } from "@intentic/ui/i18n";
 
 // One model for every icon a directory row offers. Documents differ from the management panel: per directory,

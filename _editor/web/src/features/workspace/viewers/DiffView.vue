@@ -2,7 +2,7 @@
 import { useDevice } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { highlightLangFor, lineStat, type CodeAnalysis, type LineStat } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../health/codeAnalysisClient";
 import { landingChange, type ImportSide } from "../health/codeLanding";

@@ -905,6 +905,97 @@ pub(crate) fn parse_layer(line: &str) -> Option<(String, f32)> {
 mod tests {
     use super::*;
 
+    /* THE SETUP-PROGRESS RECORD every reader of these lines is tested against (desktop app, web, here). */
+    fn progress_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!(
+            "../../../_shared/sandbox-run/src/setup-progress.fixture.json"
+        ))
+        .expect("the setup-progress fixture is JSON")
+    }
+
+    #[test]
+    fn layer_lines_read_as_the_shared_record_says() {
+        let fixture = progress_fixture();
+        for case in fixture["layers"].as_array().expect("layers") {
+            let line = case["line"].as_str().expect("line");
+            let expected = case["id"]
+                .as_str()
+                .map(|id| (id.to_string(), case["done"].as_f64().expect("done") as f32));
+            assert_eq!(parse_layer(line), expected, "{line:?}");
+        }
+        for (state, done) in fixture["layerDone"].as_object().expect("layerDone") {
+            assert_eq!(
+                parse_layer(&format!("abcdef123456: {state}")),
+                Some((
+                    "abcdef123456".to_string(),
+                    done.as_f64().expect("a number") as f32
+                )),
+                "{state}"
+            );
+        }
+    }
+
+    /// The string literal each `<marker>` in `source` opens with, wherever a call or a field names a phase.
+    fn phases_named(source: &str, marker: &str) -> Vec<String> {
+        source
+            .match_indices(marker)
+            // A whole name, not the end of a longer one (`looks_like_a_step(` is a test's, not an announcement).
+            .filter(|(at, _)| {
+                !source[..*at]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|before| before.is_alphanumeric() || before == '_')
+            })
+            .filter_map(|(at, _)| {
+                let rest = source[at + marker.len()..].trim_start();
+                let literal = rest.strip_prefix('"')?;
+                Some(literal[..literal.find('"')?].to_string())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_phase_ic_announces_is_one_the_shared_record_lists() {
+        let fixture = progress_fixture();
+        let known: Vec<&str> = fixture["phases"]
+            .as_array()
+            .expect("phases")
+            .iter()
+            .map(|phase| phase.as_str().expect("a phase id"))
+            .collect();
+        let mut named = Vec::new();
+        for source in [
+            include_str!("sandbox/connect.rs"),
+            include_str!("platform.rs"),
+            include_str!("prepare/mod.rs"),
+        ] {
+            // The marker lines (`step`) and ic's own plan (`phase:`); the platform report's stages are a vocabulary
+            // of its own (it has a `done`), so `reporter.stage` is not read here.
+            for marker in ["step(", "phase: "] {
+                named.extend(phases_named(source, marker));
+            }
+        }
+        // The scan has to find the flow's phases at all, or it proves nothing about them.
+        for expected in [
+            "preflight",
+            "claiming-code",
+            "pulling-image",
+            "connecting-machine",
+            "checking-docker",
+        ] {
+            assert!(
+                named.iter().any(|phase| phase == expected),
+                "the scan missed {expected}: {named:?}"
+            );
+        }
+        for phase in &named {
+            assert!(
+                known.contains(&phase.as_str()),
+                "ic announces `{phase}`, which setup-progress.fixture.json does not list"
+            );
+        }
+    }
+
     #[test]
     fn layer_lines_are_recognised_and_ordinary_output_is_not() {
         assert_eq!(

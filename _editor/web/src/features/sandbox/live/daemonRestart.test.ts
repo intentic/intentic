@@ -10,7 +10,7 @@ jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 const activeSandboxId = ref<string | undefined>(undefined);
 const reachable = ref(false);
-jest.mock("../client/useSandbox", () => ({
+jest.mock("../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId, reachable }),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
 }));
@@ -19,7 +19,7 @@ jest.mock("../client/useSandbox", () => ({
 const sandboxJsonMock = jest.fn(async (..._args: unknown[]): Promise<unknown> => ({}));
 // Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
 // this factory returns; only the two below are ever called here.
-jest.mock("../client/sandboxClient", () => ({
+jest.mock("../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: (...args: unknown[]) => sandboxJsonMock(...args),
     sandboxRequest: jest.fn(),
     sandboxBlob: jest.fn(),

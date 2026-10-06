@@ -8,6 +8,7 @@ import { NO_PROVIDER_CONNECTED, runRoleModel, unpinnedRunProvider } from "../age
 import { digestOf, excerptOf } from "./failure-digest.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
+import { TITLE_MAX } from "../seams/conversation-title.js";
 
 // One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or main's one fix agent with
 // the first run that fails on a main-line branch (main-fixer.ts).
@@ -17,7 +18,6 @@ export const FIX_LOG_BYTES = 24_000;
 // A failed job's log is read whole, since its errors can sit anywhere in it (a typecheck's above a test run's megabytes),
 // and only its digest (failure-digest.ts) reaches a conversation. Both forges hand the whole log over either way.
 export const WHOLE_LOG = Number.POSITIVE_INFINITY;
-const TITLE_MAX = 80;
 const RUNS_PER_PROJECT = 15;
 
 // Lines only the runner, its Docker daemon or its disk print; a test's own output (a refused port, an HTTP 503 it asserts)

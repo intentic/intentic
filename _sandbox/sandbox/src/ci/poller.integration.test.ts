@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { defaultGit } from "@intentic/scaffold";
+import { defaultGit } from "@intentic/base/git";
 import { unstubbed } from "@intentic/testing";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { SETTLES, waitFor } from "@intentic/testing/bun";

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { HostKeyStore } from "@intentic/providers";
+import { createSshExecutor, type HostKeyStore, type SshExecutor } from "@intentic/providers";
 import { KNOWN_HOSTS_FILE } from "./artifact.js";
 
 // A file-backed HostKeyStore: the host-key lockfile beside the artifact, mapping "address:port" → base64
@@ -22,3 +22,7 @@ export const createKnownHostsStore = (dir: string): HostKeyStore => {
         },
     };
 };
+
+// The executor every command that reaches a host uses: host keys pinned in the lockfile beside the artifact, so a
+// changed key is refused instead of trusted. One constructor so no command can fall back to trust-on-first-use.
+export const pinnedSshExecutor = (dir: string): SshExecutor => createSshExecutor(createKnownHostsStore(dir));

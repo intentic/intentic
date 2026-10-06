@@ -2,8 +2,8 @@
 import type { Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
-import { relativeTime } from "../features/chat/models/catalog";
 import { useT } from "@intentic/ui/i18n";
+import { timeAgo } from "@intentic/ui";
 
 // Mark for words still sitting in the composer, shared by the fleet board card and chat rail row. The words
 // show only on hover, not the face, since a board is often read over someone's shoulder. Opens downward: the
@@ -27,7 +27,7 @@ const now = useNow(() => props.at !== undefined);
 const aged = computed(() => Math.floor(now.value / AGE_STEP_MS) * AGE_STEP_MS);
 
 // Reports what the card doesn't show: how long it has sat, and its opening words; a missing part drops out.
-const age = computed(() => (props.at === undefined ? undefined : relativeTime(props.at, aged.value)));
+const age = computed(() => (props.at === undefined ? undefined : timeAgo(props.at, { now: aged.value, days: true })));
 const words = computed(() => (typeof props.preview === `function` ? props.preview() : props.preview));
 const hint = computed<Tip>(() => ({
     title: t(`common.unsentMark.notSent`),

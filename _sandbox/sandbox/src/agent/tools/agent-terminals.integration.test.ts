@@ -86,6 +86,16 @@ test("no tmux server at all is not busy", async () => {
     expect(await agentShellBusy(SESSION_ID)).toBe(false);
 });
 
+// A tmux that failed some other way answered neither busy nor idle, so the check says so instead of reading idle.
+test("a tmux that could not be asked rejects rather than reading not busy", async () => {
+    await server();
+    await writeFile(join(dir!, "tmux"), `#!/usr/bin/env bash\necho "error connecting to /tmp/tmux-0/default (Permission denied)" >&2\nexit 1\n`, {
+        mode: 0o755,
+    });
+
+    await expect(agentShellBusy(SESSION_ID)).rejects.toThrow("Command failed");
+});
+
 // An id that sanitizes to nothing names no session.
 test("an unnameable session id is not busy", async () => {
     await server();

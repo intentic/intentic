@@ -15,15 +15,15 @@ jest.mock(`vue-router`, () => ({
     useRoute: () => ({ query }) as never,
 }));
 
-// The shared rule has its own suite (router/platformRetry.test.ts); here it only stands for "the platform answered".
+// The shared rule has its own suite (client/auth/platformRetry.test.ts); here it only stands for "the platform answered".
 const platformRetry = jest.fn<() => Promise<string | undefined>>();
-jest.mock(`../../../router/platformRetry`, () => ({ platformRetry: () => platformRetry() }));
+jest.mock(`../../../client/auth/platformRetry`, () => ({ platformRetry: () => platformRetry() }));
 
 const { default: PlatformUnavailable } = await import(`../PlatformUnavailable.vue`);
 // The same module instances the screen reads, to give the device something to remember and to see what opened.
-const { forgetAccount, rememberListed } = await import(`../../sandbox/recovery/deviceDirectory`);
-const { directMode } = await import(`../../sandbox/recovery/directState`);
-const { useSandbox } = await import(`../../sandbox/client/useSandbox`);
+const { forgetAccount, rememberListed } = await import(`../../../client/directory/deviceDirectory`);
+const { directMode } = await import(`../../../client/directory/directState`);
+const { useSandbox } = await import(`../../../client/sandbox/useSandbox`);
 const { sandboxSummary } = await import(`../../../testing/sandboxSummary`);
 
 let app: App | undefined;

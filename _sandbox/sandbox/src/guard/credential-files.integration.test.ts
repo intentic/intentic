@@ -36,6 +36,11 @@ describe("the answer that removes a card", () => {
         expect(createCredentialOracle()(join(root, ".env"))).toBe(false);
     });
 
+    test("a file under a parent that is a file, which cannot be there either", () => {
+        writeFileSync(join(root, "config"), "PORT=3000\n");
+        expect(createCredentialOracle()(join(root, "config", ".env"))).toBe(false);
+    });
+
     test("a relative path, against the turn's own tree", () => {
         writeFileSync(join(root, ".env"), "PORT=3000\nNODE_ENV=development\n");
         expect(createCredentialOracle(root)(".env")).toBe(false);

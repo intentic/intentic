@@ -3,10 +3,10 @@ import { Button, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { useAuth } from "../../auth/useAuth";
+import { useAuth } from "../../../client/auth/useAuth";
 import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
-import { useSandbox } from "../client/useSandbox";
-import { rememberedAccount } from "./deviceDirectory";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { rememberedAccount } from "../../../client/directory/deviceDirectory";
 import { liveRecoveryDeps } from "./recoveryDeps";
 import { type Candidate, useRecovery } from "./useRecovery";
 

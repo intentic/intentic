@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic/capability-catalog";
-import type { InventoryEntry } from "@intentic/api-contract";
+import type { InventoryEntry } from "@intentic/sandbox-contract";
 import { Button, Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
@@ -13,7 +13,7 @@ import { usePanels } from "../../features/extensions/usePanels";
 import { convergedBadge } from "../../features/extensions/reconcileStatus";
 import { useSecrets } from "../../features/capabilities/connect/useSecrets";
 import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
-import { detectActivations, extensionPath } from "../registry";
+import { detectActivations, extensionPath } from "../../workbench/views/registry";
 import AddWantDialog from "./AddWantDialog.vue";
 import ApplyProgress from "./ApplyProgress.vue";
 import ChangePreview from "./ChangePreview.vue";
@@ -259,13 +259,10 @@ onMounted(progress.recover);
     <Notice v-if="topError" :of="topError" class="mb-6" />
 
     <!-- The deployment engine on the host is down: the single most load-bearing health fact of this page. -->
-    <div v-if="komodoDown" class="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
-        <Icon name="exclamation-triangle" class="shrink-0" />
-        <span>
-            {{ t(`views.infraDeclare.deploymentEngineKomodoUnreachable`) }}
-            <b>{{ t(`views.infraDeclare.applyChanges`) }}</b> {{ t(`views.infraDeclare.belowRepairs`) }}
-        </span>
-    </div>
+    <Notice v-if="komodoDown" tone="warning" size="lg" class="mb-6">
+        {{ t(`views.infraDeclare.deploymentEngineKomodoUnreachable`) }}
+        <b>{{ t(`views.infraDeclare.applyChanges`) }}</b> {{ t(`views.infraDeclare.belowRepairs`) }}
+    </Notice>
 
     <!-- What you want, the center of the page: apps + self-hosted services, declared through one Add entry point. -->
     <section class="@container mb-6">

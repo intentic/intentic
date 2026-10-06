@@ -61,11 +61,9 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
     ];
 };
 
-// One line per layer per state change; counted for real progress, clamped monotonic against growing totals.
-const LAYER = /^([0-9a-f]{6,}): (Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Pull complete|Already exists)/;
-
-// Fraction complete per layer state; only Downloading and Extracting actually take time.
-const LAYER_DONE: Record<string, number> = {
+// Fraction complete per layer state; only Downloading and Extracting actually take time. The same table ic's ui.rs and
+// machine_sandbox.rs read docker's pull with, all three held to sandbox-run's setup-progress.fixture.json.
+export const LAYER_DONE: Readonly<Record<string, number>> = {
     "Pulling fs layer": 0,
     Waiting: 0,
     Downloading: 0.15,
@@ -74,6 +72,16 @@ const LAYER_DONE: Record<string, number> = {
     Extracting: 0.8,
     "Pull complete": 1,
     "Already exists": 1,
+};
+
+// One line per layer per state change; counted for real progress, clamped monotonic against growing totals. A layer id
+// is hex in either case, as the Rust readers take it.
+const LAYER = /^([0-9a-fA-F]{6,}): (Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Pull complete|Already exists)/;
+
+/** One line of docker's pull: its layer and how far through it is (0..1), or undefined for any other line. */
+export const parseLayer = (line: string): { readonly id: string; readonly done: number } | undefined => {
+    const found = LAYER.exec(line);
+    return found === null ? undefined : { id: found[1] ?? ``, done: LAYER_DONE[found[2] ?? ``] ?? 0 };
 };
 
 export interface Progress {
@@ -168,11 +176,9 @@ export const advance = (state: Progress, event: RunEvent, now: number): Progress
         };
         return { ...next, percent: Math.max(state.percent, percentOf(next, now)) };
     }
-    const layer = LAYER.exec(event.text);
-    if (layer !== null) {
-        const [, id, status] = layer;
-        const done = LAYER_DONE[status ?? ``] ?? 0;
-        const next: Progress = { ...state, layers: { ...state.layers, [id ?? ``]: done } };
+    const layer = parseLayer(event.text);
+    if (layer !== undefined) {
+        const next: Progress = { ...state, layers: { ...state.layers, [layer.id]: layer.done } };
         return { ...next, percent: Math.max(state.percent, percentOf(next, now)) };
     }
     return state;

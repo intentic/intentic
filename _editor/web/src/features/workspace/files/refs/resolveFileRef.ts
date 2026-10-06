@@ -1,6 +1,6 @@
-import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
-import { resolveInTree } from "./fileRefs";
-import { type ViewScope, workspaceScope } from "../../health/workspaceScope";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { resolveInTree } from "../../../../lib/files/fileRefs";
+import { type ViewScope, workspaceScope } from "../../../../app/workspaceScope";
 
 // Falls back to the daemon when the cached tree can't resolve a reference: past its 5000-entry cap, an ignored
 // directory, or a file written since the last fetch. Split from fileRefs because this reaches the sandbox client,

@@ -1,9 +1,9 @@
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { z } from "zod";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { gitFailureReason, identity } from "../../git/git.js";
 import { headSha } from "../../git/changes/changes.js";
-import { branchSha, carriedRef } from "../land/agent-refs.js";
+import { branchSha, carriedRef } from "../../git/agent-refs.js";
 import { opt } from "../../opt.js";
 import type { AgentWorktrees } from "./worktrees.js";
 

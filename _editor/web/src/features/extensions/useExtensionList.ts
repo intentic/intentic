@@ -1,6 +1,5 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { contributedEntryOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, CapabilitySummary } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";

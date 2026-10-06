@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
-import { loadTextReader, type TextReader } from "../ocr/paddle-ocr.js";
+import { loadTextReader, type TextReader } from "@intentic/ocr/paddle-ocr";
 import type { EntityRecognizer } from "./masker.js";
 import { loadRecognizer, nerInstalled } from "./ner.js";
 import { filePrivacyLedger, privacyLedgerDocument } from "./privacy-ledger.js";

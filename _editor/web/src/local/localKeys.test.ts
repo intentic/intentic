@@ -1,10 +1,15 @@
 import "@intentic/testing/dom";
+import { keymapOverrides } from "../workbench/commands/useKeymap";
 import { localChord, sandboxSlot, sandboxSlotChord } from "./localKeys";
 
 // Pins the three chords a local window takes for itself, and that it takes nothing else: a key it leaves alone reaches
 // the editor, the field or the tree that has focus.
 
 const press = (key: string, modifiers: KeyboardEventInit = {}): KeyboardEvent => new KeyboardEvent(`keydown`, { key, ...modifiers });
+
+afterEach(() => {
+    keymapOverrides.value = {};
+});
 
 test("Ctrl finds a file, searches the folder's text and closes the tab off a Mac, and Cmd does on one", () => {
     expect([
@@ -46,4 +51,17 @@ test("Alt and a digit name the sandbox in that place, the same on a Mac, and Alt
         undefined,
     ]);
     expect([sandboxSlotChord(0), sandboxSlotChord(8), sandboxSlotChord(9)]).toEqual([`Alt+1`, `Alt+9`, undefined]);
+});
+
+// The person's keymap is the account's, so a chord remapped in Settings is remapped here too: the new chord does the
+// job and the default is left to whatever has focus. Unbinding a command takes its chord out of this window as well.
+test("a chord remapped in Settings is honoured here, and the default it replaced no longer fires", () => {
+    keymapOverrides.value = { "workspace.goToAnything": `Mod+Shift+O`, "workspace.closeTab": `Mod+Alt+W`, "workspace.searchContent": null };
+    expect([
+        localChord(press(`O`, { ctrlKey: true, shiftKey: true }), false),
+        localChord(press(`w`, { ctrlKey: true, altKey: true }), false),
+        localChord(press(`p`, { ctrlKey: true }), false),
+        localChord(press(`w`, { ctrlKey: true }), false),
+        localChord(press(`F`, { ctrlKey: true, shiftKey: true }), false),
+    ]).toEqual([`find-file`, `close-tab`, undefined, undefined, undefined]);
 });

@@ -103,7 +103,7 @@ jest.mock("../../../chat/run/summon", () => ({
 }));
 jest.mock("../../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../sandbox/client/useSandbox", () => ({
+jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({
         active: { value: { token: `connect` } },
         activeSandboxId: { value: `s1` },
@@ -111,7 +111,7 @@ jest.mock("../../../sandbox/client/useSandbox", () => ({
     }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
-jest.mock("../../../sandbox/session/sandboxSession", () => ({
+jest.mock("../../../../client/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
 

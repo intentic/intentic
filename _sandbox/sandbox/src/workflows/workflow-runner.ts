@@ -49,12 +49,14 @@ const persistReport = async (root: string, runId: string, stepId: string, report
 };
 
 // Runs in flight, keyed by run id; a module singleton so routes, boot resume and tests see the same set.
-const running = new Map<string, { readonly abort: AbortController }>();
+const running = new Map<string, { readonly abort: AbortController; readonly name: string }>();
 
 export const workflowRunning = (runId: string): boolean => running.has(runId);
 
-// Every run in flight, for whoever has to know nothing is (an automatic update waiting for a quiet moment).
-export const runningWorkflowIds = (): string[] => [...running.keys()];
+// Every run in flight with the workflow it runs, for whoever has to know nothing is (bootstrap/working-now.ts); read
+// synchronously, off the runs themselves.
+export const runningWorkflows = (): { readonly runId: string; readonly name: string }[] =>
+    [...running].map(([runId, { name }]) => ({ runId, name }));
 
 // Stops nothing not yet started and cuts off in-flight steps immediately, unlike a loop's Stop, which finishes the
 // current iteration: a workflow round is a whole agent turn. Returns false when nothing was running.
@@ -192,7 +194,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
         return;
     }
     const abort = new AbortController();
-    running.set(runId, { abort });
+    running.set(runId, { abort, name: workflow.name });
     const acquired = await workflowSlots.take(abort.signal);
     if (!acquired) {
         await abandonRun(services, run, Date.now());

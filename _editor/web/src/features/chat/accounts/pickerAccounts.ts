@@ -8,7 +8,6 @@ import {
     reportsPlanLimits,
 } from "@intentic/sandbox-contract";
 import { computed, type Ref, ref } from "vue";
-import { relativeTime } from "../models/catalog";
 import { providerDisplayLabel } from "./providerCatalog";
 import { providerRefusals, translatorAccounts } from "./providerAccounts";
 import {
@@ -29,6 +28,7 @@ import {
 } from "../session/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat-accounts";
 import { t } from "@intentic/ui/i18n";
+import { timeAgo } from "@intentic/ui/format";
 
 // Which credential and runtime serve the turn: shared by the composer's and shell's model pickers. A
 // composable, not a component body, since both callers need to know whether there's anything to show
@@ -164,7 +164,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         return accounts.value.map((entry) => {
             const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
             const subtitle =
-                identity.length > 0 ? identity.join(` · `) : ambiguousLabels.value.has(entry.label) ? `connected ${relativeTime(entry.connectedAt)}` : undefined;
+                identity.length > 0 ? identity.join(` · `) : ambiguousLabels.value.has(entry.label) ? `connected ${timeAgo(entry.connectedAt, { days: true })}` : undefined;
             const state = accountState(provider.value, accountFacts(entry), modelRef.value);
             const band = planLimitBand({ state, readable });
             return Object.assign({}, entry, {

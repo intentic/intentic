@@ -3,7 +3,7 @@ import { isOverlayTarget, ProgressRing, ui, useHoverIntent } from "@intentic/ui"
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { quickBarShowAsk, quickBarTranscript, chatParked } from "./chatPanelLayout";
-import { chatBarSlot } from "../../../shell/window/panelSlots";
+import { chatBarSlot } from "../../../workbench/window/panelSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
 import { useT } from "@intentic/ui/i18n";

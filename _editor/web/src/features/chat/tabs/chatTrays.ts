@@ -10,7 +10,7 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { agentSeed } from "../../agents/fleet/useAgents-actions";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { runIdsInLedger, useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
-import { navigateInApp } from "../../../shell/window/mainWindow";
+import { navigateInApp } from "../../../workbench/window/mainWindow";
 import { useRouter } from "vue-router";
 import { agentTabOf } from "../panel/useChat-reveal";
 import { subagentOnScreen } from "../panel/subagent/subagentView";

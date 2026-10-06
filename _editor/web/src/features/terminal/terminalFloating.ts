@@ -1,4 +1,4 @@
-import { createFloatingSurface, type FloatingSurface } from "../../shell/window/floating";
+import { createFloatingSurface, type FloatingSurface } from "../../workbench/window/floating";
 
 /* The global terminal panel's own window (right-click the panel's tab strip, mirroring the chat strip): the WHOLE panel, every tab, in a real, resizable. */
 

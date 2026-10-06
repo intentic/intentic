@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { SandboxRpc } from "../../../sandbox/client/sandboxRpc";
+import type { SandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 // A permission answered on the board card: what it may answer, what it sends, and that the card reads answered from the
@@ -11,12 +11,12 @@ const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async
 // The fleet store pulls the app shell at import time; the same cuts as useAgents-provisional.test.ts.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../../../sandbox/client/useSandbox", () => ({
+jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
 }));
-jest.mock("../../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
-jest.mock("../../../sandbox/client/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+jest.mock("../../../../lib/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 jest.mock("../../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";

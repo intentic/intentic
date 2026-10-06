@@ -1,5 +1,4 @@
-import type { CapabilitySummary, CapabilityStatus } from "@intentic/api-contract";
-import type { VpnLink } from "@intentic/sandbox-contract";
+import type { VpnLink, CapabilitySummary, CapabilityStatus } from "@intentic/sandbox-contract";
 import { awaitingLogin, browserGrants, connectionFacts, connectionState, rebuildStep, vpnFacts } from "./connections";
 
 // Reader's question is whether they still have something to do, not the daemon's state word, and for two kinds

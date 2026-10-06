@@ -1,5 +1,5 @@
 import { onMounted, ref } from "vue";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // Counts every machine door into the sandbox besides a person or control token (webhooks, workflow gates, CI hooks),
 // for the Access tab's "what still has a way in" question. Reads and counts only; each list is best-effort, unknown

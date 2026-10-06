@@ -13,14 +13,16 @@ import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 // The daemon's session list, scripted per case below.
 const terminals = jest.fn();
-jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals } }) }));
-jest.mock("../sandbox/client/useSandbox", () => ({
+// The daemon's answer to a kill, scripted per case.
+const killTerminalRpc = jest.fn(async () => ({ ok: true as const }));
+jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals, killTerminal: killTerminalRpc } }) }));
+jest.mock("../../client/sandbox/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));
 
 const { queryClient } = await import("../../lib/queryPersistence");
-const { addPendingTerminal, dropPendingTerminal, listTerminals, refreshTerminals, removeTerminal, useTerminalsQuery } =
+const { addPendingTerminal, dropPendingTerminal, killTerminal, listTerminals, refreshTerminals, useTerminalsQuery } =
     await import("./terminalsQuery");
 const { useTerminalActivity } = await import("./useTerminalActivity");
 
@@ -103,10 +105,32 @@ test("a kill drops off the badge when it is issued, not a daemon round-trip late
     daemonLists([shell(`web-a`), shell(`web-b`)]);
     const activity = mounted(() => useTerminalActivity());
     await waitFor(() => expect(activity.count.value).toBe(2));
+    let confirm: (() => void) | undefined;
+    killTerminalRpc.mockImplementation(() => new Promise((resolve) => (confirm = () => resolve({ ok: true }))));
 
-    removeTerminal(`web-a`);
+    const killing = killTerminal(`web-a`);
 
     expect(activity.count.value).toBe(1);
+    await waitFor(() => expect(confirm).toEqual(expect.any(Function)));
+    confirm?.();
+    await killing;
+});
+
+// It was taken back only by the re-read that followed, so a refused kill left the row gone for that round trip, and for
+// good when the re-read failed too.
+test("a refused kill puts the row back at once, before anything is read again", async () => {
+    daemonLists([shell(`web-a`), shell(`web-b`)]);
+    const activity = mounted(() => useTerminalsQuery());
+    await waitFor(() => expect(activity.sessions.value).toHaveLength(2));
+    // The re-read after it hangs, so whatever the list holds when the kill fails is the rollback's doing.
+    terminals.mockImplementation(() => new Promise(() => undefined));
+    killTerminalRpc.mockRejectedValue(new Error(`no such session`));
+
+    const killing = killTerminal(`web-a`);
+    expect(activity.sessions.value.map((session) => session.name)).toEqual([`web-b`]);
+
+    await expect(Promise.race([killing, new Promise((resolve) => setTimeout(() => resolve(`pending`), 50))])).resolves.toBe(`pending`);
+    expect(activity.sessions.value.map((session) => session.name)).toEqual([`web-a`, `web-b`]);
 });
 
 test("the panel's relists share the badge's cache entry rather than re-asking the daemon per surface", async () => {

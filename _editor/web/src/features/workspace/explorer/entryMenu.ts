@@ -1,5 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { archiveFormat } from "@intentic/sandbox-contract";
+import { archiveFormat, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 import { t } from "@intentic/ui/i18n";
 

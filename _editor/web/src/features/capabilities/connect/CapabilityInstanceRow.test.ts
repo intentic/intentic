@@ -3,7 +3,7 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h } from "vue";
-import type { CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { ConnectionState } from "../model/connections";
 import { IconStub } from "@intentic/ui/testing";

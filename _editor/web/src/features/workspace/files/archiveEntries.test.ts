@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { archiveAbove, isArchiveContent, opensAsFolder } from "./archiveEntries";
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).at(-1) ?? path, path, type: `file` });

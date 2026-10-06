@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { CapabilityContributionSchema } from "@intentic/extension-manifest";
-import { exec } from "@intentic/scaffold";
+import { exec } from "@intentic/base/git";
 import type { Capability, CliConfig } from "@intentic/sandbox-contract";
 import { setListenerStatus } from "../../extensions/listener/listener-status.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";

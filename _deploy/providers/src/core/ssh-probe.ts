@@ -1,7 +1,6 @@
 import type { ReadinessProbe, ResolvedInputs } from "@intentic/engine";
 import { parseInputs, sshSchema, sshTarget } from "./inputs.js";
 import type { SshExecutor, SshSession, SshTarget } from "./ssh.js";
-import { sshExecutor } from "./ssh.js";
 
 // The host's resolved inputs are exactly the shared SSH-creds block; map them to the transport target so a
 // caller (the CLI) can build a probe from the graph's host node.
@@ -15,7 +14,7 @@ export const hostTarget = (inputs: ResolvedInputs): SshTarget => sshTarget(parse
 // A session is opened and disposed per call (waitReady polls); any SSH/connect error means "not ready yet",
 // so return false and let waitReady keep polling until its deadline rather than aborting the apply.
 export const createSshProbe =
-    (target: SshTarget, executor: SshExecutor = sshExecutor): ReadinessProbe =>
+    (target: SshTarget, executor: SshExecutor): ReadinessProbe =>
     async (url) => {
         let session: SshSession;
         try {

@@ -1,5 +1,5 @@
 import type { DeviceReport } from "@intentic/sandbox-contract";
-import type { GitRunner } from "@intentic/scaffold";
+import type { GitRunner } from "@intentic/base/git";
 import { ensureProjectRepo } from "../git/remote/project-repo.js";
 import { attachedProjects, registerProject, reportedProjects } from "../system/projects-registry.js";
 import { announceRepoChange } from "../workspace/watch/repo-watch.js";
@@ -10,7 +10,7 @@ import { convergeProjectNote } from "./project-note.js";
 // project sandbox's one folder does (git/remote/project-repo.ts), and the workspace's AGENTS.md names every one. A boot
 // re-ensures them all; after it, each report from this computer's machine agent that names a folder not yet attached
 // attaches it. Here in the boot wiring because it reaches the git layout, the note and the repo watch, and the report it
-// starts from arrives at hosts/desktop-sync.ts, which hears of it through a subscription rather than an import.
+// starts from arrives at peers/desktop-sync.ts, which hears of it through a subscription rather than an import.
 
 // What a line says beside its message: the folders it is about, and the error when one failed.
 export interface ProjectsHostLogFields {

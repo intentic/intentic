@@ -1,7 +1,7 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
 import { rpcKey } from "../../../lib/queryKeys";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import type { ProcedureInput } from "../client/sandboxRpc";
+import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 
 // Every daemon call the module made, in order, and what the fake daemon answers to the list read.
 const calls = {
@@ -18,7 +18,7 @@ const save = jest.fn(async (persona: ProcedureInput<`personas.save`>) => {
 });
 const invalidateQueries = jest.fn(async () => undefined);
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries } }));
-jest.mock("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ personas: { list, save } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ personas: { list, save } }) }));
 
 const { ensureProjectPersona, projectPersonaPersona, projectPersonaId } = await import("./projectPersona");
 

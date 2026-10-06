@@ -1,5 +1,5 @@
 import { computed, type ComputedRef, type MaybeRefOrGetter, toValue } from "vue";
-import { fileRefTree } from "../../features/workspace/files/refs/fileRefs";
+import { fileRefTree } from "../files/fileRefs";
 import { createStreamingMarkdown, type ParsedMarkdown, parseMarkdownParts, type RenderedMarkdown, renderParsedMarkdown } from "./renderMarkdown";
 
 // Single markdown entry point for chat surfaces, returning a list of parts (rendered prose, figure data). Streaming

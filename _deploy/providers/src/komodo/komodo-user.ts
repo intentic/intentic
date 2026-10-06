@@ -3,7 +3,6 @@ import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import type { KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
@@ -26,7 +25,7 @@ const parse = (inputs: ResolvedInputs): KomodoUserInputs => parseInputs(komodoUs
 // keys on existence + enabled (so a freshly-created-but-not-yet-enabled user re-applies); grants are idempotent
 // re-asserts. Depends (via the resolver's explicit deps) on Komodo + each scoped deployment existing. A pure
 // sink, no outputs.
-export const createKomodoUserProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
+export const createKomodoUserProvider = (api: KomodoApi, executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         try {

@@ -133,7 +133,11 @@ flowchart LR
   machine and a sandbox in order, each with a deadline: Windows prerequisites, Docker Desktop, the engine, WSL, disk,
   the container, its daemon, its registration, the network, the tunnel and the machine agent. It applies the fixes that
   are safe unasked (starting Docker Desktop, tidying, starting a sandbox nobody stopped, finishing a cut-off swap,
-  restarting one whose registration gave up), asks on the terminal before the rest, and re-checks after each. Every
+  restarting one whose registration gave up), asks on the terminal before the rest, and re-checks after each. Docker
+  Desktop is looked for by the one discovery `ic docker prepare`'s probe, its start and the desktop app all run
+  (`docker-host/src/desktop_app.rs`: the registry, the uninstall entry, the CLI on PATH, the Start-menu shortcuts);
+  from inside WSL it is asked through interop and the Windows path it answers translated to this distro's mount,
+  rather than assumed at `/mnt/c/Program Files` (2026-10-06). Every
   automatic restart is busy-aware (agents mid-turn mean a yes first), and the repairs made through ic are counted on
   the sandbox's volume (`/history/.ic/repairs.json`, `ledger.rs`, reported as `repairs` in `--json`): after three
   automatic restarts in two hours the keeper stops and asks instead. A container a person stopped outside ic (Docker
@@ -170,6 +174,6 @@ flowchart LR
 ## Commands
 
 ```sh
-cargo test --manifest-path _sandbox/ic/Cargo.toml --workspace   # ic, and the bounded-capture crate the desktop app shares
+cargo test --manifest-path _sandbox/ic/Cargo.toml --workspace   # ic, and the two crates the desktop app shares (bounded, docker-host)
 bash _tools/scripts/build/build-ic.sh linux-x64   # release binaries into _sandbox/ic/dist-bin/
 ```

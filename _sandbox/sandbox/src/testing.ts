@@ -28,6 +28,7 @@ import { sessionsDir } from "./sessions/session-store.js";
 import type { CodexEvent, CodexRunner, CodexTurn, JsonValue } from "./runtimes/codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
 import type { Services } from "./composition.js";
+import type { EnvironmentSources } from "./seams/environment-sources.js";
 import type { Said, Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
 import { opt } from "./opt.js";
 import { type NeedsStore, needsStoreOver } from "./needs/needs-store.js";
@@ -309,6 +310,16 @@ export const testTurnMounts = (): Pick<Services, "turnMounts" | "browserRouters"
     desktopServers: () => [],
 });
 
+// The overlay's fragment sources as a suite fills the port: nothing contributes but what `over` names, so a composed
+// overlay holds only the suite's own fragments. A suite composing real capabilities and extensions fills the port with
+// `environmentSourcesOf` (environment-sources.ts) over its own services instead, as composition.ts does.
+export const environmentSourcesFake = (over: Partial<EnvironmentSources> = {}): EnvironmentSources => ({
+    capabilityFragments: async () => [],
+    workspaceExtensionFragments: async () => [],
+    providerPackFragments: async () => [],
+    ...over,
+});
+
 // An in-memory stdio child: protocol tests exercise the connector without starting Codex.
 export const fakeCodexProcess = () => {
     const events = new EventEmitter();
@@ -383,4 +394,40 @@ export const browserSessionFixture = () => {
         close: async () => undefined,
     });
     return { browser, first, second };
+};
+
+// A connection that never answers: the request waits until its signal aborts, then rejects with the signal's reason,
+// as fetch does. A request sent with no deadline at all is rejected at once, naming that, so a test can't wait out
+// the hang detector instead. Pair it with `expireTimeouts()` to see the deadline pass without waiting it out.
+export const stalledFetch: typeof fetch = Object.assign(
+    (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal === undefined || signal === null) {
+                reject(new Error("stalledFetch: the request carried no deadline"));
+                return;
+            }
+            if (signal.aborted) {
+                reject(signal.reason);
+                return;
+            }
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    { preconnect: fetch.preconnect },
+);
+
+// Every `AbortSignal.timeout(ms)` comes back already expired, as its deadline passing would leave it; `asked` lists
+// each ms requested. Restore with the returned spy's `mockRestore()`.
+export interface ExpiredTimeouts {
+    readonly asked: number[];
+    readonly mockRestore: () => void;
+}
+
+export const expireTimeouts = (): ExpiredTimeouts => {
+    const asked: number[] = [];
+    const spy = jest.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+        asked.push(ms);
+        return AbortSignal.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+    });
+    return { asked, mockRestore: () => spy.mockRestore() };
 };

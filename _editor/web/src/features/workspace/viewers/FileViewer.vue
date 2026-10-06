@@ -1,28 +1,28 @@
 <script setup lang="ts">
-import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
-import { deliverableKindOf } from "@intentic/sandbox-contract";
-import { Button, CopyButton, type Tip, ui, useDevice } from "@intentic/ui";
-import { errorMessage, useLatest } from "@intentic/ui/async";
+import { deliverableKindOf, type WorkspaceFileWindow, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { Button, CopyButton, EmptyState, type Tip, ui, useDevice } from "@intentic/ui";
+import { messageOr, useLatest } from "@intentic/ui/async";
+import { basename } from "@intentic/ui/path";
 import { extensionOf } from "@intentic/ui/file-format";
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { localFace } from "../../../app/environments/local";
-import { sandboxBlob } from "../../sandbox/client/sandboxClient";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { isArchiveContent } from "../files/archiveEntries";
-import { sha256Hex } from "../files/contentHash";
+import { sha256Hex } from "../../../lib/files/contentHash";
 import { downloadEntries } from "../files/downloadEntries";
 import { setExternalDirty } from "../files/externalDirty";
 import { readFileWindow } from "../files/fileWindow";
 import { mediaUrl } from "../files/mediaUrl";
 import { useEditBuffers } from "../files/useEditBuffers";
-import { useLayout } from "../../../shell/window/useLayout";
-import { formatChord, isApplePlatform } from "../../../shell/commands/keybindings";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useLayout } from "../../../workbench/window/useLayout";
+import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { scopeQuery, useViewScope, type ViewScope } from "../health/workspaceScope";
+import { scopeQuery, useViewScope, type ViewScope } from "../../../app/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
@@ -40,7 +40,7 @@ import HtmlPreview from "./html/HtmlPreview.vue";
 import { MAX_FILE_BYTES } from "./html/htmlDocument";
 import { htmlPreviewed, setHtmlPreviewed } from "./html/htmlPreviewed";
 import { openWorkspaceRef } from "../files/refs/openFileRef";
-import { type RegisteredViewer, viewerForExtension } from "../../../core-views/viewerRegistry";
+import { type RegisteredViewer, viewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
 // Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
@@ -228,7 +228,7 @@ const reconcileOpenFile = (currentPath: string): void => {
                 }
                 return;
             }
-            error.value = errorMessage(err, `Could not load the file.`);
+            error.value = messageOr(err, `Could not load the file.`);
         },
     );
 };
@@ -257,7 +257,7 @@ const refreshLook = (currentPath: string): void => {
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = errorMessage(err, `Could not load the file.`);
+            error.value = messageOr(err, `Could not load the file.`);
         },
     );
 };
@@ -336,7 +336,7 @@ watch(
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = errorMessage(err, `Could not load the file.`);
+            error.value = messageOr(err, `Could not load the file.`);
         };
 
         if (resolution.kind === `code` || resolution.kind === `markdown`) {
@@ -409,7 +409,7 @@ const reloadFromDisk = (): void => {
             reloadNonce.value++;
         },
         (err) => {
-            error.value = errorMessage(err, `Could not reload the file.`);
+            error.value = messageOr(err, `Could not reload the file.`);
         },
     );
 };
@@ -421,7 +421,7 @@ const download = async (): Promise<void> => {
     try {
         await downloadEntries([{ path, type: `file` }], viewScope.value);
     } catch (err) {
-        error.value = errorMessage(err, `Could not download the file.`);
+        error.value = messageOr(err, `Could not download the file.`);
     }
 };
 
@@ -478,7 +478,7 @@ const readOnlyReason = computed((): Tip => {
         return { title: t(`workspace.fileViewer.insideArchive`), note: t(`workspace.fileViewer.extractToEdit`) };
     }
     if (soleDocument !== undefined && !writableHere(path)) {
-        return { title: t(`workspace.fileViewer.soleDocumentOnly`, { name: soleDocument.slice(soleDocument.lastIndexOf(`/`) + 1) }) };
+        return { title: t(`workspace.fileViewer.soleDocumentOnly`, { name: basename(soleDocument) }) };
     }
     return {
         title: t(`workspace.words.privateCopy`),
@@ -707,10 +707,7 @@ const onEditorSave = (value: string): void =>
             </div>
             <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
-            <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-                <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-                <p class="text-sm text-danger">{{ error }}</p>
-            </div>
+            <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full" />
             <div v-else-if="loading" class="flex h-full items-center justify-center text-muted">
                 <Icon name="spinner" class="text-xl" spin />
             </div>

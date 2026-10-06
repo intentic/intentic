@@ -2,7 +2,7 @@ import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createBufferedPainter, createStreamingPainter, framePainter, type Painter, type StreamPoster } from "./painter.js";
 
 // One suite for the machine that used to be tested four times, once per connector, against four identical
-// fakes. Slack's tuning (3800/1500ms) stands in for all of them: the constants are parameters now, and the
+// fakes. A Slack-like tuning (3800/1500ms) stands in for all of them: the constants are parameters now, and the
 // per-connector poster adapters are thin enough that their listeners' own tests cover the wiring.
 const TUNING = { maxChars: 3_800, editIntervalMs: 1_500 };
 

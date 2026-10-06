@@ -9,15 +9,16 @@ import {
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { judgeCommand } from "../agent/tools/command-judge.js";
-import { cardDeps, raiseRequest } from "../conversations/actor/card-offers.js";
+import { raiseRequest } from "../guard/card-offers.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
-import { type LiveRun, turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
+import { createOpenAsks } from "../guard/open-asks.js";
 import { guard } from "../guard/guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
 import { conversationTaintSource, conversationUnattended } from "../guard/turn-taint.js";
+import type { HostGuardDeps } from "./host-guard-deps.js";
 import type { DeviceToolCall } from "./host-restart-guard.js";
 
 // Applies the owner's safety policy to a command headed for their own device, before it crosses the tunnel. The daemon
@@ -88,37 +89,9 @@ const deviceScopesOf = async (services: Services, machine: string) => {
     return parsed.success ? parsed.data : undefined;
 };
 
-// Cards still open (or answered and not yet collected) by the exact call that raised them, so the agent calling again
-// with the same command waits on the same card, and a yes given after its first call gave up still runs it once.
-const openAsks = new Map<string, Promise<HostGateRefusal | undefined>>();
+// Cards still open (or answered and not yet collected) by the exact call that raised them (guard/open-asks.ts).
+const openAsks = createOpenAsks<HostGateRefusal | undefined>();
 const askKey = (conversationId: string, machine: string, command: string): string => `${conversationId}\u0000${machine}\u0000${command}`;
-
-// Waits on an open card for what is left of this call's budget: its answer (collected, so it is used once), or the
-// still-waiting note with the card left up.
-const awaitAnswer = async (
-    key: string,
-    asking: Promise<HostGateRefusal | undefined>,
-    machine: string,
-    budgetMs: number,
-    typed: boolean,
-): Promise<HostGateRefusal | undefined> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const waited = new Promise<"waiting">((resolve) => {
-        timer = setTimeout(() => resolve("waiting"), Math.max(0, budgetMs));
-    });
-    try {
-        const outcome = await Promise.race([asking, waited]);
-        if (outcome === "waiting") {
-            return refusal(stillWaiting(machine, typed));
-        }
-        if (openAsks.get(key) === asking) {
-            openAsks.delete(key);
-        }
-        return outcome;
-    } finally {
-        clearTimeout(timer);
-    }
-};
 
 // A phone's serial as adb prints one (a USB serial, `ip:port`, an mDNS name), and nothing else: a serial is spliced into
 // the program judged below, where a `#` or a quote in it could make the command after it read as inert.
@@ -174,6 +147,7 @@ export const typedInCall = (call: DeviceToolCall): string | undefined => {
 // sandbox gate; off means only that the daemon has no objection, the machine's scopes still decide.
 const hostVerdict = async (
     services: Services,
+    guards: HostGuardDeps,
     input: {
         readonly machine: string;
         readonly command: string;
@@ -190,8 +164,7 @@ const hostVerdict = async (
             verdict: { decision: "allow", sentence: `The safety judge is turned off, so this was decided by the standing rule alone.` },
         };
     }
-    const verdict = await judgeCommand(
-        services,
+    const verdict = await guards.judge(
         {
             policy,
             program: input.command,
@@ -233,7 +206,7 @@ interface DeviceAsk {
 
 // Asks the owner on a card in the live turn and holds the call until it settles: undefined forwards the command, a
 // refusal is what the agent reads for the way the card ended.
-const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promise<HostGateRefusal | undefined> => {
+const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun, ask: DeviceAsk): Promise<HostGateRefusal | undefined> => {
     const answerNotRecorded = (error: unknown): void =>
         services.logger.warn({ err: error, machine: ask.machine }, "safety log: the owner's answer on a device command was not recorded");
     // The turn's end settles the card at once: nobody answers a card in a turn that is over, and a yes given after it
@@ -241,7 +214,7 @@ const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promi
     const ended = new AbortController();
     void run.waitUntilFinished().then(() => ended.abort());
     const answered = await raiseRequest(
-        cardDeps(services),
+        guards.cards,
         { conversationId: ask.conversationId, push: (event) => run.push(event) },
         {
             kind: "permission",
@@ -286,6 +259,7 @@ const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promi
 // machine's own scopes still hold.
 export const judgeHostCommand = async (
     services: Services,
+    guards: HostGuardDeps,
     input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined; readonly typed?: boolean },
     budgetMs: number = CALL_BUDGET_MS,
 ): Promise<HostGateRefusal | undefined> => {
@@ -302,7 +276,7 @@ export const judgeHostCommand = async (
     const key = conversationId === undefined ? undefined : askKey(conversationId, input.machine, input.command);
     const open = key === undefined ? undefined : openAsks.get(key);
     if (key !== undefined && open !== undefined) {
-        return awaitAnswer(key, open, input.machine, budgetMs - (Date.now() - at), input.typed === true);
+        return openAsks.await(key, open, budgetMs - (Date.now() - at), refusal(stillWaiting(input.machine, input.typed === true)));
     }
     // What the device itself refuses without its destructive switch, the same live reading its own shell makes: asked
     // first, since a card here could only end in "Allow once" followed by the device refusing anyway.
@@ -310,7 +284,7 @@ export const judgeHostCommand = async (
     if (gated.length > 0 && (await deviceScopesOf(services, input.machine))?.destructive === "off") {
         return refusal(switchedOff(input.machine, gated, input.typed === true));
     }
-    const run = conversationId === undefined ? undefined : turnRunOf(services.conversations, conversationId);
+    const run = conversationId === undefined ? undefined : guards.turnRun(conversationId);
     // Same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one.
     const hard = matches.find(
         (match) => guard(commandRun, { commandClass: match.commandClass, locus: DEVICE, live: match.live }).effect !== "allow",
@@ -318,7 +292,7 @@ export const judgeHostCommand = async (
     // Told to the judge, never a refusal: whether anybody is watching the live turn right now.
     const unattended = conversationId === undefined || conversationUnattended(conversationId);
     const outsideSource = conversationId === undefined ? undefined : conversationTaintSource(conversationId);
-    const { verdict, judging } = await hostVerdict(services, {
+    const { verdict, judging } = await hostVerdict(services, guards, {
         machine: input.machine,
         command: input.command,
         consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
@@ -364,7 +338,7 @@ export const judgeHostCommand = async (
     }
     // Asked whoever started the turn: a card nobody has answered yet waits for the owner, it is not a refusal.
     record("asked");
-    const asking = askOwner(services, run, {
+    const asking = askOwner(services, guards, run, {
         conversationId,
         machine: input.machine,
         command: input.command,
@@ -374,12 +348,7 @@ export const judgeHostCommand = async (
         typed: input.typed === true,
     });
     const ownKey = askKey(conversationId, input.machine, input.command);
-    openAsks.set(ownKey, asking);
     // An answer nobody came back for is dropped with its turn: a later turn's same command is asked about afresh.
-    void run.waitUntilFinished().then(() => {
-        if (openAsks.get(ownKey) === asking) {
-            openAsks.delete(ownKey);
-        }
-    });
-    return awaitAnswer(ownKey, asking, input.machine, budgetMs - (Date.now() - at), input.typed === true);
+    openAsks.hold(ownKey, asking, run.waitUntilFinished());
+    return openAsks.await(ownKey, asking, budgetMs - (Date.now() - at), refusal(stillWaiting(input.machine, input.typed === true)));
 };

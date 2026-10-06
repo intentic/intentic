@@ -27,7 +27,7 @@ describe("cacheCooling", () => {
 
     it("opens the window at a fifth left, at either lifetime", () => {
         // An hour's cache: 11 minutes left is inside the fifth, 13 is not.
-        expect(cacheCooling(agent({ promptCache: { at: NOW - 49 * MINUTE, ttlMs: HOUR } }), NOW)?.countdown).toBe(`11m 0s`);
+        expect(cacheCooling(agent({ promptCache: { at: NOW - 49 * MINUTE, ttlMs: HOUR } }), NOW)?.countdown).toBe(`11m`);
         expect(cacheCooling(agent({ promptCache: { at: NOW - 47 * MINUTE, ttlMs: HOUR } }), NOW)).toBeUndefined();
         // Five minutes' cache: the same 11 minutes is long cold, and its own fifth is 45 seconds.
         expect(cacheCooling(agent({ promptCache: { at: NOW - 4 * MINUTE - 15_000, ttlMs: 5 * MINUTE } }), NOW)?.countdown).toBe(`45s`);
@@ -68,8 +68,8 @@ describe("cacheCooling", () => {
     it("names the context it would re-send, and reads without it", () => {
         const cooling = cacheCooling(agent({ promptCache: { at: NOW - 55 * MINUTE, ttlMs: HOUR } }), NOW);
         expect(cooling?.hint.rows).toEqual([
-            { label: `Cold in`, value: `5m 0s` },
-            { label: `Cached`, value: `184k tokens` },
+            { label: `Cold in`, value: `5m` },
+            { label: `Cached`, value: `184K tokens` },
         ]);
         // An unmeasured context leaves its row empty, which the tip card drops rather than drawing a hole.
         const unmeasured = cacheCooling(agent({ contextTokens: undefined, promptCache: { at: NOW - 55 * MINUTE, ttlMs: HOUR } }), NOW);
@@ -135,7 +135,7 @@ describe("warmMark", () => {
     it("says until when a running hold keeps the cache", () => {
         const mark = warmMark(agent({ keepWarm: { since: NOW, until: NOW + 4 * HOUR, refreshes: 2, readTokens: 250_000 } }));
         expect(mark?.icon).toBe(`sun`);
-        expect(mark?.hint.rows).toContainEqual({ label: `Last read`, value: `250k tokens` });
+        expect(mark?.hint.rows).toContainEqual({ label: `Last read`, value: `250K tokens` });
     });
 
     it("says why a hold stopped early, and nothing for one that ran its course", () => {

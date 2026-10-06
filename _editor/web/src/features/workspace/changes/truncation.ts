@@ -1,4 +1,4 @@
-import type { GitDiffSide, RepoChanges } from "@intentic/api-contract";
+import type { GitDiffSide, RepoChanges } from "@intentic/sandbox-contract";
 
 // The daemon caps rows per repo (MAX_REPO_CHANGES); a repo past that ships a short list plus a per-side count.
 // Verbs act on the daemon's full scope, not the shown rows, so every displayed count must add the truncated

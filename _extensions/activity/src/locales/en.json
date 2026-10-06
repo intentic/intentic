@@ -25,5 +25,10 @@
         "direct": "Direct"
     },
     "sourceLabel": "Activity source",
+    "sources": {
+        "schedule": "Schedule",
+        "webchat": "Web chat",
+        "you": "You"
+    },
     "title": "Activity"
 }

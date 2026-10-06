@@ -4,7 +4,7 @@ import { Button, Code, Modal, type NoticeModel, Notice, SegmentedControl, notice
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDevices } from "../../../sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../sandbox/devices/usePeerConnect";
-import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
 import { cleanName } from "../../model/form";
 import ScriptSourceSwitch from "../ScriptSourceSwitch.vue";

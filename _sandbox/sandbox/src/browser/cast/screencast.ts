@@ -1,6 +1,6 @@
 import type { BrowserContext, CDPSession, Page } from "playwright";
 
-// The live-browser wire shared by a connected account's own profile (browser-profile.ts) and the agent's browser view
+// The live-browser wire shared by a connected account's own profile (browser-profile.routes.ts) and the agent's browser view
 // (browser-view.ts): CDP screencast frames out, Input events back, with a rebind that follows popups.
 
 // Fixed screencast viewport (CSS px); this is the agent's page layout and does not change with the owner's window size.

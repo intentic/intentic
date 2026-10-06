@@ -1,4 +1,4 @@
-import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/api-contract";
+import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract";
 import { composeAsk, REFACTOR_INVARIANTS } from "@intentic/sandbox-contract/chores";
 import type { ChurnWindow } from "./codebaseHealth";
 import type { Tip } from "@intentic/ui";
@@ -38,6 +38,7 @@ const WIDE_FLOOR = 20;
 const TEST_FILE = /(\.(test|spec)\.[^./]+$|(^|\/)__tests__\/)/;
 
 // Exact, never compacted (no "2.5M"), since a prompt quotes numbers the agent may recount.
+// allow(format-tiers): a prompt for an agent, written in English whatever the reader's language
 const count = (value: number): string => value.toLocaleString(`en-US`);
 
 const WINDOW_PHRASE: Record<ChurnWindow, string> = {

@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 import { extract, type Header } from "tar-stream";
 import { ArrivalFormatError } from "../arrival-error.js";
-import { drain, extractAll } from "../tar-extract.js";
+import { drain, extractAll, memberPath } from "../tar-extract.js";
 import { skipReason } from "./scan-policy.js";
 import { nodeStream } from "@intentic/base/web-stream";
 
@@ -21,18 +21,9 @@ export interface ForeignArchive {
 
 const MAX_FILES = 5000;
 
-const normalize = (name: string): string | undefined => {
-    const parts = name
-        .replaceAll("\\", "/")
-        .split("/")
-        .filter((part) => part !== "" && part !== ".");
-    // An absolute path or `..` is an escape attempt; refusing it keeps the skip list honest.
-    if (name.startsWith("/") || parts.includes("..")) {
-        return undefined;
-    }
-    return parts.join("/");
-};
-
+// Backslashes are a Windows packer's separators here; memberPath refuses an absolute path or a `..` escape attempt,
+// which keeps the skip list honest.
+const normalize = (name: string): string | undefined => memberPath(name.replaceAll("\\", "/"));
 
 const readEntry = (source: Readable): Promise<Buffer> =>
     new Promise((resolve, reject) => {

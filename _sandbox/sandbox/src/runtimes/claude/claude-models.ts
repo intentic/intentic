@@ -1,9 +1,11 @@
 import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
+import { errorMessage } from "@intentic/base/errors";
 import { CLAUDE_SEED_MODELS, humanizeModelId, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Logger } from "pino";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
+import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { cacheFile } from "../../store/open-document.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
@@ -108,8 +110,10 @@ const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logge
             "anthropic-version": "2023-06-01",
             "anthropic-beta": "oauth-2025-04-20",
         },
+        // A stalled catalog counts as unreachable, so the next credential (then the persisted catalog) is tried.
+        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     }).catch((error: unknown) => {
-        logger.warn({ error: error instanceof Error ? error.message : String(error) }, "claude models: REST catalog unreachable");
+        logger.warn({ error: errorMessage(error) }, "claude models: REST catalog unreachable");
         return undefined;
     });
     if (response === undefined) {

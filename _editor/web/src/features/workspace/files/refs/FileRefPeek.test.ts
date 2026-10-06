@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { WorkspaceFileResponse } from "@intentic/api-contract";
+import type { WorkspaceFile } from "@intentic/sandbox-contract";
 import { Icon } from "@intentic/ui";
 import { type App, createApp, h, nextTick } from "vue";
 
@@ -9,7 +9,7 @@ import { type App, createApp, h, nextTick } from "vue";
 // rules themselves are fileRefQuickLook.test.ts's.
 
 const reads: string[] = [];
-let answer: (path: string) => WorkspaceFileResponse = (path) => ({ present: false, path });
+let answer: (path: string) => WorkspaceFile = (path) => ({ present: false, path });
 jest.mock("../fileWindow", () => ({
     readFileWindow: (path: string) => {
         reads.push(path);
@@ -25,7 +25,7 @@ jest.mock("./openFileRef", () => ({
     },
     sharedStatePath: (path: string) => path.startsWith(`${STATE_DIR}/`),
 }));
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: { workspace: { children: () => Promise.resolve({ entries: [], hidden: 0 }) } },
 }));
 
@@ -33,7 +33,7 @@ const { default: FileRefPeek } = await import("./FileRefPeek.vue");
 
 // A plain-text file, so no grammar loads under the test: 30 numbered lines.
 const PLAN = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join(`\n`);
-const planWindow = (path: string): WorkspaceFileResponse =>
+const planWindow = (path: string): WorkspaceFile =>
     path === `notes/plan.txt`
         ? { present: true, path, content: PLAN, size: PLAN.length, offset: 0, bytes: PLAN.length, shared: true }
         : { present: false, path };

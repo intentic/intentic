@@ -1,6 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
-import { useSandbox } from "../sandbox/client/useSandbox";
+import { z } from "zod";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import type { TerminalTab } from "./useTerminal";
 
 // Per-terminal cosmetic overrides (label, pill color, pill icon) keyed by tmux session name. Client-side
@@ -60,10 +61,32 @@ export const TERMINAL_ICONS: readonly IconName[] = [
 
 const storageKey = (): string => `ui-terminal-meta-${useSandbox().activeSandboxId.value}`;
 
+// What a stored override may hold: a pill color and icon this build offers, and any label. Read per terminal, so one
+// entry another build wrote (a color since retired) costs that terminal its override and no other.
+const StoredMeta = z.object({
+    label: z.string().optional(),
+    color: z.enum(Object.keys(TERMINAL_COLORS) as [TerminalColor, ...TerminalColor[]]).optional(),
+    icon: z.enum(TERMINAL_ICONS as [IconName, ...IconName[]]).optional(),
+});
+// An entry that does not read is caught as nothing rather than failing the record.
+const StoredMetas = z.record(z.string(), StoredMeta.optional().catch(undefined));
+
+export const parseTerminalMetas = (raw: string | null): Record<string, TerminalMeta> => {
+    let stored: Record<string, TerminalMeta | undefined> | undefined;
+    try {
+        stored = StoredMetas.safeParse(JSON.parse(raw ?? `{}`)).data;
+    } catch {
+        // allow(silent-catch): an unreadable record is no overrides; the pills draw as they would unnamed.
+        return {};
+    }
+    return Object.fromEntries(Object.entries(stored ?? {}).flatMap(([name, meta]) => (meta === undefined ? [] : [[name, meta] as const])));
+};
+
 const read = (): Record<string, TerminalMeta> => {
     try {
-        return JSON.parse(window.localStorage.getItem(storageKey()) ?? `{}`) as Record<string, TerminalMeta>;
+        return parseTerminalMetas(window.localStorage.getItem(storageKey()));
     } catch {
+        // allow(silent-catch): storage unavailable (private mode) holds no overrides.
         return {};
     }
 };
@@ -94,6 +117,7 @@ export const setTerminalMeta = (name: string, patch: TerminalMeta): void => {
     if (Object.keys(merged).length === 0) {
         delete next[name];
     } else {
+        // SAFETY: `merged` holds only the defined fields of two TerminalMetas spread together.
         next[name] = merged as TerminalMeta;
     }
     metas.value = next;

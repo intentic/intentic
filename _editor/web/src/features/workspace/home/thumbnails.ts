@@ -1,10 +1,10 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { lazyByPath } from "../../sandbox/client/lazyByPath";
-import { sandboxBlob } from "../../sandbox/client/sandboxClient";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { lazyByPath } from "../../../client/sandbox/lazyByPath";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { mediaUrl } from "../files/mediaUrl";
-import { workspaceAgent } from "../health/workspaceScope";
+import { workspaceAgent } from "../../../app/workspaceScope";
 import { quickLookPlan } from "./quickLookContent";
 
 // A workspace file at the size it is drawn: a daemon rendition (`tile`, `strip`, `view`) or its own bytes (`original`).

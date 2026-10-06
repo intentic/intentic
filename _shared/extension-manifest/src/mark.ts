@@ -4,8 +4,9 @@ import { z } from "zod";
 // `art` (inline SVG, own drawing) beats `logo` (simple-icons slug) beats `icon` (host's set), falling back to initials
 // when none is declared.
 
-// Big enough for a drawn mark, far too small for a traced photograph.
-const ART_MAX_BYTES = 4096;
+// Big enough for a drawn mark, far too small for a traced photograph. Exported for the registry, which copies a
+// manifest's `art` into its entries and holds it to the same cap.
+export const ART_MAX_BYTES = 4096;
 
 export const MARK_FIELDS = {
     // SVG document itself, not a URL or base64; drawn inert (<img>, never inlined) so a row can't script the page.

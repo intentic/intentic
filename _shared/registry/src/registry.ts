@@ -1,3 +1,4 @@
+import { ART_MAX_BYTES } from "@intentic/extension-manifest";
 import { z } from "zod";
 import { FULL_SHA, type RegistryInstall, RegistryInstallSchema, resolveSource } from "./source.js";
 
@@ -63,8 +64,8 @@ const RegistryFileEntrySchema = z
         // The pinned commit fixes a security issue in earlier ones; an installed sandbox's badge turns urgent.
         securityFix: z.boolean().optional(),
         category: z.string().optional(),
-        // Copied off the manifest; kept as readable SVG text, not base64, so a reviewer can see it in the diff.
-        art: z.string().max(4096).optional(),
+        // Copied off the manifest, under its cap; kept as readable SVG text, not base64, so a reviewer can see it in the diff.
+        art: z.string().max(ART_MAX_BYTES).optional(),
         logo: z.string().optional(),
         icon: z.string().optional(),
         homepage: z.url().optional(),

@@ -1,8 +1,7 @@
 // A row's controls (switch, edit, delete) come only from what the daemon reports for its origin, and every origin
 // gets a row, including a disabled built-in. Reading and editing happen on the row's own click, not a menu.
 import "@intentic/testing/dom";
-import type { CapabilitySummary, SandboxSettings, SkillSummary } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type CapabilitySummary, type SandboxSettings, type SkillSummary, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { stubGlobal } from "@intentic/testing/bun";

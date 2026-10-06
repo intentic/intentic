@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { politeGit } from "@intentic/scaffold";
+import { politeGit } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { sqliteTurnCheckpoints, type TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { filePromptRecord, type PromptRecord } from "../agent/prompt/prompt-record.js";

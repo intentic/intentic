@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Logger } from "pino";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import type { ActionResult } from "../changes/changes-commits.js";
 import { upstreamOf } from "../ops/branches.js";

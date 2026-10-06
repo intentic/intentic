@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { estimateTokens } from "@intentic/base/format";
+import { markdownTable } from "./markdown.js";
 import type { PageResult } from "./page.js";
 
 export interface SavedPage {
@@ -75,9 +76,7 @@ export const saveIndex = async (outDir: string, startUrl: string, entries: Index
         `${entries.length} pages, ${entries.reduce((sum, entry) => sum + entry.tokens, 0)} tokens total.`,
         ...(skippedLine === "" ? [] : [`Skipped: ${skippedLine}.`]),
         "",
-        "| title | url | file | tokens |",
-        "| --- | --- | --- | --- |",
-        ...sorted.map((entry) => `| ${entry.title.replaceAll("|", "\\|")} | ${entry.url} | ${entry.path} | ${entry.tokens} |`),
+        markdownTable([["title", "url", "file", "tokens"], ...sorted.map((entry) => [entry.title, entry.url, entry.path, String(entry.tokens)])]),
         "",
     ];
     await writeFile(markdownPath, lines.join("\n"));

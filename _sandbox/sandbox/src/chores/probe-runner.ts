@@ -1,14 +1,11 @@
-import { execFile } from "node:child_process";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { PROBES, type ProbeSpec, WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
+import { runCheck, shellArgv } from "../workload/run-check.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { type ChoresStore, isStale, probeOf } from "./chores-store.js";
-
-const execFileAsync = promisify(execFile);
 
 // The only background sweep that spends real machine time: probes run one at a time across the whole sandbox, and the
 // tick skips entirely while any agent turn is live. A failure is recorded as a probe state, never thrown, and holds its
@@ -18,6 +15,12 @@ const execFileAsync = promisify(execFile);
 const TICK_MS = 30 * 60_000;
 // Delay before the first tick, long enough to be behind image pulls, installs and the first index build.
 const WARMUP_MS = 5 * 60_000;
+// How long the `available` line may take to say whether the tool is here, and what it may print doing so.
+const AVAILABLE_TIMEOUT_MS = 30_000;
+const AVAILABLE_CAPTURE_BYTES = 1024 * 1024;
+// Raised past execFile's 1MB default since knip/jscpd can emit megabytes of JSON, which a cut makes unparsable; past
+// it the probe fails rather than parsing half a document.
+const PROBE_CAPTURE_BYTES = 64 * 1024 * 1024;
 // Chars kept from the end of a dying tool's output, enough to name the cause without bloating the panel.
 const REASON_TAIL = 400;
 // Chars kept from the front of unrecognised output; the first line says which kind of failure this is.
@@ -48,27 +51,42 @@ export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number, work
         delete env[WORKSPACE_ROOT_EXCLUDE_ENV];
     }
 
-    try {
-        await execFileAsync("sh", ["-c", spec.available], { cwd, timeout: 30_000, env });
-    } catch {
+    const available = await runCheck({
+        argv: shellArgv(spec.available, "sh"),
+        cwd,
+        env,
+        timeoutMs: AVAILABLE_TIMEOUT_MS,
+        workload: { class: "command" },
+        kind: "probe",
+        captureBytes: AVAILABLE_CAPTURE_BYTES,
+        killOnOverflow: true,
+    });
+    if (available.exitCode !== 0 || available.truncated) {
         // Missing tool, not a failure; the reason names what's missing rather than restating the probe.
         return finish({ state: "unavailable", reason: spec.unavailable });
     }
 
-    let stdout: string;
-    try {
-        // maxBuffer raised since knip/jscpd can emit megabytes of JSON; the 1MB default truncates it unparsably.
-        ({ stdout } = await execFileAsync("sh", ["-c", spec.command], {
-            cwd,
-            timeout: spec.timeoutMs,
-            maxBuffer: 64 * 1024 * 1024,
-            env,
-        }));
-    } catch (error) {
-        const { stdout: out, stderr, killed } = error as { stdout?: string; stderr?: string; killed?: boolean };
-        const reason = killed === true ? `timed out after ${Math.round(spec.timeoutMs / 1000)}s` : tail(`${stderr ?? ""}${out ?? ""}`);
+    // A measurement is the heaviest thing this sweep does (knip, jscpd over a whole repo): classed with builds and tests.
+    const ran = await runCheck({
+        argv: shellArgv(spec.command, "sh"),
+        cwd,
+        env,
+        timeoutMs: spec.timeoutMs,
+        workload: { class: "toolchain" },
+        kind: "probe",
+        captureBytes: PROBE_CAPTURE_BYTES,
+        killOnOverflow: true,
+    });
+    if (ran.exitCode !== 0 || ran.truncated) {
+        const reason =
+            ran.ended === "timeout"
+                ? `timed out after ${Math.round(spec.timeoutMs / 1000)}s`
+                : ran.truncated
+                  ? `printed more than ${PROBE_CAPTURE_BYTES / 1024 / 1024} MB`
+                  : tail(`${ran.stderr}${ran.stdout}`) || (ran.spawnError ?? "");
         return finish({ state: "failed", reason: reason === "" ? `the command exited without output` : reason });
     }
+    const stdout = ran.stdout;
 
     const facts = spec.parse(stdout);
     if (facts === undefined) {

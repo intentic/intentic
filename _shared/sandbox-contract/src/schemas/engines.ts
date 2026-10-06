@@ -100,3 +100,10 @@ export const EngineAppliedSchema = z.object({
     // An in-process engine (`@cursor/sdk`) is picked up by the next turn; a running turn keeps its module.
     fromNextTurn: z.boolean().describe("Whether the change reaches turns already in flight, or only the next one."),
 });
+// What every engine write answers: what it applied, null when there was nothing to do (a second tab's Update lost the
+// race), and the whole view after it, never a patch to reconcile.
+export const EngineWriteResultSchema = z.object({
+    applied: EngineAppliedSchema.nullable(),
+    engines: EnginesViewSchema,
+});
+export type EngineWriteResult = z.infer<typeof EngineWriteResultSchema>;

@@ -2,8 +2,8 @@ import type { AutomationApproval, Persona, WorkflowRun } from "@intentic/sandbox
 import { t } from "@intentic/ui/i18n";
 import { computed, onUnmounted, type Ref, watch } from "vue";
 import { projectScope } from "../../../../app/projectScope";
-import { hold } from "../../../../shell/notifications/notifications";
-import { presenceOthers } from "../../../../shell/presence/usePresence";
+import { hold } from "../../../../workbench/notifications/notifications";
+import { presenceOthers } from "../../../../workbench/presence/usePresence";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
 import { type FleetLane, unregistered } from "../../fleet/agentStatus";
 import { otherFleet, partialAnswer, readingAcross } from "../../fleet/fleetScope";

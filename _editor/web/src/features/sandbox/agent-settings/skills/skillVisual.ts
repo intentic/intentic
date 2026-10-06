@@ -1,5 +1,4 @@
-import type { CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/api-contract";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/sandbox-contract";
 import { capabilityMark } from "../../../capabilities/model/tiles";
 
 // Marks for the skills list, in tiers: a manifest-declared mark from the owning extension or capability card,

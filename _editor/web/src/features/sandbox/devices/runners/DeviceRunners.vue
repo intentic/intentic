@@ -6,12 +6,12 @@ import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
 import { lastRun, sentTo } from "./runnerWork";
-import { rpcQuery } from "../../client/rpcQuery";
-import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { type DeviceRow, type MachineRow, managerOf } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
-import { useHubWork } from "../../../../shell/hub/hubWork";
+import { useHubWork } from "../../../../workbench/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 // This sandbox's runners on one MACHINE: containers it keeps there to run agents,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { EnvironmentRecurring } from "@intentic/api-contract";
+import type { EnvironmentRecurring } from "@intentic/sandbox-contract";
 import { BrandMark, Code, DisclosureRow, RowGroup, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";

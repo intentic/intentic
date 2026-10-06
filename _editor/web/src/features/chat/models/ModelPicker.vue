@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { browserOwnsClick, SearchBar, type Tip, useDevice, useListNavigation } from "@intentic/ui";
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../session/access";
@@ -22,6 +22,7 @@ import { loadAllProviderModels, loadProviderModels } from "./useChat-catalog";
 import { refreshConnections } from "../accounts/useChat-accounts";
 import { useSandboxVersion } from "../../sandbox/overview/version/useSandboxVersion";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
+import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -255,12 +256,8 @@ const railTo = (target: string | undefined): void => {
     }
 };
 
-// Ticks while the picker is open, so a row stops reading "back at 15:04" the moment it is 15:04.
-const now = ref(Date.now());
-onMounted(() => {
-    const timer = setInterval(() => (now.value = Date.now()), 30_000);
-    onUnmounted(() => clearInterval(timer));
-});
+// Ticks while the picker is open (it is mounted only then), so a row stops reading "back at 15:04" the moment it is 15:04.
+const now = useNow(true, 30_000);
 
 // Every credential that serves this model is refused until the named instant. Dimmed and stamped, never hidden and
 // never disabled: the model comes back on its own, the wait is the whole answer, and a reader may still queue a turn on

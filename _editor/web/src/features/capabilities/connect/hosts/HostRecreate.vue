@@ -13,13 +13,13 @@ import {
     SegmentedControl,
     useOsPreference,
 } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
+import { noticeFrom, usePoll } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, ref, type VNode, watch } from "vue";
 import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
-import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
-import { useHubWork } from "../../../../shell/hub/hubWork";
+import { useHubWork } from "../../../../workbench/hub/hubWork";
 import { turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
@@ -250,7 +250,8 @@ const awaiting = computed(() => watching.value && (severed.value || wentDown.val
 // The version the press was made on, so an update or a rollback is seen landing as another one.
 let fromVersion: string | undefined;
 let deadline: ReturnType<typeof setTimeout> | undefined;
-let poll: ReturnType<typeof setInterval> | undefined;
+// Asks an answering sandbox what it runs until the swap has landed; checkLanded ends the watch, and the poll with it.
+const poll = usePoll({ everyMs: LANDED_POLL_MS, check: () => checkLanded(), immediate: false });
 let settleWatch: (() => void) | undefined;
 let asking = false;
 // Hands a press's restart to the sandbox's own return (sandboxRestart.ts `untilAnswered`), once: at the press's end while
@@ -261,7 +262,7 @@ let handOff: (() => void) | undefined;
 const stopWatching = (): void => {
     watching.value = false;
     clearTimeout(deadline);
-    clearInterval(poll);
+    poll.stop();
     settleWatch?.();
     settleWatch = undefined;
 };
@@ -314,7 +315,7 @@ const armWatch = (): Promise<undefined> => {
     if (wentDown.value) {
         giveUpIn(DOWN_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
     }
-    poll = setInterval(() => void checkLanded(), LANDED_POLL_MS);
+    poll.start();
     return new Promise((resolve) => {
         settleWatch = () => resolve(undefined);
     });

@@ -110,3 +110,31 @@ export const definePreference = <T>({ key, read, write, apply }: PreferenceOptio
 
 /** Read one stored preference string without holding it, for the one caller that needs it before this is set up. */
 export const storedPreference = (key: string): string | null => stored(key);
+
+// The three shapes nearly every preference takes, so what a stored string means is said once.
+
+/** On or off, stored as `1`/`0`; `fallback` is what an unset key reads as, and anything else stored reads as off. */
+export const boolPreference = (key: string, fallback = false): Ref<boolean> =>
+    definePreference<boolean>({ key, read: (raw) => (raw === null ? fallback : raw === `1`), write: (value) => (value ? `1` : `0`) });
+
+/** One of `valid`, stored as itself; anything else (or nothing) reads as `fallback`. */
+export const enumPreference = <T extends string>(key: string, valid: readonly T[], fallback: T): Ref<T> =>
+    definePreference<T>({ key, read: (raw) => valid.find((value) => value === raw) ?? fallback, write: (value) => value });
+
+/**
+ * A whole number, read back through `clamp` (a size bounded by the window); a stored value is clamped on reading and not
+ * written back, or a narrow window would ratchet down a wide one's. `fallback` is a thunk, since a default may read the
+ * viewport.
+ */
+export const numberPreference = (key: string, clamp: (value: number) => number, fallback: () => number): Ref<number> =>
+    definePreference<number>({
+        key,
+        read: (raw) => {
+            const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+            return Number.isFinite(parsed) ? clamp(parsed) : fallback();
+        },
+        write: String,
+    });
+
+/** Free text, stored as itself; unset reads as empty. */
+export const textPreference = (key: string): Ref<string> => definePreference<string>({ key, read: (raw) => raw ?? ``, write: (value) => value });

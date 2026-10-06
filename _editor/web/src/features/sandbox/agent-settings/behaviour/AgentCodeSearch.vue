@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
+import { formatCount, Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { formatDayMonth } from "@intentic/ui/format";
 import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -42,7 +42,7 @@ const notesReach = computed<string>(() =>
         : t(`sandbox.agentCodeSearch.briefReach`, {
               sent: notes.value.ranksSent ?? 0,
               total: notes.value.ranksTotal,
-              chars: (notes.value.chars ?? 0).toLocaleString(),
+              chars: formatCount(notes.value.chars ?? 0),
           }),
 );
 const notesSchedule = computed<string>(() => {

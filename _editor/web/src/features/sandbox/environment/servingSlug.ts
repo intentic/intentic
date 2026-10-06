@@ -1,6 +1,6 @@
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { computed, type ComputedRef } from "vue";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useEnvironment } from "./useEnvironment";
 
 // THE NAME `ic` KNOWS THIS SANDBOX BY on the machine that runs it, which every command printed for that machine has to

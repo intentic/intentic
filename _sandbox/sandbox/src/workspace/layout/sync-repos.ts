@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import type { GitSyncResult } from "@intentic/scaffold";
+import type { GitSyncResult } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import { discoverRepos } from "./repo-discovery.js";
 

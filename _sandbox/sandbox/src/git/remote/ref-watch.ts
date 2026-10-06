@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { watch, type FSWatcher } from "chokidar";
 import type { Logger } from "pino";
 import { Coalescer } from "@intentic/base/async";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 
 // A third change feed (beside the file watcher and repo-set differ): the git dir is often relocated off /work and the
 // file watcher ignores `.git`, so nothing else can say a commit landed. Watches only where a ref or operation marker is

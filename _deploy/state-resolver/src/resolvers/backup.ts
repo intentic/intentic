@@ -1,5 +1,5 @@
 import { generated } from "@intentic/graph";
-import type { BackupInput, HostInput } from "@intentic/need-resolver";
+import type { BackupInput, HostInput } from "../intent/inputs.js";
 import type { ResolvedNode } from "@intentic/resources";
 import { backupId } from "../lib/ids.js";
 import { IMAGES } from "../lib/images.js";

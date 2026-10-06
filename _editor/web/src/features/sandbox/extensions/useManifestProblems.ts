@@ -1,10 +1,10 @@
 import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // What the sandbox couldn't read in its own settings files, recorded instead of just falling back to defaults:
 // - the file didn't parse (everything's at default)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { browserOwnsClick, MarkdownFigure, parseLoopbackLink, useDevice } from "@intentic/ui";
+import { browserOwnsClick, formatElapsed, MarkdownParts, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -7,7 +7,6 @@ import { basename } from "@intentic/ui/path";
 import { REQUEST_FIELDS, type RequestField } from "@intentic/sandbox-contract";
 import { type Component, computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { chatRouteWait } from "../routing/chatRoute";
@@ -17,7 +16,7 @@ import { watchClamp } from "./clampWatch";
 import { type CardAnswer, requestIdOf } from "../session/cardReplies";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/refs/openFileRef";
-import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../shell/side/sideLinks";
+import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../workbench/side/sideLinks";
 import { openLoopbackPreview } from "../../terminal/portPreview";
 import { usePaneView } from "../panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
@@ -185,7 +184,7 @@ const waitClock = computed(() => {
     if (wait === undefined) {
         return undefined;
     }
-    return wait.counts === `up` ? formatElapsed(wait.at, now.value) : formatElapsed(now.value, wait.at);
+    return wait.counts === `up` ? formatElapsed((now.value - wait.at) / 1000) : formatElapsed((wait.at - now.value) / 1000);
 });
 
 // What the model was told, for a row nobody at the composer typed; one press away.
@@ -568,10 +567,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <!-- Markdown parts preserve settled DOM while the live tail updates. -->
             <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
-                <template v-for="(part, index) in body" :key="index">
-                    <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
-                    <MarkdownFigure v-else :figure="part.figure" />
-                </template>
+                <MarkdownParts :parts="body" />
             </div>
             <!-- Marks a message the user wrote in the agent's voice (composer "as agent"); the agent itself never sees this flag. -->
             <p

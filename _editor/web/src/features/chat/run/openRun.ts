@@ -1,7 +1,7 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { agentSeed } from "../../agents/fleet/useAgents-actions";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { RunSession } from "./chatRun";
 import { summonChat } from "./summon";
 import { useChat } from "./useChat";

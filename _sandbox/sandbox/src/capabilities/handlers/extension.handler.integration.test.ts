@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract";
-import { gitHead } from "@intentic/scaffold";
+import { gitHead } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../../testing.js";

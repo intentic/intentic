@@ -5,7 +5,7 @@ import { viewAsks } from "../../../lib/registries/viewAsks";
 import { awaitingUser } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useExtensions } from "../../extensions/useExtensions";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import { useNeeds } from "../useNeeds";
 import { chatItem, type InboxItem, inboxBadge, inboxOrder, inboxSections, installItem, needItem, viewItem, waitingWakes, wakeItem } from "./inboxItems";
 

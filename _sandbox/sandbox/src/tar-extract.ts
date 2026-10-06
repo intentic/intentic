@@ -4,6 +4,19 @@
 import type { Readable } from "node:stream";
 import type { Extract, Header } from "tar-stream";
 
+/**
+ * One member's path as every reader judges it: relative and forward-slash, with `./` and empty segments folded and no
+ * trailing slash ("" for the archive's own root). Undefined for an absolute path or one with a `..` segment, which no
+ * honest packer writes and every reader refuses; what each does with a refusal (abort, skip, report) stays its own.
+ */
+export const memberPath = (name: string): string | undefined => {
+    if (name.startsWith("/")) {
+        return undefined;
+    }
+    const parts = name.split("/").filter((part) => part !== "" && part !== ".");
+    return parts.includes("..") ? undefined : parts.join("/");
+};
+
 /** Consumes and discards an entry's body so tar-stream emits the next one; used for directory markers and skipped entries. */
 export const drain = (source: Readable): Promise<void> =>
     new Promise((resolve, reject) => {

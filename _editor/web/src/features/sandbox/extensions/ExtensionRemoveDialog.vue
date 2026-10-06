@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract";
 import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, ui, vSkeletonSource } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
 import { removalPlan } from "../../extensions/useExtensions";
@@ -39,7 +39,7 @@ watch(
         try {
             plan.value = await removalPlan(id);
         } catch (error) {
-            failure.value = errorMessage(error, `Couldn't work out what removing this would take away.`);
+            failure.value = messageOr(error, `Couldn't work out what removing this would take away.`);
         }
     },
     { immediate: true },

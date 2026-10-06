@@ -1,7 +1,7 @@
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { ref } from "vue";
-import { sandboxIdOf } from "./endpoint";
+import { sandboxIdOf } from "../../../client/endpoint/endpoint";
 
 // The re-check a page runs on its loopback address after it slept: a live address (the usual wake) is asked alone and
 // kept; a dead one is left for the tunnel the moment the tunnel answers, and the calls waiting on it are told.
@@ -12,11 +12,11 @@ const TUNNEL = `https://s1.tunnel.test`;
 const ID = await sandboxIdOf(TOKEN);
 const LOCAL = `https://${HOSTNAME}:${localDaemonPort(ID)}`;
 
-jest.mock("../devices/loopback/localShortcut", () => ({
+jest.mock("../../../client/endpoint/localShortcut", () => ({
     shortcutAnswer: async () => `allowed` as const,
     useLocalShortcut: () => ({ ask: () => undefined }),
 }));
-jest.mock("../client/useSandbox", () => ({
+jest.mock("../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({
         active: ref({ token: TOKEN, hosted: null, localHostname: HOSTNAME }),
         activeSandboxId: ref(`s1`),
@@ -24,7 +24,7 @@ jest.mock("../client/useSandbox", () => ({
     }),
 }));
 
-const { useEndpoint } = await import("./useEndpoint");
+const { useEndpoint } = await import("../../../client/endpoint/useEndpoint");
 const { daemonBase, resolve, recheckAfterWake, routeRechecked, onRouteLost, reset } = useEndpoint();
 
 // Which bases answer /health as this sandbox; the rest refuse the connection, as a dead port does.

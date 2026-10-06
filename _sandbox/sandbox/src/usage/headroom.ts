@@ -1,3 +1,4 @@
+import { SingleFlight } from "@intentic/base/async";
 import type { AccountUsage, AgentProvider, UsageWindow } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
@@ -107,7 +108,7 @@ export const createHeadroomService = (deps: {
     // without a round trip; the store is the authority across restarts.
     const blockedUntil = new Map<string, ParkedRead>();
     // Read in flight per target, so concurrent triggers share one round-trip.
-    const inFlight = new Map<string, Promise<void>>();
+    const inFlight = new SingleFlight<string, void>();
     const listeners = new Set<(provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void>();
 
     // Reads the parks from disk once per process, before the first sweep decides anything: a boot sweep that ran ahead
@@ -163,57 +164,50 @@ export const createHeadroomService = (deps: {
         }
     };
 
-    const readOne = (target: HeadroomTarget): Promise<void> => {
-        const running = inFlight.get(target.key);
-        if (running !== undefined) {
-            return running;
-        }
-        const read = (async (): Promise<void> => {
-            attemptedAt.set(target.key, Date.now());
-            const reading = await target.read();
-            if (reading.retryAfterMs !== undefined) {
-                const until = Date.now() + reading.retryAfterMs;
-                await parkUntil(target.provider, target.key, until);
-                // Said out loud: a reading that silently stops moving is the one failure nobody can see from a screen.
-                deps.logger.warn(
-                    { account: target.key, provider: target.provider, until: new Date(until).toISOString() },
-                    "headroom: the provider is rate-limiting this account, holding reads off until then",
-                );
-                await readFailed(target, reading.failure ?? "the provider is rate-limiting reads");
-                return;
-            }
-            // A failed read leaves the last snapshot standing; an empty list alone would misread as "no limits". Only a
-            // read that says it found nothing retires one, and only when there was one to retire — announcing an
-            // absence nobody was shown would redraw every open window each sweep.
-            if (reading.windows.length > 0) {
-                failedReasons.delete(target.key);
-                await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
-                return;
-            }
-            if (reading.empty === true) {
-                failedReasons.delete(target.key);
-                // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
-                // actually shown — the only case worth announcing an absence for.
-                if ((await deps.store.read())[target.key] !== undefined) {
-                    await deps.store.clear(target.key);
-                    announce(target.provider, target.key, undefined);
+    const readOne = (target: HeadroomTarget): Promise<void> =>
+        inFlight.run(target.key, () =>
+            (async (): Promise<void> => {
+                attemptedAt.set(target.key, Date.now());
+                const reading = await target.read();
+                if (reading.retryAfterMs !== undefined) {
+                    const until = Date.now() + reading.retryAfterMs;
+                    await parkUntil(target.provider, target.key, until);
+                    // Said out loud: a reading that silently stops moving is the one failure nobody can see from a screen.
+                    deps.logger.warn(
+                        { account: target.key, provider: target.provider, until: new Date(until).toISOString() },
+                        "headroom: the provider is rate-limiting this account, holding reads off until then",
+                    );
+                    await readFailed(target, reading.failure ?? "the provider is rate-limiting reads");
+                    return;
                 }
-                return;
-            }
-            await readFailed(target, reading.failure ?? "the provider gave no reading");
-        })()
-            .catch(async (error: unknown) => {
+                // A failed read leaves the last snapshot standing; an empty list alone would misread as "no limits". Only a
+                // read that says it found nothing retires one, and only when there was one to retire — announcing an
+                // absence nobody was shown would redraw every open window each sweep.
+                if (reading.windows.length > 0) {
+                    failedReasons.delete(target.key);
+                    await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
+                    return;
+                }
+                if (reading.empty === true) {
+                    failedReasons.delete(target.key);
+                    // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
+                    // actually shown — the only case worth announcing an absence for.
+                    if ((await deps.store.read())[target.key] !== undefined) {
+                        await deps.store.clear(target.key);
+                        announce(target.provider, target.key, undefined);
+                    }
+                    return;
+                }
+                await readFailed(target, reading.failure ?? "the provider gave no reading");
+            })().catch(async (error: unknown) => {
                 deps.logger.warn({ err: error, account: target.key }, "headroom: read failed, the next trigger retries");
                 try {
                     await readFailed(target, "the read failed");
                 } catch (markError) {
                     deps.logger.warn({ err: markError, account: target.key }, "headroom: could not mark the failed read on the snapshot");
                 }
-            })
-            .finally(() => inFlight.delete(target.key));
-        inFlight.set(target.key, read);
-        return read;
-    };
+            }),
+        );
 
     const inScope = (target: HeadroomTarget, scope: RefreshScope | undefined): boolean =>
         (scope?.providers === undefined || scope.providers.includes(target.provider)) && (scope?.account === undefined || scope.account === target.key);

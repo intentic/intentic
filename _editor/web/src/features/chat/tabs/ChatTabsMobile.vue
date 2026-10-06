@@ -3,8 +3,8 @@ import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { statusIcon } from "../models/catalog";
 import { useChat } from "../run/useChat";
-import { viewersOfSession } from "../../../shell/presence/usePresence";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
+import { viewersOfSession } from "../../../workbench/presence/usePresence";
+import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatSwitcherSheet from "./ChatSwitcherSheet.vue";
 import { useT } from "@intentic/ui/i18n";
 

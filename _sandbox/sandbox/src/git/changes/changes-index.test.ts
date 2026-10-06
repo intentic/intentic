@@ -1,4 +1,4 @@
-import type { GitRunner } from "@intentic/scaffold";
+import type { GitRunner } from "@intentic/base/git";
 import { discardPaths, unstagePaths } from "./changes-index.js";
 import { headSha } from "./changes.js";
 

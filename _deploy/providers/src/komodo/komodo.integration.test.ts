@@ -19,12 +19,15 @@ const DEFAULT_IMAGES = { postgres: POSTGRES_IMAGE, ferretdb: FERRETDB_IMAGE, cor
 // Drives the komodo provider entirely over SSH: docker ps reports the core container, the project inspect
 // reports each service's image, the /api/health wget reports liveness, and docker compose up can be made to fail.
 const fakeSsh = (
-    opts: { running?: boolean; upFails?: boolean; healthy?: boolean; images?: Record<string, string> } = {},
+    opts: { running?: boolean; upFails?: boolean; healthy?: boolean; images?: Record<string, string>; failOn?: string } = {},
 ): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
+            if (opts.failOn !== undefined && command.includes(opts.failOn)) {
+                return { stdout: "", stderr: "No space left on device", code: 1 };
+            }
             if (command.includes("com.docker.compose.project")) {
                 return res(opts.running ? composeImages(opts.images ?? DEFAULT_IMAGES) : "");
             }
@@ -141,6 +144,25 @@ test("apply writes compose + a once-guarded env, brings the stack up, waits for 
     expect(written["KOMODO_RESOURCE_POLL_INTERVAL"]).toBe("1-min");
     expect(written["KOMODO_INIT_ADMIN_PASSWORD"]).toBe("pw");
     expect(ssh.commands.some((c) => c.includes("docker compose -p komodo") && c.includes("up -d"))).toBe(true);
+});
+
+// The .env holds the admin passkey, JWT secret and database password, and config.toml the git and registry tokens:
+// both must end up owner-only, including a .env an older release left world-readable.
+test("apply leaves the .env and config.toml readable by their owner only", async () => {
+    const ssh = fakeSsh({ healthy: true });
+    await createKomodoProvider(ssh.executor).apply(inputs, undefined, ctx());
+    const envWrite = ssh.commands.find((c) => c.includes("test -f /opt/intentic/komodo/.env")) ?? "";
+    expect(envWrite).toContain("umask 077");
+    expect(envWrite.endsWith("&& chmod 600 /opt/intentic/komodo/.env")).toBe(true);
+    expect(ssh.commands).toContain("chmod 600 /opt/intentic/komodo/config.toml");
+});
+
+test("apply fails instead of starting the stack when a config file cannot be written", async () => {
+    const ssh = fakeSsh({ healthy: true, failOn: "cat > /opt/intentic/komodo/config.toml" });
+    await expect(createKomodoProvider(ssh.executor).apply(inputs, undefined, ctx())).rejects.toThrow(
+        "komodo: write /opt/intentic/komodo/config.toml failed (exit 1): No space left on device",
+    );
+    expect(ssh.commands.some((c) => c.includes("up -d"))).toBe(false);
 });
 
 test("a guarded update snapshots the postgres/keys/ferretdb volumes before recreating; the happy path issues no restore", async () => {

@@ -7,7 +7,7 @@ import type { ComposerSelection } from "../session/composerSelection";
 import type { Conversation } from "../session/conversation";
 import type { TranscriptView } from "../session/transcriptView";
 import type { TurnClient } from "../session/turnClient";
-import { importOrReload } from "../../../router/staleChunk";
+import { importOrReload } from "../../../lib/staleChunk";
 import { markNeedsReauth, providerAccounts } from "../accounts/providerAccounts";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (the error line) or merely informed, and

@@ -33,7 +33,7 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
 ## Key files
 
 - [setupArrival.ts](setupArrival.ts) — what an arrival does by itself, a project's included, and the folder's name in the sandbox.
-- [../sandbox/client/sandboxName.ts](../sandbox/client/sandboxName.ts) — the name a new sandbox gets, numbered past the account's own; the desktop app's folder dialog names one the same way.
+- [../../client/sandbox/sandboxName.ts](../../client/sandbox/sandboxName.ts) — the name a new sandbox gets, numbered past the account's own; the desktop app's folder dialog names one the same way.
 - [flow/useSetupArrival.ts](flow/useSetupArrival.ts) — reads the offers and the row, decides the arrival and takes it.
 - [flow/machineLadder.ts](flow/machineLadder.ts) — the picker's rungs, and which of them a project may have.
 - [flow/useHostedLane.ts](flow/useHostedLane.ts) — the machine of ours on the row: provision, wait, restart, hand back.

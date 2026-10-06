@@ -11,7 +11,7 @@ import { rememberedModelFor, startingMode } from "../run/turnDefaults";
 import { untouchedDraft } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, type TabSnapshot, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "../transcript/transcriptCache";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { uuid } from "../../../lib/uuid";
 
 const { activeSandboxId } = useSandbox();

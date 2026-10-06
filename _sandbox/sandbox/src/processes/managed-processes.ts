@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { freePort } from "@intentic/base/fs";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, panelSession } from "@intentic/sandbox-contract/session-names";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { endSession } from "../seams/session-processes.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { attentionCards } from "../../agents/fleet/agentStatus";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKeyAt } from "../../../lib/queryKeys";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { type AcrossRecord, createAcrossStore } from "./acrossSandboxes";
 
 // What every other sandbox's fleet looks like, for the board's All-sandboxes scope and the switcher's counts; polling

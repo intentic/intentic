@@ -137,6 +137,38 @@ test("passes are serialized, so two moments landing together cannot read one sta
     expect(overlapped).toBe(false);
 });
 
+// A pass can still throw past the per-check guard (here the log line itself fails); that pass is lost, but the queue
+// that serializes passes must not stay rejected and take every later sweep down with it.
+test("a pass that throws loses only itself: the next pass still runs", async () => {
+    let writes = 0;
+    const registry = createInvariantRegistry(
+        pino(
+            { level: "info" },
+            {
+                write: () => {
+                    writes += 1;
+                    if (writes === 1) {
+                        throw new Error("disk full");
+                    }
+                },
+            },
+        ),
+    );
+    let runs = 0;
+    registry.register("platform", [
+        check("claim", ({ fail }) => {
+            runs += 1;
+            fail("claim names pid 42");
+        }),
+    ]);
+
+    await expect(registry.run("sweep")).rejects.toThrow("disk full");
+    const [violation] = await registry.run("sweep");
+
+    expect(runs).toBe(2);
+    expect(violation).toMatchObject({ owner: "platform", check: "claim", message: "claim names pid 42", broken: false });
+});
+
 test("wiring mistakes are loud, because nothing is running yet when they are made", () => {
     const registry = createInvariantRegistry(silent());
     registry.register("platform", [check("claim", () => {})]);

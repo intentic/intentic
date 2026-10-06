@@ -2,11 +2,11 @@ import { t } from "@intentic/ui/i18n";
 import { agentDisplayTitle, attentionReason, type AgentStanding } from "../../features/agents/fleet/agentStatus";
 import { fleet } from "../../features/agents/fleet/useAgents-fleet";
 import { heldWakes } from "../../features/agents/fleet/useAgents-registry";
-import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../lib/activeSandbox";
 import { otherBoxes } from "../../features/sandbox/live/fleetAcross";
 import { clearDesktopNotices, type DesktopNotice, desktopNotices, postDesktopNotice, withdrawDesktopNotice } from "../../app/environments/desktopNotices";
-import { CHIME_GAP_MS } from "./chimes";
-import { noticeAsks, noticeFinished } from "./tabPreferences";
+import { CHIME_GAP_MS } from "../../workbench/browser-tab/chimes";
+import { noticeAsks, noticeFinished } from "../../workbench/browser-tab/tabPreferences";
 import type { NewsItems, TabFrame } from "./tabSignal";
 
 // The tab's news as the desktop app's notifications (desktop-app notice.rs): the one way this window reaches a reader

@@ -24,7 +24,7 @@ import {
     gitStatus,
     gitSync,
     type GitSyncResult,
-} from "@intentic/scaffold";
+} from "@intentic/base/git";
 import { changedFiles } from "./changes/changes.js";
 import {
     type ActionResult,

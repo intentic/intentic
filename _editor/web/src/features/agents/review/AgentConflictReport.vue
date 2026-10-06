@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { Button, useDevice } from "@intentic/ui";
-import { useVocabulary } from "../../../core-views/vocabulary";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { computed } from "vue";
 import { agentBlockers, type Blocker, blockerLabel, blockersOf, reasonCopy, settingsOrigin, settingsPageName, userBlockers } from "./conflictResolution";
 import { useT } from "@intentic/ui/i18n";

@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/vue-query";
 import { RunnerSummarySchema, runnerSlug } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { z } from "zod";
 import { RUNNERS } from "../../../../lib/queryKeys";
-import { sandboxError, sandboxJson, sandboxRequest } from "../../client/sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest } from "../../../../client/sandbox/sandboxClient";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { manageDeviceSandbox } from "../useDevices";
 
 // This sandbox's runners: one list read by the Devices view and the
@@ -12,8 +12,10 @@ const POLL_MS = 15_000;
 
 const RunnersSchema = z.object({ runners: z.array(RunnerSummarySchema) });
 
+// Through the daemon-read wrapper: gated on the sandbox being reachable, so a daemon that is down is not asked every
+// fifteen seconds, and timed and failure-mapped like every other read.
 export function useRunners(poll = true) {
-    const query = useQuery({
+    const { query } = useSandboxQuery({
         queryKey: RUNNERS.of(),
         queryFn: async () => RunnersSchema.parse(await sandboxJson(`/system/runners`)),
         refetchInterval: poll ? POLL_MS : false,

@@ -1,6 +1,6 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
 import { formatDayMonth } from "@intentic/extension-ui/format";
-import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, toEpisodes, toSources } from "./episodes.js";
+import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, sourceLabel, toEpisodes, toSources } from "./episodes.js";
 
 // Fixtures mirror real event shapes: agent.routes.ts's record(), outbound.ts's sniffer, listeners.ts's inbound.
 // Includes a turn.started with no sessionId yet and a turn titled only at completion, the shapes that broke the old
@@ -186,6 +186,17 @@ test("the rail unions log history with live connections, so a connected-but-sile
 test("a provider whose bots disagree shows the worst state, not the healthiest", () => {
     const sources = toSources([], [connection(`discord`, `ready`, `bot-a`), connection(`discord`, `disconnected`, `bot-b`)]);
     expect(sources).toEqual([{ key: `discord`, group: `connections`, label: `Discord`, gateway: `disconnected`, episodes: 0, failed: 0 }]);
+});
+
+test("a source is named by its manifest's label, and one no manifest names reads as its key", () => {
+    const names = new Map([[`telegram`, `Telegram`], [`google`, `Google Workspace`]]);
+    const sources = toSources([], [connection(`google`, `ready`), connection(`telegram`, `ready`), connection(`matrix`, `idle`)], names);
+    expect(sources.map(({ key, label }) => ({ key, label }))).toEqual([
+        { key: `google`, label: `Google Workspace` },
+        { key: `matrix`, label: `Matrix` },
+        { key: `telegram`, label: `Telegram` },
+    ]);
+    expect(sourceLabel(`claude`)).toBe(`Claude`);
 });
 
 test("the rail counts failures per source and orders by most recent activity", () => {

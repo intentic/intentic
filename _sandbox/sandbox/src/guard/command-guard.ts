@@ -16,7 +16,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
-import { JS_TOOL_NAME } from "../execution/js-tool.js";
+import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { commandRun } from "./actions.js";
 import { createCredentialOracle } from "./credential-files.js";
 import { guard } from "./guard.js";

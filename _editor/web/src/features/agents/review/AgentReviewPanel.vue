@@ -1,34 +1,35 @@
 <script setup lang="ts">
-import type { FileDiffResponse } from "@intentic/api-contract";
 import {
     Button,
     ChangeStatusMark,
-    ui,
+    EmptyState,
     explorerColorClass,
     iconForEntry,
+    isTypingTarget,
     ResizeSeam,
     SegmentedControl,
     type Tip,
+    ui,
     useDevice,
     useExplorerStyle,
     useLoadingReveal,
 } from "@intentic/ui";
-import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
+import { isTestPath, type WorkspaceModule, type FileDiff } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import ReviewStat from "../../../components/ReviewStat.vue";
+import ReviewStat from "../../workspace/changes/ReviewStat.vue";
 import { stopAgent } from "../fleet/agentActions";
 import { boxNameOf, openInSandbox } from "../fleet/fleetScope";
 import { type Blocker, reasonCopy } from "./conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
 import { useAgentHistory } from "../fleet/useAgentHistory";
-import { documentsAt } from "../../../core-views/documentRegistry";
+import { documentsAt } from "../../../workbench/views/documentRegistry";
 import { GIT_TAB } from "../../workspace/directory-ui/directoryTabs";
 import { useDirectoryTabs } from "../../workspace/directory-ui/useDirectoryTabs";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../shell/window/useLayout";
-import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../workbench/window/useLayout";
+import { toAppPx, toScreenPx, uiLength } from "../../../workbench/window/uiScale";
 import { diffRawUrls } from "../../workspace/changes/diffRaw";
 // Where the user's own conflict half is resolved: the Changes panel, the same deep-link the card and the badges use.
 import { openChanges } from "../../workspace/changes/openChanges";
@@ -49,7 +50,7 @@ import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
-import { formatChord, isApplePlatform } from "../../../shell/commands/keybindings";
+import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
 
 // One agent's work as a review: file list on the left, that file's diff on the right, the shape every code review
 // has. Replaces the old panel's mistakes:
@@ -481,8 +482,7 @@ const onKey = (event: KeyboardEvent): void => {
         return;
     }
     // Typing beats navigating: this guard leaves arrows and F7 to the chat composer or Monaco when focused.
-    const target = event.target;
-    if (target instanceof HTMLElement && (target.isContentEditable || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName))) {
+    if (isTypingTarget(event.target)) {
         return;
     }
     if (event.key === `ArrowDown` || event.key === `j`) {
@@ -531,7 +531,7 @@ const diffOutline = useLoadingReveal(
 // Monaco is uncontrolled, so a genuinely different file must remount, not re-render. vue-query keeps `diff` the
 // same object across a no-op refetch, so that identity (numbered only because :key needs a string) is what
 // distinguishes files.
-const diffIds = new WeakMap<FileDiffResponse, number>();
+const diffIds = new WeakMap<FileDiff, number>();
 let diffSeq = 0;
 const diffKey = computed(() => {
     const body = diff.value;
@@ -720,26 +720,27 @@ const seamWidth = computed<number>({
         <template v-if="waiting">
             <AgentReviewOutline v-if="outline" :label="waitLabel" />
         </template>
-        <div
+        <!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed.
+             "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the
+             sentence points at the crossing instead. -->
+        <EmptyState
             v-else-if="changes.count.value === 0 && history.count.value === 0"
-            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+            :icon="changes.absorbed.value > 0 ? 'check' : 'file-edit'"
+            :line="
+                changes.absorbed.value > 0
+                    ? t(`agents.agentReviewPanel.anythingWritesNextShows`, { absorbedNote })
+                    : remoteName !== undefined
+                      ? t(`agents.agentReviewPanel.agentHasntChangedAny`, { remoteName })
+                      : t(`agents.agentReviewPanel.agentHasntChangedAny2`)
+            "
+            class="min-h-0 flex-1 p-6"
         >
-            <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
-            <!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed. -->
-            <p v-if="changes.absorbed.value > 0" class="max-w-xs text-2xs text-muted">
-                {{ t(`agents.agentReviewPanel.anythingWritesNextShows`, { absorbedNote }) }}
-            </p>
-            <!-- "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the sentence points at the crossing instead. -->
-            <p v-else-if="remoteName !== undefined" class="max-w-xs text-2xs text-muted">
-                {{ t(`agents.agentReviewPanel.agentHasntChangedAny`, { remoteName }) }}
-            </p>
-            <p v-else class="max-w-xs text-2xs text-muted">
-                {{ t(`agents.agentReviewPanel.agentHasntChangedAny2`) }}
-            </p>
-            <Button v-if="remoteName !== undefined" size="small" severity="secondary" class="mt-1" @click="cross">
-                <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
-            </Button>
-        </div>
+            <template v-if="remoteName !== undefined" #actions>
+                <Button size="small" severity="secondary" @click="cross">
+                    <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
+                </Button>
+            </template>
+        </EmptyState>
 
         <!-- List | diff share one screen on a phone: the diff takes over on pick, with no route change either way. -->
         <!-- No select-none while dragging: ResizeSeam already claims the whole document's selection for the drag. -->

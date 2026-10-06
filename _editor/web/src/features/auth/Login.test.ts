@@ -10,7 +10,7 @@ import * as actualDesktop from "../../app/environments/desktop";
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
 const push = jest.fn();
-// Where the guard that turned somebody away wrote the page they were headed to (router/signIn.ts).
+// Where the guard that turned somebody away wrote the page they were headed to (lib/routes/signIn.ts).
 const query = ref<Record<string, string>>({});
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
@@ -25,13 +25,13 @@ jest.mock(`vue-router`, () => ({
 
 const signInWithGoogle = jest.fn().mockResolvedValue(undefined);
 const signInWithGoogleCredential = jest.fn().mockResolvedValue(undefined);
-jest.mock(`./useAuth`, () => ({
+jest.mock(`../../client/auth/useAuth`, () => ({
     useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential }),
 }));
 
 const getIdToken = jest.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
 const renderButton = jest.fn<() => Promise<boolean>>();
-jest.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
+jest.mock(`../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
 // Available desktop build for this visitor; undefined is the default, overridden only where a test needs one.
 const desktopInstaller = jest.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 // Partial, over the real module: the page reaches for whatever the desktop lane grows next, and a mock listing its

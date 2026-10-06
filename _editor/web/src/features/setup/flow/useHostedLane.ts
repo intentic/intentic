@@ -6,7 +6,7 @@ import { computed, onScopeDispose, type Ref, ref } from "vue";
 import { track } from "../../../app/analytics";
 import { arrivingProfile } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
-import type { useSandbox } from "../../sandbox/client/useSandbox";
+import type { useSandbox } from "../../../client/sandbox/useSandbox";
 import { hostedWaitView, machineStartable } from "../hostedWait";
 import type { OfferRead } from "../setupLanes";
 import { HOSTED_IDLE, type HostedEvent, type HostedLane, laneBusy, owesHandBack, stepHosted } from "./hostedLane";

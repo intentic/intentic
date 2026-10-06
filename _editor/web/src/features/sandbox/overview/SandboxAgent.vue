@@ -2,7 +2,7 @@
 import { Notice, type NoticeModel, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "./useSandboxSettings";
 import AiAccountSection from "../secrets/AiAccountSection.vue";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";

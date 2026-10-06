@@ -68,6 +68,7 @@ export const toNodeMap = (nodes: readonly RawNode[]): Map<string, RawNode> => {
 export { compile } from "./compile.js";
 export { isRef, makeRef, refKey } from "./ref.js";
 export { collectSecretUsage, type SecretUsage, secretRef } from "./secrets.js";
+export { SSH_TRANSPORTS, type SshBlock, type SshTransport } from "./ssh.js";
 export {
     formatStamp,
     HASH_KEY,

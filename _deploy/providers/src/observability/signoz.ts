@@ -1,6 +1,6 @@
 import type { Provider } from "@intentic/engine";
 import { z } from "zod";
-import { type SshExecutor, type SshSession, sshExecutor } from "../core/ssh.js";
+import { type SshExecutor, type SshSession } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "../services/compose-service.js";
 
@@ -309,7 +309,7 @@ const seedAdmin = async (session: SshSession, parsed: SignozInputs, log: (messag
 // SigNoz as a co-located ZooKeeper + ClickHouse + migrator + UI + OTel-collector compose stack, mirroring SigNoz's
 // v0.129 reference. `read` gates on the UI being up; `diff` recreates on an image-pin bump; the admin seed tolerates an
 // existing account.
-export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createSignozProvider = (executor: SshExecutor): Provider =>
     createComposeServiceProvider(
         {
             kind: "signoz",

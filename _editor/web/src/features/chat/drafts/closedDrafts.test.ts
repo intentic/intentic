@@ -2,7 +2,7 @@ import { ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });

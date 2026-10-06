@@ -33,7 +33,7 @@ jest.mock(`./useSecrets`, () => ({
     }),
 }));
 
-jest.mock(`../../sandbox/secrets/useRole`, () => ({
+jest.mock(`../../../client/sandbox/useRole`, () => ({
     useRole: () => ({ canShip: computed(() => role.value !== `collaborator`) }),
 }));
 

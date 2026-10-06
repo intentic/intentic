@@ -129,7 +129,7 @@ jest.mock("./useAgentChanges", () => {
 });
 
 jest.mock("../fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: jest.fn(async () => {}), startAgent: jest.fn() }));
-jest.mock("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
+jest.mock("../../../client/sandbox/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");
 

@@ -1,5 +1,5 @@
 import { openForwardedPort } from "@intentic/ui";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 
 /* Ctrl+clicking a localhost link in a terminal. */
 

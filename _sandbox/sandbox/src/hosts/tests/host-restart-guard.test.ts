@@ -2,11 +2,13 @@ import { AgentAttentionSchema, type AgentSummary, AgentSummarySchema, SandboxSet
 import { unstubbed } from "@intentic/testing";
 import { startTurnRun } from "../../agent/run/turn/turn-runs.js";
 import type { Services } from "../../composition.js";
+import { cardDeps } from "../../conversations/actor/card-deps.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
+import type { HostGuardDeps } from "../host-guard-deps.js";
 import { DeviceToolCallSchema, judgeHostRestart, restartInCall } from "../host-restart-guard.js";
 
 // An agent restarting the sandbox it and the rest of the fleet run in, through a device tool: the owner is asked on a
@@ -47,6 +49,16 @@ const services = unstubbed<Services>("services", {
         get: async () => ({ ...SandboxSettingsSchema.parse({}), autoResumeOnRestart }),
     }),
 });
+
+// What the gate takes from above the host layer, as app.ts fills it: the real cards and the published turn.
+const guards: HostGuardDeps = {
+    cards: cardDeps(services),
+    turnRun: (conversationId) => turnRunOf(fleet.conversations, conversationId),
+    // A restart is never put to the judge.
+    judge: async () => {
+        throw new Error("a restart is not judged");
+    },
+};
 // The owner's "pick up again after a restart" switch, off as it ships.
 let autoResumeOnRestart = false;
 
@@ -138,7 +150,7 @@ describe("which calls restart this sandbox", () => {
 
 describe("nobody else is working", () => {
     it("forwards the call: the caller alone is stopped, and it chose to be", async () => {
-        expect(await judgeHostRestart(services, ASKED)).toBeUndefined();
+        expect(await judgeHostRestart(services, guards, ASKED)).toBeUndefined();
         expect(turnRunOf(fleet.conversations, CALLER)?.rows.filter((row) => row.permission !== undefined)).toEqual([]);
     });
 });
@@ -147,7 +159,7 @@ describe("another agent is mid-turn", () => {
     beforeEach(() => liveTurn(OTHER));
 
     it("asks the owner on a card naming who it stops, and forwards the call once they allow it", async () => {
-        const judged = judgeHostRestart(services, ASKED);
+        const judged = judgeHostRestart(services, guards, ASKED);
         const card = await cardUp();
         expect(card.title).toBe("Rebuild this sandbox now?");
         expect(card.description).toBe(
@@ -160,7 +172,7 @@ describe("another agent is mid-turn", () => {
     it("says the stopped agents pick up by themselves where the owner turned that on", async () => {
         autoResumeOnRestart = true;
         liveTurn(IDLE);
-        const judged = judgeHostRestart(services, ASKED);
+        const judged = judgeHostRestart(services, guards, ASKED);
         const card = await cardUp();
         expect(card.description).toBe(
             "It restarts the sandbox on rog, which stops the 2 agents working in it now: LEDGERLY, Done already. They pick up again by themselves once the sandbox is back.",
@@ -170,7 +182,7 @@ describe("another agent is mid-turn", () => {
     });
 
     it("hands the agent the owner's no, and tells it not to find another way", async () => {
-        const judged = judgeHostRestart(services, ASKED);
+        const judged = judgeHostRestart(services, guards, ASKED);
         expect(cards.resolve({ kind: "permission", requestId: (await cardUp()).requestId, decision: "deny" })).toBe("settled");
         expect(await judged).toEqual({
             refusal: "The owner declined: not now. Do not restart the sandbox another way; say what is left undone until it can be.",
@@ -179,7 +191,7 @@ describe("another agent is mid-turn", () => {
 
     it("holds it without a card when nobody is in the turn to ask", async () => {
         clearTurnTaint(CALLER);
-        expect(await judgeHostRestart(services, ASKED)).toEqual({
+        expect(await judgeHostRestart(services, guards, ASKED)).toEqual({
             refusal:
                 "Held for the owner: this would restart the sandbox you run in, which stops 1 other agent working now (LEDGERLY), and there is " +
                 "nobody in this turn to ask. Do not retry it unasked: ask the owner in chat, or wait until they are idle.",
@@ -187,12 +199,12 @@ describe("another agent is mid-turn", () => {
     });
 
     it("answers before the agent's client gives up, and the same call again collects the owner's yes", async () => {
-        expect(await judgeHostRestart(services, ASKED, 20)).toEqual({
+        expect(await judgeHostRestart(services, guards, ASKED, 20)).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve swap_sandbox rebuild on "rog", and nothing has run yet. Their answer is ' +
                 "kept for this exact call: make it again with the same arguments to wait for it. Do not restart the sandbox another way.",
         });
         expect(cards.resolve({ kind: "permission", requestId: (await cardUp()).requestId, decision: "once" })).toBe("settled");
-        expect(await judgeHostRestart(services, ASKED, 20)).toBeUndefined();
+        expect(await judgeHostRestart(services, guards, ASKED, 20)).toBeUndefined();
     });
 });

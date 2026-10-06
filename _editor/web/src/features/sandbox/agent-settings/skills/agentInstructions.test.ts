@@ -2,17 +2,15 @@
 // from a built-in prompt never replaces text somebody wrote without asking. Mounted, since what's tested is what this
 // page hands the document and what it does with a press.
 import "@intentic/testing/dom";
-import type { BuiltinPromptText, SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
-import { SYSTEM_PROMPT_MAX } from "@intentic/sandbox-contract";
+import { SYSTEM_PROMPT_MAX, type BuiltinPromptText, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
-import * as actualSandboxRpc from "../../client/sandboxRpc";
-import type { ProcedureInput } from "../../client/sandboxRpc";
+import * as actualSandboxRpc from "../../../../client/sandbox/sandboxRpc";
+import type { ProcedureInput } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({ systemPromptMode: `custom`, systemPrompt: `Be brief.` }));
@@ -41,7 +39,7 @@ const builtinPrompt = jest.fn<(input: ProcedureInput<`settings.builtinPrompt`>) 
 }));
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock(`../../client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ settings: { builtinPrompt } }) }));
+jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ settings: { builtinPrompt } }) }));
 
 // The document surface is `@intentic/ui`'s own and has its own suite; what is under test is what this page hands it.
 let doc: { readonly modelValue?: string; readonly stored?: string; readonly maxChars?: number } | undefined;

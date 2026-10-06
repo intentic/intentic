@@ -21,7 +21,7 @@ flowchart LR
   answers sign-in, the sandbox list, invites and the hosted plan. Every workspace call goes directly to the daemon
   through `sandboxRpc`, with a daemon-minted session that a Google ID token or a passkey establishes
   (`sandboxSession.ts`). The platform is not in that path. The daemon is reached over its tunnel, or over a
-  certified loopback name when it runs on this machine (`features/sandbox/secrets/endpoint.ts`).
+  certified loopback name when it runs on this machine (`client/endpoint/endpoint.ts`).
 - **When the platform is down or forgets.** Only the sandbox list needs the platform, so this device remembers it per
   account, names and addresses only (`features/sandbox/recovery`). The outage screen opens a remembered sandbox
   directly, the workspace running unchanged on that remembered list; a list that offers nothing to open while this
@@ -41,7 +41,9 @@ flowchart LR
   in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
   frames missed while disconnected. Terminals, the browser view and the desktop view (`/desktop`, the sandbox's own
   screen, which a maintainer can take over) use WebSockets opened with a short-lived ticket (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
-  edge serves one (`features/terminal/channel/`).
+  edge serves one (`features/terminal/channel/`). Each of them, and a connected account's browser window, rides one
+  live socket (`client/session/liveSocket.ts`): minted, pinged, closed when silent, and redialled on one
+  ladder that starts over when the sandbox answers again.
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
   bounded probes of the sandbox's address (the front's own `/system/vitals`, which answers whatever state Node is in,
   plus an opaque reach check), the platform, a hosted machine's power state, this computer's loopback where no
@@ -80,7 +82,8 @@ flowchart LR
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
   `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files, the views the app adds, and at
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
-  before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits
+  before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W (by default: they follow the keymap's overrides for the workspace commands they stand
+  for) and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits
   (`useUnsavedGuard.ts`), a project folder's Bring back section (`bring-back/LocalBringBack.vue`), and the way to a folder's own
   sandbox (`LocalProject.vue`): the window's dialog for "Work on this with an agent" (`LocalProjectDialog.vue`), and the
   card the sandbox's build stands on in the notification lane while the reader keeps working (`LocalProjectBuild.vue`),
@@ -90,7 +93,7 @@ flowchart LR
   this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an
   account, who is signed in and the sandboxes as the workspace last told it, This device, and the account itself)
   comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
-  the link-only host. The account is `shell/useAccount.ts`: in the workspace the editor's own session, in a local
+  the link-only host. The account is `client/auth/useAccount.ts`: in the workspace the editor's own session, in a local
   window the one the workspace signed in with, which the app asks the platform about for the window. A local window's
   editor runs as a placeholder for its folder, so the account is kept apart from it: the account menu, Settings and
   the plan read `useAccount`, and a sign-out or a refused call ends the account and never the folder's session
@@ -110,12 +113,13 @@ flowchart LR
   routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
 - **On a phone.** `ShellMobile.vue` shows one screen at a time. The Sandbox and Settings hubs open on an index of
   their sections, grouped as the desktop rail groups them, and each section is a page with a way back to that
-  index (`shell/hub/hubDrill.ts`). The Menu tab uses the same grouped rows (`shell/MenuRow.vue`). A card's or row's
+  index (`workbench/hub/hubDrill.ts`). The Menu tab uses the same grouped rows (`shell/MenuRow.vue`). A card's or row's
   own buttons fold behind one ⋯ that opens a sheet (`OverflowActions`). A screen's one create button floats over its
   corner (`FloatingAction`): New agent on the board, upload in the file tree. The review's Land button sits under the
   Changes tab instead of in the header. _2026-09-29: an index page, not a strip of section chips wrapping above
   every section. With extensions installed that strip was seventeen chips over every page of the sandbox hub._
-- **The side panel.** The rail owns the main area; `shell/side/` is where the reader looks at another section's
+- **The side panel.** The rail owns the main area; the side panel (`shell/side/`, its tabs and views registered in
+  `workbench/side/`) is where the reader looks at another section's
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
   extension's side view) opens in its home while that home is the main area, and beside it everywhere else, as a peek
   the next one replaces unless kept. "Open in …" moves it into its home. The chat whose home is the side is the
@@ -128,7 +132,8 @@ flowchart LR
   the file, and typing to an agent while its preview updates needs both on screen. References from the side panel's
   own chat open beside, not in the main area as a side chat does in an IDE: that would let one click replace the
   section the rail picked._
-- **The browser tab.** `shell/browser-tab/` shows the fleet's news to a reader who is looking elsewhere. One mark at
+- **The browser tab.** `shell/browser-tab/` (its chimes and preferences in `workbench/browser-tab/`) shows the fleet's
+  news to a reader who is looking elsewhere. One mark at
   a time, the first that holds: `(2)` for what needs you (the Agents tile's own count), `Offline` when the sandbox is
   not answering (never while the diagnosis sees it alive and busy), `✓` for a turn someone started that finished while you were away (gone when you come back), and a dot
   on the icon while a turn runs. The icon carries every mark; the title carries all but the last. Two opt-in sounds
@@ -145,7 +150,7 @@ flowchart LR
   taken down, and all of them cleared the moment you are back. Both are on by default, with their switches in
   Settings → Notifications, and both are links the app puts up (`app/environments/desktopNotices.ts`), only to an
   app that says it takes them (`notices`). The app also says whether its window is on screen
-  (`shell/window/onScreen.ts`), which WebView2 does not for a window in the tray: without it the page reported its
+  (`workbench/window/onScreen.ts`), which WebView2 does not for a window in the tray: without it the page reported its
   reader present all day, and the sandbox held back every push to their phone.
 - **Extensions.** `src/extension-host/loader.ts` activates what the daemon lists. First-party extensions are compiled
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
@@ -180,7 +185,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 
 | Word | Means |
 | --- | --- |
-| slot | An empty element a mounted surface publishes for a panel to teleport into (`shell/window/panelSlots.ts`) |
+| slot | An empty element a mounted surface publishes for a panel to teleport into (`workbench/window/panelSlots.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
 | status bar | The board's foot: the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`) |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
@@ -191,7 +196,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
 | peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`, the side panel's `peek`), and nothing else |
 | side panel | The desktop shell's right-hand column: what the reader opened beside the section the rail put in the main area, one tab each, stacked over the chat when the chat's home is the side (`shell/side/`). Not the Workspace's second editor pane, which is its companion pane |
-| side view | What one side panel tab shows for one input: the core's file and preview, or an extension's (`shell/side/sideViews.ts`) |
+| side view | What one side panel tab shows for one input: the core's file and preview, or an extension's (`workbench/side/sideViews.ts`) |
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 
 The status bar still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
@@ -199,20 +204,28 @@ every reader's open panel.
 
 ## Layout
 
+The directories are layered, lowest first, and a value import may only reach its own layer or a lower one
+([editor-layers.mjs](../../_tools/checks/lib/editor-layers.mjs), checked by `editor-boundaries`): foundation (`lib/`,
+`app/`, `skins/`, `styles/`, `design-system/`), the client (`client/`), `components/`, the workbench (`workbench/`),
+`features/`, and composition (`shell/`, `core-views/`, `extension-host/`, `router/`, `local/`, `testing/`). Where a lower
+layer needs something only a higher one knows (the built-in views, the account, the transcript mirror), the higher side
+registers or hands it in at startup (`main.ts`).
+
 | Directory | Holds |
 | --- | --- |
-| `app/` | Boot-time services: environment, i18n, analytics, diagnostics, self-heal |
-| `router/` | Route table, auth and setup guards, prefetch |
-| `shell/` | Workspace chrome: desktop rail, mobile tab bar, commands, windows, notifications |
-| `features/` | One directory per screen: chat, workspace, terminal, agents, sandbox, setup ([setup](src/features/setup/README.md)), settings |
-| `extension-host/` | Extension loading, the `IntenticApi` implementation, host module sharing |
-| `core-views/` | Rail views that stay in-app and the view/viewer registries |
-| `components/` | App-specific components not shared through [ui](../ui) |
-| `lib/` | Query keys, persistence, storage, streams and small utilities |
-| `push/` | Web push and native (iOS) push behind one driver |
+| `lib/` | Query keys, persistence, storage, streams, the active sandbox id, file-reference grammar, route helpers (`lib/routes/`) and small utilities |
+| `app/` | Boot-time services: environment, i18n, analytics, diagnostics, self-heal, the project and workspace scope |
 | `skins/` | Whole-app looks; see [skins](src/skins/README.md) |
 | `styles/` | Self-hosted font faces |
 | `design-system/` | Suites for `@intentic/ui` components and composables, run in this app |
+| `client/` | The editor's clients of what it talks to: the platform account (`auth/`), and the sandbox daemon's session, endpoint, typed RPC and queries (`session/`, `endpoint/`, `sandbox/`), and the device's remembered sandboxes (`directory/`) |
+| `components/` | App-specific components not shared through [ui](../ui) that know no feature |
+| `workbench/` | The services and registries features are written against, one unit per directory: window layout, commands and keybindings, notifications, presence, the hub, the side panel's tabs, the browser tab's chimes, web and native push, workspace events, and the view, viewer and document registries (`views/`) |
+| `features/` | One directory per screen: chat, workspace, terminal, agents, sandbox, setup ([setup](src/features/setup/README.md)), settings |
+| `shell/` | Workspace chrome that composes the features: desktop rail, mobile tab bar, the command palette and the commands that name features, the floating and popped-out panels, notification sources, the side panel |
+| `core-views/` | Rail views that stay in-app, and the frames that host an extension's view |
+| `extension-host/` | Extension loading, the `IntenticApi` implementation, host module sharing |
+| `router/` | Route table, auth and setup guards, prefetch |
 | `local/` | The desktop app's local window on a folder or document of this computer: its shell, place chip, Files, and the folder's own sandbox |
 | `testing/` | Fakes for suites: daemon client, router, workers |
 
@@ -220,7 +233,7 @@ every reader's open panel.
 
 - [src/main.ts](src/main.ts) — boot order: self-heal, appearance, i18n, then mount with router, vue-query and `@intentic/ui`.
 - [src/router/index.ts](src/router/index.ts) — every route and the guards that gate the shell.
-- [src/features/sandbox/client/sandboxRpc.ts](src/features/sandbox/client/sandboxRpc.ts) — the typed daemon client every contract call goes through.
+- [src/client/sandbox/sandboxRpc.ts](src/client/sandbox/sandboxRpc.ts) — the typed daemon client every contract call goes through.
 - [src/lib/useApi.ts](src/lib/useApi.ts) — the typed platform api client.
 - [src/extension-host/loader.ts](src/extension-host/loader.ts) — lists, gates and activates extensions.
 - [src/shell/WorkspaceShell.vue](src/shell/WorkspaceShell.vue) — the persistent shell, split by form factor.

@@ -55,6 +55,9 @@ export interface CapabilityCtx {
     readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
     readonly ensureIntentInstallable: (session: string) => Promise<void>;
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
+    // Spawns an ACP agent and initializes it, proving the command speaks ACP: the agent handler's apply and status. A
+    // runtime of its own (runtimes/acp/acp-probe.ts), above capabilities/, so it arrives through Services.
+    readonly probeAcpAgent: Services["probeAcpAgent"];
 }
 
 // A capability kind's behavior: apply is idempotent and streams progress, status is a fast non-blocking probe.
@@ -116,5 +119,6 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),
+        probeAcpAgent: services.probeAcpAgent,
     };
 };

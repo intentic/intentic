@@ -42,3 +42,39 @@ export const manifestFindings = (path, text) => {
             .map((dep) => `${path}:${lineOf(lines, field, dep)} ${manifest.name} names ${dep} in ${field}`),
     );
 };
+
+const EXTENSION = /^@intentic\/ext-[^/]+$/;
+
+// Outside _extensions, the packages that may depend on an extension at all, and through which import specifiers. An
+// extension is the end of the line: it stands on the SDK and nothing stands on it, apart from these two. The web app
+// compiles the UI extensions into its bundle (_editor/web/src/extension-host/builtins.ts), so it may name any of them.
+// The desktop app's files sidecar runs ONLYOFFICE's browser engine for folders on the user's own disk, with no sandbox,
+// through the one entry the extension exports for it: the engine is the extension's (about 3,000 lines it also runs in
+// a sandbox), so it stays there, and this keeps a second host from reaching past that entry or a third from appearing.
+export const CONSUMERS = new Map([
+    ["_editor/web", { extensions: undefined, specifiers: undefined }],
+    ["_devices/local-files", { extensions: new Set(["@intentic/ext-onlyoffice"]), specifiers: new Set(["@intentic/ext-onlyoffice/local-office"]) }],
+]);
+
+/** `path:line` findings for a manifest outside _extensions: every extension it names that CONSUMERS does not allow it. */
+export const consumerFindings = (path, text, dir = path.replace(/\/package\.json$/, "")) => {
+    const manifest = JSON.parse(text);
+    const lines = text.split("\n");
+    const allowed = CONSUMERS.get(dir);
+    return Object.keys(ALLOWED).flatMap((field) =>
+        Object.keys(manifest[field] ?? {})
+            .filter((dep) => EXTENSION.test(dep) && (allowed === undefined || (allowed.extensions !== undefined && !allowed.extensions.has(dep))))
+            .sort()
+            .map((dep) => `${path}:${lineOf(lines, field, dep)} ${manifest.name} names the extension ${dep} in ${field}`),
+    );
+};
+
+const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["'](@intentic\/ext-[^"']+)["']/g;
+
+/** `path:line` findings for a source file of a CONSUMERS package: every extension specifier outside its allowed set. */
+export const specifierFindings = (path, text, specifiers) =>
+    text
+        .split("\n")
+        .flatMap((line, at) =>
+            [...line.matchAll(SPECIFIER)].filter((match) => !specifiers.has(match[1])).map((match) => `${path}:${at + 1} imports ${match[1]}`),
+        );

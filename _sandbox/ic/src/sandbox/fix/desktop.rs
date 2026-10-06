@@ -37,18 +37,19 @@ pub fn start(facts: &DeviceFacts) -> Done {
 fn launch(facts: &DeviceFacts) -> std::result::Result<(), String> {
     match facts.os {
         Os::Windows => windows_launch(facts),
-        // `start` detaches it from this shell; run from a Windows folder, or cmd complains about the UNC path.
-        Os::Wsl => run_in(
-            "cmd.exe",
-            &[
-                "/c",
-                "start",
-                "",
-                r"C:\Program Files\Docker\Docker\Docker Desktop.exe",
-            ],
-            Some("/mnt/c"),
-            Duration::from_secs(30),
-        ),
+        // `start` detaches it from this shell; run from a Windows folder, or cmd complains about the UNC path. The
+        // launcher is wherever the shared discovery found it on the Windows side, not where a default install puts it.
+        Os::Wsl => {
+            let exe = super::host::windows_desktop_exe(Os::Wsl).ok_or_else(|| {
+                "Docker Desktop could not be found on the Windows side of this PC.".to_string()
+            })?;
+            run_in(
+                "cmd.exe",
+                &["/c", "start", "", &exe],
+                Some("/mnt/c"),
+                Duration::from_secs(30),
+            )
+        }
         Os::Macos => run("open", &["-a", "Docker"], Duration::from_secs(30)),
         Os::Linux => run(
             "systemctl",

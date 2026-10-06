@@ -63,8 +63,8 @@ import HostConnectDialog from "../../capabilities/connect/hosts/HostConnectDialo
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { isDefaultName } from "../../capabilities/model/tiles";
 import { machineGrants } from "../../capabilities/model/connections";
-import { useRole } from "../secrets/useRole";
-import { useSandbox } from "../client/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
 // One machine, as a page rather than an accordion body: who it is, what it wants from you, what this

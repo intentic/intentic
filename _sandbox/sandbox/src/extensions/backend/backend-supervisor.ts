@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { access, readFile } from "node:fs/promises";
 import type { ChildProcess } from "node:child_process";
+import { killGroup } from "../../workload/process-group.js";
+import { detachedStamp } from "../../seams/workload-stamp.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { createHash, randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -193,9 +195,12 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     let debounce: NodeJS.Timeout | undefined;
     let retry: NodeJS.Timeout | undefined;
 
+    // The host's whole process group, SIGKILL after a grace, as the service supervisor ends its children: a SIGTERM to
+    // the host alone left anything a backend started running, and a host wedged in an extension's code kept its port
+    // and memory beside the one respawned in its place.
     const kill = (): void => {
         if (host !== undefined) {
-            host.child.kill();
+            killGroup(host.child);
             host = undefined;
         }
     };
@@ -333,7 +338,11 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         };
         const command = hostCommand();
         const child = spawnAs({ class: "service" }, command.file, command.args, {
-            env: { ...process.env, [BACKEND_CONFIG_ENV]: JSON.stringify(config) },
+            // Stamped, since its own group is out of reach of the front's group kill: the boot sweep ends one an
+            // earlier daemon run left behind.
+            env: { ...process.env, ...detachedStamp("backend-host"), [BACKEND_CONFIG_ENV]: JSON.stringify(config) },
+            // A process group of its own, killable as a unit with whatever its backends started.
+            detached: true,
             stdio: ["ignore", "pipe", "pipe"],
         });
         const spawned: SpawnedHost = { child, port, hostToken, key };

@@ -2,9 +2,9 @@
 import { Button, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useSandbox } from "../client/useSandbox";
-import { daysLeft } from "../client/trashWindow";
-import { useSandboxTrash } from "../client/useSandboxTrash";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { daysLeft } from "./trashWindow";
+import { useSandboxTrash } from "./useSandboxTrash";
 
 // Sandboxes this account deleted that the platform still holds. Account-wide, not about the active box: it lives in
 // the hub rather than the rail's switcher so a run of test deletions never crowds the list of places to go.

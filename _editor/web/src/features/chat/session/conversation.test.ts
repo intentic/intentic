@@ -16,8 +16,8 @@ import {
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { watch } from "vue";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import type { SandboxCallContext } from "../../sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxCallContext } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
 import { planFeedback } from "./cardReplies";
@@ -55,7 +55,7 @@ const procedureOf =
     (name: string) =>
     (input: unknown, options?: CallOptions): never =>
         daemon(name, input, options) as never;
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agent: {
             run: procedureOf(`agent.run`),

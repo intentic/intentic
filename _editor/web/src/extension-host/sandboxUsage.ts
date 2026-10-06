@@ -1,5 +1,5 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../client/sandbox/sandboxRpc";
 
 // Counts which declared permissions.sandbox entry a call used, batched and reported to the daemon; lives in the browser
 // because the daemon can't attribute an authenticated request to an extension or entry.

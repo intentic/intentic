@@ -2,10 +2,9 @@ import type { User } from "@intentic/api-contract";
 import { freshImport, mocked, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
-// Plain ref stands in for useAuth's module singleton; the mock closure keeps re-imported analytics modules
-// (one evaluation per test) watching the same instance.
+// Plain ref stands in for useAuth's module singleton, handed to every boot as main.ts hands in the real one, so
+// re-imported analytics modules (one evaluation per test) watch the same instance.
 const user = ref<User | null>(null);
-jest.mock("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
 jest.mock("posthog-js", () => ({
     posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn(), alias: jest.fn() },
 }));
@@ -34,7 +33,7 @@ const bootAnalytics = async (posthogKey: string, desktop?: { version: string; in
     });
     const { posthog } = await import(`posthog-js`);
     const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
-    await analytics.initAnalytics(routePatternOf);
+    await analytics.initAnalytics(routePatternOf, user);
     return { posthog, analytics };
 };
 
@@ -190,7 +189,7 @@ describe(`the SDK loading after the first screen`, () => {
         stubGlobal(`window`, { env: environment });
         const { posthog } = await import(`posthog-js`);
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
-        const loading = analytics.initAnalytics(routePatternOf);
+        const loading = analytics.initAnalytics(routePatternOf, user);
         analytics.track(`sandbox_connected`, { first: true });
         expect(posthog.capture).not.toHaveBeenCalled();
 
@@ -206,7 +205,7 @@ describe(`the SDK loading after the first screen`, () => {
         stubGlobal(`window`, { env: environment });
         stubGlobal(`matchMedia`, touch);
         const { posthog } = await import(`posthog-js`);
-        await (await freshImport<typeof import("./analytics")>("./analytics", import.meta.url)).initAnalytics(routePatternOf);
+        await (await freshImport<typeof import("./analytics")>("./analytics", import.meta.url)).initAnalytics(routePatternOf, user);
         expect(mocked(posthog.init).mock.calls.at(-1)![1]!.session_recording!.blockSelector).toContain(`.chat-turns`);
 
         unstubAllGlobals();

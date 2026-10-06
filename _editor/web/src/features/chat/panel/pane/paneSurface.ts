@@ -6,7 +6,7 @@ import { summonChat } from "../../run/summon";
 import { agentTabOf } from "../useChat-reveal";
 import { snapshotTab } from "../../tabs/tabSnapshot";
 import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
-import { navigateInApp } from "../../../../shell/window/mainWindow";
+import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { openWorkTerminal } from "../../../terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../../../workspace/files/refs/openFileRef";
 import { picture } from "../../../workspace/home/thumbnails";

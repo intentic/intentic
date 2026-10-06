@@ -7,6 +7,7 @@ import { repoRoot } from "@intentic/constants/node";
 import type { Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
+import { environmentSourcesOf } from "../environment-composers.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { readEnvironmentContents } from "./contents.js";
 import { customPath, proposalPath } from "./environment.js";
@@ -23,8 +24,10 @@ const execFileAsync = promisify(execFile);
 // The expected version is whatever the `node` on PATH answers, which is the binary the probe reads, not the runner's own.
 const nodeVersion = async (): Promise<string> => (await execFileAsync("node", ["--version"])).stdout.trim().slice(1);
 
-const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Services =>
-    unstubbed<Services>("services", {
+const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Services => {
+    const services: Services = unstubbed<Services>("services", {
+        // The real fragment sources over these very services, as composition.ts fills the port.
+        environmentSources: environmentSourcesOf(() => services),
         // The real module list: which packs a connected provider wants is each module's own answer.
         providerModules: PROVIDER_MODULES,
         config: unstubbed<Services["config"]>("config", {
@@ -58,6 +61,8 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
         authRoot: mkdtempSync(join(tmpdir(), "contents-auth-")),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
+    return services;
+};
 
 // A block whose command is guaranteed present (node) and one whose command cannot be.
 const CUSTOM = `# ---- node-tools ----

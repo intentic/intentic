@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { formatTokens, Notice, Row, RowGroup, RowNote, Verdict } from "@intentic/ui";
+import { formatTokens, Notice, Row, RowGroup, RowNote, timeAgo, Verdict } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { relativeTime } from "../../../chat/models/catalog";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { allCleanerIds, cleanerOptions, savedByCleaner } from "../../usage/savingsChart";
@@ -113,7 +112,7 @@ const savingsVerdict = computed(() => {
         detail: `~${formatTokens(input.rawTokens)} → ~${formatTokens(input.emittedTokens)} tokens over ${input.commands} commands${
             measured === undefined ? `` : ` · ${measured}% measured against the holdout`
         }`,
-        evidence: input.updatedAt === undefined ? `` : `last command ${relativeTime(input.updatedAt)}`,
+        evidence: input.updatedAt === undefined ? `` : `last command ${timeAgo(input.updatedAt, { days: true })}`,
     } as const;
 });
 

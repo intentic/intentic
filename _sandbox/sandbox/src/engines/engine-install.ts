@@ -48,7 +48,7 @@ const npmInstall = async (descriptor: EngineDescriptor, version: string, prefix:
 
 // The one engine published as a release asset, not npm. Downloaded whole, unpacked, and reduced to just the named
 // binary; the archive's configs and docs would otherwise sit in the store forever.
-const releaseInstall = async (descriptor: EngineDescriptor, version: string, prefix: string): Promise<void> => {
+export const releaseInstall = async (descriptor: EngineDescriptor, version: string, prefix: string): Promise<void> => {
     if (descriptor.source.kind !== "github-release") {
         throw new Error(`${descriptor.id} is not a release engine`);
     }
@@ -62,7 +62,8 @@ const releaseInstall = async (descriptor: EngineDescriptor, version: string, pre
     await mkdir(unpack, { recursive: true });
     const archive = join(prefix, "asset.tar.gz");
     await writeFile(archive, Buffer.from(await response.arrayBuffer()));
-    await execFileAsync("tar", ["-xzf", archive, "-C", unpack], { timeout: INSTALL_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
+    // Never as the archive's recorded owners: the daemon runs as root, and a release tarball's uid means nothing here.
+    await execFileAsync("tar", ["-xzf", archive, "--no-same-owner", "-C", unpack], { timeout: INSTALL_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
     const found = await findFile(unpack, binary);
     if (found === undefined) {
         throw new Error(`${asset(version)} contains no ${binary}`);

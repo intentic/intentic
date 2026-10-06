@@ -1,7 +1,7 @@
 // Pins EnvironmentContents' shape, not the inventory (contents.integration.test.ts has that): staples as a scannable
 // strip, a closed row costing one line, attribution said once.
 import "@intentic/testing/dom";
-import type { EnvironmentItem } from "@intentic/api-contract";
+import type { EnvironmentItem } from "@intentic/sandbox-contract";
 import { type App, createApp, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { IconStub } from "@intentic/ui/testing";

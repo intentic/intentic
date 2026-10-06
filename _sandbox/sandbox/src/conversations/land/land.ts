@@ -1,17 +1,17 @@
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "../../git/changes/changes-porcelain.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
-import { branchSha, mainBranchOf } from "./agent-refs.js";
+import { branchSha, mainBranchOf } from "../../git/agent-refs.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -47,7 +47,7 @@ const FAILURE_MAX_CHARS = 1_000;
 // A land that threw rather than refused, as the card keeps it (AgentSummary.landFailure): its words, and `unlinked` when
 // the checkout lost its link to the workspace, the one kind the board says in its own words.
 export const landFailureOf = (cause: unknown): { readonly reason: string; readonly code?: string } => {
-    const said = cause instanceof Error ? cause.message : String(cause);
+    const said = errorMessage(cause);
     const reason = said.length > FAILURE_MAX_CHARS ? `${said.slice(0, FAILURE_MAX_CHARS - 1)}…` : said;
     return cause instanceof UnlinkedCheckoutError ? { reason, code: "unlinked" } : { reason };
 };
@@ -77,7 +77,7 @@ const applies = async (main: string, patch: string, direction: "forward" | "reve
 // What git said, off the runner's rejection; the message itself when the throw carries no stderr.
 const stderrOf = (error: unknown): string => {
     const stderr = (error as { stderr?: unknown }).stderr;
-    return typeof stderr === "string" && stderr !== "" ? stderr : error instanceof Error ? error.message : String(error);
+    return typeof stderr === "string" && stderr !== "" ? stderr : errorMessage(error);
 };
 
 // Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output

@@ -35,7 +35,7 @@ jest.mock("../fleet/useAgents", () => ({
     }),
 }));
 jest.mock("../fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
-jest.mock("../../../shell/notifications/notifications", () => ({
+jest.mock("../../../workbench/notifications/notifications", () => ({
     useNotifications: () => ({
         say: (message: string) => stub.said.push(message),
     }),

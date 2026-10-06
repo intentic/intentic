@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { z } from "zod";
 import { nsenterPrefix, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { AGENT_SESSION_ENV } from "../../system/boot/container-owner.js";
@@ -11,8 +11,9 @@ import { redirectCommand } from "../../conversations/worktrees/worktree-redirect
 import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
+import { isNoTmuxTarget } from "../../terminal/tmux-server.js";
 import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
-import { type HeavyCommands, heavyEnvPrefix, QUEUE_RUN_BIN, queueRunEnabled } from "../../system/resources/heavy-commands.js";
+import { type HeavyCommands, heavyEnvPrefix, QUEUE_RUN_BIN, queueRunEnabled } from "../../workload/heavy-commands.js";
 import { shellPrefix } from "../../workload/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import {
@@ -40,7 +41,7 @@ import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 export const tmuxRunEnabled = (): boolean => process.env["INTENTIC_AGENT_TMUX"] !== "0" && existsSync(TMUX_RUN_BIN);
 
 // A live (non-dead) pane means a command has not returned: a background job, a lingering build, or the user typing. No
-// session or no tmux server means not busy; both are `list-panes` exiting non-zero.
+// session or no tmux server means not busy; any other failed listing rejects, since it answered neither way.
 export const agentShellBusy = async (sessionId: string): Promise<boolean> => {
     const session = agentSessionName(sessionId);
     if (session === undefined) {
@@ -49,8 +50,11 @@ export const agentShellBusy = async (sessionId: string): Promise<boolean> => {
     try {
         const { stdout } = await forkedExec("tmux", ["list-panes", "-t", `=${session}`, "-F", "#{pane_dead}"]);
         return stdout.split("\n").some((pane) => pane.trim() === "0");
-    } catch {
-        return false;
+    } catch (error) {
+        if (isNoTmuxTarget(error)) {
+            return false;
+        }
+        throw error;
     }
 };
 
@@ -95,7 +99,7 @@ export const NO_PROMPTS = "env npm_config_yes=false GIT_TERMINAL_PROMPT=0 ";
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
 export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
 
-// Heavy programs are judged as they start, by what they are (system/resources/heavy-commands.ts heavyEnvPrefix): the
+// Heavy programs are judged as they start, by what they are (workload/heavy-commands.ts heavyEnvPrefix): the
 // line only carries the table down. Queueing is only on where queue-run is, and a program that matches keeps its
 // toolchain class whether or not it queues.
 const queueRunOf = (): string | undefined => (queueRunEnabled() ? QUEUE_RUN_BIN : undefined);

@@ -1,6 +1,6 @@
 import { usageContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { claimLimitReset, readLimitReset } from "./claude-limit-reset.js";
+import { claimLimitReset, readLimitReset } from "../runtimes/claude/claude-limit-reset.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 

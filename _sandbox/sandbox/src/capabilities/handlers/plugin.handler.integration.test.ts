@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract";
-import { gitFullHead, gitHead } from "@intentic/scaffold";
+import { gitFullHead, gitHead } from "@intentic/base/git";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import {
     makeWorkspaceDir,

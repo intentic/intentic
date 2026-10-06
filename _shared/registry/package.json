@@ -38,6 +38,7 @@
         "test:watch": "suites --watch"
     },
     "dependencies": {
+        "@intentic/extension-manifest": "workspace:*",
         "tslib": "catalog:",
         "zod": "catalog:"
     },

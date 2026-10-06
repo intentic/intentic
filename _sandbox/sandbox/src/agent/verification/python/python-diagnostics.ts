@@ -1,9 +1,8 @@
-import { spawn } from "node:child_process";
 import { access, constants } from "node:fs/promises";
-import os from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import type { CheckPlacement } from "@intentic/lsp/client";
-import { onPath } from "../../../system/boot/on-path.js";
+import { runCheck } from "../../../workload/run-check.js";
+import { onPath } from "../../../image/on-path.js";
 import type { DiagAnswer, DiagRequest } from "../agent-diagnostics.js";
 
 // Python half of the same post-edit-check seam (DiagRunner), a different pair of tools. ruff answers parsing and
@@ -25,39 +24,26 @@ interface RunOutcome {
     readonly answered: boolean;
 }
 
-// One tool run, demoted and bounded, entered into the turn's own namespace when there is one, the same placement dance
-// as @intentic/lsp's checker.ts.
-const run = (command: string, args: readonly string[], cwd: string, placement: CheckPlacement | undefined): Promise<RunOutcome> =>
-    new Promise((settle) => {
-        const entered = placement?.enter("/usr/bin/env", ["-C", cwd, command, ...args]);
-        const spawned =
-            entered === undefined ? { command, args, options: { cwd } } : { command: entered.command, args: entered.args, options: {} };
-        const child = spawn(spawned.command, [...spawned.args], { ...spawned.options, stdio: ["ignore", "pipe", "pipe"] });
-        if (child.pid !== undefined) {
-            try {
-                os.setPriority(child.pid, 10);
-            } catch {
-                // EPERM/ESRCH: the check just runs undemoted.
-            }
-        }
-        let stdout = "";
-        child.stdout.on("data", (chunk: Buffer) => {
-            stdout += String(chunk);
-        });
-        // Read and dropped: stderr is noise, and left unread it fills the pipe buffer and blocks a chatty run forever.
-        child.stderr.resume();
-        const timer = setTimeout(() => {
-            child.kill("SIGKILL");
-        }, RUN_TIMEOUT_MS);
-        child.on("error", () => {
-            clearTimeout(timer);
-            settle({ stdout, answered: false });
-        });
-        child.on("close", (_code, signal) => {
-            clearTimeout(timer);
-            settle({ stdout, answered: signal === null });
-        });
+// What one tool may print. pyright's JSON for one file is kilobytes; a run past this is not an answer to read.
+const MAX_STDOUT_BYTES = 16 * 1024 * 1024;
+
+// One tool run, demoted (an agent's command's class) and bounded, entered into the turn's own namespace when there is
+// one, the same placement dance as @intentic/lsp's checker.ts. stderr is read and dropped: it is noise, and left
+// unread it would fill the pipe and block a chatty run.
+const run = async (command: string, args: readonly string[], cwd: string, placement: CheckPlacement | undefined): Promise<RunOutcome> => {
+    const entered = placement?.enter("/usr/bin/env", ["-C", cwd, command, ...args]);
+    const ran = await runCheck({
+        argv: entered === undefined ? [command, ...args] : [entered.command, ...entered.args],
+        ...(entered === undefined ? { cwd } : {}),
+        timeoutMs: RUN_TIMEOUT_MS,
+        workload: { class: "command" },
+        kind: "python-check",
+        captureBytes: MAX_STDOUT_BYTES,
+        killOnOverflow: true,
     });
+    // A non-zero exit is itself an answer; only a spawn failure, a kill or a signal is not.
+    return { stdout: ran.stdout, answered: ran.spawnError === undefined && ran.ended === undefined && ran.exitSignal === undefined };
+};
 
 // The nearest environment above a file, walked the way modulesNear does. Checks the interpreter, not just the
 // directory, since a `.venv` whose `bin/python` is gone resolves nothing.

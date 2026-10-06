@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract";
-import { briefDuration } from "@intentic/base/format";
-import { type IconName, ui } from "@intentic/ui";
-import { errorMessage, useNow } from "@intentic/ui/async";
+import { formatElapsed, type IconName, ui } from "@intentic/ui";
+import { messageOr, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { formatElapsed } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { portTargetId } from "../../../preview/previewModel";
 import { openPreviewBeside } from "../../../preview/previewSurface";
-import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
 import { usePaneView } from "../useChat-view";
@@ -59,12 +57,12 @@ interface Row {
 const watchOf = (job: AgentJob): AgentWatch | undefined => agent.value?.watches?.find((watch) => watch.id === job.watch);
 
 const jobDetail = (job: AgentJob): string => {
-    const elapsed = formatElapsed(job.startedAt, now.value);
+    const elapsed = formatElapsed((now.value - job.startedAt) / 1000);
     if (job.stoppedBy !== undefined) {
         return t(`chat.chatLeftRunning.stopping`);
     }
     if (job.inputWait !== undefined) {
-        return t(`chat.chatLeftRunning.atPrompt`, { elapsed: formatElapsed(job.inputWait.since, now.value), program: job.inputWait.program });
+        return t(`chat.chatLeftRunning.atPrompt`, { elapsed: formatElapsed((now.value - job.inputWait.since) / 1000), program: job.inputWait.program });
     }
     if (job.handed === true) {
         return t(`chat.chatLeftRunning.servedOn`, { ports: portsLine(job.ports ?? []), elapsed });
@@ -72,7 +70,7 @@ const jobDetail = (job: AgentJob): string => {
     const watch = watchOf(job);
     return watch === undefined
         ? t(`chat.chatLeftRunning.running`, { elapsed })
-        : t(`chat.chatLeftRunning.wakesOnExit`, { elapsed, left: formatElapsed(now.value, watch.deadlineAt) });
+        : t(`chat.chatLeftRunning.wakesOnExit`, { elapsed, left: formatElapsed((watch.deadlineAt - now.value) / 1000) });
 };
 
 const rows = computed((): readonly Row[] => [
@@ -90,7 +88,7 @@ const rows = computed((): readonly Row[] => [
         icon: `eye` as IconName,
         spin: false,
         label: watch.note,
-        detail: t(`chat.chatLeftRunning.watchLine`, { interval: briefDuration(watch.intervalSeconds), left: formatElapsed(now.value, watch.deadlineAt) }),
+        detail: t(`chat.chatLeftRunning.watchLine`, { interval: formatElapsed(watch.intervalSeconds), left: formatElapsed((watch.deadlineAt - now.value) / 1000) }),
         warn: false,
         watch,
     })),
@@ -105,7 +103,7 @@ const press = async (key: string, act: () => Promise<void>): Promise<void> => {
     try {
         await act();
     } catch (error) {
-        refused.value = errorMessage(error, t(`chat.chatLeftRunning.stopFailed`));
+        refused.value = messageOr(error, t(`chat.chatLeftRunning.stopFailed`));
     } finally {
         pressing.value = undefined;
     }

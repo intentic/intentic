@@ -13,7 +13,9 @@
             "@intentic/ui/count-badge": ["../../_editor/ui/src/components/feedback/countBadge.ts"],
             "@intentic/ui/icon": ["../../_editor/ui/src/components/primitives/Icon.vue"],
             "@intentic/ui/markdown-view": ["../../_editor/ui/src/components/markdown/Markdown.vue"],
+            "@intentic/ui/markdown-parts": ["../../_editor/ui/src/components/markdown/MarkdownParts.vue"],
             "@intentic/ui/async": ["../../_editor/ui/src/lib/async.ts"],
+            "@intentic/ui/clipboard": ["../../_editor/ui/src/lib/clipboard.ts"],
             "@intentic/ui/loading-reveal": ["../../_editor/ui/src/composables/loadingReveal.ts"],
             "@intentic/ui/skeleton-imprint": ["../../_editor/ui/src/lib/skeletonImprint.ts"],
             "@intentic/ui/skeleton-store": ["../../_editor/ui/src/lib/skeletonStore.ts"],
@@ -33,6 +35,7 @@
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
             "@intentic/ui/theme": ["../../_editor/ui/src/composables/useTheme.ts"],
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
+            "@intentic/ui/event-target": ["../../_editor/ui/src/lib/eventTarget.ts"],
             "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"]
         }
     },

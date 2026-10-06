@@ -3,7 +3,7 @@ import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../app/projectScope";
-import { workspaceAgent } from "./workspaceScope";
+import { workspaceAgent } from "../../../app/workspaceScope";
 
 // Two-way syncs the open file (and `?agent` scope) between the URL and the tabs singleton, so reload and
 // back/forward work; only file tabs are addressable. `route.params.path` is string[] or "" when bare; writes need an

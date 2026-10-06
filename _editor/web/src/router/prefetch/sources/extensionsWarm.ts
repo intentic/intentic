@@ -1,5 +1,5 @@
 import type { HostQuery } from "@intentic/extension-api";
-import { registeredViews } from "../../../core-views/registry";
+import { registeredViews } from "../../../workbench/views/registry";
 import type { WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 

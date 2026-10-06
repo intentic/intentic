@@ -1,5 +1,5 @@
 import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 
 // Branch list/create/delete over a real repo. Listing is one `for-each-ref` call that never fails for a branch with no
 // upstream (unlike `rev-list @{upstream}...`); checkout lives in changes-commits.ts with the other HEAD-movers.

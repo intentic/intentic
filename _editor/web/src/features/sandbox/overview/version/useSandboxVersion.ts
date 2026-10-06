@@ -1,11 +1,11 @@
 import { computed, type Ref } from "vue";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
-import { rpcQuery } from "../../client/rpcQuery";
-import { sandboxRpc } from "../../client/sandboxRpc";
-import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useEnvironment } from "../../environment/useEnvironment";
-import { supportsRoute } from "../useDaemonRoutes";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 
 // Sandbox daemon's self-report (`system.info`): running `version`, and once checked, `latest` and `updateAvailable`. One shared
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never

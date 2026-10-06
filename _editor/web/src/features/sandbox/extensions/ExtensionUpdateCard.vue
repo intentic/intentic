@@ -2,13 +2,13 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
 import { Button, timeAgo, vAction, ui, SegmentedControl, StatusBadge } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import ActionLink from "../../../components/ActionLink.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useExtensions } from "../../extensions/useExtensions";
-import { useHubWork } from "../../../shell/hub/hubWork";
+import { useHubWork } from "../../../workbench/hub/hubWork";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { router } from "../../../router";
 import { updateBrief } from "./extensionBrief";
@@ -51,7 +51,7 @@ const act = async (action: () => Promise<void>): Promise<void> => {
     try {
         await action();
     } catch (error) {
-        failure.value = errorMessage(error, `That didn't work.`);
+        failure.value = messageOr(error, `That didn't work.`);
     } finally {
         busy.value = false;
     }

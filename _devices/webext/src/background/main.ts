@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { parseWebextPairingCode } from "@intentic/sandbox-contract/webext";
+import { redeemPairing } from "./enroll.js";
 import { closeLink, ensureLink, linkState } from "./link.js";
 import type { PopupCommand, PopupState } from "./messages.js";
 import { store } from "./store.js";
@@ -74,19 +75,20 @@ const pair = async (code: string): Promise<{ ok: boolean; message: string }> => 
     if (pairing === undefined) {
         return { ok: false, message: `That is not a connection code from a sandbox. Copy it again from the browser's capability card.` };
     }
-    const response = await fetch(`${pairing.url.replace(/\/$/, "")}/system/webext/enroll`, {
-        method: "POST",
-        headers: { "x-intentic-pair": pairing.token },
-    }).catch(() => undefined);
-    if (response === undefined) {
-        return { ok: false, message: `Could not reach ${pairing.url}. Is the sandbox running?` };
-    }
-    if (!response.ok) {
-        return { ok: false, message: `That code has expired. Click Connect again in your sandbox for a fresh one.` };
-    }
-    const enrolled = (await response.json()) as { token?: string };
-    if (typeof enrolled.token !== "string") {
-        return { ok: false, message: `The sandbox answered something this extension could not read.` };
+    const enrolled = await redeemPairing(pairing);
+    switch (enrolled.kind) {
+        case "enrolled":
+            break;
+        case "unreachable":
+            return { ok: false, message: `Could not reach ${pairing.url}. Is the sandbox running?` };
+        case "starting":
+            return { ok: false, message: `The sandbox is still starting (HTTP ${enrolled.status}). Paste the same code again in a moment.` };
+        case "expired":
+            return { ok: false, message: `That code has expired. Click Connect again in your sandbox for a fresh one.` };
+        case "refused":
+            return { ok: false, message: `The sandbox refused the code (HTTP ${enrolled.status}). Click Connect again in your sandbox for a fresh one.` };
+        case "unreadable":
+            return { ok: false, message: `The sandbox answered something this extension could not read.` };
     }
     await store.setSandbox({ url: pairing.url, token: enrolled.token });
     await store.setInbox(undefined);

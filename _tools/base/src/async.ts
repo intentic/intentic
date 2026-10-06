@@ -352,3 +352,63 @@ export const whenAborted = (signal: AbortSignal | undefined, handler: () => void
     signal.addEventListener("abort", handler, { once: true });
     return (): void => signal.removeEventListener("abort", handler);
 };
+
+export interface WatchOptions {
+    readonly signal?: AbortSignal | undefined;
+    // Epoch ms the watch ends by itself, even if nobody aborts it.
+    readonly until: number;
+    // However far away `until` is, the watch never outlives this many ms from when its reader starts: a forgotten one
+    // must not hold what it watches (a port, a tab listener) for as long as a caller happened to ask.
+    readonly longestMs: number;
+    readonly now?: () => number;
+}
+
+export interface WatchQueue<T> {
+    // Hands a value to the reader; queued, in order, however slow the reader is.
+    readonly push: (value: T) => void;
+    // Every value pushed, until the signal aborts or the deadline passes; whatever was pushed before that is still
+    // yielded first. One reader.
+    readonly drain: () => AsyncGenerator<T>;
+}
+
+// Turns a watch that reports through callbacks (an HTTP listener, a browser event) into a stream with a deadline, the
+// shape both loopback-catch peers answer with.
+export const watchQueue = <T>({ signal, until, longestMs, now = Date.now }: WatchOptions): WatchQueue<T> => {
+    const queue: T[] = [];
+    let wake: (() => void) | undefined;
+    let over = false;
+    const nudge = (): void => {
+        const resume = wake;
+        wake = undefined;
+        resume?.();
+    };
+    const end = (): void => {
+        over = true;
+        nudge();
+    };
+    return {
+        push: (value) => {
+            queue.push(value);
+            nudge();
+        },
+        drain: async function* () {
+            const deadline = setTimeout(end, Math.max(0, Math.min(until - now(), longestMs)));
+            const unsubscribe = whenAborted(signal, end);
+            try {
+                for (;;) {
+                    if (queue.length > 0) {
+                        yield queue.shift() as T;
+                        continue;
+                    }
+                    if (over) {
+                        break;
+                    }
+                    await new Promise<void>((resolve) => (wake = resolve));
+                }
+            } finally {
+                clearTimeout(deadline);
+                unsubscribe();
+            }
+        },
+    };
+};

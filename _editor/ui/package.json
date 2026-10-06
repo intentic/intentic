@@ -22,6 +22,10 @@
             "types": "./src/components/markdown/Markdown.vue",
             "default": "./src/components/markdown/Markdown.vue"
         },
+        "./markdown-parts": {
+            "types": "./src/components/markdown/MarkdownParts.vue",
+            "default": "./src/components/markdown/MarkdownParts.vue"
+        },
         "./markdown": {
             "types": "./src/markdown/index.ts",
             "default": "./src/markdown/index.ts"
@@ -69,6 +73,10 @@
         "./time": {
             "types": "./src/lib/timeWindow.ts",
             "default": "./src/lib/timeWindow.ts"
+        },
+        "./event-target": {
+            "types": "./src/lib/eventTarget.ts",
+            "default": "./src/lib/eventTarget.ts"
         },
         "./highlighter": {
             "types": "./src/composables/useHighlighter.ts",
@@ -127,6 +135,10 @@
             "default": "./src/composables/useTheme.ts"
         },
         "./styles/*": "./src/styles/*",
+        "./clipboard": {
+            "types": "./src/lib/clipboard.ts",
+            "default": "./src/lib/clipboard.ts"
+        },
         "./async": {
             "types": "./src/lib/async.ts",
             "default": "./src/lib/async.ts"
@@ -171,6 +183,7 @@
         "@dagrejs/dagre": "catalog:",
         "@primeuix/themes": "catalog:",
         "@intentic/code-read": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "@shikijs/langs": "catalog:",
         "@shikijs/themes": "catalog:",
         "@vue-flow/core": "catalog:",

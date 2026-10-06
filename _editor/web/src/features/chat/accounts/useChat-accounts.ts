@@ -9,7 +9,7 @@ import {
     type UsageAccount,
 } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
@@ -18,8 +18,8 @@ import { rememberedProviderFor, turnDefaults } from "../run/turnDefaults";
 import { accessKnown, firstReadyProvider, hasSignIn, providerReadyOn } from "../session/access";
 import { conversations } from "../tabs/useChat-tabs";
 import { loadActiveProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "../models/useChat-catalog";
-import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // An unseeded provider key (an ACP agent, which owns its own credentials) simply has no account list.
 export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
@@ -294,7 +294,7 @@ export const disconnect = async (id: string): Promise<void> => {
         await sandboxRpc.accounts.disconnect({ provider: target as NativeProvider, id });
     } catch (caught) {
         if (current()) {
-            error.value = errorMessage(caught, `Couldn't disconnect that account.`);
+            error.value = messageOr(caught, `Couldn't disconnect that account.`);
         }
         return;
     } finally {

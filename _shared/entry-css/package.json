@@ -4,9 +4,11 @@
     "private": true,
     "type": "module",
     "exports": {
-        "./entry.css": "./entry.css"
+        "./entry.css": "./entry.css",
+        "./house.css": "./house.css"
     },
     "files": [
-        "entry.css"
+        "entry.css",
+        "house.css"
     ]
 }

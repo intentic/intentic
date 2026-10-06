@@ -1,7 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
-import { useLayout } from "../../shell/window/useLayout";
-import { listTerminals, refreshTerminals, removeTerminal } from "./terminalsQuery";
+import { useLayout } from "../../workbench/window/useLayout";
+import { killTerminal, listTerminals } from "./terminalsQuery";
 import type { TerminalTabsSource } from "./useTerminal";
 import { uuid } from "../../lib/uuid";
 
@@ -12,16 +11,13 @@ import { uuid } from "../../lib/uuid";
 export const globalTerminalSource: TerminalTabsSource = {
     list: listTerminals,
     create: () => `web-${uuid().slice(0, 8)}`,
-    // Removes the row immediately so the badge falls with the tab; refetch in `finally` restores it if the DELETE
-    // actually failed. Logged only: the tab's already gone from the strip, and there is no error surface beyond that.
+    // Logged only: the tab's already gone from the strip, and there is no error surface beyond that; the shared list
+    // puts a refused kill's row back (killTerminal).
     kill: async (name) => {
-        removeTerminal(name);
         try {
-            await sandboxRpc.system.killTerminal({ name });
+            await killTerminal(name);
         } catch (error) {
             console.error(`terminal ${name}: kill failed`, error);
-        } finally {
-            await refreshTerminals();
         }
     },
 };

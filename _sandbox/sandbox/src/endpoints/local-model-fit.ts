@@ -10,7 +10,7 @@ import {
     type LocalModelGpu,
     type LocalModelPrefetch,
 } from "@intentic/sandbox-contract";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { opt } from "../opt.js";
 import { localModelWeightsPath } from "./local-model.js";
 import { llamaServerProcesses, readLoadReport } from "./local-model-load.js";

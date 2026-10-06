@@ -15,17 +15,17 @@ import {
 import {
     connectWithRetry,
     createProviders,
-    createSshExecutor,
     createSshProbe,
     hostTarget,
     readinessDiagnostics,
     type SshTarget,
 } from "@intentic/providers";
-import { buildCommand, type CommandContext, numberParser } from "@stricli/core";
+import { buildCommand, type CommandContext } from "@stricli/core";
 import { collectSecretUsage, type DesiredStateGraph, subgraph } from "@intentic/graph";
 import { loadConfig } from "../env.config.js";
 import { ACCESS_FILE, ARTIFACT_PATH, LAST_APPLIED_FILE, loadEnvFile, readArtifact, STATUS_FILE, writeStatus } from "../lib/artifact.js";
-import { createKnownHostsStore } from "../lib/known-hosts.js";
+import { countAtLeast } from "../lib/flags.js";
+import { pinnedSshExecutor } from "../lib/known-hosts.js";
 import { createOutput, createRedactor, teeOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 import { pendingBlock, resourceTable, retiredBlock, scanGapBlock, unownedBlock } from "../lib/tables.js";
@@ -73,7 +73,7 @@ export const apply = buildCommand<ApplyFlags>({
             artifact: { kind: "parsed", parse: String, optional: true, brief: `Path to the artifact (default: ${ARTIFACT_PATH})` },
             maxIterations: {
                 kind: "parsed",
-                parse: numberParser,
+                parse: countAtLeast(1),
                 optional: true,
                 brief: `Max reconcile iterations (default ${DEFAULT_MAX_ITERATIONS})`,
             },
@@ -115,7 +115,7 @@ export const apply = buildCommand<ApplyFlags>({
             .map((id) => id.trim())
             .filter((id) => id !== "");
         const graph = targetIds === undefined ? full : subgraph(full, targetIds);
-        const ssh = createSshExecutor(createKnownHostsStore(dir));
+        const ssh = pinnedSshExecutor(dir);
         // The baseline drives host-migration detection and prune; an unreadable one stops the run here, before any change.
         const baselinePath = flags.previous ?? join(dir, LAST_APPLIED_FILE);
         const lastApplied = join(dir, LAST_APPLIED_FILE);

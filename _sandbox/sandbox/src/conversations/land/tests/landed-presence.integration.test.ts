@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { defaultGit } from "@intentic/scaffold";
+import { defaultGit } from "@intentic/base/git";
 import { ensureRootRepo } from "../../../git/remote/root-repo.js";
 import { discardPaths } from "../../../git/changes/changes-index.js";
 import { createLogger } from "../../../logger.js";

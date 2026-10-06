@@ -35,7 +35,7 @@ webq crawl https://docs.example.com --max-pages 30
 - [src/app.ts](src/app.ts) — the commands and the `--help` text an agent reads.
 - [src/lib/page.ts](src/lib/page.ts) — one URL to one `PageResult`: cache, static fetch, browser fallback, notes.
 - [src/lib/prune.ts](src/lib/prune.ts) — scores elements and drops navigation and page chrome.
-- [src/lib/markdown.ts](src/lib/markdown.ts) — DOM to markdown with absolute links.
+- [src/lib/markdown.ts](src/lib/markdown.ts) — DOM to markdown with absolute links, and `markdownTable`, the table writer fileq shares.
 - [src/lib/crawl.ts](src/lib/crawl.ts) — bounded crawl, breadth-first or query-steered, with skip counts.
 - [src/cli.integration.test.ts](src/cli.integration.test.ts) — the CLI end to end against a loopback fixture site.
 

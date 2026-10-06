@@ -11,6 +11,12 @@ describe("limitOf", () => {
         expect(limitOf(`reddit`)).toBeUndefined();
         expect(limitOf(`some-new-network`)).toBeUndefined();
     });
+
+    it("counts a WhatsApp post against the linked-device ceiling the gateway sends at, not the Business API's", () => {
+        // Was 4,096 here while the gateway sent up to 60,000: an inbox that refused what the gateway would have posted.
+        expect(limitOf(`whatsapp`)).toBe(65_536);
+        expect(limitOf(`constructor`)).toBeUndefined();
+    });
 });
 
 describe("postsATitle", () => {

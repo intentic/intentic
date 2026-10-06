@@ -9,7 +9,7 @@ import { type App, createApp, h, ref } from "vue";
 import type { ChatMessage } from "../transcript";
 
 // The viewer, one of the card's approvers; the card reads nothing else of the session.
-jest.mock("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: ref(`bob@corp.com`) }) }));
+jest.mock("../../../../client/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: ref(`bob@corp.com`) }) }));
 
 const { default: ChatCredentialCard } = await import("./ChatCredentialCard.vue");
 

@@ -1,5 +1,4 @@
-import type { PanelSummary } from "@intentic/api-contract";
-import type { PortSummary, PublicFile } from "@intentic/sandbox-contract";
+import type { PortSummary, PublicFile, PanelSummary } from "@intentic/sandbox-contract";
 import {
     addressTarget,
     appTargets,

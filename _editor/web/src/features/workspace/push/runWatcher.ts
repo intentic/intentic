@@ -1,7 +1,7 @@
 import { type CommandRun, followCommandRun } from "@intentic/sandbox-contract";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, type ComputedRef, ref } from "vue";
-import { importOrReload } from "../../../router/staleChunk";
+import { importOrReload } from "../../../lib/staleChunk";
 
 // Watches a command the daemon runs on click (a push, usePushRun.ts): start it, follow it to a verdict, stop it.
 //
@@ -83,7 +83,7 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
         try {
             await source.start();
         } catch (cause) {
-            error.value = errorMessage(cause, `Could not start the ${source.subject}.`);
+            error.value = messageOr(cause, `Could not start the ${source.subject}.`);
             run.value = source.idle;
             return run.value;
         }
@@ -102,7 +102,7 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
                 }
             },
             onError: (cause) => {
-                error.value = errorMessage(cause, `Lost contact with the ${source.subject}.`);
+                error.value = messageOr(cause, `Lost contact with the ${source.subject}.`);
             },
         });
         if (following === follow) {
@@ -116,7 +116,7 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
         try {
             await source.cancel();
         } catch (cause) {
-            error.value = errorMessage(cause, `Could not stop the ${source.subject}.`);
+            error.value = messageOr(cause, `Could not stop the ${source.subject}.`);
         }
     };
 

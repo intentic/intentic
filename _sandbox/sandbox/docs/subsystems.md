@@ -58,6 +58,9 @@ Subsystems that react to each other never import each other:
   which pushes them over `/events` beside the file watcher and the git ref watcher.
 - `seams/turn-starter.ts` is how automations, loops, approvals, CI fixes, subagents and runners start or drive a turn;
   composition hands them `agent/run/turn/turn-doors.ts`.
+- `seams/environment-sources.ts` is where the environment overlay's contributed fragments come from (a capability's
+  handler, an extension's checkout, a connected provider's packs); composition fills it from
+  `extensions/fragment-sources.ts` and `agent/providers/provider-packs.ts`, which sit above `environment/`.
 
 ## Who spoke a row
 
@@ -132,7 +135,7 @@ MCP bridge. The owner's computers (`hosts/`), the browser extension (`webext/`),
 runners (`runners/`) are its four users; a bearer route admits one through `bearerPeer`. The phone door is the one that
 speaks plain JSON-RPC rather than oRPC frames (`phones/json-rpc-link.ts`, behind the same typed client), and the one
 whose peer can be woken: a tool call to a phone holding no socket pushes it awake through the platform's relay
-(`phones/phone-wake.ts`) and waits for it to dial in. Desktop sync (`hosts/desktop-sync.ts`) keeps its own token store,
+(`phones/phone-wake.ts`) and waits for it to dial in. Desktop sync (`peers/desktop-sync.ts`) keeps its own token store,
 but answers a store it cannot read the way the doors do: unavailable, never unauthorized.
 
 ## Shared primitives

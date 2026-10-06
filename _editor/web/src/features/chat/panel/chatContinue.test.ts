@@ -8,16 +8,16 @@ import type { Conversation } from "../session/conversation";
 import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts";
 import { judgedOauth } from "../../../testing/judgedAccounts";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
-import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
+import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
 import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { SANDBOX_BUSY_AFTER_MS } from "../../sandbox/overview/availability";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as limitResetOriginal from "../session/limitReset";
-import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
+import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
 import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 import * as useSandboxSettingsOriginal from "../../sandbox/overview/useSandboxSettings";
 
@@ -78,7 +78,7 @@ const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await (async 
     const online = { phase: `online`, failure: undefined, attempt: 0, retryDelayMs: 0, everOnline: true, unavailableSince: undefined, generation: 0 };
     return { sandboxReachable: vueRef(true), sandboxConnection: vueRef({ ...online }), ONLINE_CONNECTION: online };
 })();
-jest.mock(`../../sandbox/client/useSandbox`, () => {
+jest.mock(`../../../client/sandbox/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
@@ -684,9 +684,9 @@ it(`offers the other account twice when the session is worth carrying, each with
     const rows = [...document.querySelectorAll<HTMLButtonElement>(`button`)].filter((element) => element.textContent?.includes(`Continue on second`));
     expect(rows).toHaveLength(2);
     expect(rows[0]?.textContent).toContain(`keeping this session`);
-    expect(rows[0]?.textContent).toContain(`85k`);
+    expect(rows[0]?.textContent).toContain(`85K`);
     expect(rows[1]?.textContent).toContain(`in a fresh session`);
-    expect(rows[1]?.textContent).toContain(`6k`);
+    expect(rows[1]?.textContent).toContain(`6K`);
 
     rows[0]?.click();
     await settle();

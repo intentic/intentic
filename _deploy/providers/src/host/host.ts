@@ -2,7 +2,6 @@ import type { Provider, ResolvedInputs } from "@intentic/engine";
 import type { z } from "zod";
 import { parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 
 // The host's inputs are exactly the shared SSH-creds block.
 type HostInputs = z.infer<typeof sshSchema>;
@@ -27,7 +26,7 @@ const gather = async (session: SshSession, address: string): Promise<Record<stri
 
 // Host provider: read/apply both connect-and-gather; diff is always noop, an owned host has no managed drift.
 // `read` maps a connection failure to not-yet-reachable; `apply` lets it propagate as a hard error.
-export const createHostProvider = (executor: SshExecutor = sshExecutor): Provider => ({
+export const createHostProvider = (executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
         let session: SshSession;

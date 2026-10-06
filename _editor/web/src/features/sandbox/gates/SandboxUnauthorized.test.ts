@@ -10,17 +10,17 @@ import { IconStub } from "@intentic/ui/testing";
 
 const clearCredential = jest.fn();
 const getIdToken = jest.fn<(options?: { pick?: boolean }) => Promise<string | undefined>>();
-jest.mock(`../../auth/useGoogleIdentity`, () => ({
+jest.mock(`../../../client/auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ clearCredential, getIdToken: (options?: { pick?: boolean }) => getIdToken(options) }),
 }));
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 
 const invalidateSession = jest.fn();
 const getSessionToken = jest.fn<() => Promise<unknown>>();
-jest.mock(`../session/sandboxSession`, () => ({
+jest.mock(`../../../client/session/sandboxSession`, () => ({
     useSandboxSession: () => ({ presentedEmail: ref(`someone.else@example.com`), invalidateSession, getSessionToken }),
 }));
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, role: `owner` }) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, role: `owner` }) }) }));
 
 const signInThroughBrowser = jest.fn<(options?: { pickAccount?: boolean }) => void>();
 const desktopVersion = jest.fn<() => string | undefined>();

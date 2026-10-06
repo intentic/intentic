@@ -87,7 +87,7 @@ export const readRepoDeclaration = async (root: string, repo: string): Promise<R
     } catch (error) {
         // The repository's file to fix, and the reader's to report: a malformed declaration is stated on the row, never
         // guessed at.
-        return { repo, checks: [], fingerprint: "", error: error instanceof Error ? error.message : String(error) };
+        return { repo, checks: [], fingerprint: "", error: errorMessage(error) };
     }
 };
 

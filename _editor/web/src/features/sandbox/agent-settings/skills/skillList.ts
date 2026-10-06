@@ -1,4 +1,4 @@
-import type { SkillOrigin, SkillSummary } from "@intentic/api-contract";
+import type { SkillOrigin, SkillSummary } from "@intentic/sandbox-contract";
 import { provenanceOf } from "./skillWords";
 
 // Orders, splits and filters the skills list. Only switchable or removable rows are tunable; everything else

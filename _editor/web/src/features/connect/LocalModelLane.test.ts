@@ -4,9 +4,8 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h, nextTick, ref } from "vue";
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { localModelGb } from "@intentic/capability-catalog";
-import type { LocalModelFitResponse } from "@intentic/sandbox-contract";
+import type { LocalModelFitResponse, CapabilitySummary } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 
 const QUICK = `unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf`;

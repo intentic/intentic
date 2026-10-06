@@ -8,3 +8,4 @@ export * from "../protocol/webext-links.js";
 export * from "../protocol/webext-protocol.js";
 export * from "../schemas/webext.js";
 export * from "../schemas/loopback-catch.js";
+export * from "../schemas/peer-enrollment.js";

@@ -5,7 +5,6 @@ import { authentikApi } from "./auth/authentik-api.js";
 import { createAuthentikClientProvider } from "./auth/authentik-client.js";
 import { createBackupProvider } from "./backup/backup.js";
 import type { SshExecutor } from "./core/ssh.js";
-import { sshExecutor } from "./core/ssh.js";
 import { createGarageProvider } from "./backings/garage.js";
 import { createGarageBucketProvider } from "./backings/garage-bucket.js";
 import { createPostgresProvider } from "./backings/postgres.js";
@@ -64,7 +63,8 @@ import { createPaperlessProvider } from "./services/paperless.js";
 // three external HTTP surfaces. Each defaults to its real implementation; pass a fake to drive the whole
 // suite in-memory (tests) or a real one to reconcile against live infra (the e2e harness, a future CLI).
 export interface ProviderDeps {
-    readonly ssh?: SshExecutor;
+    // Required: the caller picks the host-key trust store (the CLI pins keys in the lockfile beside the artifact).
+    readonly ssh: SshExecutor;
     readonly cloudflare?: CloudflareApi;
     readonly forgejo?: ForgejoApi;
     readonly komodo?: KomodoApi;
@@ -80,8 +80,8 @@ export interface ProviderDeps {
 
 // Assemble the full ResourceType -> Provider map the engine reconciles against. This is the single seam
 // between a compiled graph and execution: the engine never constructs providers, it is handed this map.
-export const createProviders = (deps: ProviderDeps = {}): Providers => {
-    const ssh = deps.ssh ?? sshExecutor;
+export const createProviders = (deps: ProviderDeps): Providers => {
+    const ssh = deps.ssh;
     const cloudflare = deps.cloudflare ?? cloudflareApi;
     const forgejo = deps.forgejo ?? forgejoApi;
     const komodo = deps.komodo ?? komodoApi;

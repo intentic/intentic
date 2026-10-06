@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { appBehind, daemonBehind, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../useDaemonRoutes";
+import { appBehind, daemonBehind, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
 
 // WHO IS FAILING TO TALK TO WHOM, IN WORDS SOMEONE WHO DID NOT WRITE THIS WOULD USE. The raw diff is three lists of
 // dotted route names (`agent.send`, `sessions.list`), which on its own says "7 routes disagree" — a sentence about the

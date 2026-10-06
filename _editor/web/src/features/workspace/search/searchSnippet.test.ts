@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { WorkspaceSearchHit } from "@intentic/api-contract";
+import type { WorkspaceSearchHit } from "@intentic/sandbox-contract";
 import { useHighlighter } from "@intentic/ui";
 import { snippetPieces, snippetWindow } from "./searchSnippet";
 

@@ -1,6 +1,5 @@
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { SshExecutor, SshSession, SshTarget } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { isLocalRepo, REPO_VOLUME } from "./backup.js";
 
 // Which part of the control plane to restore; `all` also restores the host-side /opt/intentic state (tokens +
@@ -16,7 +15,7 @@ export interface RestoreArgs {
     readonly snapshot: string;
     readonly scope: RestoreScope;
     readonly log: (message: string) => void;
-    readonly executor?: SshExecutor;
+    readonly executor: SshExecutor;
 }
 
 // A named host volume restic restores the snapshot into, then the per-service restores copy out of.
@@ -46,7 +45,7 @@ const wants = (scope: RestoreScope, part: "forgejo" | "komodo"): boolean => scop
 // services on the recovered volumes. A one-shot recovery action, not a reconcile step, and not idempotent. Never
 // runs `restic forget` or deletes the repo.
 export const restoreBackup = async (args: RestoreArgs): Promise<void> => {
-    const executor = args.executor ?? sshExecutor;
+    const executor = args.executor;
     const session: SshSession = await executor.connect(args.target);
     const run = async (command: string, what: string): Promise<void> => {
         const result = await session.exec(command);

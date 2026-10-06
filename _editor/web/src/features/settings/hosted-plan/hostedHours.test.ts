@@ -3,7 +3,6 @@ import { hostedTier } from "@intentic/constants";
 import { HOURS_RESET_AT, hostedLane, hostedMachine, spentHours } from "../../../testing/hostedPlan";
 import {
     formatDayShort,
-    formatMinutes,
     hoursLeftLine,
     hoursMeter,
     lowHoursNotice,
@@ -39,15 +38,6 @@ const subscriber = (over: Partial<HostedPlanState> = {}): HostedPlanState => sta
 // The free plan's chip; the same answer for spent hours, unspent hours, no ceiling, and no machine at all.
 const FREE = { label: `free`, variant: `neutral`, detail: { title: `Free plan` } } as const;
 
-describe(`minutes as words`, () => {
-    it(`speaks minutes under an hour, whole hours plain, and a decimal otherwise`, () => {
-        expect(formatMinutes(45)).toBe(`45 min`);
-        expect(formatMinutes(120)).toBe(`2 h`);
-        expect(formatMinutes(150)).toBe(`2.5 h`);
-        expect(formatMinutes(-3)).toBe(`0 min`);
-    });
-});
-
 describe(`the meter`, () => {
     it(`is absent for an owner the ceiling does not apply to`, () => {
         expect(hoursMeter(undefined)).toBeUndefined();
@@ -61,13 +51,13 @@ describe(`the meter`, () => {
     });
 
     it(`states what is left of what`, () => {
-        expect(hoursLeftLine(hoursMeter(usage(1_680))!)).toBe(`12 h of 40 h left this month`);
+        expect(hoursLeftLine(hoursMeter(usage(1_680))!)).toBe(`12h of 40h left this month`);
     });
 
     it(`names the day a new account's ramp ends instead of the month`, () => {
         const ramped = hoursMeter({ ...usage(120, 600), rampUntil: `2026-09-21T12:00:00.000Z` })!;
         expect(ramped.rampUntil).toBe(`2026-09-21T12:00:00.000Z`);
-        expect(hoursLeftLine(ramped)).toBe(`8 h of 10 h left until ${formatDayShort(`2026-09-21T12:00:00.000Z`)}`);
+        expect(hoursLeftLine(ramped)).toBe(`8h of 10h left until ${formatDayShort(`2026-09-21T12:00:00.000Z`)}`);
         expect(hoursLeftLine(hoursMeter({ ...usage(600, 600), rampUntil: `2026-09-21T12:00:00.000Z` })!)).toContain(`used up until`);
     });
 
@@ -156,11 +146,11 @@ describe(`a machine's hours`, () => {
         const onSlot = machine(`s1`, usage(180, STANDARD.monthlyHours * 60, `slot`), STANDARD.id);
         expect(machineHours(state({ hosted: hosted(0, 2_400, [onSlot]) }), onSlot)).toEqual({
             label: `Standard hours`,
-            line: `217 h of 220 h left this month`,
+            line: `217h of 220h left this month`,
             meter: expect.objectContaining({ kind: `slot`, remainingMinutes: STANDARD.monthlyHours * 60 - 180 }),
         });
         const free = machine(`s1`, usage(1_680));
-        expect(machineHours(state({ hosted: hosted(1_680, 2_400, [free]) }), free)).toMatchObject({ label: `Free hours`, line: `12 h of 40 h left this month` });
+        expect(machineHours(state({ hosted: hosted(1_680, 2_400, [free]) }), free)).toMatchObject({ label: `Free hours`, line: `12h of 40h left this month` });
     });
 
     it(`says the free hours are shared once a second machine spends them`, () => {
@@ -173,7 +163,7 @@ describe(`a machine's hours`, () => {
         const comped = machine(`s1`, usage(95, null));
         expect(machineHours(state({ onPlan: true, comped: true, hosted: hosted(95, null, [comped]) }), comped)).toEqual({
             label: `On the house`,
-            line: `1.6 h awake this month`,
+            line: `1h 35m awake this month`,
             meter: undefined,
         });
         expect(machineHours(state({ hosted: hosted(95, null, [comped]) }), comped).label).toBe(`No hour limit`);
@@ -187,7 +177,7 @@ describe(`a machine's hours`, () => {
 describe(`the sandbox's own line and the chat strip`, () => {
     it(`states the hours of the sandbox asked about, and nothing for one the reader holds no machine for`, () => {
         const withMachine = state({ hosted: hosted(1_680, 2_400, [machine(`s1`, usage(1_680))]) });
-        expect(sandboxHoursLine(withMachine, `s1`)).toBe(`Free hours · 12 h of 40 h left this month`);
+        expect(sandboxHoursLine(withMachine, `s1`)).toBe(`Free hours · 12h of 40h left this month`);
         expect(sandboxHoursLine(withMachine, `local`)).toBeUndefined();
         expect(sandboxHoursLine(state(), `s1`)).toBeUndefined();
     });
@@ -195,7 +185,7 @@ describe(`the sandbox's own line and the chat strip`, () => {
     it(`warns only in a machine's last stretch, with the day they come back`, () => {
         const low = state({ hosted: hosted(2_160, 2_400, [machine(`s1`, usage(2_160))]) });
         expect(lowHoursNotice(low, `s1`)).toBe(
-            `Free hours · 4 h of 40 h left this month. A sleeping machine spends none, and they come back on ${formatDayShort(RESETS_AT)}.`,
+            `Free hours · 4h of 40h left this month. A sleeping machine spends none, and they come back on ${formatDayShort(RESETS_AT)}.`,
         );
         expect(lowHoursNotice(state({ hosted: hosted(600, 2_400, [machine(`s1`, usage(600))]) }), `s1`)).toBeUndefined();
         // A slot with most of its own month left is not low because the free hours beside it are.

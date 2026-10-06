@@ -2,7 +2,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { extract, type Header } from "tar-stream";
-import { drain, extractAll } from "../../../tar-extract.js";
+import { drain, extractAll, memberPath } from "../../../tar-extract.js";
 import { isControlPlanePath, resolveWithin } from "../workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "../workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace-files.js";
@@ -31,7 +31,13 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
     let remaining = limit;
 
     const handleEntry = async (header: Header, stream: Readable): Promise<void> => {
-        const target = resolveWithin(root, header.name);
+        const relPath = memberPath(header.name);
+        // The archive's own root (`./`) is /work itself, already there.
+        if (relPath === "") {
+            await drain(stream);
+            return;
+        }
+        const target = relPath === undefined ? undefined : resolveWithin(root, relPath);
         if (target === undefined) {
             throw new PathEscapeError();
         }

@@ -1,5 +1,5 @@
 import { computed, onUnmounted, ref } from "vue";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { devFillGet, devFillSet } from "../setup/devFill";
 import { apiClient } from "../../lib/useApi";
 
@@ -40,7 +40,7 @@ export function useCloudflareZones() {
             }
             zones.value = [];
             selectedZone.value = undefined;
-            zonesError.value = errorMessage(err, `Couldn't check this token's Cloudflare zones.`);
+            zonesError.value = messageOr(err, `Couldn't check this token's Cloudflare zones.`);
         } finally {
             if (token === cfToken.value.trim()) {
                 zonesLoading.value = false;

@@ -1,4 +1,4 @@
-import { holdsCredentialMaterial, maskCredentialMaterial } from "../credential-material.js";
+import { holdsCredentialMaterial, holdsCredentialToken, maskCredentialMaterial } from "../credential-material.js";
 
 // The two directions aren't symmetric: a miss just raises an extra card, a wrong clear un-gates a real credential read.
 // The "no" cases have to be exactly right; every "yes" case is a real file's real shape.
@@ -157,5 +157,53 @@ describe("masking what a credential file holds", () => {
             expect(holdsCredentialMaterial(text), `${text.slice(0, 30)} before`).toBe(true);
             expect(holdsCredentialMaterial(maskCredentialMaterial(text)), `${text.slice(0, 30)} after`).toBe(false);
         }
+    });
+});
+
+// A masked key keeps the lines that say what it was, and those lines alone must not read as a key: the public outbox
+// sniffs a share page this masker produced, and refusing it would leave the share unserved.
+describe("a private key once masked", () => {
+    const keys = [
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEow",
+        '{"private_key":"-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBg\\n-----END PRIVATE KEY-----\\n"}',
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v2\n\nlQOYBF0x8bEBCAC5\n=Xy1Z\n-----END PGP PRIVATE KEY BLOCK-----",
+        "PuTTY-User-Key-File-3: ssh-ed25519\nEncryption: none\nPrivate-Lines: 1\nAAAAIGr3dHg0\nPrivate-MAC: ab12ab12\n",
+    ];
+
+    test.each(keys)("no longer holds one: %s", (key) => {
+        expect(holdsCredentialMaterial(key)).toBe(true);
+        expect(holdsCredentialMaterial(maskCredentialMaterial(key))).toBe(false);
+    });
+
+    test("a key cut short is masked through its last body line", () => {
+        expect(maskCredentialMaterial("-----BEGIN RSA PRIVATE KEY-----\nMIIEow\nAKCAQEA\nnext line of prose")).toBe(
+            "-----BEGIN RSA PRIVATE KEY-----\n***\nnext line of prose",
+        );
+        expect(maskCredentialMaterial('{"key":"-----BEGIN RSA PRIVATE KEY-----\\nMIIEow\\nAKCAQEA"}')).toBe(
+            '{"key":"-----BEGIN RSA PRIVATE KEY-----\n***"}',
+        );
+    });
+
+    test("a putty key keeps only its first line's label", () => {
+        expect(maskCredentialMaterial(keys[4] ?? "")).toBe("PuTTY-User-Key-File-3: ***\n");
+    });
+
+    test.each(keys)("masking twice changes nothing: %s", (key) => {
+        const once = maskCredentialMaterial(key);
+        expect(maskCredentialMaterial(once)).toBe(once);
+    });
+});
+
+// The self-identifying half the outbox sniffs published files with: a key=value guess is the gate's, not the outbox's.
+describe("a credential token in text that is not a credential file", () => {
+    test("is a shape that names itself", () => {
+        expect(holdsCredentialToken(`npm_${"a1B2".repeat(9)}`)).toBe(true);
+        expect(holdsCredentialToken("-----BEGIN PRIVATE KEY-----\nMIIEvQ")).toBe(true);
+    });
+
+    test("is never a credential-named key beside a value", () => {
+        expect(holdsCredentialToken("const config={apiKey:process.env.API_KEY,password:hunter22x}")).toBe(false);
+        expect(holdsCredentialMaterial("const config={apiKey:process.env.API_KEY,password:hunter22x}")).toBe(true);
     });
 });

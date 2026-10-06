@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { SingleFlight } from "@intentic/base/async";
 import { parseSidecarFront, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
 import type { DerivedSide } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
@@ -142,7 +143,7 @@ const render = async (root: string, bytes: Uint8Array, sha: string, name: string
 
 // Renderings asked for right now, by content hash: two panes (or two reviewers) wanting the same version wait on one
 // child rather than spawning a second onto the same temp copy.
-const inFlight = new Map<string, Promise<DerivedSide>>();
+const inFlight = new SingleFlight<string, DerivedSide>();
 
 /**
  * One version of a file as text: kept by content hash if it was ever rendered, the file's own fresh shadow if these are
@@ -160,11 +161,5 @@ export const deriveBytes = async (root: string, bytes: Uint8Array, source: BlobS
             return shadow;
         }
     }
-    const already = inFlight.get(sha);
-    if (already !== undefined) {
-        return already;
-    }
-    const started = render(root, bytes, sha, source.name, exec).finally(() => inFlight.delete(sha));
-    inFlight.set(sha, started);
-    return started;
+    return inFlight.run(sha, () => render(root, bytes, sha, source.name, exec));
 };

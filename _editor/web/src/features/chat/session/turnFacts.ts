@@ -1,5 +1,5 @@
 import type { TranscriptPatch, TurnFact } from "@intentic/sandbox-contract";
-import { importOrReload } from "../../../router/staleChunk";
+import { importOrReload } from "../../../lib/staleChunk";
 import { setAccountUsage } from "../accounts/providerAccounts";
 import { boundSession } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../run/turnStream";

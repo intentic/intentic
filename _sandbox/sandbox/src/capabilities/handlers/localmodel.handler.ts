@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
-import { packFragment } from "../../environment/packs.js";
+import { packFragment } from "../../image/packs.js";
 import { estimatedModelMemory, fitsBudget, llamaServerMissing, localModelBudget, localModelGpu } from "../../endpoints/local-model-fit.js";
 import { llamaServerProcesses, localModelLogPath, type LoadReport, offloadShortfall, readLoadReport } from "../../endpoints/local-model-load.js";
 import {
@@ -29,15 +29,12 @@ import {
 import { advanceIdle, type IdleSample } from "../../endpoints/local-model-idle.js";
 import { parseProcStat } from "../../system/resources/proc-stat.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
+import { localModelPanelKey } from "../../ports/panel-keys.js";
 
 // A model the sandbox runs itself: the user picks weights, this downloads and serves them with the bundled
 // llama-server; the entry then IS an endpoint. Apply returns before the download finishes; a background job re-syncs
 // the translator once the server actually serves.
 
-// Tmux session for one entry's llama-server (`panel-model-<id>`); classified as a background process so it sits beside
-// extension gateways and dockerd, not as a visible panel tab.
-export const LOCAL_MODEL_PREFIX = "model-";
-export const localModelPanelKey = (id: string): string => `${LOCAL_MODEL_PREFIX}${id}`;
 
 // CUDA build of llama-server (overlay-only) plus the directive, spelled like docker's for the allowlist.
 const GPU_DIRECTIVE = `# local model capability, gpu option: the host's NVIDIA GPUs for llama-server.

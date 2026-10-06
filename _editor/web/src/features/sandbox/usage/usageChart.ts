@@ -4,6 +4,7 @@ import { seriesColor } from "@intentic/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 import { utcDayOf } from "@intentic/sandbox-contract/time";
 import { t } from "@intentic/ui/i18n";
+import { formatMoney, formatPercent } from "@intentic/ui/format";
 
 // Every number and mark on the Usage tab, as pure functions over the daemon's rollup rows; the screen only binds.
 // Same split as toolPresentation.ts, so a money readout's arithmetic is testable without mounting a component.
@@ -291,7 +292,7 @@ export const rankedBars = (entries: readonly RankedEntry[]): BarItem[] =>
     entries.map((entry) => ({
         label: entry.label,
         value: entry.value,
-        display: formatUsd(entry.value),
+        display: formatMoney(entry.value),
         accent: rankedAccent(entry),
         key: rankedKey(entry),
         muted: entry.kind !== `value`,
@@ -312,34 +313,9 @@ export const niceMax = (max: number): number => {
 
 // formatting
 
-// Always two decimals for column alignment; a nonzero amount rounding to $0.00 prints "<$0.01" instead.
-export const formatUsd = (value: number): string =>
-    value > 0 && value < 0.005 ? `<$0.01` : `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Precision steps down with magnitude (cents below $10k, whole dollars to $1M, then compacted) to fit hero-size
-// width; at most nine glyphs. The exact figure lives in the header, table and CSV; this view is only for the number's
-// order.
-export const formatUsdHero = (value: number): string => {
-    if (value < 10_000) {
-        return formatUsd(value);
-    }
-    return value < 1_000_000 ? `$${Math.round(value).toLocaleString()}` : `$${formatCompact(value)}`;
-};
-
-// Compacted past 1,000 (999 / 1.3K / 18.4M); one decimal below 100 scaled, none above (noise past there).
-export const formatCompact = (value: number): string => {
-    if (value < 1_000) {
-        return String(Math.round(value));
-    }
-    const [divisor, suffix] = value < 1_000_000 ? [1_000, `K`] : value < 1_000_000_000 ? [1_000_000, `M`] : [1_000_000_000, `B`];
-    const scaled = value / divisor;
-    return `${scaled.toLocaleString(undefined, { maximumFractionDigits: scaled < 100 ? 1 : 0 })}${suffix}`;
-};
-
-export const formatPercent = (value: number | undefined): string => (value === undefined ? `—` : `${Math.round(value)}%`);
-
+// A change against the previous window, signed: "+18%", "−4.3%" (a true minus), the percentage the kit's.
 export const formatDelta = (value: number | undefined): string | undefined =>
-    value === undefined ? undefined : `${value >= 0 ? `+` : `−`}${Math.abs(value) < 10 ? Math.abs(value).toFixed(1) : Math.round(Math.abs(value))}%`;
+    value === undefined ? undefined : `${value >= 0 ? `+` : `−`}${formatPercent(Math.abs(value))}`;
 
 // export
 

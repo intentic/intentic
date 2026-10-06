@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, vSkeletonSource } from "@intentic/ui";
+import { Button, EmptyState, Icon, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject, provide, ref } from "vue";
 import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
@@ -178,15 +178,17 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
         <!-- The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data loss, not loading. -->
         <ChatTranscriptSkeleton v-else-if="skeleton" :of="imprint" @retry="retryHydrate(conversation)" />
         <!-- A read that did not answer, with nothing painted to fall back on: said, with the press that asks again, never the empty invitation to start a conversation. -->
-        <div
+        <EmptyState
             v-else-if="refresh?.kind === `failed`"
-            class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted"
+            :title="t(`chat.chatPaneTurns.couldntOpen`)"
+            :line="refresh.reason ?? ``"
             role="alert"
+            class="flex-1 px-4"
         >
-            <span>{{ t(`chat.chatPaneTurns.couldntOpen`) }}</span>
-            <span v-if="refresh.reason" class="text-2xs text-subtle">{{ refresh.reason }}</span>
-            <Button size="small" severity="secondary" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
-        </div>
+            <template #actions>
+                <Button size="small" severity="secondary" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
+            </template>
+        </EmptyState>
         <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
         <slot v-else-if="!waiting" name="empty" />
         <!-- The live turn before it's written anything, or with rows under its bubble (showTurnStatus); outside the turn sections so it is always the last thing the transcript says. -->

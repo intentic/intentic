@@ -6,7 +6,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { stubEnv } from "@intentic/testing/bun";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
-import { enrolledFleet, enrollSyncKey } from "../../hosts/desktop-sync.js";
+import { enrolledFleet, enrollSyncKey } from "../../peers/desktop-sync.js";
 import { HOST_PEER } from "../../hosts/host-peer.js";
 import { createPeerHub, type PeerClient } from "../../peers/peer-hub.js";
 import { filePeerStore } from "../../peers/peer-store.js";

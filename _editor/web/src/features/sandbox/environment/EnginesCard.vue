@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { EngineRow } from "@intentic/api-contract";
+import type { EngineRow } from "@intentic/sandbox-contract";
 import {
     BrandMark,
     Button,
@@ -16,8 +16,8 @@ import {
 } from "@intentic/ui";
 import { useEngines } from "./useEngines";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useRole } from "../secrets/useRole";
-import { useHubWork } from "../../../shell/hub/hubWork";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useHubWork } from "../../../workbench/hub/hubWork";
 import { engineVisual } from "./engineVisual";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";

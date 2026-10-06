@@ -1,6 +1,5 @@
-import { type GrantedRole, GrantedRoleSchema } from "@intentic/sandbox-contract";
+import { type GrantedRole, MemberGrantSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { z } from "zod";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
@@ -18,18 +17,12 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// A grant request's email + role + the areas it is fenced to, or undefined if any is missing or malformed.
-// Role is required: a grant is a role decision, and a default here would be a policy nobody chose. Areas are
-// optional, and their absence is the whole workspace — which is also every assistant, since which cards a person may
-// wear is read off their fence (personas/persona-reach.ts) rather than listed per person.
-const GrantBodySchema = z.object({
-    email: z.string(),
-    role: GrantedRoleSchema,
-    areas: z.array(z.string().min(1)).max(20).optional(),
-});
-
+// A grant request's email + role + the areas it is fenced to (the contract's MemberGrantSchema), or undefined if any is
+// missing or malformed. Role is required: a grant is a role decision, and a default here would be a policy nobody
+// chose. Areas are optional, and their absence is the whole workspace — which is also every assistant, since which
+// cards a person may wear is read off their fence (personas/persona-reach.ts) rather than listed per person.
 const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; areas?: readonly string[] } | undefined> => {
-    const body = GrantBodySchema.safeParse(await c.req.json().catch(() => undefined));
+    const body = MemberGrantSchema.safeParse(await c.req.json().catch(() => undefined));
     if (!body.success) {
         return undefined;
     }

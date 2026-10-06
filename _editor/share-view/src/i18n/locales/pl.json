@@ -10,6 +10,7 @@
         "nothingToShow": "Nie ma czego pokazać",
         "runOwnAgents": ": uruchom własne agenty →",
         "shared": "Udostępnione z",
+        "subtitle": "{count} wiadomość · udostępniono {date} | {count} wiadomości · udostępniono {date} | {count} wiadomości · udostępniono {date}",
         "thinking": "Myśli"
     }
 }

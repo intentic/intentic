@@ -5,6 +5,7 @@
 
 import { isNewer, type WithdrawnRelease } from "@intentic/sandbox-contract";
 import { isDevBuild } from "../../version.js";
+import { RELEASE_FETCH_TIMEOUT_MS } from "./version-check.js";
 
 const RELEASES_URL = "https://api.github.com/repos/intentic/intentic/releases?per_page=30";
 // Matches version-check.ts: one unauthenticated request per sandbox per hour, against a 60/hour budget.
@@ -143,11 +144,14 @@ export const readReleases = (releases: readonly GithubRelease[]): ReleasesRead =
     return { notes, withdrawn };
 };
 
-// Fetches recent releases once and updates the cache. Never throws: any failure (offline, rate limit, shape change)
-// keeps the previous value.
+// Fetches recent releases once and updates the cache. Never throws: any failure (offline, timed out, rate limit, shape
+// change) keeps the previous value.
 export const refreshReleaseNotes = async (): Promise<void> => {
     try {
-        const response = await fetch(RELEASES_URL, { headers: { accept: "application/vnd.github+json" } });
+        const response = await fetch(RELEASES_URL, {
+            headers: { accept: "application/vnd.github+json" },
+            signal: AbortSignal.timeout(RELEASE_FETCH_TIMEOUT_MS),
+        });
         if (!response.ok) {
             return;
         }

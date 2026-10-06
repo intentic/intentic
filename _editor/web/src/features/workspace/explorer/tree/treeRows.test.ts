@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import type { Provisional } from "../../files/provisionalEntries";
 import { barrenChainOf, barrenChildren } from "../emptyDirs";
 import {

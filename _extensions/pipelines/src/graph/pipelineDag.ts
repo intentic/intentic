@@ -1,3 +1,4 @@
+import { dagLayers } from "@intentic/base/dag";
 import type { DagEdge, DagNode } from "@intentic/extension-ui";
 import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract";
 
@@ -78,38 +79,14 @@ const executionWaves = (jobs: readonly PipelineJob[]): JobGroup[] => {
     return waves.map((wave): JobGroup => ({ name: undefined, jobs: wave }));
 };
 
-// Layers by dependency depth, one past the deepest `needs` target; a job matching nothing lands at depth 0. A declared
-// cycle is broken by treating a revisit as depth 0.
-const declaredLevels = (jobs: readonly PipelineJob[]): JobGroup[] => {
-    const byName = new Map<string, PipelineJob>(jobs.map((job) => [job.name, job]));
-    const depths = new Map<PipelineJob, number>();
-    const visiting = new Set<PipelineJob>();
-    const depthOf = (job: PipelineJob): number => {
-        const known = depths.get(job);
-        if (known !== undefined) {
-            return known;
-        }
-        if (visiting.has(job)) {
-            return 0;
-        }
-        visiting.add(job);
-        const parents = (job.needs ?? []).flatMap((name) => {
-            const parent = byName.get(name);
-            return parent === undefined || parent === job ? [] : [parent];
-        });
-        const depth = parents.length === 0 ? 0 : Math.max(...parents.map((parent) => depthOf(parent) + 1));
-        visiting.delete(job);
-        depths.set(job, depth);
-        return depth;
-    };
-
-    const levels = new Map<number, PipelineJob[]>();
-    for (const job of jobs) {
-        const depth = depthOf(job);
-        levels.set(depth, [...(levels.get(depth) ?? []), job]);
-    }
-    return [...levels.entries()].toSorted(([a], [b]) => a - b).map(([, group]): JobGroup => ({ name: undefined, jobs: group }));
-};
+// Layers by dependency generation, the one layering workflows use too: a job lands one past the deepest `needs` target,
+// a need matching no job is ignored, and a declared cycle goes in one final layer rather than an invented order.
+const declaredLevels = (jobs: readonly PipelineJob[]): JobGroup[] =>
+    dagLayers(
+        jobs,
+        (job) => job.name,
+        (job) => job.needs ?? [],
+    ).map((group): JobGroup => ({ name: undefined, jobs: group }));
 
 // True if any job carries `needs`; one job missing it must not fall the whole run back to guessing from timestamps.
 const isDeclared = (jobs: readonly PipelineJob[]): boolean => jobs.some((job) => job.needs !== undefined);

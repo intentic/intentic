@@ -3,7 +3,6 @@ import { z } from "zod";
 import { backingSchema, createBackingProvider } from "../core/backing-provider.js";
 import { execProbe } from "../core/backing-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { type ContainerStamp, stampLabels } from "../core/stamp.js";
 
 const KIND = "postgres";
@@ -38,7 +37,7 @@ const composeYaml = (parsed: PostgresInputs, stamp: ContainerStamp): string =>
 
 // A Postgres backing instance (i.want.database). Per-app databases are the binding provider's job, not this
 // one's.
-export const createPostgresProvider = (executor: SshExecutor = sshExecutor): Provider =>
+export const createPostgresProvider = (executor: SshExecutor): Provider =>
     createBackingProvider(
         {
             kind: KIND,

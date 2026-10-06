@@ -7,8 +7,6 @@ import {
     type SecretInventoryEntry,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { contributionFor, contributionHosts, contributionRegistry } from "../capabilities/contributions.js";
-import type { ExtensionHost } from "../extensions/installed-extensions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { gateTargetOf } from "./credential-gates.js";
@@ -95,26 +93,6 @@ export const fileSecretHostGuards = (path: string): SecretHostGuardsStore => {
             });
         },
     };
-};
-
-// The hosts each connected capability's connector declares for its credential, expanded over that capability's own
-// settings (a self-hosted instance's URL). A capability whose connector declares none, or whose templates come out empty,
-// has no default.
-export const connectorHostDefaults = async (host: ExtensionHost): Promise<ReadonlyMap<string, readonly string[]>> => {
-    const registry = await contributionRegistry(host);
-    const defaults = new Map<string, readonly string[]>();
-    for (const capability of await host.capabilities.list()) {
-        // Only a cli connector's credential reaches a command as a reference; the other kinds mount instead.
-        if (capability.kind !== "cli") {
-            continue;
-        }
-        const connector = contributionFor(registry, "cli", capability.config);
-        const hosts = connector === undefined ? [] : contributionHosts(connector.spec, capability.config);
-        if (hosts.length > 0) {
-            defaults.set(capability.id, hosts);
-        }
-    }
-    return defaults;
 };
 
 // The guards in force: the owner's setting, where written, else a connector's default for its capability, which is on.

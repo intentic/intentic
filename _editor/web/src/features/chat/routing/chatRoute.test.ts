@@ -1,9 +1,8 @@
-import type { SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import type { ChatRoute, Persona } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, type Ref, ref } from "vue";
-import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import type { PickAction } from "../session/selectionReducer";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -31,11 +30,11 @@ jest.mock(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ p
 
 // A guest is never routed onto a persona: its chat wears one of its own from the start.
 const isGuest = ref(false);
-jest.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
 // The one daemon read under test: the reading itself.
 const routeChat = jest.fn<(input: ProcedureInput<`agent.routeChat`>) => Promise<ChatRoute>>();
-jest.mock(`../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { routeChat } }) }));
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { routeChat } }) }));
 
 // Claude connected, nothing else: the backend persona's ladder resolves to its one pin.
 jest.mock(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));

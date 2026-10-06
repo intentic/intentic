@@ -12,7 +12,7 @@ const NO_TRIAL = TrialStatusSchema.parse({ available: false, allowance: 0, used:
 // Every connection read answers empty; the plan-limits re-measure and the trial allowance are the two a test holds.
 const refreshPlanLimits = jest.fn<(input: { force?: boolean }) => Promise<PlanLimitsRefreshed>>();
 const trial = jest.fn(async (): Promise<TrialStatusResponse> => NO_TRIAL);
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         usage: { refreshPlanLimits },
         accounts: { accounts: async () => ({ accounts: [] }) },

@@ -36,3 +36,9 @@ it(`reads nothing from another build, a broken record, or no sandbox at all`, ()
     expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
     expect(readStoredRoster(undefined, `b1`)).toEqual([]);
 });
+
+// The array alone was checked, so a list of anything was handed to the board as agents and broke the first card drawn.
+it(`reads nothing from a record whose agents are not agents`, () => {
+    localStorage.setItem(`intentic.roster.sb1`, JSON.stringify({ build: `b1`, agents: [{ id: 7 }, `a2`] }));
+    expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
+});

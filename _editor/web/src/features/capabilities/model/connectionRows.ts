@@ -1,6 +1,14 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import type { CapabilityKind, Device, HostSummary, NetdiskLink, PhoneSummary, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
+import type {
+    CapabilityKind,
+    Device,
+    HostSummary,
+    NetdiskLink,
+    PhoneSummary,
+    VpnLink,
+    WebExtSummary,
+    CapabilitySummary,
+} from "@intentic/sandbox-contract";
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
 import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, vpnFacts } from "./connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";

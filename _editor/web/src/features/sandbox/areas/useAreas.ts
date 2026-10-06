@@ -1,10 +1,10 @@
 import type { Area } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Named parts of the workspace (`.intentic/config/areas.json`) via the daemon's areas routes. Readable by every
 // member — a fenced person is shown the name of the fence they are behind, and a picker cannot offer what it cannot

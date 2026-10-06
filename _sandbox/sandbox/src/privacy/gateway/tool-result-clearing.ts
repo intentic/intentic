@@ -1,3 +1,4 @@
+import { tokensOfChars } from "@intentic/base/format";
 // Old tool results replaced with a placeholder in a long Claude conversation's request, on its way through the gateway,
 // a chunk at a time. The `toolResultClearing` setting switches it on and its holdout measures it (decide/experiments.ts).
 //
@@ -29,10 +30,6 @@ export const CLEARING = {
 } as const;
 
 export type ClearingLimits = { readonly [K in keyof typeof CLEARING]: number };
-
-// The common rule of thumb for English and code; only ever compared with the limits above, so it needs to be stable, not
-// exact.
-const CHARS_PER_TOKEN = 4;
 
 // What an image is reckoned at: a screenshot is ~1,500 tokens whatever its bytes.
 const IMAGE_CHARS = 6_000;
@@ -82,7 +79,7 @@ const resultsOf = (messages: readonly Json[], limits: ClearingLimits): ResultAt[
         for (const [block, part] of content.entries()) {
             if (isRecord(part) && part["type"] === "tool_result") {
                 const chars = charsOf(part["content"]);
-                results.push({ message, block, tokens: chars / CHARS_PER_TOKEN, clearable: chars >= limits.minResultChars });
+                results.push({ message, block, tokens: tokensOfChars(chars), clearable: chars >= limits.minResultChars });
             }
         }
     }
@@ -111,7 +108,7 @@ const boundaryOf = (results: readonly ResultAt[], limits: ClearingLimits): Resul
 export const clearToolResults = (body: Json, limits: ClearingLimits = CLEARING): ClearingOutcome => {
     const untouched = { body, cleared: 0, clearedTokens: 0 };
     const messages = isRecord(body) ? body["messages"] : undefined;
-    if (!isRecord(body) || !isList(messages) || JSON.stringify(body).length / CHARS_PER_TOKEN < limits.triggerTokens) {
+    if (!isRecord(body) || !isList(messages) || tokensOfChars(JSON.stringify(body).length) < limits.triggerTokens) {
         return untouched;
     }
     const cleared = boundaryOf(resultsOf(messages, limits), limits);

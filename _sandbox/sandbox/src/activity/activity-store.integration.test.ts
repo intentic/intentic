@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { appendFile, link, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "@intentic/testing/bun";
@@ -47,6 +47,8 @@ test("passing the byte cap prunes to the newest lines", async () => {
         JSON.stringify({ id: `seed-${i}`, at: i + 1, provider: "discord", direction: "in", type: "message.received", content: filler }),
     );
     await writeFile(path, `${lines.join("\n")}\n`);
+    // A second name for the log as it was: a prune that rewrote it in place would show through this link too.
+    await link(path, `${path}.before`);
 
     const store = fileActivityStore(path);
     await store.append({ provider: "discord", direction: "out", type: "message.send" });
@@ -56,6 +58,9 @@ test("passing the byte cap prunes to the newest lines", async () => {
     // Newest survive: the fresh append plus the tail of the seeds; the oldest seeds are gone.
     expect(kept.at(-1)).toContain("message.send");
     expect(kept[0]).toContain("seed-101");
+    // Replaced whole by a rename, so a crash mid-prune leaves the old trail intact rather than a truncated one: the
+    // seeds and the append that tipped it over the cap, which went to the old file before the prune.
+    expect((await readFile(`${path}.before`, "utf8")).split("\n").filter((line) => line !== "")).toHaveLength(2_101);
 });
 
 test("an append announces itself on the runtime feed, so an open feed re-reads without a clock", async () => {

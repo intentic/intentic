@@ -1,3 +1,4 @@
+/// <reference lib="es2025.intl" />
 import { ref } from "vue";
 
 // Human-readable byte size for the breadcrumb / file-info chips. Empty string when the size is unknown.
@@ -30,11 +31,6 @@ export const formatDuration = (seconds: number): string => {
     const hours = Math.floor(whole / 3600);
     return hours > 0 ? `${hours}:${pad(Math.floor((whole % 3600) / 60))}:${pad(whole % 60)}` : `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
 };
-
-// Token counts at chip width: "1.4M" past a million, "142k" past a thousand, exact below that. Used everywhere
-// tokens are quoted so two surfaces never disagree.
-export const formatTokens = (tokens: number): string =>
-    tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens);
 
 // Two-letter monogram, the fallback after a picture, logo or glyph. Splits on the separators a name, email or repo
 // uses ("John Doe"→JD); one word keeps its first two letters; empty input gives `undefined`.
@@ -79,6 +75,9 @@ const dateFormats = new Map<DateStyle, Intl.DateTimeFormat>();
 const relativeFormats = new Map<Intl.RelativeTimeFormatNumeric, Intl.RelativeTimeFormat>();
 const numberFormats = new Map<number, Intl.NumberFormat>();
 const percentFormats = new Map<number, Intl.NumberFormat>();
+// Every other number shape, keyed by what it is for: counts, compact counts, money, the units of a span of time.
+const shapedFormats = new Map<string, Intl.NumberFormat>();
+let durationFormat: Intl.DurationFormat | undefined;
 
 // Half of Europe writes "1,4 MB". A decimal point is a language's answer, not a constant, so every number this
 // module prints with a fraction goes through here.
@@ -92,6 +91,16 @@ export const formatFixed = (value: number, digits: number): string => {
         numberFormats.set(digits, format);
     }
     return format.format(value);
+};
+
+const shapedFormat = (key: string, options: Intl.NumberFormatOptions): Intl.NumberFormat => {
+    const locale = formatLocale.value;
+    let format = shapedFormats.get(key);
+    if (format === undefined) {
+        format = new Intl.NumberFormat(locale, options);
+        shapedFormats.set(key, format);
+    }
+    return format;
 };
 
 const dateFormat = (style: DateStyle): Intl.DateTimeFormat => {
@@ -134,6 +143,8 @@ export const setFormatLocale = (tag: string): void => {
     relativeFormats.clear();
     numberFormats.clear();
     percentFormats.clear();
+    shapedFormats.clear();
+    durationFormat = undefined;
     formatLocale.value = tag;
 };
 
@@ -195,7 +206,8 @@ export const formatWhen = (at: number, now: number = Date.now()): string =>
     at - now < WEEKDAY_HORIZON_MS ? formatWeekdayTime(at) : formatDayMonthTime(at);
 
 // Coarse relative time ("now", "5m ago", "3h ago"), always rounded down since an age is a floor. `days` switches
-// the day-and-beyond case between a rolling "2d ago" and the absolute timestamp; `now` is injectable for tests.
+// the day-and-beyond case between a rolling "2d ago" (for the week after, then the calendar day: "40d ago" is a sum
+// the reader has to do) and the absolute timestamp; `now` is injectable for tests.
 // The wording is CLDR's, not ours: these phrases are the one part of the interface no translator has to supply,
 // and getting Polish's four plural forms right by hand is precisely the trap `Intl` exists to close.
 export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: number; days?: boolean } = {}): string => {
@@ -211,9 +223,106 @@ export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: 
     if (hours < 24) {
         return relativeFormat(`always`).format(-hours, `hour`);
     }
-    return days ? relativeFormat(`always`).format(-Math.floor(hours / 24), `day`) : formatDateTime(at);
+    if (!days) {
+        return formatDateTime(at);
+    }
+    const wholeDays = Math.floor(hours / 24);
+    return wholeDays < 7 ? relativeFormat(`always`).format(-wholeDays, `day`) : formatDate(at);
 };
 
 // Relative time under a day old, else a bare calendar day rather than `timeAgo`'s full absolute fallback, which
 // would set the width of every row. Pair with the exact moment in a `title`.
 export const freshness = (at: number): string => (Date.now() - at < 86_400_000 ? timeAgo(at) : formatDate(at));
+
+// --- Counts ----------------------------------------------------------------------------------------------------------
+//
+// One rule each, and the language's own separators: "1,234,567" is "1 234 567" in Polish and "1.234.567" in German,
+// and the suffix of a compact count is a word the language owns ("1.2M", "1,2 mln", "142,3 tys.").
+
+/** A count a reader may compare or repeat, exact and grouped: "1,234,567". Rounded to a whole number. */
+export const formatCount = (value: number): string => shapedFormat(`count`, { maximumFractionDigits: 0 }).format(value);
+
+/**
+ * A count at chip width: exact under a thousand, then compacted with one decimal while the scaled figure is under 100
+ * and none above it ("999", "1.3K", "18.4M", "142K"), since a fourth digit there is noise. Rounded half away from zero.
+ */
+export const formatCompact = (value: number): string => {
+    const magnitude = Math.abs(value);
+    if (magnitude < 1_000) {
+        return formatCount(value);
+    }
+    const scaled = magnitude / 1_000 ** Math.floor(Math.log10(magnitude) / 3);
+    const digits = scaled < 99.95 ? 1 : 0;
+    return shapedFormat(`compact${digits}`, { notation: `compact`, maximumFractionDigits: digits }).format(value);
+};
+
+// A token count is a compact count; the name stays because extensions import it (`@intentic/extension-ui`).
+export const formatTokens = (tokens: number): string => formatCompact(tokens);
+
+// --- Money -----------------------------------------------------------------------------------------------------------
+
+/**
+ * US dollars, the one currency every price here is in: always cents ("$0.12", "$1,234.50"), so a column of them lines
+ * up, rounded half away from zero; an amount that is not zero but rounds to it says "<$0.01" rather than claiming
+ * nothing was spent. `compact` is for a hero figure with no room for cents: whole dollars from $10,000 and a compact
+ * figure from a million ("$12,345", "$1.2M").
+ */
+export const formatMoney = (usd: number, { compact = false }: { compact?: boolean } = {}): string => {
+    const magnitude = Math.abs(usd);
+    if (magnitude > 0 && magnitude < 0.005) {
+        return `<${shapedFormat(`usd`, { style: `currency`, currency: `USD`, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.sign(usd) * 0.01)}`;
+    }
+    if (compact && magnitude >= 1_000_000) {
+        return shapedFormat(`usdCompact`, { style: `currency`, currency: `USD`, notation: `compact`, maximumFractionDigits: 1 }).format(usd);
+    }
+    if (compact && magnitude >= 10_000) {
+        return shapedFormat(`usdWhole`, { style: `currency`, currency: `USD`, maximumFractionDigits: 0 }).format(usd);
+    }
+    return shapedFormat(`usd`, { style: `currency`, currency: `USD`, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd);
+};
+
+// --- A span of time --------------------------------------------------------------------------------------------------
+
+const SPAN_UNITS = [
+    [`days`, 86_400],
+    [`hours`, 3_600],
+    [`minutes`, 60],
+    [`seconds`, 1],
+] as const;
+type SpanUnit = (typeof SPAN_UNITS)[number][0];
+
+// The narrow duration style ("3m 7s", "3 min i 7 s", "3min 7s"); a webview older than Intl.DurationFormat gets each
+// unit's own narrow form, spaced.
+const formatSpan = (parts: Partial<Record<SpanUnit, number>>): string => {
+    const locale = formatLocale.value;
+    if (typeof Intl.DurationFormat === `function`) {
+        durationFormat ??= new Intl.DurationFormat(locale, { style: `narrow` });
+        return durationFormat.format(parts);
+    }
+    return Object.entries(parts)
+        .map(([unit, value]) => shapedFormat(`unit:${unit.slice(0, -1)}`, { style: `unit`, unit: unit.slice(0, -1), unitDisplay: `narrow` }).format(value))
+        .join(` `);
+};
+
+/**
+ * How long something has been going, or how long it took, in its two largest units: "45s", "3m 7s", "2h 5m", "3d 4h".
+ * A zero second unit is left out ("14m", not "14m 0s"). ALWAYS ROUNDED DOWN, like an age: a run 59.9 seconds in has
+ * not been going a minute. Takes seconds, as `formatDuration` does; a negative span reads as zero. `largest: "hours"`
+ * keeps an allowance counted in hours in hours ("217h", not "9d 1h").
+ */
+export const formatElapsed = (seconds: number, { largest = `days` }: { largest?: `days` | `hours` } = {}): string => {
+    let left = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+    const units = largest === `hours` ? SPAN_UNITS.slice(1) : SPAN_UNITS;
+    const amounts = units.map(([unit, size]) => {
+        const amount = Math.floor(left / size);
+        left -= amount * size;
+        return [unit, amount] as const;
+    });
+    const first = amounts.findIndex(([, amount]) => amount > 0);
+    if (first === -1) {
+        // The duration format leaves every zero unit out, which for nothing at all leaves nothing.
+        return shapedFormat(`unit:second`, { style: `unit`, unit: `second`, unitDisplay: `narrow` }).format(0);
+    }
+    const shown = amounts.slice(first, first + 2).filter(([, amount], index) => index === 0 || amount > 0);
+    return formatSpan(Object.fromEntries(shown));
+};

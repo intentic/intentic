@@ -5,7 +5,7 @@ import type { PendingAttachment } from "./useChatAttachments";
 // and the picker is emptied, so picking the same file again is still a pick. The bytes' own upload is stood in for.
 
 const sandboxUpload = jest.fn<(route: string, body: Blob, options?: unknown) => Promise<void>>(async () => undefined);
-jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxUpload, sandboxBlob: jest.fn() }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxUpload, sandboxBlob: jest.fn() }));
 const { useChatAttachments } = await import("./useChatAttachments");
 
 // A file input's change as the browser dispatches it: the files picked, and the value naming the last of them.

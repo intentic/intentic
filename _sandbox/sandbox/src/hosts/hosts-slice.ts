@@ -1,6 +1,6 @@
 import type { Capability } from "@intentic/sandbox-contract";
 import type { Pairings } from "../peers/enrollment.js";
-import type { SyncFleet, SyncMode } from "./desktop-sync.js";
+import type { SyncFleet, SyncMode } from "../peers/desktop-sync.js";
 import type { HostHub, HostStore } from "./host-peer.js";
 import type { HostDeviceReach } from "./self-host.js";
 
@@ -15,6 +15,6 @@ export interface HostsSlice {
     // The desktop-sync enrollments, for the same reason and in the same shape: the devices view merges them with host
     // pulls without the hosts subsystem importing the platform's sync store.
     readonly syncFleet: () => Promise<SyncFleet>;
-    // Desktop sync's pairing; only the pairing lives here, its SSH-keyed enrollment half stays in hosts/desktop-sync.ts.
+    // Desktop sync's pairing; only the pairing lives here, its SSH-keyed enrollment half stays in peers/desktop-sync.ts.
     readonly syncPairings: Pairings<SyncMode>;
 }

@@ -5,7 +5,7 @@ import type { ChatEnvelope, ChatNote } from "./chatChannel";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
 // The sandbox id scopes every note here; useSandbox reaches window.env through useApi, which no test has.
-jest.mock("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });

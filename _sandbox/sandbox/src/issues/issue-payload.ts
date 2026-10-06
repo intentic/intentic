@@ -1,5 +1,5 @@
 import type { IssueSummary } from "@intentic/sandbox-contract";
-import { TITLE_MAX } from "../automations/scheduler.js";
+import { TITLE_MAX } from "../seams/conversation-title.js";
 
 // Everything a stranger's machine wrote sits under `untrusted`; everything the daemon knows for itself sits outside it,
 // so a hostile description reads as a quote, not a heading. The trigger catalogue's prompt is written against these

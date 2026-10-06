@@ -1,5 +1,5 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { acmeChallengeHolds, CloudflareTokenError, listZoneNames, reapOrphanDnsRecords } from "./cloudflare.js";
+import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, listZoneNames, reapOrphanDnsRecords } from "./cloudflare.js";
 
 // The two things this platform still asks Cloudflare for: the zone list, and the DNS behind the loopback cert.
 
@@ -48,6 +48,27 @@ describe(`listZoneNames`, () => {
             },
         ]);
         await expect(listZoneNames(`token`)).rejects.toThrow(`9109 nope`);
+    });
+});
+
+describe(`a zone out of DNS records`, () => {
+    it(`is said in this platform's words, which name the sweep and warn off the records old sandboxes still use`, async () => {
+        stubFetch([
+            { match: (_, url) => url.includes(`/zones?name=`), respond: () => ok([{ id: `zone-1` }]) },
+            { match: (method) => method === `GET`, respond: () => ok([]) },
+            {
+                match: (method) => method === `POST`,
+                respond: () =>
+                    new Response(JSON.stringify({ success: false, errors: [{ code: 81_045, message: `Record quota exceeded.` }], result: null }), {
+                        status: 400,
+                    }),
+            },
+        ]);
+        const failure = await ensureLocalDnsRecord(`token`, `example.com`).catch((error: unknown) => error);
+        expect(failure).not.toBeInstanceOf(CloudflareTokenError);
+        expect(failure).toMatchObject({ codes: [81_045] });
+        expect(String(failure)).toContain(`the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota)`);
+        expect(String(failure)).toContain(`Do not clear sandbox-*/ssh-*/port-slot records by hand`);
     });
 });
 

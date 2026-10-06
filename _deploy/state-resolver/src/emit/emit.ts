@@ -1,6 +1,7 @@
 import { generated, makeRef } from "@intentic/graph";
-import type { BackupInput, HostInput, IntentSet } from "@intentic/need-resolver";
-import { controlPlaneHostId } from "@intentic/need-resolver";
+import type { BackupInput, HostInput } from "../intent/inputs.js";
+import type { IntentSet } from "../intent/intent.js";
+import { controlPlaneHostId } from "../intent/needs.js";
 import type { ResolvedNode } from "@intentic/resources";
 import { adminUsername, forgejoId, gitlabRegistry, komodoId, tunnelId, tunnelName } from "../lib/ids.js";
 import { IMAGES } from "../lib/images.js";

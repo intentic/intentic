@@ -7,7 +7,7 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 // Stubs the daemon at the seam the list reaches it through, so the archive probe is asserted as a call.
 const archived = jest.fn(async () => AgentsListSchema.parse({ agents: [], rev: 0 }));
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { archived } }) }));
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { archived } }) }));
 
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";

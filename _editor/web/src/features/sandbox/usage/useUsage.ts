@@ -1,7 +1,7 @@
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The active sandbox's spend ledger, rolled up by the daemon; read-only, rows append at turn end. Fetched whole and
 // unbounded rather than windowed, since date presets and the previous-period delta each need ranges outside the

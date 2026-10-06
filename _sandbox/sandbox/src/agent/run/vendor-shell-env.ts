@@ -1,5 +1,5 @@
 import type { TurnTools } from "../providers/agent-request.js";
-import { heavyEnvVariables, QUEUE_RUN_BIN, queueRunEnabled } from "../../system/resources/heavy-commands.js";
+import { heavyEnvVariables, QUEUE_RUN_BIN, queueRunEnabled } from "../../workload/heavy-commands.js";
 
 // The heavy-command environment for a vendor runtime's own shell (Codex's app-server, Cursor's session), which the
 // daemon never writes a line for: every program that shell starts is judged by the same table Claude Code's lines

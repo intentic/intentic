@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject } from "vue";
-import { viewersOfPath } from "../../../shell/presence/usePresence";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
+import { viewersOfPath } from "../../../workbench/presence/usePresence";
+import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import { CHROME_SCOPE, contextTarget, HOISTED_CONTEXT, viewerActionsTarget } from "../files/viewerChrome";
 import { useT } from "@intentic/ui/i18n";
 

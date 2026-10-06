@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
+import type { Logger } from "pino";
 import { onRuntimeChange, publishRuntimeChange } from "../seams/runtime-feed.js";
 import { foreground, PANE_FORMAT, paneStates } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
+import { isNoTmuxServer } from "../terminal/tmux-server.js";
 
 // Push feed for state with no file on disk: tmux sessions, panel servers, sockets, browsers, child turns.
 // - announced: the daemon calls publishRuntimeChange itself when it changes something (seams/runtime-feed.ts)
@@ -43,13 +45,17 @@ export const paneFingerprint = (stdout: string): string =>
         .toSorted()
         .join("\n");
 
-// One exec for the whole tmux server. No server yet means no sessions, which is a fingerprint like any other.
+// One exec for the whole tmux server. No server yet means no sessions, which is a fingerprint like any other; any other
+// failure rejects, so the sampler skips the tick rather than reading it as every terminal gone.
 const tmuxFingerprint = async (): Promise<string> => {
     try {
         const { stdout } = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
         return paneFingerprint(stdout);
-    } catch {
-        return "";
+    } catch (error) {
+        if (isNoTmuxServer(error)) {
+            return "";
+        }
+        throw error;
     }
 };
 
@@ -75,12 +81,18 @@ const defaultRuntimeProbes: RuntimeProbes = {
     ports: () => listeningPortsFingerprint(),
 };
 
+// Where a timed sample's failure is said: the daemon's logger, handed in by the /events route that subscribes.
+export type SampleFailed = Pick<Logger, "warn">;
+
 // Factory so a test can supply its own probes and clock. A first reading only establishes the baseline and publishes
-// nothing; a slow probe's tick is skipped rather than queued, never overlapping itself.
+// nothing; a slow probe's tick is skipped rather than queued, never overlapping itself. A probe that fails rejects
+// `sample` with the baseline kept, so a failed reading never reads as a change.
 export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbes, intervalMs = SAMPLE_MS) => {
     const seen = new Map<string, string>();
     let sampling = false;
     let interval: ReturnType<typeof setInterval> | undefined;
+    // Whether the last timed sample failed: a probe failing every tick is said once per spell, not every two seconds.
+    let failing = false;
 
     const sample = async (): Promise<void> => {
         if (sampling) {
@@ -107,14 +119,26 @@ export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbe
         }
     };
 
+    const tick = async (failed: SampleFailed | undefined): Promise<void> => {
+        try {
+            await sample();
+            failing = false;
+        } catch (error) {
+            if (!failing) {
+                failed?.warn({ err: error }, "runtime watch: a sampled probe could not read its state");
+            }
+            failing = true;
+        }
+    };
+
     return {
-        start: (): void => {
+        start: (failed?: SampleFailed): void => {
             if (interval !== undefined) {
                 return;
             }
             // Baseline immediately, so the first real change is caught one interval from now rather than two.
-            void sample();
-            interval = setInterval(() => void sample(), intervalMs);
+            void tick(failed);
+            interval = setInterval(() => void tick(failed), intervalMs);
             interval.unref();
         },
         stop: (): void => {
@@ -138,11 +162,14 @@ let unwatchPrompts: (() => void) | undefined;
 // The /events connections subscribed here; the sampler runs while there is one.
 let listeners = 0;
 
-/** Subscribes a /events connection to the runtime feed. */
-export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void): (() => void) => {
+/**
+ * Subscribes a /events connection to the runtime feed. `failed` hears a sampler probe that could not read its state; the
+ * sampler keeps the one it started with, the first subscriber's.
+ */
+export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void, failed?: SampleFailed): (() => void) => {
     const unsubscribe = onRuntimeChange(listener);
     listeners += 1;
-    sampler.start();
+    sampler.start(failed);
     unwatchPrompts ??= watchPromptSignals(() => publishRuntimeChange("terminals"));
     return () => {
         unsubscribe();

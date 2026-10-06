@@ -1,7 +1,7 @@
 import { extname } from "node:path";
 import type { TranscriptRow, TranscriptTool, ShareDetail, ToolCallContent } from "@intentic/sandbox-contract";
+import { maskCredentialMaterial } from "@intentic/sandbox-contract";
 import { SHARE_FILES_DIR } from "@intentic/sandbox-contract/share-paths";
-import { SECRET_PATTERNS } from "../public/public-files.js";
 
 // Pure, synchronous reduction of a conversation to what a stranger may read: testable without a renderer doing file
 // I/O. Three steps, in order:
@@ -11,10 +11,10 @@ import { SECRET_PATTERNS } from "../public/public-files.js";
 // Dropped at both levels: `checkpointId` (meaningless off this machine), `notes` and interactive cards (no surface to
 // draw them, unreadable JSON is worse than absent).
 
-// Visible marker, on purpose: a silently shortened line would read as the agent saying something odd.
-export const REDACTED = "[redacted]";
-
-const redact = (text: string): string => SECRET_PATTERNS.reduce((value, pattern) => value.replace(new RegExp(pattern, "g"), REDACTED), text);
+// The contract's credential masker, the vocabulary transcripts are masked with, and the one the public outbox sniffs the
+// published page with (public-files.ts rule 5): what this leaves, the outbox serves. Its mask is visible (`***`) on
+// purpose: a silently shortened line would read as the agent saying something odd.
+export const redactSecrets = (text: string): string => maskCredentialMaterial(text);
 
 // What the page can draw; a path outside this set is never copied, so an image entry can't be used to publish an
 // arbitrary file.
@@ -58,14 +58,14 @@ class Pictures {
 const shareContent = (content: readonly ToolCallContent[], pictures: Pictures): ToolCallContent[] =>
     content.flatMap((entry): ToolCallContent[] => {
         if (entry.type === "text") {
-            return [{ type: "text", text: redact(entry.text) }];
+            return [{ type: "text", text: redactSecrets(entry.text) }];
         }
         if (entry.type === "diff") {
             return [
                 {
                     ...entry,
-                    ...(entry.oldText === undefined ? {} : { oldText: redact(entry.oldText) }),
-                    newText: redact(entry.newText),
+                    ...(entry.oldText === undefined ? {} : { oldText: redactSecrets(entry.oldText) }),
+                    newText: redactSecrets(entry.newText),
                 },
             ];
         }
@@ -79,11 +79,11 @@ const shareTool = (tool: TranscriptTool, pictures: Pictures): TranscriptTool => 
     name: tool.name,
     category: tool.category,
     status: tool.status,
-    ...(tool.target === undefined ? {} : { target: redact(tool.target) }),
+    ...(tool.target === undefined ? {} : { target: redactSecrets(tool.target) }),
     ...(tool.locations === undefined ? {} : { locations: tool.locations }),
     ...(tool.content === undefined ? {} : { content: shareContent(tool.content, pictures) }),
     ...(tool.children === undefined ? {} : { children: tool.children.map((child) => shareTool(child, pictures)) }),
-    ...(tool.thinking === undefined ? {} : { thinking: redact(tool.thinking) }),
+    ...(tool.thinking === undefined ? {} : { thinking: redactSecrets(tool.thinking) }),
 });
 
 export interface SharedTranscript {
@@ -96,7 +96,7 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
     const shared = messages.map((message): TranscriptRow => {
         const base: TranscriptRow = {
             role: message.role,
-            text: redact(message.text),
+            text: redactSecrets(message.text),
             ...(message.sentAt === undefined ? {} : { sentAt: message.sentAt }),
             // Placed rows keep their mark; a share is a human audience, the only one the flag exists for.
             ...(message.placed === true ? { placed: true } : {}),
@@ -112,15 +112,15 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
         }
         return {
             ...withAttachments,
-            ...(message.thinking === undefined ? {} : { thinking: redact(message.thinking) }),
+            ...(message.thinking === undefined ? {} : { thinking: redactSecrets(message.thinking) }),
             ...(message.tools === undefined ? {} : { tools: message.tools.map((tool) => shareTool(tool, pictures)) }),
             ...(message.todos === undefined
                 ? {}
                 : {
                       todos: message.todos.map((todo) => ({
                           ...todo,
-                          content: redact(todo.content),
-                          ...(todo.activeForm !== undefined ? { activeForm: redact(todo.activeForm) } : {}),
+                          content: redactSecrets(todo.content),
+                          ...(todo.activeForm !== undefined ? { activeForm: redactSecrets(todo.activeForm) } : {}),
                       })),
                   }),
         };

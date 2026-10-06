@@ -1,16 +1,26 @@
 <!-- The home's quick look: a card beside the hovered tile with a file's first lines, the picture itself, a document's first page, or what a folder holds. -->
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Code, explorerColorClass, formatBytes, iconForEntry, placeAnchored, type Placement, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import {
+    Code,
+    explorerColorClass,
+    formatBytes,
+    formatCount,
+    iconForEntry,
+    placeAnchored,
+    type Placement,
+    SkeletonSnapshot,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
 import { useLatest } from "@intentic/ui/async";
-import { useLayout } from "../../../shell/window/useLayout";
-import { renderViewerForExtension, useViewerComponent } from "../../../core-views/viewerRegistry";
-import { sandboxBlob } from "../../sandbox/client/sandboxClient";
+import { useLayout } from "../../../workbench/window/useLayout";
+import { renderViewerForExtension, useViewerComponent } from "../../../workbench/views/viewerRegistry";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { explorerShows } from "../explorer/explorerFilter";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { readFileWindow } from "../files/fileWindow";
-import { scopeQuery } from "../health/workspaceScope";
+import { scopeQuery } from "../../../app/workspaceScope";
 import { extensionOf } from "@intentic/ui/file-format";
 import { homeGroups, homeOrder } from "./homeOrder";
 import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "./quickLookContent";
@@ -199,7 +209,7 @@ const unreadable = computed(() => kind.value === `document` && !loading.value &&
 const size = computed(() => (entry === undefined || entry.type === `dir` ? undefined : formatBytes(entry.size)));
 const count = computed(() => {
     const listed = folderChildren.value;
-    return listed === undefined ? undefined : `${listed.length.toLocaleString()} ${listed.length === 1 ? `item` : `items`}`;
+    return listed === undefined ? undefined : `${formatCount(listed.length)} ${listed.length === 1 ? `item` : `items`}`;
 });
 
 onBeforeUnmount(() => controller?.abort());
@@ -247,7 +257,7 @@ onBeforeUnmount(() => controller?.abort());
                                 <span class="truncate">{{ child.name }}</span>
                             </li>
                             <li v-if="folderChildren.length > folderNames.length" class="px-1 pt-1 text-2xs text-subtle">
-                                {{ t(`workspace.homeQuickLook.more`, { count: (folderChildren.length - folderNames.length).toLocaleString() }) }}
+                                {{ t(`workspace.homeQuickLook.more`, { count: formatCount(folderChildren.length - folderNames.length) }) }}
                             </li>
                         </ul>
                     </template>

@@ -1,8 +1,8 @@
-import type { CommitResult, GitChangesResponse } from "@intentic/api-contract";
+import type { CommitResult, GitChanges } from "@intentic/sandbox-contract";
 
 // Folds a commit's one-repo answer into the cached review, avoiding a workspace-wide rescan.
 // Pure and in its own module (not inside useChanges) since a merge rule this important is worth stating alone.
-export const spliceRepoChanges = (held: GitChangesResponse, repo: string, result: CommitResult): GitChangesResponse => {
+export const spliceRepoChanges = (held: GitChanges, repo: string, result: CommitResult): GitChanges => {
     // Bound once so TypeScript narrows it in the branches below; a property access would re-widen each time.
     const scanned = result.changes;
     // Absent drops the repo; present replaces in place to keep order; an uncached repo is appended, not dropped.

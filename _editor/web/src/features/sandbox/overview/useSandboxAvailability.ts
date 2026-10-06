@@ -1,9 +1,9 @@
 import { useNow } from "@intentic/ui/async";
 import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from "vue";
-import { isBlocked } from "../live/connection";
+import { isBlocked } from "../../../client/sandbox/connection";
 import { sandboxAvailability, type SandboxAvailability } from "./availability";
-import { useSandbox } from "../client/useSandbox";
-import { daemonReady } from "./useDaemonBoot";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { daemonReady } from "../../../client/sandbox/useDaemonBoot";
 import { useVisibleOutage } from "../gates/useVisibleOutage";
 import { sandboxSeemsAlive } from "../diagnosis/useDiagnosis";
 

@@ -1,8 +1,7 @@
 // AgentSafetyJudge controls commandJudge's mode; the model applying it is chosen on the Models tab and only
 // named here.
 import "@intentic/testing/dom";
-import type { SandboxSettings } from "@intentic/api-contract";
-import { SandboxSettingsSchema } from "@intentic/api-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";

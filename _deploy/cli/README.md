@@ -12,7 +12,7 @@ flowchart LR
     engine --> infra["Hosts · Cloudflare<br/>Forgejo · Komodo"]
 ```
 
-- Four route groups in `src/app.ts`: `deploy` (the tool itself), `sandbox` (prints the canonical `docker run` for a sandbox), `tunnel host` (a host's own Cloudflare SSH tunnel) and `scaffold` (a pnpm + turbo monorepo and its apps).
+- Four route groups in `src/app.ts`: `deploy` (the tool itself), `sandbox` (prints the canonical `docker run` for a sandbox), `tunnel host` (a host's own Cloudflare SSH tunnel, made with the providers' own `findOrCreateTunnel` and `upsertCname` on the zone state-resolver's `selectZone` picks) and `scaffold` (a pnpm + turbo monorepo and its apps).
 - A workspace has separate git repos: `intent/` holds `deploy.config.ts`, `desired-state/` holds the resolved `desired-state.json`, `.env` and generated secrets. `deploy init` scaffolds them; every other command reads these default paths from cwd.
 - `deploy resolve` reaches the network only to discover the Cloudflare zone from the API token. `plan` and `apply` never re-resolve; they work from the baked artifact. Resolve keeps the artifact's `owner` id, the intent's mark on everything it deploys, and mints one only when neither the artifact nor the baseline has it; the CI pipeline never mints (2026-10-05).
 - `deploy apply` takes a lock on every host, generates missing secrets, applies authored renames, runs the reconcile loop, then prunes what the baseline holds and this artifact does not, this intent's own orphans, and its leftovers on hosts a migration retired. Deletions wait for `--yes`. A heartbeat renews the lock while the run lasts and stops it if the lock is lost (2026-10-05).

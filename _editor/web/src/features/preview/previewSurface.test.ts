@@ -7,14 +7,14 @@ const SANDBOX = `sbx-1`;
 // The active sandbox's row, whose `role` decides whether the reader may see the preview at all.
 const active = { value: undefined as { role: string } | undefined };
 
-jest.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX }, active }) }));
+jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX }, active }) }));
 
 // Where the reader stands decides whether the preview is selected in place or opened beside.
 const currentRoute = { value: { name: `agents` } };
 // SAFETY: the openers reach only `push` and `currentRoute.value.name` of a router; nothing else is called here.
 const router = { push: jest.fn(), currentRoute } as unknown as import("vue-router").Router;
 
-const { closeAllTabs, sideDocked, sideTabId, useSidePanel } = await import("../../shell/side/sideTabs");
+const { closeAllTabs, sideDocked, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
 
 // The panel's `opened` flag is module state, so a case that asks what a fresh window does needs a fresh evaluation.
 const load = () => freshImport<typeof import("./previewSurface")>("./previewSurface", import.meta.url);

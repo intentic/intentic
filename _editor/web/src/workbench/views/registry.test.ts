@@ -1,0 +1,590 @@
+import type { CapabilityFacts, Disposable, IntenticApi, ViewBadge, ViewRegistration } from "@intentic/extension-api";
+import * as apps from "@intentic/ext-repo-apps";
+import * as preview from "@intentic/ext-preview";
+import type { PanelSummary } from "@intentic/sandbox-contract";
+import { ref } from "vue";
+import { useAudience } from "../../app/useAudience";
+
+// The reader's tier, switched by the guest tests below; everyone else is read as the owner the app defaults to.
+const guestReader = { isGuest: false };
+jest.mock(`../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest) }) }));
+import {
+    activationBadge,
+    sectionReachable,
+    railBands,
+    railGroups,
+    detectActivations,
+    homeViewId,
+    railGroupsFor,
+    railRank,
+    onRail,
+    registerView,
+    railPolicy,
+    onRailOnlyByVisit,
+    tabBarIds,
+    viewAsks,
+    provideBuiltinViews,
+} from "./registry";
+import { coreViews } from "../../core-views/coreViews";
+import { badgeChip } from "./viewBadge";
+
+// Registers packaged extensions' detects against the same registry the shell composes, so cross-extension
+// rules (claiming, fallback) are exercised for real. `commands`/`viewers` stubs just keep activate() from throwing.
+const registerApi = {
+    views: { register: (view: ViewRegistration) => registerView(`test`, view) },
+    viewers: { register: (): Disposable => ({ dispose: () => {} }) },
+    // Accepted and dropped: this file is about the rail, not a broken registry stopping tested views.
+    documents: { register: (): Disposable => ({ dispose: () => {} }) },
+    commands: { register: (): Disposable => ({ dispose: () => {} }) },
+} as unknown as IntenticApi;
+// The app's own views join the rail as main.ts hands them in.
+provideBuiltinViews(coreViews);
+apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
+preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
+
+// Two LISTED first-party extensions (installed from the registry, not compiled in), registered here in the shape their
+// own repositories declare, since the rail rules below are about what happens when they are present: Acceptance is one
+// workspace-rooted tile that badges; Documentation is one tile plus an auxiliary per-repo directory panel.
+registerView(`intentic.acceptance`, {
+    id: `acceptance`,
+    label: `Acceptance`,
+    surface: `rail`,
+    detect: (repos) =>
+        repos.some((repo) => repo.userStories || repo.hasPanel) ? [{ key: `acceptance`, title: `Acceptance`, icon: `list-check` }] : [],
+    view: async () => ({}),
+});
+registerView(`intentic.documentation`, {
+    id: `documentation`,
+    label: `Documentation`,
+    surface: `rail`,
+    detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `question-circle` }] : []),
+    view: async () => ({}),
+});
+registerView(`intentic.documentation`, {
+    id: `documentation-repo`,
+    label: `Docs`,
+    surface: `directory`,
+    auxiliary: true,
+    detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: `Docs`, repo: repo.repo })),
+    view: async () => ({}),
+});
+
+// A PanelSummary with everything false; override only the facts a case exercises.
+const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
+    hasPanel: false,
+    installed: true,
+    running: false,
+    healthy: false,
+    servers: [],
+    deployConfig: false,
+    desiredState: false,
+    directoryUi: false,
+    monorepo: false,
+    tests: false,
+    userStories: false,
+    docs: false,
+    ...over,
+});
+
+// The extension ids that contributed an element rooted at `repo`.
+const idsFor = (repo: string, panels: PanelSummary[]): string[] =>
+    detectActivations(panels, [])
+        .filter(({ activation }) => activation.repo === repo)
+        .map(({ extension }) => extension.id);
+
+describe(`apps extension`, () => {
+    it(`excludes the intent/infrastructure repo: it surfaces as Infrastructure, not as an app monorepo`, () => {
+        const ids = idsFor(`intentic-app`, [panel({ repo: `intentic-app`, deployConfig: true, monorepo: true })]);
+        expect(ids).toContain(`infrastructure`);
+        expect(ids).not.toContain(`apps`);
+    });
+
+    it(`still surfaces a plain monorepo as an app monorepo`, () => {
+        expect(idsFor(`shop`, [panel({ repo: `shop`, monorepo: true })])).toContain(`apps`);
+    });
+});
+
+// The `apps` extension's tile for a repo, whether it claims it (monorepo) or just rides in props
+// (tests-only), keyed by the tile key (always the repo name). `idsFor` above only sees claiming tiles.
+const appsTile = (key: string, panels: PanelSummary[]) =>
+    detectActivations(panels, []).find(({ extension, activation }) => extension.id === `apps` && activation.key === key)?.activation;
+const contributes = (id: string, key: string, panels: PanelSummary[]): boolean =>
+    detectActivations(panels, []).some(({ extension, activation }) => extension.id === id && activation.key === key);
+
+describe(`apps extension, merged tests view`, () => {
+    it(`a monorepo-with-tests gets ONE claiming tile (props.monorepo): no duplicate ⚡ tile`, () => {
+        const panels = [panel({ repo: `mono`, monorepo: true, tests: true, hasPanel: true })];
+        const tile = appsTile(`mono`, panels);
+        expect(tile?.repo).toBe(`mono`);
+        expect(tile?.props).toEqual({ monorepo: true });
+    });
+
+    it(`a tests-only non-monorepo repo gets a non-claiming ⚡ tile`, () => {
+        const panels = [panel({ repo: `lib`, tests: true, hasPanel: true })];
+        const tile = appsTile(`lib`, panels);
+        expect(tile?.repo).toBeUndefined();
+        expect(tile?.icon).toBe(`bolt`);
+        expect(tile?.props).toEqual({ repo: `lib`, monorepo: false });
+    });
+
+    it(`the intent monorepo's tests surface as a tests-only tile beside Infrastructure, never a browsable app monorepo`, () => {
+        const panels = [panel({ repo: `intent`, monorepo: true, tests: true, deployConfig: true })];
+        const tile = appsTile(`intent`, panels);
+        expect(tile?.repo).toBeUndefined();
+        expect(tile?.props).toEqual({ repo: `intent`, monorepo: false });
+        expect(contributes(`infrastructure`, `intent`, panels)).toBe(true);
+    });
+
+    it(`the old vitest extension id is gone`, () => {
+        const acts = detectActivations([panel({ repo: `mono`, monorepo: true, tests: true })], []);
+        expect(acts.some(({ extension }) => extension.id === `vitest`)).toBe(false);
+    });
+});
+
+// Auxiliary views add a surface beside the claiming view without replacing its fallback.
+describe(`auxiliary views`, () => {
+    const register = (id: string, extra: Partial<ViewRegistration>): Disposable =>
+        registerView(`test`, {
+            id,
+            label: id,
+            surface: `directory`,
+            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
+            view: async () => await Promise.resolve({}),
+            ...extra,
+        });
+
+    it(`renders for its repo AND leaves a fallback in place`, () => {
+        const fallback = register(`stand-in`, { fallback: true });
+        const disposable = register(`aux`, { auxiliary: true });
+        const panels = [panel({ repo: `site`, hasPanel: true })];
+        expect(contributes(`aux`, `site`, panels)).toBe(true);
+        expect(contributes(`stand-in`, `site`, panels)).toBe(true);
+        disposable.dispose();
+        fallback.dispose();
+    });
+
+    it(`the same view without the flag claims the repo and suppresses the fallback`, () => {
+        const fallback = register(`stand-in`, { fallback: true });
+        const disposable = register(`claimer`, {});
+        const panels = [panel({ repo: `site`, hasPanel: true })];
+        expect(contributes(`claimer`, `site`, panels)).toBe(true);
+        expect(contributes(`stand-in`, `site`, panels)).toBe(false);
+        disposable.dispose();
+        fallback.dispose();
+    });
+});
+
+// A workspace-rooted rail tile (Acceptance's shape: one tile for the whole workspace, rooted at no repo) is the
+// registry's other claiming rule: rooted at no repo means it claims none.
+describe(`workspace-rooted tiles`, () => {
+    const tiles = (panels: PanelSummary[]) => detectActivations(panels, []).filter(({ extension }) => extension.id === `acceptance`);
+
+    it(`contributes ONE tile for the workspace, rooted at no repo`, () => {
+        const found = tiles([panel({ repo: `site`, userStories: true }), panel({ repo: `api`, userStories: true })]);
+        expect(found).toHaveLength(1);
+        expect(found[0]?.activation.key).toBe(`acceptance`);
+        expect(found[0]?.activation.repo).toBeUndefined();
+    });
+
+    // A fallback view for a repo with stories still stands.
+    it(`costs no repo its own surface`, () => {
+        const fallback = registerView(`test`, {
+            id: `stand-in`,
+            label: `Stand-in`,
+            surface: `directory`,
+            fallback: true,
+            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
+            view: async () => await Promise.resolve({}),
+        });
+        const panels = [panel({ repo: `site`, hasPanel: true, userStories: true })];
+        expect(tiles(panels)).toHaveLength(1);
+        expect(contributes(`stand-in`, `site`, panels)).toBe(true);
+        fallback.dispose();
+    });
+});
+
+// The registry outlives the host modules that write to it, so a dev-server hot reload activates an
+// extension a second time against the same registry. Appending there is what put a duplicate of every icon on the rail.
+describe(`re-activation`, () => {
+    const panels = [panel({ repo: `shop`, monorepo: true })];
+
+    it(`activating an extension again replaces its views instead of stacking duplicates`, () => {
+        const before = detectActivations(panels, []);
+        apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
+        preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
+        expect(detectActivations(panels, []).map(({ extension }) => extension.id)).toEqual(before.map(({ extension }) => extension.id));
+    });
+
+    it(`a superseded registration's disposable cannot evict the live replacement`, () => {
+        const view = (): ViewRegistration => ({
+            id: `ghost`,
+            label: `Ghost`,
+            surface: `rail`,
+            detect: () => [{ key: `ghost`, title: `Ghost` }],
+            view: async () => ({}),
+        });
+        const stale = registerView(`test`, view());
+        const live = registerView(`test`, view());
+        stale.dispose();
+        expect(detectActivations(panels, []).some(({ extension }) => extension.id === `ghost`)).toBe(true);
+        live.dispose();
+        expect(detectActivations(panels, []).some(({ extension }) => extension.id === `ghost`)).toBe(false);
+    });
+});
+
+// The rail's order is a product decision, not an accident of registration order (Acceptance landed between
+// Automations and Documentation for no reason). railGroups() declares it; checked here since the rail and mobile menu
+// must agree.
+describe(`rail order`, () => {
+    const railIds = (): string[] =>
+        detectActivations([panel({ repo: `demo`, hasPanel: true, userStories: true })], [])
+            .filter(({ extension }) => extension.surface === `rail`)
+            .map(({ extension }) => extension.id);
+
+    it(`puts what summons you above what you go and consult`, () => {
+        const ids = railIds();
+        const rank = (id: string): number => ids.indexOf(id);
+        expect(rank(`acceptance`)).toBeGreaterThanOrEqual(0);
+        // Acceptance badges to fetch you; Documentation is read on your own initiative, not before verifying a system.
+        expect(rank(`acceptance`)).toBeLessThan(rank(`documentation`));
+    });
+
+    // Keep every compiled-in rail view listed in railGroups().
+    it(`ranks every compiled-in rail view, so none falls through to the end unnoticed`, () => {
+        const listed = new Set(railGroups().flatMap((group) => group.items.map((item) => item.id)));
+        const capabilities: CapabilityFacts[] = [
+            { id: `bot`, kind: `cli`, config: { provider: `discord` } },
+            { id: `repos`, kind: `cli`, config: { provider: `github` } },
+            { id: `production`, kind: `cli`, config: { provider: `komodo` } },
+        ];
+        const rail = detectActivations(
+            [panel({ repo: `demo`, hasPanel: true, userStories: true, deployConfig: true, desiredState: true })],
+            capabilities,
+        )
+            .filter(({ extension }) => extension.surface === `rail`)
+            .map(({ extension }) => extension.id);
+        expect(rail.filter((id) => !listed.has(id))).toEqual([]);
+    });
+
+    // The top of the column is the scarce thing. Checked on railRank rather than a detected run, since two of
+    // the four ids are core shell tiles that contribute no activation.
+    it(`keeps the busy permanent run adjacent, with nothing on the rail between them`, () => {
+        // Pick the project, start a turn, read what it did: the loop the rail serves, with the scope that narrows the
+        // rest at its head. Approvals/Workflows used to sit between them.
+        expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
+        expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
+        expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
+    });
+
+    it(`tiles configuration below everything that lights up`, () => {
+        // Workflows never badges; it held the third tile only by being filed beside Agents.
+        expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
+        for (const summons of [`needs`, `approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
+            expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
+        }
+    });
+
+    // Down the road a change travels: checked by CI once it is pushed, then deployed.
+    it(`puts Pipelines directly above Deployments, a tile that holds its place only while it has news`, () => {
+        expect(railRank(`pipelines`)).toBe(railRank(`acceptance`) + 1);
+        expect(railRank(`deployments`)).toBe(railRank(`pipelines`) + 1);
+        expect(railPolicy(`pipelines`)).toBe(`signal`);
+    });
+
+    it(`heads the decisions band with Needs you, then Approvals: the two where nothing moves until the owner acts`, () => {
+        // Needs you first: what an agent is blocked on right now, in a conversation that resumes the moment it is answered.
+        const judge = railGroups().find((group) => group.id === `judge`);
+        expect(judge?.items.slice(0, 2).map((item) => item.id)).toEqual([`needs`, `approvals`]);
+    });
+
+    it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
+        // A third-party extension appends; it can't land between two first-party tiles by registering early.
+        const stray = registerView(`test`, {
+            id: `stray`,
+            label: `Stray`,
+            surface: `rail`,
+            detect: () => [{ key: `stray`, title: `Stray` }],
+            view: async () => ({}),
+        });
+        const ids = railIds();
+        expect(ids.at(-1)).toBe(`stray`);
+        stray.dispose();
+    });
+
+    it(`keeps the tile table and the rank table naming the same ids, so no tile sorts into a band it can't sit in`, () => {
+        // Both are read off railGroups(), so this fails only if an id is added to one derived list, not the other.
+        for (const item of railGroups().flatMap((group) => group.items)) {
+            expect(railRank(item.id)).toBeLessThan(railGroups().flatMap((group) => group.items).length);
+            expect([`always`, `signal`]).toContain(railPolicy(item.id));
+        }
+    });
+
+    it(`leaves per-repo directory panels in registration order, which the rail table says nothing about`, () => {
+        // Only rail ids are ranked, and the sort is stable, so directory activations pass through untouched.
+        const panels = [panel({ repo: `mono`, monorepo: true, hasPanel: true })];
+        const directory = detectActivations(panels, [])
+            .filter(({ extension }) => extension.surface === `directory`)
+            .map(({ extension }) => extension.id);
+        expect(directory).toEqual(directory.toSorted((left, right) => directory.indexOf(left) - directory.indexOf(right)));
+        expect(directory.length).toBeGreaterThan(0);
+    });
+});
+
+// Which tiles are on the column at all: the rail's scarce resource is tiles, roughly nine fit above a
+// 945px viewport. The rule is stated in registry.ts; this is it holding.
+describe(`rail tiles`, () => {
+    const resting = { pinned: false, active: false };
+
+    it(`tiles a permanent section with nothing to report: it is where you GO`, () => {
+        expect(onRail({ id: `agents` }, resting)).toBe(true);
+        expect(onRail({ id: `workspace` }, resting)).toBe(true);
+        expect(onRail({ id: `chat` }, resting)).toBe(true);
+        // Preview's badge is an inventory ("2 running"), not a claim; it holds its tile on the other half of the rule.
+        expect(onRail({ id: `preview` }, resting)).toBe(true);
+    });
+
+    it(`keeps a quiet queue off the rail, and tiles it the moment it owes the owner something`, () => {
+        // The whole complaint this table answers: Approvals was permanent, carrying a tile for an empty queue all day.
+        expect(onRail({ id: `approvals` }, resting)).toBe(false);
+        expect(onRail({ id: `approvals`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
+    });
+
+    it(`keeps the surfaces you author once and leave alone off it until a run needs you`, () => {
+        for (const shelf of [`workflows`, `automations`]) {
+            expect(onRail({ id: shelf }, resting)).toBe(false);
+            expect(onRail({ id: shelf, badge: { count: 1 } }, resting)).toBe(true);
+        }
+    });
+
+    it(`never retires the section the reader is standing in`, () => {
+        // Opened from More, a silent section would otherwise have no tile lit while its own view is on screen.
+        expect(onRail({ id: `automations` }, { pinned: false, active: true })).toBe(true);
+    });
+
+    it(`lets a pin overrule the table for one route without touching the others`, () => {
+        expect(onRail({ id: `deployments` }, { pinned: true, active: false })).toBe(true);
+        expect(onRail({ id: `deployments` }, resting)).toBe(false);
+    });
+
+    it(`knows which tile is only a visit, so the tile can say so before it goes`, () => {
+        const visiting = { pinned: false, active: true };
+        // The case the label is for: opened from More, nothing else holding it up, gone when the reader leaves.
+        expect(onRailOnlyByVisit({ id: `automations` }, visiting)).toBe(true);
+        // Everything with a second clause behind it keeps its tile after the visit: permanent, pinned, or badging.
+        expect(onRailOnlyByVisit({ id: `workspace` }, visiting)).toBe(false);
+        expect(onRailOnlyByVisit({ id: `automations` }, { pinned: true, active: true })).toBe(false);
+        expect(onRailOnlyByVisit({ id: `approvals`, badge: { count: 3 } }, visiting)).toBe(false);
+        // A claim about the tile you're ON: a section you aren't in is either on the rail for its own reason or not at all.
+        expect(onRailOnlyByVisit({ id: `automations` }, resting)).toBe(false);
+    });
+
+    it(`says only-a-visit exactly where onRail rests on the visit alone`, () => {
+        // The two are one rule read twice, checked against each other rather than a list copied from the table.
+        const cases = [
+            { id: `workspace` },
+            { id: `automations` },
+            { id: `documentation` },
+            { id: `some-third-party-view` },
+            { id: `approvals`, badge: { count: 1 } },
+        ] as const;
+        for (const pinned of [false, true]) {
+            for (const tile of cases) {
+                const stillSeatedAfterwards = onRail(tile, { pinned, active: false });
+                expect(onRailOnlyByVisit(tile, { pinned, active: true })).toBe(!stillSeatedAfterwards);
+            }
+        }
+    });
+
+    it(`gives an unlisted third-party view the same terms as a first-party one`, () => {
+        // Not `always`: a bundle can't take one of nine tiles by registering; it's on the rail exactly when it badges.
+        expect(railPolicy(`some-third-party-view`)).toBe(`signal`);
+        expect(onRail({ id: `some-third-party-view` }, resting)).toBe(false);
+        expect(onRail({ id: `some-third-party-view`, badge: { mark: `arrow-up` } }, resting)).toBe(true);
+    });
+
+    it(`tiles a tile whose only news is that something is running there`, () => {
+        // The rail has always on the rail live work — an open browser, a subagent, a workflow run — so a pipeline in
+        // flight earns the same tile. Waiting for it to FAIL before showing a tile hides the half hour when
+        // watching it is the point.
+        expect(onRail({ id: `pipelines`, badge: { running: `1 running` } }, resting)).toBe(true);
+        // And it is a tile of its own, so it outlives the visit exactly like a count does.
+        expect(onRailOnlyByVisit({ id: `pipelines`, badge: { running: `1 running` } }, { pinned: false, active: true })).toBe(false);
+    });
+
+    it(`spends permanent tiles on the work loop and nowhere else`, () => {
+        // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
+        // first is the project scope's tile, the only place the shell says which project it is looking at.
+        const permanent = railGroups()
+            .flatMap((group) => group.items)
+            .filter((item) => item.policy === `always`)
+            .map((item) => item.id);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`]);
+        // Devices is pinned to keep, and tiles itself while a machine is being worked on.
+        expect(railPolicy(`devices`)).toBe(`signal`);
+        expect(onRail({ id: `devices`, badge: { running: `Updating a machine's agents on rog` } }, resting)).toBe(true);
+    });
+});
+
+// Two claims a tile can make, and the rule that keeps them apart: what is OWED wears the chip, what is HAPPENING wears
+// the turning mark. Both are the same badge, so a view says both at once instead of one evicting the other.
+describe(`what a badge says`, () => {
+    const badgeOf = (badge: ViewBadge | undefined): ViewBadge | undefined =>
+        activationBadge({
+            extension: { id: `probe`, label: `Probe`, surface: `rail`, detect: () => [], view: async () => ({}), badge: () => badge },
+            activation: { key: `probe`, title: `Probe` },
+        });
+
+    it(`drops one with nothing to say, so every surface can go on testing presence alone`, () => {
+        expect(badgeOf(undefined)).toBeUndefined();
+        expect(badgeOf({ count: 0 })).toBeUndefined();
+        expect(badgeOf({ tooltip: `a sentence about nothing` })).toBeUndefined();
+    });
+
+    it(`keeps one whose only news is a run in flight`, () => {
+        expect(badgeOf({ running: `2 running` })?.running).toBe(`2 running`);
+    });
+
+    it(`carries the count and the run together, since a failing branch is usually failing WHILE its fix runs`, () => {
+        expect(badgeOf({ count: 2, tone: `danger`, tooltip: `main is broken`, running: `1 running` })).toMatchObject({
+            count: 2,
+            running: `1 running`,
+        });
+    });
+
+    it(`gives the running mark no chip to draw: a plate is what an errand wears`, () => {
+        expect(badgeChip({ running: `2 running` })).toBe(false);
+        expect(badgeChip({ count: 2 })).toBe(true);
+        expect(badgeChip({ mark: `arrow-up` })).toBe(true);
+        expect(badgeChip({ count: 0, running: `2 running` })).toBe(false);
+    });
+});
+
+// The maker's table: the same rail with the Projects dashboard in the file tree's tile, and the file tree standing in for it
+// while that extension is off. Read through the audience preference, so the switch is the same one Settings flips.
+describe(`the maker's rail`, () => {
+    const projectView = (): ViewRegistration => ({
+        id: `projects`,
+        label: `Projects`,
+        surface: `rail`,
+        detect: () => [{ key: `projects`, title: `Projects` }],
+        view: async () => ({}),
+    });
+
+    it(`keeps the developer's home on the file tree when nothing has been answered, with the dashboard on the rail beside it`, () => {
+        expect(railPolicy(`workspace`)).toBe(`always`);
+        expect(railPolicy(`projects`)).toBe(`always`);
+        expect(homeViewId()).toBe(`workspace`);
+    });
+
+    it(`tiles the Projects dashboard where the file tree was, once a maker has it`, () => {
+        useAudience().setAudience(`maker`);
+        const registered = registerView(`test`, projectView());
+        try {
+            expect(railPolicy(`projects`)).toBe(`always`);
+            expect(railPolicy(`workspace`)).toBe(`signal`);
+            expect(homeViewId()).toBe(`projects`);
+            expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
+            expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
+            expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
+            // The phone's bar tiles Chat, never the home view: the Project page is the Menu's to list.
+            expect(tabBarIds()).not.toContain(`projects`);
+            expect(tabBarIds()).toContain(`chat`);
+        } finally {
+            registered.dispose();
+            useAudience().setAudience(`developer`);
+        }
+    });
+
+    it(`hands the tile back to the file tree while the Projects extension is off, so a maker never has no home`, () => {
+        useAudience().setAudience(`maker`);
+        try {
+            expect(railPolicy(`projects`)).toBe(`always`);
+            expect(railPolicy(`workspace`)).toBe(`always`);
+            expect(homeViewId()).toBe(`workspace`);
+            expect(tabBarIds()).not.toContain(`workspace`);
+        } finally {
+            useAudience().setAudience(`developer`);
+        }
+    });
+
+    it(`spends the same four permanent tiles in both tables`, () => {
+        const permanent = railGroupsFor(`maker`)
+            .flatMap((group) => group.items)
+            .filter((item) => item.policy === `always`)
+            .map((item) => item.id);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`]);
+    });
+
+    // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the
+    // shell showed when the group table became a function and `railBands` was still matching groups by identity —
+    // two calls hand back equal groups that are not the same objects. Asserted on the tiles themselves, not on the
+    // band count, so the failure reads as "the rail is empty" rather than as an internal detail.
+    it(`lands every on the rail tile in a band, however many times the group table is built`, () => {
+        const tiles = [{ id: `chat` }, { id: `agents` }, { id: `approvals` }, { id: `live-status` }, { id: `stranger` }];
+        const banded = railBands(tiles, (tile) => tile.id).flatMap((band) => band.items.map((item) => item.id));
+        expect(banded.toSorted()).toEqual(tiles.map((tile) => tile.id).toSorted());
+    });
+});
+
+// A guest's rail is two tiles whichever audience it answered: every other tile opens on a read the daemon refuses it.
+describe(`a guest's rail`, () => {
+    it(`tiles only the chat and the board, and ranks nothing else`, () => {
+        guestReader.isGuest = true;
+        try {
+            expect(railPolicy(`chat`)).toBe(`always`);
+            expect(railPolicy(`agents`)).toBe(`always`);
+            expect(railPolicy(`workspace`)).toBe(`signal`);
+            expect(railPolicy(`preview`)).toBe(`signal`);
+            expect(railRank(`workspace`)).toBe(2);
+            expect(railBands([{ id: `chat` }, { id: `agents` }], (tile) => tile.id).map((band) => band.group.id)).toEqual([`work`]);
+        } finally {
+            guestReader.isGuest = false;
+        }
+    });
+
+    // A `signal` tile is not a closed door: an extension that badges takes one, and every offRail tile is listed in
+    // the More menu besides. Both put sections in front of a guest that answer a press by bouncing it to the chat, which
+    // is what the reader reported as icons that do nothing.
+    it(`withdraws the sections the fence would bounce, rather than putting them on the rail and refusing the press`, () => {
+        guestReader.isGuest = true;
+        try {
+            expect(sectionReachable(`/chat`)).toBe(true);
+            expect(sectionReachable(`/agents`)).toBe(true);
+            expect(sectionReachable(`/sandbox/access`)).toBe(true);
+            for (const closed of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
+                expect(sectionReachable(closed), closed).toBe(false);
+            }
+        } finally {
+            guestReader.isGuest = false;
+        }
+    });
+
+    it(`withdraws nothing from a tier that can open everything`, () => {
+        for (const section of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
+            expect(sectionReachable(section), section).toBe(true);
+        }
+    });
+});
+
+// What a view says a person owes it, gathered for the Needs you inbox: every registration that has any, and one whose
+// asks() throws costs only its own rows.
+describe(`viewAsks`, () => {
+    const register = (id: string, asks: ViewRegistration[`asks`]): Disposable =>
+        registerView(`test`, { id, label: id, surface: `rail`, detect: () => [], view: async () => await Promise.resolve({}), asks });
+
+    it(`lists each view's asks under that view, and leaves out a view with none and one that throws`, () => {
+        const owed = register(`owed`, () => [{ id: `p1`, kind: `Post`, title: `Post to #general`, open: `/ext/owed` }]);
+        const quiet = register(`quiet`, () => []);
+        const broken = register(`broken`, () => {
+            throw new Error(`no state yet`);
+        });
+        const error = jest.spyOn(console, `error`).mockImplementation(() => {});
+        const gathered = viewAsks().filter(({ view }) => [`owed`, `quiet`, `broken`].includes(view.id));
+        expect(gathered.map(({ view, asks }) => [view.id, asks.map((ask) => ask.id)])).toEqual([[`owed`, [`p1`]]]);
+        expect(error).toHaveBeenCalledWith(`extension test/broken: asks() failed`, expect.any(Error));
+        error.mockRestore();
+        owed.dispose();
+        quiet.dispose();
+        broken.dispose();
+    });
+});

@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
 import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../conversations/actor/card-offers.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../guard/card-offers.js";
 import { type CliAnswer, refusalAnswer } from "../http/cli-answer.js";
 import type { SignRequest } from "./wallet-signer.js";
 import { type OpenedPayment, type PaymentRow, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";

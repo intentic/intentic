@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Composition } from "./savingsChart";
-import { formatCompact } from "./usageChart";
 import { useT } from "@intentic/ui/i18n";
+import { formatCompact } from "@intentic/ui";
 
 // Where a window's raw shell output went: one stacked bar (segments sum to the whole, including what reached the
 // assistant) plus a legend list where the numbers actually live. Legend carries one number, tokens; the share is

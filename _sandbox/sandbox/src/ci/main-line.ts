@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { trackedDefaultBranchOf } from "../git/ops/publish-file.js";
 import type { CiForge, CiStore } from "./ci-store.js";
 import type { CiProject } from "./projects.js";

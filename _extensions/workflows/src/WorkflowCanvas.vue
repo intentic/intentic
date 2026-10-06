@@ -4,7 +4,7 @@ import type { Workflow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { t } from "./i18n.js";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
-import { workflowDag } from "./workflowDag";
+import { workflowDag } from "./graph/workflowDag";
 
 // Editable canvas for the designer; the only place in the extension that mutates the graph's shape via gestures. A thin
 // shell over the kit's `DagEditor`, sharing `workflowDag` and `WorkflowNodeCard` with the run view. Mutations

@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { effectScope } from "vue";
-import type { ScreenPoint } from "../window/floating";
+import type { ScreenPoint } from "../../workbench/window/floating";
 import { GRAB, overRail, useChatTileDrag } from "./chatTileDrag";
 
 // Pins the chat tile's drag off the rail: a short press stays the tile's click, a carry outside the rail opens the window

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { BrowserConfig, Capability, ExitConfig, IdentityConfig } from "@intentic/sandbox-contract";
 import { countryLocale } from "../../exit/exit-countries.js";
 import type { FingerprintPlace } from "./fingerprint.js";
@@ -76,7 +77,7 @@ export const resolveProfileExit = async (
         }
         if ("failed" in settled) {
             return {
-                refusal: `${owner} browses through the exit "${exitId}", which could not be brought up, so this browser was not opened: opening it would have connected from this sandbox's own address instead. ${settled.failed instanceof Error ? settled.failed.message : String(settled.failed)}`,
+                refusal: `${owner} browses through the exit "${exitId}", which could not be brought up, so this browser was not opened: opening it would have connected from this sandbox's own address instead. ${errorMessage(settled.failed)}`,
             };
         }
         link = await exitLink(exitEntry);

@@ -1,5 +1,5 @@
 import type { StatusVariant } from "@intentic/ui";
-import { isBlocked, type ConnectionState } from "../live/connection";
+import { isBlocked, type ConnectionState } from "../../../client/sandbox/connection";
 import { t } from "@intentic/ui/i18n";
 
 // `reachable` is the exact request-layer answer (may a daemon call be made now); this projection is the calmer UI

@@ -9,9 +9,12 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import { startAppI18n } from "./app/i18n";
 import { initAnalytics } from "./app/analytics";
-import { startAudienceSync } from "./app/audienceSync";
+import { useAuth } from "./client/auth/useAuth";
+import { startAudienceSync } from "./client/sandbox/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
-import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
+import { dropTranscriptStore } from "./features/chat/transcript/transcriptCache";
+import { describeError, installClientDiagnostics, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
+import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
 import { installRenderTrace } from "./app/renderTrace";
@@ -19,22 +22,29 @@ import { queryClient } from "./lib/queryPersistence";
 import { installSkeletonPersistence } from "./lib/skeletonPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
-import "./features/sandbox/client/sandboxScope";
-import "./features/sandbox/client/sandboxScreen";
+import "./features/sandbox/switching/sandboxScope";
+import "./features/sandbox/switching/sandboxScreen";
 import "./extension-host/hostModules";
+import { coreViews } from "./core-views/coreViews";
+import { provideBuiltinViews } from "./workbench/views/registry";
 import { openInPage, router } from "./router";
 import { routePatternOf } from "./router/routePattern";
-import { installNotificationTaps } from "./shell/notifications/notificationTaps";
+import { installNotificationTaps } from "./workbench/notifications/notificationTaps";
 import "./styles.css";
 
 installDevStyles();
 
+// The views the app builds in join the registry extensions register into; it sits below them, so they are handed in.
+provideBuiltinViews(coreViews);
+
 // Called first: a startup crash after this wipes stored state and reloads once, not needing 'clear site data'.
 installSelfHeal();
-// Called right after selfHeal, so the wipe below is captured in the crash record too.
+// Called right after selfHeal, so the wipe below is captured in the crash record too; reports reach the daemon through
+// its client, handed in since diagnostics sit below it.
+sendClientDiagnosticsWith(postClientDiagnostics);
 installClientDiagnostics();
 await purgeIfMarked();
-dropOutdatedMirrors();
+dropOutdatedMirrors(dropTranscriptStore);
 
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
@@ -53,7 +63,7 @@ installDesktopLinks();
 installDesktopOpener(openInPage);
 
 // Loads the SDK itself at the page's first idle moment (analytics.ts), so it never stands in front of the first screen.
-void initAnalytics((path) => routePatternOf(router, path));
+void initAnalytics((path) => routePatternOf(router, path), useAuth().user);
 
 // Before mount, so a slow first paint's spans land in the ring buffer too (`__intenticPerf` in the console).
 installPerfConsole();

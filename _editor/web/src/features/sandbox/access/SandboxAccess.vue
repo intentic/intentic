@@ -24,19 +24,19 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
 import { computed, onMounted, ref } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { jsonBody } from "../client/jsonBody";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { apiClient } from "../../../lib/useApi";
 import { SANDBOX_MEMBERS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
-import { useAuth } from "../../auth/useAuth";
-import { useSandbox } from "../client/useSandbox";
-import { useRole } from "../secrets/useRole";
-import { useSandboxSession } from "../session/sandboxSession";
+import { useAuth } from "../../../client/auth/useAuth";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useAreas } from "../areas/useAreas";
 import { identityHue } from "../../../lib/identityHue";
-import { presenceActivity, presenceOthers } from "../../../shell/presence/usePresence";
+import { presenceActivity, presenceOthers } from "../../../workbench/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
 import AreaPicker from "./AreaPicker.vue";
@@ -46,7 +46,7 @@ import { usePersonaReach } from "./usePersonaReach";
 import AccessMemberBadges from "./AccessMemberBadges.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxJson throws on non-2xx), then the
+// Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxRaw throws on non-2xx), then the
 // platform's record + email, each with its own error. A declined or refused send isn't a failure, since the grant is
 // already recorded; the owner gets the link instead. Members get read-only; presence is for everyone.
 
@@ -216,7 +216,7 @@ const load = async (): Promise<void> => {
         // list up and says the fences are unknown, rather than drawing every row as unfenced.
         const [invited, granted] = await Promise.all([
             apiClient.invite.list({ sandboxId: id }),
-            sandboxJson<{ members: AccessGrant[] }>(`/members`).catch((err: unknown): undefined => {
+            sandboxRaw(`GET /members`).catch((err: unknown): undefined => {
                 grantsUnread.value = noticeFrom(
                     err,
                     `Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`,
@@ -285,10 +285,10 @@ const invite = async (): Promise<void> => {
     busy.value = true;
     clearNotice();
     try {
-        // Daemon push first, enforced; sandboxJson throws on non-2xx, so an unenforced grant is never recorded as sent.
+        // Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent.
         try {
             grants.value = (
-                await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(value, inviteRole.value, inviteAreas.value)))
+                await sandboxRaw(`POST /members`, { input: grantBody(value, inviteRole.value, inviteAreas.value) })
             ).members;
             // The answer is the whole roster, so every fence is known again.
             grantsUnread.value = undefined;
@@ -376,7 +376,7 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
     try {
         // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
         try {
-            grants.value = (await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(target, role, areas)))).members;
+            grants.value = (await sandboxRaw(`POST /members`, { input: grantBody(target, role, areas) })).members;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
             return false;
@@ -441,7 +441,7 @@ const revoke = async (target: string): Promise<void> => {
     try {
         // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
         try {
-            await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
+            await sandboxRaw(`DELETE /members`, { input: { email: target } });
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't take access away on the sandbox: is it online?`);
             return;

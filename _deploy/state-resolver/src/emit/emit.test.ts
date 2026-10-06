@@ -1,6 +1,6 @@
 import { env, makeRef } from "@intentic/graph";
-import type { CloudflareIntent, HostIntent, IntentSet } from "@intentic/need-resolver";
-import { needKey, resolveNeeds } from "@intentic/need-resolver";
+import type { CloudflareIntent, HostIntent, IntentSet } from "../intent/intent.js";
+import { needKey, resolveNeeds } from "../intent/needs.js";
 import type { Catalog } from "../lib/catalog.js";
 import { forgejoCatalog, gitlabCatalog } from "../lib/catalog.js";
 import { IMAGES } from "../lib/images.js";

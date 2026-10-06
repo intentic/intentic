@@ -1,11 +1,12 @@
 import { dirname } from "node:path";
 import { createStore, resolveInputs } from "@intentic/engine";
 import type { ResourceNode } from "@intentic/graph";
-import { createSshExecutor, sshSchema, sshTarget } from "@intentic/providers";
-import { buildCommand, type CommandContext, numberParser } from "@stricli/core";
+import { sshSchema, sshTarget } from "@intentic/providers";
+import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_PATH, loadEnvFile, readArtifact } from "../lib/artifact.js";
-import { createKnownHostsStore } from "../lib/known-hosts.js";
+import { countAtLeast } from "../lib/flags.js";
+import { pinnedSshExecutor } from "../lib/known-hosts.js";
 import { columns, createOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 
@@ -50,7 +51,7 @@ export const logsCommand = buildCommand({
     parameters: {
         flags: {
             artifact: { kind: "parsed", parse: String, optional: true, brief: `Path to the artifact (default: ${ARTIFACT_PATH})` },
-            tail: { kind: "parsed", parse: numberParser, optional: true, brief: `Lines per container (default ${DEFAULT_TAIL})` },
+            tail: { kind: "parsed", parse: countAtLeast(1), optional: true, brief: `Lines per container (default ${DEFAULT_TAIL})` },
         },
         positional: {
             kind: "tuple",
@@ -85,7 +86,7 @@ export const logsCommand = buildCommand({
         if (!parsedSsh.success) {
             throw new Error(`"${id}" (type "${node.type}") has no host SSH target: its runtime logs are not host-fetchable`);
         }
-        const ssh = createSshExecutor(createKnownHostsStore(dir));
+        const ssh = pinnedSshExecutor(dir);
         const session = await ssh.connect(sshTarget(parsedSsh.data));
         try {
             // Streams chunks through the log channel: text mode prints live, ndjson frames each line for a backend.

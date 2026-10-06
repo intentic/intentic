@@ -1,5 +1,17 @@
-import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, GatewayRefusal, type ListenerMessage, recentKeys, typingHeartbeat } from "@intentic/connector-runtime";
-import type { Client, Message } from "discord.js";
+import {
+    type Delivered,
+    deliverChunked,
+    type GatewayCtx,
+    GatewayRefusal,
+    HISTORY_LIMIT,
+    type ListenerHistoryEntry,
+    type ListenerMessage,
+    MESSAGE_LIMITS,
+    paintReply,
+    recentKeys,
+    typingHeartbeat,
+} from "@intentic/connector-runtime";
+import { type Client, DiscordAPIError, type Message, type REST, Routes } from "discord.js";
 import { visibleChannel } from "./client.js";
 
 // Text side of the gateway: builds a normalized listener message from every human-authored message a subscribed bot
@@ -16,23 +28,11 @@ export interface StreamChannel {
 }
 
 // Discord's per-message content limit; a longer reply spills into follow-up messages.
-const DISCORD_MAX = 2_000;
+const DISCORD_MAX = MESSAGE_LIMITS.discord;
 // Min gap between edits; Discord rate-limits them (~5/5s), and typing covers the gap until first paint.
 const EDIT_INTERVAL_MS = 1_200;
-// Recent message ids, deduping when two bots share a channel; a restart forgets it, at worst one duplicate.
-const RECENT_MAX = 500;
-// Prior messages pulled for context when a bot is tagged (discord fetch max is 100).
-const HISTORY_LIMIT = 20;
-// Re-sent since Discord's typing indicator expires after ~10s; capped so a stuck turn can't leak it forever.
+// Re-sent since Discord's typing indicator expires after ~10s.
 const TYPING_INTERVAL_MS = 8_000;
-const TYPING_MAX_MS = 300_000;
-
-interface HistoryEntry {
-    author: { id: string; name: string };
-    content: string;
-    timestamp: string;
-    self?: boolean;
-}
 
 // Who wrote it, as Discord vouches for them: the user id (what a sender rule names), the username for display, and in a
 // guild the member's role ids as `groups`, @everyone included, so a rule can name a role or the whole server. A DM has
@@ -44,9 +44,9 @@ export const authorOf = (message: Pick<Message, "author" | "member">): ListenerM
 
 // Newest-first fetch results to chronological history, flagging our own bots' posts so the model recognizes its prior
 // replies.
-export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<string>): HistoryEntry[] =>
+export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<string>): ListenerHistoryEntry[] =>
     newestFirst.toReversed().map((m) => {
-        const entry: HistoryEntry = {
+        const entry: ListenerHistoryEntry = {
             author: { id: m.author.id, name: m.author.username },
             content: m.content,
             timestamp: m.createdAt.toISOString(),
@@ -57,31 +57,97 @@ export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<
         return entry;
     });
 
-// The gateway's /deliver door: posts one message outside any live turn, whichever connected bot can see the channel
-// (the first subscribed, matching inbound dedup order). Chunked at the same ceiling a streamed reply spills at.
-// A bot whose lookup failed outright does not stop the others; its error is the answer only if none of them could post.
-export const deliverToChannel = async (subscribed: ReadonlyMap<string, Client>, channelId: string, text: string): Promise<void> => {
-    let failure: Error | undefined;
-    for (const client of subscribed.values()) {
-        let channel: Awaited<ReturnType<typeof visibleChannel>>;
-        try {
-            channel = await visibleChannel(client, channelId);
-        } catch (error) {
-            failure ??= error instanceof Error ? error : new Error(String(error));
-            continue;
-        }
+// One bot's view of a channel, enough to post into it and link to what it posted; null when Discord answers that the
+// bot cannot see the channel at all.
+export interface PostableChannel {
+    readonly guildId: string | null;
+    readonly send: (content: string) => Promise<{ readonly id: string }>;
+}
+export type ChannelLookup = (channelId: string) => Promise<PostableChannel | null>;
+
+// Through a connected client: the channel as its cache and Discord's REST answer it.
+export const clientLookup =
+    (client: Client): ChannelLookup =>
+    async (channelId) => {
+        const channel = await visibleChannel(client, channelId);
         if (channel === null || !("send" in channel)) {
-            continue;
+            return null;
         }
-        for (let base = 0; base < text.length; base += DISCORD_MAX) {
-            await (channel as unknown as StreamChannel).send(text.slice(base, base + DISCORD_MAX));
+        // SAFETY: `send` was just found on the channel; discord.js's union of channel classes does not narrow on it.
+        const postable = channel as unknown as { readonly send: (content: string) => Promise<Message> };
+        return { guildId: "guildId" in channel ? channel.guildId : null, send: (content) => postable.send(content) };
+    };
+
+// Through the bot token alone, over REST, for a delivery while no automation holds a connection: an approved post has
+// no reason to open (and then hold) a gateway socket. discord.js's REST waits out a 429 itself, as the client does.
+export const restLookup =
+    (rest: Pick<REST, "get" | "post">): ChannelLookup =>
+    async (channelId) => {
+        let found: unknown;
+        try {
+            found = await rest.get(Routes.channel(channelId));
+        } catch (error) {
+            if (error instanceof DiscordAPIError && (error.status === 400 || error.status === 403 || error.status === 404)) {
+                return null;
+            }
+            throw error;
         }
-        return;
+        // SAFETY: discord.js types every REST answer as unknown; GET /channels/{id} answers a channel object, whose
+        // guild_id is absent for a DM.
+        const channel = found as { readonly guild_id?: string };
+        return {
+            guildId: channel.guild_id ?? null,
+            // SAFETY: POST /channels/{id}/messages answers the message it created, which always carries its id.
+            send: async (content) => (await rest.post(Routes.channelMessages(channelId), { body: { content } })) as { id: string },
+        };
+    };
+
+export const messageUrl = (guildId: string | null, channelId: string, messageId: string): string =>
+    `https://discord.com/channels/${guildId ?? "@me"}/${channelId}/${messageId}`;
+
+// Thrown inside a delivery attempt by a bot that cannot see the channel, so the next bot is tried.
+class NotHere extends Error {}
+
+// The gateway's /deliver door: posts one message outside any live turn through the first bot that can see the channel
+// (subscribed order, matching inbound dedup), chunked at the same ceiling a streamed reply spills at. A bot whose
+// lookup failed outright does not stop the others; its error is the answer only if none of them could post.
+export const deliverToChannel = async (bots: Iterable<ChannelLookup>, channelId: string, text: string): Promise<Delivered> => {
+    let lookupFailure: Error | undefined;
+    const seen = new Map<ChannelLookup, Promise<PostableChannel | null>>();
+    const channelOf = (lookup: ChannelLookup): Promise<PostableChannel | null> => {
+        const pending = seen.get(lookup) ?? lookup(channelId);
+        seen.set(lookup, pending);
+        return pending;
+    };
+    try {
+        const [first] = await deliverChunked(
+            bots,
+            async (lookup, chunk) => {
+                const channel = await channelOf(lookup).catch((error: unknown) => {
+                    lookupFailure ??= error instanceof Error ? error : new Error(String(error));
+                    throw error;
+                });
+                if (channel === null) {
+                    throw new NotHere();
+                }
+                return messageUrl(channel.guildId, channelId, (await channel.send(chunk)).id);
+            },
+            text,
+            DISCORD_MAX,
+            () => new GatewayRefusal("Discord isn't connected in this workspace, so there is no bot to post as."),
+        );
+        return first === undefined ? {} : { url: first };
+    } catch (error) {
+        if (lookupFailure !== undefined) {
+            throw new Error(`no connected Discord bot could look up channel ${channelId}: ${lookupFailure.message}`, { cause: error });
+        }
+        if (error instanceof DiscordAPIError) {
+            // Discord's own words (Missing Permissions, Unknown Channel) are what the owner can act on, and carry nothing
+            // internal, so they pass the gateway's refusal filter instead of the generic sentence.
+            throw new GatewayRefusal(`Discord refused the message (HTTP ${error.status}): ${error.message}`);
+        }
+        throw error instanceof NotHere ? new GatewayRefusal("no connected Discord bot can post in this channel") : error;
     }
-    if (failure !== undefined) {
-        throw new Error(`no connected Discord bot could look up channel ${channelId}: ${failure.message}`, { cause: failure });
-    }
-    throw new GatewayRefusal("no connected Discord bot can post in this channel");
 };
 
 export interface DiscordListener {
@@ -90,9 +156,9 @@ export interface DiscordListener {
 }
 
 export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, Client>): DiscordListener => {
-    const recent = recentKeys(RECENT_MAX);
+    const recent = recentKeys();
     // Live "typing…" indicators keyed by channelId, started on a mention, cleared when our own reply lands.
-    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS, maxMs: TYPING_MAX_MS });
+    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS });
     const startTyping = (channel: Message["channel"]): void => {
         if (!("sendTyping" in channel)) {
             return;
@@ -100,7 +166,7 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
         typing.start(channel.id, () => void channel.sendTyping().catch(() => undefined));
     };
 
-    const fetchHistory = async (message: Message): Promise<HistoryEntry[]> => {
+    const fetchHistory = async (message: Message): Promise<ListenerHistoryEntry[]> => {
         const fetched = await message.channel.messages.fetch({ limit: HISTORY_LIMIT, before: message.id });
         const selfIds = new Set([...subscribed.values()].flatMap((c) => (c.user !== null ? [c.user.id] : [])));
         return toHistory([...fetched.values()], selfIds);
@@ -157,25 +223,20 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
                 await ctx.daemon.dispatch(payload);
                 return;
             }
-            const onError = (error: unknown): void => ctx.log.warn({ err: error }, "discord stream paint failed");
-            const poster = {
-                post: (content: string) => (channel as StreamChannel).send(content),
-                update: (handle: EditableMessage, content: string) => handle.edit(content),
-            };
-            try {
-                await ctx.daemon.dispatchStreaming(
-                    payload,
-                    framePainter(
-                        () => createStreamingPainter(poster, onError, { maxChars: DISCORD_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
-                        // Posted directly, not through the painter, which owns the reply text a failed turn usually has
-                        // none of.
-                        (reason) => void poster.post(failureNotice(reason, DISCORD_MAX)).catch(onError),
-                    ),
-                );
-            } finally {
+            await paintReply(ctx.daemon, payload, {
+                surface: {
+                    stream: {
+                        // SAFETY: `paintable` holds only where `send` is on the channel.
+                        post: (content: string) => (channel as StreamChannel).send(content),
+                        update: (handle: EditableMessage, content: string) => handle.edit(content),
+                    },
+                    editIntervalMs: EDIT_INTERVAL_MS,
+                },
+                maxChars: DISCORD_MAX,
+                onError: (error) => ctx.log.warn({ err: error }, "discord stream paint failed"),
                 // Turn ended or the stream broke either way; drop typing if our own reply didn't already clear it.
-                typing.stop(message.channelId);
-            }
+                settle: () => typing.stop(message.channelId),
+            });
         })().catch((error: unknown) => ctx.log.error({ err: error }, "discord message dispatch failed"));
     };
 

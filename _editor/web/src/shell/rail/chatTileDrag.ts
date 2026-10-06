@@ -1,8 +1,8 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref, shallowRef } from "vue";
 import { floatChatAt } from "../../features/chat/panel/chatPanelLayout";
-import { useNotifications } from "../notifications/notifications";
-import type { ScreenPoint } from "../window/floating";
+import { useNotifications } from "../../workbench/notifications/notifications";
+import type { ScreenPoint } from "../../workbench/window/floating";
 
 // THE CHAT TILE, DRAGGED OFF THE RAIL. A third way to the pop-out F9 and the tile's right-click already offer: let go
 // anywhere outside the rail and the chat opens in a window of its own, at the place it was let go, the way a browser tab

@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import {
     type AgentEvent,
     type AgentProvider,
@@ -295,7 +296,7 @@ export const refreshCache = async (deps: KeepWarmDeps, conversationId: string, k
             hear(deps, keepable, heard, event, () => controller.abort());
         }
     } catch (error) {
-        heard.failure ??= { kind: "error", message: error instanceof Error ? error.message : String(error) };
+        heard.failure ??= { kind: "error", message: errorMessage(error) };
     } finally {
         conversations.holdings(REFRESHING).drop(conversationId);
     }

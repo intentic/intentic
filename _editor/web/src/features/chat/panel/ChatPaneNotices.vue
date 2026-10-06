@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon } from "@intentic/ui";
+import { Button, Icon, Notice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_NOTICE, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
@@ -8,7 +8,7 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
 import { loadTrialStatus } from "../models/useChat-catalog";
 import { usePaneView } from "./useChat-view";
-import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { lowHoursNotice } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
@@ -128,16 +128,12 @@ const activeAccountReauth = computed(() => {
     <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
     <ChatPrivacyStrip />
     <!-- The free plan's last hours: the meter's own line, amber, with the door to Billing. -->
-    <div
-        v-if="hoursNotice"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-    >
-        <Icon name="clock" class="shrink-0" />
-        <span class="min-w-[14rem] flex-1">{{ hoursNotice }}</span>
-        <Button v-if="planOffered" :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true" class="shrink-0">{{
-            t(`chat.chatPaneNotices.billing`)
-        }}</Button>
-    </div>
+    <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
+        {{ hoursNotice }}
+        <template v-if="planOffered" #actions>
+            <Button :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
+        </template>
+    </Notice>
     <!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
     <div
         v-if="trialNotice"

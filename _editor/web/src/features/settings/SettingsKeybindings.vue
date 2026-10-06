@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Button, FilterBar, Row, RowGroup, RowNote, type Tip, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
-import { commandLabel, commands } from "../../shell/commands/useCommands";
-import { rankCommands } from "../../shell/commands/commandSearch";
-import { chordFromEvent, formatChord, isApplePlatform } from "../../shell/commands/keybindings";
-import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../shell/commands/useKeymap";
+import { commandLabel, commands } from "../../workbench/commands/useCommands";
+import { rankCommands } from "../../workbench/commands/commandSearch";
+import { chordFromEvent, formatChord, isApplePlatform } from "../../workbench/commands/keybindings";
+import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../workbench/commands/useKeymap";
 import { useT } from "@intentic/ui/i18n";
 
 // Lists every command (builtins and extensions share one registry) with its effective chord; lets the user record,

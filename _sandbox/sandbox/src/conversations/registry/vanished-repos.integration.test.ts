@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { gitInit } from "@intentic/scaffold";
+import { gitInit } from "@intentic/base/git";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { beginTurn, fleetStoreOver, isolatedAgent, noIsolation, noPresences } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";

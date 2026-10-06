@@ -53,7 +53,7 @@ const resumeFire = async (services: Services, entry: JournalledFire, now: number
 
 // Runs once at boot, beside the engine's own pass over the turns it died under (agent/run/turn/turn-resume.ts). Each
 // entry is consumed or spent before it fires, so a fire that kills the daemon can't loop the boot.
-// `ownerAsked`: the restart was the owner's, asked to pick up after (agent/run/turn/restart-resume.ts).
+// `ownerAsked`: the restart was the owner's, asked to pick up after (system/restart-resume.ts).
 // `held`: a restart storm's boot, which re-fires nothing (system/boot/boot-history.ts).
 export const resumeInterruptedFires = async (services: Services, now: number = Date.now(), ownerAsked = false, held = false): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {

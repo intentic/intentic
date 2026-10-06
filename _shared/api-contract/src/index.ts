@@ -1,11 +1,11 @@
 import { PROFILE_IDS } from "@intentic/constants";
-import { GrantedRoleSchema, isProjectDirName } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, isProjectDirName, SANDBOX_ID } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
     AdoptionTicketSchema,
-    OwnerTicketSchema,
+    MintedOwnerTicketSchema,
     AdminActionResultSchema,
     AdminAttentionSchema,
     AdminCostsSchema,
@@ -65,7 +65,7 @@ const profileInput = z.object({ profile: z.enum(PROFILE_IDS).optional() });
 // hold it to (sandbox-contract's `isProjectDirName`). Optional: any other sandbox names none, and a platform from before
 // hosted projects drops it unread, which is why the editor sends it only where `hostedOffer` answers `projects`.
 const projectInput = z.object({ project: z.string().refine(isProjectDirName, `not a project folder name`).optional() });
-export const sandboxContract = {
+export const sandboxRegistryContract = {
     list: oc.route({ method: "GET", path: "/sandbox/list" }).output(z.object({ sandboxes: z.array(SandboxSummarySchema) })),
     create: oc
         .route({ method: "POST", path: "/sandbox/create" })
@@ -120,7 +120,7 @@ export const sandboxContract = {
     // Whether this platform hands out addresses at all, read beside `hostedOffer` before lanes are drawn.
     addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
     // Signed way into a hosted sandbox for its owner; owner-only, hosted-only, 404 elsewhere.
-    ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(OwnerTicketSchema),
+    ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(MintedOwnerTicketSchema),
     // What the registry holds of sandboxes the editor remembers but the list lacks, by their 12-hex ids.
     lookup: oc
         .route({ method: "POST", path: "/sandbox/lookup" })
@@ -130,7 +130,7 @@ export const sandboxContract = {
     // when it was deleted, PRECONDITION_FAILED on a platform that hands out no addresses and so cannot vouch.
     adoptionTicket: oc
         .route({ method: "POST", path: "/sandbox/adoption-ticket" })
-        .input(z.object({ sandboxId: z.string().regex(/^[0-9a-f]{12}$/) }))
+        .input(z.object({ sandboxId: z.string().regex(SANDBOX_ID) }))
         .output(AdoptionTicketSchema),
     setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput.extend(profileInput.shape)).output(SetupCodeSchema),
     // A code for the recovery command (`FixCodeSchema`); minting one replaces the last. NOT_FOUND for a hosted sandbox.
@@ -293,7 +293,7 @@ export const tokenContract = {
 export const apiContract = {
     me: meContract,
     token: tokenContract,
-    sandbox: sandboxContract,
+    sandbox: sandboxRegistryContract,
     invite: inviteContract,
     desktop: desktopContract,
     hostedPlan: hostedPlanContract,

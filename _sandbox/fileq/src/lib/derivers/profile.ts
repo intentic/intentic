@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { plural } from "@intentic/base/format";
+import { markdownTable } from "@intentic/webq/markdown";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
 /* V8 profiles (node --cpu-prof, --heap-prof, DevTools): a sample tree whose reading is a ranked table, not the JSON. */
@@ -71,9 +72,13 @@ const table = (heading: string, unit: (value: number) => string, rows: readonly 
     [
         `## ${heading}`,
         "",
-        "| self | self % | total | total % | function |",
-        "| ---: | ---: | ---: | ---: | --- |",
-        ...rows.map((row) => `| ${unit(row.self)} | ${percent(row.self, whole)} | ${unit(row.total)} | ${percent(row.total, whole)} | \`${row.key.replaceAll("|", "\\|")}\` |`),
+        markdownTable(
+            [
+                ["self", "self %", "total", "total %", "function"],
+                ...rows.map((row) => [unit(row.self), percent(row.self, whole), unit(row.total), percent(row.total, whole), `\`${row.key}\``]),
+            ],
+            { align: ["right", "right", "right", "right"] },
+        ),
     ].join("\n");
 
 const ranked = (rows: Map<string, Row>, by: "self" | "total"): readonly Row[] => [...rows.values()].toSorted((left, right) => right[by] - left[by]).slice(0, TOP_ROWS);

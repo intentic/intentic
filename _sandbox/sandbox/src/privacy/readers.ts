@@ -1,13 +1,13 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ocrInstalled } from "../ocr/models.js";
-import { type OcrLine, pageText, type TextReader } from "../ocr/paddle-ocr.js";
-import { decodeImage } from "../ocr/raster.js";
+import { ocrInstalled } from "@intentic/ocr/models";
+import { type OcrLine, pageText, type TextReader } from "@intentic/ocr/paddle-ocr";
+import { decodeImage } from "@intentic/ocr/raster";
 import { spawnAs } from "../workload/workload-class.js";
 
 // Reading an image or a PDF on this machine, so what an untrusted provider is sent can be checked for personal data
-// first. The text reader is PaddleOCR's PP-OCRv6 (src/ocr/), whose models come with the `privacy` image pack; poppler's
+// first. The text reader is PaddleOCR's PP-OCRv6 (@intentic/ocr), whose models come with the `privacy` image pack; poppler's
 // `pdftotext` ships in the image, its `pdftoppm` with the pack. A reader that is missing says so rather than failing,
 // and the gateway then holds the image or document back.
 

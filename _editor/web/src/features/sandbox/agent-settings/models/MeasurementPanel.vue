@@ -2,9 +2,9 @@
 import { computed } from "vue";
 import type { Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { formatCompact } from "../../usage/usageChart";
 import { commitPercent } from "./numberInputs";
 import { type Outcome, type ResultRow, type ResultTable, shortfallOf } from "./experimentReadings";
+import { formatCompact, formatCount, formatFixed } from "@intentic/ui/format";
 
 // The measured half of a setting that holds some of its work back for comparison (iq search, the project map, the field
 // notes, the guidance form, the output cleaners). One table, every reading a row of the same shape: what it counts, each
@@ -36,8 +36,7 @@ const {
 
 const emit = defineEmits<{ commit: [fraction: number] }>();
 
-const count = (value: number): string => value.toLocaleString();
-const average = (value: number | undefined): string => (value === undefined ? `–` : value.toLocaleString(undefined, { maximumFractionDigits: 1 }));
+const average = (value: number | undefined): string => (value === undefined ? `–` : formatFixed(value, 1));
 
 // The cleaners' one row is an amount of text, not a count of calls: "less", not "fewer".
 const change = (row: ResultRow, outcome: Outcome & { kind: `lower` | `higher` }): string =>
@@ -89,7 +88,7 @@ const tipOf = (row: ResultRow, unit: ResultTable["unit"]): Tip | undefined => {
         note:
             outcome.saved === undefined || row.key === `outputReached`
                 ? undefined
-                : t(`sandbox.measurementPanel.savedSoFar.${row.key}`, { count: outcome.saved.toLocaleString() }),
+                : t(`sandbox.measurementPanel.savedSoFar.${row.key}`, { count: formatCount(outcome.saved) }),
     };
 };
 
@@ -143,8 +142,8 @@ const shortfall = computed<number>(() => (table === undefined ? 0 : shortfallOf(
                 <!-- How much each column stands on, as a row of the table rather than an "n=" beside every figure. -->
                 <tr class="border-t border-line-subtle text-subtle">
                     <th scope="row" class="py-1.5 text-left font-normal">{{ t(`sandbox.measurementPanel.sample.${table.unit}`) }}</th>
-                    <td class="py-1.5 pl-4 text-right">{{ count(table.on) }}</td>
-                    <td class="py-1.5 pl-4 text-right">{{ count(table.off) }}</td>
+                    <td class="py-1.5 pl-4 text-right">{{ formatCount(table.on) }}</td>
+                    <td class="py-1.5 pl-4 text-right">{{ formatCount(table.off) }}</td>
                     <td class="py-1.5 pl-6" />
                 </tr>
                 <tr v-for="line in lines" :key="line.key" class="border-t border-line-subtle">

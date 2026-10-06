@@ -5,7 +5,7 @@
 // subsystem, in the boot wiring, on purpose: nothing under a subsystem imports bootstrap/.
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
-import { restartResumeDocument } from "../agent/run/turn/restart-resume.js";
+import { activityLogDocument } from "../activity/activity-store.js";
 import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
@@ -26,6 +26,7 @@ import { ciDocument } from "../ci/ci-store.js";
 import { projectDeliveriesDocument } from "../conversations/land/project-delivery.js";
 import { conversationRecordDocument } from "../conversations/registry/agents-store.js";
 import { pre1308ImportStep } from "../conversations/registry/pre-1308-import.js";
+import { definitionDocument } from "../definition/definition.js";
 import { enginePolicyDocument } from "../engines/engine-policy.js";
 import { engineStateDocument } from "../engines/engine-store.js";
 import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
@@ -35,11 +36,11 @@ import { extensionSettingsDocument } from "../extensions/extension-settings.js";
 import { extensionUpdatePolicyDocument, extensionUpdatesDocument } from "../extensions/extension-updates.js";
 import { extensionUsageDocument } from "../extensions/extension-usage.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
-import { syncEnrollmentsDocument } from "../hosts/desktop-sync.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
+import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
 import {
     hostEnrollmentsDocument,
     hostPairConsumedDocument,
@@ -56,7 +57,6 @@ import { conversationGrantsDocument } from "../personas/conversation-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
 import { phoneWakeDocument } from "../phones/phone-wake.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
-import { definitionDocument } from "../portability/definition.js";
 import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
 import { privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { privacyVaultDocument } from "../privacy/privacy-vault.js";
@@ -66,6 +66,7 @@ import { runnerIdentityDocument } from "../runners/runner-identity.js";
 import { claudeSeatsDocument } from "../runtimes/claude/claude-seats.js";
 import { safetyLogDocument } from "../safety/safety-log.js";
 import { autostartDocument } from "../scaffold/autostart.js";
+import { credentialGatesDocument } from "../secrets/credential-gates.js";
 import { credentialReleasesDocument } from "../secrets/credential-grants.js";
 import { secretHostGuardsDocument } from "../secrets/host-guards.js";
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
@@ -85,7 +86,7 @@ import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { bootHistoryDocument } from "../system/boot/boot-history.js";
 import { choreClockDocument } from "../system/chore-clock.js";
 import { attachedProjectsDocument } from "../system/projects-registry.js";
-import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
+import { restartResumeDocument } from "../system/restart-resume.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
 import { updatePolicyDocument } from "../system/updates/update-policy.js";
 import { skippedUpdateDocument } from "../system/updates/update-skip.js";
@@ -96,13 +97,15 @@ import { modelRefusalsDocument } from "../usage/model-refusals.js";
 import { observedLimitsDocument } from "../usage/observed-limits.js";
 import { providerRefusalsDocument } from "../usage/provider-refusals.js";
 import { usageParksDocument } from "../usage/usage-parks.js";
+import { usageLedgerDocument } from "../usage/usage-store.js";
 import { walletLedgerDocument } from "../wallet/wallet-ledger.js";
 import { webchatOutboxDocument } from "../webchat/webchat-outbox.js";
 import { workflowGateTokensStep, workflowRunsDocument, workflowsDocument } from "../workflows/workflows-store.js";
+import { heavyCommandsDocument } from "../workload/heavy-commands.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
 export const stateDocuments = (): readonly DocumentSpec[] => [
-    restartResumeDocument,
+    activityLogDocument,
     pausedChildrenDocument,
     approvalsDocument,
     areasDocument,
@@ -126,6 +129,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     ciDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
+    definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -137,12 +141,12 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     extensionUsageDocument,
     hookApprovalsDocument,
     hookRequestsDocument,
-    syncEnrollmentsDocument,
     hostSetupSeededDocument,
     issuesDocument,
     loopDesignsDocument,
     loopsDocument,
     needsDocument,
+    syncEnrollmentsDocument,
     hostEnrollmentsDocument,
     hostPairConsumedDocument,
     phoneEnrollmentsDocument,
@@ -157,7 +161,6 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     personasDocument,
     phoneWakeDocument,
     bundleManifestDocument,
-    definitionDocument,
     privacyLedgerDocument,
     privacyShieldDocument,
     privacyVaultDocument,
@@ -167,6 +170,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     claudeSeatsDocument,
     safetyLogDocument,
     autostartDocument,
+    credentialGatesDocument,
     credentialReleasesDocument,
     secretHostGuardsDocument,
     sandboxSecretsDocument,
@@ -183,7 +187,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     bootHistoryDocument,
     choreClockDocument,
     attachedProjectsDocument,
-    heavyCommandsDocument,
+    restartResumeDocument,
     stagedUpdateDocument,
     updateOutcomeDocument,
     updatePreparingDocument,
@@ -196,10 +200,12 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     observedLimitsDocument,
     providerRefusalsDocument,
     usageParksDocument,
+    usageLedgerDocument,
     walletLedgerDocument,
     webchatOutboxDocument,
     workflowRunsDocument,
     workflowsDocument,
+    heavyCommandsDocument,
     dependencyRequestsDocument,
 ];
 

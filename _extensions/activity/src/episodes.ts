@@ -56,16 +56,10 @@ export const DIRECT = `you`;
 // Provider-less automation wakes (cron, webhook): something called, but no connection received it.
 export const SCHEDULE = `schedule`;
 
-const SOURCE_LABELS: Readonly<Record<string, string>> = {
-    discord: `Discord`,
-    slack: `Slack`,
-    webchat: `Web chat`,
-    imap: `Email`,
-    [DIRECT]: `You`,
-    [SCHEDULE]: `Schedule`,
-};
-
-export const sourceLabel = (key: string): string => SOURCE_LABELS[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+// A source's display name, from `names` (the listener manifests' own labels and the reserved keys' translated words,
+// useSourceNames), else the key capitalized: a runtime ("claude") or a provider whose extension is gone.
+export const sourceLabel = (key: string, names: ReadonlyMap<string, string> = new Map()): string =>
+    names.get(key) ?? key.charAt(0).toUpperCase() + key.slice(1);
 
 const isTurn = (event: ActivityEvent): boolean => event.type.startsWith(`turn.`);
 
@@ -223,7 +217,11 @@ export const toEpisodes = (events: readonly ActivityEvent[]): Episode[] => {
 
 // Every source in the log, unioned with every currently-held connection, so a quiet-but-connected bot still appears.
 // Sorted by most recent activity, not alphabetically.
-export const toSources = (episodes: readonly Episode[], connections: readonly ActivityStatus["connections"][number][]): Source[] => {
+export const toSources = (
+    episodes: readonly Episode[],
+    connections: readonly ActivityStatus["connections"][number][],
+    names: ReadonlyMap<string, string> = new Map(),
+): Source[] => {
     const tally = new Map<string, { episodes: number; failed: number; lastAt: number }>();
     for (const episode of episodes) {
         const current = tally.get(episode.sourceKey) ?? { episodes: 0, failed: 0, lastAt: 0 };
@@ -256,7 +254,7 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
         sources.push({
             key,
             group: key === DIRECT ? `direct` : `connections`,
-            label: sourceLabel(key),
+            label: sourceLabel(key, names),
             ...(state !== undefined ? { gateway: state.gateway } : {}),
             ...(state?.lastError !== undefined ? { lastError: state.lastError } : {}),
             episodes: counts?.episodes ?? 0,

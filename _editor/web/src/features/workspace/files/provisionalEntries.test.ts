@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import {
     clearUnsettledUploads,
     dropProvisional,

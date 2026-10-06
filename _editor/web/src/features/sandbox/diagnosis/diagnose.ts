@@ -1,6 +1,6 @@
 import type { HostReport, HostedStatus } from "@intentic/api-contract";
 import type { EdgeVerdict, SandboxVitals } from "@intentic/sandbox-contract";
-import type { ConnectionFailure } from "../live/connection";
+import type { ConnectionFailure } from "../../../client/sandbox/connection";
 
 // WHY A SANDBOX ISN'T ANSWERING, as a pure function of what could be observed while it wasn't. The connection machine
 // (connection.ts) knows only that a stream failed and how; this file adds what a few bounded probes found out after

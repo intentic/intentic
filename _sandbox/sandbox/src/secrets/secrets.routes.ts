@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
-import { envLine, UnquotableValueError } from "@intentic/sandbox-run/quote";
+import { UnquotableValueError } from "@intentic/sandbox-run/quote";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
@@ -15,34 +15,12 @@ import { secretsContract } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../state-paths.js";
+import { envKeys, removeEnv, upsertEnv } from "./env-text.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { randomSecret } from "./random-secret.js";
 import { guardForEntry } from "./host-guards.js";
 import { createSecretHostRoutes } from "./secret-hosts.routes.js";
 import { type TextFile, textFile } from "../store/text-file.js";
-
-// One connected provider account as an inventory entry; provider tokens are never revealable.
-// Upserts by parsing and re-serializing via `envLine`, not string interpolation, so a value containing a quote or
-// newline (an SSH key) cannot break out of its line or inject a second key.
-export const upsertEnv = (content: string, key: string, value: string): string => {
-    // parseEnv answers a Dict of string values; a missing key reads as undefined.
-    const entries = { ...(parseEnv(content) as Record<string, string>), [key]: value };
-    return Object.entries(entries)
-        .map(([entryKey, entryValue]) => envLine(entryKey, entryValue))
-        .join("");
-};
-
-// Drops KEY from a .env's text (same parse/re-serialize round-trip as upsertEnv).
-export const removeEnv = (content: string, key: string): string => {
-    const entries = parseEnv(content) as Record<string, string>;
-    delete entries[key];
-    return Object.entries(entries)
-        .map(([entryKey, entryValue]) => envLine(entryKey, entryValue))
-        .join("");
-};
-
-// The keys present in a .env's text (for the UI's set badges), never the values.
-export const envKeys = (content: string): string[] => Object.keys(parseEnv(content));
 
 // The whole `Services`, not a Pick: the inventory hands `services` on to every provider module's secretEntries, and a
 // Pick would go stale with each module edit.

@@ -2,7 +2,7 @@ import type { AdoptionTicket, SandboxLookup, SandboxSummary } from "@intentic/ap
 import type { RelinkAnswer, RelinkRequest } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/client";
 import { unstubbed } from "@intentic/testing";
-import type { RememberedSandbox } from "./deviceDirectory";
+import type { RememberedSandbox } from "../../../client/directory/deviceDirectory";
 import { type RecoveryDeps, useRecovery } from "./useRecovery";
 
 // Pins the recovery screen's order: probe every remembered sandbox, ask the platform once about the ones that answered,

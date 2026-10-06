@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { Button, Icon } from "@intentic/ui";
+import { Button, formatElapsed, Icon, timeAgo } from "@intentic/ui";
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { formatElapsed } from "../../../agents/fleet/agentStatus";
 import { childLook } from "../../../agents/board/cards/childLook";
 import RunFacts from "../../../agents/board/cards/RunFacts.vue";
 import { inProcess, type TrayChild } from "../../../agents/board/view/childFold";
-import { relativeTime } from "../../models/catalog";
 
 // WHERE THE COMPOSER STANDS WHEN THE CHAT IS A SUBAGENT'S. A subagent is its parent's to direct: the parent wrote its
 // ask, reads its report, and decides what it does next, so a box to type into here would invite words the parent never
@@ -42,9 +40,9 @@ const spawned = computed(() => !inProcess(props.child));
 // The clock the pill carries: how long it has worked, else when it settled.
 const clock = computed(() =>
     look.value.working && look.value.since !== undefined && look.value.since > 0
-        ? formatElapsed(look.value.since, now.value)
+        ? formatElapsed((now.value - look.value.since) / 1000)
         : look.value.at > 0
-          ? relativeTime(look.value.at)
+          ? timeAgo(look.value.at, { days: true })
           : undefined,
 );
 </script>

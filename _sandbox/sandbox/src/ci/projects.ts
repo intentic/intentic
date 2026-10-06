@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { type GitHost, gitHostOf } from "../capabilities/cli/git-access.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { parseRemote, remoteUrlsOf } from "../git/remote/remote-urls.js";

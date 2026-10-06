@@ -16,7 +16,7 @@ flowchart LR
     site["The website<br/>_site"] -.->|"plays a demo of"| editor
 ```
 
-The lines are contracts in [`_shared`](../../_shared): the sandbox contract between the editor and the daemon, the api contract between the editor and the platform, and the extension API between extensions and both. [`_tools`](../../_tools) holds no runtime part; it builds, checks and tests the others. [topology.md](topology.md) has the processes and the trust model, [app-plane.md](app-plane.md) the line between the product and the deployment engine.
+The lines are contracts in [`_shared`](../../_shared): the sandbox contract between the editor and the daemon, the api contract between the editor and the platform, and the extension API between extensions and both. [`_tools`](../../_tools) is the foundation under all of them: the runtime primitives every part imports (`base`, `constants`, `agent-cli`, `code-read`), and the gates, harnesses and scripts that build, check and test the rest. [topology.md](topology.md) has the processes and the trust model, [app-plane.md](app-plane.md) the line between the product and the deployment engine.
 
 ## One agent turn
 

@@ -1,5 +1,4 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract";
 import { updateBrief } from "@intentic/sandbox-contract/chores";
 import { auditBrief } from "../../sandbox/extensions/extensionBrief";
 import { type FormValues, isCommitSha } from "./form";

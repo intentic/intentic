@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import ignore, { type Ignore } from "ignore";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath } from "./constants.js";
 
@@ -87,13 +88,7 @@ const makeScope = (layers: readonly GitignoreLayer[], compile: Matchers): Ignore
     async descend(absDir, relDir) {
         // Only a directory with no .gitignore has no rules; one that could not be read would make everything under it
         // count as tracked, which a walk then descends into and a portability bundle then carries.
-        const content = await readFile(join(absDir, ".gitignore"), "utf8").catch((error: unknown) => {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code === "ENOENT" || code === "ENOTDIR") {
-                return undefined;
-            }
-            throw error;
-        });
+        const content = await readFile(join(absDir, ".gitignore"), "utf8").catch(undefinedIfMissing);
         return this.layer(relDir, content);
     },
     layer(relDir, gitignore) {

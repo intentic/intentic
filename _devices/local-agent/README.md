@@ -12,7 +12,7 @@ flowchart LR
     auto -->|"Windows"| stub["intentic-launch.exe"]
 ```
 
-- Used by [`intentic-machine`](../machine) and [`acp-bridge`](../../_sandbox/acp-bridge); it always runs on the
+- Used by [`intentic-machine`](../machine) and [`acp-bridge`](../acp-bridge); it always runs on the
   user's device, never in a sandbox.
 - `agentHome` puts state under `~/.intentic/<name>`, and `writeSecretFile` writes owner-only files, since they hold
   sandbox credentials.

@@ -7,7 +7,7 @@ import type {
     LandConflict,
     ScratchPath,
 } from "@intentic/sandbox-contract";
-import { defaultGit } from "@intentic/scaffold";
+import { defaultGit } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import { headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";

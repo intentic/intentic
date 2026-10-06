@@ -1,7 +1,9 @@
 import type { AgentOrigin, ListenerMessage, Trigger } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
-import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream } from "./scheduler.js";
+import { CHANNEL_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
+import { threadKey } from "../seams/thread-key.js";
+import { fireAutomation, mintConversationId, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
+import { TITLE_MAX } from "../seams/conversation-title.js";
 import { type SenderLane, senderLane } from "./senders.js";
 
 // Provider sources hold a live connection (Discord gateway) and dispatch normalized messages here; listener automations

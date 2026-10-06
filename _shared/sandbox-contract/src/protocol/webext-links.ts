@@ -5,6 +5,10 @@
 // URL the extension dials, from the sandbox's public URL; carries no credential, the token rides the hello frame.
 export const webextConnectUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/^http/, "ws").replace(/\/$/, "")}/system/webext/connect`;
 
+// Where the extension redeems a pairing code's one-time token (sent as `x-intentic-pair`) for its durable token; the
+// answer is a PeerEnrollmentAnswer.
+export const webextEnrollUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/enroll`;
+
 // Where the extension POSTs a site's session when the owner connects it, bearer-authenticated. A separate door from the
 // socket, since the socket's answers land in the agent's context and cookies must never reach a model.
 export const webextSessionUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/session`;

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
-import { errorMessage, useLatest } from "@intentic/ui/async";
+import { Button, EmptyState } from "@intentic/ui";
+import { messageOr, useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { type Component, ref, shallowRef, watch } from "vue";
-import { sandboxBlob } from "../../sandbox/client/sandboxClient";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 
 // A document's diff drawn as one by the viewer that claims its format (viewerRegistry, `compare`): both versions'
 // bytes fetched here, since daemon routes are Bearer-authenticated, and handed to the extension's component with the
@@ -49,7 +49,7 @@ const load = (): void => {
                 return;
             }
             loading.value = false;
-            error.value = errorMessage(err, t(`workspace.compareDiffView.couldNotLoadVersions`));
+            error.value = messageOr(err, t(`workspace.compareDiffView.couldNotLoadVersions`));
         },
     );
 };
@@ -59,10 +59,8 @@ watch(() => [before, after, at, compare] as const, load, { immediate: true });
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <!-- A pair nothing could draw as one: said, with the readings that can still be had. -->
-        <div v-if="error" class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="max-w-md text-sm text-danger">{{ error }}</p>
-            <div class="flex items-center gap-2">
+        <EmptyState v-if="error" tone="danger" :title="error" class="h-full">
+            <template #actions>
                 <Button severity="secondary" @click="emit(`text`)">
                     <Icon name="robot" class="text-xs" />
                     {{ t(`workspace.compareDiffView.showTextInstead`) }}
@@ -71,8 +69,8 @@ watch(() => [before, after, at, compare] as const, load, { immediate: true });
                     <Icon name="split-columns" class="text-xs" />
                     {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
                 </Button>
-            </div>
-        </div>
+            </template>
+        </EmptyState>
         <div v-else-if="loading || component === undefined || blobs === undefined" class="flex h-full items-center justify-center text-muted">
             <Icon name="spinner" class="text-xl" spin />
         </div>

@@ -10,7 +10,8 @@ import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-
 import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S } from "../../execution/js-runtime.js";
-import { JS_TOOL_NAME, jsToolDescription, runJsTool } from "../../execution/js-tool.js";
+import { jsToolDescription, runJsTool } from "../../execution/js-tool.js";
+import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 
 // What the turn's gate answers with and what it marks, the two halves a tool needs to run a program safely. Carried
 // together because a runtime that consults without marking would launder outside content past the judge.

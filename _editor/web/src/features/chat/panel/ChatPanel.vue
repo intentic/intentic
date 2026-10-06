@@ -9,12 +9,12 @@ import { traceFocus } from "../run/focusTrace";
 import { openRunSessions } from "../run/openRun";
 import { DEFAULT_RAIL_WIDTH, railWidth } from "../../agents/board/columnWidth";
 import { quickBarTranscript, chatOnRail, chatWide } from "./chatPanelLayout";
-import { shownSideTabs } from "../../../shell/side/sideViews";
+import { shownSideTabs } from "../../../workbench/side/sideViews";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
-import { MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
-import { toAppPx, uiLength } from "../../../shell/window/uiScale";
+import { MIN_PANE_PX, useLayout } from "../../../workbench/window/useLayout";
+import { toAppPx, uiLength } from "../../../workbench/window/uiScale";
 import ChatPane from "./ChatPane.vue";
 import ChatSubagentPane from "./subagent/ChatSubagentPane.vue";
 import { keepSubagentWhileShown, subagentOnScreen } from "./subagent/subagentView";
@@ -258,7 +258,7 @@ watch(
          Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
     <!-- Wide, the tab row is the roster on the left and nothing along the top gives way to the desktop window's buttons:
          `--window-band` is how much of the top the panes and the side rail keep clear when this panel holds the corner
-         (shell/window/controlsReserve.ts). -->
+         (workbench/window/controlsReserve.ts). -->
     <div
         ref="root"
         class="chat-panel relative flex min-h-0"

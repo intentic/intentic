@@ -1,5 +1,5 @@
 import type { ChangeStatus } from "@intentic/ui";
-import type { GitChange, GitDiffSide, RepoChanges } from "@intentic/api-contract";
+import type { GitChange, GitDiffSide, RepoChanges } from "@intentic/sandbox-contract";
 
 // One changed file as the maker's Changes sidebar reads it: git's three sides flattened to one row a person can
 // press. Shared by the panel that lists them (SavePanel.vue) and the whole-tree actions that act on them

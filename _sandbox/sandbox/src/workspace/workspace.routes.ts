@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewUrl, workspaceContract } from "@intentic/sandbox-contract";
@@ -17,6 +17,7 @@ import { discoverRepos, isValidRepoId, isValidRepoName } from "./layout/repo-dis
 import { resolveReference } from "./files/resolve-reference.js";
 import { behindCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
+import { testCommandOf } from "./layout/test-runner.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
@@ -45,19 +46,6 @@ import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import { callerFence } from "../areas/area-scope.js";
 import type { Fence } from "@intentic/sandbox-contract";
 import { publicAddressOf } from "../env.config.js";
-
-// What runs a directory's tests: its own `test` script, or without one the runner its config names.
-const testCommand = (dir: string): string => {
-    const manifest = join(dir, "package.json");
-    try {
-        if (typeof (JSON.parse(readFileSync(manifest, "utf8")) as { scripts?: Record<string, unknown> }).scripts?.["test"] === "string") {
-            return "pnpm test";
-        }
-    } catch {
-        // No manifest, or one that does not parse: the runner decides below.
-    }
-    return existsSync(join(dir, "bunfig.toml")) ? "bun test" : "pnpm vitest run";
-};
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
 const GUI_SEARCH_HITS = 1_000;
@@ -534,7 +522,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                     if (abs === undefined) {
                         throw new ORPCError("BAD_REQUEST", { message: `invalid test dir "${dir}"` });
                     }
-                    return `(cd ${shellQuote(abs)} && ${testCommand(abs)})`;
+                    return `(cd ${shellQuote(abs)} && ${testCommandOf(abs)})`;
                 })
                 .join("; ");
             await services.processes.start(`${repo}--${input.session}`, { command, cwd: repoDir, oneShot: true });

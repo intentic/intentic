@@ -9,7 +9,7 @@ import DevicePage from "./DevicePage.vue";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
 import { machineRows, slugOfDaemonUrl, withSandboxNames } from "./deviceRows";
 import { useDevices } from "./useDevices";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxVersion } from "../overview/version/useSandboxVersion";
 import { useT } from "@intentic/ui/i18n";

@@ -10,7 +10,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import type { AgentRequest, TurnSpec } from "../agent/providers/agent-request.js";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
-import { onPath } from "../system/boot/on-path.js";
+import { onPath } from "../image/on-path.js";
 import { createOpenCodeAgent, createOpenCodeRunner } from "../runtimes/opencode/opencode-agent.js";
 import { mcpServersOf, openCodeMounts } from "../runtimes/opencode/opencode-mcp.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../runtimes/decorators/turn-watchdog.js";

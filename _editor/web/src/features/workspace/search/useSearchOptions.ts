@@ -1,5 +1,5 @@
 import type { Ref } from "vue";
-import { definePreference } from "@intentic/ui/preference";
+import { boolPreference, textPreference } from "@intentic/ui/preference";
 import { t } from "@intentic/ui/i18n";
 
 // Workspace search settings: persisted module-level singleton for the three match switches (Aa/ab/.*), search
@@ -14,17 +14,13 @@ const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
 // Comma-separated globs (`!` excludes); empty = whole workspace, narrowed within includeIgnored's scope.
 const INCLUDE_KEY = `ui-workspace-search-include`;
 
-// Write-through lives in the ref itself (definePreference), not a setter beside it: splitting update from
-// persistence lets `.value =` drift from the stored value.
-const boolPref = (key: string): Ref<boolean> => definePreference<boolean>({ key, read: (raw) => raw === `1`, write: (value) => (value ? `1` : `0`) });
-
-const textPref = (key: string): Ref<string> => definePreference<string>({ key, read: (raw) => raw ?? ``, write: (value) => value });
-
-const useRegex = boolPref(REGEX_KEY);
-const matchCase = boolPref(CASE_KEY);
-const wholeWord = boolPref(WORD_KEY);
-const includeIgnored = boolPref(INCLUDE_IGNORED_KEY);
-const include = textPref(INCLUDE_KEY);
+// Write-through lives in the ref itself (a kit preference), not a setter beside it: splitting update from persistence
+// lets `.value =` drift from the stored value.
+const useRegex = boolPreference(REGEX_KEY);
+const matchCase = boolPreference(CASE_KEY);
+const wholeWord = boolPreference(WORD_KEY);
+const includeIgnored = boolPreference(INCLUDE_IGNORED_KEY);
+const include = textPreference(INCLUDE_KEY);
 
 export function useSearchOptions() {
     return { useRegex, matchCase, wholeWord, includeIgnored, include };

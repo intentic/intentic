@@ -23,9 +23,9 @@ out=.image-out
 # For a tree it does not even fail: the deploy quietly ships a package with no dist and the image is broken
 # where nothing looks.
 #
-# @intentic/lsp and @intentic/iq are NOT here: both are dependencies of @intentic/sandbox, so turbo builds
-# them under its filter (build dependsOn ^build) and the sandbox's deploy carries them — the image symlinks
-# `lsp` and `iq` straight out of /opt/sandbox rather than shipping second copies of the same packages (a
+# @intentic/lsp, @intentic/iq and @intentic/ocr are NOT here: all are dependencies of @intentic/sandbox, so turbo
+# builds them under its filter (build dependsOn ^build) and the sandbox's deploy carries them — the image symlinks
+# `lsp`, `iq` and `ocr` straight out of /opt/sandbox rather than shipping second copies of the same packages (a
 # deployed iq tree duplicated ~450 MiB of the daemon's node_modules for a CLI whose own code is <1 MiB).
 TREES="
 @intentic/sandbox:$out/sandbox

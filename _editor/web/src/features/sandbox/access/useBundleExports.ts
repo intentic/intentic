@@ -1,10 +1,10 @@
-import { BundleExportsSchema } from "@intentic/api-contract";
+import { BundleExportsSchema } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { useEndpoint } from "../secrets/useEndpoint";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { BUNDLE_EXPORTS } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The list of exports, read off the daemon's export directory rather than tracked in component state, so it
 // stays correct across tabs and reloads. Polls only while something is packing.

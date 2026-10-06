@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 
 // A SANDBOX TOO OLD FOR ACCOUNT ROUTING. Every daemon from v1.313 on serves `agent.switchAccount`, and the same release
 // judges each account row itself (`state`), names the account a failed turn ran on, and keeps where a conversation runs

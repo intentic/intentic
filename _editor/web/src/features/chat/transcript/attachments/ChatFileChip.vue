@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, iconForEntry, type Side } from "@intentic/ui";
+import { AnchoredOverlay, Button, formatCount, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
 import { type ComponentPublicInstance, computed, onBeforeUnmount, ref, useTemplateRef } from "vue";
 import { type FileQuickLook, quickLookLead, quickLookLines, quickLookOmitted } from "../../drafts/fileQuickLook";
@@ -52,7 +52,7 @@ const meta = computed(() => {
     const bits = [formatBytes(look.size)];
     const lines = quickLookLines(look);
     if (lines !== undefined) {
-        bits.push(`${lines.toLocaleString()} ${lines === 1 ? `line` : `lines`}`);
+        bits.push(`${formatCount(lines)} ${lines === 1 ? `line` : `lines`}`);
     }
     return bits.join(` · `);
 });

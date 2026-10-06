@@ -1,11 +1,12 @@
-import { readFile } from "node:fs/promises";
 import { type CredentialGate, type CredentialGateKind, CredentialGatesSchema } from "@intentic/sandbox-contract";
-import { writeJsonFile } from "../store/json-file.js";
+import { defineDocument } from "../store/evolution/documents.js";
+import { openDocument } from "../store/open-document.js";
 
 // Which credentials need a named person's click, stored off the workspace beside the vault (mode 0600), since
 // `.intentic/config/` is agent-editable and would let a turn edit its own lock. Read throws on an unreadable file
 // rather than falling back, since empty here means nothing is gated. A subject is a whole capability account, never one
 // vault field.
+export const credentialGatesDocument = defineDocument({ root: "auth", path: "credential-gates.json", schema: CredentialGatesSchema });
 
 export interface CredentialGatesStore {
     // Every gate in force; `[]` if never written, throws if the file exists but cannot be read or parsed.
@@ -41,40 +42,23 @@ export const gateForCapability = (gates: readonly CredentialGate[], id: string):
     gates.find((gate) => gate.kind === "capability" && gate.subject === id);
 
 export const fileCredentialGates = (path: string): CredentialGatesStore => {
-    // Serializes read-modify-write writes into one chain, so a second write can't clobber one still in flight.
-    let queue: Promise<unknown> = Promise.resolve();
+    const file = openDocument(credentialGatesDocument, path, {
+        fallback: () => ({ gates: [] }),
+        mode: 0o600,
+        // A fresh policy over an unreadable one would lift every gate in it.
+        onUnreadable: "refuse",
+    });
+    // Absent is the ordinary first state; content that exists and cannot be read must never be read as nothing gated.
     const list = async (): Promise<readonly CredentialGate[]> => {
-        let text: string;
-        try {
-            text = await readFile(path, "utf8");
-        } catch (error) {
-            // ENOENT is the ordinary first state; anything else is unreadable, and must not be read as absent.
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                return [];
-            }
-            throw new Error(`the credential gate policy at ${path} could not be read`, { cause: error });
+        const state = await file.state();
+        if (state.unreadable) {
+            throw new Error(`the credential gate policy at ${path} could not be read (${state.detail})`);
         }
-        // Catches JSON.parse too: unparseable JSON and JSON that isn't a policy report the same refusal.
-        let raw: unknown;
-        try {
-            raw = JSON.parse(text);
-        } catch (error) {
-            throw new Error(`the credential gate policy at ${path} could not be read`, { cause: error });
-        }
-        const parsed = CredentialGatesSchema.safeParse(raw);
-        if (!parsed.success) {
-            throw new Error(`the credential gate policy at ${path} is not readable as a policy`);
-        }
-        return parsed.data.gates;
+        return state.value.gates;
     };
+    // Serialized on the file's own queue, and written over what a newer build added rather than dropping it.
     const write = async (change: (current: readonly CredentialGate[]) => readonly CredentialGate[]): Promise<void> => {
-        const run = queue.then(async () => {
-            const next = change(await list());
-            await writeJsonFile(path, { gates: next }, 0o600);
-        });
-        // Catches so a failed write doesn't break the chain; the next edit still queues behind this one.
-        queue = run.catch(() => undefined);
-        await run;
+        await file.update((current) => ({ ...current, gates: [...change(current.gates)] }));
     };
     return {
         list,

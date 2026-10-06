@@ -1,10 +1,10 @@
-import type { WorkspaceSearchGroup } from "@intentic/api-contract";
+import type { WorkspaceSearchGroup } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { sandboxRef } from "@intentic/extension-api";
 import { type InjectionKey, type Ref, watch } from "vue";
 import type { RowAction } from "../explorer/rowActions";
 import { withinScope } from "../../../app/projectScope";
-import { workspaceDir } from "../health/workspaceScope";
+import { workspaceDir } from "../../../app/workspaceScope";
 import type { SearchScope } from "../search/useWorkspaceSearch";
 
 // The home: the main pane's "nothing open" surface drawn as large tiles of one folder. Which folder, and which entry

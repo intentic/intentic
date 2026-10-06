@@ -1,11 +1,11 @@
-import type { SafetyLogEntry, SafetyPolicy } from "@intentic/api-contract";
+import type { SafetyLogEntry, SafetyPolicy } from "@intentic/sandbox-contract";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The safety policy (.intentic/config/safety.md) and its decision log, read and written via the daemon's safety
 // routes. Kept out of useSandboxSettings on purpose: that composable optimistically patches a bag of flags, while this

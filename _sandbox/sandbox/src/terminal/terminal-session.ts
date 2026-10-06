@@ -1,5 +1,5 @@
 import { JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { isNoTmuxServer } from "./tmux-server.js";
 
 // Tmux session-name charset for the WebSocket route and control-plane list/kill routes: alnum, underscore, dash only,

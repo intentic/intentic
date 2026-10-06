@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_SEED_MODELS, type Model } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
+import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
+import { expireTimeouts, stalledFetch } from "../../testing.js";
 import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "./claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";
@@ -122,6 +124,30 @@ test("a REST failure descends the ladder rather than serving the aliases the CLI
     ).models();
 
     expect(catalog.models).toEqual(recorded);
+});
+
+test("a REST catalog that never answers times out and descends the ladder like an unreachable one", async () => {
+    const recorded: Model[] = [{ id: "claude-opus-5", label: "Claude Opus 5" }];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const persistPath = join(dir, "models.json");
+    await writeFile(persistPath, JSON.stringify(recorded));
+    const warned: unknown[] = [];
+    const logger = {
+        warn: (payload: unknown) => {
+            warned.push(payload);
+        },
+    };
+
+    const timeouts = expireTimeouts();
+    try {
+        const catalog = await createClaudeCatalog(emptyStore, containerToken, dir, persistPath, discoveryFails, stalledFetch, logger).models();
+        expect(catalog.models).toEqual(recorded);
+        expect(timeouts.asked).toEqual([DISCOVERY_TIMEOUT_MS]);
+    } finally {
+        timeouts.mockRestore();
+    }
+    // Logged as unreachable, with the timeout as its reason; the CLI rung failing first logs its own line.
+    expect(warned).toContainEqual({ error: "The operation was aborted due to timeout" });
 });
 
 test("serves the REST catalog alone when the CLI is unreachable, rather than falling to the floor", async () => {

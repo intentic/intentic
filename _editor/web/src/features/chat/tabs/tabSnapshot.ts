@@ -5,7 +5,7 @@ import type { Conversation } from "../session/conversation";
 import type { TurnPick } from "../run/turnDefaults";
 import type { ForkLink, SessionRef } from "../run/turnRequest";
 import type { ChatRunView } from "../run/chatRun";
-import { forgetWindowState, readWindowState, writeWindowState } from "../../../shell/window/windowStore";
+import { forgetWindowState, readWindowState, writeWindowState } from "../../../workbench/window/windowStore";
 
 // Where a sandbox's open chat tabs persist between page loads: identity, title, and composer draft, one JSON
 // blob per sandbox, seeded from the last window's (windowStore has the store mechanics). Transcript content

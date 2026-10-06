@@ -25,6 +25,12 @@
       "since": "v1.324.0"
     }
   ],
+  "auth:credential-gates.json": [
+    {
+      "type": "{ gates: ({ approvers: string[]; kind: \"secret\" | \"capability\"; scope: \"use\" | \"conversation\"; subject: string })[] }",
+      "since": "unreleased"
+    }
+  ],
   "auth:credential-releases.json": [
     {
       "type": "Record<string, { approvedBy: string; at: number }>",
@@ -77,6 +83,12 @@
     {
       "type": "{ measuredAt: number; unread?: { reason: string; since: number }; windows: ({ gates: \"all\" | \"none\" | { models: string[] }; kind: string; label?: string; resetsAt?: number; utilization: number })[] }",
       "since": "v1.312.0"
+    }
+  ],
+  "history:activity.jsonl": [
+    {
+      "type": "{ account?: string; actor?: string; at: number; author?: string; automationIds?: string[]; channelId?: string; content?: string; conversationId?: string; direction: \"in\" | \"out\" | \"system\"; endpoint?: string; error?: string; extra?: Record<string, unknown>; id: string; method?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string }; outcome?: \"ok\" | \"error\"; provider?: string; sessionId?: string; title?: string; turnId?: string; type: string }",
+      "since": "unreleased"
     }
   ],
   "history:boot-failure.json": [
@@ -345,6 +357,12 @@
     {
       "type": "{ provider: string; until: number }",
       "since": "v1.312.0"
+    }
+  ],
+  "history:usage.jsonl": [
+    {
+      "type": "{ account?: string; at: number; autoPicked?: boolean; cacheCreationTokens: number; cacheReadTokens: number; callsBeforeTarget?: number; check?: string; checklistOpen?: number; checklistTotal?: number; clearingArm?: boolean; compactions?: number; contextTokens?: number; contextWindow?: number; conversationId?: string; costKnown?: boolean; costUsd: number; day: string; durationMs: number; errorCode?: string; errorMessage?: string; failedCalls?: number; filesEdited?: number; guidanceArm?: boolean; guidanceCohort?: string; harness: string; inputTokens: number; iqSearchArm?: boolean; iqSearchCohort?: string; mapArm?: boolean; mapChars?: number; model?: string; modelRequested?: string; notesArm?: boolean; notesChars?: number; notesCohort?: string; openingCacheCreationTokens?: number; openingCacheReadTokens?: number; openingListings?: number; openingSearches?: number; outcome?: \"ok\" | \"error\" | \"cancelled\"; outputTokens: number; promptFingerprint?: string; provider: string; purpose?: \"keep-warm\"; searchCalls?: number; toolCalls?: number; turnContext?: \"delivered\" | \"ineligible\" | \"deadline\" | \"indexing\" | \"no-hits\" | \"failed\"; turnContextMs?: number; turnIndex?: number; turns: number; verification?: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" }",
+      "since": "unreleased"
     }
   ],
   "history:webext-enrollments.json": [

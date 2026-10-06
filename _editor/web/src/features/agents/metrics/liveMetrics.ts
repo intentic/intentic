@@ -1,9 +1,9 @@
 import { PROCESS_ROLES, type ProcessRole, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { definePreference } from "@intentic/ui/preference";
 import { computed, type ComputedRef, type InjectionKey, type Ref } from "vue";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 
 // The Agents board's opt-in CPU and memory readout ("geek metrics"). Off means never asked for: the daemon measures
 // only inside a request, so with the query disabled nothing anywhere is collected, not merely hidden.

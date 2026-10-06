@@ -17,11 +17,25 @@
                 "types": "./dist/index.d.ts",
                 "default": "./dist/index.js"
             }
+        },
+        "./ingress": {
+            "types": "./dist/ingress/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/ingress/index.ts",
+                "types": "./dist/ingress/index.d.ts",
+                "default": "./dist/ingress/index.js"
+            },
+            "require": {
+                "types": "./dist/ingress/index.d.ts",
+                "default": "./dist/ingress/index.js"
+            }
         }
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsgo --build --watch"
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites"
     },
     "dependencies": {
         "@intentic/constants": "workspace:*",
@@ -32,7 +46,9 @@
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:"
     }

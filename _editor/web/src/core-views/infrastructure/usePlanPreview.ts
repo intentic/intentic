@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/vue-query";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../features/extensions/reconcileStatus";
 import { useSecretKeys } from "../../features/capabilities/connect/useSecrets";
 import { readIntenticLines } from "../../lib/intenticStream";
-import { SandboxHttpError } from "../../features/sandbox/client/sandboxHttpError";
-import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
+import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { rpcKey, WORKSPACE_STATE } from "../../lib/queryKeys";
 import { describeProvisionError } from "./provisionError";
@@ -125,7 +125,7 @@ export function usePlanPreview() {
                 error.value = `The preview stalled, last activity: ${activity.value ?? `starting`}. Cancel-and-retry, or check the sandbox.`;
                 return;
             }
-            error.value = describeProvisionError(errorMessage(err, `Preview failed.`));
+            error.value = describeProvisionError(messageOr(err, `Preview failed.`));
         } finally {
             clearTimeout(stall);
             controller = undefined;

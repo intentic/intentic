@@ -1,7 +1,7 @@
 import { type FileHandle, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { LogFileEntry } from "@intentic/sandbox-contract";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal captures (terminals/), intentic CLI runs (intentic-runs/),

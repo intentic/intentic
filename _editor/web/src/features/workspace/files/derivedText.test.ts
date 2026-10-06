@@ -5,7 +5,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // The rpc client builds a link at import time, so the daemon call is the seam: the predicates are pure, and what the
 // module remembers is asserted through it.
 const derived = jest.fn();
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { derived, derive: jest.fn() } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { derived, derive: jest.fn() } }) }));
 
 const { derivedIsOnlyView, mayHaveDerivedText, readDerivedText } = await import("./derivedText");
 const { rememberedDerivedText } = await import("./derivedCache");

@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import type { RepoChanges } from "@intentic/api-contract";
+import type { RepoChanges } from "@intentic/sandbox-contract";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Reading of another sandbox's repos: which rows show, and what each says.
@@ -7,9 +7,9 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-jest.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-jest.mock("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch: jest.fn() }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../sandbox/switching/sandboxScreen", () => ({ landOnAfterSwitch: jest.fn() }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
 
 const { hasOtherSandboxes, rowsOf, worthShowing } = await import("./changesAcross");

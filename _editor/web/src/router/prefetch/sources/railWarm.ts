@@ -1,6 +1,6 @@
 import { fetchBrowsers, browsersKey } from "../../../features/browsers/browsersQuery";
 import { capabilitiesKey, fetchCapabilities } from "../../../features/capabilities/connect/useCapabilities";
-import { rpcQuery } from "../../../features/sandbox/client/rpcQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { fetchModules, modulesKey } from "../../../features/workspace/health/useModules";
 import { fetchWorkspaceTree } from "../../../features/workspace/explorer/useWorkspaceTree";
 import { workspaceTreeKey } from "../../../features/workspace/health/workspaceTreeKey";

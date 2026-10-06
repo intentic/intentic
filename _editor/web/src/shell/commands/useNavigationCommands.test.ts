@@ -1,11 +1,11 @@
 import "@intentic/testing/dom";
 import { createApp, h, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { registerView } from "../../core-views/registry";
+import { registerView } from "../../workbench/views/registry";
 import { sandboxSections } from "../../features/sandbox/sandboxNav";
 import { settingsSections } from "../../features/settings/settingsNav";
 import { startAppI18n } from "../../app/i18n";
-import { commands } from "./useCommands";
+import { commands } from "../../workbench/commands/useCommands";
 import { useNavigationCommands } from "./useNavigationCommands";
 
 // Pins the promise this composable exists for: everywhere the shell can take you is reachable by name, derived from
@@ -24,7 +24,7 @@ jest.mock(`../../features/extensions/usePanels`, () => {
 jest.mock(`../../features/capabilities/connect/useCapabilities`, () => {
     return { useCapabilities: () => ({ capabilities: ref([]), settled: ref(true) }) };
 });
-jest.mock(`../../features/sandbox/secrets/useRole`, () => {
+jest.mock(`../../client/sandbox/useRole`, () => {
     return { useRole: () => ({ canShip: ref(state.canShip), isGuest: ref(false) }) };
 });
 jest.mock(`../../features/settings/hosted-plan/useHostedPlan`, () => {

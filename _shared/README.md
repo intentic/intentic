@@ -1,10 +1,11 @@
 # Shared contracts
 
-The wire contracts, extension SDKs and shared stylesheets that more than one part of intentic is written against, kept below every part so any part can depend on them.
+The wire contracts, extension SDKs, shared stylesheets and pure helpers that more than one part of intentic is written against, kept below every part so any part can depend on them.
 
 ```mermaid
 flowchart LR
     web["Editor<br/>browser"] -- "api-contract" --> api["Platform api"]
+    daemon -- "api-contract<br/>ingress" --> api
     web -- "sandbox-contract" --> daemon["Sandbox daemon"]
     daemon -- "sandbox-contract<br/>inverted" --> peers["Machines · browser extension<br/>runners"]
     ext["Extensions"] -- "extension-api<br/>extension-ui" --> web
@@ -18,21 +19,21 @@ flowchart LR
 
 | Package | Role |
 | --- | --- |
-| [api-contract](api-contract) | oRPC contract between the editor and the platform api. |
+| [api-contract](api-contract) | The editor's oRPC contract with the platform api, and the routes machines call on it. |
 | [capability-catalog](capability-catalog) | Capability tiles, their add forms and what connecting one does. |
 | [connector-runtime](connector-runtime) | Gateway shell the chat connector extensions run on. |
 | [contract-serve](contract-serve) | Answers sandbox-contract requests from typed handlers, for stand-ins for the daemon. |
-| [entry-css](entry-css) | The site's look for sign-in, setup and desktop handoff screens. |
+| [entry-css](entry-css) | The house materials the site and app share, and the site's look for the sign-in and setup screens. |
 | [extension-api](extension-api) | Versioned host API an extension's code programs against. |
 | [extension-manifest](extension-manifest) | Schema of `intentic-extension.json`, what an extension declares. |
 | [extension-ui](extension-ui) | Host-provided UI kit extensions render with. |
-| [house-css](house-css) | Bronze, cartouche and ember materials the site and app share. |
 | [registry](registry) | Extension registry file format: sha-pinned pointers, trust, scan facts. |
 | [relay](relay) | How the edge and the sandbox's front relay HTTP over a tunnel's streams (Rust). |
 | [sandbox-contract](sandbox-contract) | Wire contract between the editor and the sandbox daemon. |
 | [sandbox-openapi](sandbox-openapi) | The daemon's contract as an OpenAPI 3.1 document. |
 | [sandbox-run](sandbox-run) | How a sandbox container starts: names, privileges, env, Fly config. |
 | [workspace-ignore](workspace-ignore) | Which workspace paths are project files and which are noise. |
+| [workspace-setup](workspace-setup) | Which dependency manager a project needs, for the upload in the browser and the daemon. |
 
 ## The boundary
 

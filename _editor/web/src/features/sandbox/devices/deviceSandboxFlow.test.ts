@@ -7,14 +7,14 @@ import "@intentic/testing/dom";
 import type { DeviceFlowLine } from "@intentic/sandbox-contract";
 import { AsyncIteratorClass } from "@orpc/client";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import { SandboxHttpError } from "../client/sandboxHttpError";
-import type { SandboxRpc } from "../client/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 const flow = jest.fn<SandboxRpc[`system`][`manageDeviceSandbox`]>();
-jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ system: { manageDeviceSandbox: flow } }) }));
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ system: { manageDeviceSandbox: flow } }) }));
 // Named by useDevices for the routes it still reaches raw, none of which runs here; bun links an ESM import against
 // exactly what this returns.
-jest.mock(`../client/sandboxClient`, () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn(), sandboxError: jest.fn() }));
+jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn(), sandboxError: jest.fn() }));
 
 const { DeviceFlowLostError, manageDeviceSandbox, swapServingSandbox } = await import("./useDevices");
 

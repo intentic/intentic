@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { errorMessage } from "@intentic/base/errors";
 import type { Prisma } from "@intentic/prisma";
 import { type PlanFailure, PlanFailureSchema, STATE_PLAN_FORMAT } from "@intentic/sandbox-contract";
 import { FLY_VOLUME_LAYOUT, type FlyMachineConfig } from "@intentic/sandbox-run/fly";
@@ -269,7 +270,7 @@ const preflightHosted = async (config: Config, machine: HostedGateMachine, targe
         const image = pinnedImage(target.image, probe.imageDigest);
         return { verdict: readPlanAnswer(await execMachine(flyApiToken, machine.appName, machine.machineId, PLAN_COMMAND, PLAN_SECONDS)), image };
     } catch (error) {
-        return { verdict: { kind: `unknown`, reason: `the probe could not run: ${error instanceof Error ? error.message : String(error)}` }, image: target.image };
+        return { verdict: { kind: `unknown`, reason: `the probe could not run: ${errorMessage(error)}` }, image: target.image };
     } finally {
         await stopAndSettle(config, machine);
     }

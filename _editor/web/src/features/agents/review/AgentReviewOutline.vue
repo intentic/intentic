@@ -1,8 +1,8 @@
 <!-- The review's frame while its first read is in flight: the list's column and the diff's, empty, and one line saying what is on its way. -->
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
-import { useLayout } from "../../../shell/window/useLayout";
-import { uiLength } from "../../../shell/window/uiScale";
+import { useLayout } from "../../../workbench/window/useLayout";
+import { uiLength } from "../../../workbench/window/uiScale";
 import ReviewWaitLine from "./ReviewWaitLine.vue";
 
 // No rows or code lines are drawn. Every agent's review is different (two files or two hundred, a one-line fix or a

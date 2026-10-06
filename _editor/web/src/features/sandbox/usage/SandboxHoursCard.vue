@@ -6,7 +6,7 @@ import { RouterLink } from "vue-router";
 import HostedHoursMeter from "../../settings/hosted-plan/HostedHoursMeter.vue";
 import { formatDayShort, machineHours, rungName } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // WHETHER THIS SANDBOX'S AWAKE TIME COSTS HOURS, answered on the page about what the sandbox uses. A limit belongs
 // beside the thing it limits: shown only at account level, it reads as a limit on every sandbox, and one on the

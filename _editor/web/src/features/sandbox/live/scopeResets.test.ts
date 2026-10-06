@@ -4,7 +4,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, effectScope, nextTick, ref } from "vue";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
-import { activeSandboxId } from "../overview/activeSandbox";
+import { activeSandboxId } from "../../../lib/activeSandbox";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // What each door into a new sandbox scope starts over, read off the stores themselves rather than the primitive: a
@@ -14,8 +14,8 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 const reachable = ref(false);
-jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
-jest.mock("../client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: { list: async () => ({ agents: [], rev: 0, held: [] }), archived: async () => ({ agents: [], rev: 0, held: [] }) },
     }),
@@ -23,16 +23,16 @@ jest.mock("../client/sandboxRpc", () => ({
 
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { applySystemEvent } = await import("./systemEvents");
-await import("../client/sandboxScope");
+await import("../switching/sandboxScope");
 const { useChat } = await import("../../chat/run/useChat");
 const { useEditBuffers } = await import("../../workspace/files/useEditBuffers");
 const { useWorkspaceTree } = await import("../../workspace/explorer/useWorkspaceTree");
 const { useWorkspaceTabs } = await import("../../workspace/tabs/useWorkspaceTabs");
 const { useHome } = await import("../../workspace/home/useHome");
-const { useLayout } = await import("../../../shell/window/useLayout");
+const { useLayout } = await import("../../../workbench/window/useLayout");
 const { changeEpochOf, markWorkspaceChanged } = await import("../../workspace/changes/live/useWorkspaceLive");
 const { markPreviewOpened, previewOpened } = await import("../../preview/previewSurface");
-const { presenceOthers, setPresenceUsers } = await import("../../../shell/presence/usePresence");
+const { presenceOthers, setPresenceUsers } = await import("../../../workbench/presence/usePresence");
 const { useAgents } = await import("../../agents/fleet/useAgents");
 const { archived, setAgents } = await import("../../agents/fleet/useAgents-registry");
 

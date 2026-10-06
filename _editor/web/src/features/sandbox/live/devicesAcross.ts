@@ -1,5 +1,5 @@
 import type { Device } from "@intentic/sandbox-contract";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { type AcrossRecord, createAcrossStore } from "./acrossSandboxes";
 
 // The machines every other sandbox of this owner can reach, read only while the recovery panel is up: when the active

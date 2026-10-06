@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { GitRunner } from "@intentic/scaffold";
+import type { GitRunner } from "@intentic/base/git";
 import { commonDirOf, gitDirOf } from "../git-dir.js";
 
 // Where a repo's code lives: its remote urls and the host/project each names. Read by two independent callers (CI's

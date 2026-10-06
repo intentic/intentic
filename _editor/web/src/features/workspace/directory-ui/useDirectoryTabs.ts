@@ -1,5 +1,5 @@
 import { useAudience } from "../../../app/useAudience";
-import { type ActiveExtension, detectActivations } from "../../../core-views/registry";
+import { type ActiveExtension, detectActivations } from "../../../workbench/views/registry";
 import { directoryTabs } from "./directoryTabs";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { usePanels } from "../../extensions/usePanels";

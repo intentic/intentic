@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import { type DeviceRow, managerOf, type MachineRow } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
-import { useSandbox } from "../../client/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
 // TURNING SYNC ON WHERE IT IS READ ABOUT. A machine already connected needs no one-liner to start syncing a folder:

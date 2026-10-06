@@ -511,7 +511,7 @@ whose it is.
 - **Keys and enrollments per environment.** A newly made key is commented `<hostname>-<environment>`, so the sandbox
   files a new enrollment under that name. An existing key keeps its comment (a sandbox older than this agent would read
   a changed comment on the same key as a second machine holding sync); the sandbox tells existing ones apart by machine
-  and environment instead (`_sandbox/sandbox/src/hosts/desktop-sync.ts`).
+  and environment instead (`_sandbox/sandbox/src/peers/desktop-sync.ts`).
 - **Tunnel ports per environment.** Under WSL's mirrored networking a distro's loopback is the Windows side's, so both
   sides pairing one sandbox derived one port twice. A distro now derives its ports in 20000-23999 from its name and the
   sandbox id; every native environment keeps 24000-27999 exactly as before, so nothing outside WSL moves.

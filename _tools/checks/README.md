@@ -51,8 +51,8 @@ A finding that is right where it stands is excused in one of two forms, each rea
 `@intentic/constants/allow`, so a guard suite such as `_editor/web/src/moduleState.guard.test.ts` reads it the same way):
 
 - `// allow(<check>): <reason>` at the site, on its line or in the comment block right above it. It sits on the
-  declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch`, `contract-paths`,
-  `md-links` and the editor's `module-state` guard read it.
+  declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch`, `process-tiers`,
+  `contract-paths`, `md-links` and the editor's `module-state` guard read it.
 - `Allow: <check> — <reason>` as a commit trailer, for a whole change: CI's push check (`verify-push.mjs`) accepts what
   that range adds to a tidy check with that manifest id.
 
@@ -89,7 +89,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [editor-boundaries](editor-boundaries.mjs) | a static import cycle between web editor modules, or a new cycle between its subsystems |
 | [shared-boundary](shared-boundary.mjs) | a `_shared/` package depending on another part |
 | [extension-deps](extension-deps.mjs) | an extension manifest naming an `@intentic/*` package outside the extension SDK |
-| [contract-paths](contract-paths.mjs) | a contract route called by spelling its path |
+| [contract-paths](contract-paths.mjs) | a contract route, or a platform route the daemon calls, called by spelling its path |
 | [publish-set](publish-set.mjs) | a publish list that is not dependency-closed and ordered |
 | [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |
 | [release-api](release-api.mjs) | a `github.sh` helper that masks a failed write |
@@ -99,7 +99,10 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [paths](path-literals.mjs) | hand-spelled roots and `../..`-counted ones |
 | [vocabulary](vocabulary.mjs) | a retired word spelled again |
 | [silent-catch](silent-catch.mjs) | a new handler that throws an error away unnarrowed |
+| [process-tiers](process-tiers.mjs) | a daemon process started by hand instead of through `runCheck`, `spawnAs` or `@intentic/base/git`'s `exec` (ratcheted: `baselines/process-tiers.json`) |
 | [time-zones](time-zones.mjs) | a cron, date format or day bucket with no zone |
+| [format-tiers](format-tiers.mjs) | a number or date the editor or an extension formats by hand instead of through the kit (ratcheted: `baselines/format-tiers.json`) |
+| [clipboard-tiers](clipboard-tiers.mjs) | the clipboard reached through `navigator.clipboard` in the editor or an extension instead of through the kit |
 | [layout](layout.mjs) | ghost, over-full, twin, colliding or dead directories |
 | [md-links](md-links.mjs) | a relative documentation link that does not resolve |
 | [metaphor-home](metaphor-home.mjs) | the four-noun picture defined twice or on the home page |

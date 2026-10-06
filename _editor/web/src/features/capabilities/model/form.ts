@@ -10,6 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { submittedValue } from "./normalize";
+import { formatCount } from "@intentic/ui/format";
 
 // A tile declares fields; this module decides which are shown, what an answer means, and what
 // reaches the daemon, as plain functions over the form's values. The only difference between add and
@@ -93,7 +94,7 @@ const RULES: readonly FieldRule[] = [
         const tokens = Number(value);
         return Number.isInteger(tokens) && tokens >= LOCAL_MODEL_WINDOW_MIN && tokens <= LOCAL_MODEL_WINDOW_MAX
             ? undefined
-            : `Enter a whole number of tokens (${LOCAL_MODEL_WINDOW_MIN.toLocaleString()}–${LOCAL_MODEL_WINDOW_MAX.toLocaleString()}).`;
+            : `Enter a whole number of tokens (${formatCount(LOCAL_MODEL_WINDOW_MIN)}–${formatCount(LOCAL_MODEL_WINDOW_MAX)}).`;
     },
 ];
 

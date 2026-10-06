@@ -4,6 +4,7 @@ import { Button, ui, CopyButton } from "@intentic/ui";
 import { computed, nextTick, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useChat } from "../../chat/run/useChat";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import { readClipboard, useCopied } from "@intentic/ui/clipboard";
 import { useT } from "@intentic/ui/i18n";
 
 // One sign-in panel for every provider and mechanism (own account or translator subscription); branches only on
@@ -200,21 +201,17 @@ const openedProvider = (): void => {
 // A device sign-in's code goes with the press that opens its page, which asks for it: a reader who had to come back
 // for it pressed Open three times and copied it by hand. Written inside the press, the gesture a clipboard write
 // needs; the code stays on screen and copies on a press of its own for a browser that refuses.
-const codeCopied = ref(false);
-const copyCode = (): void => {
+// Held, not flashed: the note says the code is on the clipboard for as long as the flow waits on it.
+const { copied: codeCopied, copy: copyText, reset: forgetCodeCopied } = useCopied(Number.POSITIVE_INFINITY);
+const copyCode = (event?: Event): void => {
     const code = flow.value?.code;
     if (code === undefined || code === ``) {
         return;
     }
-    void navigator.clipboard?.writeText(code).then(
-        () => {
-            codeCopied.value = true;
-        },
-        () => undefined,
-    );
+    void copyText(code, event?.target instanceof Element ? event.target : undefined);
 };
-const openDevicePage = (): void => {
-    copyCode();
+const openDevicePage = (event: Event): void => {
+    copyCode(event);
     openedProvider();
 };
 
@@ -233,16 +230,13 @@ const onReturn = (): void => {
         return;
     }
     wentToProvider.value = false;
-    void navigator.clipboard
-        ?.readText()
-        .then((text) => {
-            const value = text.trim();
-            if (isOurRedirect(value)) {
-                pasted.value = value;
-            }
-        })
-        // allow(silent-catch): Clipboard permission may be refused; manual paste remains available.
-        .catch(() => undefined);
+    // Unread when permission is refused; a manual paste remains available.
+    void readClipboard(pasteField.value).then((text) => {
+        const value = (text ?? ``).trim();
+        if (isOurRedirect(value)) {
+            pasted.value = value;
+        }
+    });
 };
 
 // Armed only while a handshake is live; an idle panel shouldn't watch window pastes or the clipboard.
@@ -274,7 +268,7 @@ watch(flow, (live) => {
         pasteInstead.value = false;
         pasted.value = ``;
         wentToProvider.value = false;
-        codeCopied.value = false;
+        forgetCodeCopied();
         showDeadEnd.value = roomy;
     }
 });

@@ -1,6 +1,7 @@
 import { localModelMemory } from "@intentic/capability-catalog";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { formatMoney } from "@intentic/ui/format";
 
 // Computes a live summary sentence for form values whose consequences aren't obvious: wallet numbers
 // into a spending policy, a computer's switches into a grant, local model choices into a RAM bill.
@@ -11,8 +12,6 @@ const usd = (value: string | undefined): number | undefined => {
     return Number.isFinite(amount) && amount >= 0 ? amount : undefined;
 };
 
-const dollars = (amount: number): string => `$${amount.toFixed(amount === Math.trunc(amount) && amount >= 10 ? 0 : 2)}`;
-
 /** The wallet's spending policy as one sentence, undefined while a number is unparseable. */
 export const walletPolicySummary = (values: Readonly<Record<string, string>>): string | undefined => {
     const perPayment = usd(values[`perPaymentMaxUsd`]);
@@ -22,8 +21,8 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
         return undefined;
     }
     const asks =
-        auto <= 0 ? `Every payment asks you in chat first` : `Payments under ${dollars(auto)} go through on their own, the rest ask you first`;
-    return `${asks} · at most ${dollars(perPayment)} each · ${dollars(daily)} a day.`;
+        auto <= 0 ? `Every payment asks you in chat first` : `Payments under ${formatMoney(auto)} go through on their own, the rest ask you first`;
+    return `${asks} · at most ${formatMoney(perPayment)} each · ${formatMoney(daily)} a day.`;
 };
 
 // A connected computer's grant: presets over the switches, and the sentence.

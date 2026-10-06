@@ -1,14 +1,11 @@
-import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { promisify } from "node:util";
 import { errorMessage, isMissing } from "@intentic/base/errors";
 import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
 import type { RoleAnswer } from "../agent/models/role-answer.js";
 import { askRoleModel } from "../agent/models/role-model.js";
 import type { Services } from "../composition.js";
+import { outputTail, runCheck as runCheckCommand, shellArgv } from "../workload/run-check.js";
 import { verdictPathIn } from "./loop-brief.js";
-
-const execAsync = promisify(exec);
 
 // Checks completion after each iteration, not by asking the iteration itself: the output document first (cheap), then
 // each check in order, short-circuiting on failure. A check that fails to run answers not-done rather than ending the
@@ -16,6 +13,8 @@ const execAsync = promisify(exec);
 
 // Same ceiling the automations guard uses: a check is meant to be cheap, not redo the iteration's own work.
 const CHECK_TIMEOUT_MS = 60_000;
+// Output a check may print per stream; past it the check reads as not done (exec's default maxBuffer, which it ran under).
+const CHECK_CAPTURE_BYTES = 1024 * 1024;
 // Bytes of a check's output kept on the row; enough for the failing assertion, not a full test log.
 const DETAIL_TAIL = 500;
 
@@ -112,17 +111,20 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
 // Runs in the conversation's own tree (an isolated loop's worktree), not the workspace root. Automations guard's runner
 // with the sign flipped: zero means done here, not skip. Takes the abort signal so a stop doesn't leave it executing.
 const runCommand = async (command: string, cwd: string, signal: AbortSignal): Promise<StopVerdict> => {
-    try {
-        // Uses the platform's own shell (exec's default), not a hardcoded sh, since the command is the user's own line
-        // for whatever machine runs it.
-        const { stdout, stderr } = await execAsync(command, { cwd, timeout: CHECK_TIMEOUT_MS, signal });
-        const detail = `${stderr}${stdout}`.trim().slice(-DETAIL_TAIL);
-        return { done: true, ...(detail !== "" ? { detail } : {}) };
-    } catch (error) {
-        const { stdout, stderr } = error as { stdout?: string; stderr?: string };
-        const detail = `${stderr ?? ""}${stdout ?? ""}`.trim().slice(-DETAIL_TAIL);
-        return { done: false, ...(detail !== "" ? { detail } : {}) };
-    }
+    // The platform's own shell (exec's), not a hardcoded sh, since the command is the user's own line for whatever
+    // machine runs it.
+    const ran = await runCheckCommand({
+        argv: shellArgv(command, "platform"),
+        cwd,
+        timeoutMs: CHECK_TIMEOUT_MS,
+        signal,
+        workload: { class: "command" },
+        kind: "loop-check",
+        captureBytes: CHECK_CAPTURE_BYTES,
+        killOnOverflow: true,
+    });
+    const detail = outputTail(ran, DETAIL_TAIL);
+    return { done: ran.exitCode === 0 && !ran.truncated, ...(detail !== "" ? { detail } : {}) };
 };
 
 const runCheck = (

@@ -1,4 +1,4 @@
-import { registerDocumentProvider } from "../../../../core-views/documentRegistry";
+import { registerDocumentProvider } from "../../../../workbench/views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "../rowActions";
 
 // Composition rule for a tree row's icons: the one place directory-surface extensions, document providers and personas

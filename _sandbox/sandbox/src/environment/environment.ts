@@ -14,9 +14,7 @@ import type { Config } from "../env.config.js";
 import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
 import { containerBornAtMs, installLive } from "./drift.js";
 import { type OverlayBlock, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
-import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { privacyPackFragments } from "./privacy-pack.js";
-import { providerPackFragments } from "./provider-packs.js";
 import { statePath } from "../state-paths.js";
 
 // Overlay Dockerfile composed from the pinned FROM, each capability's fragment, and the owner-approved custom section.
@@ -83,10 +81,10 @@ export const composeEnvironment = async (services: Services): Promise<string | u
     const capabilities = await services.capabilities.list();
     const contributed = [
         ...new Set([
-            ...(await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat(),
-            ...(await workspaceExtensionFragments(services)),
+            ...(await Promise.all(capabilities.map((capability) => services.environmentSources.capabilityFragments(capability)))).flat(),
+            ...(await services.environmentSources.workspaceExtensionFragments()),
             // Helper binaries a connected provider needs, for a base image that doesn't already bake them.
-            ...(await providerPackFragments(services)),
+            ...(await services.environmentSources.providerPackFragments()),
             // The privacy shield's readers, while its policy asks for one.
             ...(await privacyPackFragments(services)),
         ]),

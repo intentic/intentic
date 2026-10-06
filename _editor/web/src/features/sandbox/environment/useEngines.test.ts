@@ -1,17 +1,17 @@
 import "@intentic/testing/dom";
-import type { EngineRow, EnginesView } from "@intentic/api-contract";
+import type { EngineRow, EnginesView } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor, stubGlobal, mocked, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-jest.mock("../client/sandboxClient", () => ({ sandboxJson: jest.fn() }));
-jest.mock("../client/useSandbox", () => ({
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn() }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));
 
-const { sandboxJson } = await import("../client/sandboxClient");
+const { sandboxJson } = await import("../../../client/sandbox/sandboxClient");
 const jsonMock = mocked(sandboxJson);
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useEngines } = await import("./useEngines");
@@ -103,7 +103,8 @@ test("in-flight update persists when navigating across views (unmount and remoun
             FIXTURE_ENGINES.engines[1]!,
         ],
     };
-    resolveUpdate({ engines: updatedView });
+    // The daemon's write answer (EngineWriteResultSchema): what it applied, and the whole view after it.
+    resolveUpdate({ applied: { ok: true, version: "0.153.2", source: "store", fromNextTurn: false }, engines: updatedView });
     await updatePromise;
 
     await waitFor(() => expect(second.result.isEngineUpdating(codex)).toBe(false));
@@ -117,7 +118,7 @@ test("updateAll updates all updatable engines sequentially", async () => {
         if (path === "/engines/update" && init?.method === "POST") {
             const body = JSON.parse(init.body as string) as { id: string };
             updatedEngines.push(body.id);
-            return Promise.resolve({ engines: FIXTURE_ENGINES }) as Promise<never>;
+            return Promise.resolve({ applied: null, engines: FIXTURE_ENGINES }) as Promise<never>;
         }
         return Promise.resolve(FIXTURE_ENGINES) as Promise<never>;
     });

@@ -20,7 +20,7 @@ sessionStorage.setItem(
 
 const { renameOpenPaths, useWorkspaceTabs } = await import("./useWorkspaceTabs");
 const { useEditBuffers } = await import("../files/useEditBuffers");
-const { documentTabId } = await import("../../../core-views/documentRegistry");
+const { documentTabId } = await import("../../../workbench/views/documentRegistry");
 
 // Composed the same way the store composes it, so tests pin behaviour, not an id's exact spelling.
 const GIT_DOC = documentTabId(`git-history`, `log`, ``);

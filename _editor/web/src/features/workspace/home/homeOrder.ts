@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { type FileCategory, formatOf } from "@intentic/ui/file-format";
 import { t } from "@intentic/ui/i18n";
 

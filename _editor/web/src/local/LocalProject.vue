@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { LOCAL_PROJECT_ASK_EVENT } from "../app/environments/local";
-import { hold } from "../shell/notifications/notifications";
+import { hold } from "../workbench/notifications/notifications";
 import LocalMachineCard from "./LocalMachineCard.vue";
 import LocalProjectDialog from "./LocalProjectDialog.vue";
 import { useLocalProject } from "./useLocalProject";

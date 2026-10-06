@@ -611,6 +611,10 @@ export const UNBACKED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.fil
 export const extensionRuntimeDir = (extension: string): string =>
     `${STATE_GROUP_DIR.local}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
 
+// Where a gateway publishes its loopback control address for the agent's CLI to read (`publishGatewayUrl`), keyed by
+// the listener provider the gateway serves, which for every gateway that publishes one is also its extension's name.
+export const extensionGatewayUrlFile = (provider: string): string => `${extensionRuntimeDir(provider)}/gateway.url`;
+
 // Manifests the unreadable-manifest notice reports on: exactly the entries that declare `manifests` in
 // Report broken manifests only when a file change can refresh their notice.
 export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes("manifests")).map(

@@ -1,4 +1,5 @@
-import { deletedReceipt, joinPath, newNameError, restoredReceipt } from "../entryNames";
+import { joinPath } from "@intentic/ui/path";
+import { deletedReceipt, newNameError, restoredReceipt } from "../entryNames";
 
 describe(`a new name being typed`, () => {
     const taken = new Set([`src/index.ts`, `notes`]);

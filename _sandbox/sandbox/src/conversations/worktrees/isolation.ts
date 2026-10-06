@@ -5,12 +5,12 @@ import { SESSION_STATE, sessionsDir } from "../../sessions/session-store.js";
 import { conversationsRoot } from "../../store/conversation-units.js";
 import { stateRelPath } from "../../state-paths.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
-import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
+import { SHARED_STATE } from "../../workload/worktree-paths.js";
 
 // An isolated turn's own view of /work: without this, an absolute path (a memory, an AGENTS.md, a message) named the
 // shared tree directly, bypassing `land` and losing attribution. A mount namespace makes the worktree BE /work; shared
@@ -21,12 +21,6 @@ const execFileAsync = promisify(execFile);
 // Stable path to the real workspace root inside the namespace, for a turn that genuinely needs the shared tree.
 // Unmounted again for a fenced turn: it is the whole workspace, which is what that turn's checkout was cut down from.
 export const MAIN_MOUNT = "/mnt/intentic-main";
-
-// State subtrees kept shared, not per-worktree; root-relative, no trailing slash. Sorted shallowest-first so a parent
-// mounted after a child could never shadow it.
-const SHARED_STATE = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, "")).toSorted(
-    (a, b) => a.split("/").length - b.split("/").length || (a < b ? -1 : 1),
-);
 
 // Reference repos cloned only to be read against; workspace content, not repo content, so a worktree needs it mounted
 // back in or hits ENOENT. Read-only by contract: a bind ignores `ro`, so the remount is a second step.
@@ -339,27 +333,6 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
 
 // Subtrees meaning the main checkout on both sides, bound or symlinked over the worktree's own copies; a path into one
 // is already correct. `.intentic/config` is not among them: it moves with the root like any tracked file.
-const sharedPrefixes = (plan: IsolationPlan): string[] => [...SHARED_STATE, ...plan.mirrors];
-
-// Which file a workspace path names for an isolated turn: the daemon uses it for a reported path, worktree-redirect.ts
-// when there's no namespace. Only the root prefix moves; the rest is already correct.
-export const inWorktree = (path: string, plan: IsolationPlan | undefined): string => {
-    if (plan === undefined || (path !== plan.root && !path.startsWith(`${plan.root}/`))) {
-        return path;
-    }
-    const rel = path === plan.root ? "" : path.slice(plan.root.length + 1);
-    if (sharedPrefixes(plan).some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`))) {
-        return path;
-    }
-    // The root itself maps to the worktree root: `ls /work` must list the agent's own tree.
-    return rel === "" ? plan.worktree : join(plan.worktree, rel);
-};
-
-// The same mapping backwards: what the agent calls a file the daemon named, so a daemon-side answer quoted back never
-// hands over the real worktree path, which reads as an instruction to leave the namespace.
-export const fromWorktree = (path: string, plan: IsolationPlan | undefined): string => {
-    if (plan === undefined || (path !== plan.worktree && !path.startsWith(`${plan.worktree}/`))) {
-        return path;
-    }
-    return path === plan.worktree ? plan.root : join(plan.root, path.slice(plan.worktree.length + 1));
-};
+// How a workspace path maps into an isolated turn's worktree and back lives beside namespace entry, so a runtime can map
+// one without importing this module (workload/worktree-paths.ts); named here too, where its callers look.
+export { fromWorktree, inWorktree } from "../../workload/worktree-paths.js";

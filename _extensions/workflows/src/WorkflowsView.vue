@@ -29,7 +29,7 @@ import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPage from "./WorkflowRunPage.vue";
 import { host } from "./host";
 import { workflowTemplates, type WorkflowTemplate } from "./templates";
-import { stepTone } from "./workflowDag";
+import { stepTone } from "./graph/workflowDag";
 import { loopIdFrom, useLoopDesigns } from "./useLoopDesigns";
 import { useWorkflows } from "./useWorkflows";
 import { t } from "./i18n.js";

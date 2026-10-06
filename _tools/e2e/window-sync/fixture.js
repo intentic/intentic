@@ -1,5 +1,5 @@
-import { activeSandboxId } from "../../../_editor/web/src/features/sandbox/overview/activeSandbox.ts";
-import { claimFloating, floatingOwner } from "../../../_editor/web/src/shell/window/floating.ts";
+import { activeSandboxId } from "../../../_editor/web/src/lib/activeSandbox.ts";
+import { claimFloating, floatingOwner } from "../../../_editor/web/src/workbench/window/floating.ts";
 import { drawsChat, elsewhereStrip, publishStrip } from "../../../_editor/web/src/features/chat/run/chatEcho.ts";
 import { EMPTY_STRIP } from "../../../_editor/web/src/features/chat/tabs/tabFacts.ts";
 

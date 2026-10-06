@@ -5320,20 +5320,16 @@
             "clearEsc": "Borrar (Esc)",
             "closeAll": "Cerrar todo",
             "closeAllTabs": "Cerrar todas las pestañas",
-            "closeAnyway": "Cerrar de todos modos",
             "closeOtherTabs": "Cerrar las demás pestañas",
             "closeOthers": "Cerrar las demás",
             "closeSplit": "Cerrar la división",
             "closeTab": "Cerrar la pestaña",
             "closeTabsToRight": "Cerrar las pestañas de la derecha",
-            "closingTabsDiscardsUnsaved": "Cerrar estas pestañas descarta sus ediciones sin guardar. Esto no se puede deshacer.",
             "codebaseHealth": "Salud del código",
             "collapseAll": "Contraer todo",
             "collapseAllFolders": "Plegar todas las carpetas",
             "commaSeparated": "Separados por comas",
             "copyPath": "Copiar la ruta",
-            "discardUnsavedChanges": "¿Descartar los cambios sin guardar?",
-            "discardUnsavedChangesIn": "¿Descartar los cambios sin guardar de {count} archivos?",
             "dropFilesToAdd": "Suelta archivos para añadirlos a la raíz del espacio de trabajo",
             "excluded": "Excluido",
             "filterFiles": "Filtrar archivos…",
@@ -5512,6 +5508,12 @@
             "acrossRepos": "{summary}, {count} repos",
             "toPush": "{count} commit por subir | {count} commits por subir",
             "unpushedBranch": "Rama sin subir | {count} ramas sin subir"
+        },
+        "closeGuard": {
+            "discardUnsavedChanges": "¿Descartar los cambios sin guardar?",
+            "discardUnsavedChangesIn": "¿Descartar los cambios sin guardar de {count} archivos?",
+            "closeAnyway": "Cerrar de todos modos",
+            "closingTabsDiscardsUnsaved": "Cerrar estas pestañas descarta sus ediciones sin guardar. Esto no se puede deshacer."
         }
     },
     "needs": {

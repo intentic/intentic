@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SkillDraft } from "@intentic/api-contract";
+import type { SkillDraft } from "@intentic/sandbox-contract";
 import { Button, MarkdownDocument, ProseField, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";

@@ -1,5 +1,6 @@
 // The kit's DOM-free subpath, not the barrel: nothing here draws anything.
 import { type AgentNote, type AgentPanel, agentStateNote, agentProcessState, agentSkewNote, restartAgent } from "@intentic/ui/device-agent";
+import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
 import type { DeviceStatus } from "./desktop";
 import { t } from "@intentic/ui/i18n";
 
@@ -9,19 +10,6 @@ import { t } from "@intentic/ui/i18n";
 
 /** Restart alone: this app has no way to fetch a newer agent, and a button that can't is worse than none. */
 type DesktopAgentOp = ReturnType<typeof restartAgent>[`op`];
-
-// An unstamped running build predates the stamp (older, not missing); `0.0.0` marks a working-tree agent, never
-// stale.
-const WORKING_TREE = `0.0.0`;
-
-// The loop keeps the build it started with, so a binary replaced under a live process leaves the two apart.
-const skewOf = (agent: DeviceStatus[`sync`][`agent`]): { running: string | undefined; installed: string } | undefined => {
-    const installed = agent.installed;
-    if (!agent.running || installed === undefined || installed === WORKING_TREE || agent.build === installed) {
-        return undefined;
-    }
-    return { running: agent.build, installed };
-};
 
 // The quiet line that makes a standing Restart button legible: what it is for on an agent asking for nothing.
 // Never carries a tone — there is no errand in it.
@@ -38,8 +26,11 @@ export const desktopAgentPanel = (status: DeviceStatus | undefined): AgentPanel<
         return undefined;
     }
     const agent = status.sync.agent;
-    const staleBuild = skewOf(agent);
-    const reported = { ...agent, ...(staleBuild === undefined ? {} : { staleBuild }) };
+    // Both judged by the contract's own rules, the ones the web Devices tab and `intentic-machine status` apply, so the
+    // three cannot disagree about this machine. A stall is read on the machine's clock, which stamped both the last
+    // pass and the reading.
+    const staleBuild = agentBuildSkew(agent);
+    const reported = { ...agent, stalled: agentStalled(agent, status.sync.capturedAt), ...(staleBuild === undefined ? {} : { staleBuild }) };
     const notes = [agentStateNote(reported), agentSkewNote(staleBuild)].filter((note) => note !== undefined);
     return {
         version: status.version,

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
+import { formatElapsed, Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { formatWhen } from "@intentic/ui/format";
-import { agentStatusMeta, CLOCK_FROM_MS, currentAction, formatElapsed } from "../../agents/fleet/agentStatus";
+import { agentStatusMeta, CLOCK_FROM_MS, currentAction } from "../../agents/fleet/agentStatus";
 import { sandboxNow } from "../../agents/fleet/sandboxClock";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
@@ -37,7 +37,7 @@ const loaderElapsed = computed(() => {
     const startedAt = conversation.value.turn.turnStartedAt.value;
     return startedAt === undefined
         ? undefined
-        : formatElapsed(startedAt, conversation.value.turn.turnOnSandboxClock.value ? sandboxTime.value : now.value);
+        : formatElapsed(((conversation.value.turn.turnOnSandboxClock.value ? sandboxTime.value : now.value) - startedAt) / 1000);
 });
 const agent = computed(() => agentById(conversation.value.conversationId));
 // Swaps to "Waiting on N subagents" once the turn is only waiting on children, matching the roster count.
@@ -62,7 +62,7 @@ const retryWait = computed(() => {
     // The sandbox stamped it, so it is counted down on the sandbox's clock.
     return nextAttemptAt - sandboxTime.value >= CLOCK_FROM_MS
         ? t(`chat.chatTurnStatus.retryingAt`, { when: formatWhen(nextAttemptAt, sandboxTime.value) })
-        : t(`chat.chatTurnStatus.retryingIn`, { wait: formatElapsed(sandboxTime.value, nextAttemptAt) });
+        : t(`chat.chatTurnStatus.retryingIn`, { wait: formatElapsed((nextAttemptAt - sandboxTime.value) / 1000) });
 });
 // 529 is capacity, 429 is the account's rate limit, anything else is a fault; each implies a different fix. One whole
 // sentence per cause, the countdown after its colon, since "the provider is" + a cause only joins up in English.

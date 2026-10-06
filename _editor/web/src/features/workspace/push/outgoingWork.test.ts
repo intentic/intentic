@@ -1,4 +1,4 @@
-import type { RepoChanges } from "@intentic/api-contract";
+import type { RepoChanges } from "@intentic/sandbox-contract";
 import { ahead, behind, outgoingMark, outgoingSummary, outgoingWork, syncable, unpublished } from "./outgoingWork";
 
 // Pins the rule the rail tile, workspace banner, and review panel all share: a clean tree isn't the same as

@@ -1,6 +1,6 @@
 import type { PushRun } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import { pushRefused } from "../../push/notifications.js";
 import { type RuleCommandRun, runRuleCommand } from "../../rules/rule-command.js";

@@ -1,14 +1,13 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { clipboardOf } from "@intentic/ui";
-import { basename, parentDir } from "@intentic/ui/path";
+import { basename, joinPath, parentDir } from "@intentic/ui/path";
 import { onScopeDispose, type Ref, ref } from "vue";
-import type { useNotifications } from "../../../../shell/notifications/notifications";
+import type { useNotifications } from "../../../../workbench/notifications/notifications";
 import type { useUploadQueue } from "../../files/upload/useUploadQueue";
-import { joinPath } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";
 import { filesOffered } from "../transfer/dragSource";
-import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { VERB_ROUTES } from "../entryMenu";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
 import { beginEntryDrag, useEntryDrag } from "../transfer/useEntryDrag";

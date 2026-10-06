@@ -32,7 +32,7 @@ const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: s
 // The machine this page can ask directly; undefined is one it cannot reach, where the command is the way.
 const hostRunning = ref<string | undefined>(`host-1`);
 jest.mock(`../../../sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => hostRunning }));
-jest.mock(`../../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sb1`), reachable }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sb1`), reachable }) }));
 jest.mock(`../../../sandbox/devices/ConnectDeviceHint.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // The rebuild the sandbox holds for idle agents, and whether it can: off, as an older sandbox answers.
 const idleWait = ref<EnvironmentRebuildWait | undefined>(undefined);

@@ -1,4 +1,4 @@
-import type { PushState } from "../push/usePushNotifications";
+import type { PushState } from "../workbench/push/usePushNotifications";
 import { t } from "@intentic/ui/i18n";
 
 // What the phone's Menu says about push on THIS device, since an agent that needs you and cannot reach you is the

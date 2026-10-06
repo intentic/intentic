@@ -1,9 +1,8 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref, ref, shallowRef } from "vue";
-import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { VERB_ROUTES } from "../entryMenu";
 import { newNameError } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";

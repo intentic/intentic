@@ -1,9 +1,9 @@
 import { type ChatRoute, type Persona, mentionPaths, parsePinned, personaModels } from "@intentic/sandbox-contract";
 import { computed, ref, type Ref } from "vue";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { roleSources } from "../accounts/roleModel";
 import type { Conversation } from "../session/conversation";

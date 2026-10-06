@@ -1,5 +1,4 @@
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
-import { probeAcpAgent } from "../../runtimes/acp/acp-probe.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // An ACP agent: a chat provider. apply/status = a spawn + initialize probe, proving the command actually
@@ -22,7 +21,7 @@ export const agentHandler: CapabilityHandler = {
     // warm connection keyed by the old one is dropped by the route exactly as an edit drops it.
     rename: {},
     async *apply(ctx, id, config) {
-        const probe = await probeAcpAgent(config as AcpAgentConfig, ctx.workspace.root);
+        const probe = await ctx.probeAcpAgent(config as AcpAgentConfig, ctx.workspace.root);
         const name = probe.agentName ?? id;
         yield {
             kind: "log",
@@ -31,7 +30,7 @@ export const agentHandler: CapabilityHandler = {
     },
     status: async (ctx, _id, config) => {
         try {
-            const probe = await probeAcpAgent(config as AcpAgentConfig, ctx.workspace.root);
+            const probe = await ctx.probeAcpAgent(config as AcpAgentConfig, ctx.workspace.root);
             return { state: "active", detail: `ACP v${probe.protocolVersion}` };
         } catch (error) {
             return { state: "error", detail: error instanceof Error ? error.message : "probe failed" };

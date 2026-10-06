@@ -1,7 +1,7 @@
 import type { GitRemoteRepo } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { rpcQuery } from "../../client/rpcQuery";
-import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { fetchWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 import { workspaceTreeKey } from "../../../workspace/health/workspaceTreeKey";
 

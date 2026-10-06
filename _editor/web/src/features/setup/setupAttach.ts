@@ -1,3 +1,4 @@
+import { rawRouteUrl } from "@intentic/sandbox-contract";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 
 // One-step alternative to provision+run+wait: nothing is provisioned, so the browser itself verifies the pasted
@@ -49,7 +50,7 @@ export const probeDaemon = async (args: {
     // Token for the daemon's first-bind gate; omitted, a tokenless daemon binds the first identity.
     readonly connectToken?: string;
 }): Promise<AttachOutcome> => {
-    const health = await probeFetch(`${args.daemonUrl}/health`);
+    const health = await probeFetch(`${args.daemonUrl}${rawRouteUrl(`GET /health`)}`);
     if (typeof health === `string`) {
         return { kind: health };
     }
@@ -64,7 +65,9 @@ export const probeDaemon = async (args: {
     if (args.connectToken !== undefined && args.connectToken !== ``) {
         headers.set(`x-intentic-connect`, args.connectToken);
     }
-    const authorized = await probeFetch(`${args.daemonUrl}/environment`, { headers });
+    // Any read behind the session check proves the bearer; this one is the sandbox's own address being probed, before it is
+    // registered, so it goes by plain fetch with the path from the route table.
+    const authorized = await probeFetch(`${args.daemonUrl}${rawRouteUrl(`GET /environment`)}`, { headers });
     if (typeof authorized === `string`) {
         return { kind: authorized };
     }

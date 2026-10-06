@@ -19,8 +19,9 @@
     ],
     "references": [
         { "path": "../../_shared/sandbox-contract" },
+        { "path": "../../_shared/api-contract" },
         { "path": "../../_shared/workspace-ignore" },
-        { "path": "../../_sandbox/workspace-setup" },
+        { "path": "../../_shared/workspace-setup" },
         { "path": "../../_shared/extension-api" },
         { "path": "../../_shared/extension-manifest" },
         { "path": "../../_deploy/graph" },
@@ -29,6 +30,7 @@
         { "path": "../../_sandbox/scaffold" },
         { "path": "../../_deploy/sdk" },
         { "path": "../../_sandbox/fileq" },
+        { "path": "../../_sandbox/ocr" },
         { "path": "../../_tools/constants" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"

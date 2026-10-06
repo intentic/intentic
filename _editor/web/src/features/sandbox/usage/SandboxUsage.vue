@@ -2,12 +2,16 @@
 import {
     BarChart,
     Card,
-    ui,
+    formatCompact,
+    formatMoney,
+    formatPercent,
     Notice,
     type NoticeModel,
     NoticeStack,
     SegmentedControl,
     SkeletonSnapshot,
+    timeAgo,
+    ui,
     vAction,
     vSkeletonSource,
 } from "@intentic/ui";
@@ -16,7 +20,6 @@ import { localZone, sameClock, UTC } from "@intentic/sandbox-contract/time";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { relativeTime } from "../../chat/models/catalog";
 import { modelLabelFor, providerDisplayLabel, providerGroup, providerGroupLabel } from "../../chat/accounts/providerCatalog";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSavings } from "./useSavings";
@@ -31,11 +34,7 @@ import UsageSparkline from "./UsageSparkline.vue";
 import {
     cacheHitRate,
     deltaPercent,
-    formatCompact,
     formatDelta,
-    formatPercent,
-    formatUsd,
-    formatUsdHero,
     inWindow,
     previousWindow,
     providersIn,
@@ -113,6 +112,7 @@ const providerOptions = computed(() => [
 // the figures
 
 const totals = computed(() => totalsOf(current.value));
+const cacheRate = computed(() => cacheHitRate(totals.value));
 const previousTotals = computed(() => (previous.value === undefined ? undefined : totalsOf(previous.value)));
 
 const seriesProviders = computed(() => providersIn(current.value, providerGroup));
@@ -291,7 +291,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
                             <!-- A floor, not a total, once a runtime that reports no cost is in the window. -->
-                            {{ totals.costKnown ? `` : `≥ ` }}{{ formatUsdHero(totals.costUsd) }}
+                            {{ totals.costKnown ? `` : `≥ ` }}{{ formatMoney(totals.costUsd, { compact: true }) }}
                         </div>
                         <div class="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-2 text-2xs" :class="deltaTone(spendDelta)">
                             <template v-if="formatDelta(spendDelta) !== undefined">
@@ -329,7 +329,7 @@ const hasSpend = computed(() => current.value.length > 0);
                     <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
                         <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.cacheHitRate`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
-                            {{ formatPercent(cacheHitRate(totals)) }}
+                            {{ cacheRate === undefined ? `—` : formatPercent(cacheRate) }}
                         </div>
                         <p class="mt-auto pt-2 text-2xs text-subtle">
                             {{ t(`sandbox.sandboxUsage.promptInputCached`, { cacheReadTokens: formatCompact(totals.cacheReadTokens) }) }}
@@ -345,7 +345,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         <h3 class="text-sm font-semibold text-content">
                             {{ preset === `all` ? t(`sandbox.sandboxUsage.spendPerPeriod`) : t(`sandbox.sandboxUsage.spendPerDay`) }}
                         </h3>
-                        <span class="text-sm tabular-nums text-muted">{{ formatUsd(totals.costUsd) }}</span>
+                        <span class="text-sm tabular-nums text-muted">{{ formatMoney(totals.costUsd) }}</span>
                     </div>
                     <UsageColumnChart v-if="hasSpend" :series="series" :providers="seriesProviders" />
                     <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
@@ -399,7 +399,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             <template #footnote>
                                 {{ formatCompact(savings?.input.commands ?? 0) }} {{ t(`sandbox.sandboxUsage.commands`) }} {{ savingsPeriod }}
                                 <template v-if="savings?.input.updatedAt !== undefined">{{
-                                    t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: relativeTime(savings.input.updatedAt) })
+                                    t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: timeAgo(savings.input.updatedAt, { days: true }) })
                                 }}</template>
                             </template>
                         </SavingsCard>
@@ -457,7 +457,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.inputTokens) }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.outputTokens) }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.cacheReadTokens) }}</td>
-                                    <td class="py-1.5 text-right text-content">{{ row.costKnown === false ? `≥ ` : `` }}{{ formatUsd(row.costUsd) }}</td>
+                                    <td class="py-1.5 text-right text-content">{{ row.costKnown === false ? `≥ ` : `` }}{{ formatMoney(row.costUsd) }}</td>
                                 </tr>
                             </tbody>
                         </table>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { ui, ResponsiveOverlay, SkeletonRows, SkeletonSnapshot, vAction, vSkeletonSource } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { sharedWorkspaceTreeKey } from "../../workspace/health/workspaceTreeKey";
-import { sandboxRpc } from "../client/sandboxRpc";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
 // Folder picker as a tree, not a text field, so a typo can't fence a persona to a nonexistent folder.

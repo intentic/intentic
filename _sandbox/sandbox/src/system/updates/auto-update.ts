@@ -1,7 +1,8 @@
+import { serialLock } from "@intentic/base/async";
 import type { AutoUpdate, AutoUpdateHold, AutoUpdateInput, DeviceFlowLine, DeviceSandboxFlow, StagedUpdate } from "@intentic/sandbox-contract";
 import { isNewer } from "@intentic/sandbox-contract";
-import type { RestartResume } from "../../agent/run/turn/restart-resume.js";
-import { askedRestart } from "../../agent/run/turn/restart-resume.js";
+import type { RestartResume } from "../restart-resume.js";
+import { askedRestart } from "../restart-resume.js";
 import { opt } from "../../opt.js";
 import type { UpdatePolicyFile } from "./update-policy.js";
 
@@ -210,13 +211,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
 
     // One look at a time, and an owner's press queued behind the look in flight rather than racing it. The swap itself
     // runs beside the chain, never in it: it lasts until this process is stopped, and nothing may queue behind that.
-    let chain: Promise<unknown> = Promise.resolve();
-    const serialize = <T>(work: () => Promise<T>): Promise<T> => {
-        const run = chain.then(work, work);
-        // allow(silent-catch): the chain only orders the looks; whoever queued this one hears its failure through `run`.
-        chain = run.catch(() => undefined);
-        return run;
-    };
+    const serialize = serialLock();
     const lookSoon = (): void => {
         void serialize(look).catch((error: unknown) => deps.logger.warn({ err: error }, "auto-update look failed"));
     };

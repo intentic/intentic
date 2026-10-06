@@ -2,9 +2,9 @@ import { computed } from "vue";
 import { effectiveAutoLand, turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { landsByDefault } from "../../sandbox/environment/rules";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { useRole } from "../../sandbox/secrets/useRole";
+import { useRole } from "../../../client/sandbox/useRole";
 import type { Conversation } from "../session/conversation";
 
 // The composer setting about how a conversation's work arrives rather than what it says: whether its finished work lands

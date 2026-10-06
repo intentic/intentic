@@ -4,7 +4,7 @@ import { call } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 import { errorCode, rejectForbidden } from "../harness/route-client.testing.js";
-import type { WidenRequest, WidenVerdict } from "./host-guard-gate.js";
+import type { WidenRequest, WidenVerdict } from "./gates/host-guard-gate.js";
 import { effectiveHostGuards } from "./host-guards.js";
 import { createSecretHostRoutes, type SecretHostRoutesDeps } from "./secret-hosts.routes.js";
 import { secretsSliceFake } from "./secrets-slice.testing.js";

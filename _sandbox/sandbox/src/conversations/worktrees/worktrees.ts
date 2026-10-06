@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, rmdir, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathExists, pathPresence, writeFileAtomic } from "@intentic/base/fs";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
@@ -12,7 +12,7 @@ import type { PerfTracker } from "../../system/resources/perf.js";
 import { textFile } from "../../store/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
+import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../../git/agent-refs.js";
 import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";

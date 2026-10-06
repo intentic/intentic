@@ -2,9 +2,9 @@ import type { Disposable, SideViewInput, SideViewRegistration } from "@intentic/
 import type { SideViewContribution } from "@intentic/extension-manifest";
 import type { IconName } from "@intentic/ui";
 import { defineComponent, h, type PropType } from "vue";
-import { registerSideView, type SideViewEntry } from "../shell/side/sideViews";
+import { registerSideView, type SideViewEntry } from "../workbench/side/sideViews";
 import ExtensionSideView from "./ExtensionSideView.vue";
-import { registeredViews } from "./registry";
+import { registeredViews } from "../workbench/views/registry";
 
 // An extension's side view, as the side panel draws every side view: the manifest's entry decides its family name and
 // whether it may take links, the registration answers the rest. The id is the extension's, then the view's, so two

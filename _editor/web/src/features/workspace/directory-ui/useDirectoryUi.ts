@@ -1,9 +1,9 @@
 import { STATE_DIR } from "@intentic/constants";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { type BridgeCall, resolveBridgeCall } from "./directoryUiVerbs";
 import { readFileWindow } from "../files/fileWindow";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // Directory-defined UI: a directory's self-contained `.intentic/ui/index.html`, read via the normal file route
 // and rendered into a sandboxed, opaque-origin iframe with no DOM/cookie/token access. Talks to its sandbox only
@@ -56,7 +56,7 @@ export const createDirectoryUiBridge = (iframe: HTMLIFrameElement): (() => void)
             const call = resolveBridgeCall(msg.verb, (msg.args as Record<string, unknown> | undefined) ?? {});
             reply({ ok: true, data: await send(call) });
         } catch (error) {
-            reply({ ok: false, error: errorMessage(error, `directory UI call failed`) });
+            reply({ ok: false, error: messageOr(error, `directory UI call failed`) });
         }
     };
     window.addEventListener(`message`, onMessage);

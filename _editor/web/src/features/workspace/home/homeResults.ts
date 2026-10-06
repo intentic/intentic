@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { basename, parentDir } from "@intentic/ui/path";
 
 // What the home shows for a query: matches under the open folder, flat, each knowing the folder it sits in. The tree

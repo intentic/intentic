@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { promptOf as kindOfPrompt } from "@intentic/iq/transcript";
 import { displayNameOf, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
 import type { ToolCallFacts } from "./turn-metrics.js";
 
@@ -57,8 +58,6 @@ interface Line {
     readonly sessionId?: string;
     readonly cwd?: string;
     readonly timestamp?: string;
-    readonly isMeta?: boolean;
-    readonly isCompactSummary?: boolean;
     readonly isSidechain?: boolean;
     readonly message?: { readonly content?: readonly Block[] | string };
 }
@@ -104,18 +103,13 @@ const isMissing = (error: unknown): boolean => {
     return code === "ENOENT" || code === "ENOTDIR";
 };
 
-// A prompt a person (or a harness on their behalf) sent, as opposed to a user line carrying tool results, a caveat the
-// CLI inserted, a compaction summary, or a local command's echo. The only turn boundary this format has.
+// A prompt a person sent, or a slash command they typed, as opposed to a user line carrying tool results, a caveat the
+// CLI inserted, a compaction summary, a local command's echo or the CLI's note of an interruption: the only turn
+// boundary this format has. Which line is which is @intentic/iq's classification, the one its recall reads too; a
+// prompt that carried only images still starts a turn, with "" as its text.
 const promptOf = (line: Line): string | undefined => {
-    if (line.type !== "user" || line.isMeta === true || line.isCompactSummary === true) {
-        return undefined;
-    }
-    const content = line.message?.content;
-    if (Array.isArray(content) && content.some((block: Block) => block["type"] === "tool_result")) {
-        return undefined;
-    }
-    const text = textOf(content);
-    return text.startsWith("<local-command-") ? undefined : text;
+    const prompt = kindOfPrompt(line as Readonly<Record<string, unknown>>);
+    return prompt?.kind === "typed" || prompt?.kind === "command" ? prompt.text : undefined;
 };
 
 const callsOf = (line: Line, options: TranscriptOptions, subagent: boolean): TranscriptCall[] => {
@@ -154,7 +148,12 @@ const failuresOf = (line: Line): TranscriptFailure[] => {
     }
     return content.flatMap((block: Block) =>
         block["type"] === "tool_result" && block["is_error"] === true && typeof block["tool_use_id"] === "string"
-            ? [{ id: block["tool_use_id"], text: (typeof block["content"] === "string" ? block["content"] : textOf(block["content"])).slice(0, FAILURE_TEXT_CHARS) }]
+            ? [
+                  {
+                      id: block["tool_use_id"],
+                      text: (typeof block["content"] === "string" ? block["content"] : textOf(block["content"])).slice(0, FAILURE_TEXT_CHARS),
+                  },
+              ]
             : [],
     );
 };
@@ -188,7 +187,10 @@ export const readClaudeTranscript = (text: string, options: TranscriptOptions): 
 };
 
 // The calls and failures of every subagent the session started, in `<session>/subagents/*.jsonl`.
-const subagentActivity = (file: string, options: TranscriptOptions): { calls: TranscriptCall[]; failures: (TranscriptFailure & { at: number | undefined })[] } => {
+const subagentActivity = (
+    file: string,
+    options: TranscriptOptions,
+): { calls: TranscriptCall[]; failures: (TranscriptFailure & { at: number | undefined })[] } => {
     const dir = join(dirname(file), basename(file, ".jsonl"), "subagents");
     let names: string[];
     try {

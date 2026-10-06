@@ -6,11 +6,11 @@ import type { Conversation } from "../session/conversation";
 import { providerAccounts } from "../accounts/providerAccounts";
 import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
-import { useLayout } from "../../../shell/window/useLayout";
+import { useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "../panel/ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
-import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
+import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
 import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 
 // Asserted through the real composer and DOM, since editing is a mode with no value unless a surface
@@ -42,7 +42,7 @@ jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // Import-time globals a mounted chat surface needs.
-jest.mock(`../../sandbox/client/useSandbox`, () => {
+jest.mock(`../../../client/sandbox/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {

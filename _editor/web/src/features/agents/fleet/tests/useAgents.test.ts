@@ -6,12 +6,12 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 // mocks cut the edges that reach `window.env` (router, analytics, sandbox client) without touching what's tested.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
-jest.mock("../../../sandbox/client/useSandbox", () => {
+jest.mock("../../../../client/sandbox/useSandbox", () => {
     return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });
 // Pins the scoping rule to a fixed id so assertions below can spell out the whole key.
-jest.mock("../../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-jest.mock("../../../sandbox/client/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+jest.mock("../../../../lib/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 // The fleet's daemon calls, one mock per procedure a case can reach. resetDaemon handles them as the one seam they used
 // to be: reset together, each answering `answer` until a case queues its own.
 const daemon = {
@@ -36,7 +36,7 @@ const reached = (): string[] => Object.entries(daemon).flatMap(([name, procedure
 // The unsent-words report the fleet sends by itself whenever a composer's words come or go. Always answered, and kept
 // out of `daemon` so a reset never leaves it answering nothing and `reached()` still counts only what a case asked for.
 const reportUnsent = jest.fn().mockResolvedValue(undefined);
-jest.mock("../../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: {
             list: daemon.list,
@@ -59,7 +59,7 @@ import { previewOf } from "../../../chat/panel/useChat-strip";
 import { Conversation } from "../../../chat/session/conversation";
 import type { Strip, TabFacts } from "../../../chat/tabs/tabFacts";
 import { useChat } from "../../../chat/run/useChat";
-import { useNotifications } from "../../../../shell/notifications/notifications";
+import { useNotifications } from "../../../../workbench/notifications/notifications";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { desyncAgents, useAgents } from "../useAgents";
 import {
@@ -828,7 +828,7 @@ describe("draft cards", () => {
     // the board reads the drawing window's own published strip (chatEcho) instead.
     it("draws a draft, named and marked, from the popped-out chat's strip, whatever this window holds", async () => {
         const { receiveChatNote } = await import("../../../chat/run/chatChannel");
-        const { receiveFloatingNote } = await import("../../../../shell/window/floating");
+        const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
         // This window's own strip is empty of it; the card is drawn from the other window's note anyway.
         receiveChatNote({
@@ -856,7 +856,7 @@ describe("draft cards", () => {
     // window can't clear a mark for a composer it never sees, so it must trust the drawing window's own strip.
     it("drops the mark when the popped-out chat says the message went, whatever this window's frozen tab holds", async () => {
         const { receiveChatNote } = await import("../../../chat/run/chatChannel");
-        const { receiveFloatingNote } = await import("../../../../shell/window/floating");
+        const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
         conversation.registered.value = true;
@@ -894,7 +894,7 @@ describe("draft cards", () => {
     // the tab, and the board reads both as one continuous card.
     it("turns a draft card into a set-aside card in one step when the popped-out chat closes it", async () => {
         const { receiveChatNote } = await import("../../../chat/run/chatChannel");
-        const { receiveFloatingNote } = await import("../../../../shell/window/floating");
+        const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
         receiveChatNote({
             sandbox: undefined,

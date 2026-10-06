@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { relativeTime } from "../models/catalog";
 import type { ChatSession } from "../run/useChat-sessions";
 import MatchLine from "../../../components/MatchLine.vue";
-import { viewersOfSession } from "../../../shell/presence/usePresence";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
+import { viewersOfSession } from "../../../workbench/presence/usePresence";
+import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import { useT } from "@intentic/ui/i18n";
+import { timeAgo } from "@intentic/ui";
 
 // The past-chats list, stored sessions as reopenable rows. One body, two hosts (desktop AnchoredOverlay, mobile
 // BottomSheet), so the title/presence/snippet/time rule lives once instead of drifting between two copies. `touch`
@@ -41,7 +41,7 @@ const emit = defineEmits<{ open: [id: string] }>();
                 :needle="query.trim().toLowerCase()"
                 class="line-clamp-2 text-2xs text-muted"
             />
-            <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
+            <span class="text-2xs text-subtle">{{ timeAgo(session.updatedAt, { days: true }) }}</span>
         </button>
     </template>
     <!-- "No matching chats" and "no chats" are different facts, and the query is what tells them apart. -->

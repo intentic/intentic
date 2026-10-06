@@ -9,8 +9,8 @@ const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbo
 jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
 
 const { HOLD_MS, useDesktopView } = await import(`./useDesktopView`);
-const { signalConnection } = await import(`../sandbox/client/useSandbox`);
-const { classifyFailure } = await import(`../sandbox/live/connection`);
+const { signalConnection } = await import(`../../client/sandbox/useSandbox`);
+const { classifyFailure } = await import(`../../client/sandbox/connection`);
 
 // Records what the view puts on the wire, and plays the daemon's side: opening, answering, closing.
 class FakeSocket {

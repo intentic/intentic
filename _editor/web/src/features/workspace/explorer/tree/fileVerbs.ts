@@ -1,9 +1,9 @@
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import type { Ref } from "vue";
 import { type MultiSelect, useMultiSelect } from "../../../../lib/multiSelect";
-import type { useNotifications } from "../../../../shell/notifications/notifications";
+import type { useNotifications } from "../../../../workbench/notifications/notifications";
 import type { DownloadTarget } from "../../files/downloadEntries";
 import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import type { LandedEntry } from "../fileNesting";

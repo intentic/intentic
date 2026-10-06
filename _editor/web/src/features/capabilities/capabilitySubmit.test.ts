@@ -2,7 +2,7 @@
 // second press while a write is in flight does nothing, the install's own terminal, and the wallet's second write to
 // the platform, whose refusal is said rather than swallowed.
 import "@intentic/testing/dom";
-import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
 import { type AddCapabilityInput, CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";

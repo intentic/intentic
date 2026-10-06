@@ -10,12 +10,12 @@ import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTil
 import { useBrowsersQuery } from "../features/browsers/browsersQuery";
 import { useDesktopQuery } from "../features/desktop/desktopQuery";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
-import { useRole } from "../features/sandbox/secrets/useRole";
+import { useRole } from "../client/sandbox/useRole";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../features/terminal/useTerminalActivity";
-import { GO_TO } from "./commands/categories";
+import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
-import { commandShortcut, registerCommand } from "./commands/useCommands";
+import { commandShortcut, registerCommand } from "../workbench/commands/useCommands";
 import {
     type ActiveExtension,
     activationBadge,
@@ -29,19 +29,19 @@ import {
     onRailOnlyByVisit,
     DEVICES_VIEW_ID,
     DESKTOP_VIEW_ID,
-} from "../core-views/registry";
-import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
-import { useVocabulary } from "../core-views/vocabulary";
+} from "../workbench/views/registry";
+import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
+import { useVocabulary } from "../workbench/views/vocabulary";
 import { useAudience } from "../app/useAudience";
 import { chatInSidePanel, chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
-import { useKeybindings } from "./commands/useKeybindings";
-import { useLayout } from "./window/useLayout";
-import { uiLength } from "./window/uiScale";
-import { useIconRailSize } from "./rail/useIconRailSize";
+import { useKeybindings } from "../workbench/commands/useKeybindings";
+import { useLayout } from "../workbench/window/useLayout";
+import { uiLength } from "../workbench/window/uiScale";
+import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { railFrame } from "./rail/railFrame";
-import { presenceOthers } from "./presence/usePresence";
+import { presenceOthers } from "../workbench/presence/usePresence";
 import { usePanels } from "../features/extensions/usePanels";
 import { appTargetId, previewEvidence, previewHealthyCount } from "../features/preview/previewModel";
 import { openPreviewOnFirstVisit } from "../features/preview/previewSurface";
@@ -51,7 +51,7 @@ import { useChanges } from "../features/workspace/changes/useChanges";
 import { pushBadge } from "../features/workspace/push/pushBadge";
 import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { usePorts } from "../features/sandbox/environment/usePorts";
-import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { useSandbox } from "../client/sandbox/useSandbox";
 import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
 import { useSyncHealth } from "../features/sandbox/devices/useDevices";
 import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
@@ -59,20 +59,20 @@ import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
-import { terminalSlot } from "./window/panelSlots";
+import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
-import { setSplit, sideDocked } from "./side/sideTabs";
+import { setSplit, sideDocked } from "../workbench/side/sideTabs";
 import { besideChat, besideFills } from "./side/sideLayout";
-import { shownSideTabs } from "./side/sideViews";
+import { shownSideTabs } from "../workbench/side/sideViews";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import { popChatOutAt, useChatTileDrag } from "./rail/chatTileDrag";
 import ChatTileDragLayer from "./rail/ChatTileDragLayer.vue";
 import RailIcon from "./rail/RailIcon.vue";
-import TileMark from "./rail/TileMark.vue";
-import { RUNNING_MARK_CLASS } from "../core-views/viewBadge";
-import PresenceAvatars from "./presence/PresenceAvatars.vue";
+import TileMark from "../components/TileMark.vue";
+import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
+import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";

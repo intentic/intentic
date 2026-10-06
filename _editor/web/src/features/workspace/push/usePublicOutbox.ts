@@ -2,8 +2,8 @@ import type { PublicList } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { PUBLIC } from "../../../lib/queryKeys";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Reads the workspace outbox from the app, since Preview's own target needs its own read. Registered under the
 // preview extension's query key (PUBLIC), not the procedure's, so its staleness push covers this read too. `live` is

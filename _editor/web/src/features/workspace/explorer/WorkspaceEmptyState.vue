@@ -3,7 +3,7 @@
 import { computed, nextTick, ref } from "vue";
 import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { useAudience } from "../../../app/useAudience";
-import AudienceAsk from "../../../components/AudienceAsk.vue";
+import AudienceAsk from "./AudienceAsk.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useAddRepo } from "./useAddRepo";
 import { useT } from "@intentic/ui/i18n";

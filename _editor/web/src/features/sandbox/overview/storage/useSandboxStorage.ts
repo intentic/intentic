@@ -3,11 +3,11 @@ import { useAsyncAction } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { queryClient } from "../../../../lib/queryPersistence";
-import { rpcQuery } from "../../client/rpcQuery";
-import { sandboxRpc } from "../../client/sandboxRpc";
-import { useSandboxQuery } from "../../client/useSandboxQuery";
-import { useRole } from "../../secrets/useRole";
-import { supportsRoute } from "../useDaemonRoutes";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
+import { useRole } from "../../../../client/sandbox/useRole";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 
 // The Disk card's data: the daemon's last measurement, a scan that leaves it on screen until the new one lands, and a
 // clean that measures again once it is done. The daemon holds the one scan, so a second window joins it.

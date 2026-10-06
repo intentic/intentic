@@ -1,5 +1,5 @@
 import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } from "../schemas/maintenance.js";
-import { plural } from "@intentic/base/format";
+import { plural, sizeLabel } from "@intentic/base/format";
 import { bucketOf, digestOf } from "./digest.js";
 import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
@@ -609,8 +609,6 @@ const FRAMEWORK_LABELS = UI_FRAMEWORKS.map((framework) => framework.label).join(
 const needsFramework = (signals: ChoreSignals): string | undefined =>
     frameworksOf(signals.shape.deps).length > 0 ? undefined : `no ${FRAMEWORK_LABELS}`;
 
-const bytesLabel = (bytes: number): string => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(bytes / 1024)} kB`);
-
 // The criterion is a share of total size, not a byte threshold, since a byte value would need a different number
 // per app. Report-stance: where to split is a product decision no unattended agent should make.
 const BUNDLE_SHARE_FLOOR = 50;
@@ -653,10 +651,10 @@ const bundleWeight: Chore = {
             return undefined;
         }
         return {
-            headline: `${largest.path} is ${Math.round(share)}% of the ${bytesLabel(totalGzip)} this build ships`,
+            headline: `${largest.path} is ${Math.round(share)}% of the ${sizeLabel(totalGzip)} this build ships`,
             detail: ranked
                 .slice(0, DETAIL_LIMIT)
-                .map((asset) => `${bytesLabel(asset.gzip)} gzipped · ${asset.path} (${bytesLabel(asset.bytes)} on disk)`),
+                .map((asset) => `${sizeLabel(asset.gzip)} gzipped · ${asset.path} (${sizeLabel(asset.bytes)} on disk)`),
             // The bucketed total and hash-stripped identities of the biggest chunks; a rebuild of the same code stays
             // silent, a new heavy chunk doesn't.
             digest: digestOf(
@@ -669,11 +667,11 @@ const bundleWeight: Chore = {
             // Not a risk being carried, however large; `warning` is reserved for something with a clock on it.
             severity: `info`,
             why:
-                `The build output in ${dir}/ of ${repoLabel(context.repo)} is ${bytesLabel(totalGzip)} gzipped across ` +
-                `${plural(assets.length, `asset`)}, and ${largest.path} alone is ${bytesLabel(largest.gzip)} of it: ${Math.round(share)}%. ` +
+                `The build output in ${dir}/ of ${repoLabel(context.repo)} is ${sizeLabel(totalGzip)} gzipped across ` +
+                `${plural(assets.length, `asset`)}, and ${largest.path} alone is ${sizeLabel(largest.gzip)} of it: ${Math.round(share)}%. ` +
                 `The next largest are ${ranked
                     .slice(1, 4)
-                    .map((asset) => `${asset.path} (${bytesLabel(asset.gzip)})`)
+                    .map((asset) => `${asset.path} (${sizeLabel(asset.gzip)})`)
                     .join(`, `)}. ` +
                 `This is the last build someone ran, read off disk; nothing rebuilt it to measure.`,
         };

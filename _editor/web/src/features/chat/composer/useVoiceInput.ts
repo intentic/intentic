@@ -1,7 +1,7 @@
 import { sleep } from "@intentic/base/async";
 import { ref, type Ref } from "vue";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { createSegmenter, resampleTo16k, wavOf16k } from "./voiceAudio";
 
 // Hands-free voice input: the mic is captured in-page (AudioWorklet), the silence segmenter (voiceAudio.ts)

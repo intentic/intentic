@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { Button, EmptyState } from "@intentic/ui";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "./useExtensions";
 import { usePanels } from "./usePanels";
-import { detectActivations } from "../../core-views/registry";
+import { detectActivations } from "../../workbench/views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -35,11 +36,15 @@ const found = computed(() => {
 
 <template>
     <ExtensionView v-if="found" :extension="found.extension" :activation="found.activation" />
-    <div v-else-if="disabledOwner" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
-        <p>{{ t(`extensions.extensionHost.switchedOff`, { manifest: extensionIdOf(disabledOwner.manifest) }) }}</p>
-        <RouterLink to="/sandbox/extensions?view=installed" class="text-link hover:underline">{{ t(`extensions.extensionHost.turnBackOnIn`) }}</RouterLink>
-    </div>
-    <div v-else-if="!isLoading" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
-        <p>{{ t(`extensions.extensionHost.nothingHereViewsContent`) }}</p>
-    </div>
+    <EmptyState
+        v-else-if="disabledOwner"
+        icon="extensions"
+        :title="t(`extensions.extensionHost.switchedOff`, { manifest: extensionIdOf(disabledOwner.manifest) })"
+        class="h-full"
+    >
+        <template #actions>
+            <Button :as="RouterLink" to="/sandbox/extensions?view=installed" size="small" severity="secondary" :label="t(`extensions.extensionHost.turnBackOnIn`)" />
+        </template>
+    </EmptyState>
+    <EmptyState v-else-if="!isLoading" :title="t(`extensions.extensionHost.nothingHereViewsContent`)" class="h-full" />
 </template>

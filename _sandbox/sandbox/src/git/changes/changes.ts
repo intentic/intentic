@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { readOnFeed } from "../feed/checkout-feed.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";

@@ -2,10 +2,10 @@
 import { computed } from "vue";
 import { useNow } from "@intentic/ui/async";
 import GateCard from "./GateCard.vue";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
-import { bootSteps, bootStartedAt } from "../overview/useDaemonBoot";
-import { useSandbox } from "../client/useSandbox";
+import { bootSteps, bootStartedAt } from "../../../client/sandbox/useDaemonBoot";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
+import { formatElapsed } from "@intentic/ui";
 
 // Shown while the active daemon is reached but not yet ready, converging state before other routes work. Steps
 // come from the daemon's own declared boot chain, streamed on /events, so a slow boot names its slow step while
@@ -55,7 +55,7 @@ const now = useNow();
                     >{{ t(`sandbox.sandboxWarming.stepsDone`, { done, total: bootSteps.length })
                     }}<template v-if="running"> · {{ running.label }}</template> ·
                 </template>
-                {{ bootStartedAt === undefined ? t(`sandbox.words.starting`) : formatElapsed(bootStartedAt, now) }}
+                {{ bootStartedAt === undefined ? t(`sandbox.words.starting`) : formatElapsed((now - bootStartedAt) / 1000) }}
             </p>
         </template>
     </GateCard>

@@ -8,7 +8,7 @@ import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { statePath } from "../../state-paths.js";
 
 // A logged-in session for one profile owner is a persistent Chromium profile at sessionDir, written by
-// browser-profile.ts and read by @playwright/mcp via --user-data-dir; lives under .intentic on /work, gitignored,
+// browser-profile.routes.ts and read by @playwright/mcp via --user-data-dir; lives under .intentic on /work, gitignored,
 // surviving a rebuild.
 // profileOwner is an identity if the account was born from one, else the account itself: identities share one browser
 // (so Continue-with-Google works), standalone accounts each keep their own profile.

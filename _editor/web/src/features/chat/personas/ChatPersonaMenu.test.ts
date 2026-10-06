@@ -13,7 +13,7 @@ const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 // The reader's tier: a guest is offered its own personas and nothing wider.
 const isGuest = ref(false);
-jest.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
 jest.mock(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({

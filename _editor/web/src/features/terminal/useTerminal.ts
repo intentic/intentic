@@ -1,6 +1,6 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
-import { activeSandboxId } from "../sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../../lib/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { isWork, KINDS, pruneTerminalMeta } from "./terminalMeta";

@@ -12,7 +12,6 @@
         { "path": "../../_tools/constants" },
         { "path": "../../_tools/base" },
         { "path": "../../_deploy/graph" },
-        { "path": "../../_deploy/need-resolver" },
         { "path": "../../_deploy/state-resolver" },
         { "path": "../../_deploy/engine" },
         { "path": "../../_deploy/providers" },

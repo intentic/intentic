@@ -17,7 +17,8 @@ export const LoopbackCatchSchema = object({
     port: number().int().min(1).max(65535),
     // The path only, leading slash included; the query is the grant and is never matched.
     path: string().startsWith("/"),
-    // Epoch ms; a catcher stops watching by itself here even if nobody aborts the stream.
+    // Epoch ms; a catcher stops watching by itself here even if nobody aborts the stream, and never later than
+    // LOOPBACK_CATCH_LONGEST_MS after it starts, however far away this is.
     expiresAt: number(),
     // Who the page thanks once the browser lands ("Claude"), so the tab says what just happened.
     title: string().min(1),
@@ -33,6 +34,10 @@ export const LoopbackCatchEventSchema = discriminatedUnion("type", [
     object({ type: literal("landed"), url: string().min(1) }),
 ]);
 export type LoopbackCatchEvent = z.infer<typeof LoopbackCatchEventSchema>;
+
+// The longest any catcher watches, whatever `expiresAt` asks: a forgotten catch must not hold a port (a device) or a
+// tab listener (a browser) for as long as a sandbox happened to ask. Both peers apply it, through `watchQueue`.
+export const LOOPBACK_CATCH_LONGEST_MS = 30 * 60_000;
 
 // Advertised in a device's `features` and a browser's facts; only a peer that says it is asked.
 export const LOOPBACK_CATCH_FEATURE = "loopback-catch";

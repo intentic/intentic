@@ -3,7 +3,7 @@ import { computed, type ComputedRef, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { isWork } from "./terminalMeta";
 import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
-import { importOrReload } from "../../router/staleChunk";
+import { importOrReload } from "../../lib/staleChunk";
 
 // Work terminals: agent Bash shells and daemon job sessions (including one-shot runs: installs, a project's checks, a
 // scaffold), shown by default only through their own surfaces (chat's Bash card, Capabilities page, the popover), not

@@ -1,6 +1,6 @@
 import { useNow } from "@intentic/ui/async";
 import { computed, onScopeDispose, ref, watch, type ComputedRef } from "vue";
-import { useSandbox } from "../client/useSandbox";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { restartExpected } from "../live/sandboxRestart";
 import { useDiagnosis } from "../diagnosis/useDiagnosis";
 import { type DiagnosisNotice, presentDiagnosis } from "../diagnosis/presentation";

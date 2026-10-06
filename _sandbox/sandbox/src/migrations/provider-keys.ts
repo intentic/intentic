@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseEnv } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type Capability,
     CapabilitySchema,
@@ -321,7 +322,7 @@ export const applyProviderKeys = async (deps: ProviderKeyDeps, ids: readonly str
             added.push({ id, capability: capability.id });
             wrote = true;
         } catch (error) {
-            failed.push({ id, error: error instanceof Error ? error.message : String(error) });
+            failed.push({ id, error: errorMessage(error) });
         }
     }
     if (wrote) {

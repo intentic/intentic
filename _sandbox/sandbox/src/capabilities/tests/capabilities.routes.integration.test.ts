@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RESERVED_MCP_SERVER_NAMES, stashedMarker, VAULTED } from "@intentic/sandbox-contract";
-import { gitFullHead, gitHead } from "@intentic/scaffold";
+import { gitFullHead, gitHead } from "@intentic/base/git";
 
 import { createApp } from "../../app.js";
 import { hasSession, markConnected, sessionDir } from "../../browser/sessions/session-store.js";

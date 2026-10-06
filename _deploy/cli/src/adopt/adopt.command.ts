@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { plural } from "@intentic/base/format";
-import { FORGEJO_HTTP_PORT, forgejoApi, overSsh, sshExecutor } from "@intentic/providers";
+import { FORGEJO_HTTP_PORT, forgejoApi, overSsh } from "@intentic/providers";
 import { secretDigest, writeSyncState } from "@intentic/scaffold";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_FILE, ARTIFACT_PATH, CONFIG_FILE, INTENT_DIR, LAST_APPLIED_FILE, loadEnvFile, readArtifact, TARGET_DIR } from "../lib/artifact.js";
+import { pinnedSshExecutor } from "../lib/known-hosts.js";
 import { createOutput, teeOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 import { version } from "../lib/version.js";
@@ -120,8 +121,9 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             if (sshKey === undefined || sshKey === "") {
                 throw new Error(`host ssh key (${ssh.sshKeyRef.source} secret ${ssh.sshKeyRef.key}) is not available`);
             }
+            // Same pinned host keys as plan/apply/destroy: the forward carries the admin password and every secret.
             repos = await overSsh(
-                sshExecutor,
+                pinnedSshExecutor(targetDir),
                 { address: ssh.address, user: ssh.user, sshKey, port: ssh.port ?? 22, via: ssh.via ?? "direct" },
                 FORGEJO_HTTP_PORT,
                 run,

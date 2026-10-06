@@ -10,7 +10,7 @@ const sidebarPanel = ref(`changes`);
 const sidebarCollapsed = ref(false);
 
 jest.mock(`../../../router`, () => ({ router: { currentRoute: route } }));
-jest.mock(`../../../shell/window/useLayout`, () => ({ useLayout: () => ({ sidebarPanel, sidebarCollapsed }) }));
+jest.mock(`../../../workbench/window/useLayout`, () => ({ useLayout: () => ({ sidebarPanel, sidebarCollapsed }) }));
 
 const { queryClient } = await import(`../../../lib/queryPersistence`);
 const { changesKey } = await import(`../../../features/workspace/changes/useChanges`);

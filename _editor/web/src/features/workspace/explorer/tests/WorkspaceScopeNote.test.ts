@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 
 const scope = ref(``);
-jest.mock(`../../health/workspaceScope`, () => ({ workspaceDir: computed(() => scope.value) }));
+jest.mock(`../../../../app/workspaceScope`, () => ({ workspaceDir: computed(() => scope.value) }));
 const setProjectScope = jest.fn();
 jest.mock(`../../../../app/projectScope`, () => ({ setProjectScope: (project: string | undefined) => setProjectScope(project) }));
 

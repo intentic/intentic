@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
-import { Button, AnchoredOverlay, CopyButton, Icon, ui, vAction, vMiddleclick } from "@intentic/ui";
+import { AnchoredOverlay, Button, CopyButton, EmptyState, Icon, timeAgo, ui, vAction, vMiddleclick } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "./activePage";
@@ -9,7 +9,6 @@ import { closeBrowser, useBrowsersQuery } from "./browsersQuery";
 import type { BrowserCommand } from "./keyIntent";
 import { useBrowserView } from "./useBrowserView";
 import BrowserSelectMenu from "../capabilities/connect/BrowserSelectMenu.vue";
-import { relativeTime } from "../chat/models/catalog";
 import { postTurnControl } from "../chat/run/turnStream";
 import { useT } from "@intentic/ui/i18n";
 
@@ -92,7 +91,7 @@ const sessionMeta = (session: BrowserSession): string =>
         accountOf(session),
         session.running
             ? `${session.pages.length} ${session.pages.length === 1 ? `page` : `pages`}`
-            : `closed${session.finishedAt === undefined ? `` : ` ${relativeTime(session.finishedAt)}`}`,
+            : `closed${session.finishedAt === undefined ? `` : ` ${timeAgo(session.finishedAt, { days: true })}`}`,
     ]
         .filter((part) => part !== undefined)
         .join(` · `);
@@ -298,13 +297,13 @@ watch(
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <!-- Not an error: most turns never open a browser. -->
-        <div v-if="sessions.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
-            <Icon name="globe" class="text-2xl text-muted" />
-            <div class="text-sm text-content">{{ t(`browsers.browsers.noBrowsersOpen`) }}</div>
-            <div class="max-w-sm text-xs text-muted">
-                {{ t(`browsers.browsers.agentOpensPageBrowser`) }}
-            </div>
-        </div>
+        <EmptyState
+            v-if="sessions.length === 0"
+            icon="globe"
+            :title="t(`browsers.browsers.noBrowsersOpen`)"
+            :line="t(`browsers.browsers.agentOpensPageBrowser`)"
+            class="flex-1"
+        />
 
         <!-- The window fills what it gets; the page inside is sized to match (see the stage's observer). -->
         <div v-else class="flex min-h-0 flex-1 overflow-hidden p-3">
@@ -440,7 +439,7 @@ watch(
                     <span v-else class="shrink-0 whitespace-nowrap px-1 text-2xs text-muted">{{
                         current?.finishedAt === undefined
                             ? t(`browsers.browsers.closed`)
-                            : t(`browsers.browsers.closedWhen`, { when: relativeTime(current.finishedAt) })
+                            : t(`browsers.browsers.closedWhen`, { when: timeAgo(current.finishedAt, { days: true }) })
                     }}</span>
 
                     <!-- Closing controls stay separate from everyday browser controls. -->
@@ -595,16 +594,14 @@ watch(
                     </div>
 
                     <!-- Recorded browser sessions have no live stream. -->
-                    <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
-                        <Icon name="globe" class="text-2xl text-muted" />
-                        <div class="text-sm text-content">{{ t(`browsers.browsers.browserClosed`) }}</div>
-                        <div class="max-w-sm text-xs text-muted">
+                    <EmptyState v-else icon="globe" :title="t(`browsers.browsers.browserClosed`)" class="absolute inset-0">
+                        <template #line>
                             <template v-if="current?.finishedAt !== undefined">{{
-                                t(`browsers.browsers.closed`, { finishedAt: relativeTime(current.finishedAt) })
+                                t(`browsers.browsers.closed`, { finishedAt: timeAgo(current.finishedAt, { days: true }) })
                             }}</template>
                             {{ t(`browsers.browsers.everyPageOpenedStill`) }}
-                        </div>
-                    </div>
+                        </template>
+                    </EmptyState>
 
                     <!-- A dialog the page opened, held by the daemon: answered here or by the agent, whichever first. Centred like the browser's own would be. -->
                     <div v-if="dialog !== undefined" class="absolute inset-0 z-20 flex items-start justify-center bg-canvas/40 p-6">

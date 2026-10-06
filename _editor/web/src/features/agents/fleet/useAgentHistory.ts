@@ -1,8 +1,7 @@
-import type { AgentHistoryCommit } from "@intentic/api-contract";
-import type { WorkspaceModule } from "@intentic/sandbox-contract";
+import type { WorkspaceModule, AgentHistoryCommit } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
-import { rpcQuery } from "../../sandbox/client/rpcQuery";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import type { AgentReviewFile } from "../review/useAgentChanges";
 
 // The other half of the review: what this conversation wrote that's already in your own history, and which commits hold

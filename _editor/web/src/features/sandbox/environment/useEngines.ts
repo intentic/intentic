@@ -1,12 +1,11 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
-import { type EngineRow, type EnginesView, EnginesViewSchema } from "@intentic/api-contract";
+import type { EngineRow, EnginesView, EngineWriteResult, RawJsonInput } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { ENGINES } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
-import { jsonBody } from "../client/jsonBody";
-import { sandboxJson } from "../client/sandboxClient";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { t } from "@intentic/ui/i18n";
 
 // The agent engines this sandbox runs (Claude Code, codex, Cursor SDK, opencode, ...) and which version each is on,
@@ -33,12 +32,13 @@ const clearInFlight = (id: string) => {
 };
 
 // An answer after a switch describes the box left behind: it is filed nowhere, and says nothing here.
-const postAction = async (path: string, body: object, fallbackMessage: string): Promise<void> => {
+type EngineWrite = `POST /engines/channel` | `POST /engines/update` | `POST /engines/revert`;
+const postAction = async <Key extends EngineWrite>(key: Key, input: RawJsonInput<Key>, fallbackMessage: string): Promise<void> => {
     const current = sandboxScopeGuard();
     try {
-        const answer = (await sandboxJson(path, jsonBody(`POST`, body))) as { engines: unknown };
+        const answer: EngineWriteResult = await sandboxRaw(key, { input });
         if (current()) {
-            queryClient.setQueryData(ENGINES_KEY, EnginesViewSchema.parse(answer.engines));
+            queryClient.setQueryData(ENGINES_KEY, answer.engines);
         }
     } catch (err: unknown) {
         if (!current()) {
@@ -58,10 +58,10 @@ export const setEngineChannel = async (engine: EngineRow, kind: "blessed" | "lat
     actionNotice.value = undefined;
     try {
         if (kind === "pinned" && engine.running.version === undefined) {
-            await postAction(`/engines/channel`, { id: engine.id, kind: "image" }, `Could not change ${engine.label} version source.`);
+            await postAction(`POST /engines/channel`, { id: engine.id, kind: "image" }, `Could not change ${engine.label} version source.`);
         } else {
             await postAction(
-                `/engines/channel`,
+                `POST /engines/channel`,
                 { id: engine.id, kind, ...(kind === "pinned" ? { version: engine.running.version } : {}) },
                 `Could not change ${engine.label} version source.`,
             );
@@ -75,7 +75,7 @@ export const updateEngine = async (engine: EngineRow): Promise<void> => {
     setInFlight(engine.id, "update");
     actionNotice.value = undefined;
     try {
-        await postAction(`/engines/update`, { id: engine.id }, `Could not update ${engine.label}.`);
+        await postAction(`POST /engines/update`, { id: engine.id }, `Could not update ${engine.label}.`);
     } finally {
         clearInFlight(engine.id);
     }
@@ -85,7 +85,7 @@ export const revertEngine = async (engine: EngineRow): Promise<void> => {
     setInFlight(engine.id, "revert");
     actionNotice.value = undefined;
     try {
-        await postAction(`/engines/revert`, { id: engine.id }, `Could not revert ${engine.label}.`);
+        await postAction(`POST /engines/revert`, { id: engine.id }, `Could not revert ${engine.label}.`);
     } finally {
         clearInFlight(engine.id);
     }
@@ -108,7 +108,7 @@ export const updateAllEngines = async (): Promise<void> => {
     try {
         for (const engine of targets) {
             try {
-                await postAction(`/engines/update`, { id: engine.id }, `Could not update ${engine.label}.`);
+                await postAction(`POST /engines/update`, { id: engine.id }, `Could not update ${engine.label}.`);
             } catch {
                 // Carry on with next engine so one failure doesn't halt the whole queue
             } finally {
@@ -123,7 +123,7 @@ export const updateAllEngines = async (): Promise<void> => {
 export function useEngines() {
     const { query } = useSandboxQuery({
         queryKey: ENGINES_KEY,
-        queryFn: async () => EnginesViewSchema.parse(await sandboxJson(`/engines`)),
+        queryFn: () => sandboxRaw(`GET /engines`),
     });
     const view = computed<EnginesView | undefined>(() => query.data.value);
     const engines = computed<readonly EngineRow[]>(() => view.value?.engines ?? []);

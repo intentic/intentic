@@ -1,4 +1,4 @@
-import type { RepoChanges } from "@intentic/api-contract";
+import type { RepoChanges } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Remote-state layer under the Changes panel, rail tile, sidebar tab, and mobile Review tab. Exists because the

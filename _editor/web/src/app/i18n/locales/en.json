@@ -764,6 +764,7 @@
             "agentActHereSession": "and the agent will act as you here. Your session stays inside your sandbox.",
             "browser": "{label}, your browser",
             "couldntStartBrowser": "Couldn't start the browser.",
+            "droppedWhileSaving": "The connection dropped while saving. Open the browser again to check you're still signed in.",
             "imDone": "I'm done",
             "logInTo": "Log in to {label}",
             "signInWouldNormally": "Sign in as you would normally: including any 2FA. When you're on your logged-in home page, click",
@@ -2411,7 +2412,6 @@
             "tonight": "Tonight",
             "tomorrowMorning": "Tomorrow morning",
             "mondayMorning": "Monday morning",
-            "tomorrowAt": "Tomorrow {clock}",
             "pickTime": "Pick a date and time",
             "setTime": "Set",
             "outOfRange": "Pick a time from a minute to 30 days from now.",
@@ -2679,8 +2679,6 @@
             "openSandbox": "Open this folder's sandbox",
             "askAgent": "Ask an agent",
             "askAgentHint": "A conversation about this file",
-            "closingDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
-            "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone.",
             "dropFilesToAdd": "Drop files to add them to {name}",
             "machineSandbox": "This computer's sandbox"
         },
@@ -7265,20 +7263,16 @@
             "clearEsc": "Clear (Esc)",
             "closeAll": "Close All",
             "closeAllTabs": "Close All Tabs",
-            "closeAnyway": "Close anyway",
             "closeOtherTabs": "Close Other Tabs",
             "closeOthers": "Close Others",
             "closeSplit": "Close Split",
             "closeTab": "Close Tab",
             "closeTabsToRight": "Close Tabs to the Right",
-            "closingTabsDiscardsUnsaved": "Closing these tabs discards their unsaved edits. This can't be undone.",
             "codebaseHealth": "Codebase health",
             "collapseAll": "Collapse all",
             "collapseAllFolders": "Collapse all folders",
             "commaSeparated": "Comma-separated",
             "copyPath": "Copy Path",
-            "discardUnsavedChanges": "Discard unsaved changes?",
-            "discardUnsavedChangesIn": "Discard unsaved changes in {count} files?",
             "dropFilesToAdd": "Drop files to add to workspace root",
             "excluded": "Excluded",
             "filterFiles": "Filter files…",
@@ -7497,6 +7491,14 @@
             "acrossRepos": "{summary}, {count} repos",
             "toPush": "{count} commit to push | {count} commits to push",
             "unpushedBranch": "Branch unpushed | {count} branches unpushed"
+        },
+        "closeGuard": {
+            "discardUnsavedChanges": "Discard unsaved changes?",
+            "discardUnsavedChangesIn": "Discard unsaved changes in {count} files?",
+            "closeAnyway": "Close anyway",
+            "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone.",
+            "closingTabsDiscardsUnsaved": "Closing these tabs discards their unsaved edits. This can't be undone.",
+            "closingWindowDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone."
         }
     }
 }

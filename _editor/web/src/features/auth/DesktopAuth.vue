@@ -4,11 +4,11 @@ import { AppBrand, Button, Notice, type NoticeModel, vAction } from "@intentic/u
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { idTokenClaims } from "./googleToken";
+import { idTokenClaims } from "../../client/auth/googleToken";
 import { handoffSpent, markHandoffSpent } from "./handoffSpent";
 import { apiClient } from "../../lib/useApi";
-import { useAuth } from "./useAuth";
-import { useGoogleIdentity } from "./useGoogleIdentity";
+import { useAuth } from "../../client/auth/useAuth";
+import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { desktopAuthLink, signInThroughBrowser } from "../../app/environments/desktop";
 import { arrivingProfile } from "../../app/useProfile";
 import { useT } from "@intentic/ui/i18n";

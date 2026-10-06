@@ -1,6 +1,5 @@
-import type { GitDiffSide } from "@intentic/api-contract";
 import type { ChangeStatus } from "@intentic/extension-api";
-import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract";
+import { type DiffSourceQuery, DiffSourceQuerySchema, type GitDiffSide } from "@intentic/sandbox-contract";
 
 // Binary diff bytes come from a separate /diff/raw request per side; built once so all diff sources query it
 // identically. Sides are inferred from status, not the response: added has no before, deleted no after, and a

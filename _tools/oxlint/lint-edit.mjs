@@ -81,11 +81,31 @@ const fixUntilSettled = (oxlint, checkout, file) => {
 
 const gitIn = (checkout, ...args) => execFileSync(`git`, args, { cwd: checkout, encoding: `buffer`, stdio: [`ignore`, `pipe`, `ignore`] });
 
-// Diagnostics of the file as HEAD holds it: none when HEAD lacks the file (all of it is this edit's), undefined when git cannot answer.
+// The path HEAD held `rel` under when the index records the file as moved (a `git mv`), so a moved module is judged
+// against its own history: compared with nothing, every finding it carried over would read as this edit's.
+const renamedFrom = (checkout, rel) => {
+    let staged;
+    try {
+        staged = gitIn(checkout, `diff`, `--cached`, `--name-status`, `--find-renames`, `--diff-filter=R`, `HEAD`).toString(`utf8`);
+    } catch {
+        // allow(silent-catch): no HEAD or no index to ask is no rename on record, and the file is judged as new
+        return undefined;
+    }
+    for (const line of staged.split(`\n`)) {
+        const [status, from, to] = line.split(`\t`);
+        if (status?.startsWith(`R`) && to === rel) {
+            return from;
+        }
+    }
+    return undefined;
+};
+
+// Diagnostics of the file as HEAD holds it, under its own path or the one it was moved from: none when HEAD lacks it
+// (all of it is this edit's), undefined when git cannot answer.
 const baselineOf = (oxlint, checkout, rel) => {
     let head;
     try {
-        head = gitIn(checkout, `show`, `HEAD:${rel}`);
+        head = gitIn(checkout, `show`, `HEAD:${renamedFrom(checkout, rel) ?? rel}`);
     } catch {
         try {
             gitIn(checkout, `cat-file`, `-e`, `HEAD`);

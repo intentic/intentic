@@ -1,3 +1,4 @@
+import { TRIAL_MODEL_API_PATH } from "@intentic/api-contract/ingress";
 import { type Capability, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CompatEntry } from "../endpoints/endpoint-translator.js";
@@ -11,7 +12,7 @@ import type { TrialService } from "./trial.js";
 
 // openai protocol rides the translator's compat list like any user endpoint. Base URL prefers the tunnel: the
 // translator is a Go binary that verifies certificates, so a self-signed dev platform fails without it.
-const trialBaseUrl = (config: Config, tunnel: PlatformTunnel): string => new URL("/trial/v1", tunnel.url() ?? config.platform.url).toString();
+const trialBaseUrl = (config: Config, tunnel: PlatformTunnel): string => new URL(TRIAL_MODEL_API_PATH, tunnel.url() ?? config.platform.url).toString();
 
 const trialCapability = (config: Config, tunnel: PlatformTunnel): Capability => ({
     id: TRIAL_ENDPOINT_ID,
@@ -19,7 +20,7 @@ const trialCapability = (config: Config, tunnel: PlatformTunnel): Capability => 
     config: {
         baseUrl: trialBaseUrl(config, tunnel),
         protocol: "openai",
-        // Sandbox's connect token, spent as a bearer; the same credential already presented to /sandbox/announce.
+        // Sandbox's connect token, spent as a bearer; the same credential its announce presents.
         apiKey: config.connectToken,
     },
 });

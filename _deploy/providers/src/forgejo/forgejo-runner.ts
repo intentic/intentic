@@ -5,7 +5,6 @@ import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
-import { sshExecutor } from "../core/ssh.js";
 import { stampLabelArgs, stampOf } from "../core/stamp.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -61,7 +60,7 @@ const configuredJobImage = async (session: SshSession): Promise<string> => {
 
 // Forgejo Actions runner (act_runner) for a host, registered with the platform's runner token; no outputs, it's
 // a worker. `read` returns the resource only when the container is up and registered to the desired instance.
-export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor): Provider => ({
+export const createForgejoRunnerProvider = (executor: SshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "instanceUrl", "token")) {

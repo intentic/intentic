@@ -5,7 +5,7 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const fetched: string[] = [];
-jest.mock("../../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
         fetched.push(path);
         return Promise.resolve(new Blob([path]));

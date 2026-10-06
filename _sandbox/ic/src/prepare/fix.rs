@@ -279,19 +279,29 @@ pub fn add_to_docker_users(facts: &Facts) -> Fixed {
 
 /* STARTING DOCKER DESKTOP, from wherever it is — and if that is nowhere we can see, from the Start menu. */
 const START_DOCKER_DESKTOP: &str = "\
-$candidates = @()\n\
-if ('%PATH%' -ne '') { $candidates += '%PATH%' }\n\
-foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA, (Join-Path $env:LOCALAPPDATA 'Programs'))) {\n\
-  if ($base) { $candidates += (Join-Path $base 'Docker\\Docker\\Docker Desktop.exe') }\n\
-}\n\
-# The shortcuts Docker's installer leaves: launching one is what a click in the Start menu does.\n\
-$candidates += (Join-Path $env:ProgramData 'Microsoft\\Windows\\Start Menu\\Programs\\Docker Desktop.lnk')\n\
-$candidates += (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Docker Desktop.lnk')\n\
-$candidates += (Join-Path $env:PUBLIC 'Desktop\\Docker Desktop.lnk')\n\
-foreach ($candidate in $candidates) {\n\
-  if ($candidate -and (Test-Path $candidate)) { Start-Process -FilePath $candidate; exit 0 }\n\
+$known = '%PATH%'\n\
+%LOCATE_DOCKER_DESKTOP%\n\
+if (($known -ne '') -and (Test-Path $known)) { $dd = $known }\n\
+if ($dd -ne '') { Start-Process -FilePath $dd; exit 0 }\n\
+# A shortcut whose target could not be read is still what a click in the Start menu launches.\n\
+foreach ($lnk in @(\n\
+  (Join-Path $env:ProgramData 'Microsoft\\Windows\\Start Menu\\Programs\\Docker Desktop.lnk'),\n\
+  (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Docker Desktop.lnk'),\n\
+  (Join-Path $env:PUBLIC 'Desktop\\Docker Desktop.lnk'))) {\n\
+  if (Test-Path $lnk) { Start-Process -FilePath $lnk; exit 0 }\n\
 }\n\
 exit 2\n";
+
+/// [`START_DOCKER_DESKTOP`] with the path the probe already found (empty for none) and the shared discovery
+/// (`intentic_docker_host::desktop_app::LOCATE`) for when it found none or the app has moved since.
+fn start_docker_desktop_script(known: &str) -> String {
+    START_DOCKER_DESKTOP
+        .replace("%PATH%", &known.replace('\'', "''"))
+        .replace(
+            "%LOCATE_DOCKER_DESKTOP%",
+            intentic_docker_host::desktop_app::LOCATE,
+        )
+}
 
 /// Exit code of [`START_DOCKER_DESKTOP`] when nothing on its list exists.
 const NOT_FOUND: i32 = 2;
@@ -300,8 +310,7 @@ const NOT_FOUND: i32 = 2;
 /// a different user's context than the one that will use it.
 #[cfg(windows)]
 pub fn start_docker_desktop(facts: &Facts) -> Fixed {
-    let known = facts.docker_desktop_path.replace('\'', "''");
-    let output = shell::run(&START_DOCKER_DESKTOP.replace("%PATH%", &known));
+    let output = shell::run(&start_docker_desktop_script(&facts.docker_desktop_path));
     if output.ok {
         return Ok(Done::Now);
     }
@@ -365,22 +374,18 @@ pub fn wait_for_daemon() -> Fixed {
 /// calls, so this is the documented route rather than a poke at its settings file.
 #[cfg(windows)]
 pub fn switch_to_linux_containers(facts: &Facts) -> Fixed {
-    let root = if facts.docker_desktop_path.is_empty() {
-        std::env::var("ProgramFiles")
-            .map(|root| format!("{root}\\Docker\\Docker"))
-            .unwrap_or_default()
-    } else {
-        std::path::Path::new(&facts.docker_desktop_path)
-            .parent()
-            .map(|dir| dir.to_string_lossy().to_string())
-            .unwrap_or_default()
-    };
-    let cli = format!("{root}\\DockerCli.exe");
-    if !std::path::Path::new(&cli).exists() {
+    use intentic_docker_host::desktop_app;
+    let cli = std::iter::once(facts.docker_desktop_path.clone())
+        .filter(|exe| !exe.is_empty())
+        .chain(desktop_app::default_installs_here())
+        .filter_map(|app| desktop_app::app_folder(&app))
+        .map(|root| format!("{root}\\DockerCli.exe"))
+        .find(|cli| std::path::Path::new(cli).exists());
+    let Some(cli) = cli else {
         return Err(Trouble::Failed(
             "Docker Desktop's own switcher could not be found. Right-click Docker's icon in the system tray, choose \"Switch to Linux containers\", then choose Check again.".to_string(),
         ));
-    }
+    };
     let quoted = cli.replace('\'', "''");
     let output = shell::run(&format!(
         "$ErrorActionPreference = 'Continue'\n& '{quoted}' -SwitchLinuxEngine\nexit $LASTEXITCODE\n"
@@ -490,19 +495,18 @@ mod tests {
             START_DOCKER_DESKTOP.contains("Docker Desktop.lnk"),
             "a shortcut is what a click in the Start menu launches, and it exists wherever Docker went"
         );
-        assert!(START_DOCKER_DESKTOP.contains("$env:LOCALAPPDATA"));
+        assert!(start_docker_desktop_script("").contains("$env:LOCALAPPDATA"));
         assert!(
             START_DOCKER_DESKTOP.contains("exit 2"),
             "not found has to be told apart from would not start: the two sentences differ"
         );
         assert!(START_DOCKER_DESKTOP.is_ascii());
-        // The known path rides in first, quoted the same way every other substitution here is.
-        let script = START_DOCKER_DESKTOP.replace(
-            "%PATH%",
-            &"C:\\It's\\Docker Desktop.exe".replace('\'', "''"),
-        );
+        // The known path rides in, quoted the same way every other substitution here is, beside the shared discovery.
+        let script = start_docker_desktop_script("C:\\It's\\Docker Desktop.exe");
         assert!(script.contains("'C:\\It''s\\Docker Desktop.exe'"));
-        assert!(!script.contains("%PATH%"));
+        assert!(script.contains(intentic_docker_host::desktop_app::LOCATE));
+        assert!(!script.contains('%'), "every placeholder filled: {script}");
+        assert!(script.is_ascii());
     }
 
     #[test]

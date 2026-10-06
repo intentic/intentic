@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { RESERVED_PROJECT_DIR_NAMES } from "@intentic/sandbox-contract";
 import { freshImport } from "@intentic/testing/bun";
-import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
+import { activeSandboxId } from "../lib/activeSandbox";
 
 // The scope's two halves: the predicate every narrowed source applies, and the selection surviving a reload for
 // the sandbox it was made in. jsdom: the selection lives in localStorage.

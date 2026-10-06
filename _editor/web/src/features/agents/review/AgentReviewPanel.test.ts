@@ -2,8 +2,7 @@
 // rows that all looked alike, forcing the reader to match strings by eye. The fix (a mark per blocked row, a
 // count per heading, a narrowing filter) is entirely in what renders, so only rendering can pin it.
 import "@intentic/testing/dom";
-import type { AgentChangesResponse, AgentHistoryResponse } from "@intentic/api-contract";
-import type { WorkspaceModule } from "@intentic/sandbox-contract";
+import type { WorkspaceModule, AgentChanges, AgentHistory } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
 import { reasonCopy } from "./conflictResolution";
@@ -30,14 +29,14 @@ jest.mock("../../workspace/viewers/BinaryDiffView.vue", () => ({ default: { rend
 
 const { default: AgentReviewPanel } = await import("./AgentReviewPanel.vue");
 // The comment toggle that decides which reading every badge prints, imported once globals are in place.
-const { showComments, toggleShowComments } = (await import("../../../shell/window/useLayout")).useLayout();
+const { showComments, toggleShowComments } = (await import("../../../workbench/window/useLayout")).useLayout();
 // The other list preference: size order vs. path order.
 const { largestFirst } = (await import("../../workspace/changes/changeWeight")).useChangeWeight();
 
 const AGENT = `a1`;
 // A refused land as the daemon reports it: nothing landed (atomic), two of five files blocked for two different
 // causes in two repos. The third repo group holds none, proving a heading's count is per repo, not the report's total.
-const changes: AgentChangesResponse = {
+const changes: AgentChanges = {
     // Nothing reached history yet, the state a refusal leaves; that empty state is tested separately below.
     absorbed: 0,
     repos: [
@@ -86,17 +85,17 @@ let app: App | undefined;
 
 // Seeded into the query cache rather than served over a stub, since the diff query is gated on daemon
 // reachability nothing here drives; this is also where the real panel reads it from.
-const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChangesResponse, history?: AgentHistoryResponse): Promise<HTMLElement> => {
+const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChanges, history?: AgentHistory): Promise<HTMLElement> => {
     // Empty by default: no packages means every path lands in one unnamed bucket, repo headings only.
-    const repos: AgentChangesResponse[`repos`] = [];
+    const repos: AgentChanges[`repos`] = [];
     for (const repo of changes.repos) {
         repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
     }
-    queryClient.setQueryData(rpcKey(`agents.diff`, { id: AGENT }), seed ?? ({ ...changes, repos } satisfies AgentChangesResponse));
+    queryClient.setQueryData(rpcKey(`agents.diff`, { id: AGENT }), seed ?? ({ ...changes, repos } satisfies AgentChanges));
     // History is lazy: the panel only enables it once absorbed work is reported, so it's seeded only for tests about
     // that state, empty otherwise to avoid a permanent loading line.
     if ((seed ?? changes).absorbed > 0) {
-        queryClient.setQueryData(rpcKey(`agents.history`, { id: AGENT }), history ?? ({ repos: [], unaccounted: 0 } satisfies AgentHistoryResponse));
+        queryClient.setQueryData(rpcKey(`agents.history`, { id: AGENT }), history ?? ({ repos: [], unaccounted: 0 } satisfies AgentHistory));
     }
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -337,7 +336,7 @@ it(`points at what is still unlanded only once part of the review has landed`, a
     queryClient.clear();
 
     // The docs repo landed, the rest did not: now the remainder is a subset worth marking.
-    const split: AgentChangesResponse = {
+    const split: AgentChanges = {
         ...changes,
         repos: changes.repos.map((repo) =>
             repo.repo === `docs` ? { ...repo, changes: repo.changes.map((change) => ({ ...change, landed: true })) } : repo,
@@ -576,7 +575,7 @@ it(`names the dependencies the work adds, per manifest, and says nothing when it
     queryClient.clear();
 
     const [root, docs] = changes.repos;
-    const adding: AgentChangesResponse = {
+    const adding: AgentChanges = {
         ...changes,
         repos: [
             { ...root!, addedDependencies: [{ path: `video/package.json`, added: [`@remotion/cli`, `react`, `remotion`] }] },

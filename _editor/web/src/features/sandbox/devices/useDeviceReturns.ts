@@ -1,6 +1,6 @@
 import { computed, watch } from "vue";
-import { rpcQuery } from "../client/rpcQuery";
-import { useSandboxQuery } from "../client/useSandboxQuery";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { agentReturnsPending, settleAgentRuns } from "./runners/deviceWork";
 
 // THE READER THAT ANSWERS AN AGENT'S WAIT, WHEREVER THE READER IS. An update or a restart is over when the machine's

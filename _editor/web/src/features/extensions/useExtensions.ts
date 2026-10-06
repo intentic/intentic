@@ -7,9 +7,9 @@ import type {
     PendingWorkspaceExtension,
 } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { rpcQuery } from "../sandbox/client/rpcQuery";
-import { sandboxRpc } from "../sandbox/client/sandboxRpc";
-import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
 // Installed extensions (capabilities resolved to manifests) for the Extensions tab. The extension host's boot does its
 // own one-shot fetch of the same route (loader.ts); this query is for reactive rendering, not loading code.

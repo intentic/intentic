@@ -3,7 +3,7 @@ const socketAddress = jest.fn<() => Promise<{ base: string; query: string } | un
 jest.mock("../sandbox/session/wsTicket", () => ({ socketAddress }));
 
 const { createTerminalSession, disposeTerminalSession } = await import("./terminalSession");
-const { signalConnection } = await import("../sandbox/client/useSandbox");
+const { signalConnection } = await import("../../client/sandbox/useSandbox");
 
 const settled = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -14,7 +14,7 @@ it(`schedules a reconnect when minting the socket's session throws, instead of g
     const warn = jest.spyOn(console, `warn`).mockImplementation(() => undefined);
     const session = createTerminalSession(`web-1`, () => undefined);
     await settled();
-    expect({ asked: socketAddress.mock.calls.length, retrying: session.reconnect !== undefined, down: session.down }).toEqual({
+    expect({ asked: socketAddress.mock.calls.length, retrying: session.live.retrying(), down: session.down }).toEqual({
         asked: 1,
         retrying: true,
         down: true,

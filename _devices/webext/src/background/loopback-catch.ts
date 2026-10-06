@@ -1,4 +1,5 @@
-import { LOOPBACK_CATCH_FEATURE, type LoopbackCatch, type LoopbackCatchEvent } from "@intentic/sandbox-contract/webext";
+import { watchQueue } from "@intentic/base/async";
+import { LOOPBACK_CATCH_FEATURE, LOOPBACK_CATCH_LONGEST_MS, type LoopbackCatch, type LoopbackCatchEvent } from "@intentic/sandbox-contract/webext";
 
 // A sign-in's loopback redirect, caught in this browser (schemas/loopback-catch.ts in the contract): the device agent's
 // `catchLoopback`, answered the same way from where the browser is. Nothing listens on the port here; the tab simply
@@ -48,19 +49,10 @@ export async function* catchLoopback(spec: LoopbackCatch, signal: AbortSignal | 
         yield { type: "busy", reason: `this browser is not allowed on ${spec.host}, so it cannot see where the sign-in lands` };
         return;
     }
-    const queue: LoopbackCatchEvent[] = [];
+    // The device agent's queue and deadline, its 30-minute cap included: a forgotten catch never keeps listening to
+    // every tab for as long as a sandbox happened to ask.
+    const watch = watchQueue<LoopbackCatchEvent>({ signal, until: spec.expiresAt, longestMs: LOOPBACK_CATCH_LONGEST_MS });
     const seen = new Set<string>();
-    let wake: (() => void) | undefined;
-    let over = false;
-    const nudge = (): void => {
-        const resume = wake;
-        wake = undefined;
-        resume?.();
-    };
-    const end = (): void => {
-        over = true;
-        nudge();
-    };
     const onUpdated = (tabId: number, change: { url?: string; status?: string }, tab: chrome.tabs.Tab): void => {
         const url = change.url ?? tab.url;
         if (url === undefined || !isLanding(spec, url) || seen.has(`${tabId} ${url}`)) {
@@ -70,31 +62,16 @@ export async function* catchLoopback(spec: LoopbackCatch, signal: AbortSignal | 
         // Rebuilt on the redirect's own host, as the device agent does, so the sandbox parses the address the provider sent.
         const landed = new URL(url);
         landed.hostname = spec.host;
-        queue.push({ type: "landed", url: landed.toString() });
-        nudge();
+        watch.push({ type: "landed", url: landed.toString() });
         // The page cannot load; closing it returns the person to where they started the sign-in.
         // allow(silent-catch): The callback tab may already be closed; its URL was delivered before this cleanup.
         void chrome.tabs.remove(tabId).catch(() => undefined);
     };
     chrome.tabs.onUpdated.addListener(onUpdated);
-    const deadline = setTimeout(end, Math.max(0, spec.expiresAt - Date.now()));
-    signal?.addEventListener("abort", end, { once: true });
     try {
         yield { type: "listening" };
-        for (;;) {
-            const next = queue.shift();
-            if (next !== undefined) {
-                yield next;
-                continue;
-            }
-            if (over || signal?.aborted === true) {
-                break;
-            }
-            await new Promise<void>((resolve) => (wake = resolve));
-        }
+        yield* watch.drain();
     } finally {
-        clearTimeout(deadline);
-        signal?.removeEventListener("abort", end);
         chrome.tabs.onUpdated.removeListener(onUpdated);
     }
 }

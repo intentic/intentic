@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { serialLock } from "@intentic/base/async";
 import type { PersonalDataSpan } from "./detect/detect.js";
 import type { EntityRecognizer } from "./masker.js";
 
@@ -170,13 +171,7 @@ export const loadRecognizer = async (
 
         // One inference at a time: a request's walker asks for every string at once, and a model run per string in
         // parallel would take every core from the turns it is shielding.
-        let queue: Promise<unknown> = Promise.resolve();
-        const serially = <T>(work: () => Promise<T>): Promise<T> => {
-            const run = queue.then(work, work);
-            // allow(silent-catch): the caller awaits `run` itself and sees its failure; the queue only needs to move on.
-            queue = run.catch(() => undefined);
-            return run;
-        };
+        const serially = serialLock();
         return {
             find: async (text) => {
                 // Nothing capitalized, no name: most tool output (logs, code, numbers) is turned away before tokenizing.

@@ -1,8 +1,14 @@
 import { readlink } from "node:fs/promises";
 import { errnoCode } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { forkedExec } from "@intentic/scaffold";
+import { forkedExec } from "@intentic/base/git";
 import { DAEMON_GEN_ENV, DAEMON_ONLY_ENV, WORKLOAD_ENV } from "../seams/workload-stamp.js";
+
+// What tmux printed on its way out, when a failed exec carried it.
+const stderrOf = (error: unknown): string | undefined => {
+    const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
+    return typeof stderr === "string" ? stderr : undefined;
+};
 
 // tmux's answer for "no sessions exist": no binary, no socket, nothing listening on it, or a server holding no session.
 // The last is the daemon's own normal state between boot and the first terminal (pinTmuxServer keeps an emptied server
@@ -12,11 +18,12 @@ export const isNoTmuxServer = (error: unknown): boolean => {
     if (errnoCode(error) === "ENOENT") {
         return true;
     }
-    const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
-    return (
-        typeof stderr === "string" && /no server running on |error connecting to .* \(No such file or directory\)|^no current target$/m.test(stderr)
-    );
+    return /no server running on |error connecting to .* \(No such file or directory\)|^no current target$/m.test(stderrOf(error) ?? "");
 };
+
+// tmux's answer for a lookup by name that found nothing: no server at all (above), or a running server without that
+// session or window, which 3.5a reports as "can't find window: <name>" even for a `-t =session` lookup.
+export const isNoTmuxTarget = (error: unknown): boolean => isNoTmuxServer(error) || /^can't find (session|window)/m.test(stderrOf(error) ?? "");
 
 // A tmux client that finds no server forks one, keeping the forker's mount namespace for every pane it holds; an
 // isolated turn forking it first would put every terminal in that turn's worktree. The daemon forks it at boot via a

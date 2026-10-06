@@ -1,6 +1,6 @@
 import type { IconName, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { errorMessage } from "@intentic/ui/async";
+import { messageOr } from "@intentic/ui/async";
 import { type LoopDesign, loopFromDesign, type Workflow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -8,7 +8,7 @@ import { useAgents } from "../../../agents/fleet/useAgents";
 import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
 import { startLoop, stopLoop } from "../../../agents/fleet/useLoops";
 import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
-import { navigateInApp } from "../../../../shell/window/mainWindow";
+import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import type { Conversation } from "../../session/conversation";
 import { openRunInChat } from "../../run/openRun";
 
@@ -195,7 +195,7 @@ export const useRunThrough = (
             // it spending unattended, so it is said under the box rather than dropped.
             loopFailure.value = undefined;
             await stopLoop(conversation.value.conversationId).catch((error: unknown) => {
-                loopFailure.value = errorMessage(error, `The loop could not be stopped.`);
+                loopFailure.value = messageOr(error, `The loop could not be stopped.`);
             });
         },
         clear: (): void => {

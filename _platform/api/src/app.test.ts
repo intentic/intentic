@@ -294,7 +294,7 @@ describe(`POST /host-report/claim`, () => {
     ])(`404s a code that is %s, with the same words`, async (_case, row) => {
         const res = await claimFix(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(row) } }), { code: `Fix0Code123` });
         expect(res.status).toBe(404);
-        expect(await res.text()).toBe(`error: fix code invalid or expired`);
+        expect(await res.json()).toEqual({ error: `fix code invalid or expired` });
     });
 
     it(`400s a body naming no code before touching the database`, async () => {
@@ -362,7 +362,7 @@ describe(`POST /host-report`, () => {
             report: fixing,
         });
         expect(res.status).toBe(401);
-        expect(await res.text()).toBe(`error: that report key is not this sandbox's`);
+        expect(await res.json()).toEqual({ error: `that report key is not this sandbox's` });
         expect(updateMany).not.toHaveBeenCalled();
     });
 
@@ -372,14 +372,14 @@ describe(`POST /host-report`, () => {
             report: fixing,
         });
         expect(res.status).toBe(401);
-        expect(await res.text()).toBe(`error: that report key is not this sandbox's`);
+        expect(await res.json()).toEqual({ error: `that report key is not this sandbox's` });
     });
 
     it(`401s a request with no key before reading the body or the database`, async () => {
         const findUnique = jest.fn();
         const res = await postHostReport(fakePrisma({ sandbox: { findUnique } }), undefined, { sandbox: TUNNEL_ID, report: fixing });
         expect(res.status).toBe(401);
-        expect(await res.text()).toBe(`error: missing report key`);
+        expect(await res.json()).toEqual({ error: `missing report key` });
         expect(findUnique).not.toHaveBeenCalled();
     });
 
@@ -403,7 +403,7 @@ describe(`POST /host-report`, () => {
         const findUnique = jest.fn();
         const res = await postHostReport(fakePrisma({ sandbox: { findUnique } }), REPORT_KEY, body);
         expect(res.status).toBe(400);
-        expect(await res.text()).toBe(`error: malformed report`);
+        expect(await res.json()).toEqual({ error: `malformed report` });
         expect(findUnique).not.toHaveBeenCalled();
     });
 
@@ -637,7 +637,7 @@ describe(`POST /sandbox/announce`, () => {
         const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: tombstone } });
         const res = await announce(prisma, `tok`, `https://${HOSTNAME}`);
         expect(res.status).toBe(410);
-        expect(await res.text()).toBe(`error: this sandbox was deleted`);
+        expect(await res.json()).toEqual({ error: `this sandbox was deleted` });
         expect(tombstone).toHaveBeenCalledWith({ where: { tunnelId: TUNNEL_ID }, select: { tunnelId: true } });
     });
 
@@ -798,6 +798,28 @@ describe(`POST /sandbox/boot-report`, () => {
         expect(updateMany).toHaveBeenCalledWith({
             where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: { bootReport: { reach: `unreachable`, detail: `no tunnel`, retrying: false, drift, at: expect.any(String) } },
+        });
+    });
+
+    // The whole body is read through the contract's schema, so every field it states lands, and a field added to it
+    // later lands without this route being touched: the bug above was a hand-kept list of fields.
+    it(`stores every field the daemon sends, stamps its own 'at' over the box's, and keeps nothing the contract does not state`, async () => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1` }), updateMany } });
+        const sent = {
+            reach: `unreachable`,
+            detail: `no tunnel`,
+            retrying: true,
+            boot: { ready: false, step: `Opening the tunnel`, done: 3, total: 9 },
+            cpu: { throttledMs: 1200, throttledPeriods: 4 },
+            drift: [{ key: `ingress`, missing: [`INGRESS_URL`], enables: `its address`, lost: `reach`, repair: `run setup again` }],
+        };
+        const res = await bootReport(prisma, `tok`, { ...sent, at: `1999-01-01T00:00:00.000Z`, secret: `not stored` });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true });
+        expect(updateMany).toHaveBeenCalledWith({
+            where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
+            data: { bootReport: { ...sent, at: expect.stringMatching(/^20\d{2}-\d{2}-\d{2}T/) } },
         });
     });
 
@@ -978,7 +1000,7 @@ describe(`POST /sandbox/adopt`, () => {
         const { prisma, create } = registry(true);
         const res = await adopt(prisma, `tok`, body());
         expect(res.status).toBe(410);
-        expect(await res.text()).toBe(`error: this sandbox was deleted from intentic: restore it from the trash, or set up a new one`);
+        expect(await res.json()).toEqual({ error: `this sandbox was deleted from intentic: restore it from the trash, or set up a new one` });
         expect(create).not.toHaveBeenCalled();
     });
 
@@ -987,7 +1009,7 @@ describe(`POST /sandbox/adopt`, () => {
         expect((await adopt(prisma, undefined, body())).status).toBe(400);
         const missingGrant = await adopt(prisma, `tok`, { ...body(), grant: undefined });
         expect(missingGrant.status).toBe(400);
-        expect(await missingGrant.text()).toBe(`error: an adoption names its ticket, its grant and an https daemonUrl`);
+        expect(await missingGrant.json()).toEqual({ error: `an adoption names its ticket, its grant and an https daemonUrl` });
         expect((await adopt(prisma, `tok`, { ...body(), daemonUrl: `http://${HOSTNAME}` })).status).toBe(400);
         expect(create).not.toHaveBeenCalled();
     });

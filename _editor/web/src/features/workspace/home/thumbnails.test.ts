@@ -2,7 +2,7 @@
 import { nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { freshImport } from "@intentic/testing/bun";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 
 const blob = jest.fn<(path: string, init?: RequestInit) => Promise<Blob>>();
 const daemonBase = ref<string | undefined>(`https://sandbox-1.example`);
@@ -10,8 +10,8 @@ const daemonBase = ref<string | undefined>(`https://sandbox-1.example`);
 // A daemon refusal, as the raw client throws it.
 const refusal = (status: number): SandboxHttpError => new SandboxHttpError(status, `Request failed (${status}).`);
 
-jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string, init?: RequestInit) => blob(path, init) }));
-jest.mock("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
+jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxBlob: (path: string, init?: RequestInit) => blob(path, init) }));
+jest.mock("../../../client/endpoint/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 type Pictures = typeof import("./thumbnails");
 // Fresh per case: the caches and the AVIF answer live for a page, and each case is its own page.

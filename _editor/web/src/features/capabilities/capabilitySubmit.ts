@@ -1,4 +1,4 @@
-import type { CapabilitySummary } from "@intentic/api-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract";
 import type { AddCapabilityInput, CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";

@@ -1,4 +1,4 @@
-import type { LandedMessage, RepoChanges } from "@intentic/api-contract";
+import type { LandedMessage, RepoChanges } from "@intentic/sandbox-contract";
 import { ALL_SIDES, commitMessageOf, originsOf } from "../changeOrigins";
 import { truncatedTotal } from "../truncation";
 

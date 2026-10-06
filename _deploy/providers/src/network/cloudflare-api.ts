@@ -1,4 +1,4 @@
-import { errorMessage } from "@intentic/base/errors";
+import { type CloudflareInit, cloudflareCall, cloudflarePages } from "@intentic/base/cloudflare";
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 
@@ -86,51 +86,10 @@ export interface CloudflareApi {
     readonly deleteDnsRecord: (args: { readonly apiToken: string; readonly zoneId: string; readonly recordId: string }) => Promise<void>;
 }
 
-const BASE = "https://api.cloudflare.com/client/v4";
-
-// Cloudflare's envelope; `result` stays unknown here so a success:false error still surfaces `errors` first.
-const envelopeSchema = z.object({
-    success: z.boolean(),
-    errors: z.array(z.object({ code: z.number(), message: z.string() })),
-    result: z.unknown(),
-    // Pagination metadata, left unknown since some endpoints (cfd_tunnel, dns_records) omit total_pages.
-    result_info: z.unknown().optional(),
-});
-
-// Fetches and validates the success envelope, throwing on transport/API errors; returns the whole envelope so
-// list callers can read result_info. Transport failures include elapsed time, to tell a timeout from an instant
-// refusal.
-const request = async (apiToken: string, path: string, init?: RequestInit): Promise<z.infer<typeof envelopeSchema>> => {
-    const label = `Cloudflare API ${init?.method ?? "GET"} ${path}`;
-    const started = Date.now();
-    let response: Response;
-    try {
-        response = await fetch(`${BASE}${path}`, {
-            ...init,
-            headers: {
-                Authorization: `Bearer ${apiToken}`,
-                ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-            },
-            // A stalled connection would otherwise block for undici's ~5-minute headers timeout, per call.
-            signal: AbortSignal.timeout(30_000),
-        });
-    } catch (error) {
-        throw new Error(`${label} transport failed after ${Date.now() - started}ms: ${errorMessage(error)}`, {
-            cause: error,
-        });
-    }
-    const envelope = parseResponse(envelopeSchema, await response.json(), label);
-    if (!response.ok || !envelope.success) {
-        const detail = envelope.errors.map((error) => `${error.code} ${error.message}`).join("; ");
-        throw new Error(`${label} failed (HTTP ${response.status}): ${detail}`);
-    }
-    return envelope;
-};
-
-const call = async <S extends z.ZodType>(apiToken: string, path: string, resultSchema: S, init?: RequestInit): Promise<z.infer<S>> => {
-    const envelope = await request(apiToken, path, init);
-    return parseResponse(resultSchema, envelope.result, `Cloudflare API ${init?.method ?? "GET"} ${path}`);
-};
+// The bearer, the envelope, the deadline and the paging are @intentic/base/cloudflare's, the one client the platform
+// calls Cloudflare with too; what is here is each result's shape, checked at the boundary.
+const call = async <S extends z.ZodType>(apiToken: string, path: string, resultSchema: S, init?: CloudflareInit): Promise<z.infer<S>> =>
+    parseResponse(resultSchema, await cloudflareCall(apiToken, path, init), `Cloudflare API ${init?.method ?? "GET"} ${path}`);
 
 export const cloudflareApi: CloudflareApi = {
     getZone: async ({ apiToken, zone }) => {
@@ -146,23 +105,12 @@ export const cloudflareApi: CloudflareApi = {
         return { id: found.id, accountId: found.account.id };
     },
     listZones: async ({ apiToken }) => {
-        const zones: { id: string; name: string; accountId: string }[] = [];
-        let page = 1;
-        let totalPages = 1;
-        do {
-            const envelope = await request(apiToken, `/zones?per_page=50&page=${page}`);
-            const parsed = parseResponse(
-                z.array(z.object({ id: z.string(), name: z.string(), account: z.object({ id: z.string() }) })),
-                envelope.result,
-                `Cloudflare API GET /zones?per_page=50&page=${page}`,
-            );
-            for (const zone of parsed) {
-                zones.push({ id: zone.id, name: zone.name, accountId: zone.account.id });
-            }
-            totalPages = z.object({ total_pages: z.number() }).safeParse(envelope.result_info).data?.total_pages ?? 1;
-            page += 1;
-        } while (page <= totalPages);
-        return zones;
+        const zones = parseResponse(
+            z.array(z.object({ id: z.string(), name: z.string(), account: z.object({ id: z.string() }) })),
+            await cloudflarePages(apiToken, "/zones"),
+            "Cloudflare API GET /zones",
+        );
+        return zones.map((zone) => ({ id: zone.id, name: zone.name, accountId: zone.account.id }));
     },
     findTunnel: async ({ accountId, apiToken, name }) => {
         const tunnels = await call(
@@ -179,7 +127,7 @@ export const cloudflareApi: CloudflareApi = {
     createTunnel: ({ accountId, apiToken, name }) =>
         call(apiToken, `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel`, z.object({ id: z.string() }), {
             method: "POST",
-            body: JSON.stringify({ name, config_src: "cloudflare" }),
+            body: { name, config_src: "cloudflare" },
         }),
     getTunnelToken: ({ accountId, apiToken, tunnelId }) =>
         call(apiToken, `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/token`, z.string()),
@@ -203,7 +151,7 @@ export const cloudflareApi: CloudflareApi = {
     putTunnelIngress: async ({ accountId, apiToken, tunnelId, ingress }) => {
         await call(apiToken, `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`, z.unknown(), {
             method: "PUT",
-            body: JSON.stringify({ config: { ingress } }),
+            body: { config: { ingress } },
         });
     },
     findDnsRecord: async ({ apiToken, zoneId, name }) => {
@@ -230,13 +178,13 @@ export const cloudflareApi: CloudflareApi = {
     createDnsRecord: async ({ apiToken, zoneId, name, content, comment }) => {
         await call(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records`, z.unknown(), {
             method: "POST",
-            body: JSON.stringify({ type: "CNAME", name, content, proxied: true, comment }),
+            body: { type: "CNAME", name, content, proxied: true, comment },
         });
     },
     updateDnsRecord: async ({ apiToken, zoneId, recordId, name, content, comment }) => {
         await call(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(recordId)}`, z.unknown(), {
             method: "PUT",
-            body: JSON.stringify({ type: "CNAME", name, content, proxied: true, comment }),
+            body: { type: "CNAME", name, content, proxied: true, comment },
         });
     },
     deleteTunnel: async ({ accountId, apiToken, tunnelId }) => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { fileWebchatOutbox } from "../../webchat/webchat-outbox.js";
-import { deliverToListenerChannel } from "./listener-deliver.js";
+import { deliverToListenerChannel, gatewayDeliveryOf } from "./listener-deliver.js";
 
 // The core-door half of "speak as the agent". A Visitor chat has no gateway extension and never will, so without this
 // leg `place` on a visitor's conversation reported "nothing is listening" and the words reached only the transcript.
@@ -32,4 +32,12 @@ test("an origin with no channel has nowhere to deliver, and says so rather than 
     // A webhook wake carries the automation but no thread; `unstubbed` would throw if the extension walk were reached.
     const { services } = harness();
     expect(await deliverToListenerChannel(services, { automationId: "guest", provider: "webchat" }, "hello")).toBe("no-gateway");
+});
+
+// A gateway's 200 says the message went; today's runtime adds a link to it as JSON, an older gateway answers a bare "ok".
+test("a delivered message's link is passed on when the gateway names one, and its absence is not a failure", () => {
+    expect(gatewayDeliveryOf(`{"url":"https://discord.com/channels/1/2/3"}`)).toEqual({ url: "https://discord.com/channels/1/2/3" });
+    expect(gatewayDeliveryOf("{}")).toEqual({});
+    expect(gatewayDeliveryOf("ok")).toEqual({});
+    expect(gatewayDeliveryOf(`{"url":42}`)).toEqual({});
 });

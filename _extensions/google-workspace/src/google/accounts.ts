@@ -160,6 +160,21 @@ export const selectConnection = (connections: readonly Connection[], wanted: str
 
 export const describe = (connection: Connection): string => (connection.email === "" ? connection.name : `${connection.name} (${connection.email})`);
 
+// `--as` retargets a company connection at another person in the domain; a personal grant has nobody else it could act
+// as. Only an address is a person: `gw drive get … --as md` names an export format, which must reach drive rather than
+// be refused as an impersonation (or, on a company connection, attempted as one, as a user called "md").
+export const retargetAs = (connection: Connection, as: string | undefined): Connection => {
+    if (as === undefined || !as.includes("@")) {
+        return connection;
+    }
+    if (connection.mode !== "domain") {
+        throw new Error(
+            `--as only works on a company (service account) connection. "${describe(connection)}" is one person's own grant, so it can only act as ${connection.email}.`,
+        );
+    }
+    return { ...connection, email: as };
+};
+
 // The credential, or the card's problem said out loud; every command goes through here, so a bad card fails with what
 // to fix.
 export const credentialOf = (connection: Connection): Credential => {

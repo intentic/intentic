@@ -4,4 +4,7 @@
 export const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 
 // Directory part without a trailing slash; empty at the root, so callers can write `v-if="parentDir(path)"`.
+// `dir/name`, or `name` alone at the root (`dir` is `""` there, never `"/"`).
+export const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
+
 export const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);

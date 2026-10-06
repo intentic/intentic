@@ -82,7 +82,7 @@ it(`switches from second-rate elapsed to minute-rate age when the subagent settl
 
     agent.value = { ...agent.value, status: `landed`, updatedAt: Date.now() };
     await nextTick();
-    expect(root.textContent).toContain(`just now`);
+    expect(root.textContent).toContain(`now`);
     expect(jest.getTimerCount()).toBe(1);
 
     await advanceTimersByTimeAsync(60_000);

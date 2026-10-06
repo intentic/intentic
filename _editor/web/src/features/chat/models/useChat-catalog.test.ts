@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { RunnableProvidersSchema, TrialStatusSchema } from "@intentic/sandbox-contract";
-import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // What a catalog read does to the chats already open on that provider. A routed channel de-lists a model for as long as
@@ -13,7 +13,7 @@ const providersList = jest.fn();
 const providerModels = jest.fn();
 const endpointModels = jest.fn();
 const trial = jest.fn();
-jest.mock("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ providers: { list: providersList, models: providerModels }, endpoints: { models: endpointModels, trial } }),
 }));
 

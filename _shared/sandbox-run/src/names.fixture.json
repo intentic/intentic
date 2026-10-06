@@ -1,0 +1,17 @@
+{
+    "containerPrefix": "intentic-sandbox-",
+    "tunnelPrefix": "intentic-sandbox-tunnel-",
+    "slug": "abc-123",
+    "names": {
+        "container": "intentic-sandbox-abc-123",
+        "tunnelContainer": "intentic-sandbox-tunnel-abc-123",
+        "workspaceVolume": "intentic-workspace-abc-123",
+        "historyVolume": "intentic-history-abc-123",
+        "dockerVolume": "intentic-docker-abc-123",
+        "network": "intentic-workspace-abc-123"
+    },
+    "portBands": {
+        "daemonLoopback": { "base": 28000, "span": 4000 },
+        "syncSsh": { "base": 24000, "span": 4000 }
+    }
+}

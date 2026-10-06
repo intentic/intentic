@@ -1,4 +1,4 @@
-import { sha256Hex } from "../../workspace/files/contentHash";
+import { sha256Hex } from "../../../lib/files/contentHash";
 
 // The browser half of the contract's sandboxIdFromToken (tunnel-ids.ts is node-only, node:crypto): the same
 // sha256-hex[:12] digest over the connect token, via WebCrypto. Must agree byte-for-byte with the CLI's, or a
