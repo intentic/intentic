@@ -38,7 +38,8 @@ flowchart LR
   incomplete".
 - `mobile/audit.mts` walks the hermetic demo build at a phone viewport and fails on blank routes, overflow, small
   targets and scrollers that do not move. `shots/capture.mts` photographs the same build into
-  `_site/site/src/assets/product/` (and `product-light/`). Both need only Chromium.
+  `_site/site/src/assets/product/` (and `product-light/`): the demo's quiet `showcase` recording, wearing the Mist
+  wallpaper over Sanctum and over the light look. Both need only Chromium.
 - `local-face/` boots the desktop app's local face (`_editor/desktop-app`, `dist/files`, built by its global setup) the
   way a window on a folder boots it, without Tauri: the bundle behind a server that resolves paths as the app's asset
   protocol does, the real `intentic-files` sidecar from source granted a temp folder on its stdin, and

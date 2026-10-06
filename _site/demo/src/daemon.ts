@@ -14,6 +14,7 @@ import {
     DEFAULT_PRIVACY_SHIELD,
     type Model,
     type OauthAccount,
+    type PasskeysList,
     type PresenceUser,
     PROVIDER_SPECS,
     ProviderKeysApplySchema,
@@ -51,7 +52,7 @@ import {
     SUPPLIER_LETTER_DOCX,
     SUPPLIER_LETTER_PATH,
 } from "./fixture/desk";
-import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, inProcessSubagents } from "./fixture/fleet";
+import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, inProcessSubagents, quietCard } from "./fixture/fleet";
 import {
     deleteKnowledgeNote,
     knowledgeGraph,
@@ -97,7 +98,7 @@ import {
     workspaceTree,
     writeFile,
 } from "./fixture/workspace";
-import { demoMode, deskEdition } from "./mode";
+import { demoMode, demoQuiet, deskEdition } from "./mode";
 import { type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "@intentic/contract-serve";
 import { demoApprovals, removeDemoApproval, upsertDemoApproval } from "./fixture/approvals";
 import { terminalSession } from "./terminal";
@@ -116,10 +117,11 @@ const FEATURED_ID = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
 const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
 
 // Live state; every write bumps `rev` and re-broadcasts (snapshot-not-diff, newest rev wins).
-const roster = {
-    agents: deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true),
-    rev: 1,
+const servedRoster = (): AgentSummary[] => {
+    const agents = deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
+    return demoQuiet() ? agents.map(quietCard) : agents;
 };
+const roster = { agents: servedRoster(), rev: 1 };
 
 // What each card still waits on people for, read from the needs fixture every time the roster goes out, as the daemon's
 // registry reads its needs store: answering one in the inbox takes the chip off the board on the next frame.
@@ -638,14 +640,18 @@ const searchSessions = (query: string, caseSensitive: boolean): ReturnType<typeo
     return needle === `` ? all : all.filter((session) => folded(session.title, caseSensitive).includes(needle));
 };
 
-// Upsert by id, as the daemon's `/personas` does; the list is the store, so a saved card is in the next read.
 // Where each starts is what decides who may talk to it (policy/persona-home.ts), so the three cards cover the three
 // answers: one homed in each area below, and one at the root that only an unfenced person reaches.
-const demoPersonas: Persona[] = [
+const codePersonas: Persona[] = [
     { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`], workspace: { startIn: `web/support` } },
     { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`], workspace: { startIn: `web/site` } },
     { id: `priya-ops`, label: `Priya · Operations`, capabilities: [`github`, `stripe-ops`] },
 ];
+// The desk is one person with one assistant, so it has no team cards to pick between (fixture/openChats.ts says the
+// same of its tabs): the chat's rail would otherwise open on the code workspace's support, growth and ops leads.
+const demoPersonas: Persona[] = deskEdition ? [] : codePersonas;
+
+// Upsert by id, as the daemon's `/personas` does; the list is the store, so a saved card is in the next read.
 const savePersona = (card: Persona): void => {
     const index = demoPersonas.findIndex((persona) => persona.id === card.id);
     if (index === -1) {
@@ -704,7 +710,12 @@ export const procedures = {
             sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
         }),
         // One still-driven browser session and one already closed, rendered as history, not a broken stream.
-        browsers: () => ({ sessions: BROWSER_SESSIONS(Date.now()) }),
+        // Quiet, the agent has put its browser down: the session is history, so the rail has no open one to count.
+        browsers: () => ({
+            sessions: BROWSER_SESSIONS(Date.now()).map((session) =>
+                demoQuiet() && session.running ? { ...session, running: false, finishedAt: session.activityAt } : session,
+            ),
+        }),
         // The owner's own computers. Without this the Devices tab could only say it had nothing to show, so nothing
         // under a paired folder — the sync switches, and the two answers to a conflict — was ever drawn.
         devices: () => ({ devices: demoDevices(Date.now()) }),
@@ -723,7 +734,7 @@ export const procedures = {
         // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no rail tile for it,
         // and no claim that it is empty.
         desktop: () => ({ running: false }),
-        subagents: () => ({ sessions: deskEdition ? [] : inProcessSubagents(STARTED_AT) }),
+        subagents: () => ({ sessions: deskEdition || demoQuiet() ? [] : inProcessSubagents(STARTED_AT) }),
     },
     agents: {
         // `held` mirrors /automations/pending's approval queue, projected onto the board.
@@ -925,8 +936,8 @@ export const procedures = {
     // refuse: a recording can't act on a real pipeline. Main is failing, with its fix agents, only in the whole recording,
     // the one roster that carries them.
     ci: {
-        runs: () => ciRunsResponse(Date.now(), demoMode.id === `full`),
-        jobs: ({ repo, runId }) => ({ jobs: ciJobs(repo, runId, Date.now()) }),
+        runs: () => ciRunsResponse(Date.now(), { mainFailing: demoMode.id === `full`, green: demoQuiet() }),
+        jobs: ({ repo, runId }) => ({ jobs: ciJobs(repo, runId, Date.now(), demoQuiet()) }),
         rerun: () => refuse(`This is the demo workspace: rerunning would start a pipeline on a repo that isn't yours.`),
         cancel: () => refuse(`This is the demo workspace: there is no live pipeline to cancel.`),
         fix: () => refuse(`This is the demo workspace: a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
@@ -991,7 +1002,12 @@ export const procedures = {
         remove: ({ id }) => okAfter(() => removeArea(id)),
     },
     usage: {
-        rollup: () => ({ rows: demoUsageRollup(STARTED_AT) }),
+        rollup: () => ({
+            rows: demoUsageRollup(
+                STARTED_AT,
+                (model) => roster.agents.find((agent) => agent.startedBy?.startsWith(`agent:`) !== true && agent.model === model)?.id,
+            ),
+        }),
         // What every connection read posts, on arrival and on the rail's refresh control alike. Nothing held: every demo
         // reading is taken, so the press moves the age rather than explaining why it couldn't.
         refreshPlanLimits: () => ({ ok: true, held: [] }),
@@ -1180,8 +1196,26 @@ export const raw = {
         }),
     "POST /system/control/tokens": () => json({ id: `ct_new`, token: `***` }),
     "DELETE /system/control/tokens/{id}": () => json({ ok: true }),
-    "GET /environment": () => json(demoEnvironment()),
-    "GET /environment/contents": () => json(demoEnvironmentContents()),
+    // Read by the Access tab on first render, so a refusal here painted an error box into every picture of it. One
+    // passkey the owner added from a laptop that syncs it, and no rule that a passkey is the only way in; registering
+    // another still refuses, since the demo's session is seeded and there is nothing for an authenticator to prove.
+    "GET /system/passkeys": () =>
+        json({
+            passkeys: [
+                {
+                    id: `pk_demo_macbook`,
+                    email: `ada@acme.dev`,
+                    label: `MacBook Air`,
+                    rpId: `app.intentic.dev`,
+                    createdAt: Date.now() - 41 * 24 * 3_600_000,
+                    lastUsedAt: Date.now() - 2 * 3_600_000,
+                    backedUp: true,
+                },
+            ],
+            required: false,
+        } satisfies PasskeysList),
+    "GET /environment": () => json(demoEnvironment({ proposal: !demoQuiet(`proposal`) })),
+    "GET /environment/contents": () => json(demoEnvironmentContents({ settled: demoQuiet(`proposal`) })),
     // Read on first render; a published workspace and empty exports/computers are the tab's default states
     // before the visitor clicks anything.
     "GET /definition/workspace": () => json({ remote: `https://github.com/acme/intentic-sandbox-ada.git`, branch: `main`, hosts: [`github.com`] }),

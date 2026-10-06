@@ -192,7 +192,7 @@ const record = async () => {
     chapter("Back to the board", "one is finished and holding its work");
     await click(page, railLink("/agents"), { after: 1_400 });
     // Hover first: `Review & land` is a hover-reveal outside the attention lane, framing the next click.
-    await hover(page, cardBody("Migrate the users table to soft deletes"), { dwell: 900 });
+    await hover(page, cardBody("Soft-delete the users table"), { dwell: 900 });
     await click(page, board.getByRole("button", { name: "Review & land" }), { after: 1_600, flight: 420 });
 
     chapter("Read the diff it wants to land", "file by file, on its own branch");

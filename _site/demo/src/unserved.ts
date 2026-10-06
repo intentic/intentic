@@ -129,7 +129,6 @@ export const UNSERVED = {
     "issues.remove": ISSUES_INBOX,
     "issues.status": ISSUES_INBOX,
     "DELETE /members/self": REAL_SIGN_IN,
-    "GET /system/passkeys": REAL_SIGN_IN,
     "POST /system/passkeys/register/options": REAL_SIGN_IN,
     "POST /system/passkeys/register": REAL_SIGN_IN,
     "POST /system/passkeys/assert/options": REAL_SIGN_IN,

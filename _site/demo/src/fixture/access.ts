@@ -1,5 +1,6 @@
 import type { InviteRecord } from "@intentic/api-contract";
 import type { GrantedRole } from "@intentic/sandbox-contract";
+import { demoQuiet } from "../mode";
 
 // THE SHARED ACCESS ROSTER: the Access tab reads two copies of who may reach this sandbox — the platform's record
 // (tier, invite state) and the daemon's enforced grant (the one that knows the fence) — and the tab only makes sense
@@ -23,10 +24,11 @@ interface DemoMember extends DemoGrant {
 const ago = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
 
 // Three states worth seeing at once: an accepted collaborator, a guest fenced to the one area Maya works in, and an
-// invite still out.
+// invite still out. A quiet recording (mode.ts `demoQuiet`) is the ordinary team without the fenced guest, whose row
+// carries a fence, an area chip and the persona she talks to: a teammate and an invite are the whole of what sharing is.
 const roster: DemoMember[] = [
     { email: `jo@acme.dev`, role: `collaborator`, status: `accepted`, invitedAt: ago(26) },
-    { email: `sam@acme.dev`, role: `guest`, areas: [`support`], status: `accepted`, invitedAt: ago(9) },
+    ...(demoQuiet() ? [] : [{ email: `sam@acme.dev`, role: `guest` as const, areas: [`support`], status: `accepted` as const, invitedAt: ago(9) }]),
     { email: `rin@acme.dev`, role: `viewer`, status: `pending`, invitedAt: ago(1) },
 ];
 

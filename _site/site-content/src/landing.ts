@@ -109,25 +109,20 @@ export const landingContent: LandingContent = {
             app: [
                 {
                     name: "hero-agents",
-                    alt: "The intentic fleet board: an Attention lane holding a Visitor chat question and an agent asking one of its own, an Active lane with an agent working on a Stripe checkout, and a Finished lane where a completed change offers Land now. Each card carries a plain-English title, the model behind it, and what it has cost.",
+                    alt: "The intentic agents board over a misty forest: an Attention lane with one agent asking a question, an Active lane where two agents are adding Stripe checkout and chasing a latency spike, and a Finished lane where a soft-delete migration offers Land now above release notes already landed. Each card carries a plain-English title, the model behind it, and what it has cost.",
                     frameLabel: "acme-shop · /agents",
                 },
                 {
                     name: "hero-review",
-                    alt: 'A finished change waiting for a yes: the agent\'s task written as a plain title, a "Ready to land" badge over an unpressed Land now button, and a short side-by-side diff of the file it changed.',
+                    alt: "A finished change waiting for a yes: the agent's task as a plain title, a Land now button not yet pressed, its four files grouped by repository, and the users route open as a side-by-side diff in which the delete becomes an update and both reads skip retired rows.",
                     frameLabel: "acme-shop · /agents",
                 },
             ],
             chat: [
                 {
                     name: "hero-chat-agents",
-                    alt: "The chat in its own window, on the Agents cut: one active conversation in the rail and, beside it, the plan the agent wrote for adding Stripe checkout, with Approve and No, keep planning under it.",
+                    alt: "The chat in its own window: the team's assistants as cards across the top of its rail, the one active conversation under them, and beside it the plan the agent wrote for adding Stripe checkout, with Approve and Keep planning in the bar below.",
                     frameLabel: "Chat · Agents",
-                },
-                {
-                    name: "hero-chat-personas",
-                    alt: "The same chat window on the Personas cut: Maya from customer care, Owen from growth and Priya from operations in the rail, with Maya's overnight support sweep open beside them and the screenshot she took of the cleared inbox.",
-                    frameLabel: "Chat · Personas",
                 },
             ],
         },
@@ -147,7 +142,7 @@ export const landingContent: LandingContent = {
                 line: "One board shows every agent you have running, and puts the one that needs you first.",
                 shot: {
                     name: "stage-run",
-                    alt: "The intentic workspace on the fleet board: an Attention lane holding a Visitor chat question and an agent asking one of its own, an Active lane where a Stripe checkout agent is running two subagents, and a Finished lane where a completed change offers Land now. Every card carries its model, its branch, what it has cost and its diff stats. The chat docked beside the board holds the plan that agent wrote, with Approve under it.",
+                    alt: "The intentic workspace on the agents board, over a misty forest: an agent asking a question in Attention, two at work in Active, and in Finished a change offering Land now above one already landed. Every card carries its model, its branch, what it has cost and its diff stats. The chat docked beside the board holds the plan the Stripe checkout agent wrote, with Approve under it.",
                     label: "acme-shop · /agents",
                 },
             },
@@ -157,7 +152,7 @@ export const landingContent: LandingContent = {
                 line: "Connect an agent to GitHub, Postgres, Stripe, Discord or any MCP server. Your keys stay on your machine.",
                 shot: {
                     name: "stage-connect",
-                    alt: "The capability catalogue, twenty of them grouped by Platform, Code & issues, Observability, Data, Communication, Business & docs, Servers and Extend: GitHub, Sentry, PostgreSQL, Discord, Docker, Stripe, Obsidian, Outline, SSH and a VPN among them, seven marked as connected, and a row at the foot for any MCP server of your own.",
+                    alt: "The capability catalogue, twenty-one of them grouped by what each is for: Docker, GitHub, Sentry, PostgreSQL, Discord, Stripe, Outline, SSH and a VPN among them, seven marked as connected. The chat docked beside it holds an agent's plan, waiting for Approve.",
                     label: "acme-shop · /capabilities",
                 },
             },
@@ -176,7 +171,7 @@ export const landingContent: LandingContent = {
                 line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
                     name: "stage-review",
-                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside them as a side-by-side diff: the removed lines in red on the left, the added ones in green on the right. The chat alongside holds the plan the change came from.",
+                    alt: "The workspace Changes tab: six uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside them as a side-by-side diff: the removed lines in red on the left, the added ones in green on the right. The chat alongside holds the plan the change came from.",
                     label: "acme-shop · /workspace",
                 },
             },
@@ -186,8 +181,8 @@ export const landingContent: LandingContent = {
                 line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
                     name: "stage-host",
-                    alt: "The acme-shop sandbox's Access page: the owner, a field to invite a teammate by email with their role beside it, the browsers currently signed in and a control that signs every one of them out, and under Here now a collaborator, Grace Hopper, looking at the agents board. The list on the left is everything else the box holds: environment, secrets, agent account, extensions, personas and devices.",
-                    label: "acme-shop · /sandbox/access",
+                    alt: "The acme-shop sandbox's own page: it runs on ada-pc, a machine of the owner's, with its installed version, its own address and the memory and cores it may use, and under that the disk it takes up, category by category. The list on the left is everything else the box holds: usage, environment, secrets, agent account, extensions, access, areas and personas.",
+                    label: "acme-shop · /sandbox",
                 },
             },
         ],
@@ -391,7 +386,7 @@ export const deskLanding: DeskLandingContent = {
                 line: "Give it your mail, your calendar, your files or your shop. Your passwords stay on your computer.",
                 shot: {
                     name: "stage-connect",
-                    alt: "The connections catalogue, grouped by what each one is for: GitHub, a database, Discord, Stripe, Obsidian, Outline and a server among them, seven already connected, and a row at the foot for anything of your own.",
+                    alt: "The connections catalogue, grouped by what each one is for: GitHub, a database, Discord, Stripe, Outline and a server among them, seven already connected.",
                     label: "my-desk · Connections",
                 },
             },
@@ -417,8 +412,8 @@ export const deskLanding: DeskLandingContent = {
                 line: "Keep it on your computer, or move it to a server so it works while your laptop is closed.",
                 shot: {
                     name: "stage-host",
-                    alt: "The workspace's Access page: the owner, a field to invite someone by email, the browsers currently signed in, and under Here now a collaborator looking at the board.",
-                    label: "my-desk · Access",
+                    alt: "The workspace's own page: the computer it runs on, its address and the memory and cores it may use, and the space it takes up on that computer.",
+                    label: "my-desk · Overview",
                 },
             },
         ],

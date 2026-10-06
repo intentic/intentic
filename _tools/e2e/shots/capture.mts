@@ -8,7 +8,13 @@ import { chromium, type Browser, type BrowserContext, type Page } from "@playwri
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 
 // The site ships two skins, so it needs two sets of these. `--light` drives the app in its light scheme and writes
-// the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts).
+// the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts). Both wear the Mist wallpaper, which
+// draws behind the board and the card pages: the dark set over Sanctum, the light set over the plain light look.
+//
+// Every shot of the code workspace is taken of the demo's `showcase` recording (_site/demo/src/mode.ts): five agents on
+// an ordinary afternoon, served QUIET, so no card carries a cooling cache, a teammate's reaction or a key it is waiting
+// for, no pipeline is red and nothing on the rail asks for attention it does not need. The recording's every-state
+// richness is for a visitor exploring the demo; a screenshot is a picture of the workspace at rest.
 //
 // `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather
 // than code, read as a maker) shot for the desk edition of the landing page. Those shots have no dark twin — the desk
@@ -49,6 +55,19 @@ const COMPOSER = 'textarea[name="draft"]';
 /* Match the platform-independent start of the chat popout label. */
 const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
 
+// The featured run's plan, parked for a yes. Every shot with the chat in it waits for this: each page load replays the
+// run from its start, and a frame taken before the plan lands shows the chat mid-read with a status pill and no plan.
+const PLAN_WAITING = "text=Plan waiting for your approval";
+
+// A row in the Changes list, by file name. Scoped to the list on purpose: the plan in the docked chat names the same
+// files as links, it comes first in the document, and an unscoped `text=` click opened the file plain from the chat
+// instead of its diff from the list, which is how the review shots lost their diff.
+const changesRow = (file: string): string => `div[class~="group/file"] button:has-text("${file}")`;
+
+// The connector cards (GitHub, Sentry, PostgreSQL, Stripe…) and Discord's are extensions, so a catalogue shot switches
+// on exactly those two: the tiles are the subject, and no other extension's icon joins the rail beside them.
+const CONNECTOR_EXTENSIONS = ["intentic.connectors", "intentic.discord"] as const;
+
 // The desk recording's two special conversations (_site/demo/src/fixture/desk.ts): the scripted run, and the finished draft.
 const DESK_FEATURED = "cnv_desk_newsletter";
 const DESK_REVIEW = "cnv_desk_september";
@@ -69,8 +88,8 @@ interface Shot {
     mobile?: boolean;
     /* Open this route first to establish the shared docked conversation. */
     openFirst?: string;
-    /** Text or selector the surface is not itself until it renders. */
-    waitFor?: string;
+    /** Text or selector the surface is not itself until it renders; several are waited for in order. */
+    waitFor?: string | readonly string[];
     /** Controls to open, in order, once the surface has rendered — for a panel whose CONTENT is the story. */
     click?: string[];
     settleMs?: number;
@@ -78,22 +97,23 @@ interface Shot {
     clip?: "area" | "chat";
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
-    /* Select the demo fixture density used for this shot; `desk` is the documents recording rather than a density. */
-    mode?: "minimal" | "default" | "full" | "desk";
+    /** The demo recording; `showcase` unless a shot names another. `desk` is the documents recording. */
+    mode?: "showcase" | "desk";
+    /** A disturbance the quiet recording should still serve, for a shot that is a picture of it. */
+    keep?: readonly "proposal"[];
     /**
-     * Which extensions are switched on, overriding the density's own list.
+     * Which extensions are switched on, overriding the recording's own list (the showcase's is none).
      *
-     * The rail carries one icon and one badge per enabled extension, so a mode picked for its ROSTER also decides how
-     * much chrome stands beside it. `[]` leaves only what the app cannot take away — sandbox, agents, workspace,
-     * preview, more, browsers, terminal, add, account — which is what a board shot should be a picture of.
+     * The rail carries one icon and one badge per enabled extension, so only a shot whose subject an extension draws
+     * switches one on: the catalogue its connector cards, Automations its own page.
      */
     extensions?: readonly string[];
     /** Overrides the shared desktop window, for a shot whose subject is not our app. */
     viewport?: { width: number; height: number };
     /** Overrides the device scale factor. Narrow sources need the extra rungs; wide ones already overshoot. */
     dpr?: number;
-    /** Scroll the main column before shooting — for the tabs whose story is below the fold. */
-    scrollTo?: number;
+    /** Scroll the main column before shooting, by pixels or until this selector's element is at the top. */
+    scrollTo?: number | string;
     /* Serve this path directly from the harness origin. */
     raw?: true;
     /** Type into a field once the surface is up, for a shot whose story is a conversation. */
@@ -104,6 +124,8 @@ interface Shot {
         height: number;
         /* Press these controls inside the popped-out window in order. */
         press?: string[];
+        /** What the popped-out window shows once its own copy of the run has caught up. */
+        waitFor?: string;
         settleMs?: number;
     };
     /* Preserve the full window height instead of trimming content. */
@@ -130,36 +152,33 @@ const SHOTS: Shot[] = [
         path: "/agents",
         openFirst: "/agents/cnv_checkout_stripe",
         waitFor: "text=ATTENTION",
-        settleMs: 1200,
+        settleMs: 1400,
         clip: "area",
-        // The curated fixture, like every other board shot. This one used the full roster — nine cards, every
-        // extension in the rail, seven badges — on the reasoning that a board about running many agents should show
-        // many. It reads as a backlog, not as capacity, and the lanes say what they are at one card each.
+        // The whole window tall, not trimmed to the cards. The board's lanes end a third of the way down, and the rest
+        // is the wallpaper: the Mist is half of what this picture is, and a frame cut under the last card loses it.
+        // The hero's window rather than the tall one, which left the bottom half of the frame dark canvas.
+        viewport: HERO_WINDOW,
+        fullHeight: true,
     },
     /* Showcase captures use whole 16:9 windows with settled curated conversations. */
     {
         name: "stage-run",
         path: "/agents",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: "text=ATTENTION",
-        settleMs: 3200,
+        waitFor: ["text=ATTENTION", PLAN_WAITING],
+        settleMs: 1400,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        // Stays on the curated fixture. The 16:9 frame is fixed, so this board cannot be trimmed back to its content
-        // and a good deal of it is canvas — but the full roster fills that space with nine cards, every extension's
-        // icon and seven badges, which is a picture of the worst day this product has rather than of working in it.
-        // The empty half is the calm; `fleet-board` is where the whole roster is the subject.
     },
     {
-        /* Use the full fixture so this catalogue includes the connected capability tiles. */
         name: "stage-connect",
         path: "/capabilities",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: "text=Connected",
-        settleMs: 3200,
+        waitFor: ["text=Connected", PLAN_WAITING],
+        settleMs: 1400,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        mode: "full",
+        extensions: CONNECTOR_EXTENSIONS,
     },
     {
         /* Open the Changes tab and select CheckoutPanel.tsx for the review frame. */
@@ -167,18 +186,20 @@ const SHOTS: Shot[] = [
         path: "/workspace",
         openFirst: "/agents/cnv_checkout_stripe",
         waitFor: 'button:has-text("Changes")',
-        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
+        click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
         settleMs: 1800,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
     },
     {
-        /* Capture sandbox access so the frame shows ownership and invitation controls. */
+        // The sandbox's own page: the machine it runs on, its address, and what it may use. This frame was the Access
+        // tab, which has grown passkeys, API tokens and signed-in browsers under the team, and at 16:9 it was every one
+        // of them at once; the overview says "this runs on a machine you own" and nothing else.
         name: "stage-host",
-        path: "/sandbox/access",
+        path: "/sandbox",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: "text=Sign out everywhere",
-        settleMs: 3200,
+        waitFor: ["text=Installed version", PLAN_WAITING],
+        settleMs: 1400,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
     },
@@ -194,63 +215,51 @@ const SHOTS: Shot[] = [
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
-        /* Curated fixture, for stage-run's reason — and this is the first screen anyone sees of the product. */
     },
     /* Capture the hero review in the same window and crop as the hero board. */
     {
         name: "hero-review",
         path: "/agents/cnv_soft_deletes",
-        waitFor: "text=Ready to land",
-        // Opens on schema.ts and stays there. It is the tallest diff this branch has: the demo records a real before
-        // and after for only two of its four files (fixture/workspace.ts, DIFFS), and the other is five lines. The
-        // frame is left part empty rather than pointed at a file whose diff the recording does not carry.
+        waitFor: "text=Land now",
+        // The route file rather than the schema the review opens on: a whole file read with three small edits in it
+        // (fixture/workspace.ts, USERS_ROUTE_*), where the schema's eleven lines left two thirds of the frame empty.
+        click: [changesRow("users.ts")],
         settleMs: 1600,
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
     },
-    /* Capture the popped-out chat on the Agents and Personas rail views. */
+    /* Capture the popped-out chat, its rail of persona cards and conversations beside the plan. */
     {
         name: "hero-chat-agents",
         path: "/agents/cnv_checkout_stripe",
         openFirst: "/agents/cnv_checkout_stripe",
         waitFor: POPOUT_BUTTON,
-        settleMs: 2600,
-        popout: POPOUT_WINDOW,
+        settleMs: 1200,
+        popout: { ...POPOUT_WINDOW, waitFor: PLAN_WAITING },
         dpr: DENSE_DPR,
     },
     {
-        name: "hero-chat-personas",
-        path: "/agents/cnv_checkout_stripe",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: POPOUT_BUTTON,
-        settleMs: 2600,
-        popout: {
-            ...POPOUT_WINDOW,
-            // Select Personas, Maya, and her run inside the popped-out chat. Her name only expands the rail row;
-            // without the run's own title after it the transcript stays on whatever the opener had open, which is
-            // how this shot came to show the Stripe plan while its alt text described an overnight support sweep.
-            press: [
-                'button[role="tab"]:has-text("Personas")',
-                "text=Maya · Customer Care",
-                "text=Morning support sweep & VIP save",
-                '.chat-mark-bar button[aria-label^="Show "]',
-            ],
-            settleMs: 1_800,
-        },
-        dpr: DENSE_DPR,
+        name: "agent-review",
+        path: "/agents/cnv_soft_deletes",
+        waitFor: "text=Land now",
+        click: [changesRow("users.ts")],
+        settleMs: 1600,
+        clip: "area",
     },
-    { name: "agent-review", path: "/agents/cnv_soft_deletes", waitFor: "text=Ready to land", settleMs: 1600, clip: "area" },
     {
         name: "chat-plan",
         path: "/workspace",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: "text=Plan waiting for your approval",
-        settleMs: 3200,
+        waitFor: PLAN_WAITING,
+        settleMs: 1200,
         clip: "chat",
         dpr: DENSE_DPR,
-        // No `stopAt`: the plan's Approve is in the bar pinned over the composer, not on the card, so the frame runs
-        // down to it rather than stopping under the plan.
+        // The plan's Approve is in the bar pinned over the composer, not on the card, so the frame runs the window's
+        // full height down to it, footer included: a trimmed cut sliced the "online" line under the composer. The
+        // hero's window, since in the tall one the plan and its bar stood a third of a frame of empty column apart.
+        viewport: HERO_WINDOW,
+        fullHeight: true,
     },
     // The workspace
     { name: "workspace-editor", path: "/workspace/api/src/db/schema.ts", waitFor: "text=deletedAt", settleMs: 1800, clip: "area" },
@@ -258,15 +267,25 @@ const SHOTS: Shot[] = [
         name: "workspace-changes",
         path: "/workspace",
         waitFor: 'button:has-text("Changes")',
-        /* Open the Changes tab and select a compact schema diff. */
-        click: ['button:has-text("Changes")', "text=schema.ts"],
+        // The panel's own change rather than the schema's: eleven lines framed the shot as a strip a quarter as tall as
+        // it was wide. Stops partway down the diff, on a line boundary, as a file with more below it.
+        click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
         settleMs: 1800,
         clip: "area",
+        stopAt: 620,
     },
-    /* Use the full fixture so the environment frame includes its capability catalog. */
+    // The connector cards are the subject, so the catalogue runs with their extensions on and nothing else.
     // Stops under Business & docs: the catalog scrolls on, and a frame that ends a fifth of the way into the
     // next row of tiles reads as a broken image rather than as a list with more below it.
-    { name: "capabilities", path: "/capabilities", waitFor: "text=Connected", settleMs: 1200, clip: "area", mode: "full", stopAt: 900 },
+    {
+        name: "capabilities",
+        path: "/capabilities",
+        waitFor: "text=Connected",
+        settleMs: 1200,
+        clip: "area",
+        extensions: CONNECTOR_EXTENSIONS,
+        stopAt: 900,
+    },
     /* Open GitHub from the catalog so the frame includes the connection panel. */
     {
         name: "capability-github",
@@ -275,14 +294,23 @@ const SHOTS: Shot[] = [
         click: ['text="GitHub"'],
         settleMs: 1400,
         clip: "area",
-        mode: "full",
+        extensions: CONNECTOR_EXTENSIONS,
     },
     { name: "sandbox-overview", path: "/sandbox", waitFor: "text=Installed version", settleMs: 1200, clip: "area" },
     // Stops under the four headline tiles, which is the whole of what this shot is for.
     { name: "sandbox-usage", path: "/sandbox/usage", waitFor: "text=Cache hit rate", settleMs: 1800, clip: "area", stopAt: 340 },
-    // Stops above the token-savings cards on purpose: those numbers are the recording's, and a marketing page
-    // that shows them reads as a benchmark we never measured.
-    { name: "sandbox-spend", path: "/sandbox/usage", waitFor: "text=Spend per day", settleMs: 1800, clip: "area", scrollTo: 620, stopAt: 640 },
+    // Scrolled to the cost chart rather than by a fixed distance: the plan limits above it change height with the
+    // accounts the recording holds. Stops above the token-savings cards on purpose: those numbers are the
+    // recording's, and a marketing page that shows them reads as a benchmark we never measured.
+    {
+        name: "sandbox-spend",
+        path: "/sandbox/usage",
+        waitFor: "text=Cost per day",
+        settleMs: 1800,
+        clip: "area",
+        scrollTo: "text=Cost per day",
+        stopAt: 560,
+    },
     /* Open the environment Recipe tab and stop at its Approve button. */
     {
         name: "sandbox-environment",
@@ -293,11 +321,14 @@ const SHOTS: Shot[] = [
         settleMs: 1600,
         clip: "area",
         stopAt: 620,
+        // The one disturbance a shot is OF: the change an agent proposed to the image, waiting for the owner's yes.
+        keep: ["proposal"],
     },
     // Stops after the account picker: below it sit the recording's savings figures, which are not ours to quote.
-    // Waits on the account itself, not on the section's heading: the heading is painted immediately and the rows
-    // under it are two skeleton bars until the daemon read lands, which is what the last run shipped.
-    { name: "sandbox-agent", path: "/sandbox/agent", waitFor: "text=Claude Max", settleMs: 1400, clip: "area", stopAt: 480 },
+    // Waits on the account list, not on the section's heading: the heading is painted immediately and the rows
+    // under it are two skeleton bars until the daemon read lands, which is what the last run shipped. The list's
+    // last row rather than an account's name, which sits beside the address in a run of its own.
+    { name: "sandbox-agent", path: "/sandbox/agent", waitFor: "text=Add another account", settleMs: 1400, clip: "area", stopAt: 480 },
     // Mobile — the same app, its own shell
     // Same reason the desktop board opens a conversation first: without it the Active lane leads with an empty
     // "New agent" draft card, which is a truthful screen and a confusing screenshot.
@@ -309,7 +340,6 @@ const SHOTS: Shot[] = [
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         dpr: DENSE_DPR,
-        /* Curated fixture: a phone screen is the one place a full roster reads as a backlog rather than as capacity. */
     },
     /* Reopen the running fixture conversation so mobile chat shows its plan card. */
     {
@@ -317,23 +347,24 @@ const SHOTS: Shot[] = [
         path: "/agents/cnv_checkout_stripe",
         openFirst: "/agents/cnv_checkout_stripe",
         mobile: true,
-        settleMs: 3200,
+        waitFor: PLAN_WAITING,
+        settleMs: 1200,
         dpr: DENSE_DPR,
     },
     /* Capture mobile files, changes, menu, and sandbox surfaces for visual review. */
     { name: "mobile-files", path: "/workspace", mobile: true, waitFor: "text=README.md", settleMs: 1600, dpr: DENSE_DPR },
     { name: "mobile-changes", path: "/workspace?panel=changes", mobile: true, waitFor: "text=CheckoutPanel.tsx", settleMs: 1600, dpr: DENSE_DPR },
     { name: "mobile-menu", path: "/menu", mobile: true, waitFor: "text=SANDBOXES", settleMs: 1400, dpr: DENSE_DPR },
-    { name: "mobile-sandbox", path: "/sandbox", mobile: true, waitFor: "text=Installed version", settleMs: 1400, dpr: DENSE_DPR },
+    { name: "mobile-sandbox", path: "/sandbox", mobile: true, waitFor: "text=Overview", settleMs: 1400, dpr: DENSE_DPR },
     /* Preview captures use 16:10 frames sized for the 544px menu rail. */
     {
-        /* Capture automations from the full fixture so the extension is enabled. */
+        /* Automations is an extension, so this shot is the one that switches it on. */
         name: "menu-automate",
         path: "/ext/automations",
         waitFor: "text=CODE CHORES",
         settleMs: 1600,
         clip: "area",
-        mode: "full",
+        extensions: ["intentic.automations"],
         viewport: { width: 1290, height: 900 },
         stopAt: 500,
     },
@@ -342,7 +373,7 @@ const SHOTS: Shot[] = [
         name: "menu-review",
         path: "/workspace",
         waitFor: 'button:has-text("Changes")',
-        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
+        click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
         settleMs: 1800,
         clip: "area",
         viewport: { width: 1290, height: 900 },
@@ -396,22 +427,23 @@ const DESK_SHOTS: Shot[] = [
         name: "desk-hero-plan",
         path: "/workspace",
         openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: "text=Plan waiting for your approval",
-        settleMs: 3200,
+        waitFor: PLAN_WAITING,
+        settleMs: 1200,
         clip: "chat",
         dpr: DENSE_DPR,
+        viewport: HERO_WINDOW,
+        fullHeight: true,
         mode: "desk",
     },
-    // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve in the bar below. The plan card
-    // lands three seconds into the run and the popped-out window starts its own copy of it, so it waits longer than
-    // the code demo's twin.
+    // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve in the bar below. The
+    // popped-out window starts its own copy of the run, so it waits for its own plan rather than the opener's.
     {
         name: "desk-hero-chat",
         path: `/agents/${DESK_FEATURED}`,
         openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: POPOUT_BUTTON,
-        settleMs: 3200,
-        popout: { ...POPOUT_WINDOW, settleMs: 4_500 },
+        settleMs: 1200,
+        popout: { ...POPOUT_WINDOW, waitFor: PLAN_WAITING },
         dpr: DENSE_DPR,
         mode: "desk",
     },
@@ -419,8 +451,8 @@ const DESK_SHOTS: Shot[] = [
         name: "desk-stage-run",
         path: "/agents",
         openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: "text=ATTENTION",
-        settleMs: 3200,
+        waitFor: ["text=ATTENTION", PLAN_WAITING],
+        settleMs: 1400,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
         mode: "desk",
@@ -777,6 +809,12 @@ const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["pop
             await window.click(target, { timeout: 20_000 });
             await window.waitForTimeout(600);
         }
+        if (popout.waitFor !== undefined) {
+            await window
+                .waitForSelector(popout.waitFor, { timeout: 20_000 })
+                .catch(() => console.warn(`  [no waitFor ${shot.name}/popout] ${popout.waitFor}`));
+        }
+        await restPointer(window);
         await window.waitForTimeout(popout.settleMs ?? 1_200);
         await window.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`) });
     } finally {
@@ -820,12 +858,14 @@ const contextOptions = (shot: Shot): Parameters<Browser["newContext"]>[0] => ({
     colorScheme: LIGHT ? "light" : "dark",
 });
 
-// A bare rail unless the shot asks otherwise. `full` is only ever chosen because the extensions ARE the subject — the
-// capability catalogue is built from them — and `desk` because its two are the maker's home and viewers; those keep the
-// mode's own list. Everything else is a shot of some other surface, and the extension icons beside it are chrome the
-// reader has to look past.
-const pinnedExtensions = (shot: Shot): readonly string[] | undefined =>
-    shot.extensions ?? (shot.mode === "full" || shot.mode === "desk" ? undefined : []);
+// Which recording a shot is of: the showcase, unless it names the desk.
+const modeOf = (shot: Shot): NonNullable<Shot["mode"]> => shot.mode ?? "showcase";
+
+// The pointer is put where nothing is. A click leaves it over what it pressed, and a row under the pointer draws its
+// hover actions — the Changes list's stage and discard buttons came out on the very row the diff is of.
+const restPointer = async (page: Page): Promise<void> => {
+    await page.mouse.move(-1, -1);
+};
 
 /** A browser context with everything the app reads before it boots already in place: look, audience, mode, rail. */
 const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext> => {
@@ -842,15 +882,20 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
     // attributes from a MutationObserver over the whole document; that fired on every node the app rendered and
     // stalled the boot far enough that the docked chat never mounted, which silently cost the two popped-out shots
     // and mis-framed every clipped one.
+    //
+    // The wallpaper is a third, its own preference and worn under either look (skins/useWallpaper.ts). Mist has a dark
+    // and a light picture, and the scheme picks between them, so both sets ask for the same name.
     await context.addInitScript(
-        ({ scheme, skin }: { scheme: string; skin: string }) => {
+        ({ scheme, skin, wallpaper }: { scheme: string; skin: string; wallpaper: string }) => {
             window.localStorage.setItem(`ui-color-scheme`, scheme);
             window.localStorage.setItem(`ui-skin`, skin);
+            window.localStorage.setItem(`ui-wallpaper`, wallpaper);
         },
-        LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` },
+        { ...(LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` }), wallpaper: `mist` },
     );
+    const mode = modeOf(shot);
     // The desk is read as a maker: the third key the desk profile seeds, and the one that changes the words on screen.
-    if (shot.mode === "desk") {
+    if (mode === "desk") {
         await context.addInitScript(() => window.localStorage.setItem(`ui-audience`, `maker`));
     }
     // Before first paint, and in every window the context opens. `raw` shots get it too: the visitor page carries
@@ -866,12 +911,12 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
         }
     }, HIDE_DEMO_CHROME);
     /* Set fixture mode before app boot so every navigation keeps it. */
-    if (shot.mode !== undefined) {
-        await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
-    }
-    const pinned = pinnedExtensions(shot);
-    if (pinned !== undefined) {
-        await context.addInitScript((ids) => window.sessionStorage.setItem(`intentic.demo.extensions`, JSON.stringify(ids)), pinned);
+    await context.addInitScript((id) => window.sessionStorage.setItem(`intentic.demo.mode`, id), mode);
+    // Every shot is of the quiet recording, the desk's included; the showcase is quiet anyway, and the key carries what a
+    // shot keeps regardless (_site/demo/src/mode.ts `demoQuiet`).
+    await context.addInitScript((keeps) => window.sessionStorage.setItem(`intentic.demo.quiet`, JSON.stringify(keeps)), shot.keep ?? []);
+    if (shot.extensions !== undefined) {
+        await context.addInitScript((ids) => window.sessionStorage.setItem(`intentic.demo.extensions`, JSON.stringify(ids)), shot.extensions);
     }
     return context;
 };
@@ -883,13 +928,14 @@ const surface = async (page: Page, shot: Shot): Promise<void> => {
         await page.waitForTimeout(2_400);
     }
     await page.goto(shot.raw === true ? `${ORIGIN}${shot.path}` : demoUrl(shot.path), { waitUntil: "domcontentloaded" });
-    if (shot.waitFor !== undefined) {
-        await page.waitForSelector(shot.waitFor, { timeout: 20_000 }).catch(() => console.warn(`  [no waitFor ${shot.name}] ${shot.waitFor}`));
+    for (const selector of [shot.waitFor ?? []].flat()) {
+        await page.waitForSelector(selector, { timeout: 20_000 }).catch(() => console.warn(`  [no waitFor ${shot.name}] ${selector}`));
     }
     for (const target of shot.click ?? []) {
         await page.click(target, { timeout: 20_000 });
         await page.waitForTimeout(600);
     }
+    await restPointer(page);
     if (shot.type !== undefined) {
         await page.fill(shot.type.target, shot.type.text);
         await page.press(shot.type.target, "Enter");
@@ -897,8 +943,20 @@ const surface = async (page: Page, shot: Shot): Promise<void> => {
         await page.waitForTimeout(shot.type.settleMs ?? 2_000);
     }
     await page.waitForTimeout(shot.settleMs ?? 800);
-    if (shot.scrollTo !== undefined) {
+    if (typeof shot.scrollTo === "number") {
         await scrollPane(page, shot, shot.scrollTo);
+        await page.waitForTimeout(600);
+    } else if (shot.scrollTo !== undefined) {
+        // The element's card, not its heading text, goes to the top, with a gutter above it so the frame does not
+        // open on the card's edge.
+        await page
+            .locator(shot.scrollTo)
+            .first()
+            .evaluate((element) => {
+                const card = element.closest(".ui-card, .bg-card") ?? element;
+                card.scrollIntoView({ block: "start" });
+            });
+        await scrollPane(page, shot, -TRIM_PAD);
         await page.waitForTimeout(600);
     }
 };
@@ -914,7 +972,8 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
             console.log(`  ✓ ${shot.name} → ${shot.path} (popped out)`);
             return true;
         }
-        await page.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`), clip: await clipFor(page, shot) });
+        const clip = await clipFor(page, shot);
+        await page.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`), ...(clip === undefined ? {} : { clip }) });
         console.log(`  ✓ ${shot.name} → ${shot.path}`);
         return true;
     } catch (error) {

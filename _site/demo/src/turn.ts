@@ -3,6 +3,7 @@ import { isTurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
+import { demoQuiet } from "./mode";
 import type { StreamSink } from "@intentic/contract-serve";
 
 // `/agent/attach`: rows on the head, then every patch and fact as it lands, folded by the same function the daemon uses
@@ -479,10 +480,15 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     };
 };
 
+// A quiet recording (mode.ts `demoQuiet`) plays the same turn without the plugin's two pieces of chrome: its status line
+// beside the composer and its warning in the transcript, both about a live key the turn never touches.
+const plain = (beats: Beat[]): Beat[] =>
+    demoQuiet() ? beats.filter(({ event }) => event.kind !== `agent_status` && event.kind !== `agent_notice`) : beats;
+
 // Which script a featured conversation plays is the conversation's own: the desk's id names the desk's run.
 export const featuredRun = (conversationId: string, now: number): Run =>
     conversationId === DESK_FEATURED_ID
-        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, DESK_FEATURED, now)
-        : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, FEATURED, now);
+        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, plain(DESK_FEATURED), now)
+        : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, plain(FEATURED), now);
 
 export const visitorRun = (conversationId: string, prompt: string, now: number): Run => createRun(conversationId, prompt, replyScript(prompt), now);

@@ -15,6 +15,10 @@ export const AWAITING_AGENT_ID = `cnv_flaky_signup`;
 export const REVIEW_AGENT_ID = `cnv_soft_deletes`;
 // Agent whose land refuses: half the delta diverged, half is held by the owner's own edits.
 export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
+// A second agent at work, on another provider: what the showcase mode adds to the curated three.
+export const LATENCY_AGENT_ID = `cnv_latency_p99`;
+// Work already landed, by the other person's hand: the showcase's second finished card.
+export const RELEASE_NOTES_AGENT_ID = `cnv_release_notes`;
 // A chat whose last message the sandbox turned away for low memory: the words wait in its queue, held for one press.
 export const HELD_AGENT_ID = `cnv_support_card`;
 // That message, as the queue holds it; its picture is the sweep capture the workspace carries (fixture/browserShots.ts).
@@ -125,14 +129,14 @@ const spawnedChildren = (now: number): AgentSummary[] => [
         seenAt: now - minutes(1),
         costUsd: 0.01,
     }),
-    spawned(`cnv_release_notes`, `sub-soft-pine-1a2b`, {
+    spawned(RELEASE_NOTES_AGENT_ID, `sub-soft-pine-1a2b`, {
         title: `Collect the merged PRs since 2.3`,
         status: `idle`,
         model: `claude-haiku-4-5-20251001`,
         updatedAt: now - minutes(41),
         seenAt: now - minutes(40),
     }),
-    spawned(`cnv_release_notes`, `sub-bold-reef-3c4d`, {
+    spawned(RELEASE_NOTES_AGENT_ID, `sub-bold-reef-3c4d`, {
         title: `Summarise the breaking changes`,
         status: `landed`,
         model: `claude-haiku-4-5-20251001`,
@@ -140,7 +144,7 @@ const spawnedChildren = (now: number): AgentSummary[] => [
         seenAt: now - minutes(36),
         diff: { files: 1, insertions: 9, deletions: 0 },
     }),
-    spawned(`cnv_release_notes`, `sub-warm-dune-6e7f`, {
+    spawned(RELEASE_NOTES_AGENT_ID, `sub-warm-dune-6e7f`, {
         title: `Translate the release notes into German`,
         status: `running`,
         provider: `codex`,
@@ -373,7 +377,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         diff: { files: 3, insertions: 72, deletions: 18 },
     },
     {
-        id: `cnv_latency_p99`,
+        id: LATENCY_AGENT_ID,
         startIn: `api`,
         // CI job holding a control token; renders as the card's second provenance line.
         startedBy: `token:nightly CI`,
@@ -461,7 +465,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         id: REVIEW_AGENT_ID,
         startIn: `api`,
         sessionId: `ses_01j9soft`,
-        title: `Migrate the users table to soft deletes`,
+        title: `Soft-delete the users table`,
         status: `ready`,
         provider: `claude`,
         harness: `claude-code`,
@@ -490,7 +494,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         proof: { at: now - minutes(18), verification: `verified`, check: `pnpm -C api test src/db` },
     },
     {
-        id: `cnv_release_notes`,
+        id: RELEASE_NOTES_AGENT_ID,
         owner: { email: `ada@acme.dev`, name: `Ada Lovelace`, since: now - minutes(140) },
         startedBy: `ada@acme.dev`,
         sessionId: `ses_01j9notes`,
@@ -529,7 +533,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         account: `ops@acme.dev`,
         branch: `agent/dep-audit`,
         base: `9b2d10e`,
-        origin: { automationId: `aut_nightly_audit`, provider: `discord`, channelId: `1180-eng-alerts`, author: `#eng-alerts` },
+        origin: { automationId: `nightly-audit`, provider: `discord`, channelId: `1180-eng-alerts`, author: `#eng-alerts` },
         costUsd: 0.14,
         inputTokens: 20_400,
         outputTokens: 2_360,
@@ -671,3 +675,23 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     ...spawnedChildren(now),
     ...auditFamily(now),
 ];
+
+// What a quiet recording (mode.ts `demoQuiet`) takes off a card: the marks of a busy moment rather than of the work.
+// A teammate's reactions, a prompt cache counting down, a command still running past its turn, a helper tray, a queued
+// message, a check that failed or never ran, and the token a CI job started it with. The title, model, branch, diff,
+// cost, activity and lane stay, and so does a check that passed, which is the one mark a finished card should carry.
+export const quietCard = ({
+    reactions: _reactions,
+    promptCache: _promptCache,
+    keepWarm: _keepWarm,
+    jobs: _jobs,
+    subagents: _subagents,
+    queue: _queue,
+    proof,
+    startedBy,
+    ...card
+}: AgentSummary): AgentSummary => ({
+    ...card,
+    ...(proof?.verification === `verified` ? { proof } : {}),
+    ...(startedBy === undefined || startedBy.startsWith(`token:`) ? {} : { startedBy }),
+});

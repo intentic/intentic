@@ -15,7 +15,7 @@ import type {
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { includeGlobs } from "@intentic/sandbox-contract";
-import { deskEdition } from "../mode";
+import { demoQuiet, deskEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
 import { choreFiles } from "./chores";
@@ -31,9 +31,12 @@ import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 export const REPOS: readonly string[] = deskEdition ? DESK_REPOS : [`web`, `api`];
 
 // `web` matches the registry fixture's project; `api` deliberately doesn't, showing both claim outcomes. A desk has no
-// remote: nothing there was ever pushed anywhere.
+// remote: nothing there was ever pushed anywhere, which the sandbox's switcher carries as a standing warning. A quiet
+// desk (mode.ts `demoQuiet`) has its shop's website kept somewhere else, as the one folder a maker's web person set up.
 export const REMOTE_REPOS: readonly { repo: string; host: string; project: string }[] = deskEdition
-    ? []
+    ? demoQuiet()
+        ? [{ repo: `shop-site`, host: `github.com`, project: `ada-studio/shop-site` }]
+        : []
     : [
           { repo: `web`, host: `github.com`, project: `acme/shop-web` },
           { repo: `api`, host: `github.com`, project: `acme-internal/shop-api` },
@@ -83,7 +86,7 @@ const BASE_CHANGES: RepoChanges[] = deskEdition ? DESK_CHANGES : CODE_CHANGES;
 
 // Both recordings' rows live in one table: their ids never meet, and a lookup by id needs no second switch.
 const ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
-    [REVIEW_AGENT_ID]: { title: `Migrate the users table to soft deletes`, provider: `claude` },
+    [REVIEW_AGENT_ID]: { title: `Soft-delete the users table`, provider: `claude` },
     ...DESK_ORIGIN_AGENTS,
 };
 
@@ -226,7 +229,7 @@ export const CHECKOUT_LIB_AFTER = `export const checkout = async (priceId: strin
 `;
 
 // Endpoint the run writes first; the only file in the story that's created, not edited.
-export const CHECKOUT_ROUTE = `import { stripe } from "../../../../_deploy/providers/src/integrations/stripe";
+export const CHECKOUT_ROUTE = `import { stripe } from "../lib/stripe";
 
 export const createCheckoutSession = async (req: Request, res: Response) => {
     const { priceId } = checkoutBody.parse(req.body);
@@ -345,15 +348,53 @@ test("a session that never opens leaves the page with a way to retry", async () 
 });
 `;
 
-const USERS_ROUTE_BEFORE = `export const deleteUser = async (id: string) => {
-    await db.delete(users).where(eq(users.id, id));
+// The route file whole, not just the one function the change is about: a reviewer reads a change in its file, and the
+// soft-delete is three small edits there (the delete becomes an update, and both reads skip retired rows), which is the
+// diff the review hero is a picture of. Lines kept short so neither side of a split diff wraps.
+const USERS_ROUTE_BEFORE = `import { eq } from "drizzle-orm";
+import { db } from "../db/client";
+import { users } from "../db/schema";
+
+export const listUsers = () => db.select().from(users);
+
+export const getUser = async (id: string) => {
+    const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, id));
+    return user ?? null;
+};
+
+export const deleteUser = async (id: string) => {
+    await db
+        .delete(users)
+        .where(eq(users.id, id));
     return { ok: true };
 };
 `;
 
-const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
-    // Retire, never remove: the row stays, every read filters it out (see liveUsers).
-    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+const USERS_ROUTE_AFTER = `import { and, eq, isNull } from "drizzle-orm";
+import { db } from "../db/client";
+import { liveUsers, users } from "../db/schema";
+
+// Retired rows stay in the table; no read returns them.
+const live = isNull(users.deletedAt);
+
+export const listUsers = () => liveUsers();
+
+export const getUser = async (id: string) => {
+    const [user] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, id), live));
+    return user ?? null;
+};
+
+export const deleteUser = async (id: string) => {
+    await db
+        .update(users)
+        .set({ deletedAt: new Date() })
+        .where(eq(users.id, id));
     return { ok: true };
 };
 `;
@@ -721,7 +762,7 @@ export const sessions = (now: number): SessionSummary[] => {
         { id: `ses_01j9flaky`, title: `Fix the flaky signup e2e test`, updatedAt: now - 2 * 60_000 },
         { id: `ses_01j9auth`, title: `Refactor the auth middleware onto the new session store`, updatedAt: now - 11 * 60_000 },
         { id: `ses_01j9latency`, title: `Investigate the p99 latency spike on /checkout`, updatedAt: now - 60_000 },
-        { id: `ses_01j9soft`, title: `Migrate the users table to soft deletes`, updatedAt: now - 18 * 60_000 },
+        { id: `ses_01j9soft`, title: `Soft-delete the users table`, updatedAt: now - 18 * 60_000 },
         { id: `ses_01j9notes`, title: `Draft the release notes for 2.4`, updatedAt: now - 34 * 60_000 },
         { id: `ses_01j9audit`, title: `Nightly dependency audit, 3 advisories, 2 patched`, updatedAt: now - 7 * hour },
         { id: `ses_01j9seo`, title: `Add structured data to the product pages`, updatedAt: now - 26 * hour },

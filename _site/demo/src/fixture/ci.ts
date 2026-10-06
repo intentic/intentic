@@ -63,7 +63,7 @@ const ciRuns = (now: number): PipelineRun[] => [
         host: `gitlab`,
         project: `acme/shop-api`,
         runId: 90_312,
-        title: `Migrate the users table to soft deletes`,
+        title: `Soft-delete the users table`,
         authorName: `Ada Lovelace`,
         trigger: `merge_request_event`,
         branch: `agent/soft-deletes`,
@@ -210,7 +210,11 @@ const mainFailures = (now: number): CiMainFailure[] => [
 ];
 
 // Every run the fixture has, whichever recording lists it: a row asks for its jobs by id, and only lists what it drew.
-const allRuns = (now: number): PipelineRun[] => [...ciRuns(now), ...mainFailureRuns(now)];
+// A quiet recording's board (mode.ts `demoQuiet`): the feature branch's one failure passed instead, so nothing is red.
+const passed = ({ failedJobs: _failedJobs, ...run }: PipelineRun): PipelineRun => (run.status === `failed` ? { ...run, status: `success` } : run);
+const branchRuns = (now: number, green: boolean): PipelineRun[] => (green ? ciRuns(now).map(passed) : ciRuns(now));
+
+const allRuns = (now: number, green = false): PipelineRun[] => [...branchRuns(now, green), ...mainFailureRuns(now)];
 
 // Both forges give every job its own page, so the fixture mints one per job rather than only for the interesting ones:
 // the graph draws each job name as a link out, and a fixture without them would under-draw the view.
@@ -317,8 +321,8 @@ const runningJobs = (base: number, runId: number): PipelineJob[] =>
         ],
     );
 
-export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] => {
-    const run = allRuns(now).find((candidate) => candidate.repo === repo && candidate.runId === runId);
+export const ciJobs = (repo: string, runId: number, now: number, green = false): PipelineJob[] => {
+    const run = allRuns(now, green).find((candidate) => candidate.repo === repo && candidate.runId === runId);
     if (run === undefined) {
         return [];
     }
@@ -330,9 +334,14 @@ export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] 
 };
 
 // The feature branch's failure is the newest run on its branch, so the rail badge stays lit truthfully. `failures` as a
-// current daemon always sends it, empty or not; only the whole recording's main is failing.
-export const ciRunsResponse = (now: number, mainFailing = false): CiRunsResponse => ({
+// current daemon always sends it, empty or not; only the whole recording's main is failing, and a green board has none.
+export const ciRunsResponse = (
+    now: number,
+    { mainFailing = false, green = false }: { mainFailing?: boolean; green?: boolean } = {},
+): CiRunsResponse => ({
     repos: CI_REPOS,
-    runs: mainFailing ? [...ciRuns(now), ...mainFailureRuns(now)].toSorted((left, right) => right.createdAt - left.createdAt) : ciRuns(now),
+    runs: mainFailing
+        ? [...branchRuns(now, green), ...mainFailureRuns(now)].toSorted((left, right) => right.createdAt - left.createdAt)
+        : branchRuns(now, green),
     failures: mainFailing ? mainFailures(now) : [],
 });

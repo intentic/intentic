@@ -422,24 +422,36 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN pnpm dlx playwright@1.56 install --with-deps chromium
 `;
 
-export const demoEnvironment = (): Environment => ({
+// `proposal: false` is a quiet recording's environment (mode.ts `demoQuiet`): nothing waiting on the owner, so the
+// sandbox's switcher carries no mark for it.
+export const demoEnvironment = ({ proposal = true }: { proposal?: boolean } = {}): Environment => ({
     container: `intentic-sandbox-acme-shop`,
     approved: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
     custom: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
     appliedHash: `sha256:1f4c9ab2`,
-    proposal: {
-        hash: `sha256:8b07de54`,
-        content: `${APPLIED_OVERLAY}
+    ...(proposal
+        ? {
+              proposal: {
+                  hash: `sha256:8b07de54`,
+                  content: `${APPLIED_OVERLAY}
 # Proposed by the agent while wiring product images on the checkout page.
 RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
  && rm -rf /var/lib/apt/lists/*
 `,
-    },
+              },
+          }
+        : {}),
 });
 
 // Same environment as contents (what the sandbox has, not how it was built); every row state is represented. Versions
-// are real tool output, not round numbers.
-export const demoEnvironmentContents = (): EnvironmentContents => ({
+// are real tool output, not round numbers. `settled` is a quiet recording's (mode.ts `demoQuiet`): only what is
+// installed and running, nothing waiting on an approval or a rebuild.
+export const demoEnvironmentContents = ({ settled = false }: { settled?: boolean } = {}): EnvironmentContents => {
+    const contents = environmentContents();
+    return settled ? { ...contents, items: contents.items.filter((item) => item.state === `active`) } : contents;
+};
+
+const environmentContents = (): EnvironmentContents => ({
     items: [
         {
             id: `custom:postgresql-client`,
@@ -573,8 +585,11 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
     ],
 });
 
-// Spend ledger the Usage tab projects: two providers, two accounts, the models the fleet actually runs.
-export const demoUsageRollup = (now: number): UsageRollupRow[] => {
+// Spend ledger the Usage tab projects: two providers, two accounts, the models the fleet actually runs. A month of it,
+// since the tab opens on thirty days and two weeks of rows left the chart's first half bare. Each model's spend is
+// booked to the board's agent that runs it (`agentFor`), so Cost by agent names the work rather than lumping every
+// dollar into the main tree; a model no agent on the board runs stays there.
+export const demoUsageRollup = (now: number, agentFor: (model: string) => string | undefined = () => undefined): UsageRollupRow[] => {
     const rows: UsageRollupRow[] = [];
     const shape = [
         { provider: `claude`, account: `ada@acme.dev`, model: `claude-sonnet-5`, harness: `claude-code`, turns: 14, cost: 2.9 },
@@ -582,18 +597,20 @@ export const demoUsageRollup = (now: number): UsageRollupRow[] => {
         { provider: `claude`, account: `ada@acme.dev`, model: `claude-haiku-4-5-20251001`, harness: `claude-code`, turns: 9, cost: 0.28 },
         { provider: `codex`, account: `chatgpt-ada`, model: `gpt-5.2-codex`, harness: `native`, turns: 6, cost: 1.1 },
     ];
-    // Two weeks with a weekend dip; rows are per day × provider × account × model.
-    for (let back = 13; back >= 0; back -= 1) {
+    // A month with a weekend dip; rows are per day × provider × account × model.
+    for (let back = 29; back >= 0; back -= 1) {
         const weekday = new Date(now - back * 86_400_000).getUTCDay();
         const load = weekday === 0 || weekday === 6 ? 0.2 : 0.7 + ((back * 37) % 60) / 100;
         for (const row of shape) {
             const turns = Math.max(1, Math.round(row.turns * load));
+            const conversationId = agentFor(row.model);
             rows.push({
                 day: day(now, back),
                 provider: row.provider,
                 account: row.account,
                 model: row.model,
                 harness: row.harness,
+                ...(conversationId === undefined ? {} : { conversationId }),
                 turns,
                 inputTokens: turns * 21_400,
                 outputTokens: turns * 2_900,

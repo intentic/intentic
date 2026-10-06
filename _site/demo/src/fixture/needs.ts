@@ -1,4 +1,5 @@
 import type { GrantRevoke, Need, NeedAnswer, StandingGrants } from "@intentic/sandbox-contract";
+import { demoQuiet } from "../mode";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID } from "./fleet";
 
 // What the demo's agents are waiting on people for (docs/architecture/needs.md): one of each kind a visitor is likely
@@ -59,8 +60,9 @@ const seed = (now: number): Need[] => [
 
 let needs: Need[] | undefined;
 
+// A quiet recording (mode.ts `demoQuiet`) starts with nothing asked: the agents have what they need.
 export const demoNeeds = (now: number = Date.now()): readonly Need[] => {
-    needs ??= seed(now);
+    needs ??= demoQuiet() ? [] : seed(now);
     return [...needs].sort((left, right) => right.createdAt - left.createdAt);
 };
 

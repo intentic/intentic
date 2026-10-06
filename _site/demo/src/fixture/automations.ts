@@ -8,7 +8,7 @@ const hours = (count: number): number => count * 3_600_000;
 
 const seed = (now: number): AutomationSummary[] => [
     {
-        id: `aut_nightly_audit`,
+        id: `nightly-audit`,
         trigger: { kind: `schedule`, cron: `0 3 * * *` },
         guard: `pnpm audit --json | jq -e '.metadata.vulnerabilities.high > 0'`,
         prompt: `Audit the workspace's dependencies. Patch what can be patched without a major bump, run the tests, and open one conversation summarising what you left alone and why.`,
@@ -26,7 +26,7 @@ const seed = (now: number): AutomationSummary[] => [
     {
         // Never run and still ahead of its moment, which is what almost every one-time wake looks like: they exist to
         // be waited for, and then they are gone.
-        id: `aut_renewal_reminder`,
+        id: `renewal-reminder`,
         trigger: { kind: `once`, at: now + hours(20) },
         prompt: `The TLS certificate for acme.example expires in a week. Check whether the renewal already went through, and if it did not, say exactly what is left to do.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
@@ -35,7 +35,7 @@ const seed = (now: number): AutomationSummary[] => [
         runs: [],
     },
     {
-        id: `aut_discord_oncall`,
+        id: `discord-oncall`,
         trigger: { kind: `listener`, provider: `discord`, channelId: `1180-eng-alerts`, eventType: `message`, mentioned: true },
         prompt: `You were mentioned in #eng-alerts. Read the thread, check the sandbox for what it refers to, and reply in the channel. If it is a code question, answer with the file and line.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
@@ -47,7 +47,7 @@ const seed = (now: number): AutomationSummary[] => [
         ],
     },
     {
-        id: `aut_visitor_chat`,
+        id: `visitor-chat`,
         trigger: { kind: `listener`, provider: `webchat`, allowedOrigins: [`https://acme.example`] },
         prompt: `A visitor is asking on the marketing site. Answer from the docs in this workspace only; if the answer isn't there, say so and offer to pass it on.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
@@ -64,7 +64,7 @@ const seed = (now: number): AutomationSummary[] => [
         runs: [{ at: now - hours(4), outcome: `completed`, detail: `answered 2 messages`, conversationId: `cnv_visitor_chat_visitor` }],
     },
     {
-        id: `aut_docs_after_land`,
+        id: `docs-after-land`,
         trigger: { kind: `workspace`, event: `agent.landed`, repo: `api` },
         prompt: `Something landed in api. Check whether the docs still describe it, the route table, the schema notes and the README, and fix what drifted.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
@@ -76,7 +76,7 @@ const seed = (now: number): AutomationSummary[] => [
         ],
     },
     {
-        id: `aut_ci_red`,
+        id: `pipeline-failed`,
         trigger: { kind: `event` },
         webhookToken: `demo-ci-webhook-token`,
         prompt: `A pipeline failed. Read the failed job's log, reproduce the failure in the sandbox, and either fix it or explain in one paragraph why it is not a code problem.`,

@@ -1,10 +1,10 @@
-import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, REVIEW_AGENT_ID } from "./fixture/fleet";
+import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, LATENCY_AGENT_ID, RELEASE_NOTES_AGENT_ID, REVIEW_AGENT_ID } from "./fixture/fleet";
 
 // Three levels of how full the recording is, picked by `?mode=` (no on-screen switcher; minimal is the default). Mainly two knobs, which agents the
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `desk`;
+export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `desk`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -20,6 +20,8 @@ export interface DemoMode {
     readonly teammate: boolean;
     // Whether the window opens holding chats: the featured run plus one per persona.
     readonly openChats: boolean;
+    /** Served quiet (see `demoQuiet` below) whatever the session asks. */
+    readonly quiet?: true;
 }
 
 // One agent kept: the featured run, since its card is the one with a real conversation behind it.
@@ -53,6 +55,20 @@ const FULL: DemoMode = {
     openChats: true,
 };
 
+// What the site's screenshots are taken of (_tools/e2e/shots/capture.mts), and served quiet: the curated three plus a
+// second agent at work and a second finished one, so the board reads as an ordinary afternoon with a few things moving
+// rather than as one specimen per lane. No extensions, so the rail is the core and nothing else.
+const SHOWCASE: DemoMode = {
+    id: `showcase`,
+    label: `Showcase`,
+    note: `A calm afternoon: what the site's screenshots show.`,
+    agents: [FEATURED_AGENT_ID, AWAITING_AGENT_ID, LATENCY_AGENT_ID, REVIEW_AGENT_ID, RELEASE_NOTES_AGENT_ID],
+    extensions: [],
+    teammate: true,
+    openChats: true,
+    quiet: true,
+};
+
 // A different workspace rather than a fullness: documents instead of code, one assistant, the maker's own words. What
 // intentic.dev/desk's screenshots are taken of, and where its "open the live workspace" link lands. The roster is its
 // own (fixture/desk.ts), so `agents` is not a filter here; the two extensions are the maker's home and the viewers that
@@ -66,7 +82,7 @@ const DESK: DemoMode = {
     openChats: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, DESK];
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, DESK];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;
@@ -149,6 +165,37 @@ export const enabledExtensions = (): readonly string[] | undefined => {
         return demoMode.extensions;
     }
 };
+
+// QUIET: the same recording on an uneventful afternoon. The recording is built to show every state a surface
+// distinguishes (a prompt cache about to cool, a key an agent is waiting for, a red pipeline, a teammate's reaction, a
+// plugin's warning), which is right for a visitor exploring and wrong for a picture whose job is to show the workspace
+// at rest. Quiet takes those out where they are served (daemon.ts, needs.ts, turn.ts) and leaves every agent, file
+// and conversation where it was. The showcase mode is always quiet; any other mode is quiet when the session holds
+// the key below, which only the screenshots harness writes, so the desk can be shot quiet too. The key's value is a
+// JSON list of the disturbances a shot still needs, since some pictures are OF one: the Environment shot is of the
+// change an agent proposed.
+const QUIET_KEY = `intentic.demo.quiet`;
+
+/** A disturbance a quiet session can ask to keep. */
+export type QuietKeep = `proposal`;
+
+const resolveQuiet = (): { readonly on: boolean; readonly keeps: ReadonlySet<QuietKeep> } => {
+    const asked = window.sessionStorage.getItem(QUIET_KEY);
+    if (asked === null) {
+        return { on: demoMode.quiet === true, keeps: new Set() };
+    }
+    try {
+        const parsed: unknown = JSON.parse(asked);
+        return { on: true, keeps: new Set(Array.isArray(parsed) ? parsed.filter((keep): keep is QuietKeep => keep === `proposal`) : []) };
+    } catch {
+        return { on: true, keeps: new Set() };
+    }
+};
+
+const quiet = resolveQuiet();
+
+/** Whether this page load is served quiet, and so without the disturbance named unless the session kept it. */
+export const demoQuiet = (keeping?: QuietKeep): boolean => quiet.on && (keeping === undefined || !quiet.keeps.has(keeping));
 
 // Switching reloads: extensions activate once per app load, so a live rebroadcast would go half-stale. Lands on the
 // fleet board, since the current route might belong to an extension about to switch off.

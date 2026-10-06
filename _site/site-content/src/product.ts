@@ -75,7 +75,7 @@ export const productPages: ProductPage[] = [
         sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
         hero: {
             name: "fleet-board",
-            alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Visitor chat and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
+            alt: "The intentic agents board over a misty forest: an Attention lane with one agent asking a question, an Active lane with an agent adding Stripe checkout and another chasing a latency spike, and a Finished lane where a soft-delete migration offers Land now above release notes already landed. Every card shows model, branch, cost and diff stats.",
             frame: "browser",
             label: "acme-shop · /agents",
         },
@@ -129,7 +129,7 @@ export const productPages: ProductPage[] = [
         sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server. Every key stays in your sandbox.",
         hero: {
             name: "capabilities",
-            alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
+            alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data, Communication, Business & docs and Servers, with Docker, GitHub, Sentry, PostgreSQL, Discord, Stripe and SSH marked as connected.",
             frame: "browser",
             label: "acme-shop · /capabilities",
         },
@@ -198,7 +198,7 @@ export const productPages: ProductPage[] = [
         heroFigure: "automate",
         menuShot: {
             name: "menu-automate",
-            alt: "The automations screen: one wake held for approval, two code chores triggered by a daily schedule and by work landing, and three integrations fired from Discord, a webchat and a webhook, each with when it last ran and a switch.",
+            alt: "The Automations screen: two code chores, one woken when work lands and one on a nightly schedule, each with when it last ran and its switch.",
         },
         facts: [
             { value: "6 events", label: "push, alert, payment, email, chat or cron" },
@@ -232,7 +232,7 @@ export const productPages: ProductPage[] = [
                 body: "An automatically started agent appears like any other, with its own card, diff and review.",
                 shot: {
                     name: "fleet-board",
-                    alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Visitor chat and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
+                    alt: "The intentic agents board over a misty forest: an Attention lane with one agent asking a question, an Active lane with an agent adding Stripe checkout and another chasing a latency spike, and a Finished lane where a soft-delete migration offers Land now above release notes already landed. Every card shows model, branch, cost and diff stats.",
                     frame: "browser",
                     label: "acme-shop · /agents",
                 },
@@ -262,11 +262,11 @@ export const productPages: ProductPage[] = [
         sub: "Every agent plans first, then waits. Review each file before you accept the change.",
         menuShot: {
             name: "menu-review",
-            alt: "The workspace Changes tab: five uncommitted files across two repos with their added and removed line counts, nothing staged, and the largest of them open in a side-by-side diff.",
+            alt: "The workspace Changes tab: six uncommitted files across two repos with their added and removed line counts, nothing staged, and the largest of them open in a side-by-side diff.",
         },
         hero: {
             name: "chat-plan",
-            alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and two buttons: approve, or keep planning.",
+            alt: "The docked chat: the task as the person wrote it, the agent's thinking, its four-step plan for adding Stripe checkout, and the bar pinned over the composer that waits for a yes: Approve, Keep planning or Read plan.",
             frame: "bare",
         },
         facts: [
@@ -293,7 +293,7 @@ export const productPages: ProductPage[] = [
                 body: "Work is grouped by file, so a 400-line change reads as six decisions. Unread files stay marked until you look.",
                 shot: {
                     name: "workspace-changes",
-                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and the diff of one of them open beside the list.",
+                    alt: "The workspace Changes tab: six uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside the list as a side-by-side diff.",
                     frame: "browser",
                     label: "acme-shop · /workspace",
                 },
@@ -331,11 +331,11 @@ export const productPages: ProductPage[] = [
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         menuShot: {
             name: "menu-host",
-            alt: "The sandbox hub: the acme-shop box online with its installed version and its own URL, over the list of what it holds, environment, secrets, agent account, extensions, access, personas and devices.",
+            alt: "The sandbox hub: the acme-shop box on ada-pc with its installed version and its own URL, beside the list of what it holds: usage, environment, secrets, agent account, extensions, access, areas and personas.",
         },
         hero: {
             name: "sandbox-overview",
-            alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and devices.",
+            alt: "The sandbox hub: the acme-shop sandbox on ada-pc with its installed version, its own URL and the memory and cores it may use, over the disk it takes up, beside the list of everything it holds: usage, environment, secrets, agent account, extensions, access, areas and personas.",
             frame: "browser",
             label: "acme-shop · /sandbox",
         },
@@ -373,7 +373,7 @@ export const productPages: ProductPage[] = [
                 body: "The sandbox records the tokens and cost of each turn. The usage stays in your own ledger because the AI account is yours.",
                 shot: {
                     name: "sandbox-spend",
-                    alt: "The sandbox Usage tab: a stacked spend-per-day chart split by Claude Code and Codex, with cost broken down by model and by agent.",
+                    alt: "The sandbox Usage tab: a month of spend per day, stacked by Claude Code and Codex, with the cost broken down by model and by the agent that spent it.",
                     frame: "browser",
                     label: "acme-shop · /sandbox/usage",
                 },
