@@ -81,13 +81,32 @@ export const overCeiling = (root, ceiling, procRoot = "/proc") => {
     return undefined;
 };
 
+// The process of `root`'s tree holding the most, with what it holds, or undefined for a tree with nothing in it.
+export const largestProcess = (root, procRoot = "/proc") => {
+    let largest;
+    for (const pid of processTree(root, procRoot)) {
+        const held = heldBytes(pid, procRoot);
+        if (held > (largest?.held ?? 0)) {
+            largest = { pid, held };
+        }
+    }
+    return largest;
+};
+
 // Watches a spawned child's tree every `intervalMs`; the first process past the ceiling gets the whole tree killed and
-// `onExceed` called once with it. Returns the stop function.
+// `onExceed` called once with it. Returns the stop function, which answers with the most any one process of the tree
+// was seen holding (undefined when nothing was sampled): how close a run came is the measurement the ceiling is sized
+// from, and a run that passes says nothing of it otherwise.
 export const watchMemory = (child, { ceiling = ceilingBytes(), intervalMs = 2_000, onExceed, procRoot = "/proc" } = {}) => {
     if (ceiling === 0 || child.pid === undefined) {
-        return () => {};
+        return () => undefined;
     }
+    let peak;
     const timer = setInterval(() => {
+        const largest = largestProcess(child.pid, procRoot);
+        if (largest !== undefined && largest.held > (peak?.held ?? 0)) {
+            peak = largest;
+        }
         const found = overCeiling(child.pid, ceiling, procRoot);
         if (found === undefined) {
             return;
@@ -103,7 +122,10 @@ export const watchMemory = (child, { ceiling = ceilingBytes(), intervalMs = 2_00
         onExceed?.(found);
     }, intervalMs);
     timer.unref();
-    return () => clearInterval(timer);
+    return () => {
+        clearInterval(timer);
+        return peak;
+    };
 };
 
 export const formatGiB = (bytes) => `${(bytes / GIB).toFixed(1)} GiB`;

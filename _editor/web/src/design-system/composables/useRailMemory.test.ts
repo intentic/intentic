@@ -103,7 +103,8 @@ describe(`useRailMemory`, () => {
 
         choice.value = undefined;
         await nextTick();
-        expect(choice.value).toBe(`intentic`);
+        // Widened again: the assignment above narrows the property to undefined, and the rail's watcher wrote it back.
+        expect(choice.value as string | undefined).toBe(`intentic`);
         stop();
     });
 

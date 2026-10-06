@@ -52,6 +52,7 @@ const sameProject = (left: string, right: string): boolean => {
 
 // Every remote of a checkout by name, in one spawn; a linked worktree reads its main checkout's.
 const remotesOf = async (dir: string, git: GitRunner): Promise<Map<string, string>> => {
+    // allow(silent-catch): `git config --get-regexp` exits 1 when no remote is set, and a checkout git cannot read has none to match
     const listed = await git(dir, ["config", "--get-regexp", String.raw`^remote\..*\.url$`]).catch(() => undefined);
     const remotes = new Map<string, string>();
     for (const line of (listed?.stdout ?? "").split("\n")) {

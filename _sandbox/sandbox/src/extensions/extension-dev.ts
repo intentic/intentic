@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { STATE_DIR } from "@intentic/constants";
@@ -96,7 +97,8 @@ const placeIn = (base: string, real: string): string | undefined => {
     return rel.split(sep).join("/");
 };
 
-const resolvedRoot = (path: string): Promise<string | undefined> => realpath(path).catch(() => undefined);
+// A root not there yet (no conversation has had a worktree) holds no place.
+const resolvedRoot = (path: string): Promise<string | undefined> => realpath(path).catch(undefinedIfMissing);
 
 // Where a real path sits, or why it is no place to run an extension from.
 const placeOf = async (roots: DevRoots, real: string): Promise<DevPlace | { readonly refused: string }> => {
@@ -162,9 +164,12 @@ export const checkDevCheckout = async (
     pinned: ExtensionManifest,
     configPath: string | undefined,
 ): Promise<DevCheck> => {
-    const real = await realpath(path).catch(() => undefined);
-    if (real === undefined) {
-        return { held: `the checkout at ${path} is gone`, fatal: true };
+    let real: string;
+    try {
+        real = await realpath(path);
+    } catch (error) {
+        // Gone is what this is for; a checkout that cannot be read holds the pinned copy just the same, saying why.
+        return { held: isMissing(error) ? `the checkout at ${path} is gone` : `the checkout at ${path} cannot be read: ${errorMessage(error)}`, fatal: true };
     }
     const place = await placeOf(roots, real);
     if ("refused" in place) {
@@ -224,7 +229,8 @@ export const bundleRevisionOf = async (dir: string, entry: string | undefined): 
     if (entry === undefined) {
         return undefined;
     }
-    const bytes = await readFile(join(dir, entry)).catch(() => undefined);
+    // A bundle not built yet has no revision; any other refusal reaches the caller.
+    const bytes = await readFile(join(dir, entry)).catch(undefinedIfMissing);
     return bytes === undefined ? undefined : createHash("sha256").update(bytes).digest("hex").slice(0, 12);
 };
 

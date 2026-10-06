@@ -75,6 +75,7 @@ test("a close the caller ends in its drop handler is never dialled again", async
 });
 
 test("connecting afresh lets the old channel go, and its late close and messages are nobody's", async () => {
+    jest.useFakeTimers();
     const { live: socket, dialled, drops } = harness();
     live.push(socket);
     socket.connect();
@@ -83,16 +84,19 @@ test("connecting afresh lets the old channel go, and its late close and messages
 
     socket.connect();
     await waitFor(() => expect(dialled).toHaveLength(2));
+    // Its close is slow to come back, past the silence bound: the replaced channel is not pinged, nor closed again for it.
+    await advanceTimersByTimeAsync(FAST.staleMs * 2);
     dialled[0]!.link.closed(1000, ``);
-    await new Promise((resolve) => setTimeout(resolve, FAST.maxRetryMs * 3));
+    await advanceTimersByTimeAsync(FAST.maxRetryMs * 3);
 
     expect({
         closedOld: dialled[0]!.closes,
+        pingedOld: dialled[0]!.sent.length,
         oldCurrent: dialled[0]!.link.current(),
         newCurrent: dialled[1]!.link.current(),
         drops,
         dialled: dialled.length,
-    }).toEqual({ closedOld: 1, oldCurrent: false, newCurrent: true, drops: [], dialled: 2 });
+    }).toEqual({ closedOld: 1, pingedOld: 0, oldCurrent: false, newCurrent: true, drops: [], dialled: 2 });
 });
 
 test("a channel that opens after it was replaced is closed rather than adopted", async () => {
@@ -134,17 +138,22 @@ test("an open channel is pinged, and one that stops answering is closed so it ca
 });
 
 test("a channel that keeps answering is never closed for silence", async () => {
+    // On the fake clock it answers every half ping exactly: on the real one a loaded runner stalled past the silence
+    // bound between two answers, and the channel was closed for a silence the test never made.
+    jest.useFakeTimers();
     const { live: socket, dialled } = harness();
     live.push(socket);
     socket.connect();
     await waitFor(() => expect(dialled).toHaveLength(1));
     dialled[0]!.link.opened();
-    const heard = setInterval(() => dialled[0]!.link.heard(), FAST.pingMs / 2);
 
-    await new Promise((resolve) => setTimeout(resolve, FAST.staleMs * 3));
-    clearInterval(heard);
+    for (let elapsed = 0; elapsed < FAST.staleMs * 3; elapsed += FAST.pingMs / 2) {
+        dialled[0]!.link.heard();
+        await advanceTimersByTimeAsync(FAST.pingMs / 2);
+    }
 
-    expect(dialled[0]!.closes).toBe(0);
+    // Pinged on every tick of the 300ms (40ms through 280ms), and never closed.
+    expect({ pings: dialled[0]!.sent.length, closes: dialled[0]!.closes }).toEqual({ pings: 7, closes: 0 });
 });
 
 test("a peer that has never answered a ping is not held to the silence clock when asked not to be", async () => {

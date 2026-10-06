@@ -7,7 +7,7 @@ import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from ".
 import type { Services } from "../../../composition.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
-import { installedCopyDirtyPaths, installedCopyReviewer } from "../../../rules/installed-copy.js";
+import { installedCopyDirtyPaths, installedCopyReviewer } from "./installed-copy.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
 import { reposOf } from "../../../rules/rules.js";
 import { workspaceRelative } from "../../../rules/workspace-relative.js";
@@ -51,7 +51,7 @@ const underRoots = (file: string, roots: readonly string[]): string | undefined 
 };
 
 // The `file.edited` moment: the byte scan on every written file, the note on a write into a copy of an extension the
-// sandbox runs (rules/installed-copy.ts), then each repository's own edit checks, run in the turn's own tree and named
+// sandbox runs (installed-copy.ts), then each repository's own edit checks, run in the turn's own tree and named
 // as the agent sees it. Firings stamp the settings list only, so a per-edit check
 // doesn't spam a feed row per save.
 const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {

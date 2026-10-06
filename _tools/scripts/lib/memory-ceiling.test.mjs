@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ceilingBytes, DEFAULT_CEILING_BYTES, heldBytes, overCeiling, processTree } from "./memory-ceiling.mjs";
+import { ceilingBytes, DEFAULT_CEILING_BYTES, heldBytes, largestProcess, overCeiling, processTree, watchMemory } from "./memory-ceiling.mjs";
 
 const MIB = 1024 ** 2;
 
@@ -43,4 +43,18 @@ test("the first process past the ceiling is named, a worker deep in the tree inc
     const proc = fakeProc({ 10: [1, 50 * 1024, 0], 11: [10, 2 * 1024, 0], 12: [11, 7000 * 1024, 900 * 1024] });
     assert.deepEqual(overCeiling(10, 6000 * MIB, proc), { pid: 12, held: 7900 * MIB });
     assert.equal(overCeiling(10, 8000 * MIB, proc), undefined);
+});
+
+test("the largest process of the tree is named with what it holds, and an empty tree names none", () => {
+    const proc = fakeProc({ 10: [1, 50 * 1024, 0], 11: [10, 3000 * 1024, 100 * 1024], 12: [11, 700 * 1024, 0] });
+    assert.deepEqual(largestProcess(10, proc), { pid: 11, held: 3100 * MIB });
+    assert.equal(largestProcess(99, fakeProc({})), undefined);
+});
+
+test("a watch that never meets its ceiling still answers how close the tree came when it stops", async () => {
+    const proc = fakeProc({ 10: [1, 40 * 1024, 0], 11: [10, 2500 * 1024, 0] });
+    const stop = watchMemory({ pid: 10 }, { ceiling: 6000 * MIB, intervalMs: 5, procRoot: proc, onExceed: () => assert.fail("not past it") });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.deepEqual(stop(), { pid: 11, held: 2500 * MIB });
+    assert.equal(watchMemory({ pid: 10 }, { ceiling: 0, procRoot: proc })(), undefined);
 });

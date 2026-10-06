@@ -80,6 +80,8 @@ const ownerControlPath = (): string | null | undefined => {
             .find((variable) => variable.startsWith(prefix));
         return entry === undefined ? null : entry.slice(prefix.length);
     } catch {
+        // allow(silent-catch): an owner whose environment cannot be read (gone meanwhile, or another user's) reads as one that
+        // named no socket, which keeps this daemon off the owner's netd rather than guessing it free
         return null;
     }
 };
