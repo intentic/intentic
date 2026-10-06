@@ -26,12 +26,13 @@ export interface LiveCard {
 
 // The seams a gate needs for testing: `liveRun` finds the turn to raise a card in (undefined refuses outright);
 // `observe` mirrors frames to the conversation's actor, since externally pushed frames bypass the turn pump; `cards`
-// parks the card where a reply finds it; `awaiting` tells the owner's devices, as a card the turn raised itself would.
+// parks the card where a reply finds it; `awaiting` tells the owner's devices, as a card the turn raised itself would,
+// and `insist` tells them even while their person is active elsewhere.
 export interface CardDeps {
     readonly liveRun: (conversationId: string | undefined) => LiveCard | undefined;
     readonly observe: (conversationId: string, event: AgentEvent) => void;
     readonly cards: Pick<ParkedCards, "create">;
-    readonly awaiting: (conversationId: string, kind: ParkKind) => void;
+    readonly awaiting: (conversationId: string, kind: ParkKind, insist?: boolean) => void;
 }
 
 // The run a caller may raise a card in. The two reserved owner names (pooled process, one-shot) mean 'no conversation';
@@ -51,6 +52,8 @@ export interface Card<K extends AgentReply["kind"]> {
     readonly mayAnswer?: MayAnswer;
     // Asks every time: a standing "allow everything" never answers it. A card addressed by mayAnswer always asks too.
     readonly alwaysAsks?: boolean;
+    // Pushed to the owner's devices even while they are active in the editor, for a card they must not miss.
+    readonly insist?: boolean;
     // The caller's own lifetime; its abort settles the card cancelled instead of leaving it parked unattended.
     readonly signal?: AbortSignal;
     readonly deadlineMs: number;
@@ -83,7 +86,7 @@ export const raiseRequest = async <K extends AgentReply["kind"]>(
     const raised = card.raised(id);
     // The card says so itself, so its Allow menu never offers a yes that would not answer it.
     say(alwaysAsks && raised.kind === "permission" ? { ...raised, alwaysAsks: true } : raised);
-    deps.awaiting(run.conversationId, card.kind);
+    deps.awaiting(run.conversationId, card.kind, card.insist === true);
     const deadline = AbortSignal.timeout(card.deadlineMs);
     const { reply, resolved, caller } = await wait(card.signal === undefined ? deadline : AbortSignal.any([card.signal, deadline]));
     say(resolved);

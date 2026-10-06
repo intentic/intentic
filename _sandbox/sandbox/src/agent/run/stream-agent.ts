@@ -274,7 +274,7 @@ async function* runConversationTurn(
         services.conversations,
         conversationId,
         placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
-        turnCloser(services, conversationId, steering),
+        turnCloser(services, conversationId, steering, signal),
     );
 }
 

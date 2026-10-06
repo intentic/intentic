@@ -54,3 +54,29 @@ test("keys are the gate's own: two gates never share a card", () => {
     one.hold("k", card.promise, deferred<void>().promise);
     expect(two.get("k")).toBe(undefined);
 });
+
+test("a carried answer outlives its turn's end, is used once, and goes when its time is up", async () => {
+    jest.useFakeTimers();
+    try {
+        const asks = createOpenAsks<string | undefined>();
+        const turn = deferred<void>();
+        const card = deferred<string | undefined>();
+        asks.hold("k", card.promise, turn.promise);
+        card.resolve(undefined);
+        asks.carry("k", card.promise, 60_000);
+        turn.resolve();
+        await turn.promise;
+        const carried = asks.get("k");
+        expect(carried).toBeInstanceOf(Promise);
+        expect(await asks.await("k", carried ?? card.promise, 1_000, "waiting")).toBe(undefined);
+        expect(asks.get("k")).toBe(undefined);
+
+        // One nobody came back for is dropped when its time is up.
+        asks.carry("k", card.promise, 60_000);
+        expect(asks.get("k")).toBeInstanceOf(Promise);
+        jest.advanceTimersByTime(60_000);
+        expect(asks.get("k")).toBe(undefined);
+    } finally {
+        jest.useRealTimers();
+    }
+});

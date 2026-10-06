@@ -10,6 +10,9 @@ export interface OpenAsks<Answer> {
     readonly hold: (key: string, asking: Promise<Answer>, turnFinished: Promise<void>) => void;
     // Waits on `asking` for `budgetMs`: its answer, collected so it is used once, or `waiting` with the card left up.
     readonly await: (key: string, asking: Promise<Answer>, budgetMs: number, waiting: Answer) => Promise<Answer>;
+    // Keeps an answer past its turn's end, for the turn a wake starts to collect (guard/held-cards.ts): until it is
+    // collected or `ms` passes, whichever comes first.
+    readonly carry: (key: string, asking: Promise<Answer>, ms: number) => void;
 }
 
 export const createOpenAsks = <Answer>(): OpenAsks<Answer> => {
@@ -25,6 +28,12 @@ export const createOpenAsks = <Answer>(): OpenAsks<Answer> => {
         hold: (key, asking, turnFinished) => {
             open.set(key, asking);
             void turnFinished.then(() => collect(key, asking));
+        },
+        carry: (key, asking, ms) => {
+            // A promise of its own, so the turn-end collect of the one it carries (matched by identity) leaves it be.
+            const carried = asking.then((answer) => answer);
+            open.set(key, carried);
+            setTimeout(() => collect(key, carried), ms).unref();
         },
         await: async (key, asking, budgetMs, waiting) => {
             let timer: ReturnType<typeof setTimeout> | undefined;

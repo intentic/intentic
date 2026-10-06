@@ -191,6 +191,8 @@ describe("telling the devices", () => {
     // The seams it reads: the conversation's title, and the sender, which records what it was asked to send.
     const wired = (title?: string) => {
         const sent: PushNotification[] = [];
+        // What went out whether or not anyone was away.
+        const insisted: PushNotification[] = [];
         const services: Pick<Services, "agents" | "pushSender"> = {
             agents: unstubbed<Services["agents"]>("agents", {
                 entry: (id) =>
@@ -206,9 +208,13 @@ describe("telling the devices", () => {
                     sent.push(notification);
                     return { delivered: 1, failed: 0 };
                 },
+                notify: async (notification) => {
+                    insisted.push(notification);
+                    return { delivered: 1, failed: 0 };
+                },
             }),
         };
-        return { services, sent };
+        return { services, sent, insisted };
     };
 
     test("a card the turn raised is read though it folds into the run only after it was announced", async () => {
@@ -264,5 +270,15 @@ describe("telling the devices", () => {
                 requireInteraction: true,
             },
         ]);
+    });
+
+    test("an insistent card is sent whether or not its person is away", async () => {
+        const { services, sent, insisted } = wired("Clean the podman store");
+        const fold = liveFold();
+        fold.apply(permission("p1", { title: "Run this on omen?" }));
+        await notifyAwaiting(services, { conversationId: "conv-1", kind: "permission", run: { rows: fold.rows }, insist: true });
+
+        expect(sent).toEqual([]);
+        expect(insisted.map((notification) => [notification.tag, notification.body])).toEqual([["awaiting-p1", "Run this on omen?"]]);
     });
 });

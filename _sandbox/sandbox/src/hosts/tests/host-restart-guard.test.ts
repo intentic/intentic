@@ -8,6 +8,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
+import { createHeldCards } from "../../guard/held-cards.js";
 import type { HostGuardDeps } from "../host-guard-deps.js";
 import { DeviceToolCallSchema, judgeHostRestart, restartInCall } from "../host-restart-guard.js";
 
@@ -53,6 +54,8 @@ const services = unstubbed<Services>("services", {
 // What the gate takes from above the host layer, as app.ts fills it: the real cards and the published turn.
 const guards: HostGuardDeps = {
     cards: cardDeps(services),
+    // A restart card is not held for the turn's close: nothing here registers one.
+    held: createHeldCards(async () => {}),
     turnRun: (conversationId) => turnRunOf(fleet.conversations, conversationId),
     // A restart is never put to the judge.
     judge: async () => {

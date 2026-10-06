@@ -5,8 +5,9 @@ import type { Services } from "../../composition.js";
 import { cardDeps } from "../../conversations/actor/card-deps.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
+import { createHeldCards } from "../../guard/held-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
-import { createDomainEvents } from "../../seams/domain-events.js";
+import { createDomainEvents, type DomainEventMap } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
 import type { HostGuardDeps } from "../host-guard-deps.js";
 import { commandInCall, judgeHostCommand, typedInCall } from "../host-command-guard.js";
@@ -54,9 +55,16 @@ const services = unstubbed<Services>("services", {
     logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
 });
 
-// What the gate takes from above the host layer, as app.ts fills it: the real cards and the published turn.
+// What the conversation was woken with by a turn's close that held for its card.
+const woken: string[] = [];
+const heldCards = createHeldCards(async (_conversationId, prompt) => {
+    woken.push(prompt);
+});
+
+// What the gate takes from above the host layer, as app.ts fills it: the real cards, the held cards and the published turn.
 const guards: HostGuardDeps = {
     cards: cardDeps(services),
+    held: heldCards,
     turnRun: (conversationId) => turnRunOf(fleet.conversations, conversationId),
     // Never asked: the judge is off, so the hard rule alone decides.
     judge: async () => {
@@ -103,6 +111,7 @@ let timeout: ReturnType<typeof armDeadline> | undefined;
 
 beforeEach(() => {
     answers.length = 0;
+    woken.length = 0;
     destructive = "on";
     deadline = new AbortController();
     timeout = armDeadline();
@@ -197,8 +206,10 @@ describe("the card outlives the call", () => {
         expect(first).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve running this on "rog", and it has not run yet. Their answer is kept ' +
-                "for this exact command: make the same call again, with exactly the same command, to wait for it. Nothing is broken on the device. " +
-                "Do not run a different command to do the same thing.",
+                "for this exact command: make the same call again, with exactly the same command, to wait for it. You may also carry on with " +
+                "other work or end your turn: the card stays up until they answer, and if they allow it you are told to make this call again. " +
+                "Nothing is broken on the device and nothing refused this, so do not report it as refused or blocked. Do not run a different " +
+                "command to do the same thing.",
         });
         const requestId = await cardUp();
         // The press after the call gave up is recorded, not refused.
@@ -211,6 +222,60 @@ describe("the card outlives the call", () => {
         expect(await cardUp()).not.toBe(requestId);
         endTurn();
         expect(await again).toEqual({ refusal: 'The turn ended before anyone answered, so it was not run on "rog". Do not retry it unasked.' });
+    });
+});
+
+describe("the agent ends its turn while the card is up", () => {
+    it("holds the card for the turn's close until a call collects its answer", async () => {
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
+        expect(heldCards.open(CONVERSATION).map((card) => card.command)).toEqual([ASKED.command]);
+        expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
+
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toBeUndefined();
+        expect(heldCards.open(CONVERSATION)).toEqual([]);
+    });
+
+    it("keeps a yes given while the turn's close held for it, for the same call in the turn its wake starts", async () => {
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
+        // The turn's close, holding for the card.
+        const holding = heldCards.hold(CONVERSATION, undefined);
+        expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
+        await holding;
+        expect(woken).toHaveLength(1);
+        expect(woken[0]).toContain(`It has not run yet:\n\n\`\`\`\n${ASKED.command}\n\`\`\``);
+
+        endTurn();
+        await turnRunOf(fleet.conversations, CONVERSATION)?.waitUntilFinished();
+        liveTurn();
+        // The wake's turn makes the same call: it runs, and no second card goes up.
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toBeUndefined();
+        expect(turnRunOf(fleet.conversations, CONVERSATION)?.rows.filter((row) => row.permission !== undefined)).toEqual([]);
+        expect(answers).toEqual([{ answer: "allowed", outcome: "allowed" }]);
+    });
+
+    it("settles the card unanswered when the turn is stopped while its close holds for it", async () => {
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
+        const requestId = await cardUp();
+        const stop = new AbortController();
+        const holding = heldCards.hold(CONVERSATION, stop.signal);
+        stop.abort();
+        await holding;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(woken).toEqual([]);
+        expect(answers).toEqual([{ answer: "unanswered", outcome: "refused" }]);
+        expect(cards.resolve({ kind: "permission", requestId, decision: "once" })).toBe("missing");
+    });
+
+    it("tells the owner's devices of the card even while they are active elsewhere", async () => {
+        const told: DomainEventMap["turn.awaiting"][] = [];
+        const unsubscribe = services.events.subscribe("turn.awaiting", (event) => told.push(event));
+        try {
+            expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
+            expect(told).toEqual([{ conversationId: CONVERSATION, awaiting: "permission", insist: true }]);
+        } finally {
+            unsubscribe();
+        }
     });
 });
 
@@ -244,8 +309,10 @@ describe("text typed into the device", () => {
         expect(await judged).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve typing this on "rog", and nothing has been typed yet. Their answer is ' +
-                "kept for this exact text: make the same call again with exactly the same text to wait for it. Nothing is broken on the device. " +
-                "Do not type a different command to do the same thing.",
+                "kept for this exact text: make the same call again with exactly the same text to wait for it. You may also carry on with other " +
+                "work or end your turn: the card stays up until they answer, and if they allow it you are told to make this call again. Nothing " +
+                "is broken on the device and nothing refused this, so do not report it as refused or blocked. Do not type a different command " +
+                "to do the same thing.",
         });
         await cardUp();
         const card = turnRunOf(fleet.conversations, CONVERSATION)

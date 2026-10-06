@@ -29,6 +29,7 @@ import {
 import { fakeTurns, memoryFleet } from "../../../testing.js";
 import { awaitingWake } from "../../../conversations/actor/conversation-state.js";
 import { turnCloser } from "../../run/placement/turn-close.js";
+import { createHeldCards } from "../../../guard/held-cards.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;
@@ -363,7 +364,12 @@ describe("background job adoption", () => {
     // The turn's close arms the wakes before its land asks whether anything still wakes the conversation: what it
     // answers is read from what the conversation then holds, and a wake already on its way, never predicted from jobs.
     describe("at the turn's close", () => {
-        const close = (conversationId: string) => turnCloser({ conversations: actors, scanPorts: async () => [], logger }, conversationId, undefined);
+        const close = (conversationId: string) =>
+            turnCloser(
+                { conversations: actors, heldCards: createHeldCards(async () => {}), scanPorts: async () => [], logger },
+                conversationId,
+                undefined,
+            );
 
         it("leaves a conversation whose job still runs awaiting the wake its watch will send", async () => {
             stop = startWatcherRuntime(runtime());

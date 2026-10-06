@@ -58,9 +58,12 @@ export interface ParkedOn {
     readonly conversationId: string;
     readonly kind: ParkKind;
     readonly run: Pick<LiveRun, "rows"> | undefined;
+    // Sent even while its person is active elsewhere in the editor (guard/card-offers.ts).
+    readonly insist?: boolean;
 }
 
-// Tells the devices of whoever is away that a card waits, named after the conversation and in the card's own words.
+// Tells the devices of whoever is away that a card waits, named after the conversation and in the card's own words; an
+// insistent card tells them whether they are away or not.
 export const notifyAwaiting = async (services: Pick<Services, "agents" | "pushSender">, parked: ParkedOn): Promise<PushDelivery> => {
     // A card the turn raised itself is announced just before its frame folds into the run (agent/run/turn/turn-runs.ts),
     // one raised outside the turn just after (card-offers.ts). One microtask on, either row is there, and the turn has
@@ -68,5 +71,6 @@ export const notifyAwaiting = async (services: Pick<Services, "agents" | "pushSe
     await Promise.resolve();
     const card = parked.run === undefined ? undefined : awaitingCard(parked.run.rows, parked.kind);
     const title = services.agents.entry(parked.conversationId)?.social.title?.text;
-    return services.pushSender.notifyIfAway(turnAwaiting(parked.conversationId, parked.kind, card, title));
+    const notification = turnAwaiting(parked.conversationId, parked.kind, card, title);
+    return parked.insist === true ? services.pushSender.notify(notification) : services.pushSender.notifyIfAway(notification);
 };

@@ -35,7 +35,8 @@ export interface DomainEventMap {
         readonly errand: TurnErrand | undefined;
     };
     // A turn begun through the port's `start` parked on its person; may happen several times a turn.
-    readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: ParkKind };
+    // `insist`: told to the owner's devices even while they are active elsewhere (guard/card-offers.ts).
+    readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: ParkKind; readonly insist?: boolean };
     // That same turn ended, exactly once; `error` only for a real failure, a stop ends it clean.
     readonly "turn.finished": {
         readonly conversationId: string;

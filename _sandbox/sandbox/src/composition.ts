@@ -75,6 +75,8 @@ import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./web
 import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { fileSafetyLog, type SafetyLog, safetyLogDocument } from "./safety/safety-log.js";
+import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
+import { heldCardWake } from "./agent/run/turn/held-card-wake.js";
 import { type SafetyPolicyStore, fileSafetyPolicyStore } from "./safety/safety-policy-store.js";
 import { fileSandboxSettingsStore, type SandboxSettingsStore, settingsDocument } from "./settings/settings-store.js";
 import { fileRuleFiringsStore, ruleFiringsDocument, type RuleFiringsStore } from "./rules/rule-firings.js";
@@ -234,6 +236,8 @@ export interface Services
     // Safety policy the judge is handed, and what it decided; a policy is a document, the log changes mid-turn.
     readonly safetyPolicy: SafetyPolicyStore;
     readonly safetyLog: SafetyLog;
+    // Device cards an agent stopped waiting on, held by its turn's close until they settle (guard/held-cards.ts).
+    readonly heldCards: HeldCards;
     // When each rule last fired; kept beside settings, not in them, so a firing isn't a config write.
     readonly ruleFirings: RuleFiringsStore;
     // Runtime-install ledger: tools sessions installed at runtime, read by the Environment card and drift sweep.
@@ -707,6 +711,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // A native install's notification passes the privacy shield on its way to Apple; read through `whole` since the
         // shield is composed in this same object.
         pushSender: createPushSender(push, logger, (text) => whole().privacyShield.redactForDisplay(text)),
+        // A settled card wakes its conversation through the turns composed in this same object, read through `whole`.
+        heldCards: createHeldCards(heldCardWake(whole, logger)),
         events,
         reaper,
         // Each source reads the finished services per call; none runs before composing returns.
@@ -749,8 +755,13 @@ export const wireReactions = (services: Services): void => {
             services.logger.warn({ err: error, event: event.event }, "workspace event dispatch failed"),
         ),
     );
-    services.events.subscribe("turn.awaiting", ({ conversationId, awaiting }) =>
-        notifyAwaiting(services, { conversationId, kind: awaiting, run: turnRunOf(services.conversations, conversationId) }),
+    services.events.subscribe("turn.awaiting", ({ conversationId, awaiting, insist }) =>
+        notifyAwaiting(services, {
+            conversationId,
+            kind: awaiting,
+            run: turnRunOf(services.conversations, conversationId),
+            ...(insist === true ? { insist } : {}),
+        }),
     );
     services.events.subscribe("turn.finished", ({ conversationId, prompt, outcome }) =>
         services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome)),

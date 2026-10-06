@@ -27,5 +27,6 @@ export const cardDeps = (services: Pick<Services, "conversations" | "cards" | "e
     liveRun: liveRequestRun(services.conversations),
     observe: actorObserver(services.conversations),
     cards: services.cards,
-    awaiting: (conversationId, kind) => services.events.publish("turn.awaiting", { conversationId, awaiting: kind }),
+    awaiting: (conversationId, kind, insist) =>
+        services.events.publish("turn.awaiting", { conversationId, awaiting: kind, ...(insist === true ? { insist } : {}) }),
 });

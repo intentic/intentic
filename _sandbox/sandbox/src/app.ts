@@ -480,6 +480,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // A device gate's turn, cards and judge come from above hosts/, so they are handed in here.
     const hostRoutes = hostPeerRoutes(services, {
         cards: cardDeps(services),
+        held: services.heldCards,
         turnRun: (conversationId) => turnRunOf(services.conversations, conversationId),
         judge: (input, signal) => judgeCommand(services, input, signal),
     });

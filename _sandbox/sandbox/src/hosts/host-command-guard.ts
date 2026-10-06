@@ -14,6 +14,7 @@ import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
+import type { HeldOutcome } from "../guard/held-cards.js";
 import { createOpenAsks } from "../guard/open-asks.js";
 import { guard } from "../guard/guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
@@ -60,15 +61,21 @@ const unanswered = (machine: string, turnEnded: boolean): string =>
           `Do not retry it unasked: carry on without it and say what was left undone.`;
 
 // What the agent reads when its card is still open as its call must answer: nothing ran, the answer is kept, and the
-// way to collect it is the same call again, never a different spelling of the same work.
+// way to collect it is the same call again, never a different spelling of the same work. Ending the turn is safe too:
+// the turn's close holds for the card and wakes the conversation with a yes (guard/held-cards.ts), which is said here
+// so an agent that stops does not tell its owner something refused the call.
+const LATER =
+    `You may also carry on with other work or end your turn: the card stays up until they answer, and if they allow it ` +
+    `you are told to make this call again. Nothing is broken on the device and nothing refused this, so do not report it ` +
+    `as refused or blocked.`;
 const stillWaiting = (machine: string, typed: boolean): string =>
     typed
         ? `Still waiting for the owner: a card asks them to approve typing this on "${machine}", and nothing has been typed yet. ` +
-          `Their answer is kept for this exact text: make the same call again with exactly the same text to wait for it. ` +
-          `Nothing is broken on the device. Do not type a different command to do the same thing.`
+          `Their answer is kept for this exact text: make the same call again with exactly the same text to wait for it. ${LATER} ` +
+          `Do not type a different command to do the same thing.`
         : `Still waiting for the owner: a card asks them to approve running this on "${machine}", and it has not run yet. ` +
-          `Their answer is kept for this exact command: make the same call again, with exactly the same command, to wait for it. ` +
-          `Nothing is broken on the device. Do not run a different command to do the same thing.`;
+          `Their answer is kept for this exact command: make the same call again, with exactly the same command, to wait for it. ${LATER} ` +
+          `Do not run a different command to do the same thing.`;
 
 // What the agent reads when the device's own "Run destructive commands" switch is off: the device would refuse the
 // command whatever the owner answered, so no card is raised for a yes that cannot work.
@@ -91,6 +98,8 @@ const deviceScopesOf = async (services: Services, machine: string) => {
 
 // Cards still open (or answered and not yet collected) by the exact call that raised them (guard/open-asks.ts).
 const openAsks = createOpenAsks<HostGateRefusal | undefined>();
+// The held card each open ask registered, by the same key, dropped once a call collects its answer (guard/held-cards.ts).
+const heldReleases = new Map<string, () => void>();
 const askKey = (conversationId: string, machine: string, command: string): string => `${conversationId}\u0000${machine}\u0000${command}`;
 
 // A phone's serial as adb prints one (a USB serial, `ip:port`, an mDNS name), and nothing else: a serial is spliced into
@@ -204,15 +213,19 @@ interface DeviceAsk {
     readonly typed: boolean;
 }
 
-// Asks the owner on a card in the live turn and holds the call until it settles: undefined forwards the command, a
-// refusal is what the agent reads for the way the card ended.
-const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun, ask: DeviceAsk): Promise<HostGateRefusal | undefined> => {
+// How a card ended: `gate` is what the call answers (undefined forwards the command, a refusal is what the agent reads),
+// `outcome` what a turn holding for the card wakes its conversation with.
+interface DeviceAnswer {
+    readonly gate: HostGateRefusal | undefined;
+    readonly outcome: HeldOutcome;
+}
+
+// Asks the owner on a card in the live turn and holds the call until it settles. `ended` settles the card at once: the
+// turn's end (nobody answers a card in a turn that is over, and a yes given after it would run the command with nobody
+// left to read what it did) or a stop while the turn's close held for it.
+const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun, ended: AbortController, ask: DeviceAsk): Promise<DeviceAnswer> => {
     const answerNotRecorded = (error: unknown): void =>
         services.logger.warn({ err: error, machine: ask.machine }, "safety log: the owner's answer on a device command was not recorded");
-    // The turn's end settles the card at once: nobody answers a card in a turn that is over, and a yes given after it
-    // would run the command with nobody left to read what it did.
-    const ended = new AbortController();
-    void run.waitUntilFinished().then(() => ended.abort());
     const answered = await raiseRequest(
         guards.cards,
         { conversationId: ask.conversationId, push: (event) => run.push(event) },
@@ -235,23 +248,28 @@ const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun,
             }),
             approves: (answer) => answer.decision !== "deny",
             alwaysAsks: ask.hard,
+            // The owner's own hard rule on their own machine: their devices hear of it even while they work elsewhere.
+            insist: ask.hard,
             signal: ended.signal,
             deadlineMs: DEADLINE_MS,
         },
     );
     if (answered.decision === "unanswered") {
         void services.safetyLog.answered(ask.at, "unanswered", "refused").catch(answerNotRecorded);
-        return refusal(unanswered(ask.machine, ended.signal.aborted));
+        return { gate: refusal(unanswered(ask.machine, ended.signal.aborted)), outcome: { decision: "unanswered" } };
     }
     if (answered.decision === "declined") {
         void services.safetyLog.answered(ask.at, "declined", "refused").catch(answerNotRecorded);
-        return refusal(
-            answered.reply.feedback?.trim() ||
-                `The user declined this. Do not run it on "${ask.machine}", and do not look for another way to achieve the same thing.`,
-        );
+        const feedback = answered.reply.feedback?.trim();
+        return {
+            gate: refusal(
+                feedback || `The user declined this. Do not run it on "${ask.machine}", and do not look for another way to achieve the same thing.`,
+            ),
+            outcome: { decision: "declined", ...(feedback ? { feedback } : {}) },
+        };
     }
     void services.safetyLog.answered(ask.at, "allowed", "allowed").catch(answerNotRecorded);
-    return undefined;
+    return { gate: undefined, outcome: { decision: "approved" } };
 };
 
 // Judges one command headed for `machine`; undefined forwards it, a refusal answers the agent and never touches the
@@ -276,7 +294,7 @@ export const judgeHostCommand = async (
     const key = conversationId === undefined ? undefined : askKey(conversationId, input.machine, input.command);
     const open = key === undefined ? undefined : openAsks.get(key);
     if (key !== undefined && open !== undefined) {
-        return openAsks.await(key, open, budgetMs - (Date.now() - at), refusal(stillWaiting(input.machine, input.typed === true)));
+        return collect(key, open, budgetMs - (Date.now() - at), input);
     }
     // What the device itself refuses without its destructive switch, the same live reading its own shell makes: asked
     // first, since a card here could only end in "Allow once" followed by the device refusing anyway.
@@ -338,7 +356,9 @@ export const judgeHostCommand = async (
     }
     // Asked whoever started the turn: a card nobody has answered yet waits for the owner, it is not a refusal.
     record("asked");
-    const asking = askOwner(services, guards, run, {
+    const ended = new AbortController();
+    void run.waitUntilFinished().then(() => ended.abort());
+    const answer = askOwner(services, guards, run, ended, {
         conversationId,
         machine: input.machine,
         command: input.command,
@@ -347,8 +367,43 @@ export const judgeHostCommand = async (
         hard: hard !== undefined,
         typed: input.typed === true,
     });
+    const asking = answer.then(({ gate }) => gate);
     const ownKey = askKey(conversationId, input.machine, input.command);
-    // An answer nobody came back for is dropped with its turn: a later turn's same command is asked about afresh.
+    // An answer nobody came back for is dropped with its turn: a later turn's same command is asked about afresh, unless
+    // the turn's close held for the card and carried a yes over to the turn its wake starts.
     openAsks.hold(ownKey, asking, run.waitUntilFinished());
-    return openAsks.await(ownKey, asking, budgetMs - (Date.now() - at), refusal(stillWaiting(input.machine, input.typed === true)));
+    // Held for the turn's close until a call collects the answer; past the turn's end it is nobody's to hold.
+    const release = guards.held.add(conversationId, {
+        machine: input.machine,
+        command: input.command,
+        typed: input.typed === true,
+        settled: answer.then(({ outcome }) => outcome),
+        cancel: () => ended.abort(),
+        carry: () => openAsks.carry(ownKey, asking, DEADLINE_MS),
+    });
+    const releaseOwn = (): void => {
+        release();
+        if (heldReleases.get(ownKey) === releaseOwn) {
+            heldReleases.delete(ownKey);
+        }
+    };
+    heldReleases.set(ownKey, releaseOwn);
+    void run.waitUntilFinished().then(releaseOwn);
+    return collect(ownKey, asking, budgetMs - (Date.now() - at), input);
+};
+
+// Waits on the card under `key` for what is left of the call's budget: its answer, which releases the held card since
+// the agent has it now, or still-waiting with the card left up and held.
+const collect = async (
+    key: string,
+    asking: Promise<HostGateRefusal | undefined>,
+    budgetMs: number,
+    input: { readonly machine: string; readonly typed?: boolean },
+): Promise<HostGateRefusal | undefined> => {
+    const waiting = refusal(stillWaiting(input.machine, input.typed === true));
+    const answer = await openAsks.await(key, asking, budgetMs, waiting);
+    if (answer !== waiting) {
+        heldReleases.get(key)?.();
+    }
+    return answer;
 };
