@@ -116,6 +116,11 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
                 ponged = false;
                 options.onOpen?.();
                 ping = window.setInterval(() => {
+                    // Replaced: nobody's now, so neither pinged nor judged by the silence clock; its own close ends it.
+                    if (channel !== link.mine) {
+                        window.clearInterval(ping);
+                        return;
+                    }
                     const judged = options.staleCheck !== `once-ponged` || ponged;
                     if (judged && Date.now() - heardAt > timing.staleMs) {
                         // Given up once: a half-open socket's close can take its closing handshake's whole timeout to

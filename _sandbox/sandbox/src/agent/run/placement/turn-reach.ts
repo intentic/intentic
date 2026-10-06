@@ -2,6 +2,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { Capability } from "@intentic/sandbox-contract";
+import { isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../../../capabilities/extension-dirs.js";
 import type { Services } from "../../../composition.js";
@@ -47,7 +48,7 @@ const installState = async (dir: string, git: GitRunner): Promise<InstallState> 
         dirtyFiles(stdout)
             .slice(0, SIGNED_FILES_MAX)
             .map(async (file) => {
-                const stat = await lstat(join(dir, file)).catch(() => undefined);
+                const stat = await lstat(join(dir, file)).catch(undefinedIfMissing);
                 return stat === undefined ? `${file}:gone` : `${file}:${stat.size}:${stat.mtimeMs}`;
             }),
     );
@@ -57,11 +58,18 @@ const installState = async (dir: string, git: GitRunner): Promise<InstallState> 
 // Every install under `root` that git can read; one it cannot (half-cloned, not a checkout) is left out.
 export const snapshotInstalls = async (root: string, git: GitRunner = defaultGit): Promise<InstallSnapshot> => {
     const base = extensionsRoot(root);
-    const dirs = await readdir(base, { withFileTypes: true }).catch(() => []);
+    // No installs folder is no install; any other refusal reaches the watch, which logs it.
+    const dirs = await readdir(base, { withFileTypes: true }).catch((error: unknown) => {
+        if (isMissing(error)) {
+            return [];
+        }
+        throw error;
+    });
     const read = await Promise.all(
         dirs
             .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
             .map(async (entry) => {
+                // allow(silent-catch): an install git cannot read (half-cloned, not a checkout) is left out, as above
                 const state = await installState(join(base, entry.name), git).catch(() => undefined);
                 return state === undefined ? [] : [[entry.name, state] as const];
             }),
@@ -83,6 +91,7 @@ export const changedInstalls = (before: InstallSnapshot, after: InstallSnapshot,
 
 // The manifest id an install answers to, its folder name when its manifest cannot be read.
 const extensionNameOf = async (root: string, dir: string, path: string | undefined): Promise<string> => {
+    // allow(silent-catch): an install whose manifest cannot be read is named by its folder, as above
     const manifest = await readExtensionManifest(extensionRootOf(extensionDir(root, dir), path)).catch(() => undefined);
     return manifest === undefined ? dir : extensionIdOf(manifest);
 };
@@ -109,6 +118,7 @@ export const strandedClones = async (
     const found = await Promise.all(
         repos.map(async ({ repo, dir }) => {
             // As a root reads it in every repo: a clone a project repo would only keep as a gitlink lands no more of itself.
+            // allow(silent-catch): a checkout whose untracked clones cannot be listed strands none, and the other checkouts still count
             const scratch = await scratchOf(dir, { root: true, container: false }, git).catch(() => []);
             const clones = await Promise.all(
                 scratch

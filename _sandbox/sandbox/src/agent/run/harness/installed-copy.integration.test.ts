@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { installedCopyDirtyPaths, installedCopyNote, installedCopyOf, installedCopyReviewer } from "./installed-copy.js";
 
@@ -32,7 +33,7 @@ const repoAt = (dir: string, remote?: string): void => {
 
 const root = mkdtempSync(join(tmpdir(), "installed-copy-"));
 const baked = mkdtempSync(join(tmpdir(), "installed-copy-baked-"));
-const install = join(root, ".intentic", "local", "extensions", "acme-widgets");
+const install = join(root, STATE_DIR, "local", "extensions", "acme-widgets");
 repoAt(install, URL);
 const capabilities: Capability[] = [{ id: "acme-widgets", kind: "extension", config: { url: URL, ref: SHA } } as Capability];
 afterAll(() => {
@@ -101,14 +102,14 @@ describe(`the note on an edit to an install`, () => {
     });
 
     test(`without a checkout of the source, it says a clone made in the conversation would not land`, async () => {
-        const note = await reviewerFor()(".intentic/local/extensions/acme-widgets/src/View.vue", "this command");
+        const note = await reviewerFor()(`${STATE_DIR}/local/extensions/acme-widgets/src/View.vue`, "this command");
         expect(note).toContain("No checkout of it is in this workspace");
         expect(note).toContain("does not land with your work");
         expect(note).not.toContain("extension dev");
     });
 
     test(`an install with no capability entry still gets the note, by its directory name`, async () => {
-        const note = await reviewerFor()(".intentic/local/extensions/acme-gadgets/src/a.ts", "this edit");
+        const note = await reviewerFor()(`${STATE_DIR}/local/extensions/acme-gadgets/src/a.ts`, "this edit");
         expect(note).toContain("the installed copy of acme-gadgets");
     });
 

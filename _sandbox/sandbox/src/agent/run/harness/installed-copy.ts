@@ -1,12 +1,13 @@
 import { access, readdir } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extensionIdOf, type ExtensionManifest } from "@intentic/extension-manifest";
 import type { Capability } from "@intentic/sandbox-contract";
-import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../capabilities/extension-dirs.js";
-import { statusPaths } from "../git/changes/changes.js";
-import { parseRemote, remoteUrlsOf } from "../git/remote/remote-urls.js";
-import { discoverRepos } from "../workspace/layout/repo-discovery.js";
+import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../../../capabilities/extension-dirs.js";
+import { statusPaths } from "../../../git/changes/changes.js";
+import { parseRemote, remoteUrlsOf } from "../../../git/remote/remote-urls.js";
+import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 
 // The note an edit gets when it lands in a copy of an extension the sandbox RUNS rather than one it builds: the git
 // checkout an install keeps at .intentic/local/extensions/<capability id>, or an extension baked into the image. Both
@@ -120,6 +121,7 @@ const named = (manifest: ExtensionManifest | undefined, fallback: string): Pick<
 
 const factsOf = async (deps: InstalledCopyDeps, hit: CopyHit, git: GitRunner): Promise<CopyFacts> => {
     if (hit.kind === "baked") {
+        // allow(silent-catch): a copy whose manifest cannot be read is named by its folder (named), and the note still goes out
         const manifest = await readExtensionManifest(join(deps.bakedRoot() ?? "", hit.name)).catch(() => undefined);
         const repos = await discoverRepos(deps.root);
         let source: string | undefined;
@@ -134,7 +136,9 @@ const factsOf = async (deps: InstalledCopyDeps, hit: CopyHit, git: GitRunner): P
     }
     const capability = (await deps.capabilities()).find((each) => each.kind === "extension" && each.id === hit.dir);
     const config = capability?.kind === "extension" ? capability.config : undefined;
+    // allow(silent-catch): a copy whose manifest cannot be read is named by its folder (named), and the note still goes out
     const manifest = await readExtensionManifest(extensionRootOf(extensionDir(deps.root, hit.dir), config?.path)).catch(() => undefined);
+    // allow(silent-catch): a source no repo here can be asked about is a source this workspace has no checkout of, which the note says
     const source = config === undefined ? undefined : await checkoutOf(deps.root, config.url, git).catch(() => undefined);
     return {
         ...named(manifest, hit.dir),
@@ -177,7 +181,13 @@ export const installedCopyDirtyPaths =
     (root: string, git: GitRunner = uncachedGit) =>
     async (): Promise<string[]> => {
         const base = extensionsRoot(root);
-        const dirs = await readdir(base, { withFileTypes: true }).catch(() => []);
+        // No installs folder is no install; any other refusal reaches the caller.
+        const dirs = await readdir(base, { withFileTypes: true }).catch((error: unknown) => {
+            if (isMissing(error)) {
+                return [];
+            }
+            throw error;
+        });
         const listed = await Promise.all(
             dirs
                 .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
