@@ -212,8 +212,9 @@ export const worktreePlacement = (
             if (!pinned) {
                 rebase = rebaser(deps, conversationId, worktree, onto, books);
             }
-            // Reported per turn, not once at boot: it depends on how the container launched.
-            const enforced = await deps.turnIsolation.available();
+            // Reported per turn, not once at boot: it depends on how the container launched. A fenced checkout is
+            // enforced by its sandbox, and a turn without one is refused before it runs (stream-agent.ts).
+            const enforced = worktree.fenced ? await deps.turnIsolation.sandboxAvailable() : await deps.turnIsolation.available();
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
             const synced = await rebaseLeased();
             opened = { repos: worktree.repos, refs: await snapshotRefs(deps.agentWorktrees, worktree.repos) };

@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { isolationScript, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
+import { type IsolationPlan, isolationScript, nsenterArgv, startAnchor, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
+import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 import { runCheck } from "../../workload/run-check.js";
 
@@ -92,6 +93,30 @@ const namespacedCheck = async (command: string, options: CheckOptions, script: (
     return { exitCode: done.code, output: tailOf(done.stdout.slice(marker + CHECK_READY.length + 1), done.stderr) };
 };
 
+// A fenced conversation's check runs where its turns do: in a sandbox of its own (turn-sandbox.ts), built for the one
+// check and released after it. Never run open: a check that cannot have its sandbox is broken, not waiting.
+const sandboxedCheck = async (command: string, options: CheckOptions, plan: IsolationPlan): Promise<CheckResult> => {
+    let anchor: Awaited<ReturnType<typeof startAnchor>>;
+    try {
+        anchor = await startAnchor(plan);
+    } catch (error) {
+        return { exitCode: undefined, output: "", broken: `its conversation's sandbox could not be built: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    try {
+        const entry = nsenterArgv(anchor.pid, anchor.cwd, "bash", ["-lc", command]);
+        const env = { ...options.env };
+        if (anchor.sandbox !== undefined) {
+            Object.assign(env, sandboxEnv(anchor.sandbox));
+        }
+        const done = await run([entry.command, ...entry.args], { cwd: "/", env });
+        return done.failed === undefined
+            ? { exitCode: done.code, output: tailOf(done.stdout, done.stderr) }
+            : { exitCode: undefined, output: tailOf(done.stdout, done.stderr), broken: `the check could not start: ${done.failed}` };
+    } finally {
+        anchor.dispose();
+    }
+};
+
 export const watchCheck =
     (isolation: TurnIsolation): RunCheck =>
     async (command, options) => {
@@ -103,6 +128,11 @@ export const watchCheck =
             return { exitCode: undefined, output: "", broken: `its conversation's worktree, ${placement.worktree}, is gone` };
         }
         const plan = await isolation.planFor(placement.worktree, placement.fenced);
+        if (placement.fenced) {
+            return (await isolation.sandboxAvailable())
+                ? sandboxedCheck(command, options, plan)
+                : { exitCode: undefined, output: "", broken: "its conversation is limited to some areas, and this sandbox cannot build the isolated environment that needs" };
+        }
         if (await isolation.available()) {
             return namespacedCheck(command, options, (trailer) => isolationScript(plan, trailer), plan.root);
         }

@@ -24,7 +24,7 @@ import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../wo
 import type { SearchTool } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
-import { worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
+import { fencedNote, fencedReminder, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
 import { promptTrim } from "../../prompt/window/context-trim.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
@@ -94,6 +94,9 @@ const workspaceNotes = (
     return [
         ...(isolated && capabilities.isolation === "cwd"
             ? [context.base.spec.sessionId === undefined ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)]
+            : []),
+        ...(context.base.spec.isolation?.anchor?.sandbox !== undefined
+            ? [context.base.spec.sessionId === undefined ? fencedNote(facts.root) : fencedReminder(facts.root)]
             : []),
         ...(send.map && facts.mapNote !== undefined ? [{ title: WORKSPACE_MAP_NOTE_TITLE, text: facts.mapNote }] : []),
         // After the map, which draws the tree, and before the skills: what the tree holds is the next question it raises.

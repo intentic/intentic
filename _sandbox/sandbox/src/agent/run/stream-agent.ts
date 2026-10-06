@@ -386,13 +386,35 @@ const attachmentsOf = async (root: string, input: RoutedTurn): Promise<{ readonl
     return { paths };
 };
 
+// A fenced conversation runs only where its fence holds: inside a sandbox (turn-sandbox.ts), under a runtime whose own
+// state the sandbox can carry. Codex and Cursor keep one sandbox-wide home holding every conversation's sessions, and a
+// runtime that never enters a namespace would read the whole tree, so all of those are refused rather than run open.
+const fencedRefusal = async (services: Services, input: RoutedTurn): Promise<string | undefined> => {
+    const capabilities = capabilitiesOf(input.agent, input.harness);
+    if (capabilities.isolation !== "namespace" || capabilities.runtime !== "claude-code") {
+        return "This conversation is limited to some areas of the workspace, and only Claude Code can run such a conversation so far. Switch it to a Claude model to continue.";
+    }
+    if (!(await services.turnIsolation.sandboxAvailable())) {
+        return "This conversation is limited to some areas of the workspace, and this sandbox cannot build the isolated environment that needs (bubblewrap with user namespaces). Ask a maintainer to recreate the sandbox.";
+    }
+    return undefined;
+};
+
 // Built only for the runtime that enters the namespace; others stay cwd'd, told so in the prompt instead.
 const isolationOf = async (
     services: Services,
     input: RoutedTurn,
     worktree: WorktreeRun | undefined,
     localCwd: string,
-): Promise<TurnPlacement | undefined> => {
+): Promise<TurnPlacement | undefined | { readonly refused: string }> => {
+    if (worktree?.fenced === true) {
+        const refused = await fencedRefusal(services, input);
+        if (refused !== undefined) {
+            return { refused };
+        }
+        const plan = await services.turnIsolation.planFor(localCwd, true);
+        return { plan, anchor: await startAnchor(plan) };
+    }
     if (worktree === undefined || !entersNamespace(input)) {
         return undefined;
     }
@@ -497,7 +519,11 @@ const preflight = async (
     }
     // Two paths: `localCwd` is the daemon's tree; `effectiveCwd` is the root as the agent sees it.
     const localCwd = worktree?.cwd ?? services.workspace.root;
-    const isolation = await isolationOf(services, input, worktree, localCwd);
+    const placed = await isolationOf(services, input, worktree, localCwd);
+    if (placed !== undefined && "refused" in placed) {
+        return placed;
+    }
+    const isolation = placed;
     clock.mark("isolation");
     const effectiveCwd = isolation?.anchor?.cwd ?? localCwd;
     // Kicked off early to overlap setup; opposite the pre-turn rebase, into the user's checkout.

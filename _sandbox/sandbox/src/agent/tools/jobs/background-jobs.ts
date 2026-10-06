@@ -70,6 +70,8 @@ export interface BackgroundJobSeed {
     readonly profile: TurnProfile;
     // The actors its conversation lives in, which hold the job and show it on the card.
     readonly conversations: Actors;
+    // Where the job's dir is made: a fenced turn's own temp dir, the only one its sandbox sees; the daemon's otherwise.
+    readonly tmp?: string;
 }
 
 // A job file is read back by a later daemon, so it is validated, never trusted. `turn` holds the opening turn's profile.
@@ -340,7 +342,7 @@ export const openBackgroundJob = (
     spec: { readonly command: string; readonly session: string; readonly description?: string; readonly toolUseId?: string },
 ): BackgroundJob | undefined => {
     const id = randomUUID();
-    const dir = join(tmpdir(), `${JOB_DIR_PREFIX}${id}`);
+    const dir = join(seed.tmp ?? tmpdir(), `${JOB_DIR_PREFIX}${id}`);
     try {
         // Made before the pane, since a watch on a dir that does not exist yet reads as broken.
         mkdirSync(dir, { recursive: true, mode: 0o700 });

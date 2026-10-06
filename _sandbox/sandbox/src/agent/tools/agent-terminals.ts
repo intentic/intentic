@@ -305,6 +305,23 @@ const taskStopHooks = (jobs: BackgroundJobSeed): TaskStopHooks => ({
     },
 });
 
+// Where a Bash call's command files are written: a fenced turn's sandbox sees only its own temp dir, at the same path
+// the daemon writes it; every other turn reads the daemon's.
+const runRootFor = (isolation: TurnPlacement | undefined): string => isolation?.anchor?.sandbox?.tmp ?? tmpdir();
+
+// A background job's seed, with its dir made where the turn can see it (runRootFor).
+const jobSeedFor = (jobs: BackgroundJobSeed, isolation: TurnPlacement | undefined): BackgroundJobSeed => {
+    const tmp = isolation?.anchor?.sandbox?.tmp;
+    return tmp === undefined ? jobs : { ...jobs, tmp };
+};
+
+// What a pane's line runs through before the command: the hop into an anchored turn's namespace, since the shared tmux
+// server forks panes in the daemon's. A fenced turn's panes need none: their tmux server runs inside its sandbox.
+const paneHop = (isolation: TurnPlacement | undefined): string => {
+    const anchor = isolation?.anchor;
+    return anchor === undefined || anchor.sandbox !== undefined ? "" : nsenterPrefix(anchor.pid, anchor.cwd);
+};
+
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     // An isolated turn's Bash must land in the same tree as its Edit/Write:
@@ -386,21 +403,20 @@ export const bashTmuxHooks = (
                         const job =
                             jobs === undefined || tool.run_in_background !== true
                                 ? undefined
-                                : startJob(jobs, { command, session, description: tool.description, toolUseId: input.tool_use_id });
+                                : startJob(jobSeedFor(jobs, isolation), { command, session, description: tool.description, toolUseId: input.tool_use_id });
                         // THE COMMAND TRAVELS BY FILE. `pkill -f` and `pgrep -f` match every process's whole command
                         // line, so a pattern that sat in any wrapper's argv (the CLI's shell, tmux-run, the pane's
                         // shell) killed the agent's own call. Written to files, it is in no argv at all: the CLI runs
                         // `tmux-run -f <dir>/line <session>`, the pane runs `bash <dir>/agent`, and the window name and
                         // the words the output filter reads sit beside them.
-                        const dir = job?.dir ?? mkdtempSync(join(tmpdir(), "intentic-run-"));
+                        const dir = job?.dir ?? mkdtempSync(join(runRootFor(isolation), "intentic-run-"));
                         mkdirSync(dir, { recursive: true, mode: 0o700 });
                         const agentFile = join(dir, "agent");
                         writeFileSync(agentFile, `${PIPESTATUS_TRAP}${executed}\n`, { mode: 0o600 });
                         const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}bash ${shellQuote(agentFile)}`;
                         // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
                         // stays outside.
-                        const inner =
-                            isolation?.anchor !== undefined ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${run}` : `${stamp}${run}`;
+                        const inner = `${stamp}${paneHop(isolation)}${run}`;
                         writeFileSync(join(dir, "line"), `${inner}\n`, { mode: 0o600 });
                         writeFileSync(join(dir, "said"), command, { mode: 0o600 });
                         writeFileSync(join(dir, "name"), windowSlug(tool.description), { mode: 0o600 });

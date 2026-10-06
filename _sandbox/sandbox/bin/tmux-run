@@ -125,11 +125,22 @@ fallback() {
 # own namespace is re-entered one level in, by the nsenter inside the pane's command line
 # (src/agent/tools/agent-terminals.ts) — the pane still runs the command in the worktree. Unset var (the daemon's
 # own runner, an unisolated turn) means this process is already where the server belongs, so there is no hop.
+#
+# A FENCED turn is the exception, and $INTENTIC_TMUX_SOCKET says so (src/conversations/worktrees/turn-sandbox.ts):
+# it runs in a sandbox whose user holds no privilege, so it could not hop out even if it tried, and the shared
+# server is exactly what it must not reach, since that server starts panes anywhere. Its sandbox gets a server of
+# its own on that socket instead: the first call forks it inside the sandbox, every pane inherits the sandbox, and
+# nothing of it reaches the owner's terminals, which talk to the shared server on its default socket.
 # Resolved to a path once because the wrapper below calls the FUNCTION, which must not find itself by name.
 tmuxbin="$(command -v tmux)" || fallback "no tmux on PATH"
 hop=()
-[ -n "${INTENTIC_TMUX_NS:-}" ] && hop=(nsenter "--mount=$INTENTIC_TMUX_NS" --)
-tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
+socket=()
+if [ -n "${INTENTIC_TMUX_SOCKET:-}" ]; then
+    socket=(-S "$INTENTIC_TMUX_SOCKET")
+elif [ -n "${INTENTIC_TMUX_NS:-}" ]; then
+    hop=(nsenter "--mount=$INTENTIC_TMUX_NS" --)
+fi
+tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" ${socket[@]+"${socket[@]}"} "$@"; }
 
 # Named so the daemon's temp sweep can attribute it (platform/reaper.ts matches the intentic-run- prefix):
 # the soft-timeout path below deliberately leaves this dir behind for the still-running command to tee into,

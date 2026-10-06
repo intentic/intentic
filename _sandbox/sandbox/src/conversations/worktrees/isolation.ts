@@ -1,9 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { SESSION_STATE, sessionsDir } from "../../sessions/session-store.js";
-import { conversationsRoot } from "../../store/conversation-units.js";
-import { stateRelPath } from "../../state-paths.js";
+import { sessionsDir } from "../../sessions/session-store.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { walkDirs } from "../../workspace/layout/dir-walk.js";
@@ -11,6 +10,7 @@ import type { Logger } from "pino";
 import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { SHARED_STATE } from "../../workload/worktree-paths.js";
+import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
 
 // An isolated turn's own view of /work: without this, an absolute path (a memory, an AGENTS.md, a message) named the
 // shared tree directly, bypassing `land` and losing attribution. A mount namespace makes the worktree BE /work; shared
@@ -40,15 +40,15 @@ export const PACKAGE_STORE = ".pnpm-store";
 // Same depth bound as the symlink mirroring this replaces.
 const MAX_LINK_DEPTH = 3;
 
-// What a fenced conversation's namespace does on top of the shared one. The sparse checkout is the fence
-// (worktree-cone.ts), and these are the paths that would hand back what it cut.
+// What a fenced conversation's sandbox needs beyond the shared plan (turn-sandbox.ts builds it). The sparse checkout
+// decides which files exist (worktree-cone.ts); the sandbox makes sure nothing else is reachable.
 export interface FencedPlacement {
     // This conversation's own runtime session store, bound over the shared one: transcripts, plans and backups it
     // writes must not land where another conversation's turn can read them, nor read what another wrote.
     readonly sessions: string;
-    // Daemon directories holding other conversations' work. Ordinary directories, not mounts, so emptiness is mounted
-    // OVER them; a bind already taken from one keeps its own reference and is unaffected.
-    readonly hidden: readonly string[];
+    // Worktree-relative directories holding a repository's `.git` pointer ("" is the root): each is masked, since the
+    // repository behind it holds every folder's history, not just the fence's.
+    readonly gitPointers: readonly string[];
 }
 
 export interface IsolationPlan {
@@ -74,8 +74,6 @@ export const overlaysDir = (historyRoot: string, id: string): string => join(ove
 // Shown by `mount`/`df`; named for what it is rather than another anonymous `overlay` row.
 const OVERLAY_FS_NAME = "intentic-modules";
 
-// The empty filesystem a fenced turn sees where another conversation's work sits; named for the same reason.
-const FENCE_FS_NAME = "intentic-fenced";
 
 // Overlay options are one comma-separated word; the kernel splits on `,`/`:` with no escaping. Refuses a path
 // containing either, so a collision fails loudly (`set -e`) instead of silently mounting the wrong thing.
@@ -124,20 +122,6 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
         lines.push(
             `mkdir -p ${shellQuote(target)} ${shellQuote(upper)} ${shellQuote(work)}`,
             `mount -t overlay ${OVERLAY_FS_NAME} -o ${shellQuote(overlayOptions(join(MAIN_MOUNT, rel), upper, work))} ${shellQuote(target)}`,
-        );
-    }
-    // Last, and only now: every mount above reads from MAIN_MOUNT, and the masks below would hide what they read.
-    const fence = plan.fence;
-    if (fence !== undefined) {
-        const store = join(plan.root, stateRelPath(".intentic/records/sessions/claude/"));
-        // The store's own directories, not just its root: `~/.claude/<name>` was symlinked at boot against the shared
-        // path, and this binds a different directory under those links.
-        const holds = SESSION_STATE.map((name) => shellQuote(join(fence.sessions, name))).join(" ");
-        lines.push(
-            `mkdir -p ${holds} ${shellQuote(store)}`,
-            `mount --bind ${shellQuote(fence.sessions)} ${shellQuote(store)}`,
-            `umount ${shellQuote(MAIN_MOUNT)}`,
-            ...fence.hidden.map((path) => `if [ -d ${shellQuote(path)} ]; then mount -t tmpfs ${FENCE_FS_NAME} ${shellQuote(path)}; fi`),
         );
     }
     lines.push(trailer);
@@ -233,13 +217,22 @@ export interface IsolationAnchor {
     readonly cwd: string;
     // What was mounted; every daemon-side reader needs it to translate an agent's paths back.
     readonly plan: IsolationPlan;
+    // A fenced turn's sandbox (turn-sandbox.ts): its own temp dir, tmux socket and terminal logs, which the turn's env
+    // and the Bash tool's rewrite must point at. Absent for an unfenced turn's plain mount namespace.
+    readonly sandbox?: SandboxLayout;
     // Drops the anchor; anything still running inside keeps the namespace alive until it exits.
     readonly dispose: () => void;
 }
 
 // Resolves only once the mounts are actually up, so no caller can hand work to a half-built namespace. Rejects rather
 // than degrading: the capability was already probed, so a failure here is a real fault.
+// A fenced plan gets a sandbox instead (turn-sandbox.ts): a mount namespace its own root process could rearrange is no
+// fence for a conversation whose person holds only some of the workspace.
 export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor> => {
+    const fence = plan.fence;
+    if (fence !== undefined) {
+        return startSandboxAnchor({ ...plan, fence });
+    }
     const child = spawn("unshare", ["--mount", "--propagation", "private", "sh", "-c", isolationScript(plan)], {
         // Stamped, since its own group puts it out of netd's reach when the daemon dies: the next boot ends it
         // (system/boot/generation-sweep.ts), which no turn needs once the daemon that ran it is gone.
@@ -283,22 +276,44 @@ export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor>
     return { pid, cwd: plan.root, plan, dispose };
 };
 
-// What a fenced conversation's namespace hides, derived rather than configured: the worktrees root is this worktree's
-// own parent, and the conversation units are the daemon's account of every conversation — the transcripts it keeps and
-// the session stores fenced ones write to. Its own store is bound before the mask goes over them.
-const fencedPlacement = (historyRoot: string, worktree: string): FencedPlacement => ({
-    sessions: sessionsDir(historyRoot, basename(worktree)),
-    hidden: [dirname(worktree), conversationsRoot(historyRoot)],
-});
+// Every directory in a checkout holding a `.git` entry, root-relative ("" is the root): the root repository's pointer
+// and each nested repository's. A fenced sandbox masks them all. Bounded like the mirror walk, and never into a mirror.
+export const gitPointersIn = async (worktree: string): Promise<string[]> => {
+    const found: string[] = [];
+    await walkDirs(worktree, { maxDepth: MAX_LINK_DEPTH + 1 }, async (dir, entries, subdirs) => {
+        if (entries.some((entry) => entry.name === ".git")) {
+            found.push(dir.rel);
+        }
+        return subdirs.filter((subdir) => subdir.name !== ".git" && !MIRRORED_DIRS.has(subdir.name));
+    });
+    return found.toSorted();
+};
+
+// A mirror is the main checkout's copy of a dependency or build directory, so in a fenced checkout it may only go where
+// the checkout itself has the parent: a sparse checkout has no directory for a folder outside the fence, and a mirror
+// there would hand that folder's build output back.
+const insideCheckout = (worktree: string, rel: string): boolean => {
+    const parent = dirname(rel);
+    if (parent === ".") {
+        return true;
+    }
+    try {
+        return statSync(join(worktree, parent)).isDirectory();
+    } catch {
+        return false;
+    }
+};
 
 export interface TurnIsolation {
     // The layout mapping, always answered regardless of what this container can enforce; applying it is the caller's
     // choice. Once returned `undefined` instead, collapsing 'no mapping' and 'unenforced' into one silent nothing.
     // `fenced` is whether the conversation was started by someone holding areas; what its checkout was cut to is the
-    // worktree's own business, but a namespace that leaves the whole tree reachable makes that cut decorative.
+    // worktree's own business, and the sandbox its plan describes is what keeps the rest out of reach.
     readonly planFor: (worktree: string, fenced: boolean) => Promise<IsolationPlan>;
     // Whether the namespace can be built; decides mount points vs symlinks, and which enforcement layer a turn uses.
     readonly available: () => Promise<boolean>;
+    // Whether a fenced turn's sandbox can be built (turn-sandbox.ts). Without it a fenced turn is refused.
+    readonly sandboxAvailable: () => Promise<boolean>;
 }
 
 export const createTurnIsolation = (options: { readonly root: string; readonly historyRoot: string; readonly logger: Logger }): TurnIsolation => {
@@ -317,17 +332,31 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
         });
         return probe;
     };
+    let sandboxProbe: Promise<boolean> | undefined;
+    const sandboxReady = (): Promise<boolean> => {
+        sandboxProbe ??= sandboxAvailable(historyRoot).then((ok) => {
+            if (!ok) {
+                logger.warn({}, "fenced turns unavailable: bubblewrap could not build a sandbox here, so conversations started by fenced members are refused");
+            }
+            return ok;
+        });
+        return sandboxProbe;
+    };
     return {
         available,
+        sandboxAvailable: sandboxReady,
         // Re-walked per turn, not cached, so a recent install is visible, cheap against a warm dentry cache. Needed
         // even without a namespace; the overlay scratch derives from the worktree's own dir name.
-        planFor: async (worktree, fenced) => ({
-            worktree,
-            root,
-            mirrors: await mirroredDirs(root, worktree, { intoNestedRepos: true }),
-            overlays: overlaysDir(historyRoot, basename(worktree)),
-            fence: fenced ? fencedPlacement(historyRoot, worktree) : undefined,
-        }),
+        planFor: async (worktree, fenced) => {
+            const mirrors = await mirroredDirs(root, worktree, { intoNestedRepos: true });
+            return {
+                worktree,
+                root,
+                mirrors: fenced ? mirrors.filter((rel) => insideCheckout(worktree, rel)) : mirrors,
+                overlays: overlaysDir(historyRoot, basename(worktree)),
+                fence: fenced ? { sessions: sessionsDir(historyRoot, basename(worktree)), gitPointers: await gitPointersIn(worktree) } : undefined,
+            };
+        },
     };
 };
 

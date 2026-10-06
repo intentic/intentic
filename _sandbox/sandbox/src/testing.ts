@@ -121,15 +121,17 @@ export const syncHookOutput = (output: HookJSONOutput): SyncHookJSONOutput => {
 };
 
 // Container without CAP_SYS_ADMIN, what the worktree suites use for the symlink-mirroring fallback; planFor still
-// answers WHERE the worktree sits since that is a layout fact, not a kernel one.
+// answers WHERE the worktree sits since that is a layout fact, not a kernel one. No sandbox either, so a fenced turn
+// run through it is refused.
 export const noIsolation = (root: string, historyRoot: string = HISTORY_ROOT): TurnIsolation => ({
     available: async () => false,
+    sandboxAvailable: async () => false,
     planFor: async (worktree: string, fenced: boolean): Promise<IsolationPlan> => ({
         worktree,
         root,
         mirrors: [],
         overlays: overlaysDir(historyRoot, basename(worktree)),
-        fence: fenced ? { sessions: sessionsDir(historyRoot, basename(worktree)), hidden: [] } : undefined,
+        fence: fenced ? { sessions: sessionsDir(historyRoot, basename(worktree)), gitPointers: [] } : undefined,
     }),
 });
 

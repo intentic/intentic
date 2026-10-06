@@ -59,6 +59,25 @@ export const worktreeReminder = (root: string): TurnNote => ({
     text: `${WORKTREE_NOTE_HEADER}\n\nUse relative paths. \`${root}\` is the shared checkout, not this branch.`,
 });
 
+// A fenced conversation's sandbox (conversations/worktrees/turn-sandbox.ts) holds only its areas and no git history.
+// Said once per session, because an agent that meets `git` failing or a folder missing spends calls looking for a way
+// round both; same header as the note above, which is what this is about and what session recall already cuts at.
+export const fencedNote = (root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text:
+        `${WORKTREE_NOTE_HEADER}\n\n` +
+        `This conversation is limited to some areas of the workspace, and it runs in a sandbox holding only those: ` +
+        `\`${root}\` is its own checkout cut to them, and nothing else of the workspace is on this filesystem. The ` +
+        `checkout has no git history, so \`git\` finds no repository here: the sandbox records your changes on the ` +
+        `conversation's branch by itself, so edit the files and leave committing to it. A folder that is absent is ` +
+        `outside this conversation's areas; say so rather than looking for it elsewhere.`,
+});
+
+export const fencedReminder = (root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text: `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` holds only this conversation's areas, and it has no git; your changes are recorded for you.`,
+});
+
 // Deliberately no note: the model reliably over-reacted to being told about a routine rebase, re-verifying builds
 // unprompted. The human still sees it in the `worktree` frame; a rebase that doesn't apply is caught at land time
 // (conversations/land.ts) instead of by prose.

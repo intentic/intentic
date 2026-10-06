@@ -32,6 +32,7 @@ import { join, normalize, relative, sep } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { z } from "zod";
 import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
+import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { worktreeRedirectHooks } from "../../conversations/worktrees/worktree-redirect.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
@@ -225,6 +226,15 @@ export const pinnedRouting = (env: Readonly<Record<string, string | undefined>>)
     ...UNSET_COMMANDS,
 });
 
+// What an anchored turn's processes need told about where they run: a plain namespace hands tmux-run the daemon's own
+// namespace to reach the shared server from; a fenced turn's sandbox names its own server, temp and log dirs.
+const anchorEnv = (anchor: IsolationAnchor | undefined): Record<string, string> => {
+    if (anchor === undefined) {
+        return {};
+    }
+    return anchor.sandbox === undefined ? { [TMUX_NS_ENV]: daemonMountNs } : sandboxEnv(anchor.sandbox);
+};
+
 // The env a turn's CLI runs with; also what the flag layer pins its routing keys to (turnSettings).
 const turnEnv = (request: HarnessRequest) => ({
     // The daemon's own environment, sealed at boot: every container secret was taken out of it once the config had read
@@ -245,8 +255,8 @@ const turnEnv = (request: HarnessRequest) => ({
     // card), never a model the CLI swaps in by itself. Its one retry on the same model within the turn stays.
     ...REFUSAL_ENV,
     // Where tmux-run talks to tmux: the daemon's namespace, not the turn's, so it starts a server there if
-    // needed.
-    ...(request.spec.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
+    // needed. A fenced turn's sandbox has a tmux server of its own instead, and its own temp and log dirs.
+    ...anchorEnv(request.spec.isolation?.anchor),
     // Whose work this is, for the leftovers sweep; unstamped with no conversation rather than a made-up owner.
     ...(request.spec.conversationId !== undefined ? workloadStamp(request.spec.conversationId) : {}),
 });
@@ -326,7 +336,8 @@ const disallowedToolsOf = (request: HarnessRequest): string[] => [...CLI_SCHEDUL
 // The flag equally accepts files, so the document moves into one, 0600, removed when the CLI exits.
 const MCP_CONFIG_FLAG = "--mcp-config";
 
-export const mcpConfigOffArgv = (args: readonly string[]): { readonly args: string[]; readonly dispose: () => void } => {
+// `tmp` is where the file goes: a fenced turn's sandbox sees only its own temp dir, so its document must be written there.
+export const mcpConfigOffArgv = (args: readonly string[], tmp: string = tmpdir()): { readonly args: string[]; readonly dispose: () => void } => {
     const at = args.indexOf(MCP_CONFIG_FLAG);
     if (at === -1) {
         return { args: [...args], dispose: () => {} };
@@ -342,7 +353,7 @@ export const mcpConfigOffArgv = (args: readonly string[]): { readonly args: stri
         if (!value.startsWith("{")) {
             continue;
         }
-        dir ??= mkdtempSync(join(tmpdir(), "intentic-run-mcp-"));
+        dir ??= mkdtempSync(join(tmp, "intentic-run-mcp-"));
         const path = join(dir, `${index - at}.json`);
         writeFileSync(path, value, { mode: 0o600 });
         rewritten[index] = path;
@@ -361,7 +372,7 @@ export const mcpConfigOffArgv = (args: readonly string[]): { readonly args: stri
 const runtimeSpawn =
     (anchor: IsolationAnchor | undefined, spawnDepth: number, onStderr: (data: string) => void) =>
     (options: SpawnOptions): SpawnedProcess => {
-        const config = mcpConfigOffArgv(options.args);
+        const config = mcpConfigOffArgv(options.args, anchor?.sandbox?.tmp);
         const { command, args } =
             anchor === undefined
                 ? { command: options.command, args: config.args }

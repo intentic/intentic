@@ -52,6 +52,18 @@ test("every tmux call is made from the namespace INTENTIC_TMUX_NS names: the ser
     }
 });
 
+test("a fenced turn's sandbox names its own tmux socket: every call goes to that server and none hops to the daemon's namespace", async () => {
+    // Both set, as an anchored turn's env could carry: the sandbox's own server wins, since its user could not hop anyway
+    // and the shared server is the one place it must not start a pane.
+    const calls = await run({ INTENTIC_TMUX_SOCKET: "/history/overlays/c/sandbox-1/tmux/default", INTENTIC_TMUX_NS: "/proc/9/ns/mnt" });
+    const tmux = calls.filter((call) => call.startsWith("tmux "));
+    expect(tmux).not.toHaveLength(0);
+    for (const call of tmux) {
+        expect(call.startsWith("tmux -S /history/overlays/c/sandbox-1/tmux/default ")).toBe(true);
+    }
+    expect(calls.some((call) => call.startsWith("nsenter"))).toBe(false);
+});
+
 test("without the var the wrapper talks to tmux directly: the daemon's own runner and an unisolated turn are already where the server belongs", async () => {
     const calls = await run({});
     expect(calls.filter((call) => call.startsWith("tmux "))).not.toHaveLength(0);
