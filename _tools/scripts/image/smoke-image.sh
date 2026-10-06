@@ -25,8 +25,12 @@
 # boot step would sail through a plain liveness probe. The probe below asserts the whole contract the launch
 # scripts and ic's postflight read:
 #
-#   * the container is still RUNNING          — a crash-on-import exits, and exiting is checked every pass so
-#                                               the failure is reported in seconds rather than at the timeout
+#   * the container is still RUNNING          — a container whose entrypoint dies exits, and exiting is checked
+#                                               every pass so the failure is reported in seconds, not at the timeout
+#   * netd has not restarted a crashed daemon — netd is PID 1 and restarts a daemon that crashed without the
+#     three times over                         container ever exiting. Its vitals (/system/vitals) count that once the
+#                                               daemon reached it; one that dies on import never does, and netd then
+#                                               listens on nothing, so its log line is counted instead. NOT retried
 #   * /health returns 200 with ok: true       — the app is assembled and serving
 #   * boot.ready is true                      — every step in main.ts's BOOT_STEPS converged
 #   * no boot step is in state "failed"       — checked separately, and NOT retried: a failed step is terminal,
@@ -88,6 +92,17 @@ const { join } = require("node:path");
 const { pathToFileURL } = require("node:url");
 const fail = (code, why) => { console.error(why); process.exit(code); };
 (async () => {
+    // netd answers its vitals itself, whatever state the daemon is in. A daemon it has restarted three times and that is
+    // down again is crashing on every start, and /health would only be retried until the timeout (2026-10-06: a daemon
+    // that could not load a package). Terminal. No vitals at all is an image from before netd, or netd not listening
+    // yet, which the /health read below reports in its own words.
+    const vitals = await fetch("http://127.0.0.1:8787/system/vitals", { signal: AbortSignal.timeout(2000) })
+        .then((answer) => (answer.ok ? answer.json() : undefined))
+        .catch(() => undefined);
+    if (vitals !== undefined && vitals.node !== "up" && Number(vitals.restarts) >= 3) {
+        fail(2, `the daemon keeps crashing: netd restarted it ${vitals.restarts} times in ten minutes and it is down again`);
+        return;
+    }
     let res;
     try {
         res = await fetch("http://127.0.0.1:8787/health", { signal: AbortSignal.timeout(5000) });
@@ -199,6 +214,16 @@ smoke() { # <image-ref>
     while :; do
         if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != "true" ]; then
             echo "  ✗ the container EXITED (code $(docker inspect -f '{{.State.ExitCode}}' "$name" 2>/dev/null || echo '?')) — the daemon never came up" >&2
+            report_and_clean
+            return 1
+        fi
+
+        # netd's line for each restart, on the container's stderr beside the daemon's own: a daemon that dies before it
+        # reaches netd leaves no port open for the probe below to ask, and would be retried to the timeout (2026-10-06:
+        # 240 s on an image whose daemon could not load a package, netd restarting it every few seconds throughout).
+        crashes="$(docker logs "$name" 2>&1 >/dev/null | grep -c 'the daemon crashed; restarting it' || true)"
+        if [ "${crashes:-0}" -ge 3 ]; then
+            echo "  ✗ the daemon keeps crashing: netd restarted it ${crashes} times; last: $(docker logs "$name" 2>&1 >/dev/null | grep 'Error' | tail -n 1)" >&2
             report_and_clean
             return 1
         fi

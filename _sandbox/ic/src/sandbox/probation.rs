@@ -164,6 +164,10 @@ pub struct Look {
     pub daemon_started: Option<u64>,
     /// How many times the probation has seen that daemon start again (restarts_seen).
     pub daemon_restarts: u32,
+    /// netd's own word that the daemon keeps crashing (health::crashing): three restarts in ten minutes, and down now.
+    /// It sees a daemon that dies before it writes its boot marker (a module it cannot load), which `daemon_restarts`
+    /// never can.
+    pub crash_loop: Option<String>,
     /// The owner stopped it on purpose (`ic sandbox stop`, or a stop the fix engine saw made outside ic): the record's
     /// `held`.
     pub held: bool,
@@ -203,6 +207,9 @@ pub fn judge(look: &Look, swap: &Swap, now: u64, grace_ms: u64) -> Verdict {
             "the new version's daemon kept crashing ({} restarts)",
             look.daemon_restarts
         ));
+    }
+    if let Some(looping) = &look.crash_loop {
+        return Verdict::Fail(format!("the new version's daemon kept crashing: {looping}"));
     }
     if !look.running || look.restarting {
         if look.restarts >= RESTARTS {
@@ -270,6 +277,7 @@ pub fn look(container: &str, swap_at: u64) -> Look {
             .unwrap_or(0);
     }
     if found.running {
+        found.crash_loop = crate::health::crashing(container);
         if let Some(health) =
             docker::exec_capture(container, &["curl", "-sf", "-m", "10", HEALTH_URL])
                 .and_then(|body| serde_json::from_str::<Value>(&body).ok())
@@ -986,6 +994,28 @@ mod tests {
         };
         assert!(
             matches!(judge(&looping, &first, 2 * MIN, 10 * MIN), Verdict::Fail(reason) if reason.contains("3 restarts"))
+        );
+    }
+
+    #[test]
+    fn a_daemon_netd_keeps_restarting_goes_back_at_once_inside_the_grace() {
+        // A daemon that cannot load a module dies before it writes its boot marker, so the probation's own count stays
+        // at nought while netd restarts it every few seconds (2026-10-06): netd's word is enough.
+        let looping = Look {
+            running: true,
+            answered: false,
+            crash_loop: crate::health::crash_loop(&crate::health::NodeVitals {
+                node: "restarting".to_string(),
+                restarts: 3,
+            }),
+            ..Look::default()
+        };
+        assert_eq!(
+            judge(&looping, &swap(0, None), MIN, 10 * MIN),
+            Verdict::Fail(
+                "the new version's daemon kept crashing: netd restarted it 3 times in the last ten minutes, and it is down again"
+                    .to_string()
+            )
         );
     }
 

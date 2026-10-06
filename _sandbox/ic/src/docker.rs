@@ -714,6 +714,18 @@ pub fn logs_passthrough(container: &str, tail: u32) -> Result<()> {
     Ok(())
 }
 
+/// What the container wrote to stderr within `since` (docker's own spelling, `10m`): where netd and the daemon it
+/// runs both write, in the order they wrote it. None when docker could not answer.
+pub fn stderr_since(container: &str, since: &str) -> Option<String> {
+    let out = docker(&["logs", "--since", since, container])
+        .stdout(Stdio::null())
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stderr).into_owned())
+}
+
 /// The container's log tail into OUR log — captured before an rm destroys it.
 pub fn logs_into(container: &str, tail: &str, log: &Log) {
     if let Ok(out) = docker(&["logs", "--tail", tail, container]).output() {

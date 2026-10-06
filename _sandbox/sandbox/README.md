@@ -313,3 +313,7 @@ pnpm --filter @intentic/sandbox test         # unit and integration suites
 pnpm dev:sandbox                             # repo root: watch loop that rebuilds or restarts a dev sandbox
 sh _sandbox/sandbox/scripts/dev-restart.sh   # recompile and restart the daemon inside a dev container
 ```
+
+`dev-restart.sh` runs the compiled daemon's state planner inside the running container before it restarts it, and
+refuses when that cannot load: only compiled code is mounted, never `node_modules`, so a package the image lacks
+crashes every start of the one container there is, and needs `pnpm rebuild:sandbox <slug>` instead.

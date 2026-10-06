@@ -53,14 +53,28 @@ flowchart LR
 - Before a swap touches the running container, it pre-flights the target image's state conversions against
   read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
   contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;
-  `--skip-preflight` overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, the
-  planner's line verbatim, so the update card says what an update converts before anyone accepts it. While it runs it
+  `--skip-preflight` overrides. A planner that ran and could not answer (it crashed, printed nothing, or printed what
+  is not a plan) refuses a move onto that image too, as the hosted gate does: the planner is the daemon's own code, and
+  an image that cannot load it will not boot. A rollback only warns, since it is the way off a failing version, and
+  so does whatever the image cannot be blamed for: a probe docker would not run, a hang, a kill, an image from before
+  the planner, a plan format only a newer ic reads. (2026-10-06: a daemon importing a package its image never
+  installed crashed the planner, which then read as "no plan", and the swap went ahead onto a daemon that crashed on
+  every start.) `prepare` records the staged image's plan in the marker it leaves the sandbox, the planner's line
+  verbatim (a refusal naming the planner for an image that could not run it, which auto-update never takes), so the
+  update card says what an update converts before anyone accepts it. While it runs it
   also keeps `update-preparing.json` there (`preparing.rs`): its step and how far the pull has got, rewritten every
   few seconds and removed when it ends, so the card draws the download in progress instead of a button for it. It also refuses a
   run line that would put the sandbox on other storage than it has (`storage.rs`: a renamed or dropped volume would
   otherwise boot a healthy-looking sandbox on empty volumes).
 - **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version
-  that never answers, never commits its state journal or reports its conversion failed is undone at once. After that
+  that never answers, never commits its state journal, reports its conversion failed, or keeps crashing is undone at
+  once. Crashing is netd's word (`health.rs`): three restarts of the daemon in ten minutes with it down again, read off
+  netd's vitals, or off netd's own log for a daemon that died before netd listened on anything; docker's restart count
+  never sees them, since netd is PID 1. The container put back is then waited for the same way, and the flow ends on
+  where the sandbox stands: a dev sandbox's previous container runs the same compiled checkout as the new one, so when
+  neither comes up, the message names that code and the two commands that fix it. (2026-10-06: a swap onto a daemon
+  that could not load a package said "Your previous sandbox was restored" over a restored container that crashed the
+  same way.) After that
   first check the old container stays parked for a 24-hour probation (`probation.rs`): `ic sandbox watch`, which the
   machine agent runs every minute while a probation is on, puts it back by itself (a rename and a start, nothing
   downloaded or built) when the new version keeps crashing, never becomes ready, or loses the tunnel the old one had.

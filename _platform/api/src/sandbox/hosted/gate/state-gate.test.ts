@@ -118,6 +118,24 @@ describe(`reading the planner's answer`, () => {
         [`a plan that names no format`, { exitCode: 0, stdout: JSON.stringify({ ok: true }), stderr: `` }, `the planner's answer names no plan format`],
         [`a plan that does not say`, { exitCode: 0, stdout: JSON.stringify({ plan: 1 }), stderr: `` }, `the planner's plan does not say whether it would succeed`],
         [`a plan whose ok is not a boolean`, { exitCode: 0, stdout: JSON.stringify({ plan: 1, ok: `false` }), stderr: `` }, `the planner's plan does not say whether it would succeed`],
+        [
+            `a module of its own the planner imports and the image lacks`,
+            {
+                exitCode: 1,
+                stdout: ``,
+                stderr: `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/opt/sandbox/dist/store/newest-run.js' imported from ${STATE_PLANNER}\n`,
+            },
+            `the planner exited with status 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/opt/sandbox/dist/store/newest-run.js' imported from ${STATE_PLANNER}`,
+        ],
+        [
+            `a package the daemon imports and the image never installed`,
+            {
+                exitCode: 1,
+                stdout: ``,
+                stderr: `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js\n`,
+            },
+            `the planner exited with status 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js`,
+        ],
     ])(`reads %s as a broken planner`, (_, answer, reason) => {
         expect(readPlanAnswer(answer)).toEqual({ kind: `broken`, reason });
     });
@@ -397,7 +415,9 @@ describe(`a rollback that fails`, () => {
  * machine, has to read ready with the state journal committed. */
 describe(`waiting for the new version's daemon`, () => {
     // Fly's own machine object, for a health answer that plays something happening to it.
-    const healthAsks = (fly: FakeFly): number => fly.called(`POST`, `/machines/m1/exec`).filter((call) => JSON.stringify(call.body).includes(DAEMON_HEALTH_COMMAND[0])).length;
+    // The health route itself: netd's vitals are asked with the same curl.
+    const healthAsks = (fly: FakeFly): number =>
+        fly.called(`POST`, `/machines/m1/exec`).filter((call) => JSON.stringify(call.body).includes(DAEMON_HEALTH_COMMAND.at(-1) ?? ``)).length;
 
     it(`keeps the new version once its daemon reads ready with its journal committed, waiting through the conversion`, async () => {
         const fly = seeded(`stopped`);

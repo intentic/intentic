@@ -587,6 +587,16 @@ fn recreate(
             &target_image,
             &dev_mounts(),
             verb,
+            // A rollback is the way off a failing version, and a reshape stays on the running one: neither is held
+            // to a check its image could not run (preflight.rs IfBroken).
+            match mode {
+                Mode::Rollback { .. } | Mode::Reshape(_) => {
+                    crate::sandbox::preflight::IfBroken::Warn
+                }
+                Mode::Update { .. } | Mode::Rebuild { .. } | Mode::Dev => {
+                    crate::sandbox::preflight::IfBroken::Stop
+                }
+            },
             &log,
         )?,
         Some(Preflight::Skip) => {
@@ -874,32 +884,34 @@ fn recreate(
                 Ok(retry_argv) => retry_argv,
                 Err(err) => {
                     heartbeat.stop();
-                    restore_parked(&container, &parked, &slug, &saved, &swap, &err.0, &log);
-                    return Err(err);
+                    let restored =
+                        restore_parked(&container, &parked, &slug, &saved, &swap, &err.0, &log);
+                    bail!(
+                        "{}{}",
+                        err.0,
+                        restored_line(&restored, matches!(mode, Mode::Dev), &slug)
+                    );
                 }
             };
         if let Err(refusal) = docker::run_argv(&retry_argv, &log) {
             let reason = format!("starting the new version failed: {refusal}");
             heartbeat.stop();
-            restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
+            let restored = restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
             bail!(
-                "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{refusal}\n       Your previous sandbox was restored. The old container's logs and this error are saved to {}.",
-                log.path.display()
+                "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{refusal}\n       The old container's logs and this error are saved to {}.{}",
+                log.path.display(),
+                restored_line(&restored, matches!(mode, Mode::Dev), &slug)
             );
         }
         println!("intentic: recreated without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
     }
 
     println!("intentic: waiting for the sandbox daemon to come up…");
-    let answered = match health::wait_answering(
-        &container,
-        &log,
-        "\n       Your previous sandbox was restored — the update did not take.",
-    ) {
+    let answered = match health::wait_answering(&container, &log, "") {
         Ok(answered) => answered,
         Err(err) => {
             heartbeat.stop();
-            restore_parked(
+            let restored = restore_parked(
                 &container,
                 &parked,
                 &slug,
@@ -908,7 +920,11 @@ fn recreate(
                 "the new version's daemon never answered",
                 &log,
             );
-            return Err(err);
+            bail!(
+                "{}{}",
+                err.0,
+                restored_line(&restored, matches!(mode, Mode::Dev), &slug)
+            );
         }
     };
     /* A NEW VERSION THAT NEVER COMMITS ITS STATE JOURNAL HAS NOT TAKEN, however well it answers — and the parked container is the way back, so it is only removed after this. */
@@ -916,10 +932,11 @@ fn recreate(
         log.section(&format!("container logs ({container})"));
         docker::logs_into(&container, "500", &log);
         heartbeat.stop();
-        restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
+        let restored = restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
         bail!(
-            "{reason}\n       Your previous sandbox was put back; as it starts, it restores the files the new version had started converting. The new version's logs are saved to {}.",
-            log.path.display()
+            "{reason}\n       As the previous sandbox starts, it restores the files the new version had started converting. The new version's logs are saved to {}.{}",
+            log.path.display(),
+            restored_line(&restored, matches!(mode, Mode::Dev), &slug)
         );
     }
 
@@ -1419,10 +1436,40 @@ fn rollback_tag(slug: &str, image_id: &str) -> String {
     )
 }
 
+/// What putting the parked container back came to.
+#[derive(Debug, PartialEq)]
+enum Restored {
+    /// It is back and its daemon answers.
+    Answering,
+    /// It is back under its name and its daemon does not come up, and why.
+    Down(String),
+    /// There was nothing to put back, or it could not take its name back (said where it happened).
+    NotPut,
+}
+
+/// The sentence that ends a failed swap: where the sandbox stands now, as `restore_parked` found it, and what to do
+/// when it is not back. Pure. A dev sandbox's previous container runs the same compiled trees from the checkout as the
+/// new one (the dev mounts), so when neither comes up, the code there is what fails, not the image (2026-10-06: a
+/// daemon importing a package its image lacked; the restored container crashed on it exactly as the new one had,
+/// while this said it was restored).
+fn restored_line(restored: &Restored, dev: bool, slug: &str) -> String {
+    match restored {
+        Restored::Answering => "\n       Your previous sandbox was restored and answers again — the update did not take.".to_string(),
+        Restored::Down(why) if dev => format!(
+            "\n       Your previous sandbox was put back, but it does not come up either: {why}.\n       Both run the compiled trees from your checkout (the dev mounts), so the code there is what fails, not the image: fix it and run `sh _sandbox/sandbox/scripts/dev-restart.sh {slug}`, or `pnpm rebuild:sandbox {slug}` when it needs a package the image does not have."
+        ),
+        Restored::Down(why) => format!(
+            "\n       Your previous sandbox was put back, but it does not come up either: {why}.\n       `ic sandbox doctor {slug}` checks every layer between here and it."
+        ),
+        Restored::NotPut => String::new(),
+    }
+}
+
 /// Put the parked container back under its name: the failed replacement (if any) is removed, the old
 /// container returns and starts, and the channel record is rewound to what it said before the swap — the
-/// swap it described did not happen. Best-effort on every step: this runs on the failure path, where the
-/// one job is to leave the machine as close to "before" as it can reach.
+/// swap it described did not happen. Then its daemon is waited for, as the new one's was, so what the flow says
+/// last is where the sandbox stands rather than where it was meant to. Best-effort on every step: this runs on the
+/// failure path, where the one job is to leave the machine as close to "before" as it can reach.
 fn restore_parked(
     container: &str,
     parked: &str,
@@ -1431,9 +1478,9 @@ fn restore_parked(
     swap: &Swap,
     reason: &str,
     log: &Log,
-) {
+) -> Restored {
     if !docker::container_exists(parked) {
-        return;
+        return Restored::NotPut;
     }
     docker::quiet(&["rm", "-f", container]);
     rewind_record(slug, saved);
@@ -1456,10 +1503,24 @@ fn restore_parked(
             "intentic: the previous sandbox is kept as {parked} but could not take its name back ({}).\n          Restore it by hand before anything else: docker rename {parked} {container} && docker start {container}",
             refusal.0
         );
-        return;
+        return Restored::NotPut;
     }
     docker::quiet(&["start", container]);
-    println!("intentic: the previous sandbox container was restored and is starting again.");
+    println!("intentic: the previous sandbox container was restored; waiting for it to answer…");
+    match health::first_answer(container) {
+        Ok(_) => Restored::Answering,
+        Err(silent) => {
+            log.section(&format!("restored container logs ({container})"));
+            docker::logs_into(container, "500", log);
+            Restored::Down(match silent {
+                health::Silent::Crashing(looping) => {
+                    format!("its daemon keeps crashing: {looping}")
+                }
+                health::Silent::Failed(error) => format!("it could not start: {error}"),
+                health::Silent::Quiet(secs) => format!("it did not answer within {secs}s"),
+            })
+        }
+    }
 }
 
 /// Rewind the channel record to what it said before a swap that did not happen. Best-effort: this runs on the
@@ -2113,5 +2174,35 @@ mod tests {
         let again = rebase_overlay(&rebased, DEV_TAG);
         assert_eq!(again.0, hash);
         assert_eq!(again.1, rebased);
+    }
+
+    #[test]
+    fn a_failed_swap_ends_on_where_the_sandbox_stands_not_where_it_was_meant_to() {
+        assert_eq!(
+            restored_line(&Restored::Answering, false, "abc"),
+            "\n       Your previous sandbox was restored and answers again — the update did not take."
+        );
+        // The restored container down too, named with the reason the wait found.
+        let why = "its daemon keeps crashing: netd restarted it 3 times in the last ten minutes, each time after Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2'";
+        let line = restored_line(&Restored::Down(why.to_string()), false, "abc");
+        assert!(
+            line.contains(&format!("does not come up either: {why}.")),
+            "{line}"
+        );
+        assert!(line.contains("`ic sandbox doctor abc`"), "{line}");
+        assert!(!line.contains("restored and answers"), "{line}");
+        // A dev sandbox's previous container runs the same checkout code: the code is named, with both ways out.
+        let dev = restored_line(&Restored::Down(why.to_string()), true, "abc");
+        assert!(
+            dev.contains("the compiled trees from your checkout"),
+            "{dev}"
+        );
+        assert!(
+            dev.contains("`sh _sandbox/sandbox/scripts/dev-restart.sh abc`"),
+            "{dev}"
+        );
+        assert!(dev.contains("`pnpm rebuild:sandbox abc`"), "{dev}");
+        // Nothing to put back says nothing more: where it could not, the restore said so itself.
+        assert_eq!(restored_line(&Restored::NotPut, true, "abc"), "");
     }
 }

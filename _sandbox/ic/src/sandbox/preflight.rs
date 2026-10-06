@@ -11,6 +11,12 @@ use crate::util::{plural, Fail, Result};
 /// The image's own planner: the daemon's conversion engine, run against the data without writing to it. An image
 /// built before the engine has no such file.
 const SCRIPT: &str = "/opt/sandbox/dist/state-plan.js";
+/// The planner as a refusal names it, where a conversion names its document.
+const PLANNER_NAME: &str = "state-plan.js";
+
+/// `docker run`'s own exits: 125 when docker could not run the container, 126 and 127 when the command could not
+/// be started in it. The probe never ran, which says nothing about the image's code.
+const DOCKER_COULD_NOT_RUN: std::ops::RangeInclusive<i32> = 125..=127;
 
 /// The one plan format this binary reads. Any other is "no plan" rather than a guess at what its fields mean.
 const FORMAT: u64 = 1;
@@ -66,9 +72,25 @@ enum Plan {
     Clear { steps: Vec<Entry>, downgrade: bool },
     /// The conversions that would throw on this sandbox's data.
     Refused(Vec<Entry>),
-    /// No plan to be had, and why: an image from before the engine, a planner that failed or hung, or an answer
-    /// this binary cannot read.
+    /// The image could not run its own check, and why: its planner ran and failed, answered nothing, or answered
+    /// something that is not a plan. The planner is the daemon's own code over the daemon's own modules, so an image
+    /// that cannot load them here cannot boot either (2026-10-06: a daemon importing a package its image never
+    /// installed crashed its planner, which read as Unknown, and the swap went ahead onto a daemon that crashed on
+    /// every start). The hosted gate refuses the same (_platform/api/src/sandbox/hosted/gate/state-gate.ts).
+    Broken(String),
+    /// No plan to be had, and why, where that is not the image's doing: an image from before the engine, a probe
+    /// docker would not run, a planner that hung or was killed, a plan in a format only a newer ic reads.
     Unknown(String),
+}
+
+/// What a Broken plan does to the swap. A move onto a build is stopped by it. A way back is not: it is how an owner,
+/// or the probation watch (probation.rs), leaves a version that is failing, and holding it to a check the older image
+/// cannot run would keep the sandbox on the failing one. A reshape moves onto the build that runs now, so it is not
+/// held to it either.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum IfBroken {
+    Stop,
+    Warn,
 }
 
 /// Ask `image` what its state conversions would do to the data `container` runs on, and act on the answer:
@@ -76,21 +98,22 @@ enum Plan {
 /// specs the new container gets beyond its data (the dev loop's compiled trees, which replace the image's own
 /// copy of the engine); `verb` names the re-run.
 ///
-/// Only an explicit `ok:false` stops the flow. Every other way this can go wrong is one warning and then the
-/// swap exactly as it ran before the pre-flight existed: a question an image cannot answer must not cost an
-/// update that would have worked.
+/// An explicit `ok:false` stops the flow, and so does a planner that could not run (Broken) where `if_broken` says
+/// so. What is not the image's doing (Unknown) is one warning and then the swap exactly as it ran before the
+/// pre-flight existed: a question an image cannot answer must not cost an update that would have worked.
 pub fn check(
     container: &str,
     slug: &str,
     image: &str,
     extra: &[String],
     verb: &str,
+    if_broken: IfBroken,
     log: &Log,
 ) -> Result<()> {
     println!("intentic: pre-flighting the state conversions of {image} on this sandbox's data (read-only)…");
     let (plan, _) = probe(container, slug, image, extra, log);
     log.line(&format!("state pre-flight: {plan:?}"));
-    report(plan, image, verb)
+    report(plan, image, verb, if_broken)
 }
 
 /// The plan for the staged marker (`/history/update-staged.json`), which the update card shows before the owner
@@ -109,10 +132,24 @@ pub fn staged_plan(
 }
 
 /// The plan for the marker: the planner's own line, verbatim (the contract's StatePlanSchema, which the daemon reads
-/// the marker with), so nothing it says is lost on the way, a step's `detail` included. None when there is no plan.
+/// the marker with), so nothing it says is lost on the way, a step's `detail` included. A broken image gets a refusal
+/// in the planner's place, which holds the update back from the daemon's auto-update (it never takes `ok: false`) and
+/// says why on the update card. None when there is no plan.
 fn marker_json(plan: &Plan, line: Option<String>) -> Option<String> {
     match plan {
         Plan::Unknown(_) => None,
+        Plan::Broken(reason) => Some(
+            serde_json::json!({
+                "plan": FORMAT,
+                "ok": false,
+                "failures": [{
+                    "document": PLANNER_NAME,
+                    "detail": format!("the new version could not run its own state check: {reason}"),
+                }],
+                "steps": [],
+            })
+            .to_string(),
+        ),
         Plan::Clear { .. } | Plan::Refused(_) => line,
     }
 }
@@ -217,22 +254,30 @@ fn verdict(ran: &docker::Bounded, image: &str) -> Plan {
             LIMIT.as_secs()
         ));
     }
+    let exited = |code: i32| match error_line(&ran.stderr) {
+        Some(line) => format!("the planner exited with status {code}: {line}"),
+        None => format!("the planner exited with status {code}"),
+    };
     match ran.code {
         Some(0) => read_plan(&ran.stdout),
         _ if predates_engine(&ran.stderr) => {
             Plan::Unknown(format!("{image} predates the state-conversion engine"))
         }
-        Some(code) => Plan::Unknown(match error_line(&ran.stderr) {
-            Some(line) => format!("the planner exited with status {code}: {line}"),
-            None => format!("the planner exited with status {code}"),
-        }),
+        Some(code) if DOCKER_COULD_NOT_RUN.contains(&code) => Plan::Unknown(exited(code)),
+        // 128 + a signal: killed from outside (the memory limit, a stop), not a verdict on the code.
+        Some(code) if code > 128 => Plan::Unknown(format!(
+            "the planner was killed (status {code}) before it answered"
+        )),
+        Some(code) => Plan::Broken(exited(code)),
         None => Plan::Unknown("the planner was stopped before it answered".to_string()),
     }
 }
 
-/// node's words for an entry script that is not there: every image built before the engine.
+/// node's words for an entry script that is not there: every image built before the engine. The script's own path,
+/// quoted, as node names the module it could not find: a module the planner imports and the image lacks names that
+/// module instead (`Cannot find module '…/x.js' imported from …/state-plan.js`), and that image is broken, not old.
 fn predates_engine(stderr: &str) -> bool {
-    stderr.contains("Cannot find module") && stderr.contains(SCRIPT)
+    stderr.contains(&format!("Cannot find module '{SCRIPT}'"))
 }
 
 /// The line of the planner's stderr worth quoting in one warning: the last one naming an error (node's
@@ -246,20 +291,20 @@ fn error_line(stderr: &str) -> Option<String> {
         .map(|line| clip(line, 200))
 }
 
-/// The planner's one JSON line → a plan. Pure, and tolerant where tolerance is safe: anything unreadable is
-/// Unknown (the swap proceeds as it always did), and only a document that says `"ok": false` in so many words
-/// becomes a refusal.
 /// The last line: a runtime that prints a notice to stdout before the plan must not cost the answer.
 fn last_line(stdout: &str) -> Option<&str> {
     stdout.lines().map(str::trim).rfind(|line| !line.is_empty())
 }
 
+/// The planner's one JSON line → a plan. Pure. A document that says `"ok": false` in so many words is a refusal for
+/// what it says; a planner that exited cleanly with no plan, or with what is not one, is Broken; only a plan in a
+/// format this binary does not read is Unknown, since a newer image may well know what it is doing.
 fn read_plan(stdout: &str) -> Plan {
     let Some(line) = last_line(stdout) else {
-        return Plan::Unknown("the planner answered nothing".to_string());
+        return Plan::Broken("the planner answered nothing".to_string());
     };
     let Ok(plan) = serde_json::from_str::<Value>(line) else {
-        return Plan::Unknown(format!(
+        return Plan::Broken(format!(
             "the planner's answer is not a plan: {}",
             clip(line, 120)
         ));
@@ -271,7 +316,7 @@ fn read_plan(stdout: &str) -> Plan {
                 "the planner answered plan format {other}, which only a newer ic reads"
             ));
         }
-        None => return Plan::Unknown("the planner's answer names no plan format".to_string()),
+        None => return Plan::Broken("the planner's answer names no plan format".to_string()),
     }
     match plan.get("ok").and_then(Value::as_bool) {
         Some(false) => Plan::Refused(entries(&plan, "failures", "detail")),
@@ -280,7 +325,7 @@ fn read_plan(stdout: &str) -> Plan {
             downgrade: plan.get("downgrade").and_then(Value::as_bool) == Some(true),
         },
         None => {
-            Plan::Unknown("the planner's plan does not say whether it would succeed".to_string())
+            Plan::Broken("the planner's plan does not say whether it would succeed".to_string())
         }
     }
 }
@@ -308,10 +353,19 @@ fn entries(plan: &Value, key: &str, text_key: &str) -> Vec<Entry> {
         .collect()
 }
 
-/// What the flow prints for a plan, and the one outcome that stops it.
-fn report(plan: Plan, image: &str, verb: &str) -> Result<()> {
+/// What the flow prints for a plan, and the outcomes that stop it.
+fn report(plan: Plan, image: &str, verb: &str, if_broken: IfBroken) -> Result<()> {
     match plan {
         Plan::Refused(failures) => Err(Fail(refusal(&failures, image, verb))),
+        Plan::Broken(reason) if if_broken == IfBroken::Stop => {
+            Err(Fail(broken(&reason, image, verb)))
+        }
+        Plan::Broken(reason) => {
+            crate::ui::warn(&format!(
+                "{image} could not run its own state check ({reason}); going back to it anyway."
+            ));
+            Ok(())
+        }
         Plan::Clear { steps, downgrade } => {
             if !steps.is_empty() {
                 println!("intentic: {}", summary(&steps));
@@ -363,9 +417,17 @@ fn refusal(failures: &[Entry], image: &str, verb: &str) -> String {
     message
 }
 
+/// The refusal for an image that could not run its own check: what failed, that nothing changed, why that is reason
+/// enough, and the one way past it.
+fn broken(reason: &str, image: &str, verb: &str) -> String {
+    format!(
+        "{image} could not run its own state check ({reason}), so the swap was stopped before it began — the sandbox is untouched.\n       The check is the image's own code: a daemon that cannot run it is unlikely to start either.\n       To swap anyway, re-run `ic sandbox {verb}` with --skip-preflight."
+    )
+}
+
 /// At most `limit` characters of `text`, marked when cut. Characters, not bytes: a cut through a multi-byte
 /// character would panic.
-fn clip(text: &str, limit: usize) -> String {
+pub fn clip(text: &str, limit: usize) -> String {
     if text.chars().count() <= limit {
         return text.to_string();
     }
@@ -454,6 +516,32 @@ mod tests {
                 Some("garbage".to_string())
             ),
             None
+        );
+        // A broken image is a refusal the daemon's auto-update will not take, in the contract's own shape.
+        let marker = marker_json(
+            &Plan::Broken("the planner exited with status 1: Error: boom".to_string()),
+            None,
+        )
+        .expect("a broken image leaves a refusal in the marker");
+        assert_eq!(
+            serde_json::from_str::<Value>(&marker).expect("JSON"),
+            serde_json::json!({
+                "plan": 1,
+                "ok": false,
+                "failures": [{
+                    "document": "state-plan.js",
+                    "detail": "the new version could not run its own state check: the planner exited with status 1: Error: boom",
+                }],
+                "steps": [],
+            })
+        );
+        // ...which this binary reads back as the refusal it is.
+        assert_eq!(
+            read_plan(&marker),
+            Plan::Refused(vec![entry(
+                "state-plan.js",
+                "the new version could not run its own state check: the planner exited with status 1: Error: boom"
+            )])
         );
     }
 
@@ -616,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn only_an_explicit_ok_false_refuses_and_every_failure_is_named_with_the_way_past_it() {
+    fn an_explicit_ok_false_refuses_and_every_failure_is_named_with_the_way_past_it() {
         let plan = read_plan(
             r#"{"plan":1,"engine":7,"ok":false,"downgrade":false,"failures":[{"document":".intentic/config/settings.json","detail":"agentRunModel is not a string"},{"document":"fleet/registry.json","detail":"duplicate id 4"}],"steps":[]}"#,
         );
@@ -633,7 +721,12 @@ mod tests {
                 entry("fleet/registry.json", "duplicate id 4"),
             ]
         );
-        let Err(Fail(message)) = report(plan, "ghcr.io/intentic/sandbox:stable", "update") else {
+        let Err(Fail(message)) = report(
+            plan,
+            "ghcr.io/intentic/sandbox:stable",
+            "update",
+            IfBroken::Stop,
+        ) else {
             panic!("a refusal must stop the flow")
         };
         assert!(
@@ -661,7 +754,8 @@ mod tests {
         // Contradicting the contract (ok:false, nothing listed) is still an explicit "no" from the image.
         let plan = read_plan(r#"{"plan":1,"ok":false}"#);
         assert_eq!(plan, Plan::Refused(vec![]));
-        let Err(Fail(message)) = report(plan, "img", "rollback") else {
+        // A way back is held to an explicit "no" all the same: only a check that could not run lets it through.
+        let Err(Fail(message)) = report(plan, "img", "rollback", IfBroken::Warn) else {
             panic!("a refusal must stop the flow")
         };
         assert!(message.contains("without naming a document"), "{message}");
@@ -680,11 +774,11 @@ mod tests {
                 downgrade: true
             }
         );
-        assert!(report(plan, "img", "rollback").is_ok());
+        assert!(report(plan, "img", "rollback", IfBroken::Warn).is_ok());
     }
 
     #[test]
-    fn garbage_is_no_plan_and_the_swap_goes_ahead() {
+    fn garbage_is_a_broken_image_that_stops_a_move_onto_it_and_not_one_back() {
         for garbage in [
             "",
             "   \n",
@@ -696,12 +790,25 @@ mod tests {
         ] {
             let plan = read_plan(garbage);
             assert!(
-                matches!(plan, Plan::Unknown(_)),
+                matches!(plan, Plan::Broken(_)),
                 "{garbage:?} read as {plan:?}"
             );
+            let Err(Fail(message)) = report(read_plan(garbage), "img", "update", IfBroken::Stop)
+            else {
+                panic!("{garbage:?} must stop an update")
+            };
             assert!(
-                report(plan, "img", "update").is_ok(),
-                "{garbage:?} must not stop the swap"
+                message.starts_with("img could not run its own state check ("),
+                "{message}"
+            );
+            assert!(message.contains("the sandbox is untouched"), "{message}");
+            assert!(
+                message.contains("re-run `ic sandbox update` with --skip-preflight"),
+                "{message}"
+            );
+            assert!(
+                report(plan, "img", "rollback", IfBroken::Warn).is_ok(),
+                "{garbage:?} must not hold a rollback"
             );
         }
         // A notice printed ahead of the plan does not cost the answer; the plan is the last line.
@@ -715,20 +822,41 @@ mod tests {
     }
 
     #[test]
-    fn a_plan_missing_what_it_must_say_is_no_plan_and_missing_extras_default() {
-        // No format, a format from the future, no verdict: none of these may be read as a refusal.
-        for unreadable in [
-            r#"{"ok":false,"failures":[{"document":"a","detail":"b"}]}"#,
-            r#"{"plan":2,"ok":false,"failures":[{"document":"a","detail":"b"}]}"#,
-            r#"{"plan":"1","ok":false}"#,
-            r#"{"plan":1,"failures":[{"document":"a","detail":"b"}]}"#,
-            r#"{"plan":1,"ok":"false"}"#,
+    fn a_plan_missing_what_it_must_say_is_broken_a_newer_format_is_no_plan_and_missing_extras_default(
+    ) {
+        // No format, a format spelled wrong, no verdict: the planner did not say what a planner says. None of them is
+        // read as the refusal its fields seem to make, which would quote failures from a document nobody vouched for.
+        for (unreadable, reason) in [
+            (
+                r#"{"ok":false,"failures":[{"document":"a","detail":"b"}]}"#,
+                "the planner's answer names no plan format",
+            ),
+            (
+                r#"{"plan":"1","ok":false}"#,
+                "the planner's answer names no plan format",
+            ),
+            (
+                r#"{"plan":1,"failures":[{"document":"a","detail":"b"}]}"#,
+                "the planner's plan does not say whether it would succeed",
+            ),
+            (
+                r#"{"plan":1,"ok":"false"}"#,
+                "the planner's plan does not say whether it would succeed",
+            ),
         ] {
-            assert!(
-                matches!(read_plan(unreadable), Plan::Unknown(_)),
-                "{unreadable} must not be read as a verdict"
+            assert_eq!(
+                read_plan(unreadable),
+                Plan::Broken(reason.to_string()),
+                "{unreadable}"
             );
         }
+        // A format from the future is a newer image knowing something this binary does not: no plan, never a verdict.
+        assert_eq!(
+            read_plan(r#"{"plan":2,"ok":false,"failures":[{"document":"a","detail":"b"}]}"#),
+            Plan::Unknown(
+                "the planner answered plan format 2, which only a newer ic reads".to_string()
+            )
+        );
         let Plan::Unknown(reason) = read_plan(r#"{"plan":2,"ok":true}"#) else {
             panic!("a newer format is no plan")
         };
@@ -761,10 +889,10 @@ mod tests {
             }
         );
         // A plan printed by a planner that then failed is not a plan the image stands behind.
-        assert!(matches!(
+        assert_eq!(
             verdict(&finished(1, clean, ""), "img"),
-            Plan::Unknown(_)
-        ));
+            Plan::Broken("the planner exited with status 1".to_string())
+        );
         let hung = docker::Bounded {
             code: None,
             timed_out: true,
@@ -803,6 +931,39 @@ mod tests {
     }
 
     #[test]
+    fn an_image_that_cannot_load_its_own_modules_is_broken_not_old() {
+        // Verbatim node (2026-10-06), for a package the daemon imports and its image never installed: the planner's
+        // import graph reached it, and so does the daemon's on every start.
+        let package = concat!(
+            "node:internal/modules/package_json_reader:331\n",
+            "  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n",
+            "        ^\n",
+            "\n",
+            "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js\n",
+            "    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9) {\n",
+            "  code: 'ERR_MODULE_NOT_FOUND'\n",
+            "}\n",
+            "\n",
+            "Node.js v24.21.0",
+        );
+        assert_eq!(
+            verdict(&finished(1, "", package), "img"),
+            Plan::Broken("the planner exited with status 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js".to_string())
+        );
+        // A file of its own the planner imports names that file, beside the planner's path: missing code, not an old
+        // image, which the planner's path alone once read it as.
+        let file = concat!(
+            "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/opt/sandbox/dist/store/newest-run.js' imported from /opt/sandbox/dist/state-plan.js\n",
+            "  code: 'ERR_MODULE_NOT_FOUND',\n",
+            "  url: 'file:///opt/sandbox/dist/store/newest-run.js'\n",
+        );
+        assert!(matches!(
+            verdict(&finished(1, "", file), "img"),
+            Plan::Broken(_)
+        ));
+    }
+
+    #[test]
     fn a_crashed_planner_is_quoted_by_its_error_line_not_its_trailer() {
         // The source excerpt that threw also spells "Error"; the message node prints after it is the one to quote.
         let stderr = concat!(
@@ -817,12 +978,13 @@ mod tests {
         );
         assert_eq!(
             verdict(&finished(1, "", stderr), "img"),
-            Plan::Unknown(
+            Plan::Broken(
                 "the planner exited with status 1: Error: cannot read /work/.intentic/config/settings.json"
                     .to_string()
             )
         );
-        // Docker refusing the run itself (an image without node) is quoted the same way.
+        // Docker refusing the run itself (an image without node) is quoted the same way, as no plan: the probe never
+        // ran, which says nothing about the image's code.
         assert_eq!(
             verdict(
                 &finished(
@@ -839,8 +1001,23 @@ mod tests {
             Plan::Unknown("the planner exited with status 127: docker: Error response from daemon: exec: \"node\": executable file not found in $PATH".to_string())
         );
         assert_eq!(
+            verdict(
+                &finished(125, "", "docker: Error response from daemon: conflict.\n"),
+                "img"
+            ),
+            Plan::Unknown(
+                "the planner exited with status 125: docker: Error response from daemon: conflict."
+                    .to_string()
+            )
+        );
+        assert_eq!(
             verdict(&finished(2, "", ""), "img"),
-            Plan::Unknown("the planner exited with status 2".to_string())
+            Plan::Broken("the planner exited with status 2".to_string())
+        );
+        // Killed from outside, by the memory limit or a stop: no verdict on the code.
+        assert_eq!(
+            verdict(&finished(137, "", ""), "img"),
+            Plan::Unknown("the planner was killed (status 137) before it answered".to_string())
         );
     }
 

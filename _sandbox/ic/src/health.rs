@@ -8,6 +8,28 @@ use crate::util::{bail, Result};
 
 const HEALTH_URL: &str = "http://localhost:8787/health";
 
+/// netd's own answer about the daemon it runs (browser-wire's `SandboxVitals`), given whatever state Node is in: netd
+/// answers it before it would wait for Node.
+const VITALS_URL: &str = "http://localhost:8787/system/vitals";
+
+/// Restarts of a crashed daemon, by netd inside a container that stays up, that make a crash loop: the editor's own
+/// threshold (diagnose.ts CRASH_LOOP_RESTARTS). Docker's restart count never sees them, since netd is PID 1.
+pub const CRASH_LOOP_RESTARTS: u32 = 3;
+
+/// The line netd logs each time it restarts a daemon that crashed (_sandbox/netd/crates/netd/src/supervise.rs, held to
+/// it by a test below).
+const NETD_RESTARTING: &str = "the daemon crashed; restarting it";
+
+/// How long the first answer may take. A clock rather than a count of reads, since a read's length depends on who
+/// answers it: netd holds one for half a minute while its daemon is down. About what fifteen such reads came to, so a
+/// first boot that converts state before it serves keeps the time it had; a daemon that keeps crashing is found long
+/// before, by netd's count of restarts.
+const ANSWER_BUDGET: Duration = Duration::from_secs(8 * 60);
+
+/// Reads of `/health` that may fail before the wait gives up: what a daemon with no netd in front of it (an image from
+/// before netd, refusing the connection while it starts) has always been given.
+const ANSWER_READS: u32 = 15;
+
 /// How long one read of `/health` in the waits below may take, in curl's `-m` seconds: a daemon that took the
 /// connection and never answers fails the read instead of holding the update forever. Past the half minute netd
 /// holds a request while its daemon is not up, so a read still rides that hold to its answer, and a wait's reach stays
@@ -23,34 +45,157 @@ const READY_BUDGET: Duration = Duration::from_secs(120);
 /// healthy boot; rolling it back would undo work that was about to succeed.
 const JOURNAL_BUDGET: Duration = Duration::from_secs(600);
 
-/// Returns the first answer, which the readiness wait reads too (see [`wait_ready`]).
-pub fn wait_answering(container: &str, log: &Log, remedy: &str) -> Result<String> {
+/// What netd says of the daemon it runs: whether Node is `up`, `starting` or `restarting`, and how many times netd
+/// restarted it in the last ten minutes.
+#[derive(Debug, PartialEq)]
+pub struct NodeVitals {
+    pub node: String,
+    pub restarts: u32,
+}
+
+/// The vitals of `container`'s daemon. None from a container with no netd to ask (an image from before it) or one not
+/// answering at all yet.
+pub fn vitals(container: &str) -> Option<NodeVitals> {
+    let body = docker::exec_capture(container, &["curl", "-sf", "-m", "5", VITALS_URL])?;
+    read_vitals(&body)
+}
+
+/// The vitals document → what the waits read of it. Pure. Anything without both fields is no answer.
+fn read_vitals(body: &str) -> Option<NodeVitals> {
+    let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+    Some(NodeVitals {
+        node: parsed.get("node")?.as_str()?.to_string(),
+        restarts: u32::try_from(parsed.get("restarts")?.as_u64()?).unwrap_or(u32::MAX),
+    })
+}
+
+/// Why `vitals` read as a daemon that keeps crashing, or None. Pure. Only a Node that is down now counts: one netd had
+/// to restart three times and that then came up has recovered, and the waits go on reading it.
+pub fn crash_loop(vitals: &NodeVitals) -> Option<String> {
+    (vitals.node != "up" && vitals.restarts >= CRASH_LOOP_RESTARTS).then(|| {
+        format!(
+            "netd restarted it {} times in the last ten minutes, and it is down again",
+            vitals.restarts
+        )
+    })
+}
+
+/// A crash loop read off the container's own log, for a daemon that dies before it ever reaches netd: netd binds no
+/// port until its daemon names them, so such a container has no vitals to ask, and netd's log line is the only count of
+/// its restarts. The last ten minutes, as netd's own count is.
+pub fn crash_loop_in_logs(container: &str) -> Option<String> {
+    crashes_in(&docker::stderr_since(container, "10m")?)
+}
+
+/// The crash loop in a stretch of netd's log, with the error the daemon printed before its last restart. Pure.
+fn crashes_in(log: &str) -> Option<String> {
+    let lines: Vec<&str> = log.lines().map(str::trim).collect();
+    let restarts: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains(NETD_RESTARTING))
+        .map(|(at, _)| at)
+        .collect();
+    if restarts.len() < CRASH_LOOP_RESTARTS as usize {
+        return None;
+    }
+    let last = restarts[restarts.len() - 1];
+    let from = restarts[restarts.len() - 2] + 1;
+    let count = restarts.len();
+    Some(
+        match lines[from..last]
+            .iter()
+            .rfind(|line| line.contains("Error"))
+        {
+            Some(error) => format!(
+                "netd restarted it {count} times in the last ten minutes, each time after {}",
+                crate::sandbox::preflight::clip(error, 200)
+            ),
+            None => format!("netd restarted it {count} times in the last ten minutes"),
+        },
+    )
+}
+
+/// Why `container`'s daemon reads as one that keeps crashing, or None: netd's vitals where it answers them, its log
+/// where it cannot (a daemon that never got far enough to have netd listen).
+pub fn crashing(container: &str) -> Option<String> {
+    match vitals(container) {
+        Some(node) => crash_loop(&node),
+        None => crash_loop_in_logs(container),
+    }
+}
+
+/// Why a daemon gave no first answer.
+#[derive(Debug, PartialEq)]
+pub enum Silent {
+    /// netd keeps restarting it (`crashing`), and why.
+    Crashing(String),
+    /// It recorded why it could not start (/history/boot-failure.json).
+    Failed(String),
+    /// Nothing answered within the wait, which ran this many seconds.
+    Quiet(u64),
+}
+
+/// The first answer of `container`'s `/health`, or why none came.
+///
+/// Every pass first asks whether the daemon keeps crashing (`crashing`), which ends the wait at once with the error it
+/// dies on. Without that, a daemon that dies before reaching netd was told apart from a slow one only by fifteen
+/// refused reads, about half a minute, and said nothing of why; one that dies after it did was given about eight
+/// minutes, since netd holds each read for half a minute before its 503. `/health` is read only once netd says Node is
+/// up, the earliest it can answer anyway, or where no netd answers.
+pub fn first_answer(container: &str) -> std::result::Result<String, Silent> {
     let started = crate::sandbox::now_ms();
-    for _ in 0..15 {
-        if let Some(answer) = docker::exec_capture(
-            container,
-            &["curl", "-sf", "-m", WAIT_READ_SECS, HEALTH_URL],
-        ) {
-            return Ok(answer);
+    let clock = Instant::now();
+    let mut failed_reads = 0;
+    while failed_reads < ANSWER_READS && clock.elapsed() < ANSWER_BUDGET {
+        let node = vitals(container);
+        let looping = match &node {
+            Some(node) => crash_loop(node),
+            None => crash_loop_in_logs(container),
+        };
+        if let Some(looping) = looping {
+            return Err(Silent::Crashing(looping));
+        }
+        if node.as_ref().is_none_or(|node| node.node == "up") {
+            if let Some(answer) = docker::exec_capture(
+                container,
+                &["curl", "-sf", "-m", WAIT_READ_SECS, HEALTH_URL],
+            ) {
+                return Ok(answer);
+            }
+            failed_reads += 1;
         }
         // A daemon that recorded why it could not start has answered, just not over HTTP: no point waiting out the
         // rest of the budget on netd's "restarting" while it fails the same way again.
         if let Some(error) = crate::sandbox::probation::boot_failure_since(container, started) {
-            log.section(&format!("container logs ({container})"));
-            docker::logs_into(container, "500", log);
-            bail!(
-                "the new version could not start: {error}\n       Its logs are saved to {}.{remedy}",
-                log.path.display()
-            );
+            return Err(Silent::Failed(error));
         }
         std::thread::sleep(Duration::from_secs(2));
     }
+    Err(Silent::Quiet(clock.elapsed().as_secs()))
+}
+
+/// Returns the first answer, which the readiness wait reads too (see [`wait_ready`]); the new version's failure in
+/// its own words, with its logs saved, when there is none.
+pub fn wait_answering(container: &str, log: &Log, remedy: &str) -> Result<String> {
+    let silent = match first_answer(container) {
+        Ok(answer) => return Ok(answer),
+        Err(silent) => silent,
+    };
     log.section(&format!("container logs ({container})"));
     docker::logs_into(container, "500", log);
-    bail!(
-        "the sandbox did not become healthy within 30s — its logs are saved to {}.{remedy}",
-        log.path.display()
-    );
+    let saved = log.path.display();
+    match silent {
+        Silent::Crashing(looping) => bail!(
+            "the new version's daemon keeps crashing: {looping}.\n       Its logs are saved to {saved}.{remedy}"
+        ),
+        Silent::Failed(error) => bail!(
+            "the new version could not start: {error}\n       Its logs are saved to {saved}.{remedy}"
+        ),
+        Silent::Quiet(secs) => bail!(
+            "the sandbox did not become healthy within {secs}s — its logs are saved to {saved}.{remedy}"
+        ),
+    }
 }
 
 /// The readiness gate: hold until `"ready":true`, echoing the running boot step's label as it changes — the
@@ -69,14 +214,27 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
     }
     let started = Instant::now();
     let mut last_step = String::new();
+    let mut crashing = None;
     loop {
-        let health = docker::exec_capture(
-            container,
-            &["curl", "-sf", "-m", WAIT_READ_SECS, HEALTH_URL],
-        )
-        .unwrap_or_default();
+        // A daemon that answered once and then fell over is not one that is ready: while netd says Node is down, the
+        // wait holds (silence would read as an old daemon that reports nothing), and a crash loop ends it.
+        let node = vitals(container);
+        if let Some(looping) = node.as_ref().and_then(crash_loop) {
+            crashing = Some(looping);
+            break;
+        }
+        let down = node.as_ref().is_some_and(|node| node.node != "up");
+        let health = if down {
+            String::new()
+        } else {
+            docker::exec_capture(
+                container,
+                &["curl", "-sf", "-m", WAIT_READ_SECS, HEALTH_URL],
+            )
+            .unwrap_or_default()
+        };
         let parsed = serde_json::from_str::<serde_json::Value>(&health).ok();
-        if readiness.admits(parsed.as_ref()) {
+        if !down && readiness.admits(parsed.as_ref()) {
             return Ok(());
         }
         // A conversion that failed is not something more waiting can fix.
@@ -103,6 +261,9 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
             break;
         }
         std::thread::sleep(Duration::from_secs(1));
+    }
+    if let Some(looping) = crashing {
+        bail!("the new version's daemon keeps crashing: {looping}.");
     }
     if readiness.journal_failed {
         bail!("the new version could not convert this sandbox's stored files; it put them back as they were.");
@@ -215,6 +376,116 @@ pub fn running_step(value: &serde_json::Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// netd's vitals as the contract spells them (browser-wire's SandboxVitals, generated into the contract), which
+    /// this reader must keep reading.
+    const GOLDEN_WIRE: &str =
+        include_str!("../../../_shared/sandbox-contract/src/netd/generated/browser-wire.json");
+
+    #[test]
+    fn the_vitals_are_read_by_the_names_and_values_netd_answers_with() {
+        let wire: serde_json::Value = serde_json::from_str(GOLDEN_WIRE).expect("JSON");
+        let vitals = &wire["vitals"];
+        assert_eq!(
+            vitals["path"],
+            VITALS_URL.trim_start_matches("http://localhost:8787")
+        );
+        let body = &vitals["body"];
+        assert_eq!(body["properties"]["node"]["$ref"], "#/$defs/NodeLink");
+        assert_eq!(body["properties"]["restarts"]["type"], "integer");
+        let links: Vec<&str> = body["$defs"]["NodeLink"]["oneOf"]
+            .as_array()
+            .expect("NodeLink is a oneOf")
+            .iter()
+            .filter_map(|link| link["const"].as_str())
+            .collect();
+        assert_eq!(links, ["starting", "up", "restarting"]);
+    }
+
+    #[test]
+    fn a_daemon_down_after_three_restarts_is_a_crash_loop_and_nothing_less_is() {
+        let read = |body: &str| read_vitals(body).expect("vitals");
+        // netd's answer verbatim, from a sandbox whose daemon could not load a package (2026-10-06).
+        let looping = read(
+            r#"{"node":"restarting","lagMs":null,"restarts":3,"uptimeS":41,"pressure":null,"tunnel":{"state":"held","dropsLastHour":0,"quic":false}}"#,
+        );
+        assert_eq!(
+            crash_loop(&looping).as_deref(),
+            Some("netd restarted it 3 times in the last ten minutes, and it is down again")
+        );
+        // Two restarts is not yet a loop; three that ended with Node up is one that recovered.
+        assert_eq!(
+            crash_loop(&read(r#"{"node":"restarting","restarts":2}"#)),
+            None
+        );
+        assert_eq!(crash_loop(&read(r#"{"node":"up","restarts":5}"#)), None);
+        // A first boot that has not said hello yet is starting, not looping, until netd has had to restart it.
+        assert_eq!(
+            crash_loop(&read(r#"{"node":"starting","restarts":0}"#)),
+            None
+        );
+        assert_eq!(
+            crash_loop(&read(r#"{"node":"starting","restarts":3}"#)).as_deref(),
+            Some("netd restarted it 3 times in the last ten minutes, and it is down again")
+        );
+        // What is not netd's answer is no answer: an image from before netd, a page in its place.
+        assert_eq!(read_vitals("<html>not found</html>"), None);
+        assert_eq!(read_vitals(r#"{"node":"up"}"#), None);
+        assert_eq!(read_vitals(r#"{"restarts":3}"#), None);
+    }
+
+    /// netd's own source, for the one line of its log this binary reads.
+    const NETD_SUPERVISE: &str = include_str!("../../netd/crates/netd/src/supervise.rs");
+
+    #[test]
+    fn the_restart_line_read_is_the_one_netd_logs() {
+        assert!(
+            NETD_SUPERVISE.contains(&format!("\"{NETD_RESTARTING}\"")),
+            "netd no longer logs {NETD_RESTARTING:?}: the crash loop of a daemon that never reaches netd goes unseen"
+        );
+    }
+
+    /// netd's stderr verbatim (2026-10-06), from a container whose daemon could not load a package, three restarts in.
+    const LOOPING: &str = concat!(
+        "2026-10-06T22:32:12.726649Z ERROR the daemon crashed; restarting it code=1 ran=180.166589ms\n",
+        "node:internal/modules/package_json_reader:331\n",
+        "  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n",
+        "        ^\n",
+        "\n",
+        "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js\n",
+        "    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)\n",
+        "    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {\n",
+        "  code: 'ERR_MODULE_NOT_FOUND'\n",
+        "}\n",
+        "\n",
+        "Node.js v24.21.0\n",
+        "2026-10-06T22:32:34.968079Z ERROR the daemon crashed; restarting it code=1 ran=168.365025ms\n",
+        "node:internal/modules/package_json_reader:331\n",
+        "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js\n",
+        "Node.js v24.21.0\n",
+        "2026-10-06T22:33:04.225244Z ERROR the daemon crashed; restarting it code=1 ran=182.637998ms\n",
+    );
+
+    #[test]
+    fn netds_log_of_three_restarts_is_a_crash_loop_named_by_the_error_it_dies_on() {
+        assert_eq!(
+            crashes_in(LOOPING).as_deref(),
+            Some("netd restarted it 3 times in the last ten minutes, each time after Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js")
+        );
+        // Two restarts is not yet a loop.
+        let two = LOOPING
+            .rsplit_once("2026-10-06T22:33:04")
+            .map(|(before, _)| before)
+            .unwrap();
+        assert_eq!(crashes_in(two), None);
+        // A crash that printed no error line is still counted.
+        let bare = format!("{NETD_RESTARTING}\n{NETD_RESTARTING}\n{NETD_RESTARTING}\n");
+        assert_eq!(
+            crashes_in(&bare).as_deref(),
+            Some("netd restarted it 3 times in the last ten minutes")
+        );
+        assert_eq!(crashes_in(""), None);
+    }
 
     #[test]
     fn finds_the_running_step_wherever_the_schema_puts_it() {

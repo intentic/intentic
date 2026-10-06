@@ -11,7 +11,8 @@ import { version } from "./version.js";
 // The update pre-flight: run inside the TARGET image over read-only mounts of the running sandbox's volumes
 // (`node /opt/sandbox/dist/state-plan.js --workspace /work --history /history`), it prints what that image's boot step
 // would convert, and which conversions would fail, before the host swaps anything. One JSON line on stdout; the host's
-// reader (`ic`, _sandbox/ic/src/sandbox/preflight.rs) refuses an update only on an explicit `"ok": false`.
+// readers (`ic`, _sandbox/ic/src/sandbox/preflight.rs, and the hosted gate) refuse an update on `"ok": false`, and on
+// this script failing to answer at all: it runs the daemon's own modules, so an image that cannot load them is broken.
 
 const { values } = parseArgs({
     options: {

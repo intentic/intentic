@@ -92,7 +92,26 @@ if ! bash "$ROOT/_tools/scripts/image/build-netd.sh"; then
     exit 1
 fi
 
+# Will the compiled daemon load in this container? Only compiled output is mounted, never node_modules, so code that
+# imports a package the image never installed compiles here and then crashes on every start, in the one container there
+# is (2026-10-06: a devDependency imported at runtime took the sandbox down until an image rebuild). The state planner
+# runs the daemon's own modules without starting it and writes nothing (it is `ic`'s update pre-flight, preflight.rs),
+# so run in the running container it reads exactly what the restart would, while the daemon it would replace still
+# serves.
+echo "intentic: checking that the compiled daemon loads in ${CONTAINER}…"
+if ! planned="$(docker exec "$CONTAINER" node /opt/sandbox/dist/state-plan.js 2>&1 >/dev/null)"; then
+    printf '%s\n' "$planned" | grep 'Error' | tail -n 1 >&2
+    if printf '%s' "$planned" | grep -q 'ERR_MODULE_NOT_FOUND'; then
+        echo "error: the compiled daemon imports something this container's image does not have (only compiled code is mounted)." >&2
+        echo "       The running daemon is untouched. Rebuild the image to install it: pnpm rebuild:sandbox ${SLUG}" >&2
+    else
+        echo "error: the compiled daemon fails before it could start (above) — the running daemon is untouched. Fix it and save again." >&2
+    fi
+    exit 1
+fi
+
 echo "intentic: restarting ${CONTAINER}…"
+restarted_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 docker restart "$CONTAINER" >/dev/null
 
 # Gate on the daemon's own /health, exactly like dev-sandbox.sh: a container that comes back up but crash-loops
@@ -103,6 +122,14 @@ echo "intentic: waiting for the daemon…"
 tries=0
 until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 2>&1; do
     tries=$((tries + 1))
+    # netd restarts a daemon that crashed without the container stopping, and logs each restart beside the daemon's own
+    # error: three is a crash loop, said with what it dies on rather than waited out.
+    crashes="$(docker logs --since "$restarted_at" "$CONTAINER" 2>&1 >/dev/null | grep -c 'the daemon crashed; restarting it' || true)"
+    if [ "${crashes:-0}" -ge 3 ]; then
+        docker logs --since "$restarted_at" "$CONTAINER" 2>&1 >/dev/null | grep 'Error' | tail -n 1 >&2
+        echo "error: the daemon keeps crashing (netd restarted it ${crashes} times, the error above)." >&2
+        exit 1
+    fi
     if [ "$tries" -ge 15 ]; then
         docker logs --tail 50 "$CONTAINER" >&2 || true
         echo "error: the daemon did not become healthy within 30s (logs above)." >&2

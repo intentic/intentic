@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { CLEAR_STATE_PLAN, type FakeFlyExecAnswer, type FakeFlyMachine } from "@intentic/testing/fly-fake";
-import { DAEMON_HEALTH_COMMAND } from "./sandbox/hosted/gate/daemon-health.js";
+import { DAEMON_HEALTH_COMMAND, DAEMON_VITALS_COMMAND } from "./sandbox/hosted/gate/daemon-health.js";
 import type { HostedGateRecord } from "./sandbox/hosted/gate/gate-row.js";
 import type { withHostedAppLock } from "./sandbox/hosted/hosted-app-lock.js";
 
@@ -111,12 +111,19 @@ const CLEAR_PLAN: FakeFlyExecAnswer = { exit_code: 0, stdout: `${JSON.stringify(
 const healthAsks = new WeakMap<FakeFlyMachine, number>();
 
 /* WHAT A HOSTED MACHINE ANSWERS THE COMMANDS THE PLATFORM RUNS IN IT (Fly's exec, the shared fake's `commands.answer`):
- * the state planner, clear unless `plan` says otherwise, and the daemon's `/health`, ready with its journal committed
- * unless `health` says otherwise. `health` gets how many times it was asked before, and the machine, so a test can play a
+ * the state planner, clear unless `plan` says otherwise, the daemon's `/health`, ready with its journal committed
+ * unless `health` says otherwise, and netd's vitals, which nothing answers unless `vitals` does. `health` gets how many times it was asked before, and the machine, so a test can play a
  * boot that converges, or one that exits under it. */
 export const machineAnswers =
-    (options: { readonly plan?: () => FakeFlyExecAnswer; readonly health?: (asked: number, machine: FakeFlyMachine) => FakeFlyExecAnswer }) =>
+    (options: {
+        readonly plan?: () => FakeFlyExecAnswer;
+        readonly health?: (asked: number, machine: FakeFlyMachine) => FakeFlyExecAnswer;
+        readonly vitals?: () => FakeFlyExecAnswer;
+    }) =>
     (machine: FakeFlyMachine, command: readonly string[]): FakeFlyExecAnswer => {
+        if (command.join(` `) === DAEMON_VITALS_COMMAND.join(` `)) {
+            return (options.vitals ?? (() => NO_HEALTH))();
+        }
         if (command.join(` `) !== DAEMON_HEALTH_COMMAND.join(` `)) {
             return (options.plan ?? (() => CLEAR_PLAN))();
         }

@@ -139,7 +139,10 @@ const failuresOf = (raw: readonly unknown[] | undefined): PlanFailure[] =>
  * cannot find the planner at all) and a plan in a format newer than this platform reads. */
 export const readPlanAnswer = (answer: FlyExecAnswer): HostedPlanVerdict => {
     if (answer.exitCode !== 0) {
-        if (answer.stderr.includes(`Cannot find module`) && answer.stderr.includes(STATE_PLANNER)) {
+        // The planner's own path, quoted, as node names the module it could not find: a module the planner imports and the
+        // image lacks names that module instead (`Cannot find module '…/x.js' imported from …/state-plan.js`), and that
+        // image is broken, not old (_sandbox/ic/src/sandbox/preflight.rs predates_engine).
+        if (answer.stderr.includes(`Cannot find module '${STATE_PLANNER}'`)) {
             return { kind: `unknown`, reason: `the image predates the state-conversion engine` };
         }
         const error = answer.stderr

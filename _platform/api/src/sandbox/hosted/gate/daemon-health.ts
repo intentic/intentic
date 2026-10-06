@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { parseVitals, VITALS_PATH } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Config } from "../../../config.js";
 import { MINUTE_MS } from "../../../durations.js";
@@ -17,6 +18,8 @@ import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly
  *   after an open journal is netd restarting a daemon that fell over mid-conversion;
  * - the machine exits with an error, whether Fly restarts it (on-failure, three times, then stopped) or not, or reads
  *   stopped with no exit to explain it;
+ * - netd, asked while `/health` is silent, says it has restarted a crashed daemon three times in ten minutes and the
+ *   daemon is down again: netd is the machine's PID 1, so a daemon crashing on every start never exits the machine;
  * - the sandbox does not check in with the platform within the budget.
  * A stop someone asked Fly for (a suspension, an operator, the abuse watch) or a clean exit (the daemon's idle-stop)
  * says nothing about the version: when the machine stays down after one, the wait reports it interrupted, and the gate
@@ -30,6 +33,11 @@ import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly
 // The same probe ic runs in the container: the daemon's own health route, on the port it always listens on. Named by
 // its path, like the planner's node, so nothing rests on how Fly's exec resolves a bare name.
 export const DAEMON_HEALTH_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787/health`] as const;
+// netd's own vitals (browser-wire's SandboxVitals), which it answers whatever state the daemon is in once the daemon has
+// reached it; a daemon that never did leaves netd listening on nothing, and only the budget then speaks for it.
+export const DAEMON_VITALS_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787${VITALS_PATH}`] as const;
+// Restarts that make a crash loop: the editor's (diagnose.ts CRASH_LOOP_RESTARTS) and ic's (health.rs) both.
+const CRASH_LOOP_RESTARTS = 3;
 const HEALTH_EXEC_SECONDS = 10;
 export const HEALTH_POLL_MS = 2_000;
 export const READY_BUDGET_MS = 3 * MINUTE_MS;
@@ -68,6 +76,21 @@ export const readDaemonHealth = (stdout: string): DaemonHealthAnswer | undefined
         ready: (parsed.boot?.ready ?? parsed.ready) !== false,
         journal: journal === `open` || journal === `failed` ? journal : `closed`,
     };
+};
+
+// Why one answer of the vitals reads as a daemon that keeps crashing, or undefined: down now, after three restarts.
+export const crashLoopOf = (stdout: string): string | undefined => {
+    let body: Parameters<typeof parseVitals>[0];
+    try {
+        body = JSON.parse(stdout);
+    } catch {
+        // allow(silent-catch): not JSON is not netd's answer, which is what undefined says
+        return undefined;
+    }
+    const vitals = parseVitals(body);
+    return vitals !== undefined && vitals.node !== `up` && vitals.restarts >= CRASH_LOOP_RESTARTS
+        ? `its daemon kept crashing: netd restarted it ${vitals.restarts} times in ten minutes`
+        : undefined;
 };
 
 export type DaemonVerdict =
@@ -138,6 +161,15 @@ const askHealth = async (config: Config, machine: DaemonMachine): Promise<Daemon
     return answer === undefined || answer.exitCode !== 0 ? undefined : readDaemonHealth(answer.stdout);
 };
 
+// Asks netd whether the daemon keeps crashing; undefined when it does not, or nothing readable answered.
+const askCrashLoop = async (config: Config, machine: DaemonMachine): Promise<string | undefined> => {
+    // allow(silent-catch): an exec Fly refuses says nothing of the daemon; the budget still decides what silence means
+    const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, DAEMON_VITALS_COMMAND, HEALTH_EXEC_SECONDS).catch(
+        () => undefined,
+    );
+    return answer === undefined || answer.exitCode !== 0 ? undefined : crashLoopOf(answer.stdout);
+};
+
 // One look at the machine and its daemon; a verdict when this look decides one.
 const look = async (config: Config, machine: DaemonMachine, baseline: DaemonBaseline, seen: Seen): Promise<DaemonVerdict | undefined> => {
     // allow(silent-catch): an unreadable machine is one more poll; its daemon's silence is judged by the budget
@@ -148,7 +180,8 @@ const look = async (config: Config, machine: DaemonMachine, baseline: DaemonBase
     }
     const answer = await askHealth(config, machine);
     if (answer === undefined) {
-        return undefined;
+        const looping = await askCrashLoop(config, machine);
+        return looping === undefined ? undefined : { kind: `down`, reason: looping };
     }
     if (answer.journal === `failed`) {
         return { kind: `down`, reason: `it could not convert this sandbox's stored files, and put them back as they were` };

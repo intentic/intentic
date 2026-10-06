@@ -60,7 +60,11 @@ flowchart LR
   A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
 - The sandbox's proof of life is netd's too: `GET /system/vitals` on the daemon's host (`vitals.rs`) is answered
-  before anything waits for Node, whether Node has not said hello yet, is up, or is being restarted. It reports Node's
+  before anything waits for Node, whether Node has not said hello yet, is up, or is being restarted, once Node has
+  named netd's ports: netd binds none until Node's first config. A Node that dies before that (a module it cannot
+  load) leaves netd listening on nothing, and netd's log line for each restart, `the daemon crashed; restarting it`,
+  is then the only count of them; `ic`'s swap and probation, `dev-restart.sh` and `smoke-image.sh` read it there
+  (2026-10-06), and the vitals everywhere else. It reports Node's
   link (`starting`, `up`, `restarting`), its lag, how many times netd restarted it in the last 10 minutes, the
   container's uptime, cgroup v2's `some avg10` pressure for cpu, memory and io, and the tunnel (`tunnel`: whether it is
   held, dialling, held by another copy and where, or deleted, whether QUIC is held, and how many times a held tunnel

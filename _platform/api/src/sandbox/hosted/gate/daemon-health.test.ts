@@ -2,7 +2,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "@intentic/testing/fly-fake";
 import type { Config } from "../../../config.js";
 import { healthAnswer, machineAnswers, NO_HEALTH } from "../../../testing.js";
-import { awaitDaemon, baselineOf, DAEMON_HEALTH_COMMAND, HEALTH_POLL_MS, READY_BUDGET_MS, readDaemonHealth } from "./daemon-health.js";
+import { awaitDaemon, baselineOf, crashLoopOf, DAEMON_HEALTH_COMMAND, DAEMON_VITALS_COMMAND, HEALTH_POLL_MS, READY_BUDGET_MS, readDaemonHealth } from "./daemon-health.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 /* The poll's pause is two seconds of real time in production; the wait is bounded by a count of looks as well. */
@@ -44,6 +44,20 @@ describe(`reading /health the way ic reads it`, () => {
 
     it.each([[``], [`<html>503</html>`], [`[1,2]`], [`"up"`]])(`reads %j as no answer`, (stdout) => {
         expect(readDaemonHealth(stdout)).toBeUndefined();
+    });
+});
+
+describe(`reading netd's vitals for a crash loop`, () => {
+    const vitals = (node: string, restarts: number): string => JSON.stringify({ node, lagMs: null, restarts, uptimeS: 41, pressure: null });
+
+    it(`reads a daemon down after three restarts as one that keeps crashing, and nothing less as one`, () => {
+        expect(crashLoopOf(vitals(`restarting`, 3))).toBe(`its daemon kept crashing: netd restarted it 3 times in ten minutes`);
+        expect(crashLoopOf(vitals(`restarting`, 2))).toBe(undefined);
+        // Restarted three times and up again: it recovered.
+        expect(crashLoopOf(vitals(`up`, 5))).toBe(undefined);
+        // An older sandbox's Node answering the path, or anything that is not netd's answer.
+        expect(crashLoopOf(`<html>not found</html>`)).toBe(undefined);
+        expect(crashLoopOf(JSON.stringify({ restarts: 3 }))).toBe(undefined);
     });
 });
 
@@ -109,7 +123,25 @@ describe(`waiting for the daemon`, () => {
             kind: `down`,
             reason: `its daemon did not answer within 3 minutes of starting`,
         });
-        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(READY_BUDGET_MS / HEALTH_POLL_MS);
+        const healthAsks = fly.called(`POST`, `/machines/m1/exec`).filter((call) => JSON.stringify(call.body).includes(DAEMON_HEALTH_COMMAND.at(-1) ?? ``));
+        expect(healthAsks).toHaveLength(READY_BUDGET_MS / HEALTH_POLL_MS);
+    });
+
+    // netd is the machine's PID 1: a daemon that crashes on every start never exits the machine, and its own count of
+    // restarts is the verdict, where the budget would have waited three minutes for it.
+    it(`goes back at the first look netd says the daemon keeps crashing, and asks netd the way it asks /health`, async () => {
+        const fly = started();
+        const looping = { exit_code: 0, stdout: `${JSON.stringify({ node: `restarting`, lagMs: null, restarts: 3, uptimeS: 41, pressure: null })}\n`, stderr: `` };
+        fly.commands.answer = machineAnswers({ health: () => NO_HEALTH, vitals: () => looping });
+        await expect(awaitDaemon(config, MACHINE, await baselineOf(config, MACHINE), undefined)).resolves.toEqual({
+            kind: `down`,
+            reason: `its daemon kept crashing: netd restarted it 3 times in ten minutes`,
+        });
+        expect(fly.called(`POST`, `/machines/m1/exec`).map((call) => call.body)).toEqual([
+            { command: [...DAEMON_HEALTH_COMMAND], timeout: 10 },
+            { command: [...DAEMON_VITALS_COMMAND], timeout: 10 },
+        ]);
+        expect(DAEMON_VITALS_COMMAND.at(-1)).toBe(`http://localhost:8787/system/vitals`);
     });
 
     it(`keeps a daemon still booting when the budget ends with its journal never open, as ic keeps a slow boot`, async () => {
