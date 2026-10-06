@@ -14,6 +14,7 @@ import {
     DIMINUTIVES_PL,
     NEVER_NAMES,
     NICKNAMES_EN,
+    THING_NOUNS,
     TITLE_ABBREVIATIONS_EN,
     TITLE_ABBREVIATIONS_PL,
     TITLES_EN,
@@ -92,7 +93,10 @@ const SOURCES: readonly ListSource[] = [
         words: `${TITLES_PL} ${TITLE_ABBREVIATIONS_PL}`,
     },
     { list: { id: "titles-en", kind: "title", languages: ["en"], matching: "as-written", ...HAND_WRITTEN }, words: `${TITLES_EN} ${TITLE_ABBREVIATIONS_EN}` },
-    { list: { id: "never-names", kind: "never", languages: ["pl", "en"], matching: "as-written", ...HAND_WRITTEN }, words: NEVER_NAMES },
+    {
+        list: { id: "never-names", kind: "never", languages: ["pl", "en"], matching: "as-written", ...HAND_WRITTEN },
+        words: `${NEVER_NAMES} ${THING_NOUNS}`,
+    },
 ];
 
 interface Built {

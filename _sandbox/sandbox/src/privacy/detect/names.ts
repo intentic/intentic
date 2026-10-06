@@ -1,4 +1,4 @@
-import { addressAfter, announcedBy, labelBefore, quotedAlone } from "./name-context.js";
+import { addressAfter, announcedBy, type Label, labelBefore, openedByQuote, quotedAlone } from "./name-context.js";
 import { type Join, joinOf, type Token, tokenize } from "./name-tokens.js";
 import type { Emit } from "./text.js";
 
@@ -94,14 +94,41 @@ const labelled: Rule = (run, at, token) => {
         return undefined;
     }
     const to = extend(run, at, 4, namePart);
+    if (namesThing(run, to)) {
+        return to + 2;
+    }
     const stretch = run.tokens.slice(at, to + 1);
     const unambiguous = stretch.some((part) => part.firstStrong || part.surnameStrong);
     const listed = stretch.every((part) => part.first || part.surname);
     const end = run.tokens[to]?.end ?? token.end;
-    const label = addressAfter(run.text, end) ? "person" : labelBefore(run.text, token.start, token.line);
+    // The address stands after the whole display name, including words that are no name ("Renovate Bot <…>").
+    const address = addressAfter(run.text, run.tokens[extend(run, to, 6, () => true)]?.end ?? end);
+    if (address === "impersonal") {
+        // Skipped whole: "Co-authored-by: Claude Opus <noreply@…>" names a bot, and no other rule should read it either.
+        return to + 1;
+    }
+    // In a line of code a field's value is a name only as a string: `owner: Any` is a type, `author = config` a variable.
+    if (address === undefined && token.line.code && !openedByQuote(run.text, token.start)) {
+        return undefined;
+    }
+    const label = address === "personal" ? "person" : weakenedByProse(run.text, end, labelBefore(run.text, token.start, token.line));
     const named = label === "person" ? unambiguous || listed : label === "name" && unambiguous;
     return named ? report(run, at, to) : undefined;
 };
+
+// A value that goes on in lowercase is a sentence, not a name, and says less about its first word: "name": "Drop
+// offset from route" is a task, where "name": "Anna" is somebody. A greeting keeps some weight ("Hi Anna and Tom"
+// still needs an unambiguous name); a bare name field keeps none.
+const weakenedByProse = (text: string, end: number, label: Label | undefined): Label | undefined => {
+    if (label === undefined || !PROSE_AFTER.test(text.slice(end, end + 3))) {
+        return label;
+    }
+    return label === "person" ? "name" : undefined;
+};
+const PROSE_AFTER = /^ \p{Ll}/u;
+
+// Whether the word right after a name makes it the name of a thing: "Victoria Station", "Renovate Bot".
+const namesThing = (run: Run, last: number): boolean => run.joins[last] === "space" && run.tokens[last + 1]?.thing === true;
 
 // Whether the token after a group of first names is its surname. Across spaces an unambiguous first name takes any
 // capitalized word ("Bożena Okafor"); across a cell separator the surname must be one ("Amalia, Rękawiczka" is a list
@@ -114,7 +141,8 @@ const surnameAfter = (run: Run, last: number, strong: boolean): boolean => {
     if (!strong) {
         return false;
     }
-    return next.surname || (run.joins[last] === "space" && next.unknown && run.heading[last + 1] !== true);
+    // A markdown heading capitalizes every word, so there a word nobody lists says nothing ("## Victor Charts").
+    return next.surname || (run.joins[last] === "space" && next.unknown && run.heading[last + 1] !== true && !next.line.heading);
 };
 
 // First name and surname ("Jan Kowalski", "Markiem Nowakiem", "Anna Maria Nowak-Kowalska", "Jan|Kowalski"), or an
@@ -124,6 +152,9 @@ const firstName: Rule = (run, at, token) => {
         return undefined;
     }
     const last = extend(run, at, 3, (next) => next.first);
+    if (namesThing(run, last)) {
+        return last + 2;
+    }
     const strong = run.tokens.slice(at, last + 1).some((part) => part.firstStrong);
     if (surnameAfter(run, last, strong)) {
         return report(run, at, last + 1);

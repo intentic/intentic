@@ -236,3 +236,59 @@ describe("text that is not prose", () => {
         expect(names("1;Anna;Warszawa;")).toEqual(["Anna"]);
     });
 });
+
+describe("words that are names only sometimes", () => {
+    // The surname register holds English words ("Drop", "Just", "Block"), and a task title or a commit subject starts
+    // with one capitalized.
+    test("a register surname that is an English word is no name at the start of a title or a field's sentence", () => {
+        for (const text of [
+            "Drop offset from route component and fix test",
+            '{"name": "Drop offset from route component and fix test"}',
+            '{"title": "Just checking the build", "user": "Block until ready"}',
+            "Thanks\nDrop the cache before the next run",
+        ]) {
+            expect(names(text), text).toEqual([]);
+        }
+    });
+
+    test("programming languages, tools and placeholders named like people stay as they are", () => {
+        expect(names("We rewrote it in Julia, then Ada, and the site is built with Hugo.")).toEqual([]);
+        expect(names("Textures come from Poly Haven.")).toEqual([]);
+        expect(names('{"name": "Job Listings", "machine_name": "Mac mini"}')).toEqual([]);
+        expect(names("Alice Example signs in; Manuel Gateway answers")).toEqual([]);
+    });
+
+    test("an ambiguous name still counts beside a surname or in a person's field", () => {
+        expect(names("Maya Kowalska przyszła.")).toEqual(["Maya Kowalska"]);
+        expect(names('{"lastName": "Drop"}')).toEqual(["Drop"]);
+    });
+});
+
+describe("context that says no person is named", () => {
+    test("a display name before a bot's, a team's or a reserved address is not a person", () => {
+        for (const text of [
+            "Co-authored-by: Claude Opus 4.5 <noreply@anthropic.com>",
+            "Author: Release Bot <ci@intentic.dev>",
+            "From: Support Team <support@shop.pl>",
+            "Signed-off-by: Maria Test <maria@example.test>",
+        ]) {
+            expect(names(text), text).toEqual([]);
+        }
+        expect(names("Author: Maria Kowalska <maria.kowalska@intentic.dev>")).toEqual(["Maria Kowalska"]);
+    });
+
+    test("a field in a line of code names a person only as a string", () => {
+        expect(names("    def acquire(self, owner: Any, relay: Any) -> None:")).toEqual([]);
+        expect(names('const author = "Ewa";')).toEqual(["Ewa"]);
+    });
+
+    test("month abbreviations listed together are months", () => {
+        expect(names("const months = ['Jan','Feb','Mar','Apr','May'];")).toEqual([]);
+        expect(names('{"headers": ["Product", "Jan", "Feb", "Mar"]}')).toEqual([]);
+    });
+
+    test("a markdown heading capitalizes every word, so a first name there needs a real surname", () => {
+        expect(names("## Victoria Charts")).toEqual([]);
+        expect(names("## Anna Kowalska")).toEqual(["Anna Kowalska"]);
+    });
+});

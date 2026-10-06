@@ -110,6 +110,43 @@ describe("taught datasets", () => {
     });
 });
 
+// A value found in context is matched alone from then on, unless it is personal only in context: a word that is also an
+// ordinary word, or a value an older detector misread. Its token keeps resolving either way, and a taught value is
+// matched whatever it is.
+describe("what a found value is matched as alone", () => {
+    const hits = (vault: ReturnType<typeof filePrivacyVault>, text: string): number => vault.matcher().find(text).length;
+    const ip = [192, 168, 1, 23].join(".");
+
+    test("an ordinary word found as a name, an address taken for a phone and a team's mailbox are not matched alone", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.load();
+        const word = vault.tokenFor("Grace", "person-name");
+        vault.tokenFor(ip, "phone");
+        vault.tokenFor(["support", "firma.pl"].join("@"), "email");
+        expect(hits(vault, "Grace period ends today")).toBe(0);
+        expect(hits(vault, `adb connect ${ip}:37005`)).toBe(0);
+        expect(hits(vault, `write to ${["support", "firma.pl"].join("@")}`)).toBe(0);
+        expect(vault.resolve("PERSON", word.replace(/\D/g, ""))).toBe("Grace");
+    });
+
+    test("a name, a full name with an ordinary word in it, and a phone are matched alone", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.load();
+        vault.tokenFor("Bożydar", "person-name");
+        vault.tokenFor(["Grace", "Kowalska"].join(" "), "person-name");
+        vault.tokenFor(["601", "234", "567"].join(" "), "phone");
+        expect(hits(vault, "Bożydar wrote")).toBe(1);
+        expect(hits(vault, `signed ${["Grace", "Kowalska"].join(" ")}`)).toBe(1);
+        expect(hits(vault, `call ${["601", "234", "567"].join(" ")}`)).toBe(1);
+    });
+
+    test("a taught value is matched however ordinary it is", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.learn("crm", [{ value: "Grace", class: "person-name" }]);
+        expect(hits(vault, "Grace period ends today")).toBe(1);
+    });
+});
+
 describe("the exact matcher", () => {
     const matcher = createKnownMatcher([
         { value: "Jan Kowalski", payload: "full" },

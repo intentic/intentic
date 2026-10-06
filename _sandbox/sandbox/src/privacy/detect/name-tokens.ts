@@ -22,6 +22,8 @@ export interface Token {
     // Capitalized and nothing else: a surname only beside an unambiguous first name.
     readonly unknown: boolean;
     readonly never: boolean;
+    // A noun of a thing (lexicon.ts): a name right before it is the thing's.
+    readonly thing: boolean;
 }
 
 // What joins two neighbouring words: spaces (one name, "Jan Kowalski"), or a cell separator (two cells of a row,
@@ -71,6 +73,7 @@ const tokenOf = (start: number, end: number, parts: readonly string[], line: Lin
         surnameAlone: !never && !ambiguous && infos.some((info) => info.surnameSuffix === "strong" && info.surnameForm),
         unknown: !first && !surname && !never && !ambiguous,
         never,
+        thing: parts.length === 1 && infos.some((info) => info.thing),
     };
 };
 

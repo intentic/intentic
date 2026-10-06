@@ -1,3 +1,4 @@
+import { impersonalAddress } from "./contact.js";
 import { type Announcer, announcerOf } from "./lexicon.js";
 import { isDigit, isLetter, isWordChar } from "./text.js";
 
@@ -11,6 +12,8 @@ export interface Line {
     readonly code: boolean;
     // A row of upper-case data ("1|JAN|KOWALSKI|…"), the only place an all-caps word may be a name.
     readonly upperData: boolean;
+    // A markdown heading, whose words are capitalized whatever they are.
+    readonly heading: boolean;
 }
 
 // A line of source code, or of machine output about code: a statement or declaration, a line ending in a brace or a
@@ -28,6 +31,7 @@ const STATEMENT_END = /;\s*$/u;
 const UPPER = /\p{Lu}/gu;
 const LOWER = /\p{Ll}/gu;
 const CELL_SEPARATOR = /[|;,\t]/;
+const MARKDOWN_HEADING = /^\s{0,3}#{1,6}\s/u;
 const MAX_UPPER_WORDS = 6;
 
 const describeLine = (text: string, start: number, end: number): Line => {
@@ -38,7 +42,13 @@ const describeLine = (text: string, start: number, end: number): Line => {
     // An assignment ending in ";" is a statement; tested apart because "=.*;$" in one pattern rescans a long minified
     // line from every "=".
     const statement = STATEMENT_END.test(line) && line.includes("=");
-    return { start, end, code: statement || CODE_LINE.test(line), upperData: upper > 0 && lower * 10 <= upper && shortOrCells };
+    return {
+        start,
+        end,
+        code: statement || CODE_LINE.test(line),
+        upperData: upper > 0 && lower * 10 <= upper && shortOrCells,
+        heading: MARKDOWN_HEADING.test(line),
+    };
 };
 
 // The line a position is on. Positions are asked in increasing order, so the current line is kept and each line is
@@ -76,15 +86,21 @@ export const codeAdjacent = (text: string, start: number, end: number): boolean 
     return (after === "'" || after === "’") && text[end + 1] === "t" && !isLetter(text[end + 2]);
 };
 
-// Names that are also months or a volume: "Jan 5", "5 Jan 2024", "Tom 2", "3 Maja". Next to a number they are dates.
+// Names that are also months or a volume: "Jan 5", "5 Jan 2024", "Tom 2", "3 Maja". Next to a number they are dates,
+// and next to another month a list of months: "Jan", "Feb", "Mar" as a table's headers or a locale's short names.
 const DATE_WORDS = new Set(["jan", "maja", "tom", "may", "june", "april", "august"]);
+const MONTH_AFTER = /^\W{1,4}(?:feb|febr|february|jun|june|jul|july|aug|august|sep|sept|september)(?!\p{L})/iu;
+const MONTH_BEFORE = /(?<!\p{L})(?:dec|december|apr|april|may|mar|march|jul|july)\W{1,4}$/iu;
 
 export const besideNumber = (text: string, start: number, end: number, lower: string): boolean => {
     if (!DATE_WORDS.has(lower)) {
         return false;
     }
     const after = text.slice(end, end + 3);
-    return /^\.? ?\d/.test(after) || isDigit(text[start - 1]) || (text[start - 1] === " " && isDigit(text[start - 2]));
+    if (/^\.? ?\d/.test(after) || isDigit(text[start - 1]) || (text[start - 1] === " " && isDigit(text[start - 2]))) {
+        return true;
+    }
+    return MONTH_AFTER.test(text.slice(end, end + 16)) || MONTH_BEFORE.test(text.slice(Math.max(0, start - 16), start));
 };
 
 // The word before, read backwards over spaces and an optional dot: "Pan Kowalski", "dr hab. Nowak", "Mr. Smith".
@@ -105,7 +121,8 @@ export const announcedBy = (text: string, start: number): Announcer | undefined 
     while (index >= 0 && end - index <= 20 && isLetter(text[index])) {
         index -= 1;
     }
-    return end - index > 1 && !isWordChar(text[index]) ? announcerOf(text.slice(index + 1, end), dotted) : undefined;
+    // The last part of a compound announces nothing: "Notre-Dame Cathedral".
+    return end - index > 1 && !isWordChar(text[index]) && text[index] !== "-" ? announcerOf(text.slice(index + 1, end), dotted) : undefined;
 };
 
 // A field, header or greeting that says the value after it is a person: lastName=…, "author": …, Author: …, From: …,
@@ -141,15 +158,22 @@ export const labelBefore = (text: string, start: number, line: Line): Label | un
     return CLOSING.test(previous.slice(previous.lastIndexOf("\n") + 1)) ? "person" : undefined;
 };
 
-// "Jan Kowalski <jan@firma.pl>": a display name before an address in angle brackets, as mail headers and git write it.
-const DISPLAY_NAME_ADDRESS = / ?<[^\s<>@]+@[^\s<>]+>/y;
+// "Jan Kowalski <jan@firma.pl>": a display name before an address in angle brackets, as mail headers and git write it. Before an
+// address that belongs to no one ("Claude <noreply@anthropic.com>", "GitHub <noreply@github.com>", a role mailbox) the
+// display name is a bot's, a service's or a team's: it says no person is named, whatever header stands before it.
+// A version may stand between them: "Claude Opus 4.5 <noreply@anthropic.com>".
+const DISPLAY_NAME_ADDRESS = /(?: \d[\d.]*)? ?<([^\s<>@]+@[^\s<>]+)>/y;
 
-export const addressAfter = (text: string, end: number): boolean => {
+export const addressAfter = (text: string, end: number): "personal" | "impersonal" | undefined => {
     DISPLAY_NAME_ADDRESS.lastIndex = end;
-    return DISPLAY_NAME_ADDRESS.test(text);
+    const address = DISPLAY_NAME_ADDRESS.exec(text)?.[1];
+    return address === undefined ? undefined : impersonalAddress(address) ? "impersonal" : "personal";
 };
 
 const QUOTES = new Set(['"', "'"]);
 
 // A quoted value of its own: "Anna" in a string literal, a JSON value, a CSV cell.
 export const quotedAlone = (text: string, start: number, end: number): boolean => QUOTES.has(text[start - 1] ?? "") && QUOTES.has(text[end] ?? "");
+
+// The first word of a string: `author: "Jan Kowalski <…>"`, a template literal's text.
+export const openedByQuote = (text: string, start: number): boolean => QUOTES.has(text[start - 1] ?? "") || text[start - 1] === "`";

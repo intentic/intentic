@@ -9,6 +9,7 @@ import {
     NOT_SURNAMES,
     PLACE_WORDS,
     ROLES_PL,
+    THING_NOUNS,
     TITLE_ABBREVIATIONS_EN,
     TITLE_ABBREVIATIONS_PL,
     TITLES_EN,
@@ -31,6 +32,8 @@ export interface WordInfo {
     readonly ambiguous: boolean;
     // Never part of a name: a function word, an institution, a title, an adjective of a place, a noun in -ska.
     readonly never: boolean;
+    // A noun of an institution, a place or a thing, which makes a name before it a thing's: "Victoria Station".
+    readonly thing: boolean;
 }
 
 interface Lexicon {
@@ -40,6 +43,7 @@ interface Lexicon {
     readonly plainSurnames: ReadonlySet<string>;
     readonly ambiguous: ReadonlySet<string>;
     readonly never: ReadonlySet<string>;
+    readonly things: ReadonlySet<string>;
     readonly notSurnames: ReadonlySet<string>;
     readonly titles: ReadonlySet<string>;
     readonly abbreviations: ReadonlySet<string>;
@@ -61,6 +65,7 @@ const lexicon = (): Lexicon => {
         plainSurnames: words(SURNAMES_EN),
         ambiguous: words(AMBIGUOUS_EN, AMBIGUOUS_PL),
         never: words(NEVER_NAMES),
+        things: words(THING_NOUNS),
         notSurnames: words(NOT_SURNAMES),
         titles: words(TITLES_PL),
         abbreviations: words(TITLE_ABBREVIATIONS_PL),
@@ -99,9 +104,11 @@ const analyse = (lower: string): WordInfo => {
         surnameSuffix: strong ? "strong" : weak ? "weak" : undefined,
         surnameForm: STRONG_FORM.test(lower),
         ambiguous: sets.ambiguous.has(lower),
+        thing: sets.things.has(lower),
         // A title is not part of the name it announces: "Pan" in "Pan Tadeusz", "Mr" in "Mr. Wickham".
         never:
             sets.never.has(lower) ||
+            sets.things.has(lower) ||
             sets.titles.has(lower) ||
             sets.abbreviations.has(lower) ||
             sets.titlesEn.has(capitalize(lower)) ||

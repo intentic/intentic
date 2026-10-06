@@ -3,6 +3,7 @@ import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
+import { personalAlone } from "./detect/standalone.js";
 import { createKnownMatcher, type KnownMatcher, type Spelling, spellingKey } from "./known-matcher.js";
 import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 
@@ -11,7 +12,8 @@ import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 // holds the real values, so it lives with the credentials (mode 0600, off the workspace). Every value in it is matched
 // from then on, wherever it appears and in every spelling its kind allows (spellingOf): a name the detector found once
 // in context is caught again where the context is missing, and a dataset the owner taught is caught whether or not any
-// detector would have found it.
+// detector would have found it. A found value that is personal only in context (an ordinary word that is also a name,
+// a value an older detector misread) is not matched alone, though its token still resolves.
 
 const VaultEntrySchema = z.object({
     value: z.string(),
@@ -223,8 +225,11 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             if (built !== undefined && built.generation === generation) {
                 return built.matcher;
             }
+            // A value the owner taught is matched whatever it is; one the detectors found, only while it would still be
+            // personal data standing alone (detect/standalone.ts).
             const values = [...byValue.values()]
                 .filter((entry) => entry.retired !== true && entry.value.length >= MIN_MATCHED)
+                .filter((entry) => entry.source !== undefined || personalAlone(entry.value, entry.class))
                 .flatMap((entry) => {
                     const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index) };
                     const spelling = spellingOf(entry.value, entry.class);

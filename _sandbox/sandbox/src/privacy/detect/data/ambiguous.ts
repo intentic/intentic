@@ -3,7 +3,10 @@
 // Written by hand from the overlap of the name lists with the frequency lists of Polish and English text; each entry is
 // the word as written, lowercase, since "Róży" is a name where "róża" alone may be a flower.
 
-// English names that are words (Will, Mark, Grace), months, places, and the colours and trades among the surnames.
+// English names that are words (Will, Mark, Grace), months, places, and the colours and trades among the surnames; the
+// surnames of the Polish register that are English words, which start sentences and commit subjects; names that are
+// programming languages and tools; and names that are everyday words of the other languages translation files and
+// tool output are written in (Swedish "inga", Portuguese "cole", Spanish "ruta", Turkish "ana", Indonesian "dan").
 export const AMBIGUOUS_EN = `
 will mark max may june april august january grace hope rose faith joy summer autumn dawn winter spring
 bill jack frank art gene pat sue guy don ray drew dean earl lance grant chase hunter mason wade kent troy chad
@@ -23,7 +26,14 @@ garner gay glass golden good goodman griffin hale hardy hart heath herring holde
 key knight lamb lane leach marsh mercer moody moon moss newton pace page peck petty pierce porter potter price
 reed riddle roach rush savage shepherd skinner snow stark stout tanner walker wall ward ware waters weaver
 gates jobs dell
-any nice ally polo mayo lei they very lady tiny mice belly martini gala taro rosy sari den dale mira dance ago albino
+nice ally polo mayo lei they very lady tiny mice belly martini gala taro rosy sari den dale mira dance ago albino
+drop block just job fit kit cap mac bar pal gut gross bogus drab dragon frost grunt mania swat urban lament melon rut
+paw bury gill gnat flak dub kin mach mech pastor stein lang zero singleton foster valentine villa whitehead levy
+morrow manning archer bender chandler proctor sexton glen jay robin noel wit glib maxim margarita ado amino poly
+lilo ley lari leva tola tamari
+aria ada julia hugo cody maya mocha cline kiro ralph
+inga cole ruta ana manuel maks alla tal yan tara ela mai lila violeta nella juli anno dari kini dan nel nell dina
+massimo julian
 `;
 
 // Polish names that are words: the spec's own examples (Róża, Wiktoria, Wilk, Lis…), inflected forms of names that are

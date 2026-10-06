@@ -30,6 +30,32 @@ describe("e-mail addresses", () => {
         }
     });
 
+    // Built from their parts, so this file holds no address a detector would mask.
+    const at = (local: string, domain: string): string => [local, domain].join("@");
+
+    test("addresses on domains that never resolve, and the placeholders documentation uses, are no one's", () => {
+        for (const text of [
+            at("jan.nowak", "corp.test"),
+            at("anna", "host.local"),
+            at("ops", "example.invalid"),
+            at("dev", "host.docker.internal"),
+            at("piotr", "router.lan"),
+            at("user", "example.pl"),
+            at("jane", "acme.dev"),
+            at("john", "yourcompany.com"),
+        ]) {
+            expect(found(text, "email"), text).toEqual([]);
+        }
+    });
+
+    test("a role mailbox names a function, not a person; a person's mailbox at a company still counts", () => {
+        for (const local of ["support", "kontakt", "biuro", "security", "hello", "info", "agent", "ci", "support+billing"]) {
+            expect(found(at(local, "firma.pl"), "email"), local).toEqual([]);
+        }
+        expect(found(at("support.kowalski", "firma.pl"), "email")).toEqual([at("support.kowalski", "firma.pl")]);
+        expect(found(at("jan.kowalski", "firma.pl"), "email")).toEqual([at("jan.kowalski", "firma.pl")]);
+    });
+
     test("file names and package versions with an @ are not addresses", () => {
         for (const text of ["icon@2x.png", "logo@3x.webp", "mermaid@12.0.0.patch", "lodash@4.17.21", "@types/node@22.1.0", "foo@bar"]) {
             expect(found(text, "email"), text).toEqual([]);
@@ -88,6 +114,52 @@ describe("phone numbers", () => {
         ]) {
             expect(found(text, "phone"), text).toEqual([]);
         }
+    });
+
+    // Android serials, adb targets and ssh hosts are addresses on a network, wherever a phone is mentioned around them.
+    // The addresses are built from their parts, so this file holds nothing a detector would mask.
+    test("an IP address, with or without its port, is not a phone even beside a phone keyword", () => {
+        const ip = (...parts: number[]): string => parts.join(".");
+        for (const text of [
+            `phone = { serial: "${ip(192, 168, 1, 23)}:37005" }`,
+            `adb connect ${ip(10, 0, 20, 5)}:5555 # the test phone`,
+            `phone at ${ip(192, 168, 100, 23)}`,
+            `mobile host ${ip(100, 64, 0, 7)}`,
+            `tel. ${ip(192, 168, 1, 230)}`,
+        ]) {
+            expect(found(text, "phone"), text).toEqual([]);
+        }
+    });
+
+    test("signed figures, a diff stat and a number with a port are not phones", () => {
+        const nine = String(123_456_789);
+        for (const text of [`phone.ts | 46 +${12} -${34}`, `mobile: +${1200} -${3400}`, `phone +${48} -${7} ${12}.${345}`, `phone ${nine}:8080`]) {
+            expect(found(text, "phone"), text).toEqual([]);
+        }
+    });
+
+    // North America, Russia and Poland number to a fixed length; a plus before a longer or shorter run is a timestamp
+    // or a signed figure, and the 555 numbers and impossible area codes are nobody's line.
+    test("an international number must have its country's length where that length is fixed, and a line it can reach", () => {
+        expect(found(`offset +${1_728_201_600_123}`, "phone")).toEqual([]);
+        expect(found(`delta +${1_728_201_600}`, "phone")).toEqual([]);
+        expect(found(`phone +${48_601_234_567_8}`, "phone")).toEqual([]);
+        expect(found(`call +1 ${212} ${555} ${4567}`, "phone")).toEqual([]);
+        expect(found(`call (${212}) ${555}-${1234}`, "phone")).toEqual([]);
+        expect(found(`call +1 (${123}) ${456}-${7890}`, "phone")).toEqual([]);
+    });
+
+    test("a nine-digit amount is not a phone, even beside a phone keyword", () => {
+        const nine = String(123_456_789);
+        expect(found(`phone build: ${nine} bytes`, "phone")).toEqual([]);
+        expect(found(`mobile revenue $${nine}`, "phone")).toEqual([]);
+    });
+
+    test("a number that is part of a slug or a host name is not a phone", () => {
+        const dashed = [601, 234, 567].join("-");
+        expect(found(`host ip-${dashed}.compute.internal`, "phone")).toEqual([]);
+        expect(found(`phone build-${dashed}`, "phone")).toEqual([]);
+        expect(found(`phone ${dashed}.example.net`, "phone")).toEqual([]);
     });
 
     // Polish writes thousands with a space, so an amount can look exactly like a mobile number.

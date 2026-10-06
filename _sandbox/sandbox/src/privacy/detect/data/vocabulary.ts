@@ -29,12 +29,14 @@ pracownika pracownica pracownicy
 `;
 
 // Words after which a capitalized word is a place, not a person: "ulica Grodzka", "przy ulicy Wileńskiej", "w gminie
-// Kowale". Streets are named with adjectives that are also surnames, so without this every street is someone.
+// Kowale". Streets are named with adjectives that are also surnames, so without this every street is someone. Towns
+// are named after saints and with first names too: "San Francisco", "St. Louis", "Fort Worth".
 export const PLACE_WORDS = `
 ul. ulica ulicy ulicę ulicą al. aleja alei aleję aleje pl. plac placu placem os. osiedle osiedla osiedlu rondo ronda
 rondzie most mostu moście dworzec dworca stacja stacji park parku kościół kościoła parafia parafii gmina gminy gminie
 powiat powiatu województwo województwa wieś wsi miasto miasta mieście jezioro jeziora rzeka rzeki szkoła szkoły
 dzielnica dzielnicy
+san santa santo são sao saint st st. fort port mount mt. lake cape
 `;
 
 // English short forms people sign with and are addressed by, which the birth registers record in full.
@@ -44,16 +46,22 @@ export const NICKNAMES_EN = `will bob rob dave matt nick sam pete ted ed liz meg
 export const TITLES_EN = `Miss Sir Dame Lady Lord`;
 export const TITLE_ABBREVIATIONS_EN = `Mr Mrs Ms Mx Dr Prof`;
 
-// Capitalized words that are never part of a name, so they end one: function words that title case capitalizes, and
-// the nouns of institutions, places and things that follow a first name in a heading ("Adam Optimizer", "Victoria
-// Station", "Uniwersytet Warszawski").
+// Capitalized words that are never part of a name, so they end one: function words that title case capitalizes, days
+// and months, and the names of God.
 export const NEVER_NAMES = `
-the a an and or but nor in on at to for of with by from as is are was were be been has have had do does did not no
+the a an any and or but nor in on at to for of with by from as is are was were be been has have had do does did not no
 yes if then else when while this that these those it its he she we you they my your our their his her what which
 who why how where all some each every new old first last next other also please thanks thank hello hi hey dear
 i w z na do od po za nie tak jest są to ten ta te oraz lub albo ale czy jak gdy że się dla bez przez przy pod nad
 przed u o też już tylko jeszcze bardzo
 monday tuesday wednesday thursday friday saturday sunday february march july september october november december
+bóg boga bogu bogiem boże jezus jezusa jezusowi jezusem chrystus chrystusa maryja maryi maryję jesus christ god
+`;
+
+// The nouns of institutions, places and things, never part of a name either, and which make a name before them the
+// name of a thing: "Adam Optimizer", "Victoria Station", "Uniwersytet Warszawski", a tool's, a bot's or a placeholder's
+// ("Renovate Bot", "Grafana Example").
+export const THING_NOUNS = `
 street road avenue drive square park river lake mountain bridge hotel hospital university college school church
 center centre group inc ltd llc gmbh company corp corporation foundation institute museum library airport bank
 award prize cup edition version release update project team club fund act law rule theorem algorithm optimizer
@@ -66,7 +74,13 @@ szpitala urząd urzędu sąd sądu bank banku spółka spółki fundacja fundacj
 kościół kościoła firma firmy grupa grupy zespół zespołu klub klubu sejm senat ministerstwo ministerstwa
 województwo powiat powiatu gmina gminy miasto miasta wieś rzeka rzeki jezioro wyspa
 lodge manor castle abbey court gardens terrace cottage farm st
-bóg boga bogu bogiem boże jezus jezusa jezusowi jezusem chrystus chrystusa maryja maryi maryję jesus christ god
+example examples sample samples demo test tests gateway proxy router provider providers developer developers owner
+builder responses response request requests reserve loop loops phone phones android codex discord skills diffs cycle
+phase proof attack agent agents assistant bot bots app apps api sdk cli plugin plugins extension extensions widget
+widgets component components module modules package packages toolkit runtime worker workers daemon pipeline pipelines
+workflow workflows queue cache database schema query editor terminal shell browser desktop dashboard chat mode theme
+template templates config settings preview docs guide tutorial reference manual handbook overview readme changelog
+license hub portal suite bundle
 `;
 
 // Words with a surname's -ski/-ska ending that name no one: adjectives of places, nations and languages (surnames in
