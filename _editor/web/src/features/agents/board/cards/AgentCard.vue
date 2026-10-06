@@ -61,7 +61,7 @@ import {
 } from "../../fleet/agentStatus";
 import CardSeal from "./CardSeal.vue";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
-import { cardProof, type ProofMark } from "./proofSeal";
+import { cardProof, type ProofMark, sealStandsIn as standsIn } from "./proofSeal";
 import { reachLine } from "./reachLine";
 import KeepWarmPanel from "../../fleet/prompt-cache/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
@@ -411,11 +411,8 @@ const proof = computed(() => {
 const reach = computed(() => reachLine(props.agent.reach));
 // THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card whose turn just
 // ended is almost always unread, so a seal that gave way to "Updated" would hide exactly when its proof is news.
-// It STANDS IN for a resting glyph (landed's octagon, which it is when closed, and idle's dot), since those say only that
-// nothing is going on and the seal says that and more; its hover leads with the word the glyph wore. A status that
-// says something of its own (running, ready, an error) keeps its glyph and gets the seal beside it.
-const SEAL_STANDS_IN: ReadonlySet<string> = new Set([`landed`, `idle`]);
-const sealStandsIn = computed(() => proof.value !== undefined && SEAL_STANDS_IN.has(props.agent.status));
+// It STANDS IN for a resting glyph (proofSeal.sealStandsIn); its hover leads with the word the glyph wore.
+const sealStandsIn = computed(() => standsIn(proof.value, props.agent.status));
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();

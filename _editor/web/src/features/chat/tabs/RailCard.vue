@@ -30,6 +30,8 @@ const props = defineProps<{
     // Why this row needs the reader, or that it has news: the corner's word, decided by agentStatus.standingChip so a
     // rail row and its board card say and tint the same thing. Takes the seat `status` would otherwise hold.
     chip?: StandingChip;
+    // True when the `corner` slot's mark (the board's seal) stands in for the resting status glyph (proofSeal.sealStandsIn).
+    statusYields?: boolean;
     // What the identity mark's rim draws: checklist ticks or a context arc, decided once by agentStatus.tileRim so
     // this card and the board's cannot disagree. Undefined for a row with nothing measured (and for every row that
     // isn't a session), which wears the empty rim instead.
@@ -137,9 +139,11 @@ const chipHint = computed((): Tip | undefined =>
                     chip.label
                 }}</span>
                 <!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
-                <span v-else-if="status !== undefined" class="flex h-4 shrink-0 items-center">
+                <span v-else-if="status !== undefined && !statusYields" class="flex h-4 shrink-0 items-center">
                     <Icon v-bind="status" />
                 </span>
+                <!-- The corner's last mark, beside the chip or the status glyph, as on the board's card (the seal). -->
+                <slot name="corner" />
             </span>
 
             <!-- Muted by default; these are reference numbers, not events, so colour here is reserved for what matters. -->

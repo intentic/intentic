@@ -114,7 +114,9 @@ it(`leaves the seal's ring open on a row whose last turn proved nothing, its wor
     expect(seal.textContent?.trim()).toBe(``);
     // The row is a button of its own, and the seal is never a press.
     expect(seal.tagName).toBe(`SPAN`);
-    expect(readings(seal)).toEqual([`Not tested after its last edit`, `Changed 2 interface files without looking at the result`]);
+    // In the corner, as on the board's card, standing in for the landed glyph, whose word its hover leads with.
+    expect(readings(seal)).toEqual([`Landed`, `Not tested after its last edit`, `Changed 2 interface files without looking at the result`]);
+    expect(seal.closest(`[data-corner]`)).not.toBeNull();
     // Not the corner: that stays the standing's, and a read, settled card has none to say.
     expect(row.querySelector(`span.ui-status-pill`)).toBeNull();
 });
@@ -123,11 +125,11 @@ it(`draws what the last turn showed of its own work as the seal alone, its words
     const el = await mountRail();
     const failing = sealOf(rowOf(el, `failing`))!;
     expect(failing.dataset[`sealKind`]).toBe(`broke`);
-    expect(readings(failing)).toEqual([`Its last check failed`, `pnpm -C web e2e signup.spec.ts`]);
+    expect(readings(failing)).toEqual([`Idle`, `Its last check failed`, `pnpm -C web e2e signup.spec.ts`]);
 
     const proven = sealOf(rowOf(el, `proven`))!;
     expect(proven.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(proven)).toEqual([`Tested after its last edit`, `pnpm -C api test`]);
+    expect(readings(proven)).toEqual([`Landed`, `Tested after its last edit`, `pnpm -C api test`]);
     // One glyph per row, whatever it has to say.
     expect(rowOf(el, `unproven`).querySelectorAll(`[data-seal]`)).toHaveLength(1);
     expect(el.querySelector(`[data-check]`)).toBeNull();

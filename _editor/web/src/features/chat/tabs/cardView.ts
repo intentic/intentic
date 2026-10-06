@@ -110,8 +110,7 @@ export const liveOf = (entry: OpenChat): CardView[`live`] => {
 
 // Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per card
 // rather than assumed. The standing is not counted here: it wears the card's corner, not this line.
-const hasMeta = (entry: OpenChat, proof: ProofMark | undefined, reach: ReachLine | undefined): boolean =>
-    proof !== undefined ||
+const hasMeta = (entry: OpenChat, reach: ReachLine | undefined): boolean =>
     reach !== undefined ||
     (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
     entry.conversation.unsent.value ||
@@ -154,7 +153,7 @@ export const createCardViews = (): CardViews => {
                 warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
                 proof,
                 reach,
-                meta: hasMeta(entry, proof, reach),
+                meta: hasMeta(entry, reach),
             };
             const print = snapshotFingerprint(view);
             const previous = held.get(entry.conversation.conversationId);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import CardSeal from "../../agents/board/cards/CardSeal.vue";
+import { sealStandsIn } from "../../agents/board/cards/proofSeal";
 import ChildCount from "../../agents/board/cards/ChildCount.vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { editsRefusal, turnInFlight } from "../../agents/fleet/agentStatus";
@@ -67,6 +68,8 @@ const settingsPages = useSettingsRefusal(
     () => props.agent !== undefined && props.agent.archivedAt === undefined && editsRefusal(props.agent),
 );
 const chip = computed(() => (props.agent === undefined ? props.view.chip : settingsChip(props.view.chip, props.agent, settingsPages.value)));
+// The seal takes the resting glyph's seat (landed, idle) exactly as on the board's card; a chip keeps its own seat either way.
+const sealYields = computed(() => chip.value === undefined && sealStandsIn(props.view.proof, props.agent?.status));
 
 // The unsent mark's words, read by the mark itself (UnsentMark): read here, in the #meta slot RailCard invokes, every
 // keystroke redrew the card and all it carries, which is the rail around the draft that chat-typing's budget keeps still.
@@ -94,6 +97,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
         :provider="props.agent?.provider ?? props.conversation.selection.provider.value"
         :status="props.view.status"
         :chip="chip"
+        :status-yields="sealYields"
         :rim="props.view.rim"
         :live="props.view.live"
         tight
@@ -139,6 +143,12 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 <Icon name="times" class="text-2xs" />
             </span>
         </template>
+        <!-- Its last turn's own proof as the board's one seal, in the board's seat: the corner's last mark, standing in for a resting glyph. -->
+        <template v-if="props.view.proof !== undefined" #corner>
+            <span class="flex h-4 shrink-0 items-center" data-corner>
+                <CardSeal :proof="props.view.proof" :status="sealYields ? props.view.status['aria-label'] : undefined" class="text-xs" />
+            </span>
+        </template>
         <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
         <template v-if="props.view.meta || twinFact !== undefined" #meta>
             <UnsentMark
@@ -161,8 +171,6 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 :class="props.view.cooling.near ? 'text-link' : 'text-muted'"
                 v-tooltip.top="props.view.cooling.hint"
             />
-            <!-- Its last turn's own proof as the board's one seal, its words in its hover the way the cache marks beside it say theirs. -->
-            <CardSeal v-if="props.view.proof !== undefined" :proof="props.view.proof" class="text-2xs" />
             <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
             <OriginMark :origin="originOf(props.conversation)" compact />
             <WorkflowMark :workflow="props.agent?.workflow" compact />

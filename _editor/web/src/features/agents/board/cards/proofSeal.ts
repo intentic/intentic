@@ -49,3 +49,10 @@ export const sealOf = (proof: ProofMark): SealKind => {
 // is already redoing.
 export const cardProof = (agent: { readonly proof?: TurnProof }, working: boolean): ProofMark | undefined =>
     working ? undefined : proofMark(agent.proof);
+
+// THE SEAL STANDS IN for a resting glyph (landed's octagon, which it is when closed, and idle's dot), since those say
+// only that nothing is going on and the seal says that and more. A status that says something of its own (running,
+// ready, an error) keeps its glyph and gets the seal beside it. One rule for the board's card and the rail's row.
+const SEAL_STANDS_IN: ReadonlySet<string> = new Set([`landed`, `idle`]);
+export const sealStandsIn = (proof: ProofMark | undefined, status: string | undefined): boolean =>
+    proof !== undefined && status !== undefined && SEAL_STANDS_IN.has(status);
