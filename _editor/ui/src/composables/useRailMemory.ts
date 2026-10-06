@@ -1,12 +1,17 @@
-import { type Ref, watch } from "vue";
+import { computed, type Ref, watch, type WritableComputedRef } from "vue";
 
-// Remembers a narrowing rail's last choice in localStorage and restores it once, the first time `options` is
-// non-empty, only if the URL has no choice of its own and the remembered value is still in `options`.
+// Remembers a narrowing rail's last choice in localStorage and puts it back whenever the view stands on its bare
+// address: a rail tile always links there, so without this every return (and every click on the tile of the view
+// already open) lands on "all". The choice still lives in the URL; this only fills the URL when it names nothing.
+//
+// Bind the picker to the RETURNED ref, not to `choice`: a pick made through it is the only thing that may remember
+// "all", which is how a deliberately widened scope stays wide instead of the tile pulling last week's repo back.
+// A URL that names a choice (a pick, a shared link, Back) is remembered too; the URL going bare by itself is not.
 
 const keyOf = (id: string): string => `intentic.rail.${id}`;
 
 // `` and undefined both mean unnarrowed (a Picker has no undefined to offer).
-const isEmpty = (value: string | undefined): boolean => value === undefined || value === ``;
+const isEmpty = (value: string | undefined): value is `` | undefined => value === undefined || value === ``;
 
 const read = (id: string): string | undefined => {
     try {
@@ -17,35 +22,46 @@ const read = (id: string): string | undefined => {
     }
 };
 
-/**
- * Remember a narrowing rail's choice and restore it the next time its view opens without one.
- * `options` arrives reactively after mount; the restore waits for a non-empty list rather than running on mount.
- */
-export function useRailMemory(id: string, choice: Ref<string | undefined>, options: () => readonly string[]): void {
-    // Persists "all" too, so a deliberately widened scope stays wide next visit.
-    watch(choice, (value) => {
-        try {
-            localStorage.setItem(keyOf(id), value ?? ``);
-        } catch {
-            // Storage may be unavailable; the choice still holds for this visit.
-        }
-    });
+const write = (id: string, value: string): void => {
+    try {
+        localStorage.setItem(keyOf(id), value);
+    } catch {
+        // Storage may be unavailable; the choice still holds for this visit.
+    }
+};
 
-    // Restores once, on the first non-empty options list; after that the reader is in control.
-    let restored = false;
+/**
+ * Remember a narrowing rail's choice and restore it whenever its view stands without one.
+ * `options` arrives reactively after mount; a restore waits for it, and never selects a value it does not offer.
+ * Returns the ref the rail's controls should write through.
+ */
+export function useRailMemory<T extends string | undefined>(id: string, choice: Ref<T>, options: () => readonly string[]): WritableComputedRef<T> {
     watch(
-        options,
-        (values) => {
-            if (restored || values.length === 0) {
-                return;
-            }
-            restored = true;
-            const held = read(id);
-            // Nothing to restore when the last visit ended on "all"; that's already the default.
-            if (isEmpty(choice.value) && !isEmpty(held) && held !== undefined && values.includes(held)) {
-                choice.value = held;
+        choice,
+        (value) => {
+            if (!isEmpty(value)) {
+                write(id, value);
             }
         },
         { immediate: true },
     );
+
+    watch(
+        [() => isEmpty(choice.value), options],
+        ([empty, values]) => {
+            const held = read(id);
+            if (empty && !isEmpty(held) && values.includes(held)) {
+                choice.value = held as T;
+            }
+        },
+        { immediate: true },
+    );
+
+    return computed<T>({
+        get: () => choice.value,
+        set: (value) => {
+            write(id, value ?? ``);
+            choice.value = value;
+        },
+    });
 }

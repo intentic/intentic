@@ -11,11 +11,14 @@ import { useRailMemory } from "@intentic/ui";
 const KEY = `intentic.rail.test.scope`;
 
 // A rail lives inside a component, so its watchers need a scope that can dispose them; running them loose would leak a
-// pair of watchers into every later test.
+// pair of watchers into every later test. Returns the ref a rail's controls write through, and the disposer.
 const mount = (choice: ReturnType<typeof ref<string | undefined>>, options: () => readonly string[]) => {
     const scope = effectScope();
-    scope.run(() => useRailMemory(`test.scope`, choice, options));
-    return () => scope.stop();
+    const picked = scope.run(() => useRailMemory(`test.scope`, choice, options));
+    if (picked === undefined) {
+        throw new Error(`effect scope did not run`);
+    }
+    return { picked, stop: () => scope.stop() };
 };
 
 beforeEach(() => {
@@ -28,7 +31,7 @@ describe(`useRailMemory`, () => {
         const choice = ref<string | undefined>(undefined);
         const options = ref<string[]>([]);
 
-        const stop = mount(choice, () => options.value);
+        const { stop } = mount(choice, () => options.value);
         // Nothing to validate against yet, so nothing is restored: the report has not landed.
         expect(choice.value).toBeUndefined();
 
@@ -38,14 +41,16 @@ describe(`useRailMemory`, () => {
         stop();
     });
 
-    // A choice already in the URL is somebody being deliberate: a shared link, a bookmark, the Back button.
-    it(`leaves a deep link alone`, async () => {
+    // A choice already in the URL is somebody being deliberate: a shared link, a bookmark, the Back button. It is also
+    // what the next bare visit should open on.
+    it(`leaves a deep link alone, and remembers it`, async () => {
         localStorage.setItem(KEY, `intentic`);
         const choice = ref<string | undefined>(`registry`);
 
-        const stop = mount(choice, () => [`registry`, `intentic`]);
+        const { stop } = mount(choice, () => [`registry`, `intentic`]);
         await nextTick();
         expect(choice.value).toBe(`registry`);
+        expect(localStorage.getItem(KEY)).toBe(`registry`);
         stop();
     });
 
@@ -55,46 +60,50 @@ describe(`useRailMemory`, () => {
         localStorage.setItem(KEY, `deleted-repo`);
         const choice = ref<string | undefined>(undefined);
 
-        const stop = mount(choice, () => [`registry`, `intentic`]);
+        const { stop } = mount(choice, () => [`registry`, `intentic`]);
         await nextTick();
         expect(choice.value).toBeUndefined();
         stop();
     });
 
-    // "All" is a choice too: someone who widened the scope on purpose should find it wide when they come back.
-    it(`remembers all, and restoring it is a no-op`, async () => {
+    // "All" picked on purpose is a choice too: someone who widened the scope should find it wide when they come back,
+    // and a later poll re-delivering the options must not drag them back either.
+    it(`remembers a picked all, and restoring it is a no-op`, async () => {
         const choice = ref<string | undefined>(`intentic`);
-        const stop = mount(choice, () => [`registry`, `intentic`]);
+        const options = ref<string[]>([`registry`, `intentic`]);
+        const { picked, stop } = mount(choice, () => options.value);
         await nextTick();
 
-        choice.value = undefined;
+        picked.value = undefined;
         await nextTick();
+        expect(choice.value).toBeUndefined();
         expect(localStorage.getItem(KEY)).toBe(``);
+        options.value = [`registry`, `intentic`, `docs`];
+        await nextTick();
+        expect(choice.value).toBeUndefined();
         stop();
 
         const next = ref<string | undefined>(undefined);
-        const stopNext = mount(next, () => [`registry`, `intentic`]);
+        const { stop: stopNext } = mount(next, () => [`registry`, `intentic`]);
         await nextTick();
         expect(next.value).toBeUndefined();
         stopNext();
     });
 
-    // Once the rail has rows the reader is driving, a second restore would fight them.
-    it(`restores once, then stays out of the way`, async () => {
-        localStorage.setItem(KEY, `intentic`);
+    // The rail tile links to the view's bare address, so clicking it while the view is already open empties the URL
+    // without remounting anything. That is not a pick, and the view must come back to where the reader left it.
+    it(`restores again when the address goes bare under a mounted rail`, async () => {
         const choice = ref<string | undefined>(undefined);
-        const options = ref<string[]>([`registry`, `intentic`]);
-
-        const stop = mount(choice, () => options.value);
+        const { picked, stop } = mount(choice, () => [`registry`, `intentic`]);
         await nextTick();
-        expect(choice.value).toBe(`intentic`);
+
+        picked.value = `intentic`;
+        await nextTick();
+        expect(localStorage.getItem(KEY)).toBe(`intentic`);
 
         choice.value = undefined;
         await nextTick();
-        // A later poll re-delivers the options; the memory must not drag the reader back.
-        options.value = [`registry`, `intentic`, `docs`];
-        await nextTick();
-        expect(choice.value).toBeUndefined();
+        expect(choice.value).toBe(`intentic`);
         stop();
     });
 
@@ -104,9 +113,14 @@ describe(`useRailMemory`, () => {
         localStorage.setItem(KEY, `intentic`);
         const choice = ref<string | undefined>(``);
 
-        const stop = mount(choice, () => [`registry`, `intentic`]);
+        const { picked, stop } = mount(choice, () => [`registry`, `intentic`]);
         await nextTick();
         expect(choice.value).toBe(`intentic`);
+
+        picked.value = ``;
+        await nextTick();
+        expect(choice.value).toBe(``);
+        expect(localStorage.getItem(KEY)).toBe(``);
         stop();
     });
 });

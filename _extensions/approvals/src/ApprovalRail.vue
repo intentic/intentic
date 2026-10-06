@@ -32,7 +32,7 @@ const { all, scopes } = defineProps<{
 const selected = defineModel<string>({ required: true });
 
 // Last slice worked, kept across visits, checked against current slices so an emptied one won't reopen blank.
-useRailMemory(`approvals.scope`, selected, () => scopes.map((scope) => scope.key));
+const picked = useRailMemory(`approvals.scope`, selected, () => scopes.map((scope) => scope.key));
 
 // Single unlabelled group: a heading here would name a distinction the rail doesn't make.
 const groups = computed<NavGroup<ApprovalScope>[]>(() => [{ key: `scopes`, items: [...scopes] }]);
@@ -70,7 +70,7 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
 <template>
     <Picker
         v-if="mobile"
-        v-model="selected"
+        v-model="picked"
         :options="options"
         :aria-label="t(`approvalRail.approvalSlice`)"
         :header="t(`approvalRail.show`)"
@@ -91,9 +91,9 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
                 density="dense"
                 :icon="all.icon"
                 :title="all.label"
-                :selected="selected === ``"
+                :selected="picked === ``"
                 class="rounded-md"
-                @click="selected = ``"
+                @click="picked = ``"
             >
                 <template #meta>
                     <span v-tooltip.bottom="note(all)" :class="tone(all)">{{ all.total }}</span>
@@ -109,9 +109,9 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
                 density="dense"
                 :icon="scope.icon"
                 :title="scope.label"
-                :selected="selected === scope.key"
+                :selected="picked === scope.key"
                 class="rounded-md"
-                @click="selected = scope.key"
+                @click="picked = scope.key"
             >
                 <template v-if="scope.icon === undefined" #lead><BrandMark :size="18" :name="scope.label" :logo="scope.logo" /></template>
                 <template #meta>

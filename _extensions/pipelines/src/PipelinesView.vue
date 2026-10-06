@@ -14,6 +14,7 @@ import {
     SkeletonSnapshot,
     SplitView,
     useNarrow,
+    useRailMemory,
     vSkeletonSource,
     type AgentRunChoice,
     type TallyItem,
@@ -52,10 +53,16 @@ const projectHidden = computed(() => allRepos.value.length - repos.value.length)
 // workspace no longer maps resolves against current standings and falls back to the whole board.
 const standings = computed(() => repoStandings(repos.value, runs.value));
 const scope = computed(() => standings.value.find((standing) => standing.repo.repo === api.route.query()[`repo`]));
-const scopeRepo = computed<string | undefined>({
-    get: () => scope.value?.repo.repo,
-    set: (value) => api.route.setQuery({ repo: value }),
-});
+// Remembered across visits (useRailMemory): the rail tile opens this view at its bare address, which would otherwise
+// throw the pick away on every return. Picks go through `scopeRepo` so choosing "all" is remembered as "all".
+const scopeRepo = useRailMemory(
+    `pipelines.repo`,
+    computed<string | undefined>({
+        get: () => scope.value?.repo.repo,
+        set: (value) => api.route.setQuery({ repo: value }),
+    }),
+    () => standings.value.map((standing) => standing.repo.repo),
+);
 
 // Under 'all repositories', a runless repo with no hook warning is dropped from the body (rail row only); one with a
 // warning stays, to explain the silence. Scoping to one repository always shows it, empty state included.

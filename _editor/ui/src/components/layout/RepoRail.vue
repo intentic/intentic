@@ -25,8 +25,9 @@ const { groups, all, memory } = defineProps<{
 // undefined = every repository. Kept undefined rather than a sentinel so the URL simply omits the parameter.
 const selected = defineModel<string | undefined>();
 
-// Remembers the last repository across visits, so the URL doesn't start empty; "All" is remembered too.
-useRailMemory(memory, selected, () => groups.flatMap((group) => group.rows.map((row) => row.value)));
+// Remembers the last repository across visits, so the URL doesn't start empty; "All" is remembered too, which is why
+// every control below writes through `remembered` rather than `selected`.
+const remembered = useRailMemory(memory, selected, () => groups.flatMap((group) => group.rows.map((row) => row.value)));
 
 const shown = computed<readonly RepoRailGroup[]>(() => groups.filter((group) => group.rows.length > 0));
 const navGroups = computed<NavGroup<RepoRailRow>[]>(() => shown.value.map((group) => ({ key: group.key, label: group.label, items: group.rows })));
@@ -43,7 +44,7 @@ const options = computed<PickerOptions<string>>(() => [
     })),
 ]);
 // Picker models a string, and `` is its spelling of "no filter".
-const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) => (selected.value = value === `` ? undefined : value) });
+const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) => (remembered.value = value === `` ? undefined : value) });
 </script>
 
 <template>
@@ -65,7 +66,7 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
                 :title="t(`ui.repoRail.allRepositories`)"
                 :selected="selected === undefined"
                 class="rounded-md"
-                @click="selected = undefined"
+                @click="remembered = undefined"
             >
                 <template #meta>
                     <span v-tooltip.bottom="all.tooltip" :class="all.tone">{{ all.meta }}</span>
@@ -82,7 +83,7 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
                 :title="row.label"
                 :selected="selected === row.value"
                 class="rounded-md"
-                @click="selected = row.value"
+                @click="remembered = row.value"
             >
                 <template #meta>
                     <span v-tooltip.bottom="row.tooltip" :class="row.tone">{{ row.meta }}</span>

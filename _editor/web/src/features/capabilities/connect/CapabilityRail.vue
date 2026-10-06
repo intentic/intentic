@@ -32,7 +32,7 @@ const { pinned, categories } = defineProps<{
 const selected = defineModel<string>({ required: true });
 
 // Last-browsed slice persists across visits, pinned rows included.
-useRailMemory(`capabilities.category`, selected, () => [...pinned, ...categories].map((scope) => scope.key));
+const picked = useRailMemory(`capabilities.category`, selected, () => [...pinned, ...categories].map((scope) => scope.key));
 
 // One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
 const groups = computed<NavGroup<CapabilityScope>[]>(() => [{ key: `categories`, items: [...categories] }]);
@@ -71,7 +71,7 @@ const options = computed<PickerOptions<string>>(() => [
 <template>
     <Picker
         v-if="compact"
-        v-model="selected"
+        v-model="picked"
         :options="options"
         :aria-label="t(`capabilities.capabilityRail.capabilityCategory`)"
         :header="t(`shared.category`)"
@@ -88,9 +88,9 @@ const options = computed<PickerOptions<string>>(() => [
                 density="dense"
                 :icon="scope.icon"
                 :title="scope.label"
-                :selected="selected === scope.key"
+                :selected="picked === scope.key"
                 class="rounded-md"
-                @click="selected = scope.key"
+                @click="picked = scope.key"
             >
                 <template #meta>
                     <span v-tooltip.bottom="meta(scope)" :class="tone(scope)">{{ scope.total }}</span>
@@ -105,9 +105,9 @@ const options = computed<PickerOptions<string>>(() => [
                 density="dense"
                 :icon="scope.icon"
                 :title="scope.label"
-                :selected="selected === scope.key"
+                :selected="picked === scope.key"
                 class="rounded-md"
-                @click="selected = scope.key"
+                @click="picked = scope.key"
             >
                 <template #meta>
                     <span v-tooltip.bottom="meta(scope)" :class="tone(scope)">{{ scope.total }}</span>
