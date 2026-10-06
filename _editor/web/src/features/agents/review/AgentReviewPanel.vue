@@ -8,12 +8,10 @@ import {
     iconForEntry,
     ResizeSeam,
     SegmentedControl,
-    SkeletonSnapshot,
     type Tip,
     useDevice,
     useExplorerStyle,
     useLoadingReveal,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { isTestPath, type WorkspaceModule } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
@@ -46,7 +44,7 @@ import AgentConflictReport from "./AgentConflictReport.vue";
 import AgentScratchReport from "./AgentScratchReport.vue";
 import AgentHistoryChip from "./AgentHistoryChip.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
-import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
+import ReviewWaitLine from "./ReviewWaitLine.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
@@ -718,15 +716,12 @@ const seamWidth = computed<number>({
         </div>
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
-        <!-- The last review seen draws the wait, empty or not; AgentDetail's own wait draws the same one. -->
+        <!-- The review's frame and one line for the wait, the same one AgentDetail's own wait draws. -->
         <template v-if="waiting">
-            <SkeletonSnapshot v-if="outline" of="agents.review" :label="waitLabel">
-                <AgentReviewOutline :label="waitLabel" />
-            </SkeletonSnapshot>
+            <AgentReviewOutline v-if="outline" :label="waitLabel" />
         </template>
         <div
             v-else-if="changes.count.value === 0 && history.count.value === 0"
-            v-skeleton-source="`agents.review`"
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
@@ -748,7 +743,7 @@ const seamWidth = computed<number>({
 
         <!-- List | diff share one screen on a phone: the diff takes over on pick, with no route change either way. -->
         <!-- No select-none while dragging: ResizeSeam already claims the whole document's selection for the drag. -->
-        <div v-else v-skeleton-source="`agents.review`" class="flex min-h-0 flex-1">
+        <div v-else class="flex min-h-0 flex-1">
             <aside
                 v-if="!mobile || selected === undefined"
                 class="flex min-h-0 min-w-0 flex-col"
@@ -1033,18 +1028,14 @@ const seamWidth = computed<number>({
 
                     <div class="min-h-0 flex-1">
                         <p v-if="diffError !== undefined" class="p-4 text-xs text-danger">{{ diffError }}</p>
-                        <!-- A file read draws that file's diff as it last looked, here or in the workspace, else the shared diff outline. -->
+                        <!-- A file read is one line where the diff's first line will be: the toolbar above already names the file
+                             and its counts, and code lines guessed for it (or remembered from another agent's diff of the same
+                             path) would only be torn down. -->
                         <template v-else-if="diff === undefined">
-                            <SkeletonSnapshot
-                                v-if="diffOutline"
-                                :of="`diff:${selected.change.path}`"
-                                :label="t(`workspace.diffSkeleton.readingFile`)"
-                            >
-                                <DiffSkeleton />
-                            </SkeletonSnapshot>
+                            <ReviewWaitLine v-if="diffOutline" :label="t(`workspace.diffSkeleton.readingFile`)" class="px-4" />
                         </template>
-                        <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
-                        <div v-else v-skeleton-source="`diff:${selected.change.path}`" class="h-full">
+                        <!-- One box around whichever viewer FileDiffPane picks. -->
+                        <div v-else class="h-full">
                             <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
                             <FileDiffPane
                                 :key="diffKey"

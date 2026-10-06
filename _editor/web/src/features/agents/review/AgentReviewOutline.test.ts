@@ -1,6 +1,6 @@
-// The outline is a promise about a screen that hasn't arrived, so what it draws is the whole of it: the panel's two
+// The outline holds the frame of a screen that hasn't arrived, and nothing it would have to guess: the panel's two
 // columns on a desktop, the list alone on a phone (whose diff is a full-screen takeover only a pick can open), and one
-// announcement for the wait rather than one per bar.
+// line saying what the wait is for.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -38,28 +38,27 @@ afterEach(() => {
     mobile.value = false;
 });
 
-it(`draws the list beside the diff at the reader's own list width, and says once what it is waiting for`, async () => {
+it(`holds the list beside the diff at the reader's own list width, and says once, in words, what it is waiting for`, async () => {
     const el = await mount(`Reading this agent's changes…`);
 
     const status = el.querySelector(`[role="status"]`)!;
     expect(status.getAttribute(`aria-busy`)).toBe(`true`);
     expect(status.textContent).toContain(`Reading this agent's changes…`);
-    // Exactly one region for the wait: the bars are decoration, and announcing each would say nothing sixty times.
     expect(el.querySelectorAll(`[role="status"]`)).toHaveLength(1);
-    for (const bar of el.querySelectorAll(`.skeleton`)) {
-        expect(bar.closest(`[aria-hidden="true"]`)).not.toBeNull();
-    }
+    // Read, not only announced: with no bars standing in for the content, the line is the whole of what the wait says.
+    expect(status.closest(`[aria-hidden="true"]`)).toBeNull();
+    expect(status.closest(`.sr-only`)).toBeNull();
 
-    // Both halves, and the list at the width the rows will land at, not a width they'd jump from.
+    // Both columns, and the list at the width the rows will land at, not a width they'd jump from.
     const list = el.querySelector(`aside`)!;
     expect(el.querySelector(`section`)).not.toBeNull();
     expect(list.style.width).toBe(uiLength(useLayout().reviewListWidth.value));
-    // Rows to land in, more than one, at different lengths: a review is a list of paths, not a stack of bars.
-    const widths = [...list.querySelectorAll(`.skeleton`)].map((bar) => bar.className);
-    expect(new Set(widths).size).toBeGreaterThan(1);
+    // No guessed rows or code lines: every review is its own, so the frame is all a wait can honestly hold.
+    expect(el.querySelectorAll(`.skeleton`)).toHaveLength(0);
+    expect(el.querySelectorAll(`*`).length).toBeLessThan(12);
 });
 
-it(`promises the list alone on a phone, where the diff is a screen only a pick opens`, async () => {
+it(`holds the list alone on a phone, where the diff is a screen only a pick opens`, async () => {
     mobile.value = true;
     const el = await mount(`Reading this agent's changes…`);
 

@@ -498,27 +498,28 @@ const mountReading = async (state: { fetching: boolean; loaded: boolean }): Prom
     return el;
 };
 
-// The first read used to be a line of text where the review was about to be, so the panel said one thing, then
-// replaced it with a completely different shape. Two facts are pinned here: the wait keeps the branch even before it
-// is old enough to be drawn (so the empty state, which says the opposite, can never flash), and once drawn it is the
-// review's own two columns.
-it(`holds the review's shape through its first read instead of a line of text`, async () => {
+// The first read used to be a line of text where the review was about to be, then a replay of whatever review was
+// seen last (another agent's files, another agent's diff). Pinned here: the wait keeps the branch even before it is old
+// enough to be drawn (so the empty state, which says the opposite, can never flash), and once drawn it is the review's
+// own two columns with one line in them, never rows guessed for this agent.
+it(`holds the review's frame through its first read, with one line and no guessed rows`, async () => {
     jest.useFakeTimers();
     const el = await mountReading({ fetching: true, loaded: false });
 
     // Below the reveal delay an answer still reads as immediate, so nothing is drawn — least of all the sentence for
     // an agent that changed nothing, which is the opposite of what is on its way.
-    expect(el.querySelector(`.skeleton`)).toBeNull();
+    expect(el.querySelector(`[role="status"]`)).toBeNull();
     expect(el.textContent).not.toContain(`hasn't changed any files`);
 
     jest.advanceTimersByTime(REVEAL_DELAY_MS);
     await nextTick();
 
-    // One status region for the whole wait, with the subject read rather than printed over the rows' places.
+    // One status region for the whole wait, said in words where the first row will land.
     const status = el.querySelector(`[role="status"]`)!;
     expect(status.getAttribute(`aria-busy`)).toBe(`true`);
     expect(status.textContent).toContain(`Reading this agent's changes…`);
-    expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
+    expect(el.querySelectorAll(`[role="status"]`)).toHaveLength(1);
+    expect(el.querySelector(`.skeleton`)).toBeNull();
     // The list and the diff beside it: both halves of what the answer lands in, at the widths it will land at.
     expect(el.querySelector(`aside`)).not.toBeNull();
     expect(el.querySelector(`section`)).not.toBeNull();
@@ -533,7 +534,7 @@ it(`keeps an answer on screen while the daemon is asked again`, async () => {
 
     expect(el.textContent).toContain(`hasn't changed any files`);
     expect(el.textContent).not.toContain(`Reading this agent's changes…`);
-    expect(el.querySelector(`.skeleton`)).toBeNull();
+    expect(el.querySelector(`[role="status"]`)).toBeNull();
 });
 
 // The rows this panel lists are read off a BRANCH. When the conversation left its checkout standing somewhere else,

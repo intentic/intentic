@@ -1,74 +1,37 @@
-<!-- The review's shape while its first read is in flight: the file list beside the diff. -->
+<!-- The review's frame while its first read is in flight: the list's column and the diff's, empty, and one line saying what is on its way. -->
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
-import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
 import { useLayout } from "../../../shell/window/useLayout";
 import { uiLength } from "../../../shell/window/uiScale";
+import ReviewWaitLine from "./ReviewWaitLine.vue";
 
-const { label, rows = 7 } = defineProps<{
-    /** What is being waited on, announced once for the whole outline. */
+// No rows or code lines are drawn. Every agent's review is different (two files or two hundred, a one-line fix or a
+// rewrite), so any rows here would be a guess the answer then contradicts, and a page of bars to tear down. What
+// every review does share is its frame: the list column at the reader's width, its header and the diff toolbar at
+// the same height. Holding that keeps the answer from moving anything when it lands.
+
+const { label } = defineProps<{
+    /** What is being waited on, said once for the whole frame. */
     label: string;
-    /** How many file rows to promise. Match the shortest review worth drawing, not the longest one seen. */
-    rows?: number;
 }>();
 
 const { mobile } = useDevice();
 const shell = useLayout();
-
-// Walked in order and wrapped, so no two rows share a length: a review is a list of paths, not a stack of bars.
-const NAME_WIDTHS = [`w-40`, `w-28`, `w-52`, `w-36`, `w-44`, `w-24`, `w-48`];
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1" role="status" aria-busy="true">
-        <span class="sr-only">{{ label }}</span>
+    <div class="flex min-h-0 flex-1">
         <aside
             class="flex min-h-0 min-w-0 flex-col"
             :class="mobile ? `flex-1` : `shrink-0 border-r border-line`"
             :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
-            aria-hidden="true"
         >
-            <!-- The list's own bar: count or filter on the left, totals and the viewed tally on the right. -->
-            <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
-                <span class="skeleton block h-3 w-14" />
-                <span class="flex-1"></span>
-                <span class="skeleton block h-2.5 w-12" />
-                <span class="skeleton block h-2.5 w-8" />
-            </div>
-            <div class="min-h-0 flex-1 overflow-hidden">
-                <!-- One repo heading over its rows: the shape every review has, whatever it turns out to hold. -->
-                <div class="flex items-center gap-1.5 border-b border-line/60 px-2 py-1">
-                    <span class="skeleton block h-2 w-2 shrink-0" />
-                    <span class="skeleton block h-2.5 w-20" />
-                    <span class="skeleton block h-3 w-8 rounded-full" />
-                </div>
-                <div
-                    v-for="index in rows"
-                    :key="index"
-                    class="flex items-center gap-2 py-1.5 pl-2.5 pr-1.5 max-md:min-h-11"
-                >
-                    <!-- Status mark, file glyph, name, size: the four things every row in this list carries. -->
-                    <span class="skeleton block h-2.5 w-2.5 shrink-0" />
-                    <span class="skeleton block h-3 w-3 shrink-0" />
-                    <span class="skeleton block h-2.5" :class="NAME_WIDTHS[(index - 1) % NAME_WIDTHS.length]" />
-                    <span class="flex-1"></span>
-                    <span class="skeleton block h-2.5 w-10 shrink-0" />
-                </div>
-            </div>
+            <div class="h-8 shrink-0 border-b border-line max-md:h-12" aria-hidden="true"></div>
+            <ReviewWaitLine :label="label" class="px-2.5" />
         </aside>
-
-<!-- Desktop opens the first diff; mobile reaches it through a file pick. -->
+        <!-- Desktop opens the first diff beside the list; a phone reaches it through a pick, so its frame is the list alone. -->
         <section v-if="!mobile" class="flex min-h-0 min-w-0 flex-1 flex-col" aria-hidden="true">
-            <!-- The diff's toolbar, at the list header's height: the two align in the real panel. -->
-            <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
-                <span class="skeleton block h-2.5 w-2.5 shrink-0" />
-                <span class="skeleton block h-2.5 w-44" />
-                <span class="flex-1"></span>
-                <span class="skeleton block h-2.5 w-14" />
-                <span class="skeleton block h-5 w-24 rounded-md" />
-            </div>
-            <!-- The workspace editor's own diff outline, so a waiting diff looks the same wherever it is opened. -->
-            <DiffSkeleton bare class="min-h-0 flex-1" />
+            <div class="h-8 shrink-0 border-b border-line max-md:h-12"></div>
         </section>
     </div>
 </template>

@@ -6,12 +6,13 @@ import { useT } from "@intentic/ui/i18n";
 // Placeholder for a transcript that hasn't arrived: previews the layout (prompt, tool rows, answer) content will
 // occupy, so arrival fills its own outline instead of replacing a spinner. Anchored to the bottom, since that's where a
 // restored transcript lands (useStickToBottom). The bars are drawn only until the conversation has been seen once; from
-// then on its own last turns, as they were last drawn, stand in for them.
+// then on its own last turns, as they were last drawn, stand in for them. Without a name (a host that asked for a quiet
+// wait, transcriptWait.ts) there is no outline at all: one line at the foot, where the transcript will land.
 const t = useT();
 
 const { of } = defineProps<{
-    // The name ChatPaneTurns keeps this conversation's turns under (`v-skeleton-source`).
-    of: string;
+    // The name ChatPaneTurns keeps this conversation's turns under (`v-skeleton-source`); absent for a quiet wait.
+    of?: string;
 }>();
 
 // Per-turn skeleton shapes, newest last; fixed uneven widths so the outline doesn't reshuffle on re-render.
@@ -52,13 +53,13 @@ const retry = (): void => {
     <!-- Bars are decoration; role=status plus the sr-only line carry the announcement for screen readers. -->
     <!-- Absolutely positioned so it adds no intrinsic size; in flow it would grow the shared scroller. -->
     <div class="relative min-h-0 flex-1" role="status" aria-busy="true">
-        <span class="sr-only">{{ t(`chat.chatTranscriptSkeleton.loadingConversation`) }}</span>
+        <span v-if="of !== undefined" class="sr-only">{{ t(`chat.chatTranscriptSkeleton.loadingConversation`) }}</span>
         <!-- The remembered turns (`data-skeleton-snapshot`) take the top when they fit, as a short chat's own turns do,
              and the bottom when they don't, as a long one opens on its last. -->
         <div class="chat-skeleton absolute inset-0 flex flex-col justify-end gap-1 overflow-hidden pb-2 [&>[data-skeleton-snapshot]]:mb-auto">
             <!-- Only the bars are remembered: the notes below keep timing the wait and offering to ask again. The status
                  above already announces it, so the remembered turns stay silent. -->
-            <SkeletonSnapshot :of="of">
+            <SkeletonSnapshot v-if="of !== undefined" :of="of">
                 <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
                     <!-- Padding here matches .chat-prompt's own vertical padding. -->
                     <div class="flex justify-end pt-3 pb-2">
@@ -85,6 +86,10 @@ const retry = (): void => {
             </p>
             <p v-else-if="slow" class="flex shrink-0 items-center justify-center gap-2 pt-2 text-2xs text-subtle">
                 <Icon name="spinner" spin class="text-2xs" />{{ t(`chat.chatTranscriptSkeleton.stillFetchingConversationSandbox`) }}
+            </p>
+            <!-- The quiet wait's one line, said rather than read only to a screen reader: there are no bars to show it. -->
+            <p v-else-if="of === undefined" class="flex shrink-0 items-center justify-center gap-2 pt-2 text-2xs text-subtle">
+                <Icon name="spinner" spin class="text-2xs" />{{ t(`chat.chatTranscriptSkeleton.loadingConversation`) }}
             </p>
         </div>
     </div>

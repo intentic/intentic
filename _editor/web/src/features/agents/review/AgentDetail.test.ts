@@ -198,8 +198,10 @@ it(`holds the header's places and the review's shape while the fleet is still be
     const header = el.querySelector<HTMLElement>(`.view-header`)!;
     expect(header.querySelectorAll(`.skeleton`).length).toBe(2);
     expect(header.textContent).not.toContain(`Agent`);
-    // And the pane below is the review's own shape, announced once, instead of the empty screen it used to be.
+    // And the pane below is the review's frame with one line in it, instead of the empty screen it used to be, and
+    // instead of the last review seen replayed as bars: another agent's files say nothing about this one's.
     const status = el.querySelector(`[role="status"]`)!;
     expect(status.textContent).toContain(`Opening this agent's review…`);
-    expect(status.querySelector(`aside`)).not.toBeNull();
+    expect(status.closest(`aside`)).not.toBeNull();
+    expect(el.querySelectorAll(`.skeleton`)).toHaveLength(2);
 });

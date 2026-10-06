@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, provide, ref } from "vue";
+import { computed, inject, provide, ref } from "vue";
 import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { CHAT_SURFACE, useChatSurface } from "../../tools/chatToolSurface";
@@ -10,6 +10,7 @@ import ChatForkCut from "../../transcript/ChatForkCut.vue";
 import ChatForkLine from "../../transcript/ChatForkLine.vue";
 import ChatMessageView from "../../transcript/ChatMessageView.vue";
 import ChatTranscriptSkeleton from "../../transcript/ChatTranscriptSkeleton.vue";
+import { QUIET_TRANSCRIPT_WAIT } from "../../transcript/transcriptWait";
 import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
 import ChatSystemPrompt from "../../transcript/prompt/ChatSystemPrompt.vue";
 import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
@@ -88,7 +89,9 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
 // The column whose `path:line` links raise a preview of the file (FileRefPeek).
 const column = ref<HTMLElement>();
 // What this conversation's next wait draws (ChatTranscriptSkeleton): its turns as they last stood, kept per conversation.
-const imprint = computed(() => `chat.transcript:${conversation.value.conversationId}`);
+// A host that asks for a quiet wait draws none, so nothing is taken for it either.
+const quiet = inject(QUIET_TRANSCRIPT_WAIT, false);
+const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversation.value.conversationId}`));
 </script>
 
 <template>
