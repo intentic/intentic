@@ -114,7 +114,7 @@ export const productPages: ProductPage[] = [
         ],
         guide: { slug: "run-multiple-coding-agents-in-parallel", question: "Can several AI coding agents work on the same repository at once?" },
         meta: {
-            title: "Run a fleet · intentic",
+            title: "Run coding agents in parallel, one worktree each · intentic",
             description:
                 "Run ten coding agents at once and see which needs you: attention lanes, per-agent cost and diffs, one git worktree each, the whole fleet on one board.",
             datePublished: PUBLISHED,
@@ -181,7 +181,7 @@ export const productPages: ProductPage[] = [
         ],
         guide: { slug: "give-an-ai-agent-database-and-api-access-safely", question: "Should an AI coding agent ever hold your database password?" },
         meta: {
-            title: "Connect agents · intentic",
+            title: "Connect coding agents to GitHub, databases & MCP · intentic",
             description:
                 "Connect an agent to GitHub, PostgreSQL, Sentry, Stripe, Discord, SSH or any MCP server. Each installs a real tool, and its key never leaves your sandbox.",
             datePublished: PUBLISHED,
@@ -247,7 +247,7 @@ export const productPages: ProductPage[] = [
             question: "Will a coding agent keep working after you close your laptop?",
         },
         meta: {
-            title: "Automate · intentic",
+            title: "Automate coding agents on schedules & webhooks · intentic",
             description:
                 "Start an agent from a push, alert, payment, email, chat or schedule. You set its permissions, and every run opens a session you can watch.",
             datePublished: PUBLISHED,
@@ -316,7 +316,7 @@ export const productPages: ProductPage[] = [
         ],
         guide: { slug: "review-ai-generated-code-changes", question: "Is an AI agent's summary of its own diff enough to merge on?" },
         meta: {
-            title: "Review agent work · intentic",
+            title: "Review AI agent code changes before they land · intentic",
             description:
                 "Every agent starts in plan mode, permission is a per-turn dial, and finished work is reviewed diff by diff before anything lands in your tree.",
             datePublished: PUBLISHED,
@@ -396,7 +396,7 @@ export const productPages: ProductPage[] = [
         ],
         guide: { slug: "where-your-code-goes-with-cloud-coding-agents", question: "Where does your code go when you use a cloud coding agent?" },
         meta: {
-            title: "Host agent work · intentic",
+            title: "Self-hosted coding agents on a server you own · intentic",
             description:
                 "Run the sandbox on a server you own. You approve installed software, connect through a private tunnel and keep usage data in the sandbox.",
             datePublished: PUBLISHED,

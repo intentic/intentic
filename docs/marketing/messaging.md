@@ -127,7 +127,9 @@ The brand tagline is now "More work. Less AI waste. Same subscriptions."
 alone is the one the reader has to believe. It states what the product buys back: throughput from
 the model subscriptions you already pay for, without a second bill for metered cloud agents.
 
-**The hero subhead carries the category**: `A workspace for coding agents.` One sentence. Any
+**The hero subhead carries the category**: `A workspace for parallel coding agents, each in a sandbox on
+your machine.` One sentence, and the only place above the fold that says what is searched for: "parallel"
+and "sandbox" were added 2026-10-06 after an SEO audit found the home page carried no query word at all. Any
 statement of what the product *is* had been kept out of the first screen along with ownership, and that
 is not a differentiator to be earned later, it is the sentence every other claim hangs on. Same order for
 the page title and the meta description: category first, differentiators after.
@@ -259,7 +261,9 @@ free column is your machine, the other is ours.
 
 - The landing is a single page: its title/description are **not** per-variant; they live in
   `_site/site-content/src/landing.ts` (`meta`). Title:
-  `intentic · A workspace for coding agents`: the category, not the brand line. A search result, a
+  `intentic · Open-source workspace for parallel coding agents`: the category, not the brand line. The
+  description names Claude Code and Codex as plural examples, then "parallel" and "sandbox", the words
+  people search with. A search result, a
   browser tab and a pasted link are the three places a stranger meets this product with no page
   around it to explain it, so all three say what it is.
 - Org description (`_site/site-content/src/site.ts`, JSON-LD): the canonical product sentence; keep

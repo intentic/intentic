@@ -1,4 +1,4 @@
-import { compareHref } from "./compare";
+import { compareHref, comparePages } from "./compare";
 import { docsHref } from "./docs";
 import { productHref } from "./product";
 
@@ -12,6 +12,12 @@ export const guidesHref = (slug: string): string => (slug ? `/guides/${slug}/` :
 
 /** Written against the state of the field on this date; the pages say so out loud. */
 const PUBLISHED = "2026-08-12";
+/** The second shelf: Docker sandboxes, self-hosted web agents, background agents and the parallel-tools roundup. */
+const PUBLISHED_OCTOBER = "2026-10-06";
+
+/** A compare link that appears only once its page exists, so a guide never points at a comparison still being written. */
+const compareLink = (slug: string, label: string): { label: string; href: string }[] =>
+    comparePages.some((page) => page.slug === slug) ? [{ label, href: compareHref(slug) }] : [];
 
 /** One approach to the problem, including the ones this product does not sell. */
 export interface GuideOption {
@@ -66,7 +72,7 @@ export interface GuidePage {
 export const guidesIndex = {
     eyebrow: "Guides",
     heading: "Straight answers about running AI coding agents",
-    sub: "Five things people ask before they know intentic exists. Each guide opens with a direct answer, weighs the approaches on the table, and says which one to actually pick.",
+    sub: "What people ask before they know intentic exists. Each guide opens with a direct answer, weighs the approaches on the table, and says which one to actually pick.",
     meta: {
         title: "Guides · Running AI coding agents",
         description:
@@ -198,7 +204,9 @@ export const guidePages: GuidePage[] = [
             { label: "Parallel agents, in the docs", href: docsHref("parallel-agents") },
             { label: "Run a fleet", href: productHref("run") },
             { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "Tools for parallel agents, compared", href: guidesHref("best-tools-for-running-parallel-coding-agents") },
             { label: "intentic vs Superset", href: compareHref("superset") },
+            ...compareLink("claude-squad", "intentic vs Claude Squad"),
         ],
         meta: {
             title: "How to run multiple AI coding agents in parallel",
@@ -309,6 +317,7 @@ export const guidePages: GuidePage[] = [
             { label: "Host agent work", href: productHref("host") },
             { label: "Your own machine, in the docs", href: docsHref("your-machine") },
             { label: "Automations", href: docsHref("automations") },
+            { label: "Background agents on your own hardware", href: guidesHref("self-hosted-background-coding-agents") },
             { label: "Quickstart", href: docsHref("quickstart") },
             { label: "intentic vs Conductor", href: compareHref("conductor") },
         ],
@@ -431,6 +440,7 @@ export const guidePages: GuidePage[] = [
             { label: "Connect agents to your systems", href: productHref("connect") },
             { label: "Capabilities, in the docs", href: docsHref("capabilities") },
             { label: "Access and permissions", href: docsHref("access") },
+            { label: "Claude Code in a Docker sandbox", href: guidesHref("run-claude-code-in-a-docker-sandbox") },
             { label: "Quickstart", href: docsHref("quickstart") },
             { label: "intentic vs cloud agents", href: compareHref("cloud-agents") },
         ],
@@ -546,6 +556,7 @@ export const guidePages: GuidePage[] = [
         related: [
             { label: "Review agent work", href: productHref("review") },
             { label: "Capabilities and permissions", href: docsHref("access") },
+            { label: "Background agents and review", href: guidesHref("self-hosted-background-coding-agents") },
             { label: "Quickstart", href: docsHref("quickstart") },
             { label: "intentic vs Cursor", href: compareHref("cursor") },
         ],
@@ -651,6 +662,7 @@ export const guidePages: GuidePage[] = [
             { label: "Host agent work", href: productHref("host") },
             { label: "Your own machine, in the docs", href: docsHref("your-machine") },
             { label: "Which models it uses", href: docsHref("models") },
+            { label: "Self-hosting instead of Claude Code on the web", href: guidesHref("self-hosted-alternative-to-claude-code-on-the-web") },
             { label: "Quickstart", href: docsHref("quickstart") },
             { label: "intentic vs cloud agents", href: compareHref("cloud-agents") },
         ],
@@ -659,6 +671,595 @@ export const guidePages: GuidePage[] = [
             description:
                 "Whose machine holds the checkout, and whose account holds the keys. What each setup sends to a model provider, and which claims are worth verifying.",
             datePublished: PUBLISHED,
+        },
+    },
+    {
+        slug: "run-claude-code-in-a-docker-sandbox",
+        question: "How do you run Claude Code in a Docker sandbox?",
+        navLabel: "Claude Code in Docker",
+        blurb: "The container becomes the permission boundary. Decide what it can see, reach and hold before you turn the prompts off.",
+        answer: "Run Claude Code in a container that sees only the repository you mount, holds only the credentials the task needs, and can reach only the hosts you allow. The container then becomes the boundary, which is what makes --dangerously-skip-permissions reasonable. Anthropic publishes a reference devcontainer with a default-deny firewall; Docker Sandboxes and managed workspaces package the same idea.",
+        facts: [
+            "Anthropic's docs say to run --dangerously-skip-permissions sessions only inside a container, a VM or its sandbox runtime. The CLI refuses the flag when it runs as root.",
+            "A container does not stop exfiltration on its own. Anthropic's devcontainer docs warn that with permissions skipped, a malicious project can send out anything reachable inside the container, including Claude Code's own credentials. The network policy is what limits that.",
+            "A bind-mounted repository is your real files. Whatever the agent deletes or rewrites in the mount is deleted or rewritten on the host, container or not.",
+            "Claude Code keeps its sign-in in its config directory, and on Linux the credential file is ~/.claude/.credentials.json. Without a volume for that directory, and CLAUDE_CONFIG_DIR pointing at it, a container asks you to log in on every start.",
+        ],
+        options: [
+            {
+                name: "Claude Code's built-in sandbox",
+                what: "Turn on /sandbox and Claude's shell commands run under OS limits: writes kept to the project, network through a proxy whose allowlist starts empty.",
+                goodFor: "Fewer prompts on your own laptop without Docker. Nothing to build, and it works on macOS, Linux and WSL2.",
+                breaksWhen:
+                    "You want the whole agent contained. File tools, MCP servers and hooks run outside it, reads cover most of the machine including ~/.ssh by default, and native Windows is not supported.",
+            },
+            {
+                name: "Anthropic's reference devcontainer",
+                what: "A devcontainer.json, Dockerfile and init-firewall.sh from the claude-code repository: a non-root user, a volume for Claude's config, and a default-deny firewall with a short allowlist.",
+                goodFor:
+                    "VS Code or any editor that opens devcontainers, teams that want one shared definition, and a network policy you can read line by line.",
+                breaksWhen:
+                    "You need hosts outside the allowlist, such as another package registry or your own APIs: every new source is a firewall edit. Anthropic calls it a working example, not a maintained base image.",
+            },
+            {
+                name: "Plain docker run",
+                what: "Your own image with Claude Code installed, the repository bind-mounted, a named volume for the config, started by hand or from a script.",
+                goodFor: "Full control with nothing to learn beyond Docker, and easy to run headless with claude -p from a script or a CI job.",
+                breaksWhen:
+                    "You forget the parts the devcontainer gives you: a non-root user, a persisted login and network limits. By default a container can reach the whole internet.",
+            },
+            {
+                name: "Docker Sandboxes",
+                what: "Docker's sbx CLI runs Claude Code in a microVM with its own kernel, Docker daemon and network, with the workspace mounted at the same path as on the host.",
+                goodFor:
+                    "A stronger boundary than a container, Docker inside the sandbox, default-deny networking with presets, and credentials injected by a host-side proxy so the raw key never enters the VM. Free for local use.",
+                breaksWhen:
+                    "Your machine is not macOS 14 on Apple silicon, Windows 11 or Ubuntu 24.04 or later, or you want several agents managed with review on top. It needs a Docker sign-in, and it is the boundary rather than the workflow.",
+            },
+            {
+                name: "A self-hosted agent workspace",
+                what: "Something that runs the container for you and puts an interface on it. intentic runs a Docker sandbox on your machine, with a git worktree per agent inside it.",
+                goodFor:
+                    "Several agents, runs that keep going after the terminal or browser closes, and review before changes reach your checkout, without writing the container setup yourself.",
+                breaksWhen:
+                    "You need one agent in one repository for an afternoon, or you need default-deny egress: intentic's sandbox does not filter outbound traffic, so that policy would be yours to add.",
+            },
+        ],
+        verdict: [
+            "If all you want is fewer prompts on your own laptop, turn on /sandbox first. It is built in and covers the shell, which is where most of the risk sits.",
+            "If you want to run with --dangerously-skip-permissions, use a real boundary. Anthropic's reference devcontainer is the best one to read and copy, because the firewall is a script you can audit. Docker Sandboxes gives a stronger boundary with less to maintain, on the platforms it supports.",
+            "Once there are several agents, or runs that should continue after you close the terminal, the container is only half the job. intentic runs Claude Code, Codex, Grok and others in a Docker sandbox on your machine, with a worktree per agent, credentials held inside the sandbox, and every change reviewed before it lands.",
+        ],
+        sections: [
+            {
+                heading: "What the container protects, and what it does not",
+                body: [
+                    "A container turns the question of what Claude may do into what this box can reach. Inside it, prompts mostly become noise: a command approved without being read is worse than a boundary nobody has to think about.",
+                    "It protects the host: files outside the mount, other projects, your SSH keys, your browser profile. It does not protect anything you put inside it. That is why three decisions matter more than the image: what you mount, which credentials go in, and where the network can go.",
+                ],
+            },
+            {
+                heading: "Mounting the repository",
+                body: [
+                    "Bind-mount the repository and the agent edits your real checkout, so changes show up in your editor straight away. That is the convenient default, and also why a mistake inside the container is a real mistake on the host.",
+                    "The alternative is a copy inside the container, which isolates the work completely and makes getting it out a git push or a patch. Docker Sandboxes offers both: a direct mount at the same path as on the host, or a clone mode that mounts the repository read-only and gives the agent a private copy.",
+                ],
+                points: [
+                    "Mount the repository, never your home directory.",
+                    "Run as a non-root user whose uid matches yours, or files created in the container come out owned by root.",
+                    "Keep dependency folders such as node_modules inside the container when the host is macOS or Windows: native modules built for one system do not load on the other.",
+                ],
+            },
+            {
+                heading: "Credentials: give it a login, not your keys",
+                body: [
+                    "Claude Code needs a credential of its own, and there are three ways to give it one. Log in inside the container, pasting the code it shows because the browser callback cannot reach the container, and keep the config directory on a volume. Generate a one-year token on the host with claude setup-token and pass it as CLAUDE_CODE_OAUTH_TOKEN, which needs a Pro, Max, Team or Enterprise plan. Or pass ANTHROPIC_API_KEY, which uses API billing instead of your plan.",
+                    "Everything else the job needs should be scoped to the job: a token for one repository rather than your SSH key, a staging database rather than production. Anthropic's devcontainer docs specifically say to avoid mounting host secrets such as ~/.ssh.",
+                ],
+            },
+            {
+                heading: "Network limits: the part most setups skip",
+                body: [
+                    "A plain docker run has full outbound access, so an agent with skipped permissions can send anything it can read to anywhere. The fix is default-deny egress with an allowlist.",
+                    "Anthropic's reference firewall does this with iptables when the container starts. It allows DNS, SSH, GitHub's published address ranges, the npm registry and the Anthropic API, rejects everything else, and checks itself by confirming that example.com is unreachable. It needs the NET_ADMIN and NET_RAW capabilities to do so. Docker Sandboxes enforces a similar policy outside the VM, with Open, Balanced and Locked Down presets.",
+                    "An allowlist is only as tight as its widest entry: Docker's docs warn that its defaults include broad wildcards.",
+                ],
+            },
+            {
+                heading: "What breaks inside the box",
+                body: ["Most of the friction is predictable, and worth knowing before the first run rather than during it."],
+                points: [
+                    "Installs from a registry that is not on the allowlist. Every new dependency source is a firewall change.",
+                    "Docker inside the container. Mounting the host's Docker socket gives the agent root-level control of the host and undoes the sandbox. Use a sandbox with its own engine: Docker Sandboxes has one per sandbox, and intentic's is a capability you switch on.",
+                    "Logging in again on every start, until the config directory lives on a volume.",
+                    "Ports. A dev server inside the container is invisible until its port is published, and two containers cannot publish the same one.",
+                    "Root images. Claude Code refuses --dangerously-skip-permissions as root, so an image that defaults to root needs a user added.",
+                ],
+            },
+        ],
+        faq: [
+            {
+                id: "skip-permissions-in-docker",
+                question: "Is it safe to use --dangerously-skip-permissions in Docker?",
+                answer: "Safer, not safe. The container protects the host outside the mount, but Anthropic warns that a malicious project can still exfiltrate anything inside it, including Claude's own credentials, unless the network is restricted. Use it with trusted repositories, a non-root user, scoped credentials and default-deny egress.",
+            },
+            {
+                id: "need-a-devcontainer",
+                question: "Do I need a devcontainer to run Claude Code in Docker?",
+                answer: "No. A devcontainer is a Docker setup that editors such as VS Code know how to open. A plain docker run with the repository mounted works the same way for the agent. The devcontainer earns its keep through Anthropic's reference firewall and as one shared definition for a team.",
+            },
+            {
+                id: "login-inside-container",
+                question: "How do you log in to Claude Code inside a container?",
+                answer: "Run claude and paste the code it shows, since the browser callback cannot reach the container, and keep the config directory on a volume so the login survives restarts. For unattended runs, create a token on the host with claude setup-token and pass it in as CLAUDE_CODE_OAUTH_TOKEN.",
+            },
+            {
+                id: "docker-sandboxes-vs-devcontainer",
+                question: "What is the difference between Docker Sandboxes and a devcontainer?",
+                answer: "A devcontainer is a container on your Docker engine, sharing the host's kernel, defined by a file in your repository. Docker Sandboxes runs each agent in a microVM with its own kernel, Docker daemon and network policy, and injects credentials from the host so raw keys never enter it. The microVM is the stronger boundary; the devcontainer is a file you can read and change.",
+            },
+            {
+                id: "claude-code-built-in-sandbox",
+                question: "Does Claude Code have a sandbox of its own?",
+                answer: "Yes: /sandbox. It confines the shell commands Claude runs, using Seatbelt on macOS and bubblewrap on Linux and WSL2, with network access through an allowlist that starts empty. It is off by default and does not cover Claude's file tools, MCP servers or hooks, so it is a layer rather than a full boundary.",
+            },
+        ],
+        related: [
+            { label: "Credentials for agents", href: guidesHref("give-an-ai-agent-database-and-api-access-safely") },
+            { label: "Tools for parallel agents", href: guidesHref("best-tools-for-running-parallel-coding-agents") },
+            { label: "Docker setup, in the docs", href: docsHref("docker") },
+            { label: "intentic vs Claude Code", href: compareHref("claude-code") },
+            ...compareLink("docker-sandboxes", "intentic vs Docker Sandboxes"),
+        ],
+        meta: {
+            title: "How to run Claude Code in a Docker sandbox",
+            description:
+                "Run Claude Code in a container that sees only your repo and reaches only allowed hosts. Devcontainer, docker run, Docker Sandboxes, credentials, what breaks.",
+            datePublished: PUBLISHED_OCTOBER,
+        },
+    },
+    {
+        slug: "self-hosted-alternative-to-claude-code-on-the-web",
+        question: "Is there a self-hosted alternative to Claude Code on the web or Codex cloud?",
+        navLabel: "Self-hosted web agents",
+        blurb: "Keep the agent and the checkout on a machine you run, then add a way in from the browser. Uptime becomes your job.",
+        answer: "Yes. Run the same agent CLI on a machine you control and add a way to reach it: SSH and tmux, Anthropic's Remote Control, an open-source web UI, or a self-hosted workspace. The checkout and credentials stay on your hardware, and turns still use your subscription. What you take on is the part the cloud products sell: a machine that stays on, and its environment.",
+        facts: [
+            "Claude Code on the web runs each session in an Anthropic-managed VM on Pro, Max, Team and eligible Enterprise seats, with no separate compute charge; sessions share your plan's rate limits. Codex cloud runs each task in a VM on OpenAI's side and is listed from ChatGPT Plus up.",
+            "Both start from GitHub. Codex cloud does not yet support GitLab or GitHub Enterprise Server. Claude Code on the web needs GitHub to clone and open pull requests, though claude --cloud can upload a bundle of a local repository instead.",
+            "Self-hosting the agent does not make the model local. The conversation and the files the agent reads still go to the model provider. What moves is the checkout, the environment and the credentials.",
+            "Anthropic's Remote Control already lets claude.ai and the Claude mobile app drive a session running on your own machine over outbound HTTPS. The local process has to keep running, and it needs a subscription login: API keys are not supported.",
+            "A web UI listening on a public address without authentication is a shell for whoever finds it. OpenCode's docs say plainly that its server is unsecured unless you set a password.",
+        ],
+        options: [
+            {
+                name: "Stay on the cloud product",
+                what: "Claude Code on the web, Codex cloud, or a peer such as Cursor's cloud agents. The vendor runs a fresh VM per task.",
+                goodFor: "Operating nothing, starting work from a phone, parallel sessions on someone else's hardware, and no extra charge on plans that include it.",
+                breaksWhen:
+                    "Code or credentials must stay on your infrastructure, the repository is not on GitHub, or the environment needs more than a setup script can install. Shell commands in Claude Code cloud sessions time out after two minutes by default, ten at most.",
+            },
+            {
+                name: "SSH, tmux and the CLI",
+                what: "The agent runs in tmux on a desktop, home server or VPS; you reattach over SSH from wherever you are.",
+                goodFor: "Anyone at home in a terminal. Free, nothing to trust beyond SSH, and the session survives a dropped connection.",
+                breaksWhen:
+                    "You want to check in from a phone without a terminal app, watch several agents at once, or read diffs comfortably. It is all text in one window.",
+            },
+            {
+                name: "Claude Code Remote Control",
+                what: "Start claude remote-control on your machine and continue the session from claude.ai/code or the Claude app.",
+                goodFor: "Claude users who want the official web and phone interface on a session that runs locally, with no inbound port opened.",
+                breaksWhen:
+                    "You use another agent, or the local process stops: Anthropic suggests tmux over SSH to keep it alive, and server mode exits after about ten minutes without a network.",
+            },
+            {
+                name: "An open-source web UI",
+                what: "Claude Code UI (now CloudCLI, AGPL-3.0), Happy (MIT, phone and web through an encrypted relay you can self-host) or opencode web (MIT) put a browser in front of agents on your machine.",
+                goodFor: "A free browser or phone front end for agents you already run, if you are happy to set it up and secure it.",
+                breaksWhen:
+                    "It is exposed carelessly, since its security is whatever you put in front of it. Most are a view onto sessions rather than isolation between them.",
+            },
+            {
+                name: "A self-hosted workspace",
+                what: "intentic: a Docker sandbox on your laptop, desktop or VPS that runs Claude Code, Codex, Grok, Kimi Code and Gemini, reached from any browser through a tunnel it dials outward.",
+                goodFor:
+                    "The shape of the cloud products on your own hardware: runs that continue with the browser closed, a worktree per agent, plan mode and per-hunk review, on the subscriptions you already have.",
+                breaksWhen:
+                    "You do not want to keep a machine on. A sandbox on a laptop stops when the laptop sleeps, like any other local tool. It is also new, and says so.",
+            },
+        ],
+        verdict: [
+            "If your code can sit on GitHub and on a vendor's VM, the cloud products are the least work, and on plans that already include them they cost nothing extra. Self-hosting is not automatically cheaper or more private: the model still sees the code.",
+            "If the checkout or the keys must stay on your hardware, start with what you have: a machine that stays on, tmux and SSH. Add Remote Control if you use Claude and want the official app, or an open-source web UI if you want a browser and can secure it.",
+            "If you want the whole cloud shape without the cloud (isolated parallel runs, a browser on any device, review before merge, triggers), that is what intentic is: an MIT-licensed workspace whose sandbox runs on your machine and keeps the repository and credentials there.",
+        ],
+        sections: [
+            {
+                heading: "What the cloud products actually give you",
+                body: [
+                    "Take away the interface and the cloud products are four things: a fresh VM per task, a setup step that installs your toolchain, a network policy, and a branch or pull request at the end. Claude Code on the web offers network levels from none to full, with a trusted default covering package registries and GitHub. Codex cloud makes internet access during the agent's work a switch you turn on, with presets.",
+                    "Both keep going when your laptop closes, because nothing runs on your laptop. That is the property most people are buying, and the one a self-hosted setup has to reproduce first.",
+                ],
+            },
+            {
+                heading: "What self-hosting changes",
+                body: [
+                    "Self-hosting moves the agent, not the model. Everything below changes; what the provider sees does not.",
+                ],
+                points: [
+                    "Where the code lives: the checkout and its history stay on a disk you control rather than a vendor VM.",
+                    "Whose credentials: database passwords and deploy keys stay on your machine instead of going into a vendor's environment settings.",
+                    "Subscriptions: the agent CLI signs in with the same Claude or ChatGPT plan, and turns draw on the same allowance either way.",
+                    "Uptime: the machine has to be on. A desktop that sleeps at night is not a server.",
+                    "The environment: any image, any toolchain, any internal host, and no time limit on setup.",
+                ],
+            },
+            {
+                heading: "Reaching it without opening it up",
+                body: [
+                    "The risk in self-hosting a web UI is the UI, not the agent. A port forwarded on your router, or a server bound to every interface on a VPS, hands a shell to whoever finds it.",
+                    "Two patterns hold up. Keep the port private and reach it over SSH or a private network. Or use something that dials outward, as Remote Control, Happy's relay and intentic's tunnel all do, so nothing inbound is opened at all.",
+                ],
+            },
+            {
+                heading: "What you give up",
+                body: [
+                    "The vendor patches the VMs, keeps the image current, and runs as many sessions as your plan allows. There are official phone apps, and a session starts from anywhere with nothing of yours left running.",
+                    "Self-hosting swaps all of that for a machine you maintain. For many people that is the right trade, because the repository or the keys cannot leave. For many others it is not, and the cloud product is the honest answer.",
+                ],
+            },
+        ],
+        faq: [
+            {
+                id: "self-hosted-claude-code-web-ui",
+                question: "Is there a self-hosted web UI for Claude Code?",
+                answer: "Yes. Open-source options include Claude Code UI (now called CloudCLI) and Happy, and OpenCode ships its own opencode web. Anthropic's Remote Control lets claude.ai drive a session on your machine. intentic is a fuller workspace around Claude Code and other agents, with its sandbox on your machine.",
+            },
+            {
+                id: "codex-cloud-alternative",
+                question: "What is a good alternative to Codex cloud?",
+                answer: "If you want another hosted service, Claude Code on the web and Cursor's cloud agents are the peers. If the code has to stay on your hardware, run the Codex CLI on an always-on machine, using codex exec for unattended tasks, or use a self-hosted workspace such as intentic that runs Codex on your ChatGPT plan.",
+            },
+            {
+                id: "self-host-same-subscription",
+                question: "Can I self-host and still use my Claude or ChatGPT subscription?",
+                answer: "Yes. The agent CLIs sign in with the same plan wherever they run, so a session on your server draws on the same allowance as one on your laptop. intentic connects your own subscriptions and never resells inference.",
+            },
+            {
+                id: "self-hosted-more-private",
+                question: "Is self-hosting more private than Claude Code on the web?",
+                answer: "It changes who holds the checkout and the credentials, not who sees the conversation. The model provider still receives the files the agent reads. Self-hosting removes the vendor VM and the repository access grant; only a local model keeps the conversation on your machine.",
+            },
+            {
+                id: "self-hosted-closed-laptop",
+                question: "Will a self-hosted agent keep running when I close my laptop?",
+                answer: "Only if it is not on the laptop. Put it on a desktop that stays awake, a home server or a VPS. A self-hosted tool on a sleeping laptop stops like any other process.",
+            },
+        ],
+        related: [
+            { label: "Where your code goes", href: guidesHref("where-your-code-goes-with-cloud-coding-agents") },
+            { label: "Agents that persist", href: guidesHref("keep-a-coding-agent-running-after-you-close-your-laptop") },
+            { label: "Host agent work", href: productHref("host") },
+            { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "intentic vs cloud agents", href: compareHref("cloud-agents") },
+            { label: "intentic vs Codex", href: compareHref("codex") },
+        ],
+        meta: {
+            title: "A self-hosted alternative to Claude Code on the web",
+            description:
+                "What Claude Code on the web and Codex cloud actually do, what changes when you self-host the agent instead, and the self-hosted options that hold up in use.",
+            datePublished: PUBLISHED_OCTOBER,
+        },
+    },
+    {
+        slug: "self-hosted-background-coding-agents",
+        question: "How do you run coding agents in the background on your own hardware?",
+        navLabel: "Background agents",
+        blurb: "Decide what wakes the agent, where it runs, and where its work lands. Choosing the model is the easy part.",
+        answer: "Put the agent on a machine that stays on, give it a trigger (a schedule, a webhook or an event), run each job in a fresh checkout or container, and have every run end as a branch you review rather than a merge. Cap what each run may spend before the first one fires, because nobody is watching when it does.",
+        facts: [
+            "A background agent is the same CLI run without a terminal. Claude Code's claude -p and Codex's codex exec take a task, work, print the result and exit, which is what a scheduler or a webhook handler needs.",
+            "Defaults differ, so read them. codex exec runs in a read-only sandbox unless you pass --sandbox workspace-write. Claude Code in print mode runs the hooks in a project's .claude/settings.json even in a folder you never trusted, unless you pass --bare.",
+            "Plain cron fires only if the machine is awake at that minute. A job scheduled for 3am on a laptop that is asleep at 3am simply does not run.",
+            "Hosted versions exist for every major agent: Anthropic's and OpenAI's GitHub Actions run on GitHub runners, GitHub's Copilot cloud agent opens pull requests from assigned issues, and Cursor's cloud agents (formerly background agents) run in cloud VMs.",
+            "Unattended runs spend with nobody watching. A run that fails every night fails every night, and on a subscription it draws on the same limits as your daytime work.",
+        ],
+        options: [
+            {
+                name: "cron and headless mode",
+                what: "A crontab line on an always-on machine that creates a worktree and calls claude -p or codex exec with a fixed prompt.",
+                goodFor: "One or two scheduled chores, such as a nightly dependency audit or a weekly changelog draft. It is free and you can read the whole system in one line.",
+                breaksWhen:
+                    "Runs overlap, several jobs want the same checkout, or you need to find out what happened last Tuesday. Logs, isolation and review are all yours to build.",
+            },
+            {
+                name: "GitHub Actions",
+                what: "anthropics/claude-code-action or openai/codex-action in a workflow, fired by a workflow event such as an @claude comment, a new issue, a pull request or a cron schedule.",
+                goodFor: "Work whose triggers already live in GitHub. The runner, the branch and the pull request come with it.",
+                breaksWhen:
+                    "Triggers come from elsewhere (an alert, a payment, a chat message), or runs need services and state that outlive a job. GitHub-hosted runners also spend your Actions minutes; self-hosted runners avoid that by making you operate them.",
+            },
+            {
+                name: "A hosted background agent",
+                what: "GitHub's Copilot cloud agent, Codex cloud, Claude Code on the web or Cursor's cloud agents: assign a task, get a branch or pull request back.",
+                goodFor: "Getting asynchronous work done with nothing to operate, for teams already paying for the product.",
+                breaksWhen: "Code or keys must stay on your infrastructure, or the event you care about is not one the vendor can trigger on.",
+            },
+            {
+                name: "A webhook receiver you write",
+                what: "A small server that takes a POST from your monitoring or billing system and starts the agent CLI.",
+                goodFor: "One precise trigger from a system you own, with logic no product would ship.",
+                breaksWhen:
+                    "The second week, when you are writing a queue, a concurrency limit, authentication, retries and somewhere to read the logs. That is a product, and now you maintain it.",
+            },
+            {
+                name: "A self-hosted agent workspace",
+                what: "intentic's automations wake an agent on a schedule, a webhook, a connected service's events or the sandbox's own events, each run in a fresh session and worktree on your machine.",
+                goodFor:
+                    "Triggers from several places in one view, every run on the board with its transcript, diff and cost, and nothing leaving your hardware.",
+                breaksWhen: "You have one nightly job and a cron line would do. It also needs a machine that stays on, like everything else here.",
+            },
+        ],
+        verdict: [
+            "Start with the smallest setup that has all four parts: a machine that stays on, a trigger, a fresh checkout per run, and output that lands as a branch. A cron entry that calls the agent's headless mode in a new worktree is a legitimate first version.",
+            "If the events already live in GitHub, the official Actions integrations are the shortest path, because the trigger, the runner and the pull request are there already.",
+            "When triggers come from several systems and runs should stay on your machine, intentic covers it: automations on a schedule, a webhook, a service's events or the workspace itself, an optional guard command that skips runs with nothing to do, models chosen per automation, a spend ledger, and review before anything lands.",
+        ],
+        sections: [
+            {
+                heading: "Four parts, and the model is the least interesting",
+                body: [
+                    "Every background agent setup that holds up has the same four parts. The agent CLI is interchangeable between them; the parts around it are where setups fail.",
+                ],
+                points: [
+                    "A trigger: what starts the run, and with what input.",
+                    "A host: a machine that is awake when the trigger fires.",
+                    "Isolation: a fresh checkout or container per run, so runs cannot trip over each other or over you.",
+                    "A landing: where the result goes, which should be a branch someone reviews, never the default branch.",
+                ],
+            },
+            {
+                heading: "Pick the trigger by where the event already is",
+                body: [
+                    "A schedule suits chores that are worth doing whether or not anything happened: audits, reports, cleanup. A webhook suits systems that can send an HTTP request: monitoring, billing, a pipeline elsewhere. An event integration suits services the agent should listen to directly, such as a chat channel or a failing build.",
+                    "Whatever the trigger, put a cheap check in front of it. A shell command that asks whether there is anything to do (is the queue empty, did the branch move, does yesterday's report exist) costs nothing, and a run that ends with nothing to do still cost a turn.",
+                ],
+            },
+            {
+                heading: "Isolate every run",
+                body: [
+                    "A background run should never work in a checkout you are using. Give each one a fresh worktree or container, so two runs that overlap, or one run and you, cannot overwrite each other.",
+                    "Isolation is also what makes skipping permission prompts acceptable. Nobody is there to approve a command at 3am, so the boundary has to be the container and the credentials inside it, not a prompt. Keep those credentials scoped to the job: a token for one repository, a read-only database role.",
+                ],
+            },
+            {
+                heading: "Review before merge, every time",
+                body: [
+                    "Unattended work should produce a proposal, not a result. The run commits to its own branch and stops; a person reads the diff before anything merges. GitHub designed its Copilot cloud agent the same way: it pushes to its own branch and cannot push to your default branch.",
+                    "Keep automatic merging off for unattended runs. Work held on a branch costs one click to release, while work that merged unread has to be noticed first, and the person who would have noticed was asleep.",
+                ],
+            },
+            {
+                heading: "Bound the cost before the first run",
+                body: ["Spend is the one resource an unattended run cannot give back, so set the limits before anything fires."],
+                points: [
+                    "Cap each run, in dollars or turns, where your tooling allows it.",
+                    "Pick the model per job: a cheaper model for triage and summaries, the strongest one only where the work needs it.",
+                    "Skip no-op runs with a guard check rather than letting the agent discover there was nothing to do.",
+                    "Let one run per trigger go at a time, so a retry storm cannot fan out.",
+                    "Read the spend per run weekly. A job that quietly fails every night shows up there first.",
+                ],
+            },
+        ],
+        faq: [
+            {
+                id: "what-is-a-background-coding-agent",
+                question: "What is a background coding agent?",
+                answer: "A coding agent that runs without anyone at the keyboard: started by a schedule, a webhook or an event, working in its own checkout, and leaving its result as a branch or pull request to review later. The agent is the same CLI you use interactively, run in its non-interactive mode.",
+            },
+            {
+                id: "claude-code-on-a-schedule",
+                question: "Can Claude Code run on a schedule?",
+                answer: "Yes. Call claude -p from cron or a CI schedule on a machine that is awake at that time, or use Anthropic's GitHub Action with a cron trigger. Anthropic also offers hosted Routines, a research preview, that run on a schedule, an API call or GitHub events.",
+            },
+            {
+                id: "webhook-starts-agent",
+                question: "Can a webhook start a coding agent?",
+                answer: "Yes. Anything that can receive an HTTP request can start an agent CLI with the payload in its prompt. The hard parts are authentication, overlapping runs and logs, which is why most people use CI, a hosted agent, or a workspace with webhook triggers built in.",
+            },
+            {
+                id: "unattended-agent-safe",
+                question: "Is it safe to let a coding agent run unattended?",
+                answer: "It is safe when the limits are set beforehand: an isolated checkout or container, credentials scoped to the job, a spend cap, and output that lands on a branch for review. Without those, an unattended agent can spend a lot and change a lot before anyone looks.",
+            },
+            {
+                id: "background-agent-cost",
+                question: "How do you stop a background agent from running up costs?",
+                answer: "Cap each run, choose a cheaper model for routine jobs, skip runs with nothing to do using a guard check, and let only one run per trigger go at a time. Then read per-run spend weekly, because a job that fails every night shows up there before anywhere else.",
+            },
+        ],
+        related: [
+            { label: "Automations, in the docs", href: docsHref("automations") },
+            { label: "Automate", href: productHref("automate") },
+            { label: "Agents that persist", href: guidesHref("keep-a-coding-agent-running-after-you-close-your-laptop") },
+            { label: "Reviewing agent work", href: guidesHref("review-ai-generated-code-changes") },
+            { label: "intentic vs GitHub Copilot", href: compareHref("github-copilot") },
+            { label: "intentic vs cloud agents", href: compareHref("cloud-agents") },
+        ],
+        meta: {
+            title: "Self-hosted background coding agents: a setup guide",
+            description:
+                "Run coding agents in the background on your own hardware: schedule, webhook and event triggers, a fresh checkout per run, review before merge, capped spend.",
+            datePublished: PUBLISHED_OCTOBER,
+        },
+    },
+    {
+        slug: "best-tools-for-running-parallel-coding-agents",
+        question: "Which tools actually help you run coding agents in parallel?",
+        navLabel: "Parallel agent tools",
+        blurb: "Ten options, from plain worktrees to cloud agents, checked against each tool's own site in October 2026, with what each is best for and where it stops.",
+        answer: "Choose by isolation first and interface second. Worktree tools such as Claude Squad, Conductor, Superset, Sculptor and Nimbalyst keep agents out of each other's files. Docker Sandboxes and intentic also separate processes, ports and credentials. Codex cloud, Claude Code on the web and Devin run on the vendor's machines. Plain git worktrees and tmux are still a valid answer.",
+        facts: [
+            "This roundup is as of October 2026, checked against each tool's own website, docs or repository. The category moves monthly: Windsurf is now called Devin Desktop, Docker Sandboxes moved to a standalone sbx command, and the company behind Vibe Kanban shut down in April 2026.",
+            "Local tools run the agent CLIs you already pay for, such as Claude Code, Codex and Gemini CLI, on your own subscription. The cloud agents are the exception: each runs its own vendor's agent on the vendor's machines.",
+            "Claude Code now creates worktrees itself: claude --worktree with a name puts the session in its own checkout under .claude/worktrees on its own branch. For two or three agents, that may be all the tooling you need.",
+        ],
+        options: [
+            {
+                name: "git worktree and tmux, by hand",
+                what: "One git worktree add per agent, one tmux window per agent. Free, and already on any machine with git.",
+                goodFor: "Two to four agents on one machine, for anyone comfortable in a terminal. Nothing new to install or trust.",
+                breaksWhen:
+                    "Agents need to run the app: ports, databases and installed tools are shared. There is no view of which agent is waiting on you, and nothing survives the machine sleeping.",
+            },
+            {
+                name: "Claude Squad",
+                what: "Open-source terminal app (AGPL-3.0) that gives each agent a tmux session and a git worktree. Runs Claude Code by default, plus Codex, Gemini, Aider or any command.",
+                goodFor: "The worktree and tmux recipe with the bookkeeping done for you, without leaving the terminal. Builds exist for macOS and Linux.",
+                breaksWhen:
+                    "Agents collide on ports or services, since the isolation is worktrees. Windows needs tmux through WSL, and the agents live on one machine, reachable only from its terminal.",
+            },
+            {
+                name: "Conductor",
+                what: "Mac app that runs Claude Code, Codex, Cursor and OpenCode in parallel, each in its own worktree, with review built in. Free tier; Pro is $50 a month.",
+                goodFor: "Mac users who want a polished interface built for this, plus the option of Pro cloud workspaces that keep running after the app closes.",
+                breaksWhen:
+                    "You are not on a Mac. Its own docs note that worktrees are not a security boundary: local agents run on your Mac with your user permissions.",
+            },
+            {
+                name: "Superset",
+                what: "Desktop app and CLI giving any CLI agent its own worktree, terminals and diff. Source-available (Elastic License 2.0); the desktop app is free, Pro is $20 per user a month.",
+                goodFor: "Many agents at once with a preview port per worktree, and reaching workspaces on another connected machine, including from an iPhone with Pro.",
+                breaksWhen: "You need Windows, which is not yet available, or first-class Linux, which is an experimental AppImage.",
+            },
+            {
+                name: "Sculptor",
+                what: "Imbue's MIT-licensed desktop app: each agent gets its own worktree, branch, terminal and diff, on your Claude plan. macOS (Apple Silicon) and Linux, labelled beta.",
+                goodFor: "Claude users who want a free, open-source desktop app and are comfortable with beta software.",
+                breaksWhen:
+                    "You need Windows, or agents beyond Claude, which come only through experimental Pi agent support. Earlier versions ran each agent in a container; the current product page describes worktrees.",
+            },
+            {
+                name: "Nimbalyst",
+                what: "MIT-licensed desktop app for macOS, Windows and Linux, with an iOS companion, that pairs Claude Code and Codex with visual editors for documents, diagrams and mockups.",
+                goodFor: "Work that is as much specs, diagrams and mockups as code, on whichever desktop OS you use. Free for individuals.",
+                breaksWhen: "You want isolation by default: a worktree per session is opt-in. It is a local desktop app, not an always-on server.",
+            },
+            {
+                name: "Vibe Kanban",
+                what: "Apache-2.0 kanban board, started with npx vibe-kanban, that runs a long list of agent CLIs in worktrees with setup scripts.",
+                goodFor: "A task board in front of local agents, if you are fine running community-maintained software.",
+                breaksWhen:
+                    "You want a company behind the tool. Its maker shut down in April 2026, the README says the project is sunsetting, and the last tagged release is from that month.",
+            },
+            {
+                name: "Docker Sandboxes",
+                what: "Docker's sbx CLI runs an agent in a microVM with its own Docker daemon, filesystem and network, locally or in Docker's cloud. Supports Claude Code, Codex, Copilot, Gemini, OpenCode and more.",
+                goodFor:
+                    "Isolation well beyond a worktree, including Docker inside the sandbox. Local use is free on macOS (Apple silicon), Windows 11 and Ubuntu 24.04 or later.",
+                breaksWhen:
+                    "You want a board, a review queue or several agents managed together: it is the isolation layer, not the workflow. Cloud sandboxes are pay-as-you-go and expire on a time-to-live.",
+            },
+            {
+                name: "Cloud agents",
+                what: "Codex cloud, Claude Code on the web and Devin run each task on the vendor's infrastructure, in a VM for the first two, and hand back a diff or pull request.",
+                goodFor:
+                    "Parallel work with nothing to operate, started from a browser or phone, running while your laptop sleeps. Included from ChatGPT Plus (Codex) and Claude Pro (Claude Code).",
+                breaksWhen:
+                    "Code or keys must stay on your infrastructure, your repository is not on GitHub (Codex cloud supports only GitHub so far), or you want several vendors' agents in one place. Cloud tasks also draw down the same plan allowance as your local work.",
+            },
+            {
+                name: "intentic",
+                what: "MIT-licensed workspace: a Docker sandbox on your laptop, desktop or VPS, a git worktree per agent inside it, reached from any browser. Runs Claude Code, Codex, Grok, Kimi Code and Gemini on your own accounts.",
+                goodFor:
+                    "Agents that keep running on a machine you own after the browser closes, with a board of who needs you, plan mode, per-hunk review and automations.",
+                breaksWhen:
+                    "You want a native desktop app or zero setup. Agents in one sandbox share its environment, so different tools or credentials mean separate sandboxes. It is new, and says so.",
+            },
+        ],
+        verdict: [
+            "If you have not tried plain worktrees yet, start there, or with Claude Code's own --worktree flag. You will soon know whether your problem was file collisions, which they solve, or something else.",
+            "If you want an interface on one machine, choose by platform and licence: Conductor on a Mac, Nimbalyst on any desktop OS, Superset or Sculptor on a Mac or Linux, Claude Squad anywhere tmux runs.",
+            "If agents need to run the app, install packages or hold credentials, move to container isolation: Docker Sandboxes for the boundary alone, or a workspace with a board and review on top, such as intentic, when runs must keep going on hardware you own. If you would rather operate nothing, a cloud agent is the honest answer.",
+        ],
+        sections: [
+            {
+                heading: "Sort the tools by isolation, not by interface",
+                body: [
+                    "The interfaces in this list look alike: a sidebar of agents, a diff, a terminal. What differs is what each agent is kept away from, and that decides which problems you still have after installing it. Each level up removes a class of collision and adds setup.",
+                ],
+                points: [
+                    "Files: a worktree per agent. Claude Squad, Conductor, Superset, Sculptor, Nimbalyst, Vibe Kanban and plain git.",
+                    "Environment: a container or microVM per agent or per workspace, with its own processes, ports and installed tools. Docker Sandboxes and intentic.",
+                    "Machine: a VM on someone else's infrastructure per task. Codex cloud, Claude Code on the web, Devin, and Conductor's cloud workspaces.",
+                ],
+            },
+            {
+                heading: "What every worktree tool shares, and where it stops",
+                body: [
+                    "A worktree tool removes the collision that bites first: two agents writing the same file. It does nothing about the next one. Two agents that both start a dev server want the same port, two test runs share one database, and every worktree uses the same installed language versions and global packages.",
+                    "Some tools soften this: Superset detects ports per workspace, and Vibe Kanban runs a setup script for each new worktree. None of them turn a worktree into a separate machine. Superset's README says it plainly: worktrees separate working files; they do not sandbox processes.",
+                ],
+            },
+            {
+                heading: "Where the agents run decides whether they keep going",
+                body: [
+                    "A desktop app runs agents on the computer it is installed on, so closing the lid stops them. Conductor Pro and the cloud agents get around that on vendor infrastructure; Superset reaches workspaces on another machine you connect. intentic runs the sandbox wherever you start it, so it keeps going on a desktop or VPS and stops on a laptop you close.",
+                ],
+            },
+            {
+                heading: "Price and licence, side by side",
+                body: [
+                    "Open-source options: Claude Squad (AGPL-3.0), Sculptor, Nimbalyst and intentic (MIT), and Vibe Kanban (Apache-2.0). Superset publishes its source under the Elastic License 2.0, which is not an OSI licence. Conductor and Devin are commercial products with free tiers.",
+                    "With every local tool, model usage comes out of your own provider subscription. Cloud agents spend the same allowance: OpenAI notes that cloud tasks may use more of it than local messages.",
+                ],
+            },
+        ],
+        faq: [
+            {
+                id: "best-tool-parallel-claude-code",
+                question: "What is the best tool for running parallel Claude Code agents?",
+                answer: "It depends on what is colliding. For file collisions, Claude Code's own --worktree flag or Claude Squad is enough. For a desktop interface, Conductor on a Mac or Sculptor and Nimbalyst elsewhere. When agents need separate environments or must keep running on your own machine, use a container-based option such as Docker Sandboxes or intentic.",
+            },
+            {
+                id: "claude-code-orchestrator",
+                question: "Is there an orchestrator for Claude Code?",
+                answer: "Several. Claude Squad, Conductor, Superset, Sculptor, Nimbalyst and intentic all start and track several Claude Code sessions, each in its own checkout. Claude Code also runs subagents and worktree sessions itself, so check whether the built-in features already cover your case before adding a tool.",
+            },
+            {
+                id: "worktrees-enough",
+                question: "Do I need a tool at all, or are git worktrees enough?",
+                answer: "Worktrees are enough while the agents only edit files. A tool earns its place when you lose track of which agent needs you, or when agents start running servers, databases or installs that collide. The first is an interface problem; the second needs containers.",
+            },
+            {
+                id: "open-source-parallel-agent-tools",
+                question: "Which parallel coding agent tools are open source?",
+                answer: "As of October 2026: Claude Squad (AGPL-3.0), Sculptor, Nimbalyst and intentic (MIT), and Vibe Kanban (Apache-2.0). Superset's source is public under the Elastic License 2.0, which is source-available rather than open source. Conductor, Devin and the hosted cloud agents are not open source.",
+            },
+            {
+                id: "parallel-agents-windows",
+                question: "Which of these tools work on Windows?",
+                answer: "Nimbalyst ships a Windows desktop app, Docker Sandboxes supports Windows 11, and intentic runs its sandbox in Docker through WSL2. Claude Squad needs tmux through WSL. Conductor is Mac-only, Superset has no Windows build yet, and Sculptor supports macOS and Linux only. Cloud agents work from any browser.",
+            },
+        ],
+        related: [
+            { label: "Running agents in parallel", href: guidesHref("run-multiple-coding-agents-in-parallel") },
+            { label: "Claude Code in a Docker sandbox", href: guidesHref("run-claude-code-in-a-docker-sandbox") },
+            { label: "Parallel agents, in the docs", href: docsHref("parallel-agents") },
+            { label: "intentic vs Conductor", href: compareHref("conductor") },
+            { label: "intentic vs Superset", href: compareHref("superset") },
+            { label: "intentic vs Nimbalyst", href: compareHref("nimbalyst") },
+            ...compareLink("claude-squad", "intentic vs Claude Squad"),
+            ...compareLink("sculptor", "intentic vs Sculptor"),
+            ...compareLink("vibe-kanban", "intentic vs Vibe Kanban"),
+            ...compareLink("docker-sandboxes", "intentic vs Docker Sandboxes"),
+        ],
+        meta: {
+            title: "Best tools for running parallel coding agents (2026)",
+            description:
+                "An honest roundup as of October 2026: worktree apps, container sandboxes and cloud agents for running coding agents in parallel, with the limits of each.",
+            datePublished: PUBLISHED_OCTOBER,
         },
     },
 ];

@@ -97,14 +97,16 @@ export interface CrossLink {
 export const landingContent: LandingContent = {
     meta: {
         // Title ≤60 chars, description ≤160 (search truncates past that); title spends its room on the filter word.
-        title: "intentic · Open-source workspace for coding agents",
-        description: "A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
+        title: "intentic · Open-source workspace for parallel coding agents",
+        // Providers appear here only as plural examples (messaging.md); "parallel" and "sandbox" are the searched words.
+        description:
+            "A workspace for coding agents. Run Claude Code, Codex and more in parallel, each in a sandbox on your machine. They keep running when you close the browser.",
     },
     hero: {
         // Split 2+1 so line two lands the promise; three beats, last one alone.
         headlineLines: ["More work. Less AI waste.", "Same subscriptions."],
         // Names the category; nothing else above the fold does. Visibility comes from the surfaces beside it, not text.
-        subhead: "A workspace for coding agents.",
+        subhead: "A workspace for parallel coding agents, each in a sandbox on your machine.",
         screens: {
             app: [
                 {

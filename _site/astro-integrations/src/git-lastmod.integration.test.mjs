@@ -180,3 +180,45 @@ gitTest(needs.title("unavailable git returns null even when source history exist
     commit(initialDate);
     expect(datesFor(["/compare/cursor/", "/compare/", "/pricing/"], { PATH: "" })).toEqual([null, null, null]);
 });
+
+gitTest(needs.title("generated guide, feature and blog routes date from their template and content source"), () => {
+    const guidesContent = "../site-content/src/guides.ts";
+    const guideTemplate = "src/pages/guides/[slug].astro";
+    const blogTemplate = "src/pages/blog/[slug].astro";
+    const post = "content/posts/one-post.md";
+    for (const source of [guidesContent, guideTemplate, blogTemplate, post]) {
+        writeSource(source, `fixture for ${source}\n`);
+    }
+    initRepository();
+    git(["add", "--", "."]);
+    git(["commit", "--quiet", "-m", "fixture"], initialDate);
+    writeSource(post, "updated post\n");
+    commit(contentDate, [post]);
+    const paths = ["/guides/some-guide/", "/blog/one-post/", "/blog/missing-post/", "/features/run/"];
+    expect(datesFor(paths)).toEqual([initialDate, contentDate, null, null]);
+
+    writeSource(guidesContent, "updated guides\n");
+    commit(templateDate, [guidesContent]);
+    expect(datesFor(paths)).toEqual([templateDate, contentDate, null, null]);
+});
+
+gitTest(needs.title("a shallow clone returns null rather than stamping every route with HEAD's date"), () => {
+    initRepository();
+    commit(initialDate);
+    writeSource("src/pages/pricing.astro", "updated pricing page\n");
+    commit(contentDate, ["src/pages/pricing.astro"]);
+    const shallowRoot = mkdtempSync(join(tmpdir(), "git-lastmod-shallow-"));
+    try {
+        execFileSync("git", ["clone", "--quiet", "--depth", "1", `file://${root}`, shallowRoot], { stdio: "ignore" });
+        const original = site;
+        site = join(shallowRoot, "_site/site");
+        try {
+            expect(datesFor(["/", "/pricing/"])).toEqual([null, null]);
+        } finally {
+            site = original;
+        }
+        expect(datesFor(["/", "/pricing/"])).toEqual([initialDate, contentDate]);
+    } finally {
+        rmSync(shallowRoot, { recursive: true, force: true });
+    }
+});

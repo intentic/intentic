@@ -1,6 +1,6 @@
 ---
 title: "Possible future vision with Bluefin"
-description: "Every informational work should start with agent."
+description: "Why serious work should start in a change-controlled agent sandbox, and why Bluefin looks like the predictable OS to host a fleet of them."
 date: 2026-09-20
 tags: ["engineering"]
 ---

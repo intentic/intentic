@@ -102,7 +102,10 @@ export default defineConfig({
         sitemap({
             // The search index is an endpoint, not a page: no title, nothing to land on; indexing it doubles the
             // corpus.
-            filter: (page) => !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json"),
+            // /phone/pair/ is the QR code's landing page and says noindex: a sitemap URL that refuses indexing is an error
+            // in Search Console. Keep this list in step with the pages that pass `noindex` to BaseLayout.
+            filter: (page) =>
+                !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json") && !new URL(page).pathname.startsWith("/phone/pair"),
             changefreq: "monthly",
             priority: 0.7,
             serialize(item) {

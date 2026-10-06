@@ -19,6 +19,9 @@
             })();
         </script>
         <title>intentic</title>
+<!-- A signed-in app, not a page: a crawler that reaches it finds only the sign-in screen, which has nothing to rank
+             for and would only sit beside intentic.dev on the brand query. Follow stays on so its links out still count. -->
+        <meta name="robots" content="noindex, follow" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
 <!-- Installable PWA: standalone display. Its colours are the LIGHT canvas and cannot be anything else — a
              manifest is one static file with no media queries, and the splash it paints is up before any script has

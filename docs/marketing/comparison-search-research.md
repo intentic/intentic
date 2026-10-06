@@ -1,6 +1,6 @@
 # Comparison search research
 
-Research date: **4 October 2026**. Scope: all existing comparison detail pages and the comparison hub.
+Research date: **4 October 2026**. Scope: all existing comparison detail pages and the comparison hub. Six pages added on **6 October 2026** (Claude Squad, Vibe Kanban, Sculptor, OpenHands, Docker Sandboxes and Agentor) were researched that day with the same method; their sections record 6 October observations and source checks.
 
 ## Method and limits
 
@@ -423,6 +423,168 @@ Disambiguate current OpenAI Codex from historical models and unrelated Codex pro
 | 10 | codex local vs cloud | A · High · local seed | Can I self-host Codex, and how does local differ from cloud? | Deployment trade-offs |
 
 **Official facts checked 2026-10-04:** [Product overview](https://learn.chatgpt.com/docs) · [Pricing](https://learn.chatgpt.com/docs/pricing) · [Cloud tasks](https://learn.chatgpt.com/docs/cloud) · [Local providers and configuration](https://learn.chatgpt.com/docs/config-file/config-advanced) · [Open-source scope](https://learn.chatgpt.com/docs/open-source) · [CLI licence](https://github.com/openai/codex/blob/main/LICENSE).
+
+## /compare/claude-squad/
+
+**Primary intent:** Claude Squad vs intentic: terminal app or browser workspace
+
+Added 6 October 2026 after an SEO audit found Claude Squad in searches where intentic was absent. Claude Squad is the smtg-ai terminal app, not Anthropic's Claude Team plan: `pricing`, `remote` and `vs` seeds fell through to Claude Team predictions and were excluded. `open source`, `docker` and `worktree` seeds returned no predictions, so those targets are inferred.
+
+**Autocomplete evidence:** [claude squad](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20squad) · [claude-squad](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude-squad) · [claude squad vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20squad%20vs) · [claude squad codex](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20squad%20codex) · [claude squad tmux](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20squad%20tmux).
+
+**Live-result discovery:** [Pane alternatives page](https://runpane.com/alternatives/claude-squad) · [LibHunt alternatives](https://www.libhunt.com/r/claude-squad) · [Web dashboard vs TUI comparison](https://getcodeman.com/compare/codeman-vs-claude-squad) · [Alternatives article](https://munderdiffl.in/blog/claude-squad-alternative/). Nearly all are written by competing vendors.
+
+**Observed prediction examples (6 October):** `claude squad alternative` · `claude squad alternatives` · `claude squad vs conductor` · `claude squad windows` · `claude squad reddit` · `claude-squad codex` · `claude squad tmux` · `claude squad vs tmux` · `claude squad install`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | claude squad alternative | A · High · brand and alternative seeds | Claude Squad vs intentic: terminal app or browser workspace | Find alternatives |
+| 2 | claude squad alternatives | A · High · alternatives seed | What is a good Claude Squad alternative? | Find alternatives |
+| 3 | claude squad vs conductor | A · High · brand and vs seeds | Claude Squad vs Conductor: what is the difference? | Compare workspaces |
+| 4 | claude squad windows | A · High · brand seed | Does Claude Squad work on Windows? | Platform |
+| 5 | claude squad install | A · Medium · hyphenated brand seed | Windows support and requirements | Setup |
+| 6 | claude squad codex | A · Medium · codex seed | Which agents does Claude Squad support? | Agent support |
+| 7 | claude squad tmux | A · Medium · tmux seed | A TUI on one machine or a browser workspace | Interface |
+| 8 | claude squad open source | I · Low · seed returned nothing | Is Claude Squad free and open source? | Licensing |
+| 9 | claude squad remote access | I · Low · seed fell through to Claude Team | Can I use Claude Squad remotely or from my phone? | Remote use |
+| 10 | claude squad git worktree | I · Low · seed returned nothing | Isolation | Isolation |
+
+**Official facts checked 2026-10-06:** [README and usage](https://github.com/smtg-ai/claude-squad) · [Licence](https://github.com/smtg-ai/claude-squad/blob/main/LICENSE.md) · [Install script](https://github.com/smtg-ai/claude-squad/blob/main/install.sh) · [Releases](https://github.com/smtg-ai/claude-squad/releases).
+
+## /compare/vibe-kanban/
+
+**Primary intent:** Vibe Kanban alternatives after the bloop shutdown
+
+Added 6 October 2026. The shutdown dominates the brand's predictions, so the page answers it first and states what still works. Third-party pages that call the repository frozen are out of date: commits resumed in September, though the last release is v0.1.44 from April. The pricing page still lists paid plans; the shutdown post says subscriptions were ended and refunded, and the page cites both. Energy-drink predictions on `alternative` seeds were excluded. A community fork (`vibe kanban indie`) appears in predictions but was not opened or recommended.
+
+**Autocomplete evidence:** [vibe kanban](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=vibe%20kanban) · [vibe kanban vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=vibe%20kanban%20vs) · [vibe kanban remote](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=vibe%20kanban%20remote) · [vibe kanban docker](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=vibe%20kanban%20docker) · [vibe kanban shutdown](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=vibe%20kanban%20shutdown).
+
+**Live-result discovery:** [Alternatives citing the shutdown](https://aq.dev/alternatives/vibe-kanban/) · [Alternatives list](https://nimbalyst.com/blog/best-vibe-kanban-alternatives-2026/) · [Native-app comparison](https://parallelcode.app/compare/parallel-code-vs-vibe-kanban/) · [Three-tool comparison](https://www.mindstudio.ai/blog/vibe-kanban-vs-paperclip-vs-claude-code-dispatch-comparison).
+
+**Observed prediction examples (6 October):** `vibe kanban alternative` · `vibe kanban sunsetting` · `vibe kanban shutdown` · `vibe kanban fork` · `vibe kanban vs conductor` · `vibe kanban opencode` · `vibe kanban remote access` · `vibe kanban docker` · `vibe kanban open source` · `vibe kanban pricing` · `vibe kanban self hosted`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | vibe kanban alternative | A · High · brand seed | Vibe Kanban alternatives after the bloop shutdown | Find alternatives |
+| 2 | vibe kanban alternatives | A · High · alternatives seed | What is the best Vibe Kanban alternative? | Find alternatives |
+| 3 | vibe kanban shutdown | A · High · brand seed | Is Vibe Kanban shutting down? | Product status |
+| 4 | vibe kanban sunsetting | A · High · brand seed | What the shutdown changes | Product status |
+| 5 | vibe kanban open source | A · Medium · open-source seed | Is Vibe Kanban free and open source? | Licensing |
+| 6 | vibe kanban pricing | A · Medium · pricing seed | Pricing | Cost |
+| 7 | vibe kanban remote access | A · High · remote seed | Can Vibe Kanban run remotely or in Docker? | Remote use |
+| 8 | vibe kanban docker | A · High · docker seed | Isolation | Isolation |
+| 9 | vibe kanban vs conductor | A · High · vs seed | Vibe Kanban vs Conductor: what is different? | Compare workspaces |
+| 10 | vibe kanban opencode | A · High · brand seed | Which agents does Vibe Kanban support? | Agent support |
+
+**Official facts checked 2026-10-06:** [Product overview](https://www.vibekanban.com/) · [Shutdown announcement](https://www.vibekanban.com/blog/shutdown) · [Source and licence](https://github.com/BloopAI/vibe-kanban) · [Supported agents](https://www.vibekanban.com/docs/supported-coding-agents) · [Worktrees](https://www.vibekanban.com/docs/getting-started) · [Remote access](https://www.vibekanban.com/docs/remote-access) · [Pricing](https://www.vibekanban.com/pricing).
+
+## /compare/sculptor/
+
+**Primary intent:** Imbue Sculptor vs intentic: parallel Claude Code workspaces
+
+Added 6 October 2026. Thin evidence: the bare name is swamped by art and Sculptor Capital predictions, and `alternative`, `alternatives`, `vs`, `open source` and `docker` seeds were irrelevant or empty. Only Imbue-branded and Claude Code seeds were relevant, so the title and H1 say "Imbue Sculptor". Older third-party reviews describe a container per agent; current official docs say a git worktree by default with Docker only as an experimental backend, and the page follows the docs. Codex support appears in a 2025 blog update but not in the current README, docs or product page, so the page does not claim it.
+
+**Autocomplete evidence:** [imbue sculptor](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=imbue%20sculptor) · [sculptor imbue](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=sculptor%20imbue) · [sculptor claude code](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=sculptor%20claude%20code) · [sculptor coding agent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=sculptor%20coding%20agent) · [sculptor alternatives](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=sculptor%20alternatives).
+
+**Live-result discovery:** [Show HN launch thread](https://news.ycombinator.com/item?id=45427697) · [Third-party review](https://rywalker.com/research/sculptor) · [Agent manager roundup](https://nimbalyst.com/blog/best-agent-management-tools-2026/) · [Parallel-agent tools roundup](https://dev.to/stravukarl/best-tools-for-managing-parallel-ai-coding-agents-in-2026-14l8).
+
+**Observed prediction examples (6 October):** `imbue sculptor` · `imbue sculptor reddit` · `imbue sculptor review` · `imbue sculptor github` · `sculptor imbue ai` · `sculptor claude code` · `sculptor gui for claude code` · `sculptor coding agent`. `sculptor alternatives`, `sculptor open source`, `sculptor docker` and `imbue sculptor alternative` returned nothing.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | imbue sculptor | A · High · branded seed | Imbue Sculptor vs intentic: parallel Claude Code workspaces | Brand research |
+| 2 | sculptor claude code | A · High · Claude Code seed | Is Sculptor a GUI for Claude Code? | Agent support |
+| 3 | sculptor gui for claude code | A · Medium · Claude Code seed | Is Sculptor a GUI for Claude Code? | Agent support |
+| 4 | imbue sculptor review | A · Medium · branded seed | What is Imbue Sculptor? | Evaluate |
+| 5 | imbue sculptor github | A · Medium · branded seed | Is Sculptor free and open source? | Licensing |
+| 6 | sculptor coding agent | A · Medium · coding seed | What is Imbue Sculptor? | Category |
+| 7 | imbue sculptor alternative | I · Low · seed returned nothing | Desktop app or browser workspace | Find alternatives |
+| 8 | sculptor windows | I · Low · platform question | Does Sculptor work on Windows? | Platform |
+| 9 | sculptor docker | I · Low · seed returned nothing | Does Sculptor run agents in Docker containers? | Isolation |
+| 10 | sculptor vs conductor | S · Medium · roundups list both | Sculptor vs Conductor: which should I choose? | Compare workspaces |
+
+**Official facts checked 2026-10-06:** [Product overview and FAQ](https://imbue.com/product/sculptor) · [Source, README and licence](https://github.com/imbue-ai/sculptor) · [Workspaces](https://github.com/imbue-ai/sculptor/blob/main/docs/help/workspaces.md) · [Pull requests](https://github.com/imbue-ai/sculptor/blob/main/docs/help/pull_requests.md) · [Experimental container backend](https://github.com/imbue-ai/sculptor/blob/main/docs/help/experimental/container_backend.md).
+
+## /compare/openhands/
+
+**Primary intent:** OpenHands alternatives: self-hosted agent workspaces compared
+
+Added 6 October 2026. Strong, varied demand. The repository moved from All-Hands-AI to the OpenHands organisation and is now titled Agent Canvas; it runs Claude Code, Codex and Gemini through ACP as well as the OpenHands agent, so the page does not frame OpenHands as a single-agent product. The main repository is MIT; the enterprise backend and self-hosted cloud charts use PolyForm Free Trial, and the page says so. Many third-party pages describe older versions and were used for discovery only. Irrelevant tails (`class code …`, LLM law degrees) were excluded.
+
+**Autocomplete evidence:** [openhands vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=openhands%20vs) · [openhands alternative](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=openhands%20alternative) · [openhands pricing](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=openhands%20pricing) · [openhands local](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=openhands%20local) · [openhands docker](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=openhands%20docker) · [openhands self hosted](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=openhands%20self%20hosted).
+
+**Live-result discovery:** [Open-source alternatives directory](https://openalternative.co/alternatives/openhands) · [AlternativeTo (OpenDevin slug)](https://alternativeto.net/software/opendevin/) · [Alternatives for self-hosters](https://aq.dev/alternatives/openhands/) · [OpenHands vs Claude Code](https://vibecoding.app/compare/claude-code-vs-openhands).
+
+**Observed prediction examples (6 October):** `openhands alternative` · `openhands alternatives` · `openhands vs opencode` · `openhands vs claude code` · `openhands vs devin` · `openhands vs codex` · `openhands pricing` · `openhands cloud pricing` · `openhands open source` · `openhands self hosted` · `openhands local llm` · `openhands local ollama` · `openhands docker` · `openhands agent canvas`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | openhands alternative | A · High · alternative seed | OpenHands alternatives: self-hosted agent workspaces compared | Find alternatives |
+| 2 | openhands alternatives | A · High · alternatives seed | What are the best OpenHands alternatives? | Find alternatives |
+| 3 | openhands vs claude code | A · High · vs seed | OpenHands vs Claude Code: what is the difference? | Compare agents |
+| 4 | openhands vs opencode | A · High · vs seed | OpenHands vs OpenCode: which should I use? | Compare agents |
+| 5 | openhands pricing | A · High · pricing seed | How much does OpenHands cost? | Cost |
+| 6 | openhands cloud pricing | A · High · pricing seed | Pricing, cloud and enterprise | Cloud cost |
+| 7 | openhands open source | A · High · open-source seed | Is OpenHands free and open source? | Licensing |
+| 8 | openhands local llm | A · High · local seed | Can OpenHands run local models? | Local inference |
+| 9 | openhands self hosted | A · High · self-hosted seed | How do I self-host OpenHands with Docker? | Deployment |
+| 10 | openhands docker | A · High · docker seed | Isolation is a setting in OpenHands | Isolation |
+
+**Official facts checked 2026-10-06:** [Product overview](https://www.openhands.dev/) · [Agent Canvas README](https://github.com/OpenHands/OpenHands) · [Pricing](https://www.openhands.dev/pricing) · [Sandboxes](https://docs.openhands.dev/openhands/usage/sandboxes/overview) · [Local models](https://docs.openhands.dev/openhands/usage/llms/local-llms) · [Mobile access](https://docs.openhands.dev/openhands/usage/agent-canvas/mobile-access) · [Kubernetes](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/kubernetes) · [Self-hosted cloud licence](https://github.com/OpenHands/OpenHands-Cloud).
+
+## /compare/docker-sandboxes/
+
+**Primary intent:** Docker Sandboxes vs intentic: isolation or a full workspace?
+
+Added 6 October 2026, with a new "Agent sandboxes" family on the hub. Docker Sandboxes is now the standalone `sbx` CLI; the `docker sandbox` command inside Docker Desktop belongs to the November 2025 experimental release, and the page says so because `docker sandbox vs sbx` is a live prediction. Docker's microVM isolation, deny-by-default network and credential proxy are stated as genuine advantages; the page does not claim intentic's container sandbox is equivalent. Generic Docker predictions (`docker swarm`, `alternatives to docker`) were excluded.
+
+**Autocomplete evidence:** [docker sandboxes](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=docker%20sandboxes) · [docker sandbox](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=docker%20sandbox) · [docker sandbox vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=docker%20sandbox%20vs) · [docker sandbox claude code](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=docker%20sandbox%20claude%20code) · [run claude code in docker](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=run%20claude%20code%20in%20docker).
+
+**Live-result discovery:** [Docker launch post](https://www.docker.com/blog/docker-sandboxes-run-agents-in-yolo-mode-safely/) · [Hands-on review](https://www.innoq.com/en/blog/2026/07/trust-but-sandbox/) · [Alternatives list](https://www.stork.ai/alternatives/docker-sandboxes) · [HN sandbox thread](https://news.ycombinator.com/item?id=49239751).
+
+**Observed prediction examples (6 October):** `docker sandboxes alternative` · `docker sandbox free alternative` · `docker sandboxes pricing` · `docker sandboxes linux` · `docker sandboxes wsl` · `docker sandboxes claude code` · `docker sandbox vs container` · `docker sandbox vs devcontainer` · `docker sandbox vs sbx` · `docker sandbox codex` · `run claude code in docker sandbox`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | docker sandboxes alternative | A · High · brand seed | Docker Sandboxes vs intentic: isolation or a full workspace? | Find alternatives |
+| 2 | docker sandboxes pricing | A · High · brand seed | Are Docker Sandboxes free? | Cost |
+| 3 | docker sandbox claude code | A · High · Claude Code seed | How do I run Claude Code in a Docker sandbox? | Setup |
+| 4 | docker sandbox linux | A · High · linux seed | Do Docker Sandboxes work on Linux and Windows? | Platform |
+| 5 | docker sandbox vs devcontainer | A · High · vs seed | Docker sandbox vs devcontainer: what is the difference? | Concepts |
+| 6 | docker sandbox vs container | A · High · vs seed | MicroVM or container | Isolation |
+| 7 | docker sandbox vs sbx | A · High · vs seed | What are Docker Sandboxes? | Product naming |
+| 8 | docker sandbox free alternative | A · Medium · alternative seed | Licence and price | Cost/licensing |
+| 9 | docker sandboxes alternative with web ui | I · Low · interface question | Is there a Docker Sandboxes alternative with a web UI? | Interface |
+| 10 | docker sandbox parallel agents | I · Low · adjacent `docker sandbox agents` prediction | Can Docker Sandboxes run agents in parallel? | Parallel work |
+
+**Official facts checked 2026-10-06:** [Product overview](https://www.docker.com/products/docker-sandboxes/) · [Overview](https://docs.docker.com/ai/sandboxes/) · [Install and requirements](https://docs.docker.com/ai/sandboxes/install/) · [Isolation](https://docs.docker.com/ai/sandboxes/security/isolation/) · [Git workflows](https://docs.docker.com/ai/sandboxes/workflows/git/) · [Cloud sandboxes](https://docs.docker.com/ai/sandboxes/cloud/) · [FAQ and pricing](https://docs.docker.com/ai/sandboxes/faq/) · [Licence](https://github.com/docker/sbx-releases). The hub family also names [E2B](https://e2b.dev/) and [Daytona](https://www.daytona.io/), whose homepages were opened for that one-line description only.
+
+## /compare/agentor/
+
+**Primary intent:** Self-hosted Claude Code web alternatives: Agentor vs intentic
+
+Added 6 October 2026 because github.com/lonetis/agentor ranked first in live results for "claude code web alternative self-hosted". The brand itself has no demand (`agentor` predicts Agent Orange and unrelated names; `agentor github` echoes the seed), so the title and H1 lead with the category, not the name. The exact audit phrase returned no predictions; adjacent `self hosted claude code` and `claude code web ui` seeds did. The README styles the project "Agentor", which the page follows. It is a young project with no versioned releases; the page says so and states intentic's own app is new.
+
+**Autocomplete evidence:** [self hosted claude code](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=self%20hosted%20claude%20code) · [claude code web ui](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20code%20web%20ui) · [claude code web self hosted](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20code%20web%20self%20hosted) · [claude code remote](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=claude%20code%20remote) · [agentor](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=agentor).
+
+**Live-result discovery:** [Agentor, first result](https://github.com/lonetis/agentor) · [Claude Code open-source alternatives](https://openalternative.co/alternatives/claude-code) · [Claude Code web UI alternatives](https://termdeck.io/blog/claude-code-web-ui-alternative) · [Open WebUI alternatives page](https://docs.openwebui.com/alternatives/claude/).
+
+**Observed prediction examples (6 October):** `self hosted claude code alternative` · `self hosted claude code web` · `best self hosted claude code alternative` · `self hosted sandbox claude code` · `claude code web ui self hosted` · `claude code web ui open source` · `claude code web alternative` · `claude code remote from phone`. `claude code web alternative self hosted` returned nothing.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | claude code web alternative self hosted | S · High · Agentor ranks first | Self-hosted Claude Code web alternatives: Agentor vs intentic | Find alternatives |
+| 2 | self hosted claude code | A · High · self-hosted seed | What is a self-hosted alternative to Claude Code on the web? | Deployment |
+| 3 | self hosted claude code web | A · High · self-hosted seed | Remote access without a domain | Remote use |
+| 4 | claude code web ui self hosted | A · High · web UI seed | Introduction | Interface |
+| 5 | claude code web ui open source | A · High · web UI seed | Is Agentor free and open source? | Licensing |
+| 6 | self hosted sandbox claude code | A · High · self-hosted seed | How does Agentor isolate agents? | Isolation |
+| 7 | claude code remote from phone | A · Medium · remote seed | Can I reach Agentor from my phone or another network? | Mobile use |
+| 8 | agentor github | S · Low · seed echoed; repository ranks first | Licence and price | Brand research |
+| 9 | agentor vs docker sandboxes | I · Low · adjacent sandbox comparison | Agentor vs Docker Sandboxes: which isolates better? | Compare isolation |
+| 10 | self hosted codex cloud alternative | I · Low · Agentor's own positioning | Does Agentor support Codex and Gemini? | Agent support |
+
+**Official facts checked 2026-10-06:** [README](https://github.com/lonetis/agentor) · [Licence](https://github.com/lonetis/agentor/blob/main/LICENSE) · [Worker image](https://github.com/lonetis/agentor/blob/main/docs/worker.md) · [Environments and firewall](https://github.com/lonetis/agentor/blob/main/docs/environments.md) · [Networking](https://github.com/lonetis/agentor/blob/main/docs/networking.md).
 
 ## Verification
 

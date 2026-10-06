@@ -16,8 +16,10 @@
     "main": "./worker.ts",
     /* The build command only builds; deployment and post-deploy indexing run separately. */
     /* Build the demo into public/demo before Astro copies public into dist. */
+    /* Cloudflare checks out one commit; the sitemap's lastmod and the home page's git stats need the history, and */
+    /* refuse to guess without it. Commits and trees only (no blobs), and a failed fetch still builds, just undated. */
     "build": {
-        "command": "pnpm -C ../demo exec vite build && astro build",
+        "command": "(test \"$(git rev-parse --is-shallow-repository)\" != true || git fetch --unshallow --filter=blob:none --quiet || true) && pnpm -C ../demo exec vite build && astro build",
     },
     "assets": {
         "directory": "./dist",

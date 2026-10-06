@@ -80,7 +80,7 @@ export const docsBook: Book = {
                             title: "Quickstart",
                             blurb: "Four ways to bring a sandbox up, end to end",
                             meta: {
-                                title: "Quickstart · intentic docs",
+                                title: "Quickstart: coding agents in a sandbox · intentic docs",
                                 description:
                                     "Bring a live agent workspace up on your own machine four ways: the desktop app, one setup command, Docker Compose, or plain docker run.",
                                 datePublished: "2026-07-23",
@@ -91,7 +91,7 @@ export const docsBook: Book = {
                             title: "Docker setup",
                             blurb: "What gets created, and how to live with it",
                             meta: {
-                                title: "Docker setup · intentic docs",
+                                title: "Docker setup for sandboxed coding agents · intentic docs",
                                 description:
                                     "The anatomy every install path shares: the containers, volumes and network created, the capability posture, the nested engine, overlays and updates.",
                                 datePublished: "2026-07-23",
@@ -165,7 +165,7 @@ export const docsBook: Book = {
                             title: "Capabilities",
                             blurb: "Give the agent tools, systems and machines",
                             meta: {
-                                title: "Capabilities · intentic docs",
+                                title: "Capabilities: tools & credentials for agents · intentic docs",
                                 description:
                                     "Connect GitHub, databases, MCP servers, SSH hosts and more. Where the credentials live, and what the agent actually receives.",
                                 datePublished: "2026-08-07",
@@ -223,7 +223,7 @@ export const docsBook: Book = {
                             title: "Parallel agents",
                             blurb: "Isolated conversations, subagents and cross-provider children",
                             meta: {
-                                title: "Parallel agents · intentic docs",
+                                title: "Parallel coding agents with git worktrees · intentic docs",
                                 description:
                                     "Run isolated agents in parallel, let a turn supervise runtime subagents or full cross-provider child agents, and review every branch before it lands.",
                                 datePublished: "2026-08-07",
@@ -272,7 +272,7 @@ export const docsBook: Book = {
                             title: "Models & accounts",
                             blurb: "Providers, harnesses, accounts and what they cost",
                             meta: {
-                                title: "Models & accounts · intentic docs",
+                                title: "Claude Code, Codex, Gemini: models & accounts · intentic docs",
                                 description:
                                     "Which model serves a turn: the provider, the connected account, the agentic loop it runs in, and where the spend is reported.",
                                 datePublished: "2026-08-07",

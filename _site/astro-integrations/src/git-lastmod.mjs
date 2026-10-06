@@ -13,6 +13,11 @@ const projectRoot = process.cwd();
  * @returns {string | null}
  */
 function gitLastModified(relPaths) {
+    // A shallow clone (Cloudflare's build checks out one commit) answers every path with HEAD's date: the sitemap then
+    // stamped all ~110 URLs with one timestamp, which teaches a crawler to ignore lastmod. No date beats a wrong one.
+    if (isShallow()) {
+        return null;
+    }
     try {
         const out = execSync(`git log -1 --format=%cI -- ${relPaths.map((relPath) => JSON.stringify(relPath)).join(" ")}`, {
             cwd: projectRoot,
@@ -24,6 +29,34 @@ function gitLastModified(relPaths) {
         return null;
     }
 }
+
+/** @type {boolean | undefined} */
+let shallow;
+
+/** Whether the checkout is shallow, asked once per build. A git that cannot answer is treated as shallow. */
+function isShallow() {
+    if (shallow === undefined) {
+        try {
+            shallow =
+                execSync("git rev-parse --is-shallow-repository", { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() !==
+                "false";
+        } catch {
+            shallow = true;
+        }
+    }
+    return shallow;
+}
+
+/**
+ * Routes generated from one content module and a shared `[slug].astro` template: a detail page has no file of its own, so
+ * it dates from the template and the module its words come from. Blog posts are one Markdown file each.
+ * @type {{ prefix: string; content: (slug: string) => string[] }[]}
+ */
+const generatedRoutes = [
+    { prefix: "/guides", content: () => ["../site-content/src/guides.ts"] },
+    { prefix: "/features", content: () => ["../site-content/src/product.ts"] },
+    { prefix: "/blog", content: (slug) => [`content/posts/${slug}.md`] },
+];
 
 /**
  * Map a public URL pathname to its source file paths.
@@ -45,6 +78,14 @@ function urlPathToSources(pathname) {
     for (const c of candidates) {
         if (existsSync(path.join(projectRoot, c))) {
             return trimmed === "/compare" || comparisonDetail ? [c, "../site-content/src/compare.ts"] : [c];
+        }
+    }
+    for (const route of generatedRoutes) {
+        const match = new RegExp(`^${route.prefix}/([^/]+)$`, "u").exec(trimmed);
+        const template = `src/pages${route.prefix}/[slug].astro`;
+        if (match && existsSync(path.join(projectRoot, template))) {
+            const sources = route.content(match[1] ?? "").filter((source) => existsSync(path.join(projectRoot, source)));
+            return sources.length > 0 ? [template, ...sources] : null;
         }
     }
     return null;

@@ -165,16 +165,34 @@ function withLiveContent(response: Response, live: LiveContent): Response {
     return rewriter.transform(new Response(response.body, { status: response.status, statusText: response.statusText, headers }));
 }
 
-// Redirects http to https, folding in any moved path so a legacy plaintext link takes one hop, not two. Without this
-// every page had a crawlable plaintext twin splitting search signals.
+// Redirects http to https and www to the bare domain, folding in any moved path so a legacy link takes one hop, not
+// two. Without this every page had a crawlable twin (plaintext, or on www) splitting search signals.
 function httpsRedirect(url: URL): Response | undefined {
-    if (url.protocol !== "http:") {
+    const www = url.hostname.startsWith("www.");
+    if (url.protocol !== "http:" && !www) {
         return undefined;
     }
     const secure = new URL(url.href);
     secure.protocol = "https:";
+    if (www) {
+        secure.hostname = url.hostname.slice("www.".length);
+    }
     secure.pathname = movedPath(url.pathname) ?? url.pathname;
     return Response.redirect(secure.href, 301);
+}
+
+// The asset layer adds a page's trailing slash with a 307, which tells a crawler the slashless URL may come back, so
+// every link to /docs held its signals apart from /docs/. Only that exact hop is made permanent; any other redirect stands.
+function permanentSlash(response: Response, url: URL): Response {
+    const location = response.headers.get("location");
+    if (response.status !== 307 || location === null) {
+        return response;
+    }
+    const target = new URL(location, url);
+    if (target.origin !== url.origin || target.pathname !== `${url.pathname}/`) {
+        return response;
+    }
+    return Response.redirect(target.href, 301);
 }
 
 export default {
@@ -266,7 +284,7 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
 
     const file = SCRIPTS[vanity];
     if (file === undefined) {
-        return env.ASSETS.fetch(request);
+        return permanentSlash(await env.ASSETS.fetch(request), url);
     }
     const asset = await env.ASSETS.fetch(new Request(new URL(`/scripts/${file}`, url), request));
     return new Response(asset.body, { status: asset.status, headers: { "content-type": "text/plain; charset=utf-8" } });
