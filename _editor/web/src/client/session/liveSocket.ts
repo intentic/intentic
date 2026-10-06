@@ -118,6 +118,9 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
                 ping = window.setInterval(() => {
                     const judged = options.staleCheck !== `once-ponged` || ponged;
                     if (judged && Date.now() - heardAt > timing.staleMs) {
+                        // Given up once: a half-open socket's close can take its closing handshake's whole timeout to
+                        // come back, and until it does nothing more is sent on it nor is it closed again.
+                        window.clearInterval(ping);
                         link.mine?.close();
                         return;
                     }

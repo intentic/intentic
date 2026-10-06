@@ -851,7 +851,7 @@ describe(`ChatMessageView answer body`, () => {
         const element = mount(body);
         const rendered = element.querySelector(`.chat-markdown`)?.children ?? [];
         expect([...rendered].map((child) => `${child.tagName}.${child.classList[0] ?? ``}`)).toEqual([`DIV.md-run`, `DL.my-4`, `DIV.md-run`]);
-        expect(rendered[1]?.textContent).toContain(`92%`);
+        expect(rendered[1]?.textContent).toBe(`Coverage92%`);
     });
 
     it(`keeps a figure-free answer as plain prose wrappers`, () => {

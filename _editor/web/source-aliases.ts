@@ -193,6 +193,13 @@ export const sourceAliases = (): Record<string, string> => ({
     // Extension-registry file format, imported by the wire contract's schemas.ts; without this alias the dev server
     // resolves to a `dist/` that may not exist yet.
     "@intentic/registry": fromRoot("_shared/registry/src/index.ts"),
+    // What an extension declares, imported by the extension views and by the registry above. Through its `dist`, a
+    // workspace that keeps an older build (CI's does, and the local face's job builds no lib first) serves a module
+    // missing whatever the source exported since.
+    "@intentic/extension-manifest": fromRoot("_shared/extension-manifest/src/index.ts"),
+    // Which dependency manager a dropped project needs, read by the upload queue before anything is sent. A `dist`
+    // that was never built fails Vite's dependency scan, and the dev server then reloads the page it is serving.
+    "@intentic/workspace-setup": fromRoot("_shared/workspace-setup/src/index.ts"),
     "@intentic/extension-api": fromRoot("_shared/extension-api/src/index.ts"),
     ...extensionAliases,
 });

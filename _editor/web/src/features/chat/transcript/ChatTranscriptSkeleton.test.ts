@@ -39,6 +39,6 @@ it(`says one line and draws no turns for a quiet wait`, async () => {
     expect(status.querySelectorAll(`.chat-surface, .chat-surface-assistant`)).toHaveLength(0);
     // Said where it can be read, not only to a screen reader: nothing else on screen tells the wait apart from an empty chat.
     const line = [...status.querySelectorAll(`p`)].find((p) => p.textContent?.includes(`Loading conversation…`));
-    expect(line).toBeDefined();
+    expect(line?.textContent).toContain(`Loading conversation…`);
     expect(status.querySelector(`.sr-only`)).toBeNull();
 });

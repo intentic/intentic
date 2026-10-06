@@ -189,7 +189,7 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a
   runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data.
 - (2026-10-02) That refusal is decided by the runtime alone, so it is said as one: the chat shows it above the composer
-  before the send ([`ChatPrivacyStrip.vue`](../../_editor/web/src/features/chat/panel/ChatPrivacyStrip.vue)), and the
+  before the send ([`ChatPrivacyStrip.vue`](../../_editor/web/src/features/chat/panel/privacy/ChatPrivacyStrip.vue)), and the
   daemon's sentence opens with "before reading anything". Said only after the send, as a shield finding, it read as a
   false alarm over a message that held no personal data, while the turn it would have run (a Cursor turn asked about
   sessions) went on to read `agents show` and the conversation store, which print the owner's name and email. The way

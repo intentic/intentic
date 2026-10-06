@@ -5,7 +5,6 @@ import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import type { KomodoApi } from "./komodo-api.js";
-import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
 
 // The ssh block is the CONTROL-PLANE host's (where Core runs), the registration check queries Core over an

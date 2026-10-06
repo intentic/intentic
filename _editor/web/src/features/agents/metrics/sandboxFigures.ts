@@ -222,7 +222,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                                   : usedOf(sandbox.swapBytes, sandbox.swapLimitBytes),
                           hint: {
                               title: t(`agents.liveMetrics.swapLabel`),
-                              note: t(sandbox.swapFull === true ? `agents.liveMetrics.swapFullNote` : `agents.liveMetrics.swapNote`),
+                              note: sandbox.swapFull === true ? t(`agents.liveMetrics.swapFullNote`) : t(`agents.liveMetrics.swapNote`),
                           },
                           warn: sandbox.swapFull === true,
                       },

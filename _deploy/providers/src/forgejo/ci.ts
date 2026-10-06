@@ -5,7 +5,6 @@ import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
-import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
 // ssh targets the control-plane host; commitFile and setRepoSecret reach Forgejo over an SSH port-forward.

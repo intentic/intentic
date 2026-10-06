@@ -4,7 +4,6 @@ import { hasPendingRef, parseInputs, registryImage, sshSchema } from "../core/in
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import type { DeploymentConfig, KomodoApi } from "./komodo-api.js";
-import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
 
 // Komodo server for control-plane-local deployments; worker-host deployments use the host id as server name.

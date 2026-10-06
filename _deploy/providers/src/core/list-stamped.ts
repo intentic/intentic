@@ -1,5 +1,6 @@
 import type { ListedResource, ProviderContext, ScanSource } from "@intentic/engine";
 import { OWNER_KEY } from "@intentic/graph";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { parseInputs, sshSchema, sshTarget } from "./inputs.js";
 import type { SshExecutor, SshSession, SshTarget } from "./ssh.js";
 
@@ -13,7 +14,11 @@ export interface StampedRow {
 
 // Every intentic-stamped container on the host in one exec; `-a` includes stopped containers, since an orphan can still
 // hold volumes. A failed `docker ps` throws: an empty listing would read as "nothing of ours here".
-const STAMPED_TABLE = `docker ps -a --filter "label=intentic.type" --format '{{.Label "intentic.type"}}\t{{.Label "intentic.id"}}\t{{.Label "intentic.protect"}}\t{{.Label "${OWNER_KEY}"}}'`;
+// The columns, tab-separated in the order readStampedTable splits them. Each label key crosses two parsers: docker's Go
+// template, where it is a string literal (JSON's quoting, for a key like these), then the shell, as part of one word.
+const STAMPED_LABELS = ["intentic.type", "intentic.id", "intentic.protect", OWNER_KEY];
+const STAMPED_FORMAT = STAMPED_LABELS.map((label) => `{{.Label ${JSON.stringify(label)}}}`).join("\t");
+const STAMPED_TABLE = `docker ps -a --filter "label=intentic.type" --format ${shellQuote(STAMPED_FORMAT)}`;
 
 export const readStampedTable = async (session: SshSession): Promise<readonly StampedRow[]> => {
     const result = await session.exec(STAMPED_TABLE);

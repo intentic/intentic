@@ -815,7 +815,9 @@ export const landedDelivery = (agent: { readonly delivery?: LandingDelivery }): 
             // "You edited them too" only where that is the whole of why; a link or a missing git says itself in the hover.
             const edited = delivery.conflicts.every(({ reason }) => reason === `edited`);
             return {
-                text: t(edited ? `agents.agentStatus.keptOutEdited` : `agents.agentStatus.keptOut`, { count, folder }, count),
+                text: edited
+                    ? t(`agents.agentStatus.keptOutEdited`, { count, folder }, count)
+                    : t(`agents.agentStatus.keptOut`, { count, folder }, count),
                 tip: keptTip(delivery),
                 icon: `file-edit`,
                 warm: true,

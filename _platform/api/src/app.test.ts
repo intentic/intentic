@@ -347,7 +347,7 @@ describe(`POST /host-report`, () => {
         );
         expect(res.status).toBe(204);
         const [[written]] = updateMany.mock.calls as [[{ data: { hostReport: { reporters: Record<string, { os: string }> } } }]];
-        expect(Object.values(written.data.hostReport.reporters).map((report) => report.os)).toEqual([`wsl`, `windows`]);
+        expect(Object.values(written.data.hostReport.reporters).map((reporter) => reporter.os)).toEqual([`wsl`, `windows`]);
     });
 
     it.each([

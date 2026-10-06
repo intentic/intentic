@@ -4,7 +4,6 @@ import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
 import type { SshExecutor } from "../core/ssh.js";
 import type { AlerterConfig, KomodoApi, ResourceTarget } from "./komodo-api.js";
-import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
 
 // The ssh block is the control-plane host's. Komodo's API is reached over an SSH port-forward to Core.

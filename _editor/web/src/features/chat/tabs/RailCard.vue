@@ -5,7 +5,7 @@ import { formatElapsed, type IconName, ProgressRing, SegmentRing, timeAgo, type 
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import { type StandingChip, type TileRim } from "../../agents/fleet/agentStatus";
+import type { StandingChip, TileRim } from "../../agents/fleet/agentStatus";
 import { sandboxNow } from "../../agents/fleet/sandboxClock";
 import { markSegments } from "../../../lib/markSegments";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";

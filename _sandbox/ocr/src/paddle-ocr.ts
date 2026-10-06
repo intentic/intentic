@@ -35,6 +35,14 @@ export interface TextReader {
     readonly read: (image: Raster) => Promise<OcrLine[]>;
 }
 
+// The reader loadTextReader makes. Its two model sessions hold over a gigabyte of native memory (1.5 GiB after reading
+// one page, measured), which the garbage collector does not see, so a reader merely dropped can keep it for the rest of
+// the process: the daemon keeps one for good, and anything done reading (a test among many in one process) releases it.
+// Waits for a read in flight; nothing reads after.
+export interface LoadedTextReader extends TextReader {
+    readonly release: () => Promise<void>;
+}
+
 // The dictionary the recognizer's classes index, from its config.
 const alphabetOf = async (dir: string): Promise<string[]> => {
     const config: unknown = parse(await readFile(join(dir, ...RECOGNIZER_CONFIG), "utf8"));
@@ -87,7 +95,7 @@ const THREADS = 4;
 export const loadTextReader = async (
     dir: string = ocrModelDir(),
     warn: (message: string, error: unknown) => void = () => undefined,
-): Promise<TextReader | undefined> => {
+): Promise<LoadedTextReader | undefined> => {
     if (!ocrInstalled(dir)) {
         return undefined;
     }
@@ -163,6 +171,10 @@ export const loadTextReader = async (
                         }
                     }
                     return lines;
+                }),
+            release: () =>
+                serially(async () => {
+                    await Promise.all([detector.release(), recognizer.release()]);
                 }),
         };
     } catch (error) {

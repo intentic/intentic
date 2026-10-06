@@ -238,7 +238,9 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
         ]),
     );
 
+    const before = Date.now();
     const frames = await collect(streamAgent(s, input, undefined));
+    const took = Date.now() - before;
 
     const stamp = { account: "default", actor: "ada@example.com" };
     expect(frames).toStrictEqual([
@@ -315,7 +317,12 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
         { ...row, sessionId: "s-limit", type: "turn.error", outcome: "error", error: "Claude usage limit reached." },
         { ...row, sessionId: "s-limit", type: "turn.completed" },
     ]);
-    // Refused before it answered: billed nothing, and no verdict on work it never did.
+    // Refused before it answered: billed nothing, and no verdict on work it never did. No frame carried a duration, so
+    // the daemon's own clock measured the refusal (turn-settlement.ts): a span within the call, not a zero that only
+    // holds when the turn starts and settles in the same millisecond.
+    const measured = writes.usage[0]?.durationMs ?? -1;
+    expect(measured).toBeGreaterThanOrEqual(0);
+    expect(measured).toBeLessThanOrEqual(took);
     expect(writes.usage).toStrictEqual([
         {
             provider: "claude",
@@ -333,7 +340,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
             cacheReadTokens: 0,
             cacheCreationTokens: 0,
             costUsd: 0,
-            durationMs: 0,
+            durationMs: measured,
             turnIndex: 0,
             autoPicked: undefined,
         },

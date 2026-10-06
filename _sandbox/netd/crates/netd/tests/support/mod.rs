@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use std::convert::Infallible;
-use std::net::TcpListener as StdListener;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -35,6 +35,13 @@ pub const SANDBOX_ID: &str = "abcdef012345";
 /// them took the port before netd bound it (it logged "could not bind" and the TLS test met a refused connect).
 /// So the port comes from below that range, where neither can land, off a counter this process never repeats, started
 /// at an offset by pid so two test processes on one host walk different ports.
+///
+/// The probe binds without listening. A listening probe outlived its drop: a sibling test spawning a process (a netd, a
+/// tmux) in that instant hands the child a copy of every descriptor until its exec closes them, so the port still
+/// listened in the child. netd then could not bind it, or `bound` and a browser's socket connected to the child's copy
+/// and were reset when its exec closed it (CI run 37445201398, "Connection reset by peer" opening a terminal). A socket
+/// only bound, with SO_REUSEADDR as netd's own listener sets, still finds a port something listens on, and a copy of it
+/// a child keeps for a moment neither stops netd listening there nor accepts a connection.
 pub fn free_port() -> u16 {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     const FLOOR: u16 = 10_000;
@@ -52,10 +59,19 @@ pub fn free_port() -> u16 {
             "every port below the ephemeral range was handed out"
         );
         let port = FLOOR + u16::try_from((start + taken) % span).unwrap();
-        if StdListener::bind(("127.0.0.1", port)).is_ok() {
+        if unclaimed(port) {
             return port;
         }
     }
+}
+
+// Whether netd could listen on the port: bound like its listener is, and never listening itself.
+fn unclaimed(port: u16) -> bool {
+    let Ok(probe) = tokio::net::TcpSocket::new_v4() else {
+        return false;
+    };
+    probe.set_reuseaddr(true).is_ok()
+        && probe.bind(SocketAddr::from(([127, 0, 0, 1], port))).is_ok()
 }
 
 /// Node's answer to where a preview host's request goes: its host, and whether it asks the probe's path.

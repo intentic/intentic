@@ -12,7 +12,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { lowHoursNotice } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
-import ChatPrivacyStrip from "./ChatPrivacyStrip.vue";
+import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import { useT } from "@intentic/ui/i18n";
 

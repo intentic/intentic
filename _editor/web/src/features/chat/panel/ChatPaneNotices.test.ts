@@ -60,8 +60,8 @@ jest.mock(`../../agents/fleet/useAgents`, () => ({
 jest.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
 // The needs strip reads the sandbox's needs store, which is not what these notices are about.
 jest.mock(`../../needs/NeedsStrip.vue`, () => ({ default: defineComponent({ name: `NeedsStrip`, setup: () => () => undefined }) }));
-// The privacy shield's strip reads the shield's own status, and has its own test (ChatPrivacyStrip.test.ts).
-jest.mock(`./ChatPrivacyStrip.vue`, () => ({ default: defineComponent({ name: `ChatPrivacyStrip`, setup: () => () => undefined }) }));
+// The privacy shield's strip reads the shield's own status, and has its own test (privacy/ChatPrivacyStrip.test.ts).
+jest.mock(`./privacy/ChatPrivacyStrip.vue`, () => ({ default: defineComponent({ name: `ChatPrivacyStrip`, setup: () => () => undefined }) }));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     RouterLink: RouterLinkStub as never,

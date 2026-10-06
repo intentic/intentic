@@ -37,19 +37,21 @@ rules:
             - verify.yml
             - webstore-publish.yml
 
-    # `secrets: inherit` on ci.yml's three verify calls and its release call.
+    # `secrets: inherit` on ci.yml's three verify calls and its release call, and on release.yml's call of the
+    # Android app's release build.
     #
-    # The callees are `./.github/workflows/verify.yml` and `./.github/workflows/release.yml` — IN THIS
-    # REPOSITORY, on the same commit, reviewed in the same diff, and reachable only from a branch pushed here
-    # (the fork boundary, docs/ops/ci-runner.md). zizmor's concern is a called workflow it cannot see; there is no
-    # such workflow here. Enumerating each secret per call would move the same set across the same boundary,
-    # while adding a list that goes stale the first time a job needs one more.
+    # The callees are `./.github/workflows/verify.yml`, `./.github/workflows/release.yml` and
+    # `./.github/workflows/device-android.yml` — IN THIS REPOSITORY, on the same commit, reviewed in the same diff,
+    # and reachable only from a branch pushed here (the fork boundary, docs/ops/ci-runner.md). zizmor's concern is a
+    # called workflow it cannot see; there is no such workflow here. Enumerating each secret per call would move the
+    # same set across the same boundary, while adding a list that goes stale the first time a job needs one more.
     #
     # DELETE THIS SUPPRESSION IF: a call ever targets a workflow outside this repository. Then the secrets have
     # to be named one by one, because the callee stops being something this repository's review covers.
     secrets-inherit:
         ignore:
             - ci.yml
+            - release.yml
 
     # `npm install -g npm@latest` in npm-publish.yml.
     #

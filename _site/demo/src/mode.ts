@@ -167,7 +167,7 @@ export const enabledExtensions = (): readonly string[] | undefined => {
 };
 
 // QUIET: the same recording on an uneventful afternoon. The recording is built to show every state a surface
-// distinguishes (a prompt cache about to cool, a key an agent is waiting for, a red pipeline, a teammate's reaction, a
+// distinguishes (a prompt cache about to cool, a key an agent is waiting for, a failing pipeline, a teammate's reaction, a
 // plugin's warning), which is right for a visitor exploring and wrong for a picture whose job is to show the workspace
 // at rest. Quiet takes those out where they are served (daemon.ts, needs.ts, turn.ts) and leaves every agent, file
 // and conversation where it was. The showcase mode is always quiet; any other mode is quiet when the session holds

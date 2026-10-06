@@ -87,7 +87,6 @@ export interface AuthorizeChallenge {
 // paste page unless a redirect is named.
 export const buildAuthorizeUrl = (redirectUri: string = REDIRECT_URI): AuthorizeChallenge => {
     const verifier = base64url(randomBytes(32));
-    const challenge = base64url(createHash("sha256").update(verifier).digest());
     const state = base64url(randomBytes(32));
     return { authorizeUrl: authorizeUrlFor({ verifier, state }, redirectUri), verifier, state, redirectUri };
 };
