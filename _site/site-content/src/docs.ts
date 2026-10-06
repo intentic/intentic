@@ -51,6 +51,19 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // After Architecture: that page says where things live, this one says what keeps each part
+                            // inside its box, and the Access page leans on it for areas.
+                            id: "sandboxing",
+                            title: "Sandboxing",
+                            blurb: "Machine, sandbox, area and agent, from the outside in",
+                            meta: {
+                                title: "Sandboxing: machines, sandboxes, areas and agents · intentic docs",
+                                description:
+                                    "How intentic contains agent work: sandboxes on a machine that share nothing, areas that give each person a slice of a workspace, and agents that work with exactly their person's access.",
+                                datePublished: "2026-10-06",
+                            },
+                        },
+                        {
                             // First shelf: later pages rely on these words (daemon, land, worktree, harness) from early
                             // on.
                             id: "glossary",
@@ -132,7 +145,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Access & sharing · intentic docs",
                                 description:
-                                    "How the owner is decided, what each invited tier can do, and why the daemon rather than the UI is what enforces it.",
+                                    "How the owner is decided, what each invited tier can do, how areas give someone part of the workspace, and why the daemon rather than the UI is what enforces it.",
                                 datePublished: "2026-08-07",
                             },
                         },

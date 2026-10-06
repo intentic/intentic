@@ -1,0 +1,158 @@
+---
+import { sandboxingScene } from "@intentic/site-content/sandboxing";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+import SandboxingFigure from "../../components/figures/SandboxingFigure.astro";
+
+/* HOW WORK IS CONTAINED, as nested boxes from the outside in. The figure and the first table carry the model, the
+   sections under them the detail, and "walls and lanes" says which of the drawn lines a hostile program cannot cross. */
+
+const scene = sandboxingScene;
+
+/* When the answer to "keep them apart" is an area and when it is another sandbox. */
+const choose = [
+    {
+        situation: "Teammates who should each stay on their own part of one project",
+        use: "Areas",
+        because: "One environment, one set of tools, and work that lands in one tree. Each person and their agents see only their part.",
+    },
+    {
+        situation: "A customer or contractor who must never see the rest of the code",
+        use: "Another sandbox",
+        because: "Its own container and volumes, holding a clone of only what they may see. Nothing of yours is in the box to reach.",
+    },
+    {
+        situation: "Two unrelated projects, or two jobs whose credentials must not meet",
+        use: "Another sandbox",
+        because: "Separate tools, accounts, secrets and history. One machine can run both.",
+    },
+    {
+        situation: "The same people, but a task that needs other accounts or fewer powers",
+        use: "Another persona",
+        because: "Same sandbox and area, with a different set of accounts and powers handed to the turn.",
+    },
+];
+---
+
+<DocsLayout
+    pageId="sandboxing"
+    heading="Sandboxing"
+    lead="Every agent turn runs inside four boxes nested one in another: a machine, a sandbox on it, the area of the person who started the conversation, and the agent's own checkout. Each box is cut from the one around it and can never be wider."
+>
+    <div class="docs-embed my-8">
+        <SandboxingFigure />
+    </div>
+
+    <h2>The four boxes</h2>
+    <table>
+        <thead>
+            <tr><th>Box</th><th>Holds</th><th>Its edge is kept by</th></tr>
+        </thead>
+        <tbody>
+            {
+                scene.layers.map((layer) => (
+                    <tr>
+                        <td>
+                            <a href={`#${layer.id}`}>
+                                <strong>{layer.tab}</strong>
+                            </a>
+                        </td>
+                        <td>{layer.holds.join(" · ")}</td>
+                        <td>{layer.keptBy}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <h2 id="machine">1. {scene.layers[0]?.title}</h2>
+    <p>{scene.layers[0]?.body}</p>
+    <p>
+        The machine decides how fast work runs and nothing else about it. Moving a sandbox to a bigger machine keeps its address, its files
+        and its history. A sandbox runs <a href="/docs/docker/">unprivileged by default</a>. Anything that needs more of the machine, such
+        as its own Docker engine or a GPU, is a capability the owner turns on. See <a href="/where-it-runs/">where it runs</a> for the choice of
+        machine.
+    </p>
+
+    <h2 id="sandbox">2. {scene.layers[1]?.title}</h2>
+    <p>{scene.layers[1]?.body}</p>
+    <p>
+        A sandbox is meant to last. It holds many conversations at once, keeps working after you close the browser, and builds up the way
+        its project is done: the <a href="/docs/capabilities/">accounts and services</a> it is connected to, the
+        <a href="/docs/extensions/">extensions</a> installed in it, its skills, and its personas. When an agent needs a tool the image
+        lacks, it proposes the change and the owner approves it, so the next turn and the next person find the same tools. The shape of all
+        this exports as a <a href="/docs/sandbox-definitions/">sandbox definition</a>, which can rebuild the same environment elsewhere.
+    </p>
+    <p>
+        Nothing crosses between two sandboxes. They are separate containers with separate volumes, even when they run on the same machine.
+    </p>
+
+    <h2 id="area">3. {scene.layers[2]?.title}</h2>
+    <p>{scene.layers[2]?.body}</p>
+    <p>
+        Areas are defined once under <strong>Sandbox → Areas</strong>, as a name and a list of folders, and handed out per person under{" "}
+        <strong>Sandbox → <a href="/docs/access/">Access</a></strong>. Naming them rather than listing folders on every person means that
+        a new folder is one edit, and two people meant to see the same thing can't drift apart. The definition is a tracked file, so a
+        change to who sees what shows up in review like any other change. Editing an area moves everyone who holds it at once, including
+        conversations already running.
+    </p>
+    <p>How areas combine with tiers:</p>
+    <ul>
+        <li><strong>A writer</strong> needs at least one area: it is where they may change files. They can't land or publish.</li>
+        <li><strong>A guest</strong> needs at least one area too: the personas homed in it are the ones a guest talks through.</li>
+        <li><strong>A viewer or collaborator</strong> may be given areas to narrow what they see, or none for the whole workspace.</li>
+        <li><strong>A maintainer</strong> can't be given areas. See below for why.</li>
+    </ul>
+
+    <h2 id="agent">4. {scene.layers[3]?.title}</h2>
+    <p>{scene.layers[3]?.body}</p>
+    <p>
+        Agents don't have access of their own. A conversation started by a person in the <code>support</code> area works in{" "}
+        <code>support</code>, whoever later reads it, and keeps that fence for its whole life even if the person's grant changes. A
+        persona homed in a narrower folder narrows the turn further. Its edits go to the conversation's own branch, so nothing reaches the
+        main tree until someone allowed to <a href="/docs/glossary/">land</a> it reviews the diff. For the branch mechanics, see{" "}
+        <a href="/docs/parallel-agents/">parallel agents</a>.
+    </p>
+
+    <h2>Walls and lanes</h2>
+    <p>
+        Nested boxes look like walls all the way down. They aren't, and it matters which edges you lean on.
+    </p>
+    {
+        scene.lanes.map((lane) => (
+            <Fragment>
+                <h3>{lane.heading}</h3>
+                <p>{lane.body}</p>
+            </Fragment>
+        ))
+    }
+
+    <h2>An area, a sandbox, or a persona</h2>
+    <table>
+        <thead>
+            <tr><th>You have</th><th>Use</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+            {
+                choose.map((row) => (
+                    <tr>
+                        <td>{row.situation}</td>
+                        <td>
+                            <strong>{row.use}</strong>
+                        </td>
+                        <td>{row.because}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/access/", title: "Access & sharing", why: "the tiers, and how an invite carries areas." },
+            { href: "/docs/worksite/", title: "The worksite", why: "machine, sandbox, persona and project as one picture." },
+            { href: "/docs/architecture/", title: "Architecture", why: "where identity, code, state and compute live." },
+            { href: "/docs/docker/", title: "Docker setup", why: "the container, its volumes and its capability posture." },
+        ]}
+    />
+</DocsLayout>

@@ -168,6 +168,11 @@ const state = [
         editing different branches. Landing is the single door back: it applies the conversation's delta to the main tree without moving
         main's commit history.
     </p>
+    <p>
+        A conversation started by someone who holds <a href="/docs/sandboxing/#area">areas</a> goes one step further: each of its turns runs
+        in a box of its own, as an unprivileged user with its own processes, and only that person's folders on disk.{" "}
+        <a href="/docs/sandboxing/">Sandboxing</a> draws the four boxes a turn sits inside.
+    </p>
     <table>
         <thead>
             <tr><th>Layer</th><th>Holds</th><th>Lifecycle rule</th></tr>
@@ -246,6 +251,7 @@ const state = [
 
     <DocsRelated
         links={[
+            { href: "/docs/sandboxing/", title: "Sandboxing", why: "machine, sandbox, area and agent, from the outside in." },
             { href: "/docs/parallel-agents/", title: "Parallel agents", why: "worktrees, child agents, review and landing." },
             { href: "/docs/sandbox-definitions/", title: "Sandbox definitions", why: "the reproducible shape of an environment." },
             { href: "/docs/remote-runners/", title: "Remote runners", why: "moving execution to another machine without moving control." },

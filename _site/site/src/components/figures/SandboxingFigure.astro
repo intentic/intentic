@@ -1,0 +1,1027 @@
+---
+/* Sandboxing figure: machine, sandbox, area and agent as four nested boxes, lit one at a time. */
+import { sandboxingScene } from "@intentic/site-content/sandboxing";
+
+const scene = sandboxingScene;
+
+/* One sample sandbox, drawn concretely so every box has something real in it. Ada's area is the one the steps follow. */
+const PEOPLE = [
+    { name: `You`, role: `owner`, reach: `whole workspace`, ada: false },
+    { name: `Ada`, role: `writer`, reach: `area · support`, ada: true },
+    { name: `Kai`, role: `viewer`, reach: `area · web`, ada: false },
+];
+const AREA_FOLDERS = [
+    { path: `support/`, persona: `Support desk` },
+    { path: `docs/help/`, persona: undefined },
+];
+const OTHER_FOLDERS = [
+    { path: `web/`, persona: `Web dev`, control: false },
+    { path: `finance/`, persona: `Bookkeeper`, control: false },
+    { path: `.intentic/`, persona: undefined, control: true },
+];
+const TOOLS = [`Node · Python`, `git · iq`, `skills`, `extensions`];
+const NEIGHBOURS = [`billing-ops`, `research`];
+
+const ICON = {
+    machine:
+        '<rect x="3" y="5" width="18" height="5.5" rx="1.5"/><rect x="3" y="13.5" width="18" height="5.5" rx="1.5"/><path d="M6.5 7.75h.01"/><path d="M6.5 16.25h.01"/>',
+    box: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5"/><path d="M12 12v9"/>',
+    folder: '<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2l2 2.2h7.8A1.5 1.5 0 0 1 20 9.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/>',
+    person: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+    agent: '<path d="m12 3 1.7 4.8 4.8 1.7-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7z"/><path d="M18 16.5v3"/><path d="M16.5 18h3"/>',
+    branch: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="8.5" r="2"/><path d="M6 7.5v9"/><path d="M18 10.5c0 4-6 3-12 6"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+    card: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16a3 3 0 0 1 6 0"/><path d="M14 10h4"/><path d="M14 13.5h3"/>',
+    pause: '<path d="M9 5v14"/><path d="M15 5v14"/>',
+    play: '<path d="M7 4.5v15l12-7.5z"/>',
+};
+
+const glyph = (paths: string, size = 14) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+---
+
+<figure class="sb" data-sb data-step="0" data-paused="false">
+    {/* The steps. Buttons, so a reader can stop on one; autoplay advances them while the figure is on screen. */}
+    <div class="sb-tabs" role="group" aria-label="Show one layer at a time">
+        {
+            scene.layers.map((layer, index) => (
+                <button type="button" class="sb-tab" data-sb-go={index + 1} aria-pressed="false">
+                    <span class="sb-tab-num">{String(index + 1).padStart(2, `0`)}</span>
+                    <span class="sb-tab-name">{layer.tab}</span>
+                    <span class="sb-tab-bar" aria-hidden="true" />
+                </button>
+            ))
+        }
+        <button type="button" class="sb-play" data-sb-play aria-label="Pause the animation">
+            <span class="sb-play-pause" set:html={glyph(ICON.pause, 13)} />
+            <span class="sb-play-play" set:html={glyph(ICON.play, 13)} />
+        </button>
+    </div>
+
+    {/* The drawing. Hidden from screen readers, which get the same story from the captions and the label below. */}
+    <div class="sb-stage" aria-hidden="true">
+        <div class="sb-machine">
+            <div class="sb-head">
+                <span class="sb-icon" set:html={glyph(ICON.machine)} />
+                <span class="sb-eyebrow">Machine</span>
+                <span class="sb-name">ada-pc</span>
+                <span class="sb-chip sb-chip-machine">Docker</span>
+            </div>
+
+            <div class="sb-machine-body">
+                <div class="sb-box">
+                    <div class="sb-head">
+                        <span class="sb-icon" set:html={glyph(ICON.box)} />
+                        <span class="sb-eyebrow">Sandbox</span>
+                        <span class="sb-name">acme-shop</span>
+                        <span class="sb-chip sb-chip-vol">/work · /history</span>
+                    </div>
+
+                    <div class="sb-tools">
+                        <span class="sb-tools-label">Image</span>
+                        {
+                            TOOLS.map((tool, index) => (
+                                <span class="sb-tool" style={`--i:${index}`}>
+                                    {tool}
+                                </span>
+                            ))
+                        }
+                        <span class="sb-tool sb-tool-new" style={`--i:${TOOLS.length}`}>
+                            + ffmpeg
+                            <span class="sb-tool-state">
+                                <span class="sb-state-a">proposed</span>
+                                <span class="sb-state-b">approved</span>
+                            </span>
+                        </span>
+                    </div>
+
+                    <div class="sb-inner">
+                        <div class="sb-col sb-people">
+                            <span class="sb-col-label">People</span>
+                            {
+                                PEOPLE.map((person) => (
+                                    <div class:list={["sb-row", "sb-person", person.ada && "sb-ada"]}>
+                                        <span class="sb-icon" set:html={glyph(ICON.person, 13)} />
+                                        <span class="sb-row-main">
+                                            <span class="sb-row-name">{person.name}</span>
+                                            <span class="sb-row-sub">{person.role}</span>
+                                        </span>
+                                        <span class="sb-reach">{person.reach}</span>
+                                    </div>
+                                ))
+                            }
+                            <div class="sb-row sb-agent">
+                                <span class="sb-icon" set:html={glyph(ICON.agent, 13)} />
+                                <span class="sb-row-main">
+                                    <span class="sb-row-name">Agent</span>
+                                    <span class="sb-row-sub">for Ada · Support desk</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="sb-col sb-tree">
+                            <span class="sb-col-label">Workspace</span>
+                            <div class="sb-area">
+                                <span class="sb-area-tag">Ada's area · support</span>
+                                {
+                                    AREA_FOLDERS.map((folder, index) => (
+                                        <div class="sb-row sb-folder sb-in" style={`--i:${index}`}>
+                                            <span class="sb-icon" set:html={glyph(ICON.folder, 13)} />
+                                            <span class="sb-path">{folder.path}</span>
+                                            {folder.persona && (
+                                                <span class="sb-persona">
+                                                    <span set:html={glyph(ICON.card, 12)} />
+                                                    {folder.persona}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                            {
+                                OTHER_FOLDERS.map((folder) => (
+                                    <div class:list={["sb-row", "sb-folder", "sb-out", folder.control && "sb-control"]}>
+                                        <span class="sb-icon" set:html={glyph(folder.control ? ICON.lock : ICON.folder, 13)} />
+                                        <span class="sb-path">{folder.path}</span>
+                                        {folder.persona && (
+                                            <span class="sb-persona">
+                                                <span set:html={glyph(ICON.card, 12)} />
+                                                {folder.persona}
+                                            </span>
+                                        )}
+                                        {folder.control ? (
+                                            <span class="sb-note sb-note-control">settings · in no area</span>
+                                        ) : (
+                                            <span class="sb-note sb-note-out">not in its checkout</span>
+                                        )}
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+
+                    <div class="sb-branch">
+                        <span class="sb-icon" set:html={glyph(ICON.branch, 13)} />
+                        <span>Agent's edits</span>
+                        <span class="sb-arrow">→</span>
+                        <span>committed by the daemon to its own branch</span>
+                        <span class="sb-arrow">→</span>
+                        <span>landed by a maintainer</span>
+                    </div>
+                </div>
+
+                <div class="sb-neighbours">
+                    {
+                        NEIGHBOURS.map((name) => (
+                            <div class="sb-neighbour">
+                                <span class="sb-icon" set:html={glyph(ICON.box, 13)} />
+                                <span class="sb-eyebrow">Sandbox</span>
+                                <span class="sb-name">{name}</span>
+                                <span class="sb-neighbour-sub">own container · own volumes</span>
+                            </div>
+                        ))
+                    }
+                    <span class="sb-wall">nothing crosses</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sb-captions">
+        <div class="sb-cap" data-cap="0">
+            <p class="sb-cap-title">{scene.heading}</p>
+            <p class="sb-cap-body">{scene.sub}</p>
+        </div>
+        {
+            scene.layers.map((layer, index) => (
+                <div class="sb-cap" data-cap={index + 1}>
+                    <p class="sb-cap-title">
+                        <span class="sb-cap-num">{String(index + 1).padStart(2, `0`)}</span>
+                        {layer.title}
+                    </p>
+                    <p class="sb-cap-body">{layer.body}</p>
+                    <p class="sb-cap-kept">
+                        <span>Kept by</span> {layer.keptBy}
+                    </p>
+                </div>
+            ))
+        }
+    </div>
+    <p class="sr-only">{scene.label}</p>
+</figure>
+
+<script>
+    // Steps through the four layers while the figure is on screen. Clicking a step stops on it; the play button
+    // carries on from there. Holding the pointer over the drawing freezes the current step without losing its place.
+    const BEAT_MS = 6000;
+    const STEPS = 4;
+
+    for (const figure of document.querySelectorAll<HTMLElement>(`[data-sb]`)) {
+        const tabs = [...figure.querySelectorAll<HTMLButtonElement>(`[data-sb-go]`)];
+        const play = figure.querySelector<HTMLButtonElement>(`[data-sb-play]`);
+        const reduced = matchMedia(`(prefers-reduced-motion: reduce)`).matches;
+        let step = 0;
+        let playing = !reduced;
+        let visible = false;
+        let held = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let deadline = 0;
+        let remaining = BEAT_MS;
+
+        const show = (next: number): void => {
+            step = next;
+            figure.dataset.step = String(next);
+            tabs.forEach((tab, index) => tab.setAttribute(`aria-pressed`, String(index + 1 === next)));
+            remaining = BEAT_MS;
+        };
+        const stop = (): void => {
+            if (timer !== undefined) {
+                clearTimeout(timer);
+                timer = undefined;
+            }
+        };
+        const run = (): void => {
+            stop();
+            if (!playing || !visible || held) {
+                return;
+            }
+            if (step === 0) {
+                show(1);
+            }
+            deadline = Date.now() + remaining;
+            timer = setTimeout(() => {
+                show((step % STEPS) + 1);
+                run();
+            }, remaining);
+        };
+        const setPlaying = (on: boolean): void => {
+            playing = on;
+            figure.dataset.paused = String(!on);
+            play?.setAttribute(`aria-label`, on ? `Pause the animation` : `Play the animation`);
+            remaining = BEAT_MS;
+            run();
+        };
+
+        tabs.forEach((tab, index) =>
+            tab.addEventListener(`click`, () => {
+                show(index + 1);
+                setPlaying(false);
+            }),
+        );
+        play?.addEventListener(`click`, () => {
+            if (!playing && step === STEPS) {
+                show(1);
+            }
+            setPlaying(!playing);
+        });
+
+        const stage = figure.querySelector(`.sb-stage`);
+        stage?.addEventListener(`pointerenter`, () => {
+            if (timer === undefined) {
+                return;
+            }
+            held = true;
+            figure.dataset.held = `true`;
+            remaining = Math.max(0, deadline - Date.now());
+            stop();
+        });
+        stage?.addEventListener(`pointerleave`, () => {
+            if (!held) {
+                return;
+            }
+            held = false;
+            delete figure.dataset.held;
+            run();
+        });
+
+        figure.dataset.paused = String(!playing);
+        new IntersectionObserver(
+            ([entry]) => {
+                visible = entry?.isIntersecting ?? false;
+                if (visible) {
+                    run();
+                } else {
+                    stop();
+                }
+            },
+            { threshold: 0.35 },
+        ).observe(figure);
+    }
+</script>
+
+<style>
+    .sb {
+        --sb-beat: 6s;
+        --sb-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+        --sb-dim: 0.28;
+        container-type: inline-size;
+        margin: 0;
+        border: 1px solid var(--color-line);
+        background: var(--wash-panel);
+        padding: 1rem;
+        color: var(--color-content);
+    }
+
+    /* ── Steps ─────────────────────────────────────────────────────────────── */
+    .sb-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+        gap: 0.4rem;
+        margin-bottom: 0.9rem;
+    }
+    .sb-tab {
+        position: relative;
+        display: flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        overflow: hidden;
+        border: 1px solid var(--color-line);
+        background: var(--role-figure-panel);
+        padding: 0.5rem 0.65rem 0.6rem;
+        text-align: left;
+        color: var(--color-muted);
+        cursor: pointer;
+        transition:
+            border-color 0.3s,
+            color 0.3s,
+            background-color 0.3s;
+    }
+    .sb-tab:hover {
+        border-color: var(--color-line-bright);
+        color: var(--color-content);
+    }
+    .sb-tab:focus-visible,
+    .sb-play:focus-visible {
+        outline: 2px solid var(--color-primary-400);
+        outline-offset: 2px;
+    }
+    .sb-tab-num {
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        color: var(--color-gold);
+    }
+    .sb-tab-name {
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+    .sb-tab-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+        background: var(--color-primary-500);
+        transform: scaleX(0);
+        transform-origin: left;
+    }
+    .sb-tab[aria-pressed="true"] {
+        border-color: var(--role-ember-line-strong);
+        background: var(--role-figure-row-on);
+        color: var(--color-content);
+    }
+    .sb-tab[aria-pressed="true"] .sb-tab-num {
+        color: var(--color-primary-400);
+    }
+    .sb-tab[aria-pressed="true"] .sb-tab-bar {
+        animation: sb-progress var(--sb-beat) linear forwards;
+    }
+    .sb[data-held="true"] .sb-tab-bar {
+        animation-play-state: paused;
+    }
+    .sb[data-paused="true"] .sb-tab[aria-pressed="true"] .sb-tab-bar {
+        animation: none;
+        transform: scaleX(1);
+    }
+    .sb-play {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.4rem;
+        border: 1px solid var(--color-line);
+        background: var(--role-figure-panel);
+        color: var(--color-muted);
+        cursor: pointer;
+    }
+    .sb-play:hover {
+        border-color: var(--color-line-bright);
+        color: var(--color-content);
+    }
+    .sb-play-play,
+    .sb[data-paused="true"] .sb-play-pause {
+        display: none;
+    }
+    .sb[data-paused="true"] .sb-play-play {
+        display: inline-flex;
+    }
+
+    /* ── Shared pieces ─────────────────────────────────────────────────────── */
+    .sb-head {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.6rem;
+    }
+    .sb-icon {
+        display: inline-flex;
+        color: var(--color-gold);
+        flex-shrink: 0;
+    }
+    .sb-eyebrow {
+        font-size: 0.62rem;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
+    .sb-name {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--color-content);
+    }
+    .sb-chip {
+        margin-left: auto;
+        border: 1px solid var(--color-line);
+        padding: 0.05rem 0.45rem;
+        font-family: var(--font-mono);
+        font-size: 0.64rem;
+        color: var(--color-muted);
+        transition:
+            border-color 0.4s,
+            color 0.4s;
+    }
+
+    /* Every box that can be lit or dimmed eases between the two. */
+    .sb-machine,
+    .sb-box,
+    .sb-neighbour,
+    .sb-tools,
+    .sb-row,
+    .sb-area,
+    .sb-branch,
+    .sb-wall,
+    .sb-note,
+    .sb-col-label,
+    .sb-reach,
+    .sb-persona {
+        transition:
+            opacity 0.5s var(--sb-ease),
+            border-color 0.5s var(--sb-ease),
+            box-shadow 0.5s var(--sb-ease),
+            background-color 0.5s var(--sb-ease),
+            color 0.5s var(--sb-ease),
+            transform 0.5s var(--sb-ease);
+    }
+
+    /* ── The machine ───────────────────────────────────────────────────────── */
+    .sb-machine {
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-figure-terminal);
+        padding: 0.75rem;
+    }
+    .sb-machine-body {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    /* ── The sandbox ───────────────────────────────────────────────────────── */
+    .sb-box {
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-figure-panel);
+        padding: 0.75rem;
+    }
+    .sb-tools {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
+    }
+    .sb-tools-label,
+    .sb-col-label {
+        font-size: 0.6rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+    .sb-tools-label {
+        margin-right: 0.2rem;
+    }
+    .sb-tool {
+        border: 1px solid var(--color-line);
+        background: var(--role-figure-terminal);
+        padding: 0.1rem 0.45rem;
+        font-family: var(--font-mono);
+        font-size: 0.66rem;
+        color: var(--color-muted);
+    }
+    .sb-tool-new {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-color: var(--role-ember-line);
+        color: var(--color-content);
+    }
+    .sb-tool-state {
+        display: inline-grid;
+        font-family: var(--font-sans);
+        font-size: 0.58rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+    .sb-tool-state > span {
+        grid-area: 1 / 1;
+    }
+    .sb-state-a {
+        opacity: 0;
+        color: var(--color-warning);
+    }
+    .sb-state-b {
+        color: var(--color-success);
+    }
+
+    .sb-inner {
+        display: grid;
+        gap: 0.75rem;
+    }
+    .sb-col {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+    .sb-row {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        border: 1px solid var(--color-line);
+        background: var(--role-figure-terminal);
+        padding: 0.35rem 0.5rem;
+        min-width: 0;
+    }
+    .sb-row-main {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+        min-width: 0;
+    }
+    .sb-row-name {
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .sb-row-sub {
+        font-size: 0.64rem;
+        color: var(--color-subtle);
+    }
+    .sb-reach {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 0.62rem;
+        color: var(--color-subtle);
+        white-space: nowrap;
+    }
+    .sb-agent {
+        margin-left: 1.1rem;
+        border-style: dashed;
+        border-color: var(--role-ember-line);
+        position: relative;
+    }
+    .sb-agent::before {
+        content: "";
+        position: absolute;
+        left: -0.75rem;
+        top: -0.35rem;
+        width: 0.6rem;
+        height: 50%;
+        border-left: 1px solid var(--color-line-strong);
+        border-bottom: 1px solid var(--color-line-strong);
+    }
+    .sb-agent .sb-icon {
+        color: var(--color-primary-400);
+    }
+
+    .sb-path {
+        font-family: var(--font-mono);
+        font-size: 0.74rem;
+    }
+    .sb-persona {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: auto;
+        border: 1px solid var(--color-line);
+        padding: 0.02rem 0.4rem;
+        font-size: 0.62rem;
+        color: var(--color-muted);
+        white-space: nowrap;
+    }
+    .sb-note {
+        font-size: 0.6rem;
+        color: var(--color-subtle);
+        white-space: nowrap;
+    }
+    .sb-persona + .sb-note {
+        margin-left: 0.3rem;
+    }
+    .sb-folder:not(:has(.sb-persona)) .sb-note {
+        margin-left: auto;
+    }
+    .sb-note-out {
+        display: none;
+    }
+    .sb-control .sb-icon,
+    .sb-control .sb-path {
+        color: var(--color-subtle);
+    }
+
+    .sb-area {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        margin: 0.7rem 0 0.15rem;
+        border: 1px dashed var(--role-ember-line-strong);
+        background: var(--role-decision-fill);
+        padding: 0.95rem 0.35rem 0.35rem;
+    }
+    .sb-area-tag {
+        position: absolute;
+        top: -0.55rem;
+        left: 0.5rem;
+        background: var(--color-card);
+        padding: 0 0.35rem;
+        font-size: 0.6rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--color-primary-400);
+    }
+
+    .sb-branch {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.75rem;
+        border-top: 1px solid var(--color-line);
+        padding-top: 0.6rem;
+        font-size: 0.68rem;
+        color: var(--color-muted);
+    }
+    .sb-branch .sb-icon {
+        color: var(--color-primary-400);
+    }
+    .sb-arrow {
+        color: var(--color-gold);
+    }
+
+    /* ── Neighbouring sandboxes ────────────────────────────────────────────── */
+    .sb-neighbours {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+    .sb-neighbour {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid var(--color-line);
+        background: var(--role-figure-panel);
+        padding: 0.55rem 0.6rem;
+    }
+    .sb-neighbour-sub {
+        flex-basis: 100%;
+        font-size: 0.6rem;
+        color: var(--color-subtle);
+    }
+    .sb-wall {
+        grid-column: 1 / -1;
+        text-align: center;
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+        opacity: 0;
+    }
+
+    /* ── Captions ──────────────────────────────────────────────────────────── */
+    .sb-captions {
+        margin-top: 0.9rem;
+        min-height: 7.5rem;
+    }
+    .sb-cap {
+        display: none;
+    }
+    .sb[data-step="0"] .sb-cap[data-cap="0"],
+    .sb[data-step="1"] .sb-cap[data-cap="1"],
+    .sb[data-step="2"] .sb-cap[data-cap="2"],
+    .sb[data-step="3"] .sb-cap[data-cap="3"],
+    .sb[data-step="4"] .sb-cap[data-cap="4"] {
+        display: block;
+        animation: sb-caption 0.5s var(--sb-ease);
+    }
+    .sb-cap-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin: 0 0 0.3rem;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-content);
+    }
+    .sb-cap-num {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--color-primary-400);
+    }
+    .sb-cap-body {
+        margin: 0;
+        font-size: 0.86rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+    .sb-cap-kept {
+        margin: 0.45rem 0 0;
+        font-size: 0.74rem;
+        color: var(--color-subtle);
+    }
+    .sb-cap-kept span {
+        margin-right: 0.3rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        font-size: 0.62rem;
+        color: var(--color-gold);
+    }
+
+    /* ── Wide layout ───────────────────────────────────────────────────────── */
+    @container (min-width: 40rem) {
+        .sb {
+            padding: 1.25rem;
+        }
+        .sb-machine-body {
+            grid-template-columns: minmax(0, 1fr) 9.5rem;
+            align-items: start;
+        }
+        .sb-neighbours {
+            grid-template-columns: 1fr;
+        }
+        .sb-inner {
+            grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        }
+        .sb-captions {
+            min-height: 6.5rem;
+        }
+    }
+    @container (max-width: 30rem) {
+        .sb-tab {
+            flex-direction: column;
+            gap: 0;
+            padding: 0.4rem 0.45rem 0.5rem;
+        }
+        .sb-tab-name {
+            font-size: 0.74rem;
+        }
+        .sb-persona {
+            display: none;
+        }
+        .sb-captions {
+            min-height: 12rem;
+        }
+    }
+
+    /* ── Step 1 · the machine ──────────────────────────────────────────────── */
+    .sb[data-step="1"] .sb-machine {
+        border-color: var(--role-ember-line-strong);
+        box-shadow: var(--role-ember-glow-lit);
+    }
+    .sb[data-step="1"] .sb-chip-machine {
+        border-color: var(--role-ember-line-strong);
+        color: var(--color-primary-400);
+    }
+    .sb[data-step="1"] .sb-tools,
+    .sb[data-step="1"] .sb-inner,
+    .sb[data-step="1"] .sb-branch {
+        opacity: var(--sb-dim);
+    }
+    .sb[data-step="1"] .sb-neighbour {
+        animation: sb-neighbour 1.8s var(--sb-ease) both;
+        animation-delay: 0.3s;
+    }
+    .sb[data-step="1"] .sb-neighbour:nth-child(2) {
+        animation-delay: 0.6s;
+    }
+    .sb[data-step="1"] .sb-wall {
+        opacity: 1;
+        transition-delay: 0.9s;
+    }
+
+    /* ── Step 2 · the sandbox ──────────────────────────────────────────────── */
+    .sb[data-step="2"] .sb-box {
+        border-color: var(--role-ember-line-strong);
+        box-shadow: var(--role-ember-glow-lit);
+    }
+    .sb[data-step="2"] .sb-chip-vol {
+        border-color: var(--role-ember-line-strong);
+        color: var(--color-primary-400);
+    }
+    .sb[data-step="2"] .sb-neighbour {
+        opacity: var(--sb-dim);
+    }
+    .sb[data-step="2"] .sb-tool {
+        animation: sb-pop 0.5s var(--sb-ease) both;
+        animation-delay: calc(0.2s + var(--i) * 0.12s);
+    }
+    .sb[data-step="2"] .sb-tool-new {
+        animation:
+            sb-pop 0.5s var(--sb-ease) both calc(0.2s + var(--i) * 0.12s),
+            sb-dashed 2.6s step-end both 0.9s;
+    }
+    .sb[data-step="2"] .sb-state-a {
+        animation: sb-state-out 3.4s linear both 0.9s;
+    }
+    .sb[data-step="2"] .sb-state-b {
+        animation: sb-state-in 3.4s linear both 0.9s;
+    }
+    .sb[data-step="2"] .sb-branch,
+    .sb[data-step="2"] .sb-agent {
+        opacity: var(--sb-dim);
+    }
+    .sb[data-step="2"] .sb-area {
+        border-color: var(--color-line);
+        background: transparent;
+    }
+    .sb[data-step="2"] .sb-area-tag {
+        opacity: 0;
+    }
+
+    /* ── Step 3 · the area ─────────────────────────────────────────────────── */
+    .sb[data-step="3"] .sb-tools,
+    .sb[data-step="3"] .sb-neighbour,
+    .sb[data-step="3"] .sb-person:not(.sb-ada),
+    .sb[data-step="3"] .sb-out:not(.sb-control),
+    .sb[data-step="3"] .sb-branch {
+        opacity: var(--sb-dim);
+    }
+    .sb[data-step="3"] .sb-agent {
+        opacity: 0;
+        transform: translateX(-0.5rem);
+    }
+    .sb[data-step="3"] .sb-ada,
+    .sb[data-step="4"] .sb-ada {
+        border-color: var(--role-ember-line-strong);
+        background: var(--role-figure-row-on);
+    }
+    .sb[data-step="3"] .sb-ada .sb-reach,
+    .sb[data-step="4"] .sb-ada .sb-reach {
+        color: var(--color-primary-400);
+    }
+    .sb[data-step="3"] .sb-area {
+        box-shadow: var(--role-ember-glow-lit);
+        animation: sb-fence 0.8s var(--sb-ease) both 0.25s;
+    }
+    .sb[data-step="3"] .sb-area .sb-persona {
+        border-color: var(--role-ember-line-strong);
+        color: var(--color-content);
+    }
+    .sb[data-step="3"] .sb-control {
+        border-style: dashed;
+    }
+
+    /* ── Step 4 · the agent ────────────────────────────────────────────────── */
+    .sb[data-step="4"] .sb-tools,
+    .sb[data-step="4"] .sb-neighbour,
+    .sb[data-step="4"] .sb-person:not(.sb-ada) {
+        opacity: var(--sb-dim);
+    }
+    .sb[data-step="4"] .sb-agent {
+        border-color: var(--color-primary-500);
+        background: var(--role-figure-row-on);
+        box-shadow: var(--role-ember-glow-lit);
+        animation: sb-arrive 0.7s var(--sb-ease) both 0.2s;
+    }
+    .sb[data-step="4"] .sb-in {
+        animation: sb-read 2.4s ease-in-out infinite;
+        animation-delay: calc(1s + var(--i) * 0.6s);
+    }
+    .sb[data-step="4"] .sb-out {
+        opacity: 0.45;
+    }
+    .sb[data-step="4"] .sb-out .sb-persona {
+        display: none;
+    }
+    .sb[data-step="4"] .sb-out:not(.sb-control) .sb-path {
+        text-decoration: line-through;
+        text-decoration-color: var(--color-subtle);
+    }
+    .sb[data-step="4"] .sb-note-out {
+        display: inline;
+        margin-left: auto;
+        animation: sb-caption 0.5s var(--sb-ease) both 0.8s;
+    }
+    .sb[data-step="4"] .sb-branch {
+        border-top-color: var(--role-ember-line);
+        color: var(--color-content);
+        animation: sb-caption 0.6s var(--sb-ease) both 1.2s;
+    }
+
+    @keyframes sb-progress {
+        to {
+            transform: scaleX(1);
+        }
+    }
+    @keyframes sb-caption {
+        from {
+            opacity: 0;
+            transform: translateY(4px);
+        }
+    }
+    @keyframes sb-pop {
+        from {
+            opacity: 0;
+            transform: translateY(5px) scale(0.94);
+        }
+    }
+    @keyframes sb-dashed {
+        0% {
+            border-style: dashed;
+            border-color: var(--color-warning);
+        }
+        45%,
+        100% {
+            border-style: solid;
+            border-color: var(--role-ember-line-strong);
+        }
+    }
+    @keyframes sb-state-out {
+        0%,
+        40% {
+            opacity: 1;
+        }
+        48%,
+        100% {
+            opacity: 0;
+        }
+    }
+    @keyframes sb-state-in {
+        0%,
+        42% {
+            opacity: 0;
+        }
+        52%,
+        100% {
+            opacity: 1;
+        }
+    }
+    @keyframes sb-neighbour {
+        0% {
+            border-color: var(--color-line);
+        }
+        30% {
+            border-color: var(--role-ember-line-strong);
+            box-shadow: var(--role-ember-glow);
+        }
+        100% {
+            border-color: var(--color-line-strong);
+        }
+    }
+    @keyframes sb-fence {
+        from {
+            border-color: transparent;
+            background-color: transparent;
+            box-shadow: none;
+            transform: scale(0.97);
+        }
+    }
+    @keyframes sb-arrive {
+        from {
+            opacity: 0;
+            transform: translateX(-0.9rem);
+        }
+    }
+    @keyframes sb-read {
+        0%,
+        100% {
+            border-color: var(--color-line);
+            background-color: var(--role-figure-terminal);
+        }
+        25% {
+            border-color: var(--role-ember-line-strong);
+            background-color: var(--role-figure-row-on);
+        }
+    }
+
+    /* Reduced motion keeps every state, drops the movement. Autoplay is off too (the script reads the same query). */
+    @media (prefers-reduced-motion: reduce) {
+        .sb *,
+        .sb *::before {
+            animation: none !important;
+            transition: none !important;
+        }
+        .sb[data-step="1"] .sb-wall {
+            opacity: 1;
+        }
+    }
+</style>

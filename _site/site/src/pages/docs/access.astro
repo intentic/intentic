@@ -21,6 +21,11 @@ const roles = [
         why: `Agent work stays on isolated branches, so driving one changes nothing in your tree. Landing and publishing become requests instead.`,
     },
     {
+        name: `Writer`,
+        can: `Everything a collaborator can, plus changing files themselves, inside the areas they hold. Nothing they change leaves the sandbox on their say.`,
+        why: `The tier for someone who works on one part of the project. It always comes with at least one area.`,
+    },
+    {
         name: `Maintainer`,
         can: `Ship and operate: land work, approve drafts, use the terminal, read the logs and the connected services.`,
         why: `The tier for anything that leaves the sandbox.`,
@@ -64,13 +69,27 @@ const roles = [
             }
         </tbody>
     </table>
-    <p>They draw four real fences rather than mirroring the navigation:</p>
+    <p>They draw real fences rather than mirroring the navigation:</p>
     <ul>
         <li><strong>A guest sees only their own conversations.</strong> The fleet, the files and every other transcript are refused to it by the daemon, and each of its turns wears one of its cards.</li>
         <li><strong>Credentials stay with the owner.</strong> Invitees cannot see secrets, their names or their inventory.</li>
         <li><strong>What leaves the sandbox needs a maintainer.</strong> <a href="/docs/glossary/">Landing</a> into the main tree, publishing, the raw terminal.</li>
         <li><strong>Collaborators can drive agents.</strong> Viewers can watch the <a href="/docs/glossary/">fleet</a> and read files and transcripts.</li>
+        <li><strong>A writer changes files only inside their areas.</strong> Every file route outside them refuses, and so does their agents' checkout.</li>
     </ul>
+
+    <h2 id="areas">Areas: giving someone part of the workspace</h2>
+    <p>
+        A tier says what someone may <em>do</em>. An <strong>area</strong> says <em>where</em>: a named set of folders, defined once under{" "}
+        <strong>Sandbox → Areas</strong> and picked per person on this tab. Someone holding areas sees only those folders in the file tree,
+        in search and in the conversations they can open, and can use only the personas homed inside them. Their agents inherit exactly that:
+        a conversation keeps the areas of the person who started it, and each of its turns runs with nothing else of the tree on disk.
+    </p>
+    <p>
+        Holding no area means the whole workspace. A writer and a guest must hold at least one; a viewer or collaborator may; a maintainer
+        cannot, because that tier already holds the owner's operating authority. <a href="/docs/sandboxing/">Sandboxing</a> draws how areas
+        sit inside a sandbox, and when someone needs a sandbox of their own instead.
+    </p>
 
     <h2>Inviting someone</h2>
     <p>
@@ -114,6 +133,7 @@ const roles = [
 
     <DocsRelated
         links={[
+            { href: "/docs/sandboxing/", title: "Sandboxing", why: "machine, sandbox, area and agent, from the outside in." },
             { href: "/docs/parallel-agents/", title: "Parallel agents", why: "why a collaborator driving an agent can't disturb your tree." },
             { href: "/docs/your-machine/", title: "Your own machine", why: "connecting a computer, and the editor bridge." },
             { href: "/guides/review-ai-generated-code-changes/", title: "Guide: reviewing what an agent wrote", why: "what to read first in a diff, and where a check command earns its keep." },
