@@ -27,9 +27,9 @@ const opening = sandboxValue(() => readTabSnapshot(scopedSandboxId.value));
 // Tabs that exist only while focused: an untouched draft, or a peeked chat with nothing unsent. An untouched draft
 // only exists while focused (else it's swept): the tab and the board's draft card are one conversation, so an
 // abandoned one squats in Active looking like real work. A sweep destroys nothing (card and History survive, a
-// running turn just detaches). Words in the composer spare a peek regardless of its flag. The peek flag arrives two
-// ways: a card or History row opening a chat for a look, and the roster releasing one it has finished with
-// (`releaseDone`).
+// running turn just detaches). Words in the composer spare a peek regardless of its flag. The peek flag arrives three
+// ways: a card or History row opening a chat for a look, the roster releasing one it has finished with
+// (`releaseDone`), and a person landing its work by hand (`releaseLanded`).
 const transient = (conversation: Conversation): boolean => untouchedDraft(conversation) || (conversation.peek.value && !conversation.unsent.value);
 
 // The blank a window shows with nothing open (Conversation.standIn), minted here so both call sites (no tabs
@@ -534,6 +534,26 @@ export const releaseDone = (ids: ReadonlySet<string>): void => {
     }
     // Replaced, not merged: a chat that goes back to work and finishes again is done a second time.
     settled.value = ids;
+};
+
+/**
+ * A land pressed by hand, said to the tabs (summons `release`): accepting the work is the reader's own verdict that
+ * they are done with the chat, so it goes now rather than after releaseDone's twelve-hour tidy. The same release, with
+ * the same exceptions (pinned, words unsent, a column of its own beside another), then the one writer's sweep at once:
+ * a chat in the background leaves, and the focused one, which the sweep never takes, goes italic where the reader can
+ * see it and leaves when they move on. Sending it a follow-up keeps it, as words in any peek do.
+ *
+ * Matched on (id, box): `box` is the sandbox the land was aimed at, undefined for this browser's own.
+ */
+export const releaseLanded = (ids: ReadonlySet<string>, box: string | undefined): void => {
+    const landed = conversations.value.filter((conversation) => ids.has(conversation.conversationId) && conversation.box.value === box);
+    if (landed.length === 0) {
+        return;
+    }
+    for (const conversation of landed) {
+        releaseChat(conversation.conversationId);
+    }
+    setConversations(conversations.value, activeId.value, `release-landed`);
 };
 
 // One store per window: a hot update re-running this module would mint a second one beside it.

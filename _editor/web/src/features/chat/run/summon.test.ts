@@ -283,6 +283,71 @@ it(`sets an archived chat's unsent words aside in the window drawing it`, async 
     expect(closedDrafts.value.map((entry) => [entry.conversationId, entry.draft])).toEqual([[filed.conversationId, `half a thought`]]);
 });
 
+// A chat the roster knows, with nothing waiting to be sent: what a landed card's tab looks like. `box` names the sandbox
+// it lives in, absent for this browser's own.
+const knownTab = (conversationId: string, box?: string): StoredTab => ({
+    ...setAside(conversationId, ``),
+    registered: true,
+    ...(box === undefined ? {} : { box }),
+});
+const show = (tab: StoredTab): void =>
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [tab], focus: tab.conversationId, caret: false }));
+const openIds = (): string[] => useChat().conversations.value.map((conversation) => conversation.conversationId);
+const tabOf = (conversationId: string) => useChat().conversations.value.find((conversation) => conversation.conversationId === conversationId);
+
+// A land pressed in any window lets its chat go in every one: at once in the background, and for the chat on screen,
+// once the reader moves on, since the sweep never takes the focused tab out from under them.
+it(`lets a landed chat go from a window that never saw the press`, () => {
+    show(knownTab(`cnv-landed`));
+    show(knownTab(`cnv-reading`));
+
+    deliver(wireSummons({ kind: `release`, conversationIds: [`cnv-landed`] }));
+
+    expect(openIds()).not.toContain(`cnv-landed`);
+    expect(openIds()).toContain(`cnv-reading`);
+});
+
+it(`keeps the landed chat the reader is looking at until they move on`, () => {
+    show(knownTab(`cnv-elsewhere`));
+    show(knownTab(`cnv-landed`));
+
+    deliver(wireSummons({ kind: `release`, conversationIds: [`cnv-landed`] }));
+
+    expect(useChat().activeId.value).toBe(`cnv-landed`);
+    expect(tabOf(`cnv-landed`)?.peek.value).toBe(true);
+
+    useChat().setActive(`cnv-elsewhere`);
+
+    expect(openIds()).not.toContain(`cnv-landed`);
+});
+
+// The same exceptions the roster's own release keeps: held on purpose, or words that would be stranded.
+it(`keeps a landed chat that is pinned, or holds words not yet sent`, async () => {
+    show(knownTab(`cnv-pinned`));
+    show(knownTab(`cnv-typing`));
+    show(knownTab(`cnv-reading`));
+    useChat().setPinned(`cnv-pinned`, true);
+    tabOf(`cnv-typing`)!.draft.value = `one more thing`;
+    await nextTick();
+
+    deliver(wireSummons({ kind: `release`, conversationIds: [`cnv-pinned`, `cnv-typing`] }));
+
+    expect(openIds()).toEqual(expect.arrayContaining([`cnv-pinned`, `cnv-typing`]));
+    expect(tabOf(`cnv-pinned`)?.peek.value).toBe(false);
+    expect(tabOf(`cnv-typing`)?.peek.value).toBe(false);
+});
+
+// An id repeats across boxes: a land aimed at another sandbox says nothing about this box's chat of the same id.
+it(`leaves a chat alone when the land was aimed at another box`, () => {
+    show(knownTab(`cnv-landed`));
+    show(knownTab(`cnv-reading`));
+
+    deliver(wireSummons({ kind: `release`, conversationIds: [`cnv-landed`], box: `sb-other` }));
+
+    expect(openIds()).toContain(`cnv-landed`);
+    expect(tabOf(`cnv-landed`)?.peek.value).toBe(false);
+});
+
 // Which window ran a turn, by the words of the one call only a send makes; an attach is hydration, not a send.
 const turnsSentHere = (): string[] => run.mock.calls.map(([turn]) => turn.prompt);
 

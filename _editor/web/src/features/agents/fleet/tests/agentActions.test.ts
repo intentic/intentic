@@ -1,6 +1,7 @@
 import type { AgentSummary, LandConflict } from "@intentic/sandbox-contract";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PickAction } from "../../../chat/session/selectionReducer";
+import type { Summons } from "../../../chat/run/summon";
 
 // A tab's selection as this suite reads it back: its picks, and the one write that sets them and records any model worn.
 const pickable = <P extends Record<string, { value: string | undefined }>>(picks: P, worn: unknown[] = []) => ({
@@ -97,8 +98,10 @@ jest.mock("../../../chat/panel/useChat-reveal", () => ({
 }));
 // The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it,
 // so a summoned turn runs here, as summonTurn does in any window drawing the chat.
+// Every summons a press made, in order: what the other windows would have heard.
+const summoned: Summons[] = [];
 jest.mock("../../../chat/run/summon", () => ({
-    summonChat: () => {},
+    summonChat: (summons: Summons) => summoned.push(summons),
     summonTurn: (conversation: { turn: { say: (prompt: string) => void } }, prompt: string) => conversation.turn.say(prompt),
 }));
 jest.mock("../../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
@@ -158,6 +161,7 @@ const stubConflicts = (conflicts: readonly LandConflict[]): void => stubDaemon({
 
 afterEach(() => {
     sent.length = 0;
+    summoned.length = 0;
     chat.conversations.value = [];
     chat.enqueued.length = 0;
     chat.opened.length = 0;
@@ -194,6 +198,53 @@ it("carries an explicit mode, so the conflict report's Merge is a different requ
     await landAgent(`a1`, `merge`);
     expect(sent[0]?.headers.get(`content-type`)).toBe(`application/json`);
     expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding`, force: false });
+});
+
+// A card whose work waits on its branch for a press, as the roster reports one.
+const held = (id: string, standing: Partial<AgentSummary> = {}): AgentSummary => ({
+    id,
+    status: `ready`,
+    provider: `claude`,
+    harness: `native`,
+    updatedAt: 0,
+    attention: none,
+    ...standing,
+});
+const releases = (): Summons[] => summoned.filter((summons) => summons.kind === `release`);
+
+// Accepting the work is the reader's "done with this chat", so a pressed land lets it go in every window, as an
+// archive does; a release rather than a retire, since the card stays in Finished and the chat can go on.
+it("lets a chat go once a press landed its work", async () => {
+    registry.value = [held(`a1`)];
+    stubLand();
+
+    await landAgent(`a1`);
+
+    expect(releases()).toEqual([{ kind: `release`, conversationIds: [`a1`] }]);
+});
+
+// Every case where the reader is not done: work left to resolve, nothing settled, or a conversation still mid-work.
+it.each([
+    [`a land that moved nothing`, held(`a1`), `check`, { landed: true, changed: false }],
+    [`a refused land`, held(`a1`), `check`, { landed: false, changed: false }],
+    [`a merge, which leaves conflict markers to resolve`, held(`a1`), `merge`, LANDED],
+    [`a forced land into a running turn`, held(`a1`, { status: `running` }), `check`, LANDED],
+    [`a land beside a question still waiting`, held(`a1`, { status: `idle`, attention: { ...none, question: true } }), `check`, LANDED],
+] as const)("keeps the chat after %s", async (_case, card, mode, answer) => {
+    registry.value = [card];
+    stubDaemon({ [`POST /agents/a1/land`]: answer });
+
+    await landAgent(`a1`, mode);
+
+    expect(releases()).toEqual([]);
+});
+
+it("keeps the chat of a card this browser cannot see", async () => {
+    stubLand();
+
+    await landAgent(`a1`);
+
+    expect(releases()).toEqual([]);
 });
 
 // Decided against the freshly-read report, not the card: the board arms "resolve" on `status: "conflict"` alone and

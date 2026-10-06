@@ -8,7 +8,7 @@ import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
 import { closeSubagent, showSubagent } from "../panel/subagent/subagentView";
 import { snapshotTab, type StoredTab } from "../tabs/tabSnapshot";
-import { closeConversations, closeTabs, keepChat } from "../tabs/useChat-tabs";
+import { closeConversations, closeTabs, keepChat, releaseLanded } from "../tabs/useChat-tabs";
 import { type Reveal, reveal, type RevealEntry } from "../panel/useChat-reveal";
 
 // How a surface outside the panel changes the chat everywhere: the same reveal applies locally and posts to every
@@ -26,6 +26,11 @@ export type Summons =
     // as the panel's own × would: the conversation survives in the archive, so words left unsent are set aside to come
     // back with it rather than dropped.
     | { readonly kind: `retire`; readonly conversationIds: readonly string[] }
+    // Lets go of the chats whose work a person just landed by hand (agentActions.landAgent), in every window, since the
+    // panel holding them is very often another window's. Not a retire: a landed card stays in Finished and its chat can
+    // go on, so this is the roster's own release, early (releaseLanded). `box` is the sandbox the land was aimed at,
+    // absent for this browser's own, since an id repeats across boxes.
+    | { readonly kind: `release`; readonly conversationIds: readonly string[]; readonly box?: string }
     // Promotes a peeked tab from the board press, since the panel holding it (and the sweep that would otherwise
     // reclaim it) is very often another window's.
     | { readonly kind: `keep`; readonly conversationIds: readonly string[] }
@@ -49,6 +54,10 @@ const apply = (summons: Summons): void => {
     }
     if (summons.kind === `retire`) {
         closeTabs(new Set(summons.conversationIds));
+        return;
+    }
+    if (summons.kind === `release`) {
+        releaseLanded(new Set(summons.conversationIds), summons.box);
         return;
     }
     if (summons.kind === `keep`) {

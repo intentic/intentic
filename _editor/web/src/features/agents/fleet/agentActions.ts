@@ -14,6 +14,7 @@ import { otherBoxes, refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
+import { type AgentStanding, awaitingUser, turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
 import { claim, underClaim } from "./useAgents-provisional";
 import { useAgents } from "./useAgents";
@@ -96,7 +97,9 @@ export const openConversation = (id: string): Conversation | undefined =>
 // from a press that showed the warning first.
 // No headers deadline: the answer comes once the work is in the tree, and a large delta takes longer than the bound;
 // the card's `landing` status, drawn from the press on, carries the wait. `measure` moves no card: it only re-judges.
-export const landAgent = (
+// Every press goes through here and no automatic land does (those are the daemon's, at a turn's end), so this is also
+// where a pressed land lets its chat go (releasesChat).
+export const landAgent = async (
     id: string,
     mode: LandMode = `check`,
     span: AgentSpan = `outstanding`,
@@ -104,8 +107,27 @@ export const landAgent = (
     at: AgentReach = undefined,
 ): Promise<LandResult> => {
     const request = (): Promise<LandResult> => sandboxRpc.agents.land({ id, mode, span, force }, { context: { at, deadline: false } });
-    return mode === `measure` ? request() : underClaim(id, at, `land`, request, (result) => result.landed);
+    if (mode === `measure`) {
+        return request();
+    }
+    // Read before the press: the claim draws the card `landing` from here on, which reads as a turn in flight.
+    const card = cardAt(id, at);
+    const result = await underClaim(id, at, `land`, request, (answer) => answer.landed);
+    if (releasesChat(mode, result, card)) {
+        summonChat({ kind: `release`, conversationIds: [id], ...(at === undefined ? {} : { box: at }) });
+    }
+    return result;
 };
+
+// Whether a land pressed by hand lets its chat go: accepting the work is as plain a "done with this" as archiving it,
+// but a landed card stays in Finished, so the chat is released (summons `release`) rather than retired. Only a `check`
+// land that carried work, from a card with nothing live in it:
+// - `merge` leaves conflict markers in the tree, work the reader may still want the agent for
+// - a land that moved nothing settled nothing (nothingLanded says so), and one refused settled less
+// - a forced land into a running turn, or a land beside a question, leaves the conversation mid-work
+// - a card this browser can't see is one it can't vouch for
+const releasesChat = (mode: LandMode, result: LandResult, card: AgentStanding | undefined): boolean =>
+    mode === `check` && result.landed && result.changed && card !== undefined && !turnInFlight(card) && !awaitingUser(card);
 
 // What a land that moved nothing says, wherever it was pressed. Landed-with-nothing-to-show is the one outcome neither
 // the board nor the review can see for itself — both list what the BRANCH holds — so saying nothing left a press that
@@ -276,10 +298,12 @@ export const deleteAgentScratch = async (id: string, repo: string, paths: readon
     await sandboxRpc.agents.deleteScratch({ id, repo, paths: [...paths] }, { context: { at } });
 };
 
-// The run a card shows under way, from whichever roster it came from; undefined for a turn with none to name.
-const shownRun = (id: string, at: AgentReach): string | undefined =>
-    (at === undefined ? useAgents().agentById(id) : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id))
-        ?.run;
+// The card a press acts on, from whichever roster it came from.
+const cardAt = (id: string, at: AgentReach): (AgentStanding & { readonly run?: string }) | undefined =>
+    at === undefined ? useAgents().agentById(id) : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id);
+
+// The run a card shows under way; undefined for a turn with none to name.
+const shownRun = (id: string, at: AgentReach): string | undefined => cardAt(id, at)?.run;
 
 // True cancel for an in-flight turn, the card reading `stopping` from the press. A conversation streaming in a tab here
 // is stopped by that tab (TurnClient.stop), which is what every Stop in a chat does too: its ending reaches the card
