@@ -12,7 +12,8 @@ export type ExtensionBundleRouteDeps = Pick<Services, "workspace" | "files" | "c
 // /environment (oRPC is for JSON). The web loader fetches this with auth → Blob URL → import(). The ETag is the
 // code identity: the pinned HEAD sha for a git-installed extension (sha-pinned installs make the bundle
 // immutable per commit), and the content hash for a workspace one, whose dir is live-edited and has no commit
-// to stand for it.
+// to stand for it. An install running from its source checkout (extension-dev.ts) is hashed too: its bundle moves
+// with every rebuild while the pinned sha does not, and a 304 would keep serving the browser the old build.
 export const createExtensionBundleRoute =
     (services: ExtensionBundleRouteDeps) =>
     async (c: Context<AppEnv, "/extensions/:id/bundle">): Promise<Response> => {
@@ -28,7 +29,8 @@ export const createExtensionBundleRoute =
         if (source === undefined) {
             return c.json({ error: "the entry bundle is missing from the extension" }, 404);
         }
-        const etag = extension.source === "installed" ? await services.git.head(extensionDir(services.workspace.root, id)) : sha256Text(source);
+        const pinned = extension.source === "installed" && (extension.dev === undefined || extension.dev.held !== undefined);
+        const etag = pinned ? await services.git.head(extensionDir(services.workspace.root, id)) : sha256Text(source);
         if (c.req.header("if-none-match") === etag) {
             return c.body(null, 304);
         }

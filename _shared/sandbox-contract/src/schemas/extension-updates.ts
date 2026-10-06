@@ -131,6 +131,42 @@ export const ExtensionUpdatesCheckedSchema = z.object({
     ok: z.literal(true).describe("The check ran."),
     checkedAt: z.string().describe("When, so a screen can date the answer."),
 });
+// Dev mode: an extension installed from a repository, served from a source checkout in this workspace instead of its
+// pinned clone (.intentic/local/extension-dev.json), so a change to its code is seen on reload without being landed.
+// `path` and `conversation` are kept apart rather than joined into one display string: a screen says "in conversation
+// <id>" in its own words.
+export const ExtensionDevSchema = z.object({
+    path: z
+        .string()
+        .describe(
+            "The source checkout it was pointed at, such as extensions/maintenance: relative to the workspace, or to the conversation's own copy of it when `conversation` is set.",
+        ),
+    conversation: z
+        .string()
+        .optional()
+        .describe(
+            "The conversation whose isolated copy of the workspace holds that checkout. Absent means the workspace itself. That copy goes when the conversation does, and the pinned version runs again then.",
+        ),
+    uncommitted: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("How many files in the checkout differ from its last commit, a rebuilt bundle included. Absent when git could not say."),
+    revision: z
+        .string()
+        .optional()
+        .describe(
+            "A short fingerprint of the browser bundle served from the checkout. It changes with every rebuild, which is how a screen tells the copy it loaded is behind. Absent while held, and for an extension with no browser half.",
+        ),
+    held: z
+        .string()
+        .optional()
+        .describe(
+            "Why the checkout is not what runs, as a sentence: it is gone, holds a different extension, is not built yet, or asks for powers the pinned version was never approved for. Present means the pinned version still runs.",
+        ),
+});
+export type ExtensionDev = z.infer<typeof ExtensionDevSchema>;
 export const ExtensionSummarySchema = z.object({
     id: extensionId.describe("The extension's id."),
     manifest: ExtensionManifestSchema.describe("What it declares about itself: what it contributes, what it needs, and what it may reach."),
@@ -206,8 +242,60 @@ export const ExtensionSummarySchema = z.object({
     updatePolicy: ExtensionUpdatePolicySchema.optional().describe(
         "The owner's standing answer for this one: tell me, have an agent look, or just do it.",
     ),
+    dev: ExtensionDevSchema.optional().describe(
+        "Set while an extension installed from a repository is pointed at a source checkout in this workspace, for working on the extension itself: its code is served from there instead of the pinned copy. `commit` keeps naming the pinned version, which is what updates and the registry compare against.",
+    ),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
+// The dev-mode verbs address an installed extension any of the ways a person names one.
+const devTarget = z
+    .string()
+    .min(1)
+    .describe(
+        "Which installed extension: its connection id (intentic-maintenance), its manifest id (intentic.maintenance) or its short name (maintenance).",
+    );
+export const ExtensionDevSetInputSchema = z.object({
+    id: devTarget,
+    path: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "The checkout to run it from. From an agent in an isolated conversation, a relative or /work path reads against that conversation's own copy. Absent: the workspace repository cloned from the address it was installed from, the calling conversation's copy first.",
+        ),
+});
+export const ExtensionDevTargetSchema = z.object({ id: devTarget });
+export const ExtensionDevStateSchema = z.object({
+    id: extensionId.describe("Its connection id."),
+    name: z.string().describe("Its manifest id, publisher.name."),
+    dev: ExtensionDevSchema.describe("Where it runs from now, or why the pinned version still runs."),
+});
+export const ExtensionDevClearedSchema = z.object({
+    id: extensionId.describe("Its connection id."),
+    name: z.string().describe("Its manifest id, publisher.name."),
+    cleared: z.boolean().describe("Whether it was pointed at a checkout. False means it already ran its pinned version and nothing changed."),
+});
+export const ExtensionDevListSchema = z.object({
+    extensions: z
+        .array(
+            z.object({
+                id: extensionId.describe("Its connection id."),
+                name: z.string().describe("Its manifest id, publisher.name."),
+                commit: z.string().describe("The pinned commit, in full."),
+                dev: ExtensionDevSchema.optional().describe("Present while it is pointed at a source checkout."),
+                checkout: z
+                    .object({
+                        path: z.string().describe("Relative to the workspace, or to the conversation's copy of it when `conversation` is set."),
+                        conversation: z.string().optional().describe("Set when the calling conversation's own copy is the one found."),
+                    })
+                    .optional()
+                    .describe(
+                        "A checkout of its source repository in the workspace, which is where a change to it belongs. Absent when the workspace has none.",
+                    ),
+            }),
+        )
+        .describe("Every extension installed from a repository. Built-in and workspace extensions are not here: they already run from their source."),
+});
 // Read by both the Extensions tab and an authoring agent off GET /extensions.
 export const InvalidWorkspaceExtensionSchema = z.object({
     dir: z.string().describe("Which folder."),

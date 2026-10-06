@@ -5,7 +5,19 @@ import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { repoRoot } from "../constants/src/node.mjs";
 
-const ALLOWED = new Set([`logs`, `scrub`, `intentic-saldeo`]);
+// logs and scrub are tracked by the workspace repo; the rest are nested clones of their own extension repositories.
+const ALLOWED = new Set([
+    `logs`,
+    `scrub`,
+    `intentic-saldeo`,
+    `acceptance`,
+    `deployments`,
+    `documentation`,
+    `example`,
+    `issues`,
+    `knowledge`,
+    `maintenance`,
+]);
 
 const extensionsDir = join(repoRoot(import.meta.url), `..`, `extensions`);
 if (!existsSync(extensionsDir)) {

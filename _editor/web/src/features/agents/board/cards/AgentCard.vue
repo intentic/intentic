@@ -62,6 +62,7 @@ import {
 import CardSeal from "./CardSeal.vue";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
 import { cardProof, type ProofMark } from "./proofSeal";
+import { reachLine } from "./reachLine";
 import KeepWarmPanel from "../../fleet/prompt-cache/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
@@ -405,6 +406,9 @@ const proof = computed(() => {
     }
     return heldProof;
 });
+// Where its last turn put its work besides its branch (reachLine.ts): live files, a clone of its own, a push. Kept
+// while a new turn runs, unlike the seal: the work it names stays where it went until a turn puts it back.
+const reach = computed(() => reachLine(props.agent.reach));
 // THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card whose turn just
 // ended is almost always unread, so a seal that gave way to "Updated" would hide exactly when its proof is news.
 // It STANDS IN for a resting glyph (landed's octagon, which it is when closed, and idle's dot), since those say only that
@@ -720,6 +724,18 @@ const grab = (event: PointerEvent): void => {
             <p v-if="failureRaw" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="failureRaw">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ failureLine }}</span>
+            </p>
+
+            <!-- Where its last turn's work went besides its branch: the worst of it in one line, every place in the hover. -->
+            <p
+                v-if="reach !== undefined"
+                class="flex min-w-0 items-start gap-2 text-2xs"
+                :class="reach.tone === `warning` ? 'text-warning' : 'text-muted'"
+                data-reach
+                v-tooltip.top.lines="reach.detail"
+            >
+                <Icon :name="reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="mt-px shrink-0 text-2xs" />
+                <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ reach.text }}</span>
             </p>
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->

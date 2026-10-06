@@ -3,6 +3,7 @@ import type { ExtensionSummary, CapabilitySummary } from "@intentic/sandbox-cont
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
+import { codeRevisionOf } from "./codeRevision";
 import { extensionsLoaded, extensionsReconciling, extensionStatuses, loadedCommits, loadedListAt } from "../../extension-host/loader";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
@@ -59,8 +60,21 @@ const refusedStateOf = (problems: readonly string[], uiState: ExtensionState, ba
 
 export function useExtensionList() {
     const queryClient = useQueryClient();
-    const { extensions, invalid, pending, setEnabled, approve, create, remove, checkUpdates, updatesCheckedAt, listedAt, isLoading, error } =
-        useExtensions();
+    const {
+        extensions,
+        invalid,
+        pending,
+        setEnabled,
+        approve,
+        create,
+        remove,
+        clearDev,
+        checkUpdates,
+        updatesCheckedAt,
+        listedAt,
+        isLoading,
+        error,
+    } = useExtensions();
     const { capabilities } = useCapabilities();
 
     // Removal empties three caches beyond the extension list: the capability grid loses the entries added from its
@@ -82,12 +96,13 @@ export function useExtensionList() {
     // then the list is merely ahead of the pass about to catch up with it.
     const aheadOfHost = computed(() => extensionsLoaded.value && !extensionsReconciling.value && listedAt.value > loadedListAt.value);
 
-    // Rows whose loaded bundle lags the daemon's already-updated checkout; a host reload here picks it up.
+    // Rows whose loaded bundle lags the daemon's already-updated checkout, or a rebuilt source checkout running in its
+    // place (dev mode); a host reload here picks it up.
     const updatedSinceLoaded = computed(() =>
         aheadOfHost.value
             ? extensions.value.filter((extension) => {
                   const loaded = loadedCommits.value.get(extension.id);
-                  return extension.source === `installed` && extension.enabled && loaded !== undefined && loaded !== extension.commit;
+                  return extension.source === `installed` && extension.enabled && loaded !== undefined && loaded !== codeRevisionOf(extension);
               })
             : [],
     );
@@ -146,6 +161,7 @@ export function useExtensionList() {
         approve,
         create,
         remove: removeExtension,
+        clearDev,
         checkUpdates,
         updatesCheckedAt,
         updatedSinceLoaded,

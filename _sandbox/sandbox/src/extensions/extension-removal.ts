@@ -12,6 +12,7 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { forgetExtensionApproval } from "./extension-approvals.js";
+import { displayOf, forgetExtensionDev } from "./extension-dev.js";
 import { forgetExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses } from "./extension-processes.js";
 import { forgetExtensionSettings, readAllExtensionSettings } from "./extension-settings.js";
@@ -173,6 +174,12 @@ const keepsOf = (extension: InstalledExtension, strandedAutomations: number, sib
         ...(strandedAutomations > 0 || templated ? ["automations you built with it stay; a template is a starting point, not a dependency"] : []),
         ...(presets.length > 0 ? ["connections added from its preset cards stay: those are ordinary connections that never needed it"] : []),
         ...(extension.source === "installed" ? ["its source repository is untouched, so installing it again is one paste of the same address"] : []),
+        // Dev mode serves a checkout in the workspace; removal deletes the pinned copy and lets go of the checkout.
+        ...(extension.dev === undefined
+            ? []
+            : [
+                  `the source checkout it was pointed at (${extension.dev.place === undefined ? extension.dev.checkout : displayOf(extension.dev.place)}) stays as it is`,
+              ]),
     ];
 };
 
@@ -258,6 +265,8 @@ export const removeExtension = async (
         services.serviceProcesses.stop(extensionProcessKey(extension.id, process.name));
     }
     await tearDownExtension(services, ctx, extension);
+    // Keyed by this install's id rather than the identity, so it goes whether or not a sibling stays.
+    await forgetExtensionDev(root, extension.id);
 
     if (sibling === undefined) {
         await Promise.all([

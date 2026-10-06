@@ -325,6 +325,46 @@ const repoLine = (repo) => {
     return `${repo.repo} @${repo.base.slice(0, 8)} · ${delta} · ${repo.landed ? `landed ${ago(repo.landedAt)} ago` : "not landed"}`;
 };
 
+// Where the last turn put work besides its branch (AgentSummary.reach), in the board's own words: live files outside it,
+// clones of its own a land never carries, pushes it made itself. One sentence a line, each live file listed under its own.
+const plural = (count, one, many) => (count === 1 ? one : many);
+const reachLines = (reach) => {
+    if (reach === undefined) {
+        return [];
+    }
+    const live = reach.live ?? [];
+    const loose = live.filter((entry) => entry.extension === undefined);
+    const outside = loose.length + (reach.liveMore ?? 0);
+    const lines = live
+        .filter((entry) => entry.extension !== undefined)
+        .map((entry) => `Changed the installed copy of ${entry.extension}: live now, not reviewed, lost on its next update`);
+    if (outside > 0) {
+        lines.push(`Wrote ${outside} ${plural(outside, "file", "files")} outside its branch: live now, not reviewed`);
+        lines.push(...loose.map((entry) => `  ${entry.path}`));
+    }
+    for (const clone of reach.stranded ?? []) {
+        const held =
+            clone.uncommitted > 0 && clone.unpushed > 0
+                ? `${clone.uncommitted} uncommitted changes and ${clone.unpushed} commits not pushed`
+                : clone.uncommitted > 0
+                  ? `${clone.uncommitted} uncommitted ${plural(clone.uncommitted, "change", "changes")}`
+                  : `${clone.unpushed} ${plural(clone.unpushed, "commit", "commits")} not pushed`;
+        const land = clone.uncommitted + clone.unpushed === 1 ? "it won't land" : "they won't land";
+        lines.push(`${held} in ${clone.dir}, a clone of its own: ${land}`);
+    }
+    if (reach.strandedMore !== undefined) {
+        lines.push(`${reach.strandedMore} more ${plural(reach.strandedMore, "clone of its own holds", "clones of its own hold")} work that won't land`);
+    }
+    for (const push of reach.published ?? []) {
+        const target = push.remote === undefined ? "its upstream" : push.branch === undefined ? push.remote : `${push.remote}/${push.branch}`;
+        lines.push(`Pushed to ${target}${push.dir === undefined ? "" : ` from ${push.dir}`}: ${push.command}`);
+    }
+    if (reach.publishedMore !== undefined) {
+        lines.push(`${reach.publishedMore} more ${plural(reach.publishedMore, "push", "pushes")}`);
+    }
+    return lines;
+};
+
 const writeRecall = (agent) => {
     const failure = agent.failureCode === undefined ? agent.status : `${agent.status} (${agent.failureCode})`;
     process.stdout.write(`${agent.id} · "${agent.title ?? "(untitled)"}" · ${agent.running ? "working" : failure}\n`);
@@ -361,6 +401,9 @@ const writeRecall = (agent) => {
     const quiet = agent.repoStates.length - interesting.length;
     if (quiet > 0) {
         process.stdout.write(`  ${interesting.length === 0 ? "repos:" : "      "} ${quiet} more, unchanged\n`);
+    }
+    for (const [index, line] of reachLines(agent.reach).entries()) {
+        process.stdout.write(`  ${index === 0 ? "reach:" : "      "} ${line}\n`);
     }
     process.stdout.write(`  record ${agent.record} (zstdcat) · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
     for (const [index, asked] of agent.digest.asked.entries()) {

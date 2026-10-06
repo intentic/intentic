@@ -12,6 +12,7 @@ import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { type LandBooks, type LandingDeps, type LandingHooks, landTurn, settleLandBooks } from "./turn-landing.js";
 import { anchorIsolatedTurn, type Placement } from "./turn-placement.js";
+import type { ReachWatch } from "./turn-reach.js";
 
 // An isolated conversation's own worktree: composed and rebased onto today's main line before the model reads it,
 // rebased again whenever a parked card settles and once more before the land, and announced each time it moves. A
@@ -171,7 +172,14 @@ export interface WorktreeSteps extends LandingHooks {
 
 export const worktreePlacement = (
     deps: LandingDeps & Pick<Services, "turnCheckpoints" | "turnIsolation">,
-    turn: { readonly input: TurnInput; readonly conversationId: string; readonly snapshot: SnapshotTurn; readonly signal: AbortSignal | undefined },
+    turn: {
+        readonly input: TurnInput;
+        readonly conversationId: string;
+        readonly snapshot: SnapshotTurn;
+        readonly signal: AbortSignal | undefined;
+        // Where the turn's work went besides its branch: installs read once its copy is composed, the rest at the close.
+        readonly reach?: ReachWatch;
+    },
     steps: WorktreeSteps,
 ): Placement => {
     const { input, conversationId } = turn;
@@ -209,6 +217,7 @@ export const worktreePlacement = (
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
             const synced = await rebaseLeased();
             opened = { repos: worktree.repos, refs: await snapshotRefs(deps.agentWorktrees, worktree.repos) };
+            void turn.reach?.open();
             books.branch = worktree.branch;
             books.span = await Promise.all(
                 worktree.repos.map(async ({ repo, base }) => ({
@@ -273,6 +282,8 @@ export const worktreePlacement = (
             if (!books.reconciled && !failed) {
                 await settleLandBooks(deps, conversationId);
             }
+            // Clones are read in the checkouts the turn opened on; one that never came up has none to strand.
+            await turn.reach?.close((opened?.repos ?? []).map(({ repo }) => ({ repo, dir: deps.agentWorktrees.worktreeDir(conversationId, repo) })));
         },
         // Once per turn, whatever the outcome; an empty span means the worktree never came up.
         settled: (ending) => {

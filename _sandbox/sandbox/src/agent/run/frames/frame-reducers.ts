@@ -1,5 +1,6 @@
 import type { AgentEvent, TodoItem } from "@intentic/sandbox-contract";
 import { createFrameLedger, type FrameLedger } from "../../verification/agent-verification.js";
+import { createReachFrameLedger, type ReachFrameLedger } from "../../verification/agent-reach.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/agent-viewing.js";
 import { createTurnMetrics, type TurnMetrics } from "@intentic/agent-context/turn-metrics";
 import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
@@ -107,6 +108,8 @@ export interface TurnFrames {
     readonly verification: FrameLedger;
     // Whether the turn looked at what it drew: browser evidence, kept apart from code checks.
     readonly viewing: ViewFrameLedger;
+    // Where its work went besides its branch, as far as its tool calls say: live writes and pushes.
+    readonly reach: ReachFrameLedger;
     // What the turn did before its first edit.
     readonly metrics: TurnMetrics;
 }
@@ -123,6 +126,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
     const limitReset = frameReducer<number | undefined>(undefined, foldLimitReset);
     const verification = createFrameLedger();
     const viewing = createViewFrameLedger();
+    const reach = createReachFrameLedger(root);
     const metrics = createTurnMetrics(root);
     // The call ledger is runtime-neutral (it also scores Claude Code transcripts for the plugin); this is its fold over
     // frames. Only `tool_call` is a call: `tool_call_update` is a later SNAPSHOT of one already counted, and the one
@@ -147,6 +151,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
         limitReset,
         verification,
         viewing,
+        reach,
         callMetrics,
     ];
     // Moved from both sides, by frames and by classifications, so one state both fold into.
@@ -176,6 +181,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
         }),
         verification,
         viewing,
+        reach,
         metrics,
     };
 };

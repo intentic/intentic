@@ -134,6 +134,24 @@ it(`wears that same glyph when nothing was left open`, () => {
     expect(glyph.children).toHaveLength(0);
 });
 
+/* WHERE ITS LAST TURN'S WORK WENT BESIDES ITS BRANCH is one line of its own, warning for work nobody will review or land. */
+it(`says where its last turn put work outside its branch, and nothing when it put none there`, () => {
+    const el = mount({
+        ...ready(`idle`),
+        reach: {
+            at: 1,
+            live: [{ path: `${STATE_DIR}/local/extensions/intentic-maintenance`, extension: `intentic.maintenance` }],
+            published: [{ remote: `origin`, branch: `main`, command: `git push origin main` }],
+        },
+    });
+    const line = el.querySelector(`[data-reach]`);
+    expect(line?.textContent).toContain(
+        `Changed the installed copy of intentic.maintenance: live now, not reviewed, lost on its next update (+1 more)`,
+    );
+    expect(line?.className).toContain(`text-warning`);
+    expect(mount(ready(`idle`)).querySelector(`[data-reach]`)).toBeNull();
+});
+
 const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => /Land now|Landing/.test(button.textContent ?? ``));
 

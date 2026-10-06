@@ -31,6 +31,7 @@ import { enginePolicyDocument } from "../engines/engine-policy.js";
 import { engineStateDocument } from "../engines/engine-store.js";
 import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
 import { extensionApprovalsDocument } from "../extensions/extension-approvals.js";
+import { extensionDevDocument } from "../extensions/extension-dev.js";
 import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
 import { extensionSettingsDocument } from "../extensions/extension-settings.js";
 import { extensionUpdatePolicyDocument, extensionUpdatesDocument } from "../extensions/extension-updates.js";
@@ -134,6 +135,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     engineStateDocument,
     runtimeInstallsDocument,
     extensionApprovalsDocument,
+    extensionDevDocument,
     extensionEnablementDocument,
     extensionSettingsDocument,
     extensionUpdatePolicyDocument,

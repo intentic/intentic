@@ -12,6 +12,7 @@ import {
     SessionOwnerSchema,
     type TurnProfile,
     TurnProofSchema,
+    TurnReachSchema,
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -200,6 +201,9 @@ export const PersistedAgentSchema = z.object({
     // What the last turn that touched code showed of its work, read off its tool calls; a turn that touched none leaves
     // it standing, since the work on the branch has not moved.
     proof: TurnProofSchema.optional(),
+    // Where the last turn's work went besides its branch (live files, clones of its own, pushes); replaced by every
+    // turn that runs, absent when it all stayed on the branch.
+    reach: TurnReachSchema.optional(),
     postures: PosturesSchema,
     landing: LandingSchema,
     social: SocialSchema,

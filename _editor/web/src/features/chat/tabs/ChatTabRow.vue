@@ -194,6 +194,17 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
                 timeAgo(props.agent.updatedAt, { days: true })
             }}</span>
+            <!-- Where its last turn's work went besides its branch, the board card's line on a row of its own: the worst of it, every place in the hover. -->
+            <span
+                v-if="props.view.reach !== undefined"
+                class="flex w-full min-w-0 items-center gap-1"
+                :class="props.view.reach.tone === `warning` ? 'text-warning' : 'text-muted'"
+                data-reach
+                v-tooltip.top.lines="props.view.reach.detail"
+            >
+                <Icon :name="props.view.reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="shrink-0 text-2xs" />
+                <span class="min-w-0 flex-1 truncate">{{ props.view.reach.text }}</span>
+            </span>
         </template>
     </RailCard>
 </template>

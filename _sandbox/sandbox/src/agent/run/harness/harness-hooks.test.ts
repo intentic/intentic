@@ -23,6 +23,8 @@ const depsHolding = (entry: PersistedAgent | undefined): HarnessHooksDeps => ({
     agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }),
     agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {}),
     perf: unstubbed<Services["perf"]>("perf", {}),
+    capabilities: unstubbed<Services["capabilities"]>("capabilities", {}),
+    config: unstubbed<Services["config"]>("config", { extensionsDir: "" }),
 });
 
 // The same turn, in a conversation's own worktree, as the route hands it over.

@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow } from "@intentic/sandbox-contract";
+import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow, TurnReach } from "@intentic/sandbox-contract";
 import { readableProviderText } from "../../agent/providers/provider-error-text.js";
 import type { Services } from "../../composition.js";
 import { agentRepoChanges } from "../land/agent-changes.js";
@@ -270,6 +270,8 @@ export interface FleetRecall extends FleetRow {
     readonly failureCode?: string;
     readonly limitResetsAt?: number;
     readonly landedSubject?: string;
+    // Where its last turn put work besides its branch (AgentSummary.reach); absent when it all stayed there.
+    readonly reach?: TurnReach;
     readonly repoStates: readonly FleetRepo[];
     readonly digest: FleetDigest;
 }
@@ -324,6 +326,7 @@ export const fleetRecall = async (
             worktree: placement.kind === "worktree" ? deps.agentWorktrees.conversationDir(entry.id) : undefined,
             archivedAt: entry.archivedAt,
             landedSubject: entry.landing.message?.subject,
+            reach: entry.reach,
         }),
         ...failureOf(entry.ending),
         repoStates: repos,

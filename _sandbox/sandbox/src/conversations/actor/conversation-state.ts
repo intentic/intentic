@@ -1,4 +1,4 @@
-import type { AgentJob, AgentNeed, AgentSummary, AgentWatch, KeepWarm, ParkKind, TodoItem, TurnProof } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentNeed, AgentSummary, AgentWatch, KeepWarm, ParkKind, TodoItem, TurnProof, TurnReach } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
@@ -47,7 +47,7 @@ export interface TurnActivity {
     readonly todo?: string;
 }
 
-// Everything `begin` starts afresh. The settle clears the turn's books (usage, session, failure, proof) and leaves the
+// Everything `begin` starts afresh. The settle clears the turn's books (usage, session, failure, proof, reach) and leaves the
 // readings a card keeps showing between turns (activity, context fill, cache deadline, checklist, landing, resuming).
 export interface TurnRuntime {
     // When the last frame arrived; a live card's recency, never a settled one's.
@@ -75,6 +75,8 @@ export interface TurnRuntime {
     readonly failure: FailedEnding | undefined;
     // What the turn showed of its own work, noted as it settles and filed on the card by the settle; spent with the turn.
     readonly proof: TurnProof | undefined;
+    // Where its work went besides its branch, noted as it closes and filed by the settle the same way.
+    readonly reach: TurnReach | undefined;
     // A recovery the daemon is already running and will re-run on its own; the one ending that survives the settle.
     readonly resuming: boolean;
     // What the card shows of the land lease; `begin` hides it, the next acquisition shows it again.
@@ -179,6 +181,7 @@ export const freshRuntime = (): TurnRuntime => ({
     usage: NO_USAGE,
     failure: undefined,
     proof: undefined,
+    reach: undefined,
     resuming: false,
     landing: false,
 });

@@ -7,6 +7,7 @@ import { ERROR_MESSAGE_CHARS } from "../frames/classify-failure.js";
 import type { Attribution } from "../frames/frame-decorators.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { TurnFailure, TurnFrames } from "../frames/frame-reducers.js";
+import type { ReachFrames } from "../../verification/agent-reach.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { TurnPlan } from "../turn/turn-plan.js";
@@ -48,6 +49,9 @@ export interface SettlementPlan {
     // The durable ledger row every turn lands on, unbilled failures included.
     readonly usage: UsageRow;
     readonly proof: ProofNote | undefined;
+    // What its tool calls say of where its work went besides its branch, for the close to finish reading (turn-reach.ts);
+    // undefined without a conversation, which has no card to say it on.
+    readonly reach: ReachFrames | undefined;
     // The label of the main tree's turn-end snapshot; undefined for an isolated turn, which never touches it.
     readonly snapshot: string | undefined;
 }
@@ -66,7 +70,7 @@ export interface TurnEnd {
     // The namespace the turn ran in, if it entered one.
     readonly isolation: TurnPlacement | undefined;
     readonly experiments: Extract<TurnPlan, { readonly ok: true }>["experiments"];
-    readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "metrics">;
+    readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "reach" | "metrics">;
     // When the runtime was started (epoch ms): the turn's own clock, for the duration a provider did not report.
     readonly startedAt: number;
 }
@@ -228,6 +232,8 @@ export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPl
         headroomRefresh: routed ? { scope: { providers: [end.provider] }, maxAgeMs: SETTLE_MAX_AGE_MS } : undefined,
         usage: usageOf(end, outcome, now),
         proof: proofOf(end, now),
+        // Every turn's, a spawned child's too: unlike its proof, where its work went is its own card's to say.
+        reach: end.input.conversationId === undefined ? undefined : end.frames.reach.reading(),
         snapshot: end.isolated ? undefined : end.input.prompt,
     };
 };

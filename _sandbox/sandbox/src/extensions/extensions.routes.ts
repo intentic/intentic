@@ -9,6 +9,8 @@ import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { approveExtension } from "./extension-approvals.js";
+import { devSummaryOf } from "./extension-dev.js";
+import { createExtensionDevRoutes } from "./extension-dev.routes.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { planExtensionRemoval, removeExtension } from "./extension-removal.js";
@@ -138,6 +140,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     ...opt("health", record?.health),
                     ...opt("previous", previous),
                     ...(installed ? { updatePolicy: resolveUpdatePolicy(policies[identity]) } : {}),
+                    ...opt("dev", await devSummaryOf(extension)),
                 };
             };
             const extensions: ExtensionSummary[] = [];
@@ -388,5 +391,7 @@ export const createExtensionsRoutes = (services: Services) => {
             services.serviceProcesses.stop(extensionProcessKey(input.id, input.name));
             return { ok: true } as const;
         }),
+        // Dev mode: an install served from a source checkout (extension-dev.routes.ts).
+        ...createExtensionDevRoutes(services),
     };
 };

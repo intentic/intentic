@@ -2,6 +2,11 @@ import { procedure } from "../protocol/route-meta.js";
 import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
 import {
     ExtensionApproveInputSchema,
+    ExtensionDevClearedSchema,
+    ExtensionDevListSchema,
+    ExtensionDevSetInputSchema,
+    ExtensionDevStateSchema,
+    ExtensionDevTargetSchema,
     ExtensionEnabledInputSchema,
     ExtensionProcessParamSchema,
     ExtensionProcessStatusSchema,
@@ -21,6 +26,10 @@ import {
 } from "../schemas/extension-updates.js";
 import { ExtensionReadinessSchema } from "../schemas/maintenance.js";
 import { OkSchema } from "../schemas/shared.js";
+
+// Dev mode's verbs: the agent's `extension` CLI drives them on the agent token, and the Extensions tab's way back
+// calls devClear. None reads or moves a credential.
+const devRoute = procedure.meta({ agent: true });
 
 // Installed extensions resolved to their approved manifests. The bundle itself is a plain Hono route, `GET
 // /extensions/{id}/bundle`, not part of this oRPC contract: raw ESM bytes aren't a JSON payload.
@@ -209,4 +218,44 @@ export const extensionsContract = {
         })
         .input(ExtensionProcessParamSchema)
         .output(OkSchema),
+    // Dev mode (.intentic/local/extension-dev.json): an installed extension served from a source checkout. Same powers
+    // only: a checkout declaring more is held, and the pinned version keeps running.
+    devList: devRoute
+        .route({
+            method: "GET",
+            path: "/extensions/dev",
+            summary: "Installed extensions and their source checkouts",
+            description:
+                "Every extension installed from a repository, with its pinned commit, whether it runs from a source checkout, and the checkout of its repository this workspace holds, if any. The calling conversation's own copy is named first.",
+        })
+        .output(ExtensionDevListSchema),
+    devSet: devRoute
+        .route({
+            method: "POST",
+            path: "/extensions/{id}/dev",
+            summary: "Run an installed extension from its source checkout",
+            description:
+                "Serves the extension's browser bundle, backend, processes, skills and contributions from a checkout of its source instead of its pinned copy, so a change to it shows on reload without being landed first. The checkout must hold the same extension and declare the same powers; one asking for more, or not built yet, is held and the pinned version keeps running, with the reason. Nothing is installed or updated: the pinned copy stays where it is.",
+        })
+        .input(ExtensionDevSetInputSchema)
+        .output(ExtensionDevStateSchema),
+    devClear: devRoute
+        .route({
+            method: "POST",
+            path: "/extensions/{id}/dev/clear",
+            summary: "Go back to the pinned version",
+            description: "Stops serving the extension from its source checkout. The checkout itself is left exactly as it is.",
+        })
+        .input(ExtensionDevTargetSchema)
+        .output(ExtensionDevClearedSchema),
+    devReload: devRoute
+        .route({
+            method: "POST",
+            path: "/extensions/{id}/dev/reload",
+            summary: "Pick up a rebuilt checkout",
+            description:
+                "Call after rebuilding an extension that runs from its source checkout: its backend restarts on the new code, and an open app is told the list changed, so it offers to reload the new browser bundle.",
+        })
+        .input(ExtensionDevTargetSchema)
+        .output(ExtensionDevStateSchema),
 };

@@ -425,7 +425,7 @@ const bookInto =
 // How the turn ended goes on the entry: its failure, the user's stop, or the clean ending that hands off to standing.ts,
 // which a dismissal takes too. The open work is dropped and re-added only as this settle says.
 const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): PersistedAgent => {
-    const { unfinished: _open, ...carried } = entry;
+    const { unfinished: _open, reach: _reach, ...carried } = entry;
     return {
         ...carried,
         ...opt("sessionId", flush.sessionId ?? entry.sessionId),
@@ -433,6 +433,9 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
         ...opt("unfinished", unfinishedOf(entry, flush, now)),
         // A turn that touched no code brings no proof, and the branch's last record stands.
         ...opt("proof", flush.proof ?? entry.proof),
+        // Replaced by every turn that ran, a turn whose work all stayed on its branch clearing it; a settle with no turn
+        // (a manual land) leaves it standing.
+        ...opt("reach", flush.ranTurn ? flush.reach : entry.reach),
         ending: flush.failure ?? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }),
         totals: {
             costUsd: entry.totals.costUsd + flush.usage.costUsd,
@@ -1124,6 +1127,7 @@ export const createFleet = (
             ...describedBy(entry),
             ...reportedUnfinished(entry, state),
             ...opt("proof", entry.proof),
+            ...opt("reach", entry.reach),
             ...reportedFailure(entry.ending, status, limitHold(state)),
             ...postures(entry.postures),
             ...spentBy(entry.totals, state?.turn.usage ?? NO_USAGE, subagentCountsOf(conversations, entry.id).running),

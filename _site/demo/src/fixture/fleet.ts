@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { type AgentSummary, ciFixConversationId, nextDayStartIn, type SubagentSession, UTC } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 
@@ -546,6 +547,12 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         toolUses: 46,
         diff: { files: 3, insertions: 14, deletions: 9 },
         proof: { at: now - minutes(392), verification: `verified`, check: `pnpm -C api test` },
+        // The third advisory was in an installed extension, and it patched the installed copy in place: live in every
+        // conversation, on no branch, and gone with that extension's next update.
+        reach: {
+            at: now - minutes(392),
+            live: [{ path: `${STATE_DIR}/local/extensions/intentic-deployments`, extension: `intentic.deployments` }],
+        },
     },
     // Started by the sandbox, not by anyone on the team, at the first failed job of the release notes' push to `web`'s
     // main, and sent the next push's failures on main too: its second turn is working on both.
@@ -678,8 +685,9 @@ export const fleetRoster = (now: number): AgentSummary[] => [
 
 // What a quiet recording (mode.ts `demoQuiet`) takes off a card: the marks of a busy moment rather than of the work.
 // A teammate's reactions, a prompt cache counting down, a command still running past its turn, a helper tray, a queued
-// message, a check that failed or never ran, and the token a CI job started it with. The title, model, branch, diff,
-// cost, activity and lane stay, and so does a check that passed, which is the one mark a finished card should carry.
+// message, a check that failed or never ran, work its last turn left outside its branch, and the token a CI job started
+// it with. The title, model, branch, diff, cost, activity and lane stay, and so does a check that passed, which is the
+// one mark a finished card should carry.
 export const quietCard = ({
     reactions: _reactions,
     promptCache: _promptCache,
@@ -688,6 +696,7 @@ export const quietCard = ({
     subagents: _subagents,
     queue: _queue,
     proof,
+    reach: _reach,
     startedBy,
     ...card
 }: AgentSummary): AgentSummary => ({

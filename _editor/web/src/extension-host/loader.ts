@@ -13,6 +13,7 @@ import { sandboxRpc } from "../client/sandbox/sandboxRpc";
 import { readFailure } from "../client/sandbox/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
+import { codeRevisionOf } from "../features/extensions/codeRevision";
 import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
 
 // Loads and activates installed extensions from GET /extensions (compiled-in first-party, daemon-baked, and
@@ -39,7 +40,8 @@ export interface ExtensionHostStatus {
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
 
-// Commit each extension loaded at, per handle; divergence from the current commit triggers the reload prompt.
+// Revision each extension loaded at, per handle (codeRevisionOf: the pinned commit, or a dev checkout's bundle
+// fingerprint); divergence from the list's current one triggers the reload prompt.
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const loadedCommits = shallowRef<ReadonlyMap<string, string>>(new Map());
 
@@ -212,7 +214,7 @@ const loadPass = async (host: HostBindings): Promise<void> => {
         return;
     }
     extensionStatuses.value = [...listedStatuses, ...unlistedStatuses];
-    loadedCommits.value = new Map(summaries.map((summary) => [summary.id, summary.commit]));
+    loadedCommits.value = new Map(summaries.map((summary) => [summary.id, codeRevisionOf(summary)]));
     loadedListAt.value = listedAt;
     extensionsLoaded.value = true;
 };

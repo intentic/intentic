@@ -1,0 +1,211 @@
+#!/usr/bin/env node
+// The in-sandbox extension command: run an installed extension from a checkout of its source (dev mode), and go back.
+//
+// An extension installed from a repository runs from a pinned clone under .intentic/local/extensions/<id>, which every
+// conversation shares live, nobody reviews, and the next update replaces. Editing it was the only way an owner saw a
+// change on reload, so agents edited it. `extension dev` points the install at a source checkout instead (the
+// workspace's own clone, or this conversation's copy of it), and the daemon serves it from there; nothing is installed
+// or updated, and `--off` goes back.
+//
+// It owns no logic: every subcommand is one call to the daemon's /extensions/dev routes (src/extensions/), the same ones
+// the Extensions tab's "Back to pinned version" calls. Auth is the per-boot agent token, which those routes admit and
+// which reads no credential.
+//
+//   exit 0  done
+//   exit 1  refused, or the checkout is held and the pinned version still runs; the sentence says why
+//   exit 2  misuse, or the daemon could not be reached
+
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+// Overridable so a suite can point the command at a daemon of its own; the image sets neither.
+const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
+const base = `http://127.0.0.1:${process.env.SANDBOX_PORT ?? "8787"}`;
+// The conversation this shell was spawned for: the daemon prefers its own copy of a checkout, and reads a /work path
+// against it.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+const WORKSPACE = process.env.WORKSPACE_ROOT ?? "/work";
+
+const USAGE = `extension — run an installed extension from a checkout of its source, and go back
+
+  extension list                    installed extensions, their pinned commit, and where each runs from
+  extension dev <name> [path]       run it from its source checkout (found by its repository when no path is given)
+  extension dev <name> --off        go back to the pinned version; the checkout is left as it is
+  extension reload <name>           after rebuilding the checkout: restart its backend and processes on the new build
+
+  <name> is its short name (maintenance), its id (intentic.maintenance) or its connection id (intentic-maintenance).
+  --json                            machine-readable output for list
+
+The checkout must hold the same extension with the same powers, built. Change the extension there, never in
+.intentic/local/extensions/: that copy is shared live by every conversation and replaced by the next update.`;
+
+const say = (text) => process.stdout.write(`${text}\n`);
+
+// Agents discard stderr, so a failure has to survive on the stream they read.
+const exit = (code, message) => {
+    say(message);
+    process.exit(code);
+};
+
+// Read lazily: --help has to work in a shell where the daemon is not running yet.
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return exit(2, `extension: no daemon token at ${TOKEN_PATH}: is the intentic daemon running in this container?`);
+    }
+};
+
+// One loopback call. A 4xx is the daemon refusing with a sentence (exit 1); anything else that is not a 2xx is the
+// daemon failing (exit 2).
+const call = async (method, path, body) => {
+    const response = await fetch(`${base}${path}`, {
+        method,
+        headers: {
+            "x-intentic-agent": token(),
+            ...(CONVERSATION === "" ? {} : { "x-intentic-conversation": CONVERSATION }),
+            ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }).catch((error) => exit(2, `extension: cannot reach the daemon at ${base} (${error.message})`));
+    const parsed = await response.json().catch(() => undefined);
+    if (!response.ok) {
+        const message = parsed?.message ?? parsed?.error?.message ?? parsed?.error ?? `the daemon answered ${response.status}`;
+        exit(response.status >= 400 && response.status < 500 && response.status !== 401 ? 1 : 2, `extension: ${message}`);
+    }
+    return parsed;
+};
+
+const short = (name) => name.slice(name.indexOf(".") + 1);
+
+// Where a checkout is, said the way the reader can find it.
+const whereOf = (dev) => {
+    if (dev.conversation === undefined) {
+        return dev.path;
+    }
+    return dev.conversation === CONVERSATION ? `${dev.path} (this conversation's copy)` : `${dev.path} (conversation ${dev.conversation}'s copy)`;
+};
+
+// "Rebuild with `pnpm run build` there", the command read off the checkout's own files from this shell's view of the
+// workspace; a plain "Rebuild it there" when they name none.
+const rebuildOf = (dev) => {
+    const dir = dev.conversation === undefined || dev.conversation === CONVERSATION ? join(WORKSPACE, dev.path) : undefined;
+    if (dir === undefined) {
+        return "Rebuild it there";
+    }
+    try {
+        const scripts = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).scripts ?? {};
+        if (typeof scripts.build !== "string") {
+            return "Rebuild it there";
+        }
+        const manager =
+            existsSync(join(dir, "bun.lock")) || existsSync(join(dir, "bun.lockb"))
+                ? "bun"
+                : existsSync(join(dir, "yarn.lock"))
+                  ? "yarn"
+                  : existsSync(join(dir, "package-lock.json"))
+                    ? "npm"
+                    : "pnpm";
+        return `Rebuild with \`${manager} run build\` there`;
+    } catch {
+        return "Rebuild it there";
+    }
+};
+
+const changes = (count) =>
+    count === undefined ? undefined : count === 0 ? "nothing uncommitted" : `${count} uncommitted change${count === 1 ? "" : "s"}`;
+
+const list = async (json) => {
+    const { extensions } = await call("GET", "/extensions/dev");
+    if (json) {
+        say(JSON.stringify(extensions, null, 2));
+        return;
+    }
+    if (extensions.length === 0) {
+        say("No extension here is installed from a repository. Built-in and workspace extensions already run from their source.");
+        return;
+    }
+    const blocks = extensions.map((extension) => {
+        const lines = [`${extension.name} (${extension.id}), pinned at ${extension.commit.slice(0, 7)}`];
+        if (extension.dev === undefined) {
+            lines.push("    runs its pinned version");
+        } else if (extension.dev.held === undefined) {
+            lines.push(`    runs from ${[whereOf(extension.dev), changes(extension.dev.uncommitted)].filter(Boolean).join(" · ")}`);
+        } else {
+            lines.push(`    pointed at ${whereOf(extension.dev)}, but runs its pinned version: ${extension.dev.held}`);
+        }
+        lines.push(
+            extension.checkout === undefined
+                ? "    no checkout of its source in this workspace"
+                : `    source checkout: ${whereOf(extension.checkout)}`,
+        );
+        return lines.join("\n");
+    });
+    say(blocks.join("\n"));
+};
+
+// A held checkout is written but not run: said as the reason and what clears it, exit 1.
+const report = (state, reloaded) => {
+    const name = short(state.name);
+    if (state.dev.held !== undefined) {
+        exit(
+            1,
+            `${state.name} is pointed at ${whereOf(state.dev)}, but its pinned version still runs: ${state.dev.held}. ` +
+                `Once that is dealt with, \`extension reload ${name}\` picks it up; \`extension dev ${name} --off\` lets go of the checkout.`,
+        );
+    }
+    if (reloaded) {
+        const build = state.dev.revision === undefined ? "" : ` (build ${state.dev.revision})`;
+        say(`${state.name} reloaded from ${whereOf(state.dev)}${build}; the owner sees it after Reload in the editor.`);
+        return;
+    }
+    say(
+        `${state.name} now runs from ${whereOf(state.dev)}. ${rebuildOf(state.dev)}, then \`extension reload ${name}\`; ` +
+            `the owner sees it after Reload in the editor. \`extension dev ${name} --off\` goes back to the pinned version.`,
+    );
+};
+
+const main = async () => {
+    const argv = process.argv.slice(2);
+    const flags = new Set(argv.filter((arg) => arg.startsWith("-")));
+    const [command, name, path, ...extra] = argv.filter((arg) => !arg.startsWith("-"));
+    if (command === undefined || command === "help" || flags.has("--help") || flags.has("-h")) {
+        say(USAGE);
+        return;
+    }
+    if (!["list", "dev", "reload"].includes(command)) {
+        exit(2, `extension: unknown command "${command}"\n\n${USAGE}`);
+    }
+    const unknown = [...flags].filter((flag) => !["--json", "--off"].includes(flag));
+    if (unknown.length > 0 || extra.length > 0) {
+        exit(2, `extension: unexpected ${unknown.length > 0 ? `option ${unknown[0]}` : `argument "${extra[0]}"`}\n\n${USAGE}`);
+    }
+    if (command === "list") {
+        await list(flags.has("--json"));
+        return;
+    }
+    if (name === undefined) {
+        exit(2, `extension: ${command} needs a name: run \`extension list\` to see them.`);
+    }
+    const target = `/extensions/${encodeURIComponent(name)}`;
+    if (command === "reload") {
+        report(await call("POST", `${target}/dev/reload`, {}), true);
+        return;
+    }
+    if (flags.has("--off")) {
+        if (path !== undefined) {
+            exit(2, "extension: --off takes no path");
+        }
+        const cleared = await call("POST", `${target}/dev/clear`, {});
+        say(
+            cleared.cleared
+                ? `${cleared.name} runs its pinned version again; the checkout is left as it is. The owner sees it after Reload in the editor.`
+                : `${cleared.name} already runs its pinned version.`,
+        );
+        return;
+    }
+    // Absolute from this shell's view, which the daemon reads against this conversation's copy of the workspace.
+    report(await call("POST", `${target}/dev`, path === undefined ? {} : { path: resolve(process.cwd(), path) }), false);
+};
+
+await main();

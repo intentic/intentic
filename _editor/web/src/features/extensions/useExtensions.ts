@@ -60,6 +60,13 @@ export function useExtensions() {
         await query.refetch();
         return removed;
     };
+    // Takes an install running from its source checkout back to its pinned version; the checkout is left as it is. The
+    // caller's reloadExtensions() then loads the pinned bundle in this browser.
+    const clearDev = async (id: string) => {
+        const cleared = await sandboxRpc.extensions.devClear({ id });
+        await query.refetch();
+        return cleared;
+    };
     // One card's contribution from the enabled extensions, keyed by kind + id since an id is only unique within its
     // kind. Undefined until /extensions loads.
     const contributionOf = (kind: CapabilityKind, id: string): CapabilityContribution | undefined =>
@@ -101,6 +108,7 @@ export function useExtensions() {
         approve,
         create,
         remove,
+        clearDev,
         contributionOf,
         manifestOf,
         checkUpdates,

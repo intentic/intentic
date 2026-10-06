@@ -543,6 +543,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/geo /usr/local/bin/geo
 # routes, never mount.cifs directly, so a disk the agent mounts and one the owner mounts are the same operation.
 # cifs-utils is NOT baked — it rides the netdisk capability's fragment; a sandbox with no disk carries no client.
 COPY --chmod=755 _sandbox/sandbox/bin/netdisk /usr/local/bin/netdisk
+# The extension command: run an installed extension from a checkout of its source (dev mode) and go back. Same shape
+# as netdisk: it calls the daemon's /extensions/dev routes, the ones the Extensions tab's way back calls too, so an
+# install the agent points at a checkout and one the owner points back are the same operation.
+COPY --chmod=755 _sandbox/sandbox/bin/extension /usr/local/bin/extension
 # The one-time-code command connector skills teach for services whose write path asks for a 2FA code (npm
 # publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
 # never reaches a shell — only codes that die within their period do.

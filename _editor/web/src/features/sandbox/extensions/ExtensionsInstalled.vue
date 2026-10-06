@@ -39,7 +39,7 @@ const emit = defineEmits<{
     clear: [];
 }>();
 
-const { entries, invalid, pending: waiting, unlisted, setEnabled, approve, remove, isLoading, error } = useExtensionList();
+const { entries, invalid, pending: waiting, unlisted, setEnabled, approve, remove, clearDev, isLoading, error } = useExtensionList();
 const outline = useSandboxOutline(isLoading);
 // The list query's own message, in the words of the view that asked for it.
 watch(
@@ -142,6 +142,23 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
         await reloadExtensions();
     } catch (failure) {
         emit(`notice`, noticeFrom(failure, `Could not ${enabled ? `enable` : `disable`} ${extensionIdOf(extension.manifest)}.`));
+    } finally {
+        pending.value = undefined;
+    }
+};
+
+// Back from a source checkout to the pinned copy: the daemon moves its processes and backend, the reload swaps the bundle
+// this browser runs. Said afterwards, since the row's dev line simply disappears.
+const leaveDev = async (extension: ExtensionSummary): Promise<void> => {
+    pending.value = extension.id;
+    emit(`notice`, undefined);
+    const manifest = extensionIdOf(extension.manifest);
+    try {
+        await clearDev(extension.id);
+        await reloadExtensions();
+        emit(`notice`, { tone: `info`, title: t(`sandbox.extensionsInstalled.backToPinned`, { manifest }) });
+    } catch (failure) {
+        emit(`notice`, noticeFrom(failure, t(`sandbox.extensionsInstalled.couldntLeaveDev`, { manifest })));
     } finally {
         pending.value = undefined;
     }
@@ -267,6 +284,7 @@ const confirmRemove = async (): Promise<void> => {
                     :pending="pending === entry.extension.id"
                     @toggle="(enabled) => toggle(entry.extension, enabled)"
                     @remove="removing = entry.extension"
+                    @dev-clear="leaveDev(entry.extension)"
                     @update:expanded="(open) => (opened = open ? entry.extension.id : undefined)"
                 />
             </RowGroup>

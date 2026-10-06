@@ -36,6 +36,9 @@ export interface ServiceStatus {
     // Epoch ms of the last state change, the terminals row's activity clock.
     readonly since: number;
     readonly lastExitCode?: number;
+    // Where it was started, so a caller whose idea of that moved (an extension now run from its source checkout) can
+    // tell a process to move from one already in place; start() leaves a running key alone.
+    readonly cwd: string;
 }
 
 export interface ServiceProcesses {
@@ -221,6 +224,7 @@ const status = (key: string, entry: Entry): ServiceStatus => ({
     restarts: entry.restarts,
     since: entry.since,
     ...(entry.lastExitCode === undefined ? {} : { lastExitCode: entry.lastExitCode }),
+    cwd: entry.spec.cwd,
 });
 
 // Boot backstop for an unclean daemon death: orphans keep holding ports and connections the new daemon knows nothing

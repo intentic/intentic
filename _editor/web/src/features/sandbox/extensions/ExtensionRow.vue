@@ -20,7 +20,27 @@ const t = useT();
 
 const { entry, expanded, pending } = defineProps<{ entry: ExtensionEntry; expanded: boolean; pending: boolean }>();
 
-const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; "update:expanded": [expanded: boolean] }>();
+const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; devClear: []; "update:expanded": [expanded: boolean] }>();
+
+// An install running from a source checkout instead of its pinned copy (dev mode), or pointed at one that is held. Said
+// on the closed row too: what runs is not what the commit below names, and that is the first thing to know about it.
+const dev = computed(() => entry.extension.dev);
+const devLine = computed(() => {
+    const current = dev.value;
+    if (current === undefined) {
+        return undefined;
+    }
+    const where =
+        current.conversation === undefined
+            ? current.path
+            : t(`sandbox.extensionRow.devInConversation`, { path: current.path, conversation: current.conversation });
+    if (current.held !== undefined) {
+        return t(`sandbox.extensionRow.devHeld`, { where, reason: current.held });
+    }
+    const running = t(`sandbox.extensionRow.devRunningFrom`, { where });
+    const count = current.uncommitted ?? 0;
+    return count === 0 ? running : `${running} · ${t(`sandbox.extensionRow.devUncommitted`, { count }, count)}`;
+});
 
 // Offered only where removal means something: a baked extension has no files here to delete, and an essential one is
 // the control surface for work that carries on regardless. Both refuse daemon-side too; this is what stops the button
@@ -167,8 +187,9 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
         </template>
 
         <!-- Shown only while closed: once open, the record below states it in full, and a truncated copy would be noise. -->
-        <template v-if="entry.detail && !expanded" #description>
-            <span class="block truncate" :class="tone">{{ entry.detail }}</span>
+        <template v-if="(entry.detail || devLine) && !expanded" #description>
+            <span v-if="entry.detail" class="block truncate" :class="tone">{{ entry.detail }}</span>
+            <span v-else class="block truncate" :class="dev?.held === undefined ? `text-muted` : `text-warning`">{{ devLine }}</span>
         </template>
 
         <template #control>
@@ -210,6 +231,23 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
         <template #below>
             <div class="flex flex-col gap-4">
                 <p v-if="entry.detail" class="text-xs" :class="tone">{{ entry.detail }}</p>
+
+                <!-- Where it runs from, and the way back; the checkout itself is never touched from here. -->
+                <div v-if="devLine !== undefined" class="flex flex-col gap-1.5">
+                    <p class="text-xs" :class="dev?.held === undefined ? `text-content` : `text-warning`">{{ devLine }}</p>
+                    <div class="flex items-center gap-2">
+                        <Button
+                            size="small"
+                            :text="true"
+                            :label="t(`sandbox.extensionRow.devBackToPinned`)"
+                            :disabled="pending"
+                            @click="emit(`devClear`)"
+                        >
+                            <template #icon><Icon name="undo" /></template>
+                        </Button>
+                        <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.devLeavesCheckout`) }}</span>
+                    </div>
+                </div>
 
                 <dl v-if="breakdown.length > 0" class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
                     <template v-for="facet in breakdown" :key="`${facet.kind}:${facet.label}`">

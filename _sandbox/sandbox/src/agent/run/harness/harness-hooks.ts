@@ -7,6 +7,7 @@ import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from ".
 import type { Services } from "../../../composition.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
+import { installedCopyDirtyPaths, installedCopyReviewer } from "../../../rules/installed-copy.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
 import { reposOf } from "../../../rules/rules.js";
 import { workspaceRelative } from "../../../rules/workspace-relative.js";
@@ -24,7 +25,10 @@ import { opt } from "../../../opt.js";
 
 // What the harness's hooks reach for: the reviewers' deps, the conversation's checkout for what its work changed, and
 // the ledgers they stamp.
-export type HarnessHooksDeps = Pick<Services, "workspace" | "logger" | "ruleFirings" | "agents" | "agentWorktrees" | "perf">;
+export type HarnessHooksDeps = Pick<
+    Services,
+    "workspace" | "logger" | "ruleFirings" | "agents" | "agentWorktrees" | "perf" | "capabilities" | "config"
+>;
 
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
@@ -46,8 +50,9 @@ const underRoots = (file: string, roots: readonly string[]): string | undefined 
     return roots.map((root) => workspaceRelative(file, root)).find((relative) => relative !== file);
 };
 
-// The `file.edited` moment: the byte scan on every written file, then each repository's own edit checks, run in the
-// turn's own tree and named as the agent sees it. Firings stamp the settings list only, so a per-edit check
+// The `file.edited` moment: the byte scan on every written file, the note on a write into a copy of an extension the
+// sandbox runs (rules/installed-copy.ts), then each repository's own edit checks, run in the turn's own tree and named
+// as the agent sees it. Firings stamp the settings list only, so a per-edit check
 // doesn't spam a feed row per save.
 const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
     const isolation = context.base.spec.isolation;
@@ -65,7 +70,14 @@ const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: re
         onFired: (rule: Rule) => stampFiring(deps, rule),
         onRan: (rule, ms, status) => deps.perf.record("edit.rule", ms, { rule: rule.id, status }, status === "error"),
     });
-    return { editReviewers: [bytes, commands].filter((each) => each !== undefined) };
+    // Installs live in the shared tree, outside every worktree, so they are looked up from the workspace root.
+    const installed = installedCopyReviewer({
+        root: deps.workspace.root,
+        bakedRoot: () => deps.config.extensionsDir,
+        capabilities: () => deps.capabilities.list(),
+        relative: (file) => underRoots(file, roots),
+    });
+    return { editReviewers: [bytes, installed, commands].filter((each) => each !== undefined) };
 };
 
 // What the conversation's work changed and has not landed in the repositories `named`, workspace-relative, and the
@@ -109,14 +121,23 @@ const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: reado
     };
 };
 
-// The turn's dirty files for shell-edit attribution, by both names (checkoutDirtyPaths reuses the repo list).
-const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly onDisk: string; readonly path: string }[]>) => {
+// The turn's dirty files for shell-edit attribution, by both names (checkoutDirtyPaths reuses the repo list), plus the
+// installed extensions' checkouts: they sit in the shared tree under a hidden directory no repo walk enters, and a
+// build or `sed -i` there is exactly the write the installed-copy note exists for. Same name on both sides, since the
+// shared tree is mounted at the same path inside a turn's namespace.
+const dirtyFilesOf = (
+    deps: HarnessHooksDeps,
+    context: TurnContext,
+): (() => Promise<readonly { readonly onDisk: string; readonly path: string }[]>) => {
     const dirty = checkoutDirtyPaths(context.localCwd);
-    return async () =>
-        (await dirty()).map((path) => {
+    const installs = installedCopyDirtyPaths(deps.workspace.root);
+    return async () => [
+        ...(await dirty()).map((path) => {
             const onDisk = join(context.localCwd, path);
             return { onDisk, path: fromWorktree(onDisk, context.base.spec.isolation?.plan) };
-        });
+        }),
+        ...(await installs().catch((): string[] => [])).map((path) => ({ onDisk: join(deps.workspace.root, path), path })),
+    ];
 };
 
 // Every hook a harness turn is planned with, on top of the ones the route and the planner already bound.
@@ -124,7 +145,7 @@ export const harnessHooks = (deps: HarnessHooksDeps, context: TurnContext, fileE
     ...context.base.hooks,
     // Which files the tree says are dirty, both names, for a shell command's edit diagnostics. Read on every turn: the
     // main checkout's standing dirty set is everyone's landed work and a baseline, not a finding, there.
-    dirtyFiles: dirtyFilesOf(context),
+    dirtyFiles: dirtyFilesOf(deps, context),
     ...editReviewersOf(deps, context, fileEdited),
     ...turnChecksOf(deps, context, turnEnding),
     // Each hook callback's time, filed under `hook.<event>`: slow ones land in perf.jsonl with the tool they held.

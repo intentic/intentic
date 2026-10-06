@@ -1,4 +1,5 @@
-import type { AgentEvent, AgentJob, AgentWatch, TurnProof } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/constants";
+import type { AgentEvent, AgentJob, AgentWatch, TurnProof, TurnReach } from "@intentic/sandbox-contract";
 import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
@@ -50,6 +51,7 @@ const WAITING = joined(NO_QUEUE, QUEUED);
 // What a settling turn showed of its own work, as settle-turn.ts notes it just ahead of the settle that files it.
 const PROOF: TurnProof = { at: 4_000, verification: "failing", check: "pnpm test" };
 const LATER_PROOF: TurnProof = { at: 4_500, verification: "verified", check: "pnpm test" };
+const REACH: TurnReach = { at: 4_000, live: [{ path: `${STATE_DIR}/local/extensions/intentic-x`, extension: "intentic.x" }] };
 
 interface Row {
     readonly name: string;
@@ -515,6 +517,20 @@ const rows: readonly Row[] = [
         effects: [],
     },
     {
+        name: "a noted reach waits on the turn for the settle to file it, quietly",
+        from: running(),
+        event: { kind: "reach-noted", reach: REACH },
+        to: running({}, { reach: REACH }),
+        effects: [],
+    },
+    {
+        name: "a reach noted as nothing replaces one noted before it",
+        from: running({}, { reach: REACH }),
+        event: { kind: "reach-noted", reach: undefined },
+        to: running(),
+        effects: [],
+    },
+    {
         name: "a begin starts the turn's books without the last turn's proof",
         from: idle({ proof: PROOF }),
         event: { kind: "begin", turn: OPENING },
@@ -931,6 +947,7 @@ describe("the settle", () => {
         usage: { costUsd: 0.5, inputTokens: 10, outputTokens: 3, toolUses: 2, subagents: 1 },
         checklist: [{ content: "a", status: "pending" as const }],
         proof: PROOF,
+        reach: REACH,
     };
     const flushOf = (decision: ReturnType<typeof decide>): SettleFlush | undefined => {
         const settled = decision.effects.find((effect) => effect.kind === "entry-settled");
@@ -967,6 +984,7 @@ describe("the settle", () => {
             sessionId: undefined,
             checklist: undefined,
             proof: undefined,
+            reach: undefined,
         });
         expect(decision.state).toStrictEqual(idle({ resuming: true }));
     });

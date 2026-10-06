@@ -13,7 +13,7 @@ export const fakeServiceProcesses = (
     const started: { key: string; cwd: string }[] = [];
     const stopped: string[] = [];
     const statusOf = (key: string): ServiceStatus | undefined =>
-        key in ports ? { key, state: "running", port: ports[key] ?? 0, restarts: 0, since: 0 } : undefined;
+        key in ports ? { key, state: "running", port: ports[key] ?? 0, restarts: 0, since: 0, cwd: "" } : undefined;
     return Object.assign(
         unstubbed<ServiceProcesses>("serviceProcesses", {
             start: async (key, spec) => {

@@ -38,6 +38,15 @@ A workspace extension's approval is a digest of its declared powers, kept in `/h
 
 A registry ([`_shared/registry`](../../_shared/registry)) is a git repository of curated listings; the official one is `github.com/intentic/registry`, and [`_tools/registry-scan`](../../_tools/registry-scan) proposes and re-checks its entries.
 
+## Dev mode
+
+An installed extension runs from its pinned clone in `.intentic/local/extensions/<id>`, which every conversation shares live, nobody reviews, and the next update replaces. Changing that copy used to be the only way to see a change on reload, so agents changed it. Dev mode points the install at a checkout of its source instead, such as `extensions/maintenance` or a conversation's own copy of it, and the daemon serves the extension from there: its bundle, backend, processes, skills and contributions. The pointer lives in `.intentic/local/extension-dev.json`, which is never versioned, since it can name a conversation's worktree ([`extension-dev.ts`](../../_sandbox/sandbox/src/extensions/extension-dev.ts)).
+
+- The inventory follows a pointer only to a checkout inside the workspace or a conversation's worktree, outside `.intentic/`, `refs/` and `public/`, holding the same extension id, declaring exactly the powers of the pinned version, and built. Otherwise the pinned clone keeps running and the row says why. New powers still come only through an update the owner approves.
+- The install keeps `source: "installed"` and its pinned `commit`, so updates, Browse and the environment overlay read the pinned clone, and removal deletes that clone and the pointer, never the checkout.
+- The bundle's ETag is its content hash while dev mode is on, and the row's `dev.revision` is the same hash, so a rebuild shows the editor's usual "Reload now".
+- The agent's `extension` command drives it (`extension dev maintenance`, `extension reload maintenance`, `extension dev maintenance --off`). With no path, it finds the workspace repository cloned from the address the extension was installed from, and the calling conversation's copy comes first. The Extensions tab shows where the extension runs from and has a button to go back to the pinned version.
+
 ## Loading
 
 - **UI.** Extensions compiled into the editor are imported from [`builtins.ts`](../../_editor/web/src/extension-host/builtins.ts). Any other bundle is fetched from the daemon and imported as a module by [`loader.ts`](../../_editor/web/src/extension-host/loader.ts); its bare imports resolve through the page's import map to the host's own copies, and [`bundle.ts`](../../_shared/extension-manifest/src/bundle.ts) refuses any other import. There is no iframe: UI code runs in the editor's window.

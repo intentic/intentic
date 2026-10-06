@@ -10,11 +10,15 @@ import { listenerOwnership, listenerProcessesDesired, listenerState } from "./li
 export const EXTENSION_PROCESS_PREFIX = "ext-";
 export const extensionProcessKey = (id: string, name: string): string => `${EXTENSION_PROCESS_PREFIX}${id.replaceAll(".", "-")}-${name}`;
 
+// Where a declared process runs: its extension's directory, which for an install in dev mode is the source checkout.
+const processCwd = (extension: InstalledExtension, process: ProcessContribution): string =>
+    process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd);
+
 export const startExtensionProcess = async (services: Services, extension: InstalledExtension, process: ProcessContribution): Promise<void> => {
     const key = extensionProcessKey(extension.id, process.name);
     await services.serviceProcesses.start(key, {
         command: process.command,
-        cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
+        cwd: processCwd(extension, process),
         // Reaches the daemon over loopback with its extension's own token, so it gets the reach the manifest declared
         // (`permissions.daemon`, plus its listener provider's routes), never the panel token's; INTENTIC_WORKSPACE lets
         // it write into the workspace.
@@ -129,6 +133,63 @@ export const stopPendingExtensionProcesses = async (services: Services): Promise
         }
     } catch (error) {
         services.logger.warn({ err: error }, "stopping pending extensions' processes failed");
+    }
+};
+
+// Moves what installs have running onto the directory each runs from now: dev mode pointed one at its source checkout,
+// or back at the pinned copy. Idempotent, so the route that made the switch and the watcher that saw the pointer file
+// change can both call it: a process already where it belongs is left alone. One the extension no longer declares (a
+// checkout that renamed it) is stopped, sparing a key another extension declares, as above. `restart` names installs
+// whose running processes restart even in place (a rebuild), and `autoStart` those whose autoStart processes come up
+// too; the watcher passes neither, so a process the owner stopped stays stopped.
+export const followExtensionDirs = async (
+    services: Services,
+    options: { readonly restart?: ReadonlySet<string>; readonly autoStart?: ReadonlySet<string> } = {},
+): Promise<void> => {
+    try {
+        const inventory = await extensionInventory(services);
+        const claimed = new Set(
+            [...inventory.extensions, ...inventory.pending].flatMap((extension) =>
+                (extension.manifest.contributes?.processes ?? []).map((process) => extensionProcessKey(extension.id, process.name)),
+            ),
+        );
+        for (const extension of inventory.extensions.filter((candidate) => candidate.source === "installed")) {
+            stopUndeclared(services, extension, claimed);
+            await moveProcesses(services, extension, options.restart?.has(extension.id) === true);
+            if (extension.enabled && options.autoStart?.has(extension.id) === true) {
+                await startAutoStartProcesses(services, extension);
+            }
+        }
+    } catch (error) {
+        services.logger.warn({ err: error }, "moving extension processes onto their directories failed");
+    }
+};
+
+// A running process of this install that no enumerated extension declares any more.
+const stopUndeclared = (services: Services, extension: InstalledExtension, claimed: ReadonlySet<string>): void => {
+    const prefix = extensionProcessKey(extension.id, "");
+    for (const service of services.serviceProcesses.list()) {
+        if (service.key.startsWith(prefix) && !claimed.has(service.key)) {
+            services.serviceProcesses.stop(service.key);
+        }
+    }
+};
+
+// Restarts each running declared process that was started somewhere else than its directory now, or every running one
+// when `restart`; one the switch would not start again stays stopped.
+const moveProcesses = async (services: Services, extension: InstalledExtension, restart: boolean): Promise<void> => {
+    for (const process of extension.manifest.contributes?.processes ?? []) {
+        const key = extensionProcessKey(extension.id, process.name);
+        const status = services.serviceProcesses.statusOf(key);
+        const inPlace = status?.cwd === processCwd(extension, process);
+        if (status === undefined || (inPlace && !restart)) {
+            continue;
+        }
+        services.serviceProcesses.stop(key);
+        const wanted = extension.enabled && (await processesDesired(services, extension));
+        if (wanted) {
+            await startExtensionProcess(services, extension, process);
+        }
     }
 };
 

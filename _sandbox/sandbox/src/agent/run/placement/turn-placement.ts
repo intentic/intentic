@@ -11,6 +11,7 @@ import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { TurnCloser, TurnEnding } from "./turn-close.js";
 import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "./turn-landing.js";
+import type { ReachWatch } from "./turn-reach.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -151,14 +152,18 @@ export async function* anchorIsolatedTurn(
     yield { kind: "checkpoint", id: `worktree:${turn.index}`, index: turn.index };
 }
 
-// The main tree: the body announces its own checkpoint, and there is no branch to land or books to settle.
-export const mainTreePlacement = (body: () => AsyncIterable<AgentEvent>): Placement => ({
+// The main tree: the body announces its own checkpoint, and there is no branch to land or books to settle. Where the
+// work went besides the tree's own repos is still read, its installs as it opens and the rest as it closes.
+export const mainTreePlacement = (body: () => AsyncIterable<AgentEvent>, reach?: ReachWatch): Placement => ({
     // oxlint-disable-next-line require-yield -- A placement with nothing to announce hands its body over at once.
-    async *open () {
+    async *open() {
+        void reach?.open();
         return body();
     },
-    async *land () {},
-    close: async () => {},
+    async *land() {},
+    close: async () => {
+        await reach?.close([]);
+    },
     settled: () => {},
     thrown: "agent turn failed",
 });

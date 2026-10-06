@@ -10,7 +10,9 @@ import {
     readExtensionManifest,
     workspaceExtensionsRoot,
 } from "../capabilities/extension-dirs.js";
+import { opt } from "../opt.js";
 import { type ExtensionApproval, extensionApprovals } from "./extension-approvals.js";
+import { checkDevCheckout, type InstalledDev, readExtensionDev } from "./extension-dev.js";
 import { readExtensionEnablement } from "./extension-enablement.js";
 
 // Structural subset of Services the enumerator needs; callers pass `services` or a small adapter with the same fields.
@@ -35,6 +37,10 @@ export interface InstalledExtension {
     readonly source: ExtensionSummary["source"];
     // Owner's switch; a disabled extension stays listed (its row still renders) but drops from enabledExtensions().
     readonly enabled: boolean;
+    // A git install pointed at a source checkout (extension-dev.ts): `dir` and `manifest` are the checkout's unless
+    // `held` says why the pinned copy still runs. `source` stays "installed" either way, so nothing that deletes or
+    // updates an install ever reaches the checkout.
+    readonly dev?: InstalledDev;
 }
 
 // A workspace extension the owner has not approved with the powers it declares now: enumerated for its row and the
@@ -143,14 +149,31 @@ export const extensionInventory = async (services: ExtensionHost): Promise<Exten
     const enabledOf = (manifest: ExtensionManifest): boolean =>
         ESSENTIAL_EXTENSIONS.has(extensionIdOf(manifest)) || enablement[extensionIdOf(manifest)] !== false;
     const installed: InstalledExtension[] = [];
+    // Read once only when there is an install to apply it to.
+    let pointers: Awaited<ReturnType<typeof readExtensionDev>> | undefined;
     for (const capability of capabilities) {
         if (capability.kind !== "extension") {
             continue;
         }
         const dir = extensionRootOf(extensionDir(services.workspace.root, capability.id), capability.config.path);
         const manifest = await readExtensionManifest(dir);
-        if (manifest !== undefined) {
-            installed.push({ id: capability.id, dir, manifest, source: "installed", enabled: enabledOf(manifest) });
+        if (manifest === undefined) {
+            continue;
+        }
+        const pinned: InstalledExtension = { id: capability.id, dir, manifest, source: "installed", enabled: enabledOf(manifest) };
+        pointers ??= await readExtensionDev(services.workspace.root);
+        const pointer = pointers[capability.id];
+        if (pointer === undefined) {
+            installed.push(pinned);
+            continue;
+        }
+        // A pointer that fails its check leaves the pinned copy running, and says why on the row.
+        const roots = { root: services.workspace.root, historyRoot: services.config.historyRoot };
+        const checked = await checkDevCheckout(roots, pointer.path, manifest, capability.config.path);
+        if ("held" in checked) {
+            installed.push({ ...pinned, dev: { checkout: checked.checkout ?? pointer.path, held: checked.held, ...opt("place", checked.place) } });
+        } else {
+            installed.push({ ...pinned, dir: checked.dir, manifest: checked.manifest, dev: { checkout: checked.checkout, place: checked.place } });
         }
     }
     const baked = await bakedExtensions(services, enabledOf);

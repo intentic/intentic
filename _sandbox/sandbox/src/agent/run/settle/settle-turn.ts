@@ -1,5 +1,6 @@
 import type { Services } from "../../../composition.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
+import type { ReachFrames } from "../../verification/agent-reach.js";
 import type { SettlementPlan } from "./turn-settlement.js";
 
 // Carries a settlement plan out in the order a turn's exit always has: the resume records first, then the rows and
@@ -23,12 +24,17 @@ export const performSettlement = (
         readonly record: (event: TurnActivity) => void;
         // Records the outbound calls whose results never arrived.
         readonly flush: () => void;
+        // Takes what the frames say of where the work went, for the placement's close to finish reading and note.
+        readonly reach?: (frames: ReachFrames) => void;
     },
 ): void => {
     recordResumes(deps, plan);
     // Before the settle that files it: the actor keeps it with the turn's other readings until then.
     if (plan.proof !== undefined) {
         deps.conversations.send(plan.proof.conversationId, { kind: "proof-noted", proof: plan.proof.proof });
+    }
+    if (plan.reach !== undefined) {
+        turn.reach?.(plan.reach);
     }
     turn.record(plan.completion);
     if (plan.headroomRefresh !== undefined) {

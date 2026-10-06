@@ -16,6 +16,7 @@ import {
     type TodoItem,
     type TurnProfile,
     type TurnProof,
+    type TurnReach,
 } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
@@ -103,6 +104,8 @@ export interface SettleFlush {
     readonly checklist: readonly TodoItem[] | undefined;
     // What the turn showed of its own work; absent for one that touched no code, which leaves the card's last record.
     readonly proof: TurnProof | undefined;
+    // Where the turn's work went besides its branch; absent when it all stayed there, which clears the card's last one.
+    readonly reach: TurnReach | undefined;
 }
 
 export type ConversationEvent =
@@ -119,6 +122,8 @@ export type ConversationEvent =
     | { readonly kind: "stop"; readonly ending: StopEnding }
     // What the settling turn showed of its own work, read off its tool calls; the settle files it on the card.
     | { readonly kind: "proof-noted"; readonly proof: TurnProof }
+    // Where the settling turn's work went besides its branch, read as it closes; the settle files it, undefined included.
+    | { readonly kind: "reach-noted"; readonly reach: TurnReach | undefined }
     // The turn is over, however it ended; a manual land settles a resting card the same way.
     | { readonly kind: "settle" }
     // A restored card's answer will re-run the turn; holds the card through the settle that precedes it.
@@ -512,9 +517,10 @@ const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): 
         sessionId: turn.sessionId,
         checklist: turn.checklist,
         proof: turn.proof,
+        reach: turn.reach,
     };
     return {
-        state: { ...state, phase, turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, proof: undefined } },
+        state: { ...state, phase, turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, proof: undefined, reach: undefined } },
         effects: [{ kind: "entry-settled", flush }, { kind: "persist" }, { kind: "reprobe" }, { kind: "broadcast" }],
         reply: undefined,
     };
@@ -718,6 +724,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     frame: (state, event, now) => onFrame(state, event.frame, now),
     stop: (state, event) => onStop(state, event.ending),
     "proof-noted": (state, event) => unchanged({ ...state, turn: { ...state.turn, proof: event.proof } }, undefined),
+    "reach-noted": (state, event) => unchanged({ ...state, turn: { ...state.turn, reach: event.reach } }, undefined),
     settle: (state, _event, _now, entry) => onSettle(state, entry),
     "resume-promised": (state) => unchanged({ ...state, turn: { ...state.turn, resuming: true } }, undefined),
     "resume-abandoned": (state, event, _now, entry) => onAbandon(state, event.reason, entry),

@@ -61,6 +61,7 @@ import { performSettlement } from "./settle/settle-turn.js";
 import { settleTurn } from "./settle/turn-settlement.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin, runnerPlacement } from "./placement/turn-placement.js";
 import { type WorktreeRun, worktreePlacement } from "./placement/worktree-placement.js";
+import { type ReachWatch, reachWatch } from "./placement/turn-reach.js";
 import { turnCloser } from "./placement/turn-close.js";
 import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 import { standingOn } from "../../conversations/actor/parked-cards.js";
@@ -179,16 +180,19 @@ const placementOf = (
             },
         );
     }
+    // Where the turn's work went besides its branch: installs read as it opens, its frames' half handed over as it
+    // settles, and the whole noted as it closes (turn-reach.ts).
+    const reach = reachWatch(services, id);
     if (!conversation.isolated) {
-        return mainTreePlacement(() => runTurn(services, input, signal, undefined, steering, snapshot));
+        return mainTreePlacement(() => runTurn(services, input, signal, undefined, steering, snapshot, reach), reach);
     }
     return worktreePlacement(
         services,
-        { input, conversationId: id, snapshot, signal },
+        { input, conversationId: id, snapshot, signal, reach },
         {
             compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), true),
             versionMain: (repos) => versionMainTree(services, repos),
-            run: (worktree) => runTurn(services, input, signal, worktree, steering, snapshot),
+            run: (worktree) => runTurn(services, input, signal, worktree, steering, snapshot, reach),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
             fix: (span) => runWorktreeFixers(services, id, span),
         },
@@ -772,6 +776,8 @@ async function* runTurn(
     steering: SteeringQueue | undefined,
     // Which conversation message this turn answers, for its checkpoint; undefined with no conversation.
     turn?: SnapshotTurn,
+    // Takes the frames' half of where the work went; its placement reads the rest as the turn closes.
+    reach?: ReachWatch,
 ): AsyncGenerator<AgentEvent> {
     const prepared = yield* prepareTurn(services, input, signal, worktree, steering, turn);
     if (prepared === undefined) {
@@ -832,7 +838,7 @@ async function* runTurn(
             experiments: plan.experiments,
             startedAt,
         });
-        performSettlement(services, settlement, { record, flush: sniffer.flush });
+        performSettlement(services, settlement, { record, flush: sniffer.flush, ...opt("reach", reach?.framed) });
     }
 }
 

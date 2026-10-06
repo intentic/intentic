@@ -13,6 +13,7 @@ import {
     turnInFlight,
 } from "../../agents/fleet/agentStatus";
 import { cardProof, type ProofMark } from "../../agents/board/cards/proofSeal";
+import { type ReachLine, reachLine } from "../../agents/board/cards/reachLine";
 import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/prompt-cache/promptCache";
 import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
@@ -46,6 +47,8 @@ export interface CardView {
     readonly warm: WarmMark | undefined;
     // What its last turn showed of its own work (proofSeal.ts): plain data like everything here.
     readonly proof: ProofMark | undefined;
+    // Where its last turn put its work besides its branch (reachLine.ts), the board card's line at rail width.
+    readonly reach: ReachLine | undefined;
     readonly meta: boolean;
 }
 
@@ -107,8 +110,9 @@ export const liveOf = (entry: OpenChat): CardView[`live`] => {
 
 // Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per card
 // rather than assumed. The standing is not counted here: it wears the card's corner, not this line.
-const hasMeta = (entry: OpenChat, proof: ProofMark | undefined): boolean =>
+const hasMeta = (entry: OpenChat, proof: ProofMark | undefined, reach: ReachLine | undefined): boolean =>
     proof !== undefined ||
+    reach !== undefined ||
     (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
     entry.conversation.unsent.value ||
     originOf(entry.conversation) !== undefined ||
@@ -134,6 +138,7 @@ export const createCardViews = (): CardViews => {
         of: (entry, snippet, now) => {
             // Only a roster agent has a turn that proved anything; an unfiled chat has none.
             const proof = entry.agent === undefined ? undefined : cardProof(entry.agent, turnInFlight(entry.agent));
+            const reach = entry.agent === undefined ? undefined : reachLine(entry.agent.reach);
             const view: CardView = {
                 status: statusOf(entry),
                 // The corner's word, from the board's own projection: why this chat needs you, else that it worked
@@ -148,7 +153,8 @@ export const createCardViews = (): CardViews => {
                 cooling: entry.agent === undefined ? undefined : cacheCooling(entry.agent, now),
                 warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
                 proof,
-                meta: hasMeta(entry, proof),
+                reach,
+                meta: hasMeta(entry, proof, reach),
             };
             const print = snapshotFingerprint(view);
             const previous = held.get(entry.conversation.conversationId);

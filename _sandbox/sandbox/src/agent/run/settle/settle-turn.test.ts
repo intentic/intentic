@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { TurnProof } from "@intentic/sandbox-contract";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../composition.js";
@@ -86,6 +87,7 @@ const plan = (change: Partial<SettlementPlan> = {}): SettlementPlan => ({
         durationMs: 0,
     },
     proof: undefined,
+    reach: undefined,
     snapshot: undefined,
     ...change,
 });
@@ -128,6 +130,40 @@ describe("a settlement", () => {
         expect(deps.agents.entry("settle-2")?.proof).toStrictEqual(FAILING);
         expect(deps.agents.get("settle-2")?.proof).toStrictEqual(FAILING);
         expect(deps.conversations.state("settle-2")?.turn.proof).toBeUndefined();
+    });
+
+    test("hands what the frames saw of where the work went to the turn's reach, for its close to finish", () => {
+        const { deps } = traced();
+        const handed: unknown[] = [];
+        const framed = {
+            live: [`${STATE_DIR}/local/state.json`],
+            published: [{ remote: "origin", branch: "main", command: "git push origin main" }],
+        };
+        performSettlement(deps, plan({ reach: framed }), { ...turn, reach: (frames) => void handed.push(frames) });
+        performSettlement(deps, plan(), { ...turn, reach: (frames) => void handed.push(frames) });
+        expect(handed).toStrictEqual([framed]);
+    });
+
+    test("files the reach a turn noted, and the next turn's replaces it, cleared when it noted none", async () => {
+        const { deps } = traced();
+        const reach = { at: 1_500, live: [{ path: `${STATE_DIR}/local/extensions/intentic-x`, extension: "intentic.x" }] };
+        const opening = { conversationId: "settle-3", isolated: true, prompt: "go", profile: { agent: "codex" as const } };
+        await beginTurn(deps.conversations, opening, 1_000);
+        await deps.conversations.send("settle-3", { kind: "reach-noted", reach }, 1_500).settled;
+        await deps.conversations.send("settle-3", { kind: "settle" }, 2_000).settled;
+        expect(deps.agents.entry("settle-3")?.reach).toStrictEqual(reach);
+        expect(deps.agents.get("settle-3")?.reach).toStrictEqual(reach);
+        expect(deps.conversations.state("settle-3")?.turn.reach).toBeUndefined();
+
+        // A manual land settles with no turn under it, and leaves the last turn's reach standing.
+        await deps.conversations.send("settle-3", { kind: "settle" }, 2_500).settled;
+        expect(deps.agents.entry("settle-3")?.reach).toStrictEqual(reach);
+
+        await beginTurn(deps.conversations, opening, 3_000);
+        await deps.conversations.send("settle-3", { kind: "reach-noted", reach: undefined }, 3_500).settled;
+        await deps.conversations.send("settle-3", { kind: "settle" }, 4_000).settled;
+        expect(deps.agents.entry("settle-3")?.reach).toBeUndefined();
+        expect(deps.agents.get("settle-3")?.reach).toBeUndefined();
     });
 
     test("of a run that got somewhere resets the ladder, and one with nothing to hold, prove or snapshot does only the rest", () => {

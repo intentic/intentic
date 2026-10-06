@@ -116,6 +116,61 @@ export const TurnProofSchema = z.object({
         .describe("How many rendered files it changed (pages, components, styles) without looking at the result afterwards. Absent when none."),
 });
 export type TurnProof = z.infer<typeof TurnProofSchema>;
+// How many entries each of a reach's lists carries; past it, the list's `…More` count says how many were left out.
+export const TURN_REACH_LIST_MAX = 10;
+// Where the last turn's work went when it went somewhere other than its own branch, read off what the turn touched and
+// never asked of the model. Lists only the exceptions: a turn whose work all lives on its branch leaves no reach at all.
+export const TurnReachSchema = z.object({
+    at: z.number().describe("When the turn that left this ended, in milliseconds."),
+    live: z
+        .array(
+            z.object({
+                path: z
+                    .string()
+                    .describe(
+                        "What it wrote, as it named it: relative to the workspace for the sandbox's shared state, absolute for the owner's own checkout.",
+                    ),
+                extension: z
+                    .string()
+                    .optional()
+                    .describe("The extension, by its manifest id, when what it changed is the installed copy of one. Absent for anything else."),
+            }),
+        )
+        .max(TURN_REACH_LIST_MAX)
+        .optional()
+        .describe(
+            "Files it changed in place where every conversation reads them, outside its own branch: an installed extension's copy, the sandbox's shared state, the owner's own checkout. Live the moment they were written, never reviewed, and an installed extension's next update replaces them.",
+        ),
+    liveMore: z.number().optional().describe("How many more such files there were beyond the ones listed. Absent when all are listed."),
+    stranded: z
+        .array(
+            z.object({
+                dir: z.string().describe("The clone, as a folder relative to its own copy of the workspace."),
+                uncommitted: z.number().describe("Files changed in it and never committed."),
+                unpushed: z.number().describe("Commits in it its upstream does not have, or that no remote has when it follows none."),
+            }),
+        )
+        .max(TURN_REACH_LIST_MAX)
+        .optional()
+        .describe(
+            "Repositories it cloned inside its own copy and left work in. A clone of its own never rides its land, so what is in one stays there.",
+        ),
+    strandedMore: z.number().optional().describe("How many more such clones there were beyond the ones listed. Absent when all are listed."),
+    published: z
+        .array(
+            z.object({
+                dir: z.string().optional().describe("The folder it pushed from, as the command named it. Absent for its own working folder."),
+                remote: z.string().optional().describe("The remote it pushed to, as the command named it. Absent when the command named none."),
+                branch: z.string().optional().describe("The branch it pushed to, as the command named it. Absent when the command named none."),
+                command: z.string().describe("The push itself, trimmed to one line."),
+            }),
+        )
+        .max(TURN_REACH_LIST_MAX)
+        .optional()
+        .describe("Pushes it made with git that went through: work it sent out of the sandbox itself, never through a land."),
+    publishedMore: z.number().optional().describe("How many more such pushes there were beyond the ones listed. Absent when all are listed."),
+});
+export type TurnReach = z.infer<typeof TurnReachSchema>;
 // A landing's commit message: subject plus the two trailer sentences a changelog repo gets. One schema, not three
 // duplicated fields, since both the live roster and the review carrier must read the same shape and can't disagree.
 export const LandedMessageSchema = z.object({
@@ -482,6 +537,11 @@ export const AgentSummarySchema = z.object({
     // Written by the turn's own settle from its tool calls; nothing is asked of the model to earn or clear it.
     proof: TurnProofSchema.optional().describe(
         "What its last turn showed of its work: whether a check it ran passed after its last edit, and whether it looked at interface files it changed. Absent until a turn that edited or checked anything has ended.",
+    ),
+    // Written by the turn's own settle from its tool calls and a read of the clones and installs it could have touched;
+    // replaced by every turn, so it says where the LAST turn's work went.
+    reach: TurnReachSchema.optional().describe(
+        "Where its last turn's work went when it went somewhere besides its own branch: files changed live outside it, clones of its own holding work that will not land, pushes it made itself. Absent when everything it did is on its branch.",
     ),
     // Completed turns and lifetime tool calls, the card's msgs/tools counters.
     turns: z.number().optional().describe("Turns it has finished."),
