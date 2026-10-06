@@ -5,7 +5,7 @@ import { computed, shallowRef } from "vue";
 // The link half of the decorator reads the workspace tree's query for its container root; nothing is in it here.
 jest.mock("../queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
 
-const { picturePathIn } = await import("./markdownImages");
+const { PENDING_PICTURE, picturePathIn } = await import("./markdownImages");
 const { fileLinkDecorator } = await import("./renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 
@@ -78,7 +78,7 @@ describe(`picturePathIn`, () => {
 
 describe(`pictures in a previewed document`, () => {
     it(`asks for the picture's workspace path, with a neutral src until its bytes land`, () => {
-        expect(sources(renderIn(`docs/`, `![flow](img/flow.png)`))).toEqual([``]);
+        expect(sources(renderIn(`docs/`, `![flow](img/flow.png)`))).toEqual([PENDING_PICTURE]);
         expect(asked).toEqual([`docs/img/flow.png`]);
     });
 
@@ -93,7 +93,7 @@ describe(`pictures in a previewed document`, () => {
 
     it(`redraws the document when the bytes land, since the render read them`, () => {
         const html = computed(() => renderIn(`docs/`, `![flow](img/flow.png)`));
-        expect(sources(html.value)).toEqual([``]);
+        expect(sources(html.value)).toEqual([PENDING_PICTURE]);
         landed.value = { "docs/img/flow.png": `blob:app/flow` };
         expect(sources(html.value)).toEqual([`blob:app/flow`]);
     });
@@ -141,5 +141,26 @@ describe(`a picture offered in more than one version`, () => {
         expect(inScheme(`light`)).toBe(`not all`);
         // Without a look to answer to, the query is left for the browser.
         expect(sourceOf(renderIn(`docs/`, PICTURE)).media).toBe(`(prefers-color-scheme: dark)`);
+    });
+});
+
+describe(`a picture whose bytes are on their way`, () => {
+    const pending = (html: string): boolean[] => {
+        const holder = document.createElement(`div`);
+        holder.innerHTML = html;
+        return [...holder.querySelectorAll(`img`)].map((image) => image.hasAttribute(`data-md-pending`));
+    };
+
+    it(`is marked pending until they land, and a file with nothing to draw is not`, () => {
+        const answers: Record<string, string | null> = { "docs/gone.png": null };
+        const drawFrom = (path: string): string | null | undefined => answers[path];
+        const render = (): string => renderEngine(`![a](wait.png) ![b](gone.png) ![c](https://x.dev/c.png)`, fileLinkDecorator({ dir: `docs/`, picture: drawFrom }));
+        expect(pending(render())).toEqual([true, false, false]);
+        answers[`docs/wait.png`] = `blob:app/wait`;
+        expect(pending(render())).toEqual([false, false, false]);
+    });
+
+    it(`is never pending when it climbs out of the workspace, since nothing will ever land`, () => {
+        expect(pending(renderIn(`docs/`, `![x](../../../etc/secret.png)`))).toEqual([false]);
     });
 });

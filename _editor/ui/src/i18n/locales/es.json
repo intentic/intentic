@@ -160,7 +160,8 @@
     },
     "markdownDocumentSurface": {
         "document": "Documento",
-        "followLink": "{target} · Ctrl+clic para abrir"
+        "followLink": "{target} · Ctrl+clic para abrir",
+        "drawingDiagram": "Dibujando el diagrama…"
     },
     "noteEditor": {
         "copyMarkdown": "Copiar markdown",

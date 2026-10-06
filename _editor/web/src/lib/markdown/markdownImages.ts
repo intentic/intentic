@@ -58,9 +58,19 @@ export const picturePathIn = (dir: string, src: string): string | undefined => {
 // One `srcset` candidate: an address and, after whitespace, the width or density it is for (`a.png 2x`).
 const CANDIDATE = /^(\S+)(\s+.*)?$/su;
 
+/**
+ * What a surface answers for a picture's workspace path: its address, `null` for a file with nothing to draw, or
+ * undefined while its bytes are on their way.
+ */
+export type DrawPicture = (path: string) => string | null | undefined;
+
+// What a picture on its way draws in the meantime: one transparent pixel, which asks nothing of anyone and, unlike an
+// empty `src`, is not a broken image the browser would put its glyph on. The stylesheet sizes and paints the placeholder.
+export const PENDING_PICTURE = `data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7`;
+
 // A `<source>`'s candidates, each relative address resolved like an `<img>`'s; a candidate with nothing to draw yet is
 // left out, and a set left with none is empty, which the browser skips for the next source or the `<img>`.
-const resolveSrcset = (srcset: string, dir: string, draw: (path: string) => string | undefined): string =>
+const resolveSrcset = (srcset: string, dir: string, draw: DrawPicture): string =>
     srcset
         .split(`,`)
         .map((candidate) => candidate.trim())
@@ -72,7 +82,7 @@ const resolveSrcset = (srcset: string, dir: string, draw: (path: string) => stri
             }
             const path = picturePathIn(dir, url);
             const drawn = path === undefined ? undefined : draw(path);
-            return drawn === undefined ? [] : [`${drawn}${match?.[2] ?? ``}`];
+            return drawn === undefined || drawn === null ? [] : [`${drawn}${match?.[2] ?? ``}`];
         })
         .join(`, `);
 
@@ -82,7 +92,8 @@ const SCHEME_QUERY = /^\s*\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)\s*$/
 /**
  * Points every relative picture in a sanitized document at what `draw` answers for its workspace path, in place.
  * `dir` is the document's folder. While `draw` has nothing yet the `src` is empty, which asks nothing of anyone; a
- * picture that climbs out of the workspace keeps it empty, and `draw` is never asked about it. A `<picture>`'s
+ * picture that climbs out of the workspace keeps it empty, and `draw` is never asked about it. One still on its way is
+ * marked `data-md-pending`, which the stylesheet draws as a loading placeholder in the picture's place. A `<picture>`'s
  * `<source srcset>` resolves the same way, and one offered for a colour scheme answers to `scheme`, the app's look,
  * rather than to the operating system's: a dark app shows a README's dark picture on a light desktop, as GitHub's
  * own theme does.
@@ -90,7 +101,7 @@ const SCHEME_QUERY = /^\s*\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)\s*$/
 export const resolvePictures = (
     fragment: DocumentFragment,
     dir: string,
-    draw: (path: string) => string | undefined,
+    draw: DrawPicture,
     scheme?: `light` | `dark`,
 ): void => {
     for (const image of fragment.querySelectorAll(`img`)) {
@@ -99,7 +110,9 @@ export const resolvePictures = (
             continue;
         }
         const path = picturePathIn(dir, src);
-        image.setAttribute(`src`, path === undefined ? `` : (draw(path) ?? ``));
+        const drawn = path === undefined ? null : draw(path);
+        image.setAttribute(`src`, drawn === undefined ? PENDING_PICTURE : (drawn ?? ``));
+        image.toggleAttribute(`data-md-pending`, drawn === undefined);
     }
     for (const source of fragment.querySelectorAll(`picture > source`)) {
         const srcset = source.getAttribute(`srcset`);

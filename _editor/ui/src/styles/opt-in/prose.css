@@ -203,6 +203,22 @@
     border-radius: var(--radius-md);
 }
 
+/* A WORKSPACE PICTURE ON ITS WAY (markdownImages.ts marks it while its bytes load) holds a placeholder of the size it will be, painted as every loading placeholder in the app is (utilities.css `.skeleton`), rather than a broken-image glyph that then pops into a picture and pushes the page down. Its own `width`/`height` size it when it has them; without, it takes a picture's usual shape. */
+.md-prose img[data-md-pending] {
+    background-color: var(--ui-skeleton-ink, color-mix(in oklab, var(--color-content) 11%, transparent));
+    mask-image: var(--ui-skeleton-sheen);
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    color: transparent;
+    font-size: 0;
+}
+.md-prose img[data-md-pending]:not([height]) {
+    aspect-ratio: 16 / 9;
+}
+.md-prose img[data-md-pending]:not([width]) {
+    width: min(100%, 32rem);
+}
+
 /* An HTML container a README centres its header with (`<div align="center">`): the browser centres the text, and the measured blocks inside it centre in the column rather than sitting left with their text centred in the measure. */
 .md-prose [align="center"] > :is(p, h1, h2, h3, h4, ul, ol, blockquote) {
     margin-inline: auto;

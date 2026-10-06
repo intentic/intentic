@@ -20,6 +20,7 @@ const remember = (key: string, svg: string | null): void => {
 // The block shows its picture at rest only once there is one; a refused diagram stays the code that failed.
 const show = (holder: HTMLElement, svg: string | null): void => {
     const block = holder.parentElement;
+    delete block?.dataset[`mdDrawing`];
     if (svg === null) {
         holder.replaceChildren();
         delete block?.dataset[`mdDrawn`];
@@ -31,8 +32,21 @@ const show = (holder: HTMLElement, svg: string | null): void => {
     }
 };
 
-/** Draws every diagram holder under `root` not yet drawn in `look` (the scheme and accent the palette is read from). */
-export const drawFigures = (root: HTMLElement, scheme: "light" | "dark", look: string): void => {
+// A diagram on its way (mermaid is a lazy import, then a render) is a placeholder the size of its code, saying so, rather
+// than code that turns into a picture a moment later. Only a block with no picture yet: a look changing under a drawn
+// diagram keeps the old one on screen until the new one lands.
+const pending = (holder: HTMLElement, label: string): void => {
+    const block = holder.parentElement;
+    if (block !== null && block.dataset[`mdDrawn`] === undefined) {
+        block.dataset[`mdDrawing`] = label;
+    }
+};
+
+/**
+ * Draws every diagram holder under `root` not yet drawn in `look` (the scheme and accent the palette is read from).
+ * `label` is what a block says while its diagram is on its way.
+ */
+export const drawFigures = (root: HTMLElement, scheme: "light" | "dark", look: string, label: string): void => {
     const font = getComputedStyle(root).fontFamily;
     for (const holder of root.querySelectorAll<HTMLElement>(`.${FIGURE_HOLDER}`)) {
         if (holder.dataset[`mdFigureLook`] === look) {
@@ -46,6 +60,7 @@ export const drawFigures = (root: HTMLElement, scheme: "light" | "dark", look: s
             show(holder, cached);
             continue;
         }
+        pending(holder, label);
         void renderMermaid(code, scheme, font).then(
             (svg) => {
                 remember(key, svg);

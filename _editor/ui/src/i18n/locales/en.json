@@ -183,7 +183,8 @@
     },
     "markdownDocumentSurface": {
         "document": "Document",
-        "followLink": "{target} · Ctrl+click to open"
+        "followLink": "{target} · Ctrl+click to open",
+        "drawingDiagram": "Drawing diagram…"
     },
     "noteEditor": {
         "copyMarkdown": "Copy markdown",

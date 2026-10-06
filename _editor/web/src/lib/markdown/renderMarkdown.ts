@@ -10,7 +10,7 @@ import {
     type StreamingMarkdown,
 } from "@intentic/ui/markdown";
 import { linkifyFileRefs } from "./markdownFileLinks";
-import { resolvePictures } from "./markdownImages";
+import { type DrawPicture, resolvePictures } from "./markdownImages";
 
 // App's markdown entry point: the shared design-system engine plus file-path linking, added here as a decorator so
 // route knowledge stays out of the design system. Every call site imports from here, so no surface can render prose
@@ -28,7 +28,7 @@ export const fileLinkDecorator =
     (options?: {
         readonly dir?: string;
         readonly agent?: string;
-        readonly picture?: (path: string) => string | undefined;
+        readonly picture?: DrawPicture;
         readonly scheme?: `light` | `dark`;
     }): MarkdownDecorator =>
     (fragment) => {

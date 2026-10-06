@@ -97,6 +97,15 @@ const pictures = lazyByPath(async (key: string): Promise<Picture> => {
 // The picture at `size`, starting its fetch on first ask.
 export const picture = (scope: string | undefined, path: string, size: PictureSize): Picture | undefined => pictures.get(keyOf(scope, path, size));
 
+/**
+ * A document's picture as markdownImages.ts draws it: its address once its bytes are here, `null` when the file has none
+ * to give (gone, or refused), and undefined while they are still on their way, which the document draws as a placeholder.
+ */
+export const documentPicture = (scope: string | undefined, path: string): string | null | undefined => {
+    const held = picture(scope, path, `original`);
+    return held === undefined ? undefined : (held.url ?? null);
+};
+
 // Bytes this window already holds for a file it is uploading, so the original is never asked of the daemon.
 export const rememberOriginal = (path: string, url: string): void => pictures.put(keyOf(undefined, path, `original`), { url });
 

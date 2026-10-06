@@ -157,7 +157,8 @@
     },
     "markdownDocumentSurface": {
         "document": "Dokument",
-        "followLink": "{target} · Strg+Klick zum Öffnen"
+        "followLink": "{target} · Strg+Klick zum Öffnen",
+        "drawingDiagram": "Diagramm wird gezeichnet…"
     },
     "noteEditor": {
         "copyMarkdown": "Markdown kopieren",

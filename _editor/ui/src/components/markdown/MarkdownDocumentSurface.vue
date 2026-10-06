@@ -144,7 +144,7 @@ const putCaret = (offset: number): void => putSelection(offset, offset);
 const { scheme, accent } = useTheme();
 const drawDiagrams = (): void => {
     if (host.value !== undefined) {
-        drawFigures(host.value, scheme.value, `${scheme.value}:${accent.value}`);
+        drawFigures(host.value, scheme.value, `${scheme.value}:${accent.value}`, t(`ui.markdownDocumentSurface.drawingDiagram`));
     }
 };
 watch([scheme, accent], drawDiagrams);
@@ -232,8 +232,36 @@ const onRenderedClick = (event: MouseEvent): void => {
 };
 
 // Marks whichever block holds the caret, regardless of how it got there (click, arrow key, find, rewrite).
+// A block drawn as something at rest (a rendering, a diagram) that the caret opens into its source: its source is
+// usually shorter than the picture it drew, and everything under it would jump up by the difference just as the reader
+// clicked. So the block keeps the height it had at rest while the caret is in it, its source centred in that room; it
+// can still grow past it while being typed in. Measured the moment it opens, before the class changes what it draws.
+const DRAWS_AT_REST = `.md-src-rich:not([data-md-quiet]), .md-code-block[data-md-drawn], .md-code-block[data-md-drawing]`;
+let held: { index: number; height: number } | undefined;
+
+const holdHeight = (index: number): void => {
+    const element = blockElements()[index];
+    if (held?.index !== index) {
+        const opening = element !== undefined && !element.classList.contains(`md-block-active`);
+        const draws = element?.matches(DRAWS_AT_REST) === true || element?.querySelector(DRAWS_AT_REST) !== null;
+        held = opening && draws && element !== undefined ? { index, height: element.getBoundingClientRect().height } : undefined;
+    }
+    // Set on every pass, not once: a keystroke in the block rebuilds its element, which must keep the room it was given.
+    blockElements().forEach((each, at) => {
+        if (!(each instanceof HTMLElement)) {
+            return;
+        }
+        if (held !== undefined && at === held.index) {
+            each.style.setProperty(`--md-rest-height`, `${held.height}px`);
+        } else {
+            each.style.removeProperty(`--md-rest-height`);
+        }
+    });
+};
+
 const markActive = (): void => {
     const index = activeIndex();
+    holdHeight(index);
     blockElements().forEach((element, at) => element.classList.toggle(`md-block-active`, at === index));
     drawDiagrams();
 };

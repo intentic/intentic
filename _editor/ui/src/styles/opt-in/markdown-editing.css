@@ -356,3 +356,53 @@
     border-end-end-radius: var(--radius-md);
     padding-bottom: 0.6em;
 }
+
+/* A BLOCK OPENED FROM ITS PICTURE keeps the room the picture took (`--md-rest-height`, measured by the surface as the caret arrives), its source centred in it, so the page under it does not jump as the reader clicks. It still grows past that room while typed in, and gives it back when the caret leaves. */
+.md-editing .md-block-active:is(.md-src-rich, .md-code-block, .md-src-trailed) {
+    min-height: var(--md-rest-height, auto);
+}
+.md-editing .md-block-active.md-src-rich,
+.md-editing .md-block-active.md-src-trailed,
+.md-editing .md-block-active.md-code-block[data-md-drawn] {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+/* A centred source is a column of rows and a box, not a row of words: the flexed children keep their own widths. */
+.md-editing .md-block-active:is(.md-src-rich, .md-src-trailed) > * {
+    flex: none;
+}
+
+/* A DIAGRAM ON ITS WAY is a placeholder the size of its code, saying so (figureDrawing.ts sets `data-md-drawing` to the words): the code it will become a picture of never flashes up first. Painted the way every loading placeholder in the app is (utilities.css `.skeleton`). */
+.md-editing .md-code-block[data-md-drawing]:not(.md-block-active) {
+    border-color: transparent;
+    background: transparent;
+}
+.md-editing .md-code-block[data-md-drawing]:not(.md-block-active) > [data-md-row] {
+    visibility: hidden;
+}
+.md-editing .md-code-block[data-md-drawing]:not(.md-block-active)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-md);
+    background-color: var(--ui-skeleton-ink, color-mix(in oklab, var(--color-content) 11%, transparent));
+    mask-image: var(--ui-skeleton-sheen);
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    pointer-events: none;
+}
+.md-editing .md-code-block[data-md-drawing]:not(.md-block-active)::before {
+    content: attr(data-md-drawing);
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-normal);
+    letter-spacing: normal;
+    color: var(--color-muted);
+}

@@ -11,7 +11,7 @@ import { openFileRefFromEvent } from "../files/refs/openFileRef";
 import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { quickLookPlan } from "./quickLookContent";
-import { picture } from "./thumbnails";
+import { documentPicture, picture } from "./thumbnails";
 
 // Reads the file it is handed, never the listing: HomeCover decides which file answers for the folder, and this draws it
 // the way its tab would, read-only. Markdown is prose, other text is highlighted, a picture is drawn; anything else
@@ -176,7 +176,7 @@ const undrawable = computed(
 // beside the document is drawn from its own bytes in that scope (MarkdownViewer.vue).
 const decorate = computed(() => {
     const agent = workspaceAgent.value;
-    return fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, agent, picture: (file) => picture(agent, file, `original`)?.url });
+    return fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, agent, picture: (file) => documentPicture(agent, file) });
 });
 
 const open = (): void => {

@@ -6,7 +6,7 @@ import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { openFileRefFromEvent, openWorkspaceRef } from "../files/refs/openFileRef";
 import { useViewScope } from "../../../app/workspaceScope";
-import { picture } from "../home/thumbnails";
+import { documentPicture } from "../home/thumbnails";
 import type { LineJump } from "../tabs/workspaceTabs";
 import CodeView from "./CodeView.vue";
 import MarkdownOutline from "./MarkdownOutline.vue";
@@ -55,7 +55,7 @@ const decorate = computed<MarkdownDecorator>(() => {
     const links = fileLinkDecorator({
         dir: path.slice(0, path.lastIndexOf(`/`) + 1),
         agent,
-        picture: (file) => picture(agent, file, `original`)?.url,
+        picture: (file) => documentPicture(agent, file),
         scheme: scheme.value,
     });
     const tickable = editable === true;
