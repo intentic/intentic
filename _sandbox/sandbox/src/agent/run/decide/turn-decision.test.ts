@@ -12,9 +12,9 @@ import type { Admission } from "../../../workload/resource-budget.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
 import type { FieldNotes } from "@intentic/agent-context/field-notes";
-import { GUIDANCE_REVISION } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
+import { MAP_COMPARISON } from "./experiments.js";
 import type { ChildSupervisor } from "../../subagents/children.js";
 import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -210,13 +210,13 @@ test("a gated connector loses its variables from the shell and its skill, and no
     expect(titles(decision)).toEqual([GATED_CREDENTIALS_TITLE]);
 });
 
-// the project map: an opening, non-fork message, and only in the treatment arm of a measured conversation
+// the project map: an opening, non-fork message, in both arms of a measured conversation, which differ only in its form
 
 const MAP = "## Map of this project\n\nbilling/ takes the payments; mailer/ sends the receipts.";
 const MAP_ON = SandboxSettingsSchema.parse({ workspaceMap: true });
 const MAP_MEASURED = SandboxSettingsSchema.parse({ workspaceMap: true, workspaceMapHoldout: 0.5 });
-const MAP_TREATED = conversationIn("workspace-map", true);
-const MAP_CONTROL = conversationIn("workspace-map", false);
+const MAP_TREATED = conversationIn("workspace-map-form", true);
+const MAP_CONTROL = conversationIn("workspace-map-form", false);
 const LEAN: Persona = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
 // A conversation cut from another, on its first turn.
 const FORK = { conversationId: "parent", keep: 2, files: "now" } as const;
@@ -229,11 +229,32 @@ test.each([
         { conversationId: MAP_TREATED },
         undefined,
         true,
-        { turnIndex: 0, mapArm: true, mapChars: MAP.length },
+        { turnIndex: 0, mapArm: true, mapCohort: MAP_COMPARISON, mapChars: MAP.length },
     ],
-    ["the opening turn of a control conversation", MAP_MEASURED, { conversationId: MAP_CONTROL }, undefined, false, { turnIndex: 0, mapArm: false }],
-    ["a fork's opening turn", MAP_MEASURED, { conversationId: MAP_TREATED, forkOf: FORK }, undefined, false, { turnIndex: 0, mapArm: true }],
-    ["a follow-up, whose transcript already holds the map", MAP_MEASURED, { conversationId: MAP_TREATED }, 3, false, { turnIndex: 3, mapArm: true }],
+    [
+        "the opening turn of a control conversation, which gets the full form",
+        MAP_MEASURED,
+        { conversationId: MAP_CONTROL },
+        undefined,
+        true,
+        { turnIndex: 0, mapArm: false, mapCohort: MAP_COMPARISON, mapChars: MAP.length },
+    ],
+    [
+        "a fork's opening turn",
+        MAP_MEASURED,
+        { conversationId: MAP_TREATED, forkOf: FORK },
+        undefined,
+        false,
+        { turnIndex: 0, mapArm: true, mapCohort: MAP_COMPARISON },
+    ],
+    [
+        "a follow-up, whose transcript already holds the map",
+        MAP_MEASURED,
+        { conversationId: MAP_TREATED },
+        3,
+        false,
+        { turnIndex: 3, mapArm: true, mapCohort: MAP_COMPARISON },
+    ],
     [
         "a card that drops the map, taken out of the experiment",
         MAP_MEASURED,
@@ -421,7 +442,7 @@ const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iq
 
 test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s draws one arm per salt, the same on every turn", (conversationId) => {
     const search = experimentArm("iq-search", conversationId, 0.5);
-    const map = experimentArm("workspace-map", conversationId, 0.5);
+    const map = experimentArm("workspace-map-form", conversationId, 0.5);
     const notes = experimentArm("field-notes", conversationId, 0.5);
 
     const first = decided(MEASURED_FACTS, turn({ conversationId }));
@@ -431,7 +452,9 @@ test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s 
         iqSearchArm: search,
         iqSearchCohort: TEACHING.cohort,
         mapArm: map,
-        ...(map ? { mapChars: MAP.length } : {}),
+        mapCohort: MAP_COMPARISON,
+        // Both arms are sent a map; they differ in its form.
+        mapChars: MAP.length,
         notesArm: notes,
         // What the prompt paid, so only on a turn that was sent the brief; the cohort on both arms, to pair them.
         ...(notes ? { notesChars: BRIEF.chars } : {}),
@@ -459,17 +482,6 @@ test("a window too small for the field notes withholds them, so the ledger recor
     expect(decision.experiments).toEqual({ notesCohort: BRIEF.revision });
 });
 
-// the guidance experiment: the arm is the short form, and a turn composed with neither form is no control turn
-
-const GUIDANCE_MEASURED = SandboxSettingsSchema.parse({ leanGuidance: true, leanGuidanceHoldout: 0.5 });
-
-test.each([true, false])("a conversation drawing the %s arm is composed with that form and stamped with it", (arm) => {
-    const decision = decided({ ...FACTS, settings: GUIDANCE_MEASURED }, turn({ conversationId: conversationIn("lean-guidance", arm) }));
-
-    expect(decision.context.base.spec.guidance).toBe(arm ? "lean" : "full");
-    expect(decision.experiments).toEqual({ turnIndex: 0, guidanceArm: arm, guidanceCohort: GUIDANCE_REVISION });
-});
-
 // The system prompt names the tool the conversation was taught, so its guidance and the iq teaching never disagree; the
 // holdout keeps `rg`, or the guidance would teach the control what the experiment withholds from it.
 test.each([true, false])("a conversation drawing the %s iq arm is told to find code with the tool it was taught", (arm) => {
@@ -482,23 +494,6 @@ test("a sandbox with iq off is told rg", () => {
     const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ iqSearch: false }) }, turn({ conversationId: "c-1" }));
 
     expect(decision.context.base.spec.search).toBe("rg");
-});
-
-test("the switch with no holdout sends the short form and measures nothing", () => {
-    const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ leanGuidance: true }) }, turn({ conversationId: "c-1" }));
-
-    expect(decision.context.base.spec.guidance).toBe("lean");
-    expect(decision.experiments).toEqual({ turnIndex: 0 });
-});
-
-test.each([
-    ["a custom prompt", { ...FACTS, settings: { ...GUIDANCE_MEASURED, systemPromptMode: "custom", systemPrompt: "Own." } }],
-    ["a window too small for guidance", { ...FACTS, settings: GUIDANCE_MEASURED, declared: { window: 40_000, onACard: true } }],
-] as const)("%s sends neither form, so its conversation is stamped with no arm", (_case, facts) => {
-    const decision = decided(facts, turn({ agent: "endpoint/tiny", conversationId: conversationIn("lean-guidance", false) }));
-
-    expect(decision.experiments.guidanceArm).toBeUndefined();
-    expect(decision.experiments.guidanceCohort).toBeUndefined();
 });
 
 // the tool-result clearing experiment: the arm's old tool results are replaced by the gateway, and only a native Claude

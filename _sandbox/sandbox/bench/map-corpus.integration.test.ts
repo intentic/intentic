@@ -87,6 +87,32 @@ test("the run's own area is recognised as the one it is standing in", () => {
     expect(parsed?.here).toBe("engine");
 });
 
+test("the compact form reads back too: its rows, its also-line names, and the project it names", () => {
+    const note = [
+        "## Map of this project",
+        "",
+        "You are here: `shop/billing`, in `shop`. This is its layout, so do not `ls` or `tree` the root to orient yourself; use `iq files` or Read for exact paths.",
+        "",
+        "web/features  The editor the user works in",
+        "billing       Takes the payments  ← you are here",
+        "Also: web/{shell,ui}, docs, and 3 smaller",
+        "",
+        "Recent work (last 3 weeks) landed in: web/features/{chat,agents}",
+    ].join("\n");
+    const parsed = parseMapNote(`${note}\n\nfix the thing please`);
+    expect(parsed?.areas.map((area) => area.name)).toEqual(["web/features", "billing", "web/shell", "web/ui", "docs"]);
+    expect(parsed?.areas.filter((area) => area.purpose).map((area) => area.name)).toEqual(["web/features", "billing"]);
+    expect(parsed).toMatchObject({ project: "shop", here: "billing", truncated: true, chars: note.length });
+});
+
+test("the compact note the renderer produces is the note this reads back", () => {
+    const root = workspaceOf();
+    const note = workspaceMapNote({ root, cwd: root, form: "compact" });
+    const parsed = parseMapNote(`${note ?? ""}\n\nfix the thing please`);
+    expect(parsed?.areas.map((area) => area.name).toSorted()).toEqual(["engine", "notes", "site"]);
+    expect(parsed?.chars).toBe(note?.length);
+});
+
 /* ---- the corpus reading ---- */
 
 let clock = 0;

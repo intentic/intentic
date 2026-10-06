@@ -4,7 +4,7 @@ What a coding agent is told as a session opens, and the per-session readings tha
 
 ```mermaid
 flowchart LR
-    tree["Project tree"] --> map(["workspace-map"])
+    tree["Project tree<br/>and its git history"] --> map(["workspace-map"])
     notes["field-notes file"] --> reader(["field-notes"])
     map --> daemon["Sandbox daemon<br/>turn composition"]
     reader --> daemon
@@ -20,8 +20,15 @@ flowchart LR
 - Runtime-neutral on purpose: nothing here knows the daemon's event shapes, settings or state paths. The daemon adapts
   its frames onto `createTurnMetrics` and passes its own notes path; the plugin does the same from hook payloads and
   `~/.claude/projects`.
-- `workspace-map` recomputes a project's areas from the filesystem every time (2,800-character ceiling);
-  `field-notes` slices a ranked TOON brief to a budget, and `field-notes-prompt` is the brief both writers of that
+- `workspace-map` recomputes a project's areas from the filesystem every time (2,800-character ceiling), in two
+  forms: `full`, every area by size with its languages and the biggest opened up, and `compact`, the areas recent
+  commits touched with their purposes, the rest by name, and the feature-sized folders the last three weeks of commits
+  landed in (`workspace-activity`). The plugin sends `full`; the daemon sends `compact` and measures it against `full`.
+  - 2026-10-06: `compact` exists because the full map's only measured effect was fewer opening `ls` calls (−43% ±22),
+    with no change in calls before reaching the edited file, while the first edits of 38% of sessions landed in six
+    folders two levels below anything the full map names. A purpose is now a README's or manifest's first sentence,
+    markup stripped and cut at a clause, in both forms.
+- `field-notes` slices a ranked TOON brief to a budget, and `field-notes-prompt` is the brief both writers of that
   file are given, so the writer and the reader cannot drift apart.
 - `experiments` draws a conversation's arm from a salted hash of its id, `turn-metrics` scores one turn's tool calls
   (searches, orientation listings, calls before the edited file, failures), and `arm-stats` compares the two arms of
@@ -38,11 +45,12 @@ flowchart LR
     an image-only prompt starts one here only. Making either the other's reader changes what one of them counts, so it
     waits on deciding which answer is right.
 - `guidance` holds the working-guidance paragraphs that hold outside the sandbox; the daemon's guidance registry
-  takes them word for word, so its experiment cohort did not move when they came here.
+  takes them word for word.
 
 ## Key files
 
-- [src/workspace-map.ts](src/workspace-map.ts) — the project map: area discovery, purposes, and the budgeted render.
+- [src/workspace-map.ts](src/workspace-map.ts) — the project map: area discovery, purposes, and both renders.
+- [src/workspace-activity.ts](src/workspace-activity.ts) — where recent commits landed, for the compact map.
 - [src/field-notes.ts](src/field-notes.ts) — reads a field-notes file by rank, never re-encoding it.
 - [src/turn-metrics.ts](src/turn-metrics.ts) — the per-turn call ledger every reading is taken from.
 - [src/arm-stats.ts](src/arm-stats.ts) — which readings judge which mechanism, and the two-arm arithmetic.

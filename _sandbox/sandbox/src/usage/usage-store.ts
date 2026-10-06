@@ -1,4 +1,5 @@
 import { type UsageRollupRow, type UsageTurn, UsageTurnSchema, utcDayOf } from "@intentic/sandbox-contract";
+import { dropAll } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openLedger } from "../store/open-document.js";
 
@@ -17,6 +18,8 @@ export const usageLedgerDocument = defineDocument({
     schema: UsageTurnSchema,
     granularity: "entries",
     boot: false,
+    // The short-guidance experiment's stamps (2026-10-06): the form lost, and the experiment went with it.
+    history: [...dropAll(["guidanceArm", "guidanceCohort"])],
 });
 
 export interface UsageStore {

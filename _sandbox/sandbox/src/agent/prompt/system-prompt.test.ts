@@ -85,11 +85,9 @@ test("a runtime outside the Claude Code loop is told what outside content is", (
     }
 });
 
-test("the drawn variant is the one a runtime outside the loop carries", () => {
-    const lean = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, guidance: "lean" });
-    expect(lean.systemAppend).toBe(guidanceBlock("lean", undefined, "rg"));
-    const full = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
-    expect(full.systemAppend).toBe(guidanceBlock("full", undefined, "rg"));
+test("a runtime outside the loop carries the guidance block as its append", () => {
+    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    expect(placement.systemAppend).toBe(guidanceBlock(undefined, "rg"));
 });
 
 test("a custom prompt is added where it cannot replace", () => {
@@ -250,8 +248,8 @@ test("both built-in bases carry the guidance under its heading, after the base",
     expect(claude.append.startsWith(`${GUIDANCE_HEADER}\n\n`)).toBe(true);
 });
 
-test("the lean variant replaces the full one in the loop's own composition", async () => {
-    const lean = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, guidance: "lean", append: "extra" })) as string;
+test("the loop's own composition is the base, the guidance block, then the append", async () => {
+    const composed = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: "extra" })) as string;
     const mounted = {
         unattended: false,
         browserOutputDir: undefined,
@@ -262,8 +260,7 @@ test("the lean variant replaces the full one in the loop's own composition", asy
         hostDevices: undefined,
         ownBrowsers: undefined,
     };
-    expect(lean).toBe(`${INTENTIC}\n\n${guidanceBlock("lean", mounted, "rg")}\n\nextra`);
-    expect(lean).not.toContain("ORIENTING");
+    expect(composed).toBe(`${INTENTIC}\n\n${guidanceBlock(mounted, "rg")}\n\nextra`);
 });
 
 test("custom reaches the SDK as the bare text, with no guidance at all", async () => {

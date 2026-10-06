@@ -1471,8 +1471,6 @@ const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     fieldNotes: true,
     fieldNotesBudget: 4000,
     fieldNotesHoldout: 0.2,
-    leanGuidance: true,
-    leanGuidanceHoldout: 0.2,
     toolResultClearing: true,
     toolResultClearingHoldout: 0.5,
 };

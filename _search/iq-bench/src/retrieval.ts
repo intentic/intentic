@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createEngine, estimateTokens, type QueryRequest, type Scope } from "@intentic/iq-engine";
+import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import { anchorsOf } from "./anchors.js";
 import { type BenchConfig, CONFIGS, needsModels } from "./configs.js";
 import { ensureIndex, ensureModels, headSha, indexDirFor, packageRoot, repoRoot } from "./repos.js";
@@ -34,6 +35,12 @@ const requestOf = (dataset: QueryDataset, queryCase: QueryCase): QueryRequest =>
     options: queryCase.verb === "ast" ? { astLang: queryCase.scope?.langs?.[0] ?? "ts" } : {},
     echo: `${queryCase.verb} ${queryCase.query}`,
 });
+
+// A group's best [rerank] tag, as printed: undefined when none of its shown hits reached the cross-encoder.
+const rerankOf = (group: WorkspaceSearchResult["groups"][number] | undefined): number | undefined => {
+    const scores = (group?.hits ?? []).flatMap((hit) => hit.tags.flatMap((tag) => (tag.kind === "rerank" && tag.score !== undefined ? [tag.score] : [])));
+    return scores.length === 0 ? undefined : Math.max(...scores);
+};
 
 const loadDatasets = (): QueryDataset[] =>
     readdirSync(join(packageRoot, "datasets"))
@@ -69,8 +76,26 @@ const runConfig = async (dataset: QueryDataset, root: string, config: BenchConfi
         if (score !== undefined) {
             row.score = { ...score, tokens: estimateTokens(outcome.text), latencyMs };
         }
-        if (outcome.verdict !== undefined) {
+        if (outcome.verdict?.relevance !== undefined) {
             row.relevance = outcome.verdict.relevance;
+        }
+        if (outcome.verdict !== undefined) {
+            if (outcome.verdict.confidence !== undefined) {
+                row.confidence = outcome.verdict.confidence;
+            }
+            if (outcome.verdict.basis !== undefined) {
+                row.basis = outcome.verdict.basis;
+            }
+        }
+        // The engine's own scores when it reports them (unrounded, and the file's best passage even where packing left
+        // that passage's line untagged); the [rerank] tags of the two leading groups for an engine that does not.
+        const top = outcome.verdict?.top ?? rerankOf(outcome.result.groups[0]);
+        const runnerUp = outcome.verdict?.top !== undefined ? outcome.verdict.runnerUp : rerankOf(outcome.result.groups[1]);
+        if (top !== undefined) {
+            row.top = top;
+        }
+        if (runnerUp !== undefined) {
+            row.runnerUp = runnerUp;
         }
         rows.push(row);
     }

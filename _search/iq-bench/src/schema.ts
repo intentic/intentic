@@ -26,7 +26,11 @@ export type CaseScope = z.infer<typeof ScopeSchema>;
 //   near-duplicate:      the answer has lookalike siblings (five `router.ts`, `termui.py` beside `_termui_impl.py`).
 //   deprecated:          a deprecated or retired copy exists; the live code is the answer.
 //   no-answer:           nothing in the corpus answers it; scored by whether iq said its match was weak.
-export const SLICES = ["identifier-in-prose", "paraphrase", "near-duplicate", "deprecated", "no-answer"] as const;
+//   ui-copy:             text as a screenshot shows it, often with its placeholders filled in; the answer is the code
+//                        that renders it, which may only name it through a translation key.
+//   route:               an app route as the address bar shows it (`/sandbox/agent?section=tools`); the answer is
+//                        where the route is declared and the view it loads.
+export const SLICES = ["identifier-in-prose", "paraphrase", "near-duplicate", "deprecated", "no-answer", "ui-copy", "route"] as const;
 export type Slice = (typeof SLICES)[number] | "general";
 
 const QueryCaseSchema = z
@@ -153,6 +157,16 @@ const CaseRowSchema = z.object({
     weak: z.boolean().optional(),
     // The best cross-encoder probability iq saw, when a rerank ran: what the weak floor is calibrated against.
     relevance: z.number().optional(),
+    // The answer line's verdict word, when iq printed one: what the verdict table reads against whether the top answer
+    // was right.
+    confidence: z.enum(["confident", "ambiguous", "weak"]).optional(),
+    // What the verdict was read off: the cross-encoder, or an exact match (literal text, a route, a defined name) that
+    // needs no score. Absent from runs before the engine reported it, where every verdict was a rerank's.
+    basis: z.enum(["rerank", "literal", "route", "identifier"]).optional(),
+    // The cross-encoder probability of the top file's best passage, and of the runner-up file's, as the [rerank] tags
+    // show them: the two scores a verdict rule can be recalibrated on from the rows alone, without rerunning.
+    top: z.number().optional(),
+    runnerUp: z.number().optional(),
     skipped: z.literal("models-missing").optional(),
 });
 export type CaseRow = z.infer<typeof CaseRowSchema>;

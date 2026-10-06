@@ -223,59 +223,23 @@ test("a monthly rewrite is a new treatment: only the latest revision's turns are
     expect(notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
 });
 
-// The short form is `on`; the long form, kept by the holdout, is the control it is compared against.
-test("the guidance experiment compares failed calls between the short and long forms", async () => {
+// Only the Claude Code loop counts a turn's model calls one by one; every other runtime reports 1 for the whole exchange,
+// which is no count at all, so round trips are read off the loop's rows alone.
+test("round trips are read off the Claude Code loop's rows alone", async () => {
     const rows = [
         ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
-            turn({ conversationId: `short-${index}`, guidanceArm: true, guidanceCohort: "g1", failedCalls: index % 2 === 0 ? 1 : 2 }),
+            turn({ conversationId: `cleared-${index}`, harness: "claude-code", clearingArm: true, turns: index % 2 === 0 ? 40 : 60 }),
         ),
         ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
-            turn({ conversationId: `long-${index}`, guidanceArm: false, guidanceCohort: "g1", failedCalls: index % 2 === 0 ? 3 : 4 }),
-        ),
-    ];
-    const { guidance, notes } = await readTurnExperiments(storeOf(rows), {});
-
-    expect(notes).toBeUndefined();
-    expect(guidance?.cohort).toBe("g1");
-    expect(guidance?.sampleUnit).toBe("conversations");
-    expect(guidance?.metrics[0]).toMatchObject({
-        metric: "failedCalls",
-        on: { turns: MIN_ARM_TURNS, mean: 1.5 },
-        off: { turns: MIN_ARM_TURNS, mean: 3.5 },
-    });
-});
-
-// Round trips are what the long form's batching and context-reuse paragraphs are for. Only the Claude Code loop counts a
-// turn's model calls one by one; every other runtime reports 1 for the whole exchange, which is no count at all.
-test("the guidance experiment reads round trips off the Claude Code loop's rows alone", async () => {
-    const rows = [
-        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
-            turn({
-                conversationId: `short-${index}`,
-                harness: "claude-code",
-                guidanceArm: true,
-                guidanceCohort: "g1",
-                turns: index % 2 === 0 ? 40 : 60,
-            }),
-        ),
-        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
-            turn({
-                conversationId: `long-${index}`,
-                harness: "claude-code",
-                guidanceArm: false,
-                guidanceCohort: "g1",
-                turns: index % 2 === 0 ? 20 : 40,
-            }),
+            turn({ conversationId: `kept-${index}`, harness: "claude-code", clearingArm: false, turns: index % 2 === 0 ? 20 : 40 }),
         ),
         // Another runtime's conversations, in both arms: their `turns: 1` must not read as one round trip each.
-        ...Array.from({ length: 10 }, (_, index) =>
-            turn({ conversationId: `codex-${index}`, harness: "codex", guidanceArm: index % 2 === 0, guidanceCohort: "g1" }),
-        ),
+        ...Array.from({ length: 10 }, (_, index) => turn({ conversationId: `codex-${index}`, harness: "codex", clearingArm: index % 2 === 0 })),
     ];
-    const { guidance } = await readTurnExperiments(storeOf(rows), {});
+    const { clearing } = await readTurnExperiments(storeOf(rows), {});
 
-    expect(guidance?.metrics.map((reading) => reading.metric)).toEqual(["failedCalls", "callsBeforeTarget", "roundTrips"]);
-    expect(guidance?.metrics[2]).toMatchObject({
+    expect(clearing?.metrics[1]).toMatchObject({
+        metric: "roundTrips",
         on: { turns: MIN_ARM_TURNS, mean: 50 },
         off: { turns: MIN_ARM_TURNS, mean: 30 },
     });

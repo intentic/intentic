@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace-ignore";
+import { groupedFolders, type WorkspaceActivity, workspaceActivityOf } from "./workspace-activity.js";
 
 // Which areas a project has, what each is for, and where the run stands; recomputed from the filesystem every
 // conversation instead of stored, so it can't drift the way a written paragraph would. Areas, not files, since sessions
@@ -156,12 +157,24 @@ const describeReadme = (dir: string): string | undefined => {
     return undefined;
 };
 
+// The first sentence, without markup: a README's opening line can carry HTML (`<br>`), and a purpose cut mid-way through
+// its second sentence reads as broken rather than short.
+const firstSentence = (text: string): string => {
+    const plain = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return /^(.+?[.!?])(?:\s|$)/.exec(plain)?.[1] ?? plain;
+};
+
 const clip = (text: string, max: number): string => {
-    const oneLine = text.replace(/\s+/g, " ").trim();
+    const oneLine = firstSentence(text);
     if (oneLine.length <= max) {
         return oneLine;
     }
     const head = oneLine.slice(0, max);
+    // A clause that ends inside the window reads as a whole thought; a word boundary only as a cut.
+    const clause = Math.max(...[", ", "; ", ": ", " — "].map((mark) => head.lastIndexOf(mark)));
+    if (clause > max / 2) {
+        return head.slice(0, clause);
+    }
     const lastSpace = head.lastIndexOf(" ");
     return `${(lastSpace > max / 2 ? head.slice(0, lastSpace) : head).replace(/[.,;:]$/, "")}…`;
 };
@@ -284,6 +297,12 @@ const areaDirsOf = (projectRoot: string, root: string): AreaDir[] => {
     return shelf === undefined ? areas : shelf.packages.map((entry) => ({ name: `${shelf.name}/${entry.name}`, dir: entry.dir, packages: [] }));
 };
 
+// `full` lists every area by size with its file count and languages, and opens the biggest one. `compact` lists only
+// the areas recent work touched, by name and purpose, names the rest on one line, and says which folders below them
+// the recent commits landed in. The full form's one measured effect was a 43% (±22) drop in opening `ls` calls, with
+// no change in calls before reaching the file a turn edits; the compact form is the A/B against it.
+export type MapForm = "full" | "compact";
+
 export interface WorkspaceMapInput {
     // The workspace root, for the sibling line and as the floor of the climb.
     readonly root: string;
@@ -292,6 +311,8 @@ export interface WorkspaceMapInput {
     // How the reader should find an exact path, as the note names it; the sandbox has iq on every PATH, a plain Claude
     // Code install may not.
     readonly exactPaths?: string;
+    // Absent is `full`, the form the Claude Code plugin measures.
+    readonly form?: MapForm;
 }
 
 // The map, or undefined when there's nothing worth saying: a project with one area or none fits in a single listing
@@ -416,6 +437,54 @@ const render = (map: WorkspaceMap, exactPaths: string): string => {
     return [...head, ...lines, ...(total > 0 ? [`  … and ${total} more`] : []), ...tail].join("\n");
 };
 
+// The compact form's limits: areas with a line of their own, and folders on the recent-work line.
+const COMPACT_AREAS = 6;
+const COMPACT_HOT = 6;
+// An area earns a line of its own with this share of the recent commits; below it, its name on the "also" line is
+// enough to find it.
+const COMPACT_ACTIVE_SHARE = 0.03;
+// A folder named on the recent-work line has had at least this many commits: one is an errand, not where work is.
+const COMPACT_HOT_MIN = 2;
+
+const renderCompact = (map: WorkspaceMap, exactPaths: string, activity: WorkspaceActivity): string => {
+    const project = map.project === "" ? "the workspace" : `\`${map.project}\``;
+    // An opened area stands for its children: they are where the work is, and its own line would only repeat them. One
+    // child is no opening (a package and its `src`), so the area keeps its own line and purpose.
+    const leaves = map.areas.flatMap((area) => (area.children.length > 1 ? area.children : [area]));
+    const busy = (area: MapArea): number => activity.byFolder.get(area.name) ?? 0;
+    // With no history to read, size is the only signal left, as in the full form.
+    const ranked =
+        activity.commits > 0
+            ? leaves.toSorted((left, right) => busy(right) - busy(left) || right.files - left.files || left.name.localeCompare(right.name))
+            : leaves.toSorted((left, right) => right.files - left.files || left.name.localeCompare(right.name));
+    const active = (area: MapArea, at: number): boolean =>
+        at < COMPACT_AREAS && (activity.commits === 0 || busy(area) >= Math.max(1, activity.commits * COMPACT_ACTIVE_SHARE));
+    const listed = ranked.filter((area, at) => area.here || active(area, at));
+    const rest = leaves.filter((area) => !listed.includes(area)).map((area) => area.name);
+    const unlisted = map.omitted + map.areas.reduce((sum, area) => sum + area.childrenOmitted, 0);
+    const width = Math.min(Math.max(...listed.map((area) => area.name.length)) + 2, 34);
+    const hot = groupedFolders(
+        activity.hot
+            .filter((entry) => entry.commits >= COMPACT_HOT_MIN)
+            .slice(0, COMPACT_HOT)
+            .map((entry) => entry.folder),
+    );
+    // The project is named either way, so whoever reads the note back can resolve its area names.
+    const where = map.cwd === map.project ? `You are at the top of ${project}.` : `You are here: \`${map.cwd}\`, in ${project}.`;
+    return [
+        WORKSPACE_MAP_NOTE_HEADER,
+        "",
+        `${where} This is its layout, so do not \`ls\` or \`tree\` the root to orient yourself; use ${exactPaths} for exact paths.`,
+        "",
+        ...listed.map((area) => `${area.name.padEnd(width)}${area.purpose}${area.here ? "  ← you are here" : ""}`.trimEnd()),
+        ...(rest.length > 0 || unlisted > 0
+            ? [`Also: ${groupedFolders(rest).join(", ")}${unlisted > 0 ? `${rest.length > 0 ? ", " : ""}and ${unlisted} smaller` : ""}`]
+            : []),
+        ...(map.siblings.length > 0 ? [`Also under the workspace root: ${map.siblings.map((name) => `${name}/`).join(", ")}`] : []),
+        ...(hot.length > 0 ? ["", `Recent work (last 3 weeks) landed in: ${hot.join(" · ")}`] : []),
+    ].join("\n");
+};
+
 // Cached per project directory to collapse a burst of conversations opening together. Short TTL, not
 // watcher-invalidated, on purpose: the whole value of this note is that it can't go stale, and a minute is well inside
 // that window.
@@ -426,7 +495,8 @@ const cache = new Map<string, { at: number; note: string | undefined }>();
 // should cost the note, never the turn.
 export const workspaceMapNote = (input: WorkspaceMapInput): string | undefined => {
     const exactPaths = input.exactPaths ?? "`iq files` or Read";
-    const key = `${input.root}\u0000${input.cwd}\u0000${exactPaths}`;
+    const form = input.form ?? "full";
+    const key = `${input.root}\u0000${input.cwd}\u0000${exactPaths}\u0000${form}`;
     const hit = cache.get(key);
     if (hit !== undefined && Date.now() - hit.at < TTL_MS) {
         return hit.note;
@@ -434,7 +504,16 @@ export const workspaceMapNote = (input: WorkspaceMapInput): string | undefined =
     let note: string | undefined;
     try {
         const map = workspaceMapOf(input);
-        note = map === undefined ? undefined : render(map, exactPaths);
+        note =
+            map === undefined
+                ? undefined
+                : form === "compact"
+                  ? renderCompact(
+                        map,
+                        exactPaths,
+                        workspaceActivityOf({ projectRoot: join(input.root, map.project), areas: map.areas.map((area) => area.name) }),
+                    )
+                  : render(map, exactPaths);
     } catch {
         note = undefined;
     }

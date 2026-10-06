@@ -23,7 +23,7 @@ import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import type { GuidanceVariant, SearchTool } from "../prompt/guidance.js";
+import type { SearchTool } from "../prompt/guidance.js";
 import type { PromptTrim } from "../prompt/system-prompt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
@@ -81,8 +81,6 @@ export interface TurnSpec {
     // What the model's declared window would not pay for, already applied to the prompt fields above, so the adapter
     // sheds the same guidance the planner did and the disclosure shows the prompt that was actually sent.
     readonly contextTrim?: PromptTrim;
-    // Which variant of this product's guidance the turn drew, read by the adapter and the disclosure alike; absent is full.
-    readonly guidance?: GuidanceVariant;
     // Which tool that guidance tells the turn to find code with; absent is `rg`, the one every image carries.
     readonly search?: SearchTool;
     // Mid-turn steering queue; when present the turn streams input and pushed messages inject between tool calls.

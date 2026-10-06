@@ -303,21 +303,6 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
         ),
-    // Measured by the `guidance` experiment against the full set; the full set stays the default until that says otherwise.
-    leanGuidance: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Send this product's own guidance in its short form: only what the agent cannot find out by looking, instead of a paragraph for every habit it was once caught in. Off by default, because the long form is the one the product was tuned on.",
-        ),
-    leanGuidanceHoldout: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0)
-        .describe(
-            "What share of conversations to keep on the long form, so the two can be compared. Whole conversations rather than individual turns, because the guidance sits in the prompt for the whole session.",
-        ),
     // Measured by the `clearing` experiment: the gateway in front of a native Claude turn replaces old tool results with
     // a placeholder, a chunk at a time, so the cached prompt breaks once per chunk rather than on every call
     // (privacy/gateway/tool-result-clearing.ts). Off by default until that experiment says it pays.
@@ -353,17 +338,18 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(false)
         .describe(
-            "Open every conversation with a map of the project it starts in: what is in it, what each part is for, and where the agent is standing. Worked out fresh each time rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
+            "Open every conversation with a map of the project it starts in: the parts recent work touched and what each is for, the rest by name, where the agent is standing, and which folders the last three weeks of commits landed in. Worked out fresh each time from the tree and its history rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
         ),
     // Judged on the opening turn's own directory listings, not averaged across the conversation, or a twelve-turn
-    // conversation would divide the effect by twelve.
+    // conversation would divide the effect by twelve. Since 2026-10-06 the held-out share gets the full map (every area
+    // with its size) rather than none: the map-or-none comparison had settled its one effect, fewer opening listings.
     workspaceMapHoldout: z
         .number()
         .min(0)
         .max(1)
         .default(0)
         .describe(
-            "What share of conversations to open without the map, so the two can be compared. Whole conversations rather than individual turns, because the map is sent once and stays in the conversation's history afterwards.",
+            "What share of conversations to open with the full map instead, every area with its size, so the two forms can be compared. Whole conversations rather than individual turns, because the map is sent once and stays in the conversation's history afterwards.",
         ),
     // The one composed piece that is WRITTEN rather than derived: a monthly automation rewrites it off the session
     // corpus, so it carries what no scan of the tree can (which commands really work here, what the box can take, how
@@ -654,7 +640,7 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 // openingListings: directory listings a turn ran to orient itself (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
-// roundTrips: model calls a turn took (the guidance form, whose batching and context-reuse paragraphs exist to save them).
+// roundTrips: model calls a turn took (tool-result clearing, whose lost results could cost re-runs).
 // contextPerCall: prompt tokens per model call, cached or not (tool-result clearing, which exists to shrink it).
 // Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest. Round trips are the
 // nearest a reading comes to it, and still a count of calls, not of tokens or money; the prompt a call carries is the
@@ -723,7 +709,6 @@ export const SavingsReportSchema = z.object({
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
     notes: TurnExperimentSchema.optional(),
-    guidance: TurnExperimentSchema.optional(),
     clearing: TurnExperimentSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;

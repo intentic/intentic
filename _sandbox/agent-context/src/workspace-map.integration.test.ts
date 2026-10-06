@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -262,4 +263,93 @@ test("the note names where the run stands and marks it in the list", async () =>
     expect(note).toContain("app/billing");
     expect(note).toMatch(/billing.*← you are here/);
     expect(note).not.toMatch(/mailer.*← you are here/);
+});
+
+test("a purpose is its first sentence, without markup, cut at a clause rather than mid-word", async () => {
+    const root = await scaffold({
+        ".git/HEAD": "ref: refs/heads/main\n",
+        "intro/README.md": "# intro\n\nRun several agents side by side, each on its own worktree.<br>\nSecond sentence.\n",
+        "intro/a.ts": "",
+        "long/package.json": pkg(
+            "long",
+            "One private box per project where the code and its coding agents live, owned by the daemon and reached from everywhere. More.",
+        ),
+        "long/a.ts": "",
+    });
+
+    const purposes = Object.fromEntries((workspaceMapOf({ root, cwd: root })?.areas ?? []).map((area) => [area.name, area.purpose]));
+
+    expect(purposes).toEqual({
+        intro: "Run several agents side by side, each on its own worktree.",
+        long: "One private box per project where the code and its coding agents live",
+    });
+});
+
+// The compact form ranks areas by the commits that touched them, so it needs a real history.
+const committed = (root: string, files: readonly string[]): void => {
+    const git = (...args: string[]): void => {
+        execFileSync("git", ["-C", root, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args], {
+            stdio: "ignore",
+            env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
+        });
+    };
+    git("init", "-q", "-b", "main");
+    // The scaffold itself lands well before the window, as a repository's old history would.
+    git("add", "-A");
+    execFileSync("git", ["-C", root, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "start"], {
+        stdio: "ignore",
+        env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "t",
+            GIT_AUTHOR_EMAIL: "t@t",
+            GIT_COMMITTER_NAME: "t",
+            GIT_COMMITTER_EMAIL: "t@t",
+            GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
+            GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
+        },
+    });
+    for (const [at, file] of files.entries()) {
+        execFileSync("sh", ["-c", `mkdir -p "$(dirname "$1")" && echo ${at} >> "$1"`, "sh", join(root, file)]);
+        git("add", "-A");
+        git("commit", "-q", "-m", `edit ${at}`);
+    }
+};
+
+test("the compact form lists the areas recent work touched, names the rest, and says where the work landed", async () => {
+    const root = await scaffold({
+        "web/package.json": pkg("web", "The editor the user works in, with files and chat. More."),
+        "server/package.json": pkg("server", "The daemon behind it."),
+        "archive/package.json": pkg("archive", "Old things."),
+        "archive/a.ts": "",
+        "archive/b.ts": "",
+        "archive/c.ts": "",
+        "archive/d.ts": "",
+    });
+    committed(root, ["web/src/chat/Pane.vue", "web/src/chat/Tabs.vue", "web/src/agents/Board.vue", "server/src/api/routes.ts", "web/README.md"]);
+
+    const note = workspaceMapNote({ root, cwd: root, form: "compact" }) ?? "";
+
+    expect(note.startsWith("## Map of this project")).toBe(true);
+    expect(note).toMatch(/do not `ls` or `tree`/);
+    // Busiest first, with its purpose and no sizes; an area nobody touched is a name on one line, not a row.
+    expect(note).toMatch(/^web {2,}The editor the user works in, with files and chat\.$/m);
+    expect(note).toMatch(/^server {2,}The daemon behind it\.$/m);
+    expect(note.indexOf("web ")).toBeLessThan(note.indexOf("server "));
+    expect(note).not.toMatch(/\d+ files?/);
+    expect(note).toContain("Also: archive");
+    expect(note).toContain("Recent work (last 3 weeks) landed in: web/src/chat");
+});
+
+test("without history the compact form falls back to the biggest areas", async () => {
+    const root = await scaffold({
+        "big/a.ts": "",
+        "big/b.ts": "",
+        "big/c.ts": "",
+        "small/a.ts": "",
+    });
+
+    const note = workspaceMapNote({ root, cwd: root, form: "compact" }) ?? "";
+
+    expect(note).toMatch(/^big$/m);
+    expect(note).not.toContain("Recent work");
 });

@@ -23,8 +23,7 @@ settings.json):
 
 Runtimes take it differently: Claude Code and Codex replace their base prompt with it; OpenCode and Cursor can only
 add, so it is appended to theirs; Pi and ACP have no system prompt seam, so a custom prompt is not applied there,
-and the persona note and `AGENTS.md` go with the message instead. **Short guidance** (`leanGuidance`) sends the
-product's guidance in its short form.
+and the persona note and `AGENTS.md` go with the message instead.
 
 **A persona's own prompt**: `.intentic/config/personas/<id>/PROMPT.md`, used when the persona's **What it is told**
 is **Its own** (`systemPromptMode: "custom"` on its card). It replaces the sandbox's prompt on that persona's turns,
@@ -61,8 +60,10 @@ isolated turn, and it arrives by itself. During an isolated turn the owner's liv
 
 Some things ride only a conversation's first message, so turning them on shows in new conversations: the project
 map (`workspaceMap`), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
-skills folder themselves). The comparison shares (`workspaceMapHoldout`, `iqSearchHoldout`,
-`fieldNotesHoldout`, `leanGuidanceHoldout`, `toolResultClearingHoldout`) assign whole conversations, not turns.
+skills folder themselves). The map comes in two forms: compact (the areas recent work touched, the rest by name, and
+the folders the last three weeks of commits landed in) and full (every area with its size); `workspaceMapHoldout`
+is the share that gets the full one. The comparison shares (`workspaceMapHoldout`, `iqSearchHoldout`,
+`fieldNotesHoldout`, `toolResultClearingHoldout`) assign whole conversations, not turns.
 
 **Clear old tool results** (`toolResultClearing`, Agent → Tools → Command output) has the gateway in front of a native
 Claude turn replace the oldest tool results with a one-line placeholder once the conversation passes about 100k tokens,

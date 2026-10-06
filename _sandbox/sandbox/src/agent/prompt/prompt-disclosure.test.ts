@@ -80,15 +80,15 @@ test("the harness arm's own guidance is shown, though it never rode the append",
     expect(textOf(claude, "guidance")).toContain("Nobody is watching this turn right now");
 });
 
-// The variant rides the request, so the disclosure recomposes the form the turn drew rather than the default.
-test("the guidance shown is the form the turn was sent", () => {
-    const lean = promptDisclosure({
+// The disclosure recomposes the block from the request, so what it shows is what the turn was sent.
+test("the guidance shown is the block the turn was sent", () => {
+    const claude = promptDisclosure({
         capabilities: CLAUDE,
-        request: { spec: { systemPromptMode: "intentic", guidance: "lean" }, policy: { unattended: true }, tools: {} },
+        request: { spec: { systemPromptMode: "intentic" }, policy: { unattended: true }, tools: {} },
         at: AT,
     });
-    expect(textOf(lean, "guidance")).toBe(
-        guidanceBlock("lean", {
+    expect(textOf(claude, "guidance")).toBe(
+        guidanceBlock({
             unattended: true,
             browserOutputDir: undefined,
             browserAccounts: false,
@@ -105,14 +105,14 @@ test("the guidance shown is the form the turn was sent", () => {
         request: {
             spec: {
                 systemPromptMode: "intentic",
-                ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, guidance: "lean" }),
+                ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false }),
             },
             policy: {},
             tools: {},
         },
         at: AT,
     });
-    expect(textOf(codex, "guidance")).toBe(guidanceBlock("lean", undefined, "rg"));
+    expect(textOf(codex, "guidance")).toBe(guidanceBlock(undefined, "rg"));
 });
 
 test("a runtime that keeps its own prompt says so, and its guidance is the append's own head", () => {

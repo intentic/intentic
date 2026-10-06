@@ -27,13 +27,12 @@ export type TurnExperimentStamps = Partial<
         | "iqSearchCohort"
         | "mapArm"
         | "mapChars"
+        | "mapCohort"
         | "notesArm"
         | "notesChars"
         | "notesCohort"
         | "turnContext"
         | "turnContextMs"
-        | "guidanceArm"
-        | "guidanceCohort"
         | "clearingArm"
     >
 >;

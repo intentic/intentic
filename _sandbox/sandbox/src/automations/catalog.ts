@@ -5,6 +5,7 @@ import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type Tr
 import { type AutomationTemplateContribution, extensionIdOf, type ListenerContribution } from "@intentic/extension-manifest";
 import { installedExtensions } from "../extensions/installed-extensions.js";
 import type { ExtensionHost, InstalledExtension } from "../extensions/installed-extensions.js";
+import { conversationsRoot } from "../store/conversation-units.js";
 
 // Trigger catalogue for what can wake an agent: sources and templates the composer offers and `upsert` validates
 // against, drawn from one list.
@@ -182,9 +183,11 @@ const FIELD_NOTES_PROMPT = fieldNotesPrompt({
     reader: "the daemon",
     evidence:
         `The evidence is the session corpus. \`agents ls\` and \`agents show <id> --transcript\` read conversations back, ` +
-        `\`agents find '<text>'\` finds the ones that said a thing, and the transcripts themselves are under ` +
-        `\`${HISTORY_ROOT}/transcripts\` (one JSON object per line: role, text, and a tools array carrying each call's name, ` +
-        `status, target and output).`,
+        `\`agents find '<text>'\` finds the ones that said a thing, and each conversation's record is ` +
+        `\`${conversationsRoot(HISTORY_ROOT)}/<id>/transcript.jsonl.zst\`, read with \`zstdcat\` (one JSON object per line: ` +
+        `role, text, and a tools array carrying each call's name, status, target and output). Date a conversation, and ` +
+        `count it into a period, from \`${HISTORY_ROOT}/usage.jsonl\` (one row per turn: day, conversationId, model, ` +
+        `failedCalls, and which arm of each experiment it drew), never from file times.`,
     period: "this month's",
     quietSpan: "a month's sessions",
 });

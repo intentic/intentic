@@ -164,3 +164,47 @@ test("a weak answer names its state on the answer line, ahead of the scores", ()
     });
     expect(rendered.text.split("\n")[1]).toBe("answer: alpha/src/constants.ts:7 · weak · [rerank 0.03]");
 });
+
+// Facts qualify the answer (a UI string's catalog key, an address's route, the answer's neighbours): printed right
+// under it, and admitted against the same capsule share as every optional line, so --budget still holds.
+describe("facts under the answer", () => {
+    const facts = [
+        "key: agents.agentActions.noConversationLeft · web/src/app/i18n/locales/en.json:8 (+4 locales) · used at web/src/features/agents/agentActions.ts:178",
+        "siblings: agentStatus.ts · useAgents-actions.ts · Agents.vue · useAgentHistory.ts · +14 more",
+    ];
+    const withFacts = (budget: number, lead = true): ReturnType<typeof renderText> =>
+        renderText({
+            verb: "q",
+            echo: '"That agent has no conversation left to send to."',
+            unit: "hits",
+            style: "hits",
+            showTags: true,
+            groups: groups(40, 6),
+            offset: 0,
+            freshness: { state: "fresh", ageMs: 120 },
+            budget,
+            cursorId: "abcd1234",
+            lead,
+            confidence: "confident",
+            facts,
+        });
+
+    test("follow the answer line in order, ahead of the candidates", () => {
+        const lines = withFacts(1500).text.split("\n");
+        expect(lines[1]).toMatch(/^answer: /);
+        expect(lines[2]).toBe(facts[0]);
+        expect(lines[3]).toBe(facts[1]);
+        expect(lines[4]).toMatch(/^candidates: /);
+    });
+
+    test("fit inside --budget, dropped whole when they do not", () => {
+        for (const budget of [60, 120, 200, 400, 1500]) {
+            expect(estimateTokens(withFacts(budget).text), `budget=${budget}`).toBeLessThanOrEqual(budget);
+        }
+        expect(withFacts(60).text).not.toContain("key: ");
+    });
+
+    test("need an answer line to qualify", () => {
+        expect(withFacts(1500, false).text).not.toContain("siblings: ");
+    });
+});

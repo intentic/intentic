@@ -30,7 +30,9 @@ const ROW = /^(\d+),([a-z][a-z0-9_-]*),/;
 
 // A top-level key opens at column 0; everything a section owns is indented under it. Both spellings TOON gives a key:
 // `id:` for an object, `id[4]{cols}:` for a table.
-const TOP_LEVEL = /^([a-z][a-z0-9_]*)(\[|:)/;
+// Hyphens too, since an id is kebab-case (ROW above) and every id is also the key of its own block: a key pattern without
+// them refused any file with a hyphenated id outright.
+const TOP_LEVEL = /^([a-z][a-z0-9_-]*)(\[|:)/;
 
 export interface FieldNotes {
     // The note as the model reads it, header included.

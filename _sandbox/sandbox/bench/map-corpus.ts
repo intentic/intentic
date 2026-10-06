@@ -84,10 +84,84 @@ const noteLinesOf = (message: string): string[] | undefined => {
     return lines.slice(0, end + 1);
 };
 
+// The compact form (workspace-map.ts renderCompact): rows of a name and its purpose under the prose, the rest named on
+// an "Also:" line with `parent/{a,b}` groups, then the recent-work line. No sizes, so `files` reads 0.
+const COMPACT_HEAD = /^You are (?:at the top of|here:) .*This is its layout/;
+const COMPACT_ROW = /^(\S+)(?: {2,}(.*?))?(?: {2}← you are here)?$/;
+const COMPACT_ALSO = /^Also: (.*)$/;
+
+// Commas inside a `{a,b}` group belong to the group, so the list is split at the top level only.
+const expandGroups = (list: string): string[] => {
+    const items: string[] = [];
+    let depth = 0;
+    let current = "";
+    for (const char of list) {
+        depth += char === "{" ? 1 : char === "}" ? -1 : 0;
+        if (char === "," && depth === 0) {
+            items.push(current.trim());
+            current = "";
+        } else {
+            current += char;
+        }
+    }
+    items.push(current.trim());
+    return items
+        .filter((item) => item !== "")
+        .flatMap((item) => {
+            const group = /^(.*)\{(.*)\}$/.exec(item);
+            return group === null ? [item] : (group[2] ?? "").split(",").map((name) => `${group[1] ?? ""}${name}`);
+        });
+};
+
+const compactNoteOf = (message: string): MapNote | undefined => {
+    const start = message.indexOf(WORKSPACE_MAP_NOTE_HEADER);
+    if (start === -1) {
+        return undefined;
+    }
+    const lines = message.slice(start).split("\n");
+    const head = lines.findIndex((line) => COMPACT_HEAD.test(line));
+    if (head === -1) {
+        return undefined;
+    }
+    const areas: MapNoteArea[] = [];
+    let end = head;
+    for (let index = head + 2; index < lines.length; index += 1) {
+        const line = lines[index] ?? "";
+        const also = COMPACT_ALSO.exec(line)?.[1];
+        if (also !== undefined) {
+            const names = expandGroups(also.replace(/,? ?and \d+ smaller$/, ""));
+            areas.push(...names.map((name) => ({ name, files: 0, purpose: false, here: false, child: false })));
+        } else if (line.startsWith("Also under the workspace root:")) {
+            // Siblings outside the project: named, not mapped.
+        } else if (line === "" && lines[index + 1]?.startsWith("Recent work") === true) {
+            end = index + 1;
+            break;
+        } else {
+            const row = line === "" ? null : COMPACT_ROW.exec(line);
+            if (row?.[1] === undefined) {
+                break;
+            }
+            areas.push({ name: row[1], files: 0, purpose: (row[2] ?? "") !== "", here: line.endsWith("← you are here"), child: false });
+        }
+        end = index;
+    }
+    if (areas.length === 0) {
+        return undefined;
+    }
+    const kept = lines.slice(0, end + 1);
+    return {
+        chars: kept.join("\n").length,
+        project: /(?:top of|, in) `(.+?)`\./.exec(lines[head] ?? "")?.[1] ?? "",
+        areas,
+        here: areas.find((area) => area.here)?.name,
+        truncated: kept.some((line) => /and \d+ smaller$/.test(line)),
+    };
+};
+
 export const parseMapNote = (message: string): MapNote | undefined => {
     const kept = noteLinesOf(message);
     if (kept === undefined) {
-        return undefined;
+        return compactNoteOf(message);
     }
     const areas: MapNoteArea[] = [];
     for (const line of kept) {

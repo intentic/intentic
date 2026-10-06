@@ -38,10 +38,11 @@ export const fieldNotesPrompt = (at: FieldNotesPlace): string =>
     `they could have found it out cheaply themselves. Rank 1 is the costliest gap. Rank on recent sessions only, and ` +
     `recount every percentage from them rather than carrying the old one forward: a trap sessions stopped hitting, because ` +
     `the code or the environment has since fixed it, drops down or out however costly it once was.\n\n` +
-    `SIZE IS PART OF THE RANKING. ${capitalized(at.reader)} sends the priority table on every turn, then whole sections in rank order ` +
-    `until the owner's budget runs out (4,000 characters by default, the table included), and stops at the first section ` +
-    `that does not fit, so one long section silences every rank below it. Keep the table's cells to a few words, keep ` +
-    `each section under about 700 characters, and split anything longer into two ranks. Leave out what every turn is ` +
+    `SIZE IS PART OF THE RANKING. ${capitalized(at.reader)} sends the \`meta\` block on every turn, then whole sections in rank ` +
+    `order until the owner's budget runs out (4,000 characters by default, \`meta\` included), and stops at the first ` +
+    `section that does not fit, so one long section silences every rank below it. The priority table is the order, ` +
+    `never sent, so keep its cells to a few words for whoever opens the file; keep each section under about 700 ` +
+    `characters, and split anything longer into two ranks. Leave out what every turn is ` +
     `already told elsewhere (the system prompt's working rules, the skills it lists, the search teaching): repeating it ` +
     `spends the budget twice.\n\n` +
     `VERIFY EVERY FACT AGAINST ${at.place.toUpperCase()} BEFORE YOU WRITE IT DOWN. A transcript from six weeks ago is a ` +

@@ -35,7 +35,8 @@ test("spells out the shape field-notes.ts slices by rank", () => {
 // alone fills the budget and whose other ranks never reach a turn.
 test("tells the writer the budget is shared and a long section silences the ranks below it", () => {
     const text = fieldNotesPrompt(PROJECT);
-    expect(text).toContain("SIZE IS PART OF THE RANKING. The plugin sends the priority table on every turn");
+    expect(text).toContain("SIZE IS PART OF THE RANKING. The plugin sends the `meta` block on every turn");
+    expect(text).toContain("The priority table is the order, never sent");
     expect(text).toContain("so one long section silences every rank below it");
     expect(text).toContain("recount every percentage from them rather than carrying the old one forward");
 });

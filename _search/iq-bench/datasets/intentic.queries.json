@@ -251,6 +251,105 @@
             "slices": ["no-answer"],
             "expected": [],
             "notes": "Checked 2026-09-29: rg -i 'autoscal|horizontal pod' matches nothing; sandboxes are Fly machines, not pods."
+        },
+        {
+            "id": "ui-copy-no-conversation-left",
+            "verb": "q",
+            "query": "That agent has no conversation left to send to.",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/agents/fleet/agentActions.ts", "line": 178 }],
+            "notes": "Live 2026-10-06: a bare query answered stream-agent.ts. The text is en.json agents.agentActions.noConversationLeft, rendered by agentActions.ts."
+        },
+        {
+            "id": "ui-copy-keep-planning",
+            "verb": "q",
+            "query": "Write notes to keep planning, or approve above…",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/chat/composer/composerIntent.ts", "line": 131 }],
+            "notes": "en.json chat.composerIntent.placeholderPlan, the composer's placeholder in plan mode."
+        },
+        {
+            "id": "ui-copy-has-settings",
+            "verb": "q",
+            "query": "It has settings: fill them in under Installed.",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/sandbox/extensions/DiscoverDetail.vue", "line": 127 }],
+            "notes": "en.json sandbox.discoverDetail.hasSettings, used in a .vue template."
+        },
+        {
+            "id": "ui-copy-model-reading",
+            "verb": "q",
+            "query": "choose which model does the reading",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/chat/models/ChatModelPicker.vue", "line": 136 }],
+            "notes": "en.json chat.chatModelPicker.chooseWhichModelReads, typed in lower case as an agent paraphrasing a screenshot would."
+        },
+        {
+            "id": "ui-copy-kept-failing-filled",
+            "verb": "q",
+            "query": "1.4.2 kept failing, so this machine went back to 1.4.1 by itself.",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/sandbox/overview/version/updateOutcome.ts", "line": 106 }],
+            "notes": "en.json sandbox.updateOutcome.keptFailingWentBackTo is '{to} kept failing, so this machine went back to {from} by itself.': the screenshot shows its placeholders filled in."
+        },
+        {
+            "id": "ui-copy-workspace-moved-on",
+            "verb": "q",
+            "query": "Your workspace moved on since the agent branched",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/agents/review/conflictResolution.ts", "line": 81 }],
+            "notes": "en.json agents.conflictResolution.workspaceMovedOnSince, capitalised differently from the catalog."
+        },
+        {
+            "id": "ui-copy-no-turns-yet",
+            "verb": "q",
+            "query": "No turns on this account yet.",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/sandbox/secrets/AiAccountSection.vue", "line": 161 }],
+            "notes": "en.json sandbox.aiAccountSection.noTurnsYet."
+        },
+        {
+            "id": "ui-copy-preparing-domain",
+            "verb": "q",
+            "query": "Preparing your intentic domain…",
+            "slices": ["ui-copy"],
+            "expected": [{ "file": "_editor/web/src/features/setup/flow/commandHandoff.ts", "line": 69 }],
+            "notes": "en.json setup.commandHandoff.preparingDomain: three words and an ellipsis."
+        },
+        {
+            "id": "route-agents",
+            "verb": "q",
+            "query": "/agents",
+            "slices": ["route"],
+            "expected": [{ "file": "_editor/web/src/router/index.ts", "line": 307 }, { "file": "_editor/web/src/features/agents/fleet/Agents.vue" }],
+            "notes": "Live 2026-10-06: answered AGENTS.md by fuzzy path match. Declared as the shell's child route `agents`."
+        },
+        {
+            "id": "route-sandbox-agent-tools",
+            "verb": "q",
+            "query": "/sandbox/agent?section=tools",
+            "slices": ["route"],
+            "expected": [
+                { "file": "_editor/web/src/router/index.ts", "line": 375 },
+                { "file": "_editor/web/src/features/sandbox/overview/SandboxAgent.vue", "line": 110 }
+            ],
+            "notes": "Live 2026-10-06: answered only a notes file. `sandbox/:tab?` loads SandboxHub.vue, whose `agent` slug is SandboxAgent.vue, whose `tools` section starts at line 110."
+        },
+        {
+            "id": "route-settings-billing",
+            "verb": "q",
+            "query": "/settings/billing",
+            "slices": ["route"],
+            "expected": [{ "file": "_editor/web/src/router/index.ts", "line": 407 }, { "file": "_editor/web/src/features/settings/SettingsHub.vue", "line": 49 }],
+            "notes": "`settings/:tab?` loads SettingsHub.vue, which mounts SettingsBilling for the `billing` slug."
+        },
+        {
+            "id": "route-capabilities",
+            "verb": "q",
+            "query": "/capabilities",
+            "slices": ["route"],
+            "expected": [{ "file": "_editor/web/src/router/index.ts", "line": 351 }, { "file": "_editor/web/src/features/capabilities/Capabilities.vue" }],
+            "notes": "`capabilities/:entry?` with its optional param left out."
         }
     ]
 }

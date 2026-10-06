@@ -5,7 +5,7 @@ import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
-import { guidanceBlock, type GuidanceVariant, type SearchTool } from "./guidance.js";
+import { guidanceBlock, type SearchTool } from "./guidance.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import type { TurnPolicy, TurnSpec, TurnTools } from "../providers/agent-request.js";
@@ -49,8 +49,6 @@ export interface TurnPromptInput {
     // type, so the prompt keeps no dependency on the decision that produced it — and so the decision can keep naming
     // its titles from here without the two importing each other.
     readonly trim?: PromptTrim;
-    // Which variant of this product's guidance the turn drew (decide/experiments.ts); absent is the full set.
-    readonly guidance?: GuidanceVariant;
     // Which tool the guidance names for finding code; absent is `rg`.
     readonly search?: SearchTool;
 }
@@ -134,7 +132,7 @@ export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement
 
     const append = joined([
         // The Claude Code loop composes its guidance itself (sdkSystemPrompt); every other runtime carries it here.
-        runtime === "claude-code" || trim.guidance ? undefined : guidanceBlock(input.guidance ?? "full", undefined, input.search ?? "rg"),
+        runtime === "claude-code" || trim.guidance ? undefined : guidanceBlock(undefined, input.search ?? "rg"),
         personaNote,
         // Before the owner's rules and after this product's: what the sandbox learned about itself is context for the
         // rules, not a rule, and anything claiming to outrank the owner's own words would be reading its own promotion.
@@ -178,8 +176,6 @@ export interface SdkSystemPromptInput {
     // What the model's window will not pay for; carried this far so the composed prompt and the disclosed one shed the
     // same pieces.
     readonly trim?: PromptTrim;
-    // Which variant of the guidance the planner chose; absent is the full set.
-    readonly guidance?: GuidanceVariant;
     // Which tool the guidance names for finding code; absent is `rg`.
     readonly search?: SearchTool;
 }
@@ -187,7 +183,7 @@ export interface SdkSystemPromptInput {
 // The turn fields the composed prompt reads, in the groups the request holds them in, so both readers — the adapter that
 // sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
-    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "guidance" | "search">;
+    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search">;
     readonly policy: Pick<TurnPolicy, "unattended">;
     readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones">;
 }
@@ -216,7 +212,6 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     ownBrowsers: tools.ownBrowsers,
     ownPhones: tools.ownPhones,
     ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
-    ...(spec.guidance === undefined ? {} : { guidance: spec.guidance }),
     ...(spec.search === undefined ? {} : { search: spec.search }),
 });
 
@@ -225,7 +220,6 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
 export const harnessGuidance = ({
     append,
     trim,
-    guidance = "full",
     search = "rg",
     unattended,
     browserOutputDir,
@@ -241,7 +235,6 @@ export const harnessGuidance = ({
         ? []
         : [
               guidanceBlock(
-                  guidance,
                   {
                       unattended,
                       browserOutputDir,

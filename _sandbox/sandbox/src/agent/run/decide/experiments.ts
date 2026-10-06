@@ -1,7 +1,6 @@
 import { experimentArm } from "@intentic/agent-context/experiments";
 import type { SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
 import type { FieldNotes } from "@intentic/agent-context/field-notes";
-import { GUIDANCE_REVISION } from "../../prompt/guidance.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { opt } from "../../../opt.js";
 import type { TurnContextOutcome, TurnContextSkip } from "../turn/turn-context.js";
@@ -28,8 +27,6 @@ export interface ExperimentReadings {
     readonly fieldNotes: TurnFieldNotes;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
     readonly turnContext: TurnContextOutcome | undefined;
-    // Undefined on a turn sent no guidance at all (a custom prompt, no system seam, a trimmed window).
-    readonly guidance: { readonly arm: boolean | undefined };
     // Undefined on every turn but a native Claude one: no other runtime's requests pass a gateway that clears.
     readonly clearing: { readonly arm: boolean | undefined };
 }
@@ -44,6 +41,9 @@ interface Experiment<Reading> {
     readonly stamps: (reading: Reading) => TurnExperimentStamps;
 }
 
+// What the map experiment compares, stamped on both arms so a reading never mixes it with the map-or-none rows before.
+export const MAP_COMPARISON = "compact-vs-full";
+
 // Annotated, not inferred: a nested ternary over a literal and a union widens to `string`.
 const deliveryOf = (outcome: TurnContextOutcome | undefined): TurnContextSkip | "delivered" | undefined =>
     outcome === undefined ? undefined : "note" in outcome ? "delivered" : outcome.skipped;
@@ -56,12 +56,15 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         // A cohort only beside its arm: on an unmeasured turn it names a revision nothing was compared against.
         stamps: ({ arm, cohort }) => ({ ...opt("iqSearchArm", arm), ...opt("iqSearchCohort", arm === undefined ? undefined : cohort) }),
     },
+    // Compact map (the arm) against the full one (the holdout); both arms get a map. Its own salt and cohort, since the
+    // map-or-none comparison before it stamped the same arm field with another meaning.
     workspaceMap: {
-        salt: "workspace-map",
+        salt: "workspace-map-form",
         on: (settings) => settings.workspaceMap,
         holdout: (settings) => settings.workspaceMapHoldout,
         stamps: ({ arm, notes }) => ({
             ...opt("mapArm", arm),
+            ...opt("mapCohort", arm === undefined ? undefined : MAP_COMPARISON),
             ...opt("mapChars", notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length),
         }),
     },
@@ -82,13 +85,6 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         on: (settings) => settings.iqSearch,
         holdout: () => 0,
         stamps: (outcome) => ({ ...opt("turnContext", deliveryOf(outcome)), ...opt("turnContextMs", outcome?.durationMs) }),
-    },
-    // The arm is the lean form; the holdout keeps the full one.
-    guidance: {
-        salt: "lean-guidance",
-        on: (settings) => settings.leanGuidance,
-        holdout: (settings) => settings.leanGuidanceHoldout,
-        stamps: ({ arm }) => ({ ...opt("guidanceArm", arm), ...opt("guidanceCohort", arm === undefined ? undefined : GUIDANCE_REVISION) }),
     },
     // The arm has its old tool results replaced by the gateway (privacy/gateway/tool-result-clearing.ts); the holdout
     // keeps every one.

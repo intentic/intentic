@@ -25,7 +25,8 @@ const { savings } = useSavings({});
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
 const searchTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.search));
 
-// Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn.
+// Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn. Both arms
+// get a map; the holdout keeps the full one, so the compact one is measured against it.
 const mapHoldoutPercent = computed<number>(() => asPercent(settings.value?.workspaceMapHoldout));
 const mapTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.map));
 
@@ -91,14 +92,15 @@ const notesSchedule = computed<string>(() => {
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />
             </template>
-            <!-- Holdout flips whole conversations here too: the map is sent once, on the conversation's opening turn. -->
+            <!-- Holdout flips whole conversations here too: the map is sent once, on the conversation's opening turn, compact
+                 to the measured share and full to the rest. -->
             <template v-if="settings?.workspaceMap === true" #below>
                 <MeasurementPanel
                     :table="mapTable"
                     :percent="mapHoldoutPercent"
-                    :note="t(`sandbox.agentCodeSearch.ofConversationsOpenWithout`)"
-                    :on-label="t(`sandbox.agentCodeSearch.withMap`)"
-                    :off-label="t(`sandbox.measurementPanel.without`)"
+                    :note="t(`sandbox.agentCodeSearch.ofConversationsGetFullMap`)"
+                    :on-label="t(`sandbox.agentCodeSearch.compactMap`)"
+                    :off-label="t(`sandbox.agentCodeSearch.fullMap`)"
                     @commit="(workspaceMapHoldout: number) => patch({ workspaceMapHoldout })"
                 />
             </template>

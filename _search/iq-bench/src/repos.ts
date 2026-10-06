@@ -8,6 +8,11 @@ import { type RepoLock, ReposLockSchema } from "./schema.js";
 export const packageRoot = findPackageRoot(import.meta.url);
 // The monorepo checkout doubles as the "intentic" benchmark repo, no clone step.
 export const monorepoRoot = findRepoRoot(import.meta.url);
+// IQ_BENCH_MONOREPO points the "intentic" corpus at another checkout of this repository, typically a clone frozen at one
+// commit. The live checkout moves while a before/after pair runs (other agents land work in it, and the change being
+// measured edits the very package most intentic cases expect), so the two runs would search different files; a frozen
+// clone holds the corpus still and leaves the engine as the only difference.
+const intenticCorpus = process.env["IQ_BENCH_MONOREPO"] ?? monorepoRoot;
 // IQ_BENCH_CACHE moves the clones and indexes elsewhere, so two runs in one checkout (two agents, two engine builds)
 // never rebuild each other's index or share a vector cache written by another embedder.
 export const cacheDir = process.env["IQ_BENCH_CACHE"] ?? join(packageRoot, ".cache");
@@ -33,7 +38,7 @@ const materialize = (repo: RepoLock): string => {
 
 export const repoRoot = (repoId: string): string => {
     if (repoId === "intentic") {
-        return monorepoRoot;
+        return intenticCorpus;
     }
     const lock = readReposLock().find((repo) => repo.id === repoId);
     if (lock === undefined) {

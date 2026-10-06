@@ -110,4 +110,6 @@ export const SETTINGS_HISTORY = [
     at("offload", drop("landCheck")),
     // The model list for the fix a refused push offered (2026-09-28): a refused push now says why and offers nothing.
     at("modelRoles", drop("pre-push-fix")),
+    // The short guidance form (2026-10-06): it lost its A/B to the full one, which every turn now gets.
+    ...dropAll(["leanGuidance", "leanGuidanceHoldout"]),
 ] as const;

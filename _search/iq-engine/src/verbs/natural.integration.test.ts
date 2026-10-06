@@ -54,13 +54,15 @@ test.skipIf(!models.runs)(
 
 // The weak floor end to end: the fixture holds widgets and nothing about payments, so a refund question must read weak
 // and tell the reader what to do, while a question the registry answers must not. Both sit far from the floor
-// (measured 2026-09-29: 0.998 and 0.00002), so neither flips when the floor is recalibrated.
+// (measured 2026-09-29: 0.998 and 0.00002), so neither flips when the floor is recalibrated. Whether the answered one
+// reads confident is the confident rule's business (confidence.test.ts): its top file scores 0.86, under that floor.
 test.skipIf(!models.runs)(
     models.title("a question nothing in the workspace answers reads weak, and one the workspace answers does not"),
     async () => {
         const engine = createEngine({ root, modelDir: MODEL_DIR });
         const answered = await engine.run(request("q", "how are widgets built for the registry?"));
-        expect(answered.verdict?.confidence).toBe("confident");
+        expect(answered.verdict?.confidence).not.toBe("weak");
+        expect(answered.verdict?.relevance).toBeGreaterThan(WEAK_FLOOR);
         const absent = await engine.run(request("q", "how are payments refunded through Stripe?"));
         expect(absent.verdict?.confidence).toBe("weak");
         expect(absent.verdict?.relevance).toBeLessThan(WEAK_FLOOR);

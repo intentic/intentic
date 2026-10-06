@@ -41,6 +41,7 @@ export type {
     SymbolRow,
     Verb,
     Verdict,
+    VerdictBasis,
     VerbOptions,
 } from "./types.js";
 export type { CodebaseHealth, HealthRequest, HealthTotals, KeyModule } from "./engines/health.js";
@@ -52,8 +53,9 @@ export type { ImportGraph } from "./engines/import-graph.js";
 export { disabledOf, type Feature, FEATURES, parseFeatures } from "./features.js";
 export { estimateTokens } from "./render/budget.js";
 export { renderVerify, type VerifyIssue, type VerifyIssueKind, type VerifyReport } from "./verify/check.js";
-// The cross-encoder floor under which an answer reads "weak"; iq-bench marks it on its calibration sweep.
-export { WEAK_FLOOR } from "./verbs/dispatch.js";
+// The verdict thresholds: the cross-encoder floor under which an answer reads "weak", and the top score and lead over
+// the runner-up "confident" needs; iq-bench marks them on its calibration tables.
+export { CONFIDENCE_MARGIN, CONFIDENT_FLOOR, WEAK_FLOOR } from "./verbs/verdict.js";
 export { isIqDenied, IQ_DIR } from "./workspace/floor.js";
 // The scope-filter glob dialect; exported so the daemon's rules and the search box narrow paths the same way.
 export { globToRegExp } from "./workspace/glob.js";

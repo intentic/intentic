@@ -167,7 +167,7 @@ const treeReads = (context: TurnContext, premise: TurnPremise): Pick<AdmittedTur
     const start = premise.startIn === undefined || premise.startIn === "" ? root : resolveWithin(root, premise.startIn);
     return {
         memoryNote: workspaceMemoryNote({ root, cwd: start ?? root }),
-        mapNote: premise.send.map && start !== undefined ? workspaceMapNote({ root, cwd: start }) : undefined,
+        mapNote: premise.send.map && start !== undefined ? workspaceMapNote({ root, cwd: start, form: premise.mapForm }) : undefined,
     };
 };
 

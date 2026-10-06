@@ -34,6 +34,9 @@ const formatException = (exc: unknown): string => {
 const HELP = `One search tool, intent-first. A bare query auto-detects intent, fuses engines, and answers
 natural language semantically: there is no second verb for questions:
   iq "where do we enforce the secrets floor?"
+Text the workspace holds verbatim leads: UI copy off a screenshot answers with the component that
+renders it (through its translation key, slots filled in or not), and an address such as
+iq '/sandbox/agent?section=tools' with its route, view and section.
 
   iq find 'createServer\\(' --lang ts      text/regex match (--literal --word --case)
   iq files wkignore                       file by fuzzy name (--exact for globs)
@@ -55,9 +58,10 @@ natural language semantically: there is no second verb for questions:
   iq sessions files "auth refresh"        files past sessions touched for a topic
 
 Read the first lines and stop: every answer opens with a capsule, \`answer:\` names the top
-path:line, its enclosing symbol and a verdict: confident (stop), ambiguous (compare the candidates),
-or weak (nothing here likely answers, it may not exist: stop, or rephrase once in the code's words);
-\`candidates:\` names the ranked paths that did not fit; \`more:\` gives the exact --after command.
+path:line, its enclosing symbol and a verdict: confident (it scored as the answer: stop), ambiguous
+(compare the candidates), or weak (nothing here likely answers, it may not exist: stop, or rephrase
+once in the code's words); \`key:\`/\`route:\` say what the answer resolved through, \`siblings:\` names
+the files beside it; \`candidates:\` names the ranked paths that did not fit; \`more:\` the --after command.
 The code follows below it, so \`head\` never cuts the part that matters. Natural-language answers
 carry the top hits' full enclosing bodies: read those instead of re-opening the file.
 

@@ -80,17 +80,27 @@ export interface QueryRequest {
     readonly features?: ReadonlySet<Feature>;
 }
 
-// The answer line's verdict on a reranked prose answer. "weak" when no candidate clears the cross-encoder's absolute
-// floor, so nothing here likely answers; otherwise "ambiguous" or "confident" by the gap between the two leading files.
+// The answer line's verdict. On a reranked prose answer: "weak" when no candidate clears the cross-encoder's absolute
+// floor, so nothing here likely answers; "confident" when the top answer scores well on its own AND clearly ahead of
+// the runner-up; "ambiguous" otherwise. An exact answer (literal text, a route, a defined identifier) is judged by the
+// match itself: "confident" for one clear match, "ambiguous" for several.
 export type Confidence = "confident" | "ambiguous" | "weak";
 
-// How the cross-encoder judged a prose answer. The capsule prints the word; this carries both to callers that score it
+// What a verdict was read off: the cross-encoder's scores, or an exact match that needs none.
+export type VerdictBasis = "rerank" | "literal" | "route" | "identifier";
+
+// How the answer was judged. The capsule prints the word; this carries it and its evidence to callers that score it
 // (iq-bench) without parsing the text.
 export interface Verdict {
     // The answer line's word; absent with the confidence stage off, when the capsule prints none.
     readonly confidence?: Confidence;
-    // The best cross-encoder probability among the reranked candidates, the absolute score "weak" is read against.
-    readonly relevance: number;
+    readonly basis: VerdictBasis;
+    // The best cross-encoder probability among the reranked candidates, the absolute score "weak" is read against;
+    // absent when no rerank ran.
+    readonly relevance?: number;
+    // The top and runner-up files' best cross-encoder probabilities, what "confident" is read against.
+    readonly top?: number;
+    readonly runnerUp?: number;
 }
 
 export interface QueryOutcome {

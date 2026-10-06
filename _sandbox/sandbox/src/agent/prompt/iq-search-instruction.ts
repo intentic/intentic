@@ -24,7 +24,7 @@ const loadIqSearchInstruction = async (pluginDir: string): Promise<IqSearchTeach
     return {
         note: `${IQ_SEARCH_INSTRUCTION_HEADER}\n\n${body}`,
         cohort: createHash("sha256")
-            .update(`${body}\0${SEARCH_GUIDANCE.iq.full}\0${SEARCH_GUIDANCE.iq.lean}`)
+            .update(`${body}\0${SEARCH_GUIDANCE.iq}`)
             .digest("hex")
             .slice(0, 12),
     };

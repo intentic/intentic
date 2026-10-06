@@ -16,5 +16,5 @@ test("the cohort moves with the system prompt's iq search line, not only with th
     const { cohort } = await iqSearchInstruction(PLUGIN_DIR);
 
     expect(cohort).not.toBe(short(body));
-    expect(cohort).toBe(short(`${body}\0${SEARCH_GUIDANCE.iq.full}\0${SEARCH_GUIDANCE.iq.lean}`));
+    expect(cohort).toBe(short(`${body}\0${SEARCH_GUIDANCE.iq}`));
 });

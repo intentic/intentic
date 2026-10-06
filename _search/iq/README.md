@@ -11,8 +11,11 @@ flowchart LR
     iq -- "capsule + code<br/>within --budget" --> agent
 ```
 
-- A bare query picks its own strategy: a path, an identifier, a regex or natural language, falling back to semantic search when nothing matches exactly. There is no separate verb for questions.
-- Every answer opens with a capsule: `answer:` names the top anchor, its enclosing symbol and a verdict, `confident`, `ambiguous`, or `weak` when nothing retrieved likely answers and the thing asked about may not exist; `candidates:` and `more:` follow. Output fits `--budget` tokens, capsule included.
+- A bare query picks its own strategy: an address, a path, an identifier, a regex or natural language, falling back to semantic search when nothing matches exactly. There is no separate verb for questions. Text the workspace holds verbatim leads a natural-language answer: UI copy off a screenshot answers with the component that renders it, through its translation key, and an address (`iq '/sandbox/agent?section=tools'`) with its route, view and section ([iq-engine](../iq-engine) has the rules).
+- Every answer opens with a capsule: `answer:` names the top anchor, its enclosing symbol and a verdict; `key:`, `route:` and `siblings:` lines under it say what it resolved through and which files sit beside it; `candidates:` and `more:` follow. Output fits `--budget` tokens, capsule included.
+  - `confident`: the top answer scored as an answer on its own and clearly ahead of the next file (a rerank of 0.9 and a lead of 0.1), or is an exact match (one translation key, one route, one definition). Right 93% of the time on iq-bench's reranked cases.
+  - `ambiguous`: anything between; the answer is usually among the top files and the candidates.
+  - `weak`: nothing retrieved scored as a likely answer (a best rerank under 0.05), so the thing asked about may not exist.
 - Exit codes follow grep (0 hits, 1 none, 2 error). Common grep flags get a one-line redirect instead of a usage dump.
 - `iq verify` reads an answer (a file, or stdin) and checks every reference in it against the index: cited files exist, `path:line` anchors fall inside their file and near the names the same line cites, and code names are defined or at least written somewhere here. It exits 0 when all hold and 1 when any does not, so a hook or CI step can gate on it.
 - The index lives in `.intentic/local/cache/iq` and maintains itself; `iq index rebuild` is for a stale index only.

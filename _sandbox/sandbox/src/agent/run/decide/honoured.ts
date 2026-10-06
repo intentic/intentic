@@ -178,7 +178,6 @@ export const honoured = (
         ...opt("fieldNotesNote", planned.fieldNotes),
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
-        guidance: premise.guidance,
         search: searchToolOf(premise),
     });
     const access = turnAccess(facts, base, persona, withheldMounts);
@@ -196,7 +195,6 @@ export const honoured = (
             systemPromptMode: prompt.mode,
             ...opt("systemPrompt", placement.systemPrompt),
             ...opt("systemAppend", placement.systemAppend),
-            guidance: premise.guidance,
             search: searchToolOf(premise),
             sessionStore: facts.sessionStore,
             ...opt("cwd", startPath),

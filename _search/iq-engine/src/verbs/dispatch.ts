@@ -10,6 +10,7 @@ import { IMPACT_DEFAULTS, impactOf, testsCovering } from "../engines/impact.js";
 import { buildImportGraph, fileHeads } from "../engines/import-graph.js";
 import { type RgOptions, type RgResult, rgSearch } from "../engines/lexical.js";
 import { repoMap } from "../engines/map.js";
+import { parseRouteAddress } from "../engines/routes.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
 import { disabledOf, type Feature } from "../features.js";
 import { classify } from "../plan/classify.js";
@@ -22,9 +23,13 @@ import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.
 import { renderList } from "../render/list.js";
 import { renderText, type Rendered } from "../render/text.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
-import type { Confidence, EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb, Verdict } from "../types.js";
+import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb, Verdict } from "../types.js";
 import { classOf, filterScope, langOf, sweep } from "../workspace/scan.js";
 import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
+import { catalogFacts, literalAnswer, type LiteralAnswer } from "./literal.js";
+import { routeAnswer } from "./route.js";
+import { siblingsLine } from "./siblings.js";
+import { confidenceOf, fieldScores, marginOf, sigmoid, WEAK_HINT } from "./verdict.js";
 
 export interface DispatchContext {
     readonly root: string;
@@ -62,6 +67,8 @@ interface VerbPlan {
     readonly verdict?: Verdict;
     // Whether the top groups are delivered as code rather than as anchors (the pack stage).
     readonly pack?: boolean;
+    // Capsule lines under the answer: a UI string's translation key and call sites, an address's route and view.
+    readonly facts?: readonly string[];
 }
 
 const toGroups = (
@@ -297,6 +304,10 @@ const packGroups = async (db: SqliteDb, root: string, groups: readonly RankedGro
     );
 };
 
+// Verbs whose answer line is where to start reading, and so worth naming the files beside it: a bare query and find.
+// def and refs already name the exact symbol; listing its folder would only spend budget.
+const SIBLING_VERBS = new Set<Verb>(["q", "find"]);
+
 const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "read", "recent", "log", "who", "hotspots", "map", "impact"]);
 
 // How many paths a note names before it switches to counting instead.
@@ -369,32 +380,23 @@ const RERANK_TOP = 32;
 const RERANK_PER_FILE = 4;
 // RRF constant blending the fused and cross-encoder orders; matches the k used in plan/fuse.ts.
 const RERANK_RRF_K = 60;
-// Below this sigmoid gap between the best and second-best file, the field counts as flat/ambiguous.
-const CONFIDENCE_MARGIN = 0.05;
-// Below this cross-encoder probability for the best reranked passage, nothing retrieved likely answers and the answer
-// line says "weak". Every other signal is relative to the best hit (the margin, RRF ranks, bm25 normalised to the top),
-// so something is always "the answer"; ms-marco's sigmoid is the one score that means the same thing from one query to
-// the next. Low on purpose: on code this model scores some real answers near zero, and calling a real answer weak costs
-// more than missing a non-answer. Calibrated on iq-bench's no-answer slice (README there, "The weak floor").
-export const WEAK_FLOOR = 0.005;
-const WEAK_HINT =
-    "weak match: no result scored as a likely answer, so this may not exist here. Stop, or rephrase once in the code's own words; reading on through the candidates will not find it";
-
-const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));
-
-// Weak wins over the margin: a clear gap between two passages that both fail to answer is still no answer.
-export const confidenceOf = (margin: number, relevance: number): Confidence => {
-    if (relevance < WEAK_FLOOR) {
-        return "weak";
-    }
-    return margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
-};
 
 // "confident" says stop reading; "ambiguous" points at the candidates rather than out to a grep spiral; "weak" says none
 // of it answers, so the agent stops instead of reading on for a feature that is not there. With the confidence stage off
-// the capsule says none of them, and the score is still measured.
-const verdictOf = (reranked: { readonly margin: number; readonly relevance: number }, judge: boolean): Verdict =>
-    judge ? { confidence: confidenceOf(reranked.margin, reranked.relevance), relevance: reranked.relevance } : { relevance: reranked.relevance };
+// the capsule says none of them, and the scores are still measured. verdict.ts holds the rule and its calibration.
+const verdictOf = (reranked: RerankOutcome, named: boolean, judge: boolean): Verdict => {
+    const scores = {
+        basis: "rerank" as const,
+        relevance: reranked.relevance,
+        ...(reranked.top !== undefined ? { top: reranked.top } : {}),
+        ...(reranked.runnerUp !== undefined ? { runnerUp: reranked.runnerUp } : {}),
+    };
+    if (!judge) {
+        return scores;
+    }
+    const margin = marginOf({ top: reranked.top, runnerUp: reranked.runnerUp });
+    return { ...scores, confidence: confidenceOf({ top: reranked.top ?? 0, margin, relevance: reranked.relevance, named }) };
+};
 
 // A judged plan carries its verdict, and a weak one the hint saying what to do about it, in the capsule and the JSON
 // result alike.
@@ -407,27 +409,21 @@ const outcomeOf = (result: WorkspaceSearchResult, rendered: Rendered, verdict: V
     return verdict === undefined ? outcome : { ...outcome, verdict };
 };
 
-// Relative gap between the top two FILES of the order actually rendered (post-RRF blending), not raw passage scores,
-// since one file scoring well twice must not read as ambiguity.
-export const fieldMargin = (ordered: readonly { path: string }[], scored: readonly { hit: EngineHit; logit: number }[]): number => {
-    const bestByPath = new Map<string, number>();
-    for (const entry of scored) {
-        const seen = bestByPath.get(entry.hit.path);
-        if (seen === undefined || entry.logit > seen) {
-            bestByPath.set(entry.hit.path, entry.logit);
-        }
-    }
-    const scoreOf = (index: number): number | undefined => {
-        const path = ordered[index]?.path;
-        return path === undefined ? undefined : bestByPath.get(path);
-    };
-    const top = scoreOf(0);
-    if (top === undefined) {
-        return 0;
-    }
-    const runnerUp = scoreOf(1);
-    return runnerUp === undefined ? 1 : sigmoid(top) - sigmoid(runnerUp);
-};
+// Identifier-shaped words in a question (`bodyLimit`, `WEAK_FLOOR`, `rerank_groups`): a symbol the index defines under
+// one of them means what was asked about exists, so the answer cannot be "it is not here".
+const IDENTIFIER_WORD = /\b(?:[a-z]+[A-Z][\w$]*|[A-Z][a-z0-9]+[A-Z][\w$]*|[A-Za-z][a-z0-9]*_[\w$]+)\b/g;
+
+const namesDefined = (db: SqliteDb, query: string): boolean =>
+    [...new Set(query.match(IDENTIFIER_WORD) ?? [])].some((name) => db.get("SELECT 1 AS hit FROM symbols WHERE name = ? LIMIT 1", name) !== undefined);
+
+interface RerankOutcome {
+    readonly groups: RankedGroup[];
+    // The best probability anywhere in the pool.
+    readonly relevance: number;
+    // The top and runner-up files' best probabilities, in the rendered order.
+    readonly top: number | undefined;
+    readonly runnerUp: number | undefined;
+}
 
 // Cross-encoder pass over the fused top hits, blended in via RRF rather than dictating the order outright; undefined
 // when this host has no cross-encoder, and the fused order then stands.
@@ -437,7 +433,7 @@ const rerankGroups = async (
     query: string,
     groups: RankedGroup[],
     stages: { readonly sourceFirst: boolean; readonly spread: boolean },
-): Promise<{ groups: RankedGroup[]; margin: number; relevance: number } | undefined> => {
+): Promise<RerankOutcome | undefined> => {
     const candidates: RankedHit[] = [];
     for (const group of groups) {
         // A group's hits are in line order; a capped pool takes each file's best-fused hits, not its first ones.
@@ -468,15 +464,19 @@ const rerankGroups = async (
         (1 / (RERANK_RRF_K + entry.fusedRank) + 1 / (RERANK_RRF_K + rerankRanks.get(entry.fusedRank)!)) * prior(entry);
     const blended = scored.toSorted((a, b) => rrf(b) - rrf(a) || a.fusedRank - b.fusedRank).map((entry) => entry.hit);
     const rest = groups.flatMap((group) => group.hits).filter((hit) => !scoredKeys.has(`${hit.path}:${hit.line}`));
-    // Regroups by path in the new order: a group's rank is its best hit's rank.
+    // Regroups by path in the new order: a group's rank is its best hit's rank. Each hit takes its blended rank as its
+    // score too, so the answer line anchors the passage that put its file first. With the fused score it kept before,
+    // it could name a line the cross-encoder scored 0.01 in a file another passage had carried to the top, and read
+    // "confident · [rerank 0.01]".
     const byPath = new Map<string, { path: string; score: number; hits: RankedHit[] }>();
     [...blended, ...rest].forEach((hit, rank) => {
         const score = 1 / (rank + 1);
+        const ranked = { ...hit, score };
         const existing = byPath.get(hit.path);
         if (existing === undefined) {
-            byPath.set(hit.path, { path: hit.path, score, hits: [hit] });
+            byPath.set(hit.path, { path: hit.path, score, hits: [ranked] });
         } else {
-            existing.hits.push(hit);
+            existing.hits.push(ranked);
         }
     });
     const regrouped = [...byPath.values()].map((group) => {
@@ -486,7 +486,7 @@ const rerankGroups = async (
     // The best passage anywhere in the pass, not the leading file's: "nothing here likely answers" is a claim about all
     // of them, and the RRF blend can rank a stronger passage below a weaker one.
     const relevance = sigmoid(scores.reduce((best, score) => Math.max(best, score), Number.NEGATIVE_INFINITY));
-    return { groups: regrouped, margin: fieldMargin(regrouped, scored), relevance };
+    return { groups: regrouped, ...fieldScores(regrouped, scored), relevance };
 };
 
 // The full natural-language pipeline: BM25 with RM3 expansion, semantic vectors, cross-encoder rerank, and code-graph
@@ -546,11 +546,71 @@ const naturalPlan = async (
         ...(notes.length > 0 ? { provenance: notes.join(" · ") } : {}),
         ...(related.length > 0 ? { related } : {}),
     };
-    return reranked === undefined ? plan : judged(plan, verdictOf(reranked, on("confidence")));
+    return reranked === undefined ? plan : judged(plan, verdictOf(reranked, namesDefined(context.db, request.query), on("confidence")));
+};
+
+// An exact answer's verdict: the match itself is the evidence, so no score; one clear match is confident.
+const exactVerdict = (basis: Verdict["basis"], confident: boolean, judge: boolean): Verdict =>
+    judge ? { basis, confidence: confident ? "confident" : "ambiguous" } : { basis };
+
+// LITERAL FIRST (literal.ts): the literal hits lead and the semantic answer follows them, minus the files already
+// shown. The semantic run's graph lines are dropped: they explain its own top hits, not the text that was found.
+// Within one literal tier the matches are equally exact (one sentence under three keys, "That didn't work on this
+// device."), so the semantic run breaks the tie: a file it ranked, else a file in a folder it ranked, comes first.
+const literalLed = (literal: LiteralAnswer, natural: VerbPlan, judge: boolean): VerbPlan => {
+    const fileRank = new Map(natural.groups.map((group, rank) => [group.path, rank]));
+    const dirRank = new Map<string, number>();
+    natural.groups.forEach((group, rank) => {
+        const dir = group.path.slice(0, group.path.lastIndexOf("/") + 1);
+        if (!dirRank.has(dir)) {
+            dirRank.set(dir, rank);
+        }
+    });
+    const evidence = (path: string): [number, number] => [
+        fileRank.get(path) ?? Number.MAX_SAFE_INTEGER,
+        dirRank.get(path.slice(0, path.lastIndexOf("/") + 1)) ?? Number.MAX_SAFE_INTEGER,
+    ];
+    const leading = literal.groups
+        .map((group, index) => ({ group, tier: literal.tiers[index] ?? 0, index, evidence: evidence(group.path) }))
+        .toSorted((a, b) => a.tier - b.tier || a.evidence[0] - b.evidence[0] || a.evidence[1] - b.evidence[1] || a.index - b.index)
+        .map((entry) => entry.group);
+    const position = new Map(leading.map((group, rank) => [group.path, rank]));
+    const firstShown = (paths: readonly string[]): number => Math.min(Number.MAX_SAFE_INTEGER, ...paths.map((path) => position.get(path) ?? Number.MAX_SAFE_INTEGER));
+    const facts = literal.facts.toSorted((a, b) => firstShown(a.paths) - firstShown(b.paths)).map((fact) => fact.line);
+    const shown = new Set(leading.map((group) => group.path));
+    const rest = natural.groups.filter((group) => !shown.has(group.path));
+    const groups = [...leading, ...rest].map((group, rank) => ({ ...group, score: 1 / (rank + 1) }));
+    const { related: _related, hint: _hint, verdict: _verdict, ...base } = natural;
+    return {
+        ...base,
+        groups,
+        headerNote: literal.note,
+        facts,
+        verdict: exactVerdict("literal", literal.confident, judge),
+    };
+};
+
+// A natural-language query: the literal pass and the semantic pipeline run side by side, so a query that matches no
+// text pays no extra wait for having been tried.
+const naturalOrLiteral = async (
+    context: DispatchContext,
+    request: QueryRequest,
+    entries: readonly FileEntry[],
+    allowed: ReadonlySet<string>,
+    rgBase: Omit<RgOptions, "pattern">,
+): Promise<VerbPlan> => {
+    const [literal, natural] = await Promise.all([
+        // Best effort: a literal pass that fails leaves the semantic answer, never no answer.
+        literalAnswer(request.query, entries, rgBase).catch(() => undefined),
+        naturalPlan(context, request, entries, allowed),
+    ]);
+    return literal === undefined ? natural : literalLed(literal, natural, context.features.has("confidence"));
 };
 
 const runVerb = async (context: DispatchContext, request: QueryRequest, entries: readonly FileEntry[]): Promise<VerbPlan> => {
     const on = (feature: Feature): boolean => context.features.has(feature);
+    // A caller rendering its own rows: capsule-only work (facts, the route walk) is skipped for it.
+    const list = request.render.list;
     const allowed = new Set(entries.map((entry) => entry.path));
     const paths = entries.map((entry) => entry.path);
     // Ceiling applies only to a list caller's first page, one past what was asked; a continuation stays contiguous.
@@ -619,10 +679,14 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         }
         const exactGroups = toGroups([{ engine: "lexical", hits: found.hits, capped: found.capped }], request.query, entries, context.features);
         // A prose phrase sent to `find` almost always wants the semantic pipeline; --literal is the exact-match escape.
+        // It passes through the literal pass first: UI text with its placeholders filled in matches no line verbatim,
+        // but does match its catalog template.
         if (exactGroups.length === 0 && !request.options.literal && isPhrase(request.query)) {
-            const escalated = await naturalPlan(context, request, entries, allowed);
-            return { ...escalated, headerNote: "no exact phrase match, answered semantically" };
+            const escalated = await naturalOrLiteral(context, request, entries, allowed, rgBase);
+            return { ...escalated, headerNote: escalated.verdict?.basis === "literal" ? escalated.headerNote! : "no exact phrase match, answered semantically" };
         }
+        // A match in a translation catalog names its key and where code uses it (literal.ts, the second hop).
+        const facts = list === undefined ? await catalogFacts(found.hits, entries, rgBase).catch(() => []) : [];
         return {
             groups: exactGroups,
             unit: "matches",
@@ -631,6 +695,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             lead: true,
             ...(found.ceiling ? { ceiling: true } : {}),
             ...(note !== undefined ? { headerNote: note } : {}),
+            ...(facts.length > 0 ? { facts } : {}),
         };
     }
 
@@ -817,9 +882,26 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     }
 
     if (request.verb === "q") {
+        // An address (`/agents`, `/sandbox/agent?section=tools`) is a route before it is a path: it names a screen,
+        // and a file-name match for its words (AGENTS.md) is not where that screen is built.
+        if (list === undefined && parseRouteAddress(request.query) !== undefined) {
+            const route = await routeAnswer(request.query, context.root, entries, rgBase).catch(() => undefined);
+            if (route !== undefined) {
+                return {
+                    groups: route.groups,
+                    unit: "hits",
+                    style: "hits",
+                    showTags: true,
+                    lead: true,
+                    headerNote: route.note,
+                    facts: route.facts,
+                    verdict: exactVerdict("route", route.confident, on("confidence")),
+                };
+            }
+        }
         const kind = classify(request.query);
         if (kind === "natural") {
-            return naturalPlan(context, request, entries, allowed);
+            return naturalOrLiteral(context, request, entries, allowed, rgBase);
         }
         const results: EngineResult[] = [];
         if (kind === "path") {
@@ -844,7 +926,17 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         }
         const groups = toGroups(results, request.query, entries, context.features);
         if (groups.length > 0) {
-            return { groups, unit: "hits", style: "hits", showTags: true, lead: true };
+            // An identifier the index defines is answered by its definition: one definition is confident, several are a
+            // choice between them. A name found only as text gets no word, as before.
+            const defined = kind === "identifier" ? (results[0]?.hits.length ?? 0) : 0;
+            return {
+                groups,
+                unit: "hits",
+                style: "hits",
+                showTags: true,
+                lead: true,
+                ...(defined > 0 ? { verdict: exactVerdict("identifier", defined === 1, on("confidence")) } : {}),
+            };
         }
         // Nothing matched exactly; answers semantically instead of spending a turn on a hint that says to.
         const escalated = await naturalPlan(context, request, entries, allowed);
@@ -960,6 +1052,15 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         if (list === undefined && context.features.has("pack") && plan.pack === true) {
             plan = { ...plan, groups: await packGroups(context.db, context.root, plan.groups, request.render.budget) };
         }
+        // The answer's neighbours, for the search verbs whose answer is a place to start reading (siblings.ts).
+        const answer = plan.groups[0]?.path;
+        const siblings =
+            list === undefined && plan.lead === true && answer !== undefined && SIBLING_VERBS.has(request.verb)
+                ? siblingsLine(answer, entries, plan.groups, request.query)
+                : undefined;
+        if (siblings !== undefined) {
+            plan = { ...plan, facts: [...(plan.facts ?? []), siblings] };
+        }
     }
 
     const disabled = disabledOf(context.features);
@@ -993,6 +1094,8 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
                   ...(hint !== undefined ? { hint } : {}),
                   ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
                   ...(plan.lead === true ? { lead: true } : {}),
+                  // Facts describe the first answer; a later page leads with another group.
+                  ...(offset === 0 && plan.facts !== undefined && plan.facts.length > 0 ? { facts: plan.facts } : {}),
                   confidence: plan.verdict?.confidence,
                   cursorId: id,
               });

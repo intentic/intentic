@@ -14,14 +14,9 @@ import {
     type Tip,
 } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { useSavings } from "../../usage/useSavings";
-import MeasurementPanel from "../models/MeasurementPanel.vue";
-import { type ResultTable, tableOf } from "../models/experimentReadings";
-import { asPercent } from "../models/numberInputs";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
 import { promptReach, spokenList } from "./promptReach";
 import { useT } from "@intentic/ui/i18n";
@@ -94,11 +89,6 @@ const confirmReplace = (): void => {
     replacing.value = undefined;
 };
 
-// The holdout keeps whole conversations on the long form, since the guidance rides the prompt for the whole session.
-const { savings } = useSavings({});
-const guidanceHoldoutPercent = computed<number>(() => asPercent(settings.value?.leanGuidanceHoldout));
-const guidanceTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.guidance));
-
 const reach = promptReach();
 const viewPromptTip = computed((): Tip => ({
     title: t(`sandbox.agentInstructions.viewPrompt`),
@@ -161,33 +151,6 @@ const viewPromptTip = computed((): Tip => ({
                     </div>
                 </template>
                 <Notice v-if="builtinError !== undefined" :of="builtinError" class="mt-2" />
-            </template>
-        </Row>
-
-        <!-- A custom prompt drops this product's guidance outright, so the form it would take has nothing to choose. -->
-        <Row
-            v-if="promptMode !== `custom`"
-            spine
-            icon="list-check"
-            :title="t(`sandbox.agentInstructions.leanGuidance`)"
-            :description="t(`sandbox.agentInstructions.leanGuidanceDescription`)"
-        >
-            <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.leanGuidance ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ leanGuidance: value })"
-                />
-            </template>
-            <template v-if="settings?.leanGuidance === true" #below>
-                <MeasurementPanel
-                    :percent="guidanceHoldoutPercent"
-                    :table="guidanceTable"
-                    :note="t(`sandbox.agentInstructions.ofConversationsKeepFullGuidance`)"
-                    :on-label="t(`sandbox.agentInstructions.shortForm`)"
-                    :off-label="t(`sandbox.agentInstructions.longForm`)"
-                    @commit="(leanGuidanceHoldout: number) => patch({ leanGuidanceHoldout })"
-                />
             </template>
         </Row>
 

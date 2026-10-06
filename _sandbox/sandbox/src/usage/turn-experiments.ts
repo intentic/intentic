@@ -3,21 +3,19 @@ import type { DayWindowQuery, SavingsReport, UsageTurn } from "@intentic/sandbox
 import { opt } from "../opt.js";
 import type { UsageStore } from "./usage-store.js";
 
-// The mechanism experiments (iq search teaching, project map, field notes, guidance form) measured off the usage ledger.
+// The mechanism experiments (iq search teaching, project map, field notes, tool-result clearing) measured off the usage ledger.
 // What each is judged on and the arithmetic over its two arms are @intentic/agent-context's, shared with the Claude Code
 // plugin's stats; this module only says where a ledger row keeps each experiment's arm and treatment revision.
 
 const SEARCH_DESIGN: Design<UsageTurn> = { ...MECHANISMS.search, arm: (turn) => turn.iqSearchArm, cohort: (turn) => turn.iqSearchCohort };
 
-// The map has no revisions to cohort by: it is recomputed from the filesystem on every send.
-const MAP_DESIGN: Design<UsageTurn> = { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: () => undefined };
+// Cohorted by comparison rather than by revision (the map is recomputed on every send): the compact-vs-full rows are read
+// apart from the map-or-none rows before them, whose arm meant something else.
+const MAP_DESIGN: Design<UsageTurn> = { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: (turn) => turn.mapCohort };
 
 // Cohorted, unlike the map, because the file is rewritten monthly and a window wide enough to reach MIN_ARM_TURNS is
 // wide enough to hold two revisions.
 const NOTES_DESIGN: Design<UsageTurn> = { ...MECHANISMS.notes, arm: (turn) => turn.notesArm, cohort: (turn) => turn.notesCohort };
-
-// `on` is the lean form.
-const GUIDANCE_DESIGN: Design<MeasuredUsageTurn> = { ...MECHANISMS.guidance, arm: (turn) => turn.guidanceArm, cohort: (turn) => turn.guidanceCohort };
 
 // `on` has its old tool results replaced. No revisions yet: the limits are constants (tool-result-clearing.ts).
 const CLEARING_DESIGN: Design<MeasuredUsageTurn> = { ...MECHANISMS.clearing, arm: (turn) => turn.clearingArm, cohort: () => undefined };
@@ -39,18 +37,16 @@ const withPerCall = (turn: UsageTurn): MeasuredUsageTurn => {
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<Pick<SavingsReport, "search" | "map" | "notes" | "guidance" | "clearing">> => {
+): Promise<Pick<SavingsReport, "search" | "map" | "notes" | "clearing">> => {
     const turns = (await usage.turns(window)).filter(measurable).map(withPerCall);
     const search = measureExperiment(turns, SEARCH_DESIGN);
     const map = measureExperiment(turns, MAP_DESIGN);
     const notes = measureExperiment(turns, NOTES_DESIGN);
-    const guidance = measureExperiment(turns, GUIDANCE_DESIGN);
     const clearing = measureExperiment(turns, CLEARING_DESIGN);
     return {
         ...(search !== undefined ? { search } : {}),
         ...(map !== undefined ? { map } : {}),
         ...(notes !== undefined ? { notes } : {}),
-        ...(guidance !== undefined ? { guidance } : {}),
         ...opt("clearing", clearing),
     };
 };

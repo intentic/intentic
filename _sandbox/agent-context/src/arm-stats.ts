@@ -1,4 +1,4 @@
-// Measures the context mechanisms (the search teaching, the project map, the field notes, the guidance form) off rows of
+// Measures the context mechanisms (the search teaching, the project map, the field notes, tool-result clearing) off rows of
 // turns rather than asserting their value: each mechanism holds a share of conversations out as a control, and this
 // compares the two arms. The teaching applies every turn, so a conversation's sample averages over its turns; the map
 // applies once, so its sample is the opening turn alone. A delta is shown only once both arms reach MIN_ARM_TURNS and the
@@ -17,8 +17,8 @@ const Z_95 = 1.96;
 // openingListings: directory listings a turn ran to orient itself (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
-// roundTrips: model calls a turn took, each one a re-read of the whole context (the guidance form, whose batching and
-// context-reuse paragraphs exist to save them).
+// roundTrips: model calls a turn took, each one a re-read of the whole context (tool-result clearing, whose lost results
+// could cost re-runs).
 // contextPerCall: prompt tokens per model call, cached or not (tool-result clearing, which exists to shrink it).
 export type MetricName =
     "searchCalls" | "openingSearches" | "openingListings" | "callsBeforeTarget" | "failedCalls" | "roundTrips" | "contextPerCall";
@@ -184,9 +184,6 @@ export const MECHANISMS = {
     map: { metrics: [ROOT_LISTINGS, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
     // The brief rides the whole session, so turn 40 is as much evidence as turn 1.
     notes: { metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET], sampleUnit: "conversations", sample: meanOfTurns },
-    // Judged on what the long form was written to prevent: calls that fail, calls spent before reaching the work, and
-    // the round trips its batching and context-reuse paragraphs ask the agent not to spend.
-    guidance: { metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET, ROUND_TRIPS], sampleUnit: "conversations", sample: meanOfTurns },
     // Judged on what it is for, the prompt each call carries, and on what it could cost: a model that has lost a result
     // it needed runs the tool again (more round trips) or guesses (more calls that fail).
     clearing: { metrics: [CONTEXT_PER_CALL, ROUND_TRIPS, FAILED_CALLS], sampleUnit: "conversations", sample: meanOfTurns },

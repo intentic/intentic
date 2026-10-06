@@ -23,6 +23,10 @@ export interface RenderRequest {
     readonly hint?: string;
     // Code-graph neighbor lines; rendered and budgeted like hint.
     readonly related?: readonly string[];
+    // Lines that say what the answer is beyond its anchor, printed under `answer:` in order: the translation key a UI
+    // string resolved to (`key:`), the route and view an address resolved to (`route:`), the answer's neighbours
+    // (`siblings:`). Each is admitted against the capsule's share of the budget like every optional line.
+    readonly facts?: readonly string[];
     // True if the capsule opens with an `answer:` anchor; false where the ranking itself is the answer.
     readonly lead?: boolean;
     // Whether the top result clearly stands out, or nothing likely answers at all, when a reranker was present to judge it.
@@ -149,6 +153,8 @@ export const renderText = (request: RenderRequest): Rendered => {
     const answer = request.lead === true && pending[0] !== undefined ? answerLine(pending[0], request.confidence) : undefined;
     const leadLine = answer !== undefined && admit(answer) ? answer : undefined;
     const hintLine = request.hint !== undefined && admit(`hint: ${request.hint}`) ? `hint: ${request.hint}` : undefined;
+    // After the hint and before the candidates: they qualify the answer itself, which a candidates line does not.
+    const factLines = leadLine === undefined ? [] : (request.facts ?? []).filter(admit);
     const worstCandidates = wantsCandidates
         ? pending
               .map(candidateAnchor)
@@ -229,7 +235,7 @@ export const renderText = (request: RenderRequest): Rendered => {
     const unshown = groups.slice(offset + shownGroups);
     const capsule = [header(shownTotal, request.headerNote)];
     if (leadLine !== undefined) {
-        capsule.push(leadLine);
+        capsule.push(leadLine, ...factLines);
     }
     const candidates = showCandidates ? unshown.slice(0, CANDIDATE_COUNT).map(candidateAnchor) : [];
     if (candidates.length > 0) {

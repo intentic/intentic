@@ -71,15 +71,15 @@ export const UsageTurnSchema = z.object({
     // Arm of the project-map experiment, stable per conversation; mapChars is the note's length when sent.
     mapArm: z.boolean().optional(),
     mapChars: z.number().optional(),
+    // Which comparison `mapArm` belongs to: absent on the map-or-none rows, "compact-vs-full" since 2026-10-06, when
+    // the arm became the compact map and the holdout the full one.
+    mapCohort: z.string().optional(),
     // Arm of the field-notes experiment, stable per conversation; notesChars is what the budget let through.
     notesArm: z.boolean().optional(),
     notesChars: z.number().optional(),
     // Hash of the brief that was sent, recorded on control turns too. Load-bearing rather than decorative: the file is
     // rewritten monthly, so a 30-day window holds two different treatments and pooling them would measure neither.
     notesCohort: z.string().optional(),
-    // Arm of the lean-guidance experiment, stable per conversation; true is the short form. The cohort hashes both forms.
-    guidanceArm: z.boolean().optional(),
-    guidanceCohort: z.string().optional(),
     // Arm of the tool-result clearing experiment, stable per conversation; true is a conversation whose old tool results
     // the gateway drops. Native Claude turns only: no other runtime's requests pass a gateway that clears.
     clearingArm: z.boolean().optional(),

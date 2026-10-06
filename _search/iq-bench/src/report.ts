@@ -4,6 +4,7 @@ import type { RepoMeta } from "./retrieval.js";
 import type { CaseRow, CaseScore, RunRecord } from "./schema.js";
 import { meanScores } from "./score.js";
 import { sliceTable, weakReport } from "./slices.js";
+import { verdictReport } from "./verdicts.js";
 
 const fmt = (value: number | undefined, digits = 2): string => (value === undefined ? "—" : value.toFixed(digits));
 
@@ -328,6 +329,7 @@ export const renderRetrievalReport = (rows: readonly CaseRow[], metas: readonly 
     }
     parts.push(sliceTable(rows));
     parts.push(weakReport(rows));
+    parts.push(verdictReport(rows));
     parts.push(configVsFull(rows));
     parts.push(
         "\n> Latency includes iq's per-run revalidation sweep: the honest CLI-equivalent number. No-answer cases have no retrieval score: the config and paired tables leave them out, and only the slice and weak tables read them.",

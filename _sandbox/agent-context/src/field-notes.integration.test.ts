@@ -139,3 +139,13 @@ test("an index naming a section the file lost sends nothing rather than a brief 
     expect(fieldNotes({ file, budget: 10_000, onUnreadable: (why) => said.push(why) })).toBeUndefined();
     expect(said.join(" ")).toContain(`toolchain`);
 });
+
+// Ids are kebab-case by the writer's brief, and each id is also its block's key: both have to read the hyphen.
+test("a kebab-case id is read like any other", async () => {
+    const file = await scaffold(
+        [`meta:`, `  title: Field notes`, `priority[1]{rank,id,title}:`, `  1,stale-dist,Lib dist is stale`, `stale-dist:`, `  fix: rebuild it`, ``].join("\n"),
+    );
+    const notes = fieldNotes({ file, budget: 10_000 });
+    expect(notes?.ranksSent).toBe(1);
+    expect(notes?.text).toContain("  fix: rebuild it");
+});

@@ -157,7 +157,6 @@ const sharedContext = (
 });
 
 // The turn index only for a turn in a conversation; the map's size off the notes as they will be sent, trimmed. The
-// guidance arm only where guidance was composed at all, so a turn that got neither form is no control turn.
 const experimentsOf = (
     facts: AdmittedTurnFacts,
     input: AgentTurn,
@@ -165,14 +164,12 @@ const experimentsOf = (
     premise: TurnPremise,
     notes: TurnFieldNotes,
     sent: readonly TurnNote[] | undefined,
-    guided: boolean,
 ): TurnExperimentStamps =>
     experimentStamps(input.conversationId === undefined ? undefined : runtime.conversationTurns, {
         iqSearch: { arm: premise.arms.search, cohort: facts.iqTeaching?.cohort },
         workspaceMap: { arm: premise.arms.map, notes: sent },
         fieldNotes: notes,
         turnContext: facts.turnContext,
-        guidance: { arm: guided ? premise.arms.guidance : undefined },
         clearing: { arm: premise.arms.clearing },
     });
 
@@ -254,7 +251,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         spawn,
         briefing: premise.briefing,
         ...opt("contextTrim", composed.contextTrim),
-        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes, system.guidance && trim === undefined),
+        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes),
         warnings,
     };
 };
