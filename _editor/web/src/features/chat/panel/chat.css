@@ -325,7 +325,7 @@
     display: block;
     width: 100%;
     height: var(--wash-height);
-    border-radius: var(--radius-sm);
+    border-radius: 9999px;
     background: color-mix(in oklab, var(--wash-ink) var(--wash-depth), transparent);
     cursor: pointer;
     transition: background-color 160ms ease-out;
