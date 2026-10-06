@@ -769,7 +769,10 @@ jobs:
     needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
-    timeout-minutes: 20
+    # The legs carry @intentic/web's whole suite, which alone takes 18 to 20 minutes (verify-site and verify-platform,
+    # 1100s and 1167s on 2026-10-06), beside the sandbox's: at 20 minutes every leg of three runs that day was cancelled
+    # before web reported, at a peak of 4.3 GiB, well under the ceiling. The verify jobs that run the same suite have 60.
+    timeout-minutes: 40
     strategy:
       # Both legs always run: knowing a bug is east-only or west-only is most of the diagnosis, and stopping at the
       # first failure throws that away.

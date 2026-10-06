@@ -15,6 +15,7 @@ import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { dropTranscriptStore } from "./features/chat/transcript/transcriptCache";
 import { describeError, installClientDiagnostics, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
+import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
 import { installRenderTrace } from "./app/renderTrace";
@@ -40,8 +41,11 @@ provideBuiltinViews(coreViews);
 // Called first: a startup crash after this wipes stored state and reloads once, not needing 'clear site data'.
 installSelfHeal();
 // Called right after selfHeal, so the wipe below is captured in the crash record too; reports reach the daemon through
-// its client, handed in since diagnostics sit below it.
-sendClientDiagnosticsWith(postClientDiagnostics);
+// its client, handed in since diagnostics sit below it. A window on a folder of the user's own disk has no daemon behind
+// it, only the files sidecar, which keeps no log: there a report has nowhere to go, and is dropped as one with no sandbox.
+if (localFace() === undefined) {
+    sendClientDiagnosticsWith(postClientDiagnostics);
+}
 installClientDiagnostics();
 await purgeIfMarked();
 dropOutdatedMirrors(dropTranscriptStore);
