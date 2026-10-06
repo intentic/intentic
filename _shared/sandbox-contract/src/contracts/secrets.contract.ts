@@ -4,6 +4,8 @@ import {
     CredentialGuardSubjectParamSchema,
     CredentialGatesSchema,
     CredentialGrantSchema,
+    CredentialPolicySchema,
+    CredentialPolicySetSchema,
     CredentialRequestSchema,
     SecretInventorySchema,
     SecretKeyParamSchema,
@@ -141,6 +143,29 @@ export const secretsContract = {
         .meta({ agent: true })
         .input(SecretHostGuardSetSchema)
         .output(SecretHostGuardSetResultSchema),
+    // The credential gateway's say over one connection: how its credential reaches the agent, and what it may do there.
+    policy: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/policy/{subject}",
+            summary: "How a connection's credential reaches the agent, and what it may do",
+            description:
+                "Whether the credential gateway holds this connection's credential or the agent is handed it, and the method and path rules the gateway enforces on every request it attaches it to. Names and rules only, never values.",
+        })
+        // The `secrets policy` CLI's read, on the agent token: knowing the rules lets a turn plan around them.
+        .meta({ agent: true })
+        .input(CredentialGuardSubjectParamSchema)
+        .output(CredentialPolicySchema),
+    setPolicy: secretRoute
+        .route({
+            method: "PUT",
+            path: "/secrets/policy/{subject}",
+            summary: "Set how a connection's credential reaches the agent, and its rules",
+            description:
+                "The owner's alone, and never the agent's: handing the agent the credential itself, or replacing what the gateway lets it do, is a decision about the credential, not a use of it.",
+        })
+        .input(CredentialPolicySetSchema)
+        .output(CredentialPolicySchema),
     request: secretRoute
         .route({
             method: "POST",

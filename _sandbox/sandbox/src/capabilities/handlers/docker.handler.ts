@@ -12,7 +12,6 @@ import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
 // boot. No remove: de-privileging live engine state is too destructive to do silently.
 
-
 // Always present; the engine half is the docker pack, composed only when the base image lacks it.
 const DOCKER_DIRECTIVE = `# docker capability: this directive grants dockerd the privileges it needs
 # (translated to a --privileged run by the allowlisted rebuild executors).

@@ -24,7 +24,9 @@ export const createCapabilityAskRoutes = (services: Services) => {
             // Statuses are probed once for the whole manifest; `connected` means live, not merely added.
             const [statuses, recommendations] = await Promise.all([
                 Promise.all(
-                    capabilities.map(async (capability) => [capability.id, await registry[capability.kind].status(ctx, capability.id, capability.config)] as const),
+                    capabilities.map(
+                        async (capability) => [capability.id, await registry[capability.kind].status(ctx, capability.id, capability.config)] as const,
+                    ),
                 ).then((pairs) => new Map(pairs)),
                 capabilityRecommendations(services.workspace.root, capabilities, dismissed),
             ]);
@@ -39,7 +41,11 @@ export const createCapabilityAskRoutes = (services: Services) => {
                     };
                 }),
                 // The scan's evidence verbatim, so an agent can check the claim before asking for it.
-                suggested: recommendations.map((recommendation) => ({ entry: recommendation.entry, claim: recommendation.reason, evidence: recommendation.evidence })),
+                suggested: recommendations.map((recommendation) => ({
+                    entry: recommendation.entry,
+                    claim: recommendation.reason,
+                    evidence: recommendation.evidence,
+                })),
             };
             return c.json(answer);
         },

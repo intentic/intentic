@@ -2,12 +2,13 @@ import { join } from "node:path";
 import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { REPLAY_SECRET_ENV } from "@intentic/sandbox-run";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
+import { type ConfigDefinition, cliArgs, env, envFile, inspectSchema, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
 // Env var name = schema path in SCREAMING_SNAKE per segment; the shape is a fixed external contract.
-const configSchema = z.object({
+export const configSchema = z.object({
     // Workspace dir; the three repos (intent, desired-state, app) clone under <root>/<role>.
     workspaceRoot: z.string().default(WORKSPACE_ROOT),
     // Daemon-owned history and protected git dirs; kept outside workspaceRoot so an agent rm -rf can't reach it.
@@ -193,6 +194,17 @@ const definition = {
 export type Config = z.infer<typeof configSchema>;
 
 export const loadConfig = (): Config => loadPuristicConfig(definition);
+
+// Every environment name a `secret: true` leaf above is read from: what boot takes out of the daemon's own environment
+// once loaded, so no child inherits it (seams/sealed-env.ts), and what the tmux server's environment is scrubbed of.
+// Derived from the schema, so marking a new leaf secret is the whole change.
+export const CONFIG_SECRET_ENV: readonly string[] = inspectSchema(configSchema)
+    .filter((leaf) => leaf.secret)
+    .map((leaf) => leaf.envName);
+
+// Every secret the container's environment can carry: the schema's own, and the runner's replayed ones the schema does not
+// read (a self-host deploy key, a runner's pairing token). The two lists are the only ways a variable gets in.
+export const CONTAINER_SECRET_ENV: readonly string[] = [...new Set([...CONFIG_SECRET_ENV, ...REPLAY_SECRET_ENV])];
 
 // Where this sandbox is reachable from outside, as its config says: the zone, its id, and the outbox's slot and base URL.
 export const publicAddressOf = (config: Pick<Config, "zone" | "sandbox" | "connectToken">) => {

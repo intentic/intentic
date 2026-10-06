@@ -25,7 +25,8 @@ export const capabilitiesDocument = defineDocument({
         // job now). Removed, each recorded in the ledger; the tracked file's history keeps the entry whole.
         retireEntries(
             "retires a service or integration connection, withdrawn in favour of CLI connectors",
-            (entry): entry is { kind: "service" | "integration" } => isJsonObject(entry) && (entry["kind"] === "service" || entry["kind"] === "integration"),
+            (entry): entry is { kind: "service" | "integration" } =>
+                isJsonObject(entry) && (entry["kind"] === "service" || entry["kind"] === "integration"),
         ),
     ],
 });

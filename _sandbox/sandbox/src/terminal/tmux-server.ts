@@ -2,6 +2,7 @@ import { readlink } from "node:fs/promises";
 import { errnoCode } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { forkedExec } from "@intentic/base/git";
+import { CONTAINER_SECRET_ENV } from "../env.config.js";
 import { DAEMON_GEN_ENV, DAEMON_ONLY_ENV, WORKLOAD_ENV } from "../seams/workload-stamp.js";
 
 // What tmux printed on its way out, when a failed exec carried it.
@@ -31,9 +32,11 @@ export const isNoTmuxTarget = (error: unknown): boolean => isNoTmuxServer(error)
 export const HOLDER_SESSION = "intentic-server-pin";
 
 // What the server's own environment must not hand every pane it starts (2026-10-05): netd's two sockets, which a
-// server netd or an earlier daemon started holds, and a daemon run's generation, which would date every pane by
-// the run that happened to start the server. The tmux sessions have their own sweeps.
-const SCRUBBED_SERVER_ENV = [...DAEMON_ONLY_ENV, DAEMON_GEN_ENV];
+// server netd or an earlier daemon started holds, a daemon run's generation, which would date every pane by the run
+// that happened to start the server, and every container secret (2026-10-06): a server netd forked for the owner's
+// terminal before the daemon sealed its own environment holds the whole container env. The tmux sessions have their
+// own sweeps.
+const SCRUBBED_SERVER_ENV = [...DAEMON_ONLY_ENV, DAEMON_GEN_ENV, ...CONTAINER_SECRET_ENV];
 
 /** Whether tmux already copies the owner stamp from a creating client into each new session it makes. */
 export const copiesOwnerStamp = (updateEnvironment: string): boolean =>

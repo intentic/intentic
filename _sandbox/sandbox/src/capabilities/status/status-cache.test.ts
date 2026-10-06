@@ -21,7 +21,10 @@ const probed = (first: CapabilityStatus) => {
 describe(`capability status cache`, () => {
     it(`probes the first ask, then answers from what it holds while a fresh probe runs behind`, async () => {
         const pushes: number[] = [];
-        const cache = createStatusCache(() => pushes.push(1), () => undefined);
+        const cache = createStatusCache(
+            () => pushes.push(1),
+            () => undefined,
+        );
         const device = probed({ state: `pending`, detail: `away` });
         expect(await cache.status(`phone`, {}, device.probe)).toEqual({ state: `pending`, detail: `away` });
         device.answer({ state: `active` });
@@ -33,7 +36,10 @@ describe(`capability status cache`, () => {
 
     it(`pushes nothing when the probe behind an answer finds the same one`, async () => {
         const pushes: number[] = [];
-        const cache = createStatusCache(() => pushes.push(1), () => undefined);
+        const cache = createStatusCache(
+            () => pushes.push(1),
+            () => undefined,
+        );
         const steady = probed({ state: `active` });
         await cache.status(`docker`, {}, steady.probe);
         await cache.status(`docker`, {}, steady.probe);
@@ -42,7 +48,10 @@ describe(`capability status cache`, () => {
     });
 
     it(`probes an edited connection fresh rather than serving what its old settings said`, async () => {
-        const cache = createStatusCache(() => undefined, () => undefined);
+        const cache = createStatusCache(
+            () => undefined,
+            () => undefined,
+        );
         const entry = probed({ state: `error`, detail: `bad token` });
         await cache.status(`gitlab`, { token: `old` }, entry.probe);
         entry.answer({ state: `active` });
@@ -51,7 +60,10 @@ describe(`capability status cache`, () => {
 
     it(`keeps the last answer when a probe behind it fails, and forgets a removed connection`, async () => {
         const failures: unknown[] = [];
-        const cache = createStatusCache(() => undefined, (error) => failures.push(error));
+        const cache = createStatusCache(
+            () => undefined,
+            (error) => failures.push(error),
+        );
         await cache.status(`vpn`, {}, async () => ({ state: `active` }));
         expect(
             await cache.status(`vpn`, {}, async () => {

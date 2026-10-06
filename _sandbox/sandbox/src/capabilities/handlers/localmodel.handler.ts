@@ -35,7 +35,6 @@ import { localModelPanelKey } from "../../ports/panel-keys.js";
 // llama-server; the entry then IS an endpoint. Apply returns before the download finishes; a background job re-syncs
 // the translator once the server actually serves.
 
-
 // CUDA build of llama-server (overlay-only) plus the directive, spelled like docker's for the allowlist.
 const GPU_DIRECTIVE = `# local model capability, gpu option: the host's NVIDIA GPUs for llama-server.
 # intentic:runtime --gpus=all`;
@@ -420,8 +419,7 @@ export const localModelHandler: CapabilityHandler = {
 
 // The llama-server for one entry, found by the port it was told to bind. The panel manager knows a tmux session, not
 // a pid, and the port is the one thing the command line is guaranteed to carry.
-const serverPidOf = async (port: number): Promise<number | undefined> =>
-    (await llamaServerProcesses()).find((server) => server.port === port)?.pid;
+const serverPidOf = async (port: number): Promise<number | undefined> => (await llamaServerProcesses()).find((server) => server.port === port)?.pid;
 
 const cpuTicksOf = async (pid: number): Promise<number | undefined> =>
     readFile(`/proc/${pid}/stat`, "utf8")

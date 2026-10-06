@@ -489,7 +489,7 @@ const preflight = async (
 ): Promise<Preflight | { readonly refused: string }> => {
     const held = supersedeHeld(services, input.conversationId);
     // Shared with the boot-time condition-watch restore, so a drifted second copy can't quietly stop working.
-    const cliEnv = await turnCliEnv(services);
+    const cliEnv = await turnCliEnv(services, input.conversationId);
     clock.mark("env");
     const attachments = await attachmentsOf(services.workspace.root, input);
     if ("refused" in attachments) {

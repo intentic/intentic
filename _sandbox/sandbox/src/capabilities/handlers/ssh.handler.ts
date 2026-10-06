@@ -48,7 +48,12 @@ export const sshHandler: CapabilityHandler = {
     rename: { carry: async (_ctx, from) => removeSshHost(from) },
     async *apply(ctx, id, config) {
         const ssh = config as SshConfig;
-        await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, ...(ssh.auth === "password" ? {} : { identityFile: hostKeyPath(id) }) });
+        await writeSshHost(id, {
+            host: ssh.host,
+            user: ssh.user,
+            port: ssh.port,
+            ...(ssh.auth === "password" ? {} : { identityFile: hostKeyPath(id) }),
+        });
         if (ssh.auth === "password") {
             await writeFile(hostPassPath(id), ssh.password, { mode: 0o600 });
         } else {

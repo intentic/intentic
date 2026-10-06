@@ -6,12 +6,12 @@ description: Manage Cloudflare DNS, zones, cache, tunnels, Workers and Pages via
 # Cloudflare (connected)
 
 Token in `$CLOUDFLARE_API_TOKEN`; `$CLOUDFLARE_ACCOUNT_ID` may be set too (when empty, list accounts below).
-Base is `https://api.cloudflare.com/client/v4`. Define this helper once per shell:
+Base is `$CLOUDFLARE_API_BASE_URL` (it stands in for https://api.cloudflare.com/client/v4). Define this helper once per shell:
 `cf <METHOD> <path> [-d '<json>']`:
 
 ```sh
 cf() { local m="$1" p="$2"; shift 2; curl -s -X "$m" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  -H "Content-Type: application/json" "https://api.cloudflare.com/client/v4/$p" "$@"; }
+  -H "Content-Type: application/json" "$CLOUDFLARE_API_BASE_URL/$p" "$@"; }
 ```
 
 Every response is an envelope `{success, errors, result, result_info}`: check `.success` and on `false` read
@@ -34,5 +34,6 @@ there". **DNS edits and cache purges change live traffic: say what you are about
 - R2 buckets: `cf GET "accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets" | jq -c '.result.buckets[]'`, listing only; the objects inside speak S3 and need their own R2 access keys, which this token is not
 
 Notes: paginate with `?page=N&per_page=50` and read `.result_info | {page, total_pages}`. `wrangler`, if
-installed, picks up these same two env vars and needs no login. A proxied (orange-cloud) record hides the
+installed, reads the plain names, so hand them over per command and it needs no login:
+`CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_BASE_URL=$CLOUDFLARE_API_BASE_URL wrangler <CMD>`. A proxied (orange-cloud) record hides the
 origin IP: turning `proxied` off exposes it, so don't do that as a side effect of another edit.

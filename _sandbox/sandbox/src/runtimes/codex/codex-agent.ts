@@ -35,6 +35,7 @@ import { aboutSubagent, codexSubagentFrames, codexSubagents, subagentSpend } fro
 import { codexInstructionConfig } from "./codex-instructions.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } from "./codex-models.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
+import { containerKeyEnv } from "../../seams/sealed-env.js";
 
 // Codex provider adapter: same seam as agent.ts's runAgent (AgentRequest in, AgentEvent frames out), backed by the
 // Codex CLI's app-server instead of the Claude Agent SDK. App-server publishes whole item completions plus lifecycle,
@@ -703,7 +704,8 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                       env: { ...env, CODEX_API_KEY: credential.authToken },
                       ...withRuntimeConfig(translatorProvider(credential.baseUrl), runtimeConfig),
                   }
-                : { env, config: runtimeConfig }),
+                : // The container's own key, handed over by name: the daemon's environment no longer holds it (sealed-env.ts).
+                  { env: { ...env, ...containerKeyEnv("codex") }, config: runtimeConfig }),
             // Anchors an isolated turn's worktree at /work for app-server and its forks; absent, the turn just runs
             // cwd'd.
             ...(request.spec.isolation?.anchor === undefined

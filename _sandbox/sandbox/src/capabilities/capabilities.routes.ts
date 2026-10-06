@@ -38,8 +38,12 @@ const PERSONAS_PATH = stateRelPath(".intentic/config/personas.json");
 // uncommitted, they read as the owner's edits and a land touching the same file is refused. A rename also repoints the
 // personas that name the connection, so it commits that file with it. Only where the files held nothing uncommitted
 // before the write: an agent's landed change to them waiting in Changes is not the page's to commit unreviewed.
-const versionManifest = <T>(services: Services, subject: string, write: () => Promise<T>, paths: readonly string[] = [capabilitiesDocument.path]): Promise<T> =>
-    versionedSettingsWrite(services, paths, `Settings: ${subject}`, write);
+const versionManifest = <T>(
+    services: Services,
+    subject: string,
+    write: () => Promise<T>,
+    paths: readonly string[] = [capabilitiesDocument.path],
+): Promise<T> => versionedSettingsWrite(services, paths, `Settings: ${subject}`, write);
 
 // Follows a capability id everywhere else it's stored by name: an account's identity, an identity's mailbox, a
 // persona's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.

@@ -39,7 +39,7 @@ describe("guard mechanism", () => {
 
     test("the catalog carries the shipped actions", () => {
         const actions = listGuardedActions();
-        for (const expected of ["session.start", "outbound.send", "command.run", "credential.use", "secret.send"]) {
+        for (const expected of ["session.start", "outbound.send", "command.run", "credential.use", "secret.send", "credential.request"]) {
             expect(actions, `catalog is missing "${expected}"`).toContain(expected);
         }
     });

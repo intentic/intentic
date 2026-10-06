@@ -5,15 +5,15 @@ description: Read and manage GitHub repos, issues, pull requests, and code searc
 
 # GitHub (connected)
 
-Token in `$GITHUB_TOKEN`. Talk to `https://api.github.com` with `curl`.
+Token in `$GITHUB_TOKEN`. Talk to `$GITHUB_API_URL` (it stands in for https://api.github.com) with `curl`.
 Headers: `-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json"`.
 
-- Who am I: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user | jq '{login}'`
-- Your repos: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/user/repos?per_page=50&sort=updated" | jq '.[] | {full_name, private}'`
-- Open issues in a repo: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/<OWNER>/<REPO>/issues?state=open" | jq '.[] | {number, title}'`
-- Open pull requests: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/<OWNER>/<REPO>/pulls?state=open" | jq '.[] | {number, title}'`
-- Search issues/PRs: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/search/issues?q=<URL_ENCODED_QUERY>" | jq '.items[] | {number, title, html_url}'`
-- Create an issue: `curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/<OWNER>/<REPO>/issues" -d '{"title":"...","body":"..."}'`
+- Who am I: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/user" | jq '{login}'`
+- Your repos: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/user/repos?per_page=50&sort=updated" | jq '.[] | {full_name, private}'`
+- Open issues in a repo: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/repos/<OWNER>/<REPO>/issues?state=open" | jq '.[] | {number, title}'`
+- Open pull requests: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/repos/<OWNER>/<REPO>/pulls?state=open" | jq '.[] | {number, title}'`
+- Search issues/PRs: `curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/search/issues?q=<URL_ENCODED_QUERY>" | jq '.items[] | {number, title, html_url}'`
+- Create an issue: `curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/repos/<OWNER>/<REPO>/issues" -d '{"title":"...","body":"..."}'`
 
 ## Git (clone / pull / push)
 If this connection has git access enabled, https is credential-cached and ssh-form URLs work too (over a native

@@ -94,7 +94,8 @@ export const extensionHandler: CapabilityHandler = {
         // editor's Extensions view hears of it through the capabilities.json push and offers the reload there.
         yield {
             kind: "log",
-            message: "Extension installed: its UI loads in the editor that installed it, and from Sandbox > Extensions in any other; agents pick it up on their next turn.",
+            message:
+                "Extension installed: its UI loads in the editor that installed it, and from Sandbox > Extensions in any other; agents pick it up on their next turn.",
         };
     },
     status: async (ctx, id, config) => {

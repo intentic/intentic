@@ -17,6 +17,7 @@ import {
     unattendedAccountsNote,
 } from "../../../personas/personas.js";
 import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
+import { gatewayHeld, shellEnvOf } from "../../../capabilities/cli-env.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
@@ -59,10 +60,11 @@ const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPerso
     const gatedEnv =
         personaEnv === undefined
             ? undefined
-            : gatedCliEnv(personaEnv, facts.installed, facts.gates, facts.releases, base.spec.conversationId, envSuffix);
+            : gatedCliEnv(personaEnv, facts.installed, facts.gates, facts.releases, base.spec.conversationId, envSuffix, gatewayHeld);
     const withheld = [...withheldMounts, ...(gatedEnv?.withheld ?? [])];
     return {
-        shellEnv: gatedEnv?.cliEnv,
+        // Git's rewrites onto the credential gateway are folded in only now, from the cards both filters kept.
+        shellEnv: gatedEnv === undefined ? undefined : shellEnvOf(gatedEnv.cliEnv),
         withheld,
         denied: [...(base.policy.disallowedTools ?? []), ...personaDisallowedTools(persona, facts.installed), ...gatedSkills(withheld)],
     };

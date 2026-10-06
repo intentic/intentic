@@ -16,6 +16,7 @@ import { forgetDaemonOnlyEnv, prepareDaemonProcess, requireAuthWhenReachable } f
 import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { startNetdDoor } from "./bootstrap/netd-door.js";
+import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
 import { startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
@@ -24,7 +25,8 @@ import { workingNow } from "./bootstrap/working-now.js";
 import { createServices } from "./composition.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
-import { loadConfig } from "./env.config.js";
+import { CONTAINER_SECRET_ENV, loadConfig } from "./env.config.js";
+import { sealConfigSecrets } from "./seams/sealed-env.js";
 import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
 import { bootFacts } from "./system/boot/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
@@ -63,6 +65,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // the reason logged, rather than half-booting. A well-formed runner otherwise boots like any loopback sandbox.
     const runnerEnv = runnerModeRequested(process.env);
     const config = loadConfig();
+    // Read, so out of the environment before anything is spawned: no child inherits a container secret (sealed-env.ts).
+    sealConfigSecrets({ secretEnv: CONTAINER_SECRET_ENV, keys: config });
     attempt.historyRoot = config.historyRoot;
     requireAuthWhenReachable(config);
     requireLocalContract(config);
@@ -133,6 +137,10 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         const work = startWorkSignal({ working: () => workingNow(services, "restart").length, events: services.events, logger, boot: bootFacts });
         shutdown.push(() => work.stop());
     }
+    // The credential gateway, on loopback beside netd rather than behind it, up before any turn can be handed one of its
+    // addresses (broker/broker-server.ts).
+    const credentialGateway = await startCredentialGateway(services, logger);
+    shutdown.push(() => void credentialGateway.stop());
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
     shutdown.push(() => services.announcer.stop());

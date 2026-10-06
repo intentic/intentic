@@ -32,6 +32,7 @@ export type HarnessServersDeps = Pick<
     | "config"
     | "conversations"
     | "credentialGate"
+    | "gatewayHeld"
     | "hostGuardGate"
     | "dependencies"
     | "logger"
@@ -71,6 +72,18 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
     release: async (names, lane, detail, target) => {
         if (names.length === 0) {
             return { ok: true };
+        }
+        // A credential the gateway holds is never resolved into a value at any exit: the request goes to the gateway.
+        for (const name of names) {
+            const held = await deps.gatewayHeld(name);
+            if (held !== undefined) {
+                const vars = held.vars.map((variable) => `\`$${variable}\``).join(", ");
+                return {
+                    refusal:
+                        `"${name}" is held by the sandbox's credential gateway, so it is never put into a ${lane === "browser" ? "page" : "command"}. ` +
+                        `Send the request to ${vars.length > 0 ? vars : `the variables its skill names`} instead, with its token variable as it is: the gateway attaches the credential.`,
+                };
+            }
         }
         const sent = await deps.hostGuardGate.check({
             names,

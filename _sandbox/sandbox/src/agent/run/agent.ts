@@ -227,6 +227,8 @@ export const pinnedRouting = (env: Readonly<Record<string, string | undefined>>)
 
 // The env a turn's CLI runs with; also what the flag layer pins its routing keys to (turnSettings).
 const turnEnv = (request: HarnessRequest) => ({
+    // The daemon's own environment, sealed at boot: every container secret was taken out of it once the config had read
+    // it (seams/sealed-env.ts), so what is left is the image's toolchain and the daemon's non-secret settings.
     ...process.env,
     // cli-kind capability credentials the shell reads, rebuilt every turn; tmux panes get key names, not
     // values.

@@ -29,7 +29,23 @@ const decode = (privateKey: string) => {
     const [checkA, checkB] = [section.readUInt32BE(0), section.readUInt32BE(4)];
     at = 8;
     const [type, point, secret, comment] = [read(), read(), read(), read()];
-    return { lines, magic, cipher, kdf, kdfOptions, count, blob, section, checkA, checkB, type, point, secret, comment, padding: section.subarray(at) };
+    return {
+        lines,
+        magic,
+        cipher,
+        kdf,
+        kdfOptions,
+        count,
+        blob,
+        section,
+        checkA,
+        checkB,
+        type,
+        point,
+        secret,
+        comment,
+        padding: section.subarray(at),
+    };
 };
 
 test("writes one unencrypted ed25519 key in OpenSSH's container, armored and wrapped as ssh-keygen writes it", () => {

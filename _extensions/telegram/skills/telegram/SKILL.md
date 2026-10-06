@@ -6,8 +6,8 @@ description: Read and send messages in the connected Telegram bot's chats via th
 # Telegram (connected)
 
 Authenticated with a bot token in `$TELEGRAM_BOT_TOKEN`. Talk to the Bot API with `curl`.
-Base URL: `https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN`, the token is IN the path, so never paste a
-constructed URL anywhere it could be read; always build it from the variable.
+Base URL: `$TELEGRAM_API_URL` (it stands in for https://api.telegram.org/bot followed by the token), the token can be
+IN that path, so never paste a constructed URL anywhere it could be read; always build it from the variable.
 
 Every method accepts `POST` with a JSON body and answers `{"ok":true,"result":…}` or
 `{"ok":false,"error_code":…,"description":"…"}`. Check `.ok`: a 400 with a plain-English `description` is how
@@ -24,30 +24,30 @@ There is no app review and no public URL. In Telegram, message **@BotFather**:
    bot → `Disable`, then remove and re-add it to the group.
 4. Nothing else. A private chat works from the first message the user sends.
 
-Confirm it landed: `curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe" | jq '.result | {id, username}'`
+Confirm it landed: `curl -s "$TELEGRAM_API_URL/getMe" | jq '.result | {id, username}'`
 
 ## Common commands
 
 - Send a message (`<CHAT_ID>` is a number, negative for groups; a public channel can be `"@channelname"`):
-  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"text":"hello"}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"`
+  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"text":"hello"}' "$TELEGRAM_API_URL/sendMessage"`
 - Reply to a specific message:
-  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"text":"on it","reply_parameters":{"message_id":<MESSAGE_ID>}}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"`
+  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"text":"on it","reply_parameters":{"message_id":<MESSAGE_ID>}}' "$TELEGRAM_API_URL/sendMessage"`
 - Post into a forum topic of a supergroup (the topic id rides in on the event as `extra.messageThreadId`):
   add `"message_thread_id":<THREAD_ID>` to the body above.
 - React to a message with an emoji:
-  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"message_id":<MESSAGE_ID>,"reaction":[{"type":"emoji","emoji":"👀"}]}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setMessageReaction"`
+  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"message_id":<MESSAGE_ID>,"reaction":[{"type":"emoji","emoji":"👀"}]}' "$TELEGRAM_API_URL/setMessageReaction"`
 - Edit something you sent:
-  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"message_id":<MESSAGE_ID>,"text":"corrected"}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/editMessageText"`
+  `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":<CHAT_ID>,"message_id":<MESSAGE_ID>,"text":"corrected"}' "$TELEGRAM_API_URL/editMessageText"`
 - Send a file from the workspace:
-  `curl -s -F chat_id=<CHAT_ID> -F document=@/work/report.pdf "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendDocument"`
+  `curl -s -F chat_id=<CHAT_ID> -F document=@/work/report.pdf "$TELEGRAM_API_URL/sendDocument"`
 - Download a file someone sent (`fileId` comes in on the event as `extra.attachments[].fileId`): two steps,
   because `getFile` hands back a path you then fetch:
   ```sh
-  path=$(curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=<FILE_ID>" | jq -r .result.file_path)
-  curl -s -o /work/incoming "https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/$path"
+  path=$(curl -s "$TELEGRAM_API_URL/getFile?file_id=<FILE_ID>" | jq -r .result.file_path)
+  curl -s -o /work/incoming "$TELEGRAM_FILE_URL/$path"
   ```
 - Look up a chat you have the id of:
-  `curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getChat?chat_id=<CHAT_ID>" | jq '.result | {id, type, title, username}'`
+  `curl -s "$TELEGRAM_API_URL/getChat?chat_id=<CHAT_ID>" | jq '.result | {id, type, title, username}'`
 
 **A bot cannot read a chat's past messages.** There is no history endpoint: `getUpdates` is owned by the
 gateway process, so do not call it: and what you were not told about, you cannot look up. If you need context

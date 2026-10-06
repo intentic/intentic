@@ -106,6 +106,10 @@ export const LOCAL_PORT = 8788;
 // Bundled translator port, loopback-only; the Dockerfile bakes this value into TRANSLATOR_URL.
 export const TRANSLATOR_PORT = 8789;
 
+// The credential gateway, bound by the daemon on loopback only and never relayed by netd, so an address it issues is
+// useless anywhere but inside this container (sandbox src/broker/).
+export const BROKER_PORT = 8790;
+
 // Public web client id, not secret; four places must agree on it or sign-in silently breaks.
 export const GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
 

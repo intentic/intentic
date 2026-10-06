@@ -8,7 +8,7 @@ import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffo
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
-import type { CredentialGate, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { CredentialGate, CredentialPolicy, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, bearerFrom, type Caller, ForbiddenError } from "../auth/auth.js";
 import { roleAtLeast, secretsContract } from "@intentic/sandbox-contract";
@@ -20,6 +20,7 @@ import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { randomSecret } from "./random-secret.js";
 import { guardForEntry } from "./host-guards.js";
 import { createSecretHostRoutes } from "./secret-hosts.routes.js";
+import { createCredentialPolicyRoutes, credentialPolicies } from "../capabilities/broker/broker-policy.routes.js";
 import { type TextFile, textFile } from "../store/text-file.js";
 
 // The whole `Services`, not a Pick: the inventory hands `services` on to every provider module's secretEntries, and a
@@ -142,6 +143,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
     return {
         // Where each secret may be sent: its own module, since who may change a list turns on more than a role.
         ...createSecretHostRoutes(services),
+        // How each connection's credential reaches the agent and what it may do there (broker/broker-policy.routes.ts).
+        ...createCredentialPolicyRoutes(services),
         // With DevOps, into desired-state/.env, which deploys and the CI copy read; without it, into the sandbox's own
         // store (sandbox-secrets.ts), so keeping a key for the agent never needs a deploy pipeline scaffolded first.
         set: i.set.handler(async ({ input }) => {
@@ -187,7 +190,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async ({ context }) => {
-            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards] = await Promise.all([
+            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards, policies] = await Promise.all([
                 // A display surface: one unparseable repo file costs its own rows, said in the log, not the whole panel.
                 existsSync(desiredState())
                     ? collectSecretInventory(desiredState()).catch((error: unknown) => {
@@ -210,6 +213,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 }),
                 // Display only, like the gates: an unreadable file shows no guards here, while every exit still refuses.
                 services.hostGuards().catch(() => [] as const),
+                // How each connection's credential reaches the agent; display only, the gateway reads its own.
+                credentialPolicies(services, services.credentialPolicy).catch((): ReadonlyMap<string, CredentialPolicy> => new Map()),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
                 .filter((capability) => secretField(capability, connectors) !== undefined)
@@ -241,8 +246,11 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 const withHosts =
                     hostGuard === undefined ? entry : { ...entry, hosts: { guard: hostGuard.guard, list: hostGuard.hosts, source: hostGuard.source } };
                 const withGate = gate === undefined ? withHosts : { ...withHosts, gate: { approvers: gate.approvers, scope: gate.scope } };
+                const policy = entry.kind === "capability" ? policies.get(entry.key) : undefined;
+                const withPolicy =
+                    policy === undefined ? withGate : { ...withGate, credential: { delivery: policy.delivery, rules: policy.rules, rulesFrom: policy.rulesFrom } };
                 // Revealable says what this caller's Reveal would get: a gated row is only its approvers'.
-                const readable = withGate.revealable && !mayReveal(context.identity, gate) ? { ...withGate, revealable: false } : withGate;
+                const readable = withPolicy.revealable && !mayReveal(context.identity, gate) ? { ...withPolicy, revealable: false } : withPolicy;
                 return use === undefined
                     ? readable
                     : {

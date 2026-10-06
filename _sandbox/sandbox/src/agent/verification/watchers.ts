@@ -5,6 +5,7 @@ import { profileOf, type TurnProfile, type WatchOutcome, watchWakePrompt } from 
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
+import { shellEnvOf } from "../../capabilities/cli-env.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
 import { whenFileAppears } from "../tools/file-appears.js";
@@ -81,8 +82,9 @@ export interface WatcherRuntime extends WakeDoors {
     readonly runCheck: RunCheck;
     // What an armed watch IS, on disk, so a daemon that dies under one can put it back (watch-journal.ts).
     readonly journal: WatchJournal;
-    // The environment a check runs with today, asked at restore time, not off disk, so no credential is persisted.
-    readonly envOf: () => Promise<Record<string, string>>;
+    // The environment a conversation's check runs with today, asked at restore time, not off disk, so nothing a check
+    // was armed with is persisted; per conversation, since its gateway addresses answer to that conversation.
+    readonly envOf: (conversationId: string) => Promise<Record<string, string>>;
     // Whether a journalled watch's conversation still exists, archived or not.
     readonly conversationLive: (conversationId: string) => boolean;
     // Where each conversation's watches are held, and its card told of them.
@@ -249,14 +251,20 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: Wat
     });
     if ("invalid" in receipt) {
         // The report goes into the log rather than nowhere.
-        live.logger.error({ watch: record.id, conversationId: record.spec.conversationId, report: prompt, invalid: receipt.invalid }, "watch: report could not be delivered");
+        live.logger.error(
+            { watch: record.id, conversationId: record.spec.conversationId, report: prompt, invalid: receipt.invalid },
+            "watch: report could not be delivered",
+        );
         return;
     }
     if ("why" in receipt) {
         live.logger.info({ watch: record.id, conversationId: record.spec.conversationId, why: receipt.why }, "watch: its conversation took nothing");
         return;
     }
-    live.logger.info({ watch: record.id, outcome, conversationId: record.spec.conversationId, delivered: receipt.delivered }, "watch: report delivered");
+    live.logger.info(
+        { watch: record.id, outcome, conversationId: record.spec.conversationId, delivered: receipt.delivered },
+        "watch: report delivered",
+    );
 };
 
 const entryOf = (record: WatcherRecord): JournalledWatch => ({
@@ -438,11 +446,13 @@ export const restoreWatchers = async (): Promise<void> => {
     if (entries.length === 0) {
         return;
     }
-    // Asked once for the whole pass, not per entry: every watch restoring here wants the same answer.
-    const env = await live.envOf();
+    // Asked once per conversation, not per entry: every watch of one conversation wants the same answer.
+    const envs = new Map<string, Promise<Record<string, string>>>();
     for (const entry of entries) {
         try {
-            await restoreOne(live, entry, env);
+            const env = envs.get(entry.conversationId) ?? live.envOf(entry.conversationId);
+            envs.set(entry.conversationId, env);
+            await restoreOne(live, entry, await env);
         } catch (error) {
             live.logger.error({ err: error, watch: entry.id, conversationId: entry.conversationId }, "watch: could not be restored, dropping it");
             await live.journal.drop(entry.id);
@@ -538,7 +548,7 @@ export const startWatchers = (services: Services): (() => void) =>
         sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId),
         journal: services.watchJournal,
         // The same function that builds a turn's shell env, so a restored check can't drift from an arming turn's.
-        envOf: () => turnCliEnv(services),
+        envOf: async (conversationId) => shellEnvOf(await turnCliEnv(services, conversationId)),
         // Archive disarms its own watches, so an archived conversation's entry is one still being delivered.
         conversationLive: (conversationId) => services.agents.entry(conversationId) !== undefined,
         conversations: services.conversations,

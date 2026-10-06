@@ -79,7 +79,9 @@ export const unstash = (stash: SecretStash, kind: string, config: Readonly<Recor
             );
         }
         if (held.kind !== kind || held.field !== field) {
-            throw new StashRefusal(`that generated key was made to be the ${held.field} of a ${held.kind} entry, so it is not used as ${kind} ${field}`);
+            throw new StashRefusal(
+                `that generated key was made to be the ${held.field} of a ${held.kind} entry, so it is not used as ${kind} ${field}`,
+            );
         }
         values[field] = held.value;
     }

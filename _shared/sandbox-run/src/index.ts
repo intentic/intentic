@@ -230,6 +230,20 @@ export const REPLAY_ENV = [
     "SANDBOX_PROJECTS_HOST",
 ] as const;
 
+// The replayed names whose value is a credential. The daemon seals each out of its own environment at boot, alongside
+// its config schema's own secret leaves, so no process it spawns inherits one (sandbox src/seams/sealed-env.ts); a
+// replayed name the daemon's schema also reads must agree with it, which the daemon's suite checks.
+export const REPLAY_SECRET_ENV: ReadonlySet<(typeof REPLAY_ENV)[number]> = new Set([
+    "CONNECT_TOKEN",
+    "SANDBOX_GRANT",
+    "CLOUDFLARE_API_TOKEN",
+    // A multi-line private key for self-hosted deploys.
+    "HOST_SSH_KEY",
+    "SYNC_PAIR_TOKEN",
+    "HOST_PAIR_TOKEN",
+    "RUNNER_PAIR_TOKEN",
+]);
+
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:
 // HOST_SSH_KEY is a multi-line private key, so anything line-based re-splits it.
 export const parseNulEnv = (dump: string): [string, string][] =>

@@ -261,7 +261,10 @@ test.each(SAMPLE_CASES)("%s: the catalog calls secret exactly the fields the dae
         entry.fields
             .filter((field) => field.value === undefined && field.key in config && fieldApplies(field, config))
             .filter((field) => (field.secret === true) !== vaulted.has(field.key))
-            .map((field) => `${entry.id}.${field.key}: the catalog says ${field.secret === true ? "secret" : "plain"}, the daemon ${vaulted.has(field.key) ? "vaults" : "echoes"} it`),
+            .map(
+                (field) =>
+                    `${entry.id}.${field.key}: the catalog says ${field.secret === true ? "secret" : "plain"}, the daemon ${vaulted.has(field.key) ? "vaults" : "echoes"} it`,
+            ),
     );
     expect(disagreements).toEqual([]);
 });

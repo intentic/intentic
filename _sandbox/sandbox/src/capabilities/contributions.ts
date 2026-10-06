@@ -58,7 +58,9 @@ export const invalidateContributions = (): void => {
 };
 
 // A capability store whose every write invalidates the inventory.
-export const invalidatingContributions = <S extends { readonly upsert: (value: never) => Promise<void>; readonly remove: (id: string) => Promise<boolean> }>(
+export const invalidatingContributions = <
+    S extends { readonly upsert: (value: never) => Promise<void>; readonly remove: (id: string) => Promise<boolean> },
+>(
     store: S,
 ): S => ({
     ...store,
@@ -120,18 +122,28 @@ export const contributionFor = (
     return registry.get(contributionKey(kind, String(config[key])));
 };
 
-// Expands a cli connector's env templates: `${field}` substitutes the config value, `${field:uri}` percent-encodes it.
-// An absent field yields "".
+// One template over a card's settings, the spelling `env`, `hosts`, `probe` and `broker` share: `${field}` substitutes the
+// value, `${field:uri}` percent-encodes it, and an absent field yields "".
+const FIELD_TEMPLATE = /\$\{([a-zA-Z][a-zA-Z0-9]*)(:uri)?\}/g;
+
+export const expandFieldTemplate = (template: string, config: Readonly<Record<string, string>>): string =>
+    template.replace(FIELD_TEMPLATE, (_match, field: string, uri: string | undefined) => {
+        const value = config[field] ?? "";
+        return uri === undefined ? value : encodeURIComponent(value);
+    });
+
+// The fields one template reads, which is how a variable is known to carry a secret: it names a secret field.
+export const fieldsNamedIn = (template: string): ReadonlySet<string> =>
+    new Set([...template.matchAll(FIELD_TEMPLATE)].map((match) => match[1] ?? ""));
+
+// Expands a cli connector's env templates (expandFieldTemplate).
 export const contributionEnv = (spec: CapabilityContribution, config: Record<string, string>): Record<string, string> => {
     const env: Record<string, string> = {};
     if (spec.kind !== "cli") {
         return env;
     }
     for (const [key, template] of Object.entries(spec.env)) {
-        env[key] = template.replace(/\$\{([a-zA-Z][a-zA-Z0-9]*)(:uri)?\}/g, (_match, field: string, uri: string | undefined) => {
-            const value = config[field] ?? "";
-            return uri === undefined ? value : encodeURIComponent(value);
-        });
+        env[key] = expandFieldTemplate(template, config);
     }
     return env;
 };
@@ -142,9 +154,8 @@ export const contributionHosts = (spec: CapabilityContribution, config: Record<s
     if (spec.kind !== "cli" || spec.hosts === undefined) {
         return [];
     }
-    const expanded = spec.hosts.map((template) =>
-        template.replace(/\$\{([a-zA-Z][a-zA-Z0-9]*)(:uri)?\}/g, (_match, field: string) => config[field] ?? ""),
-    );
+    // `:uri` is ignored here: a host is matched, not sent, so it is read as the field holds it.
+    const expanded = spec.hosts.map((template) => template.replace(FIELD_TEMPLATE, (_match, field: string) => config[field] ?? ""));
     return [...new Set(expanded.flatMap((host) => normalizeHostPattern(host) ?? []))];
 };
 

@@ -6,7 +6,7 @@ description: Read, post, react and search in the connected Slack workspace via t
 # Slack (connected)
 
 Authenticated with a bot token in `$SLACK_BOT_TOKEN`. Talk to Slack's Web API with `curl`.
-Base URL: `https://slack.com/api`, Auth header: `-H "Authorization: Bearer $SLACK_BOT_TOKEN"`.
+Base URL: `$SLACK_API_URL` (it stands in for https://slack.com/api), Auth header: `-H "Authorization: Bearer $SLACK_BOT_TOKEN"`.
 
 Slack always answers HTTP 200; the real result is `.ok` in the body. Check it: `| jq '.ok, .error'` on
 anything that looks wrong. IDs (`C…` channel, `U…` user, `T…` team) come from the list commands below; a
@@ -58,26 +58,26 @@ Then: **Basic Information → App-Level Tokens → Generate** with the `connecti
 `xapp-` token), **Install App → Install to Workspace** (that's the `xoxb-` token), and paste both onto the
 Slack capability. Finally the user must invite the bot to each channel it should see: `/invite @intentic`.
 
-Confirm it landed: `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" https://slack.com/api/auth.test | jq '{ok, team, user, user_id}'`
+Confirm it landed: `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/auth.test" | jq '{ok, team, user, user_id}'`
 
 ## Common commands
 
 - List channels the workspace has (add `types=public_channel,private_channel` for private ones the bot is in):
-  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "https://slack.com/api/conversations.list?limit=200" | jq '.channels[] | {id, name, is_member}'`
+  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/conversations.list?limit=200" | jq '.channels[] | {id, name, is_member}'`
 - Read recent messages in a channel:
-  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "https://slack.com/api/conversations.history?channel=<CHANNEL_ID>&limit=20" | jq '.messages[] | {ts, user, text}'`
+  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/conversations.history?channel=<CHANNEL_ID>&limit=20" | jq '.messages[] | {ts, user, text}'`
 - Read a thread (`<THREAD_TS>` is the parent message's `ts`):
-  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "https://slack.com/api/conversations.replies?channel=<CHANNEL_ID>&ts=<THREAD_TS>&limit=50" | jq '.messages[] | {ts, user, text}'`
+  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/conversations.replies?channel=<CHANNEL_ID>&ts=<THREAD_TS>&limit=50" | jq '.messages[] | {ts, user, text}'`
 - Post a message (drop `thread_ts` to post at channel level):
-  `curl -s -X POST -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json; charset=utf-8" -d '{"channel":"<CHANNEL_ID>","thread_ts":"<THREAD_TS>","text":"hello"}' https://slack.com/api/chat.postMessage`
+  `curl -s -X POST -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json; charset=utf-8" -d '{"channel":"<CHANNEL_ID>","thread_ts":"<THREAD_TS>","text":"hello"}' "$SLACK_API_URL/chat.postMessage"`
 - React to a message (a shortcode, no colons):
-  `curl -s -X POST -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" -d '{"channel":"<CHANNEL_ID>","timestamp":"<TS>","name":"white_check_mark"}' https://slack.com/api/reactions.add`
+  `curl -s -X POST -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" -d '{"channel":"<CHANNEL_ID>","timestamp":"<TS>","name":"white_check_mark"}' "$SLACK_API_URL/reactions.add"`
 - Resolve a user id to a name:
-  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "https://slack.com/api/users.info?user=<USER_ID>" | jq '.user | {name, real_name, tz}'`
+  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/users.info?user=<USER_ID>" | jq '.user | {name, real_name, tz}'`
 - DM a person (open the conversation first, then post to the returned channel id):
-  `curl -s -X POST -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" -d '{"users":"<USER_ID>"}' https://slack.com/api/conversations.open | jq '.channel.id'`
+  `curl -s -X POST -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" -d '{"users":"<USER_ID>"}' "$SLACK_API_URL/conversations.open" | jq '.channel.id'`
 - Link to a message (handy when reporting what you did):
-  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "https://slack.com/api/chat.getPermalink?channel=<CHANNEL_ID>&message_ts=<TS>" | jq -r .permalink`
+  `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/chat.getPermalink?channel=<CHANNEL_ID>&message_ts=<TS>" | jq -r .permalink`
 
 ## Writing for Slack
 

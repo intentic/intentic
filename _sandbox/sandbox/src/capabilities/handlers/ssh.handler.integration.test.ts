@@ -69,7 +69,11 @@ test("password auth: writes a 0600 .pass file, no IdentityFile", async () => {
 // Where the key came from changes nothing about how it is used: the same IdentityFile, the same 0600 key file.
 test("generated auth: signs in with a key file exactly as a pasted key does", async () => {
     const pair = generateSshKey("intentic-box");
-    const made: Capability = { id: "made", kind: "ssh", config: { auth: "generated", host: "5.6.7.8", port: 22, user: "deploy", privateKey: pair.privateKey } };
+    const made: Capability = {
+        id: "made",
+        kind: "ssh",
+        config: { auth: "generated", host: "5.6.7.8", port: 22, user: "deploy", privateKey: pair.privateKey },
+    };
     const { ctx, home } = tempCtx();
     await drain(sshHandler.apply(ctx, "made", made.config));
     const conf = readFileSync(confPath(home, "made"), "utf8");

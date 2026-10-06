@@ -11,6 +11,7 @@ import { useRole } from "../../../client/sandbox/useRole";
 import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
 import SecretHostsEditor from "./SecretHostsEditor.vue";
+import SecretCredentialPolicy from "./SecretCredentialPolicy.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due
@@ -237,7 +238,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         type="button"
                         :class="ACTION"
                         :disabled="!canReveal"
-                        :aria-label="revealedValue !== undefined ? t(`capabilities.words.hideValue`) : t(`capabilities.secretEntryRow.revealValueMaintainersOnly`)"
+                        :aria-label="
+                            revealedValue !== undefined
+                                ? t(`capabilities.words.hideValue`)
+                                : t(`capabilities.secretEntryRow.revealValueMaintainersOnly`)
+                        "
                         v-action="toggleReveal"
                     >
                         <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />
@@ -316,6 +321,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <span v-if="row.entry.lastUse.lane === `browser`">{{
                         t(`capabilities.secretEntryRow.typedOn`, { detail: row.entry.lastUse.detail })
                     }}</span>
+                    <!-- Attached by the credential gateway: the agent sent the request, never held the value. -->
+                    <span v-else-if="row.entry.lastUse.lane === `gateway`"
+                        >{{ t(`capabilities.secretEntryRow.viaGateway`) }}
+                        <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
+                    >
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
@@ -332,7 +342,10 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         v-tooltip.top="
                             gateOn
                                 ? { title: t(`capabilities.secretEntryRow.dropApproval`), note: t(`capabilities.secretEntryRow.agentUsesFreely`) }
-                                : { title: t(`capabilities.secretEntryRow.requireApproval`), note: t(`capabilities.secretEntryRow.namedPersonReleases`) }
+                                : {
+                                      title: t(`capabilities.secretEntryRow.requireApproval`),
+                                      note: t(`capabilities.secretEntryRow.namedPersonReleases`),
+                                  }
                         "
                         :aria-label="t(`capabilities.secretEntryRow.fromNamedPerson`)"
                         @update:model-value="toggleGate"
@@ -408,6 +421,8 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 
                 <!-- The host guard: a stored value's, or a connector's credential's, never a mounted account's, which no command carries. -->
                 <SecretHostsEditor v-if="!row.sessionShaped" :row="row" :expanded="expanded" />
+                <!-- How a connection's credential reaches the agent, and the credential gateway's rules on it. -->
+                <SecretCredentialPolicy :row="row" :expanded="expanded" />
             </div>
 
             <Notice v-if="error" :of="error" class="mt-2" />

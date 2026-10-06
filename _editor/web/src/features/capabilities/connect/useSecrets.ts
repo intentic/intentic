@@ -1,4 +1,4 @@
-import type { CredentialGate, CredentialGateKind, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { CredentialGate, CredentialGateKind, SecretInventoryEntry, CredentialPolicySet } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../setup/devFill";
@@ -125,6 +125,17 @@ export function useSecretHosts() {
         onSuccess: () => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
     });
     return { setHosts };
+}
+
+// How a connection's credential reaches the agent, and the rules the credential gateway enforces on it. The owner's alone
+// to change; the row reads it off the inventory, so an edit writes and refreshes that.
+export function useCredentialPolicy() {
+    const queryClient = useQueryClient();
+    const setPolicy = useMutation({
+        mutationFn: (input: CredentialPolicySet) => sandboxRpc.secrets.setPolicy(input),
+        onSuccess: () => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
+    });
+    return { setPolicy };
 }
 
 export function useSecrets() {

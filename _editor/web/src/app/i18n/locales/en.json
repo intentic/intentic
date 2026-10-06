@@ -1272,6 +1272,7 @@
             "setUpdateValue": "Set / update value",
             "singleLineValue": "Single-line value",
             "typedOn": "typed on {detail}",
+            "viaGateway": "attached by the credential gateway to",
             "usedByAgent": "used by the agent",
             "value": "Value",
             "whoRelease": "Who can release it",
@@ -1287,6 +1288,26 @@
             "pasteValue": "Paste the value for {secretKey}",
             "showValue": "Show value",
             "storedInSandboxs": "Stored in your sandbox's"
+        },
+        "secretCredentialPolicy": {
+            "heading": "How the agent gets it",
+            "heldByGateway": "Held by the credential gateway",
+            "handedOverByChoice": "Handed to the agent, by your choice",
+            "handedOverNoRoute": "Handed to the agent",
+            "keepInGateway": "Keep it in the credential gateway",
+            "gatewayExplain": "The agent never sees it: its requests go to the sandbox's gateway, which attaches the credential and checks the rules below first.",
+            "rawExplain": "The agent holds the real value, for a tool that cannot work without it. The rules below do not apply until you keep it in the gateway again.",
+            "directExplain": "This connector speaks no HTTP the gateway could carry (a database, a mail server), so the agent holds the real value.",
+            "yourRules": "Your rules, checked in order; the first that covers a request decides:",
+            "connectorRules": "The connector's rules, checked in order; the first that covers a request decides:",
+            "noRules": "No rules: every request to its hosts goes.",
+            "anyMethod": "any method",
+            "anyPath": "any path",
+            "editRules": "Edit rules",
+            "useConnectorRules": "Use the connector's rules",
+            "rulesJson": "Rules, as JSON",
+            "notJson": "Rules are a JSON list of objects with action (allow, ask or deny), and optional methods, paths and why.",
+            "couldNotSave": "Could not save how the agent gets this credential"
         },
         "secretHosts": {
             "addHost": "Add host",
@@ -2138,6 +2159,7 @@
             "laneCode": "The agent is about to use it in a script it is running.",
             "laneBrowser": "The agent is about to type it into a page.",
             "laneOtp": "The agent is about to mint a one-time code from it.",
+            "laneGateway": "The credential gateway is about to attach it to a request the agent sent.",
             "laneCapability": "The agent is asking for this connected account to be loaded into the conversation.",
             "laneCredential": "The agent is asking to use this credential."
         },

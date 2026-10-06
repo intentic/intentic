@@ -6,13 +6,14 @@ description: Manage Fly.io machines, apps, volumes and app secrets through the M
 # Fly.io (connected)
 
 Token in `$FLY_API_TOKEN`, organization slug in `$FLY_ORG`. Everything below is the Machines API at
-`https://api.machines.dev/v1`; flyctl is not installed here, and a copy you install yourself reads the plain
-name, so hand it the token per command: `FLY_API_TOKEN=$FLY_API_TOKEN fly status -a <APP>`. Define this helper
-once per shell: `flyapi <METHOD> <path> [-d '<json>']`:
+`$FLY_MACHINES_URL/v1` (it stands in for https://api.machines.dev/v1); flyctl is not installed here, and a copy
+you install yourself reads the plain name, so hand it the token per command:
+`FLY_API_TOKEN=$FLY_API_TOKEN fly status -a <APP>`. flyctl needs the real token, so it works only when the owner set
+this card to raw delivery; prefer `flyapi`. Define this helper once per shell: `flyapi <METHOD> <path> [-d '<json>']`:
 
 ```sh
 flyapi() { local m="$1" p="$2"; shift 2; curl -s -X "$m" -H "Authorization: Bearer $FLY_API_TOKEN" \
-  -H "Content-Type: application/json" "https://api.machines.dev/v1/$p" "$@"; }
+  -H "Content-Type: application/json" "$FLY_MACHINES_URL/v1/$p" "$@"; }
 ```
 
 The machine is the unit: an app is a namespace with its own private network, and scaling means creating or

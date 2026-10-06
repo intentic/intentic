@@ -13,7 +13,10 @@ import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspac
 import type { CapabilitiesStore } from "../capabilities-store.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
-import { cliEnvOf } from "../cli-env.js";
+import { cliEnvOf, type CliEnvOptions, gatewayHeld, shellEnvOf } from "../cli-env.js";
+import { GATEWAY_PLACEHOLDER } from "../broker/broker-routes.js";
+import type { CredentialDelivery } from "../broker/broker-policy.js";
+import { brokerSessionsFrom } from "../broker/broker-session.js";
 import { contributedSkill, contributionRegistry } from "../contributions.js";
 import { restoreConnectorHooks } from "../cli/connector-hooks.js";
 import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess } from "../cli/git-access.js";
@@ -49,6 +52,14 @@ const hostFor = (capabilities: Capability[]): ExtensionHost =>
     }) as unknown as ExtensionHost;
 
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "tok-123" } };
+
+const gatewaySessions = brokerSessionsFrom(async () => Buffer.alloc(32, 1));
+// How the turn builds a card's variables: through the credential gateway, unless the owner set the card to raw delivery.
+const delivered = (delivery: CredentialDelivery): CliEnvOptions => ({
+    gateway: { sessions: gatewaySessions, origin: "http://127.0.0.1:8790", conversationId: "c1" },
+    delivery: async () => delivery,
+});
+const raw = delivered("raw");
 const skillPath = (root: string, id: string): string => join(root, ".agents", "skills", id, "SKILL.md");
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
@@ -161,8 +172,42 @@ test("apply templates the SKILL.md for the instance: unique name + suffixed vars
 
 test("cliEnvOf suffixes each var with the instance id; ignores non-cli capabilities", async () => {
     const mcp: Capability = { id: "x", kind: "mcp", config: { url: "https://a/mcp" } };
-    expect(await cliEnvOf(hostFor([discord, mcp]))).toEqual({ DISCORD_BOT_TOKEN_DISCORD: "tok-123" });
-    expect(await cliEnvOf(hostFor([mcp]))).toEqual({});
+    expect(await cliEnvOf(hostFor([discord, mcp]), raw)).toEqual({
+        DISCORD_BOT_TOKEN_DISCORD: "tok-123",
+        DISCORD_API_URL_DISCORD: "https://discord.com/api",
+    });
+    expect(await cliEnvOf(hostFor([mcp]), raw)).toEqual({});
+});
+
+test("cliEnvOf hands a brokered card's shell gateway addresses and a placeholder, never the credential", async () => {
+    const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "ghp-real-value" } };
+    const env = await cliEnvOf(hostFor([github, discord]), delivered("gateway"));
+    expect(JSON.stringify(env)).not.toContain("ghp-real-value");
+    expect(JSON.stringify(env)).not.toContain("tok-123");
+    expect(env["GITHUB_TOKEN_GITHUB"]).toBe(GATEWAY_PLACEHOLDER);
+    expect(env["DISCORD_BOT_TOKEN_DISCORD"]).toBe(GATEWAY_PLACEHOLDER);
+    for (const name of [
+        "GITHUB_API_URL_GITHUB",
+        "GITHUB_UPLOADS_URL_GITHUB",
+        "GITHUB_RAW_URL_GITHUB",
+        "GITHUB_GIT_URL_GITHUB",
+        "DISCORD_API_URL_DISCORD",
+    ]) {
+        expect(env[name]).toMatch(/^http:\/\/127\.0\.0\.1:8790\/[\w-]+\.[\w-]+$/);
+    }
+    expect(gatewayHeld(env, "github")).toBe(true);
+    // Git reaches github.com through the gateway, in both remote spellings, once the filters have kept the card.
+    const shell = shellEnvOf(env);
+    expect(shell["GIT_CONFIG_COUNT"]).toBe("2");
+    expect([shell["GIT_CONFIG_VALUE_0"], shell["GIT_CONFIG_VALUE_1"]].toSorted()).toEqual(["git@github.com:", "https://github.com/"]);
+    expect(shell["GIT_CONFIG_KEY_0"]).toBe(`url.${env["GITHUB_GIT_URL_GITHUB"] ?? ""}/.insteadOf`);
+});
+
+test("shellEnvOf rewrites git for no card a filter removed", async () => {
+    const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "t" } };
+    const env = await cliEnvOf(hostFor([github]), delivered("gateway"));
+    const filtered = Object.fromEntries(Object.entries(env).filter(([key]) => !key.endsWith("_GITHUB")));
+    expect(shellEnvOf(filtered)["GIT_CONFIG_COUNT"]).toBeUndefined();
 });
 
 test("cliEnvOf expands each connector's env template; two instances of one provider don't collide", async () => {
@@ -183,17 +228,23 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
         kind: "cli",
         config: { provider: "postgres", host: "b.example.com", port: "5432", user: "app", password: "pw2", database: "invoices" },
     };
-    expect(await cliEnvOf(hostFor([github]))).toEqual({ GITHUB_TOKEN_GITHUB: "gh" });
-    expect(await cliEnvOf(hostFor([gitlab]))).toEqual({ GITLAB_TOKEN_GITLAB: "gl", GITLAB_URL_GITLAB: "https://gitlab.example.com" });
+    expect(await cliEnvOf(hostFor([github]), raw)).toEqual({
+        GITHUB_TOKEN_GITHUB: "gh",
+        GITHUB_API_URL_GITHUB: "https://api.github.com",
+        GITHUB_UPLOADS_URL_GITHUB: "https://uploads.github.com",
+        GITHUB_RAW_URL_GITHUB: "https://raw.githubusercontent.com",
+        GITHUB_GIT_URL_GITHUB: "https://github.com",
+    });
+    expect(await cliEnvOf(hostFor([gitlab]), raw)).toEqual({ GITLAB_TOKEN_GITLAB: "gl", GITLAB_URL_GITLAB: "https://gitlab.example.com" });
     // No encoding on this path (curl --user sends it verbatim); only ${field:uri} (postgres below) percent-encodes.
-    expect(await cliEnvOf(hostFor([imap]))).toEqual({
+    expect(await cliEnvOf(hostFor([imap]), raw)).toEqual({
         IMAP_HOST_IMAP: "imap.example.com",
         IMAP_PORT_IMAP: "993",
         IMAP_USERNAME_IMAP: "u@e.com",
         IMAP_PASSWORD_IMAP: "p#ss@word: &$100%!",
     });
     // Postgres URL template percent-encodes user/password/database via ${field:uri}.
-    expect(await cliEnvOf(hostFor([primary, secondary]))).toEqual({
+    expect(await cliEnvOf(hostFor([primary, secondary]), raw)).toEqual({
         POSTGRES_URL_ANALYTICS: "postgresql://app:pw1@a.example.com:5432/metrics",
         POSTGRES_URL_BILLING: "postgresql://app:pw2@b.example.com:5432/invoices",
     });
@@ -496,9 +547,12 @@ const npm: Capability = {
 };
 
 test("npm auth rewrite is an upsert that keeps the rest of ~/.npmrc", () => {
-    expect(upsertNpmAuth("", "t1")).toBe("//registry.npmjs.org/:_authToken=t1\n");
+    const gatewayLine = `//127.0.0.1:8790/:_authToken=${GATEWAY_PLACEHOLDER}`;
+    expect(upsertNpmAuth("", "t1")).toBe(`//registry.npmjs.org/:_authToken=t1\n${gatewayLine}\n`);
     const mixed = "save-exact=true\n//registry.npmjs.org/:_authToken=old\nregistry=https://registry.npmjs.org/\n";
-    expect(upsertNpmAuth(mixed, "rotated")).toBe("save-exact=true\nregistry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=rotated\n");
+    expect(upsertNpmAuth(mixed, "rotated")).toBe(
+        `save-exact=true\nregistry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=rotated\n${gatewayLine}\n`,
+    );
     expect(stripNpmAuth(upsertNpmAuth(mixed, "rotated"))).toBe("save-exact=true\nregistry=https://registry.npmjs.org/\n");
     expect(stripNpmAuth("//registry.npmjs.org/:_authToken=only\n")).toBe("");
 });
@@ -513,7 +567,7 @@ test("npm: apply writes the auth line + templated skill; a wiped HOME pends unti
     expect(skill).toContain("name: npm");
     expect(skill).toContain("$(otp npm)");
     expect(skill).toContain("$NPM_TOKEN_NPM");
-    expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe("//registry.npmjs.org/:_authToken=npm-tok-1\n");
+    expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe(`//registry.npmjs.org/:_authToken=npm-tok-1\n//127.0.0.1:8790/:_authToken=${GATEWAY_PLACEHOLDER}\n`);
     expect(statSync(join(home, ".npmrc")).mode & 0o777).toBe(0o600);
     expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "active" });
 
@@ -585,5 +639,8 @@ test("npm: the totp seed reaches neither the echo nor the agent env", async () =
     const connectors = await contributionRegistry(hostFor([]));
     // hasSecret speaks for the token; the totp seed has no such flag and is withheld too.
     expect(echoConfig(npm, connectors)).toEqual({ provider: "npm", hasSecret: true });
-    expect(await cliEnvOf(hostFor([npm]))).toEqual({ NPM_TOKEN_NPM: "npm-tok-1" });
+    expect(await cliEnvOf(hostFor([npm]), raw)).toEqual({ NPM_TOKEN_NPM: "npm-tok-1", NPM_REGISTRY_URL_NPM: "https://registry.npmjs.org" });
+    const brokered = await cliEnvOf(hostFor([npm]), delivered("gateway"));
+    expect(brokered["NPM_TOKEN_NPM"]).toBe(GATEWAY_PLACEHOLDER);
+    expect(JSON.stringify(brokered)).not.toContain("npm-tok-1");
 });

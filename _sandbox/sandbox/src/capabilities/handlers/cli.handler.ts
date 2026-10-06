@@ -17,6 +17,8 @@ import {
 import { CORE_CONNECTOR_HOOKS } from "../cli/connector-hooks.js";
 import { gitAccessWired, gitHostOf } from "../cli/git-access.js";
 import { npmAuthWired } from "../cli/npm-access.js";
+import type { CapabilityContribution } from "@intentic/extension-manifest";
+import { brokerOf, brokerRoutes } from "../broker/broker-routes.js";
 
 // CLI-tool integration: provider data (entry, fields, env, skill, fragment) lives in an installed extension's manifest;
 // this handler is generic plumbing over it. `apply` templates the connector's skill per instance ($VAR to $VAR_<ID>)
@@ -47,6 +49,43 @@ const whatsappStatus = (id: string): { state: "active" | "pending"; detail?: str
         return { state: "pending", detail: `Type this code ${PHONE_STEPS}.`, code: pairing.code, settling: true };
     }
     return { state: "pending", detail: "waiting for WhatsApp to issue a pairing code…", settling: true };
+};
+
+// What every brokered card's skill says first, generated from its declaration so no connector has to remember it: which
+// variable stands in for which service, and that the service's own address is the one place not to send a request.
+const gatewayNote = (spec: CapabilityContribution, config: Readonly<Record<string, string>>, suffix: string): string | undefined => {
+    const broker = brokerOf(spec);
+    if (broker === undefined) {
+        return undefined;
+    }
+    const routes = brokerRoutes(broker, config).flatMap((route) =>
+        route.env === undefined
+            ? []
+            : [
+                  `- \`$${route.env}_${suffix}\` stands in for ${route.upstream.origin}${route.upstream.pathname === "/" ? "" : route.upstream.pathname}`,
+              ],
+    );
+    const git = brokerRoutes(broker, config).some((route) => route.git);
+    return [
+        "## Where requests go",
+        "",
+        "This card's credential is held by the sandbox's credential gateway, not by your shell: its token variables hold a placeholder that authenticates nothing on its own. Send every request to the variables below, never to the service's own address; the gateway attaches the credential and checks the owner's rules on the way.",
+        ...(routes.length > 0 ? ["", ...routes] : []),
+        ...(git ? ["", "Git remotes on this service need nothing: your git is pointed at the gateway for them already."] : []),
+        "",
+        "A refusal from the gateway is JSON with a `message` saying why (a rule, a person who declined, a host the owner did not allow): read it, do not retry the same request, and say what you left undone.",
+        "",
+    ].join("\n");
+};
+
+// After the skill's frontmatter, so the skill loader still reads its name and description first.
+const withGatewayNote = (skill: string, spec: CapabilityContribution, config: Readonly<Record<string, string>>, suffix: string): string => {
+    const note = gatewayNote(spec, config, suffix);
+    if (note === undefined) {
+        return skill;
+    }
+    const frontmatter = /^---\n[\s\S]*?\n---\n/.exec(skill);
+    return frontmatter === null ? `${note}\n${skill}` : `${frontmatter[0]}\n${note}${skill.slice(frontmatter[0].length)}`;
 };
 
 export const cliHandler: CapabilityHandler = {
@@ -88,7 +127,12 @@ export const cliHandler: CapabilityHandler = {
         }
         // Longest keys first, so one env var name can't corrupt another's shared prefix.
         const suffix = envSuffix(id);
-        const keys = connector.spec.kind === "cli" ? Object.keys(connector.spec.env).toSorted((a, b) => b.length - a.length) : [];
+        // A broker's route variables are suffixed like the connector's own `env`, so they are rewritten with them.
+        const routeVars = (brokerOf(connector.spec)?.routes ?? []).flatMap((route) => (route.env === undefined ? [] : [route.env]));
+        const keys =
+            connector.spec.kind === "cli"
+                ? [...new Set([...Object.keys(connector.spec.env), ...routeVars])].toSorted((a, b) => b.length - a.length)
+                : [];
         // No `${tools}` slot for cli: a connector's cheatsheet is only about its own tool.
         let skill = await contributedSkill(connector, id, "");
         if (skill === undefined) {
@@ -101,6 +145,7 @@ export const cliHandler: CapabilityHandler = {
         for (const key of keys) {
             skill = skill.replaceAll(`$${key}`, `$${key}_${suffix}`);
         }
+        skill = withGatewayNote(skill, connector.spec, cliConfig, suffix);
         await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
         // Hook runs visibly in the job session only when it shells out; its return value is a non-fatal warning.
         const hook = CORE_CONNECTOR_HOOKS[provider];

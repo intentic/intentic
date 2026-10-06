@@ -83,12 +83,12 @@ export const readRemoteRefs = async (dir: string, url: string, token?: string, g
         // The token rides a header via GIT_CONFIG_* so it never lands in the URL, a pane log or git's own error text.
         const { stdout } = await git(dir, [...STALL_GUARD, "ls-remote", "--symref", url, ...REF_PATTERNS], {
             GIT_TERMINAL_PROMPT: "0",
-            ...(token === undefined
-                ? {}
-                : { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraheader", GIT_CONFIG_VALUE_0: gitAuthHeader(token) }),
+            ...(token === undefined ? {} : { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraheader", GIT_CONFIG_VALUE_0: gitAuthHeader(token) }),
         });
         return parseRemoteRefs(stdout);
     } catch (error) {
-        throw new RemoteRefsError(`Could not read ${url}: ${refusalReason(String((error as { stderr?: unknown }).stderr ?? ""), token !== undefined)}`);
+        throw new RemoteRefsError(
+            `Could not read ${url}: ${refusalReason(String((error as { stderr?: unknown }).stderr ?? ""), token !== undefined)}`,
+        );
     }
 };

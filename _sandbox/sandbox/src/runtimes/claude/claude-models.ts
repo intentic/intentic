@@ -9,6 +9,7 @@ import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { cacheFile } from "../../store/open-document.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
+import { containerKeyEnv } from "../../seams/sealed-env.js";
 
 // Claude's model catalog merges the CLI's tier aliases (effort levels and badges, no versioned id) with Anthropic's
 // REST /v1/models (versioned ids and names); only versioned rows are offered, aliases just lend capabilities and are
@@ -72,7 +73,8 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
             ...process.env,
             // Claude Code refuses to run under root unless the environment is marked already-sandboxed.
             IS_SANDBOX: "1",
-            ...(oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: oauthToken } : {}),
+            // No account: the container's own key, which the daemon's sealed environment no longer hands down.
+            ...(oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: oauthToken } : containerKeyEnv("claude")),
         },
     };
     const session = sdk().query({ prompt: pendingInput(abort.signal), options });

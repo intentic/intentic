@@ -5,13 +5,13 @@ description: Search, read, create and update pages and databases in your Notion 
 
 # Notion (connected)
 
-Token in `$NOTION_TOKEN`. Base is `https://api.notion.com/v1`, and every call carries three headers, so define
-this helper once per shell: `notion <METHOD> <path> [-d '<json>']`:
+Token in `$NOTION_TOKEN`. Base is `$NOTION_API_URL/v1` (it stands in for https://api.notion.com/v1), and every call
+carries three headers, so define this helper once per shell: `notion <METHOD> <path> [-d '<json>']`:
 
 ```sh
 notion() { local m="$1" p="$2"; shift 2; curl -s -X "$m" -H "Authorization: Bearer $NOTION_TOKEN" \
   -H "Notion-Version: 2022-06-28" -H "Content-Type: application/json" \
-  "https://api.notion.com/v1/$p" "$@"; }
+  "$NOTION_API_URL/v1/$p" "$@"; }
 ```
 
 The integration only sees pages and databases someone shared with it (page `•••` → `Connections`); sub-pages

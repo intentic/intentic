@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intentic/constants";
+import { BROKER_PORT, DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intentic/constants";
 
 // No two fixed in-container binds may share a port; declared ports (@intentic/constants) must be the single source, not
 // a literal in the Dockerfile.
@@ -9,7 +9,7 @@ import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intenti
 const DOCKERFILE = join(packageRoot(import.meta.url), "Dockerfile");
 
 // Keyed by name so a failure says which pair collided, not just that two numbers matched.
-const FIXED_PORTS = { DAEMON_PORT, PREVIEW_PORT, LOCAL_PORT, TRANSLATOR_PORT };
+const FIXED_PORTS = { DAEMON_PORT, PREVIEW_PORT, LOCAL_PORT, TRANSLATOR_PORT, BROKER_PORT };
 
 test("every fixed in-container port is distinct", () => {
     const byPort = new Map<number, string[]>();

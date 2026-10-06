@@ -41,7 +41,8 @@ export const pluginHandler: CapabilityHandler = {
         await checkoutInto(ctx, session, pluginsRoot(ctx.workspace.root), id, { url, ref: at, token });
         yield {
             kind: "log",
-            message: "Plugin installed at this commit, the agent loads its skills, agents and hooks next turn. Hooks and hooks modules run once you approve them.",
+            message:
+                "Plugin installed at this commit, the agent loads its skills, agents and hooks next turn. Hooks and hooks modules run once you approve them.",
         };
     },
     // The commit the checkout landed on, in full: what the entry pins from now on.

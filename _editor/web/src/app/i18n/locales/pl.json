@@ -1266,6 +1266,7 @@
             "setUpdateValue": "Ustaw / zaktualizuj wartość",
             "singleLineValue": "Wartość jednowierszowa",
             "typedOn": "wpisane na {detail}",
+            "viaGateway": "dołączony przez bramkę poświadczeń do",
             "usedByAgent": "używane przez agenta",
             "value": "Wartość",
             "whoRelease": "Kto może to zwolnić",
@@ -1901,6 +1902,26 @@
             "recommendedDescription": "Podpowiedzi na podstawie tego, co masz w przestrzeni roboczej: o każdą z nich prosi już Twój własny kod.",
             "catalogDescription": "Rozbuduj swój sandbox: każda możliwość daje agentowi nowe narzędzia albo łączy Twoje konta. Wszystko jest przechowywane tylko w Twoim sandboxie."
         },
+        "secretCredentialPolicy": {
+            "heading": "Jak agent go dostaje",
+            "heldByGateway": "Przechowywany przez bramkę poświadczeń",
+            "handedOverByChoice": "Przekazany agentowi, z Twojego wyboru",
+            "handedOverNoRoute": "Przekazany agentowi",
+            "keepInGateway": "Trzymaj go w bramce poświadczeń",
+            "gatewayExplain": "Agent nigdy go nie widzi: jego żądania trafiają do bramki sandboxa, która dołącza poświadczenie i najpierw sprawdza poniższe reguły.",
+            "rawExplain": "Agent ma prawdziwą wartość, dla narzędzia, które bez niej nie działa. Poniższe reguły nie obowiązują, dopóki znów nie zostawisz go w bramce.",
+            "directExplain": "Ten konektor nie mówi protokołem HTTP, który bramka mogłaby przenieść (baza danych, serwer poczty), więc agent ma prawdziwą wartość.",
+            "yourRules": "Twoje reguły, sprawdzane po kolei; decyduje pierwsza, która obejmuje żądanie:",
+            "connectorRules": "Reguły konektora, sprawdzane po kolei; decyduje pierwsza, która obejmuje żądanie:",
+            "noRules": "Brak reguł: każde żądanie do jego hostów przechodzi.",
+            "anyMethod": "dowolna metoda",
+            "anyPath": "dowolna ścieżka",
+            "editRules": "Edytuj reguły",
+            "useConnectorRules": "Użyj reguł konektora",
+            "rulesJson": "Reguły w formacie JSON",
+            "notJson": "Reguły to lista JSON obiektów z polem action (allow, ask lub deny) oraz opcjonalnymi methods, paths i why.",
+            "couldNotSave": "Nie udało się zapisać, jak agent dostaje to poświadczenie"
+        },
         "secretHosts": {
             "addHost": "Dodaj host",
             "couldNotSave": "Nie udało się zapisać ochrony hostów.",
@@ -2138,6 +2159,7 @@
             "laneCode": "Agent zaraz użyje go w uruchamianym skrypcie.",
             "laneBrowser": "Agent zaraz wpisze go na stronie.",
             "laneOtp": "Agent zaraz wygeneruje z niego jednorazowy kod.",
+            "laneGateway": "Bramka poświadczeń zaraz dołączy je do żądania wysłanego przez agenta.",
             "laneCapability": "Agent prosi o wczytanie tego podłączonego konta do rozmowy.",
             "laneCredential": "Agent prosi o użycie tych danych logowania."
         },

@@ -114,6 +114,7 @@ import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.j
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { connectorHostDefaults } from "./capabilities/contributions.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
+import { type BrokerSlice, createBrokerSlice } from "./capabilities/broker/broker-slice.js";
 import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
 import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
@@ -151,6 +152,7 @@ export interface Services
         RunnersSlice,
         CapabilitiesSlice,
         SecretsSlice,
+        BrokerSlice,
         PrivacySlice,
         NeedsSlice,
         ExtensionsSlice,
@@ -345,7 +347,12 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
 // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
 const createReaper = ({ conversations, agents, events, logger }: Pick<Services, "conversations" | "agents" | "events" | "logger">): ResourceReaper =>
     createResourceReaper({
-        browsers: { runningOwners: runningBrowserOwners, idleNames: idleBrowserSessionNames, close: closeBrowserSession, closeFor: closeBrowserSessionsFor },
+        browsers: {
+            runningOwners: runningBrowserOwners,
+            idleNames: idleBrowserSessionNames,
+            close: closeBrowserSession,
+            closeFor: closeBrowserSessionsFor,
+        },
         ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(conversations, owner),
         // A watch keeps the conversation for its wake; its finished turn's processes go regardless (2026-10-05).
         processOwnerLive: (owner) => owner === DAEMON_OWNER || turnInFlight(conversations, owner),
@@ -556,6 +563,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ownerEmail: authSlice.ownerEmail,
         warn: (message, error) => logger.warn({ err: error }, message),
     });
+    // The credential gateway's signing key, the owner's per-card policy, and the passes its `ask` rules leave.
+    const brokerSlice = createBrokerSlice({
+        authRoot,
+        cards: cardDeps({ conversations, cards, events }),
+        host: { workspace, files: workspaceSlice.files, capabilities, config },
+    });
     const extensionsSlice = createExtensionsSlice({
         config,
         logger,
@@ -586,6 +599,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         roster: () => [...agents.list(), ...agents.listArchived()].flatMap((summary) => agents.entry(summary.id) ?? []),
         forget: (conversationId) => {
             secretsSlice.credentialGrants.forget(conversationId);
+            brokerSlice.rulePrompts.forget(conversationId);
             // A purged conversation's grants go with it, so a reused id inherits nothing it was not given.
             void conversationGrants
                 .forget(conversationId)
@@ -613,6 +627,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...conversationsParts.slice,
         ...capabilitiesParts.slice,
         ...secretsSlice,
+        ...brokerSlice,
         // Read by the turn's credential resolution and the gateway route alike, so a policy change holds from the next
         // model request whichever runtime sends it.
         ...createPrivacySlice({

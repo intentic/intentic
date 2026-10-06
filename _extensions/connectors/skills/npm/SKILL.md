@@ -5,20 +5,21 @@ description: Publish and manage packages on the npm registry (npmjs.com), publis
 
 # npm (connected)
 
-The npm CLI is already authenticated for `registry.npmjs.org` (the token also sits in `$NPM_TOKEN` for curl).
+The npm CLI is already authenticated for `$NPM_REGISTRY_URL` (it stands in for https://registry.npmjs.org): pass
+`--registry "$NPM_REGISTRY_URL"` on the commands that need the login, as below (the token also sits in `$NPM_TOKEN` for curl).
 
-- Who am I: `npm whoami`
+- Who am I: `npm whoami --registry "$NPM_REGISTRY_URL"`
 - Inspect: `npm view <PKG>` · versions: `npm view <PKG> versions` · tags: `npm view <PKG> dist-tags`
-- Publish (from the package dir): `npm publish`, a scoped package's first publish needs `--access public`
-- Dist-tags: `npm dist-tag add <PKG>@<VERSION> <TAG>` / `npm dist-tag ls <PKG>`
-- Deprecate: `npm deprecate <PKG>@"<RANGE>" "<MESSAGE>"`
-- Owners / access: `npm owner ls <PKG>` · `npm access list packages`
+- Publish (from the package dir): `npm publish --registry "$NPM_REGISTRY_URL"`, a scoped package's first publish needs `--access public`
+- Dist-tags: `npm dist-tag add <PKG>@<VERSION> <TAG> --registry "$NPM_REGISTRY_URL"` / `npm dist-tag ls <PKG>`
+- Deprecate: `npm deprecate <PKG>@"<RANGE>" "<MESSAGE>" --registry "$NPM_REGISTRY_URL"`
+- Owners / access: `npm owner ls <PKG>` · `npm access list packages --registry "$NPM_REGISTRY_URL"`
 - Downloads (no auth): `curl -s https://api.npmjs.org/downloads/point/last-week/<PKG> | jq`
 
 ## 2FA / one-time codes
 
 When a write is refused with an OTP/one-time-password error, mint a code and retry in one step:
-`npm publish --otp "$(otp ${id})"`. Codes die within seconds: mint at the moment of use, never ahead, and
+`npm publish --registry "$NPM_REGISTRY_URL" --otp "$(otp ${id})"`. Codes die within seconds: mint at the moment of use, never ahead, and
 never ask the user for a code before trying `otp ${id}`.
 
 If `otp ${id}` says no TOTP secret is stored: the account is on WebAuthn. When the npmjs.com browser is

@@ -1,4 +1,5 @@
 // secrets: user-supplied env-var secrets the daemon writes to desired-state/.env
+import { BrokerRuleSchema } from "@intentic/extension-manifest";
 import { z } from "zod";
 import { SECRET_HOST_MAX, SECRET_HOST_PATTERN_RE, SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
 // Straight to the sandbox daemon, never through the platform; `apply` reloads .env with no restart. `list` returns keys
@@ -60,8 +61,10 @@ export const CredentialGateKindSchema = z
 export type CredentialGateKind = z.infer<typeof CredentialGateKindSchema>;
 
 export const CredentialLaneSchema = z
-    .enum(["shell", "code", "browser", "session", "otp"])
-    .describe("What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, or one one-time code.");
+    .enum(["shell", "code", "browser", "session", "otp", "gateway"])
+    .describe(
+        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, or a request the credential gateway attaches it to.",
+    );
 export type CredentialLane = z.infer<typeof CredentialLaneSchema>;
 
 export const CredentialGateSchema = z.object({
@@ -167,6 +170,43 @@ export const SecretHostGuardSetResultSchema = z.object({
 
 // Across every store: env/generated secrets, capability credentials, AI-provider accounts. Values never ride this
 // shape; `revealable` says whether `reveal` can return one (everything but provider accounts).
+// How the agent gets one connection's credential, and what it may do with it there. `gateway` is the default for every
+// connector that declares gateway routes: the credential never enters the agent's shell, and the rules below are
+// enforced where it is attached. `raw` is the owner's explicit choice for a tool that needs the real value; `direct` is a
+// connector with no gateway route at all (a database's wire protocol, a mail server, a request signature).
+export const CredentialDeliveryModeSchema = z
+    .enum(["gateway", "raw", "direct"])
+    .describe(
+        "How the agent gets this connection's credential: `gateway` keeps it in the sandbox's credential gateway, which attaches it to each request the agent sends and checks the rules first; `raw` hands it to the agent because the owner chose that for a tool needing the real value; `direct` hands it over because the connector has no gateway route (a database, a mail server).",
+    );
+export type CredentialDeliveryMode = z.infer<typeof CredentialDeliveryModeSchema>;
+
+export const CredentialPolicySchema = z.object({
+    subject: z.string().describe("The connection's id."),
+    delivery: CredentialDeliveryModeSchema,
+    rules: z
+        .array(BrokerRuleSchema)
+        .describe("What the credential may do through the gateway, checked in order, the first covering rule deciding; a request none covers is allowed."),
+    rulesFrom: z
+        .enum(["connector", "owner"])
+        .describe("Whose rules these are: the connector's own defaults, or the owner's, which replace them whole."),
+});
+export type CredentialPolicy = z.infer<typeof CredentialPolicySchema>;
+
+export const CredentialPolicySetSchema = z.object({
+    subject: z.string().describe("The connection's id."),
+    delivery: z
+        .enum(["gateway", "raw"])
+        .optional()
+        .describe("Hand the agent the credential itself (`raw`), or keep it in the gateway (`gateway`). Leave it out to keep what is set."),
+    rules: z
+        .array(BrokerRuleSchema)
+        .nullable()
+        .optional()
+        .describe("The owner's own rules, replacing the connector's whole; `null` goes back to the connector's. Leave it out to keep what is set."),
+});
+export type CredentialPolicySet = z.infer<typeof CredentialPolicySetSchema>;
+
 export const SecretInventoryEntrySchema = z.object({
     // Env-var key for env|generated; `<provider>:<accountId>` for provider; capability instance id otherwise.
     key: z.string().describe("What identifies it. Unique across the whole inventory, so several accounts of one provider each get their own entry."),
@@ -195,7 +235,9 @@ export const SecretInventoryEntrySchema = z.object({
     lastUse: z
         .object({
             at: z.number().describe("When, in milliseconds."),
-            lane: z.enum(["shell", "code", "browser"]).describe("How it was used: a command, a script, or typed into a page."),
+            lane: z
+                .enum(["shell", "code", "browser", "gateway"])
+                .describe("How it was used: a command, a script, typed into a page, or attached by the credential gateway to a request the agent sent."),
             detail: z
                 .string()
                 .optional()
@@ -204,6 +246,10 @@ export const SecretInventoryEntrySchema = z.object({
         })
         .optional()
         .describe("The last time an agent actually spent this secret. Absent while it never has been, which most never are."),
+    // Joined from the credential gateway's policy, on a connection's row only.
+    credential: CredentialPolicySchema.omit({ subject: true })
+        .optional()
+        .describe("How the agent gets this connection's credential and what it may do with it. Absent on everything but a connected command-line tool."),
     // Joined from the gate policy, so the row can name the approver without a second call.
     gate: z
         .object({

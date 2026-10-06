@@ -104,6 +104,86 @@ const ProbeSchema = z.object({
         .describe("Accept a self-signed certificate, for a service whose local install ships one (Obsidian's Local REST API)."),
 });
 
+// How a cli card's credential reaches the services it is for without ever reaching the agent: the sandbox's credential
+// gateway, a loopback-only listener the agent's shell calls instead of the service. The gateway picks the upstream from
+// this declaration (never from the request), attaches the credential the way the service takes it, checks the card's
+// rules and gates, and forwards. The agent's env holds the gateway's address and, where a tool insists on a token
+// variable, an inert placeholder.
+const BrokerRouteSchema = z.object({
+    upstream: z
+        .string()
+        .min(1)
+        .describe(
+            "The service's base URL, a template over the fields like `env` (`https://api.github.com`, `${url}`). What is sent to this route's gateway address goes here and nowhere else.",
+        ),
+    env: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]*$/)
+        .optional()
+        .describe(
+            "The variable the agent's shell finds this route's gateway address in (`GITHUB_API_URL`), suffixed per instance like `env`. Naming one of `env`'s own variables (`GITLAB_URL`) points it at the gateway instead of the service, so a skill written against it needs no change.",
+        ),
+    headers: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe(
+            'The headers that carry the credential, templated over the fields (`{"authorization": "Bearer ${token}"}`). The gateway sets them on every request it forwards, replacing any the agent sent under the same name.',
+        ),
+    basic: z
+        .object({ username: z.string(), password: z.string() })
+        .optional()
+        .describe(
+            "HTTP Basic credentials, templated over the fields, for a service that takes them (git over HTTPS: `x-access-token` and `${token}`).",
+        ),
+    form: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe(
+            "Fields the gateway sets in a request's url-encoded form body, templated over the fields, for a service that takes its credential there: an OAuth token exchange's `client_secret` or `refresh_token`. What the exchange answers (a short-lived access token) is the agent's to use; the long-lived secret never is.",
+        ),
+    pathPrefix: z
+        .string()
+        .startsWith("/")
+        .optional()
+        .describe(
+            "A path the gateway puts before the agent's own, templated over the fields, for a service that takes its credential in the path (Telegram's `/bot${token}`).",
+        ),
+    git: z
+        .boolean()
+        .optional()
+        .describe(
+            "This upstream serves git over HTTP: the agent's git is pointed at the gateway for it (`url.<gateway>.insteadOf`), so a clone, fetch or push needs no credential in the agent's hands.",
+        ),
+});
+export type BrokerRoute = z.infer<typeof BrokerRouteSchema>;
+
+export const BrokerRuleSchema = z.object({
+    methods: z
+        .array(z.string().regex(/^[A-Z]+$/))
+        .optional()
+        .describe("The HTTP methods it covers (`DELETE`, `PUT`); absent covers every method."),
+    paths: z
+        .array(z.string().startsWith("/"))
+        .optional()
+        .describe(
+            "The paths it covers, below the route's upstream: `*` matches one segment, `**` any number of them (`/repos/*/*/hooks/**`). Absent covers every path.",
+        ),
+    action: z.enum(["allow", "ask", "deny"]).describe("`allow` forwards it, `ask` holds it on a card for the owner, `deny` refuses it."),
+    why: z.string().optional().describe("One line on what the rule protects, shown on the card or in the refusal."),
+});
+export type BrokerRule = z.infer<typeof BrokerRuleSchema>;
+
+export const BrokerSchema = z.object({
+    routes: z.array(BrokerRouteSchema).min(1),
+    rules: z
+        .array(BrokerRuleSchema)
+        .optional()
+        .describe(
+            "What the credential may do, checked in order against each request the gateway forwards; the first rule covering a request decides, and one no rule covers is allowed. The owner's own rules for a card replace these.",
+        ),
+});
+export type Broker = z.infer<typeof BrokerSchema>;
+
 // The install-dialog card: how it looks in the grid and how the user gets its credential. Shared by every kind below.
 const CatalogSchema = z.object({
     name: z.string().min(1),
@@ -191,6 +271,10 @@ export const CapabilityContributionSchema = z
                 .describe(
                     "The hosts this card's credential is meant for, as templates over the fields like `env` (`api.github.com`, `*.githubusercontent.com`, `${url}`); a value that comes out as a URL counts as its host. The sandbox limits the credential's `{{secret:…}}` reference to them by default, so a use aimed anywhere else asks a person first. The owner can change or lift the list on the Secrets view.",
                 ),
+            // Only narrows how the credential is used, so it carries no effect: nothing here grants the extension reach.
+            broker: BrokerSchema.optional().describe(
+                "Route the credential through the sandbox's credential gateway instead of handing it to the agent: per upstream, the variable carrying the gateway's address and how the credential is attached, plus optional method and path rules. Every `env` variable whose template names a secret field then holds an inert placeholder. Declare it on every card whose service is spoken to over HTTP.",
+            ),
             // The first way a card served tools, kept one release as an alias of `contributes.tools` with this card as
             // `perCard` and this value as `path` (points/tools.ts); a manifest declaring both is served by `tools`.
             mcp: z

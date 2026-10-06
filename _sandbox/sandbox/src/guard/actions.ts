@@ -176,6 +176,38 @@ export const secretSend = defineGuardedAction<SecretSendInput>({
     },
 });
 
+export interface CredentialRequestInput {
+    // What the card's method and path rules say of one request the credential gateway would attach the credential to
+    // (broker/broker-rules.ts): the first rule covering it, or allow when none does.
+    readonly rule: "allow" | "ask" | "deny";
+    // Whether a person already allowed requests under that rule for the rest of this conversation.
+    readonly passed: boolean;
+    // Whether a card can be raised at all: there is a live conversation to draw it in.
+    readonly canPark: boolean;
+}
+
+// One request through the credential gateway, against the rules of the card whose credential it would carry. The
+// gateway is where the credential is attached, so this decision is enforced, not advised: nothing the agent holds can
+// make the same request with the credential any other way.
+export const credentialRequest = defineGuardedAction<CredentialRequestInput>({
+    action: "credential.request",
+    decide: ({ rule, passed, canPark }) => {
+        if (rule === "allow") {
+            return ALLOW("the card's rules allow this request");
+        }
+        if (rule === "deny") {
+            return DENY("the card's rules refuse this request");
+        }
+        if (passed) {
+            return ALLOW("a person already allowed requests under this rule in this conversation");
+        }
+        if (!canPark) {
+            return DENY("the card's rules ask a person first, and there is no live conversation to ask in");
+        }
+        return HOLD("the card's rules ask a person before this request");
+    },
+});
+
 export interface ChildSpawnInput {
     // Provider the child would run on; a specific rule wins over the general `agents.spawn` one.
     readonly provider: string;
@@ -188,7 +220,9 @@ export interface ChildSpawnInput {
 // Where outside content came from, in the words the card and the parent read: a child on a runtime with no rulebook of
 // its own taints its parent as `agent:<provider>` (children.ts), which only this says plainly.
 const outsideWords = (source: string): string =>
-    source.startsWith("agent:") ? `the report of a subagent on ${source.slice("agent:".length)}, a runtime with no permission rules of its own` : source;
+    source.startsWith("agent:")
+        ? `the report of a subagent on ${source.slice("agent:".length)}, a runtime with no permission rules of its own`
+        : source;
 
 // Consulted on every supervisor mutation. A hold raises a card on the parent's turn since there's no held form of a
 // spawn; it refuses only when nobody can ask. The taint floor applies only when the owner set no explicit rule.

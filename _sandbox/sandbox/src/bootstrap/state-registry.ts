@@ -19,6 +19,7 @@ import { heldWakesDocument } from "../automations/held-wakes-store.js";
 import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
 import { sendersDocument } from "../automations/senders-store.js";
 import { browserPasskeysDocument } from "../browser/tools/passkeys.js";
+import { credentialPolicyDocument } from "../capabilities/broker/broker-policy.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { capabilitySecretsDocument, extensionSecretsDocument } from "../capabilities/credentials/secret-vault.js";
 import { dismissalsDocument } from "../capabilities/offers/dismissals-store.js";
@@ -122,6 +123,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     scheduleCoverageDocument,
     sendersDocument,
     browserPasskeysDocument,
+    credentialPolicyDocument,
     capabilitiesDocument,
     capabilitySecretsDocument,
     extensionSecretsDocument,

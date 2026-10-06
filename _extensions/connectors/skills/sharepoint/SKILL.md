@@ -11,7 +11,7 @@ There is no user behind this token: it is the app itself, so "my files" / OneDri
 reach and `/me` always fails. Get an hour-long token, then call Graph with it:
 
 ```sh
-sp_token() { curl -s -X POST "https://login.microsoftonline.com/$SHAREPOINT_TENANT_ID/oauth2/v2.0/token" \
+sp_token() { curl -s -X POST "$SHAREPOINT_LOGIN_URL/$SHAREPOINT_TENANT_ID/oauth2/v2.0/token" \
   -d "client_id=$SHAREPOINT_CLIENT_ID" -d "client_secret=$SHAREPOINT_CLIENT_SECRET" \
   -d "scope=https://graph.microsoft.com/.default" -d "grant_type=client_credentials" | jq -r '.access_token'; }
 SP=$(sp_token)   # re-run when calls start answering 401 (the token lasts ~1 hour)

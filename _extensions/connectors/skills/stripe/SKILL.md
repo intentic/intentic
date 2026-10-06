@@ -5,13 +5,13 @@ description: Read and write customers, charges, payment intents, invoices, subsc
 
 # Stripe (connected)
 
-Key in `$STRIPE_API_KEY`. Base is `https://api.stripe.com/v1`. Requests are **form-encoded, never JSON**, and a
-GET wants its parameters in the query string, so define this helper once per shell:
+Key in `$STRIPE_API_KEY`. Base is `$STRIPE_API_URL/v1` (it stands in for https://api.stripe.com/v1). Requests are
+**form-encoded, never JSON**, and a GET wants its parameters in the query string, so define this helper once per shell:
 
 ```sh
 stripe() { local m="$1" p="$2"; shift 2
   curl -s $([ "$m" = GET ] && echo -G) -X "$m" -H "Authorization: Bearer $STRIPE_API_KEY" \
-    "https://api.stripe.com/v1/$p" "$@"; }
+    "$STRIPE_API_URL/v1/$p" "$@"; }
 ```
 
 `-G` folds each `-d` into the query string on a GET, so `stripe GET charges -d limit=20` is one call and

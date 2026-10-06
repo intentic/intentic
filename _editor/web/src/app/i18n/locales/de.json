@@ -849,6 +849,26 @@
             "localDevScriptSource": "Lokale Entwicklung: Skriptquelle",
             "runsScriptCheckoutOnly": "Führt das Skript aus Ihrem Checkout aus, nur auf einer Maschine, die das Repo hat"
         },
+        "secretCredentialPolicy": {
+            "heading": "Wie der Agent es bekommt",
+            "heldByGateway": "Vom Anmeldedaten-Gateway verwahrt",
+            "handedOverByChoice": "Dem Agenten übergeben, auf deinen Wunsch",
+            "handedOverNoRoute": "Dem Agenten übergeben",
+            "keepInGateway": "Im Anmeldedaten-Gateway behalten",
+            "gatewayExplain": "Der Agent sieht es nie: Seine Anfragen gehen an das Gateway der Sandbox, das die Anmeldedaten anhängt und zuerst die Regeln unten prüft.",
+            "rawExplain": "Der Agent hält den echten Wert, für ein Werkzeug, das ohne ihn nicht funktioniert. Die Regeln unten gelten erst wieder, wenn du es im Gateway behältst.",
+            "directExplain": "Dieser Connector spricht kein HTTP, das das Gateway tragen könnte (eine Datenbank, ein Mailserver), daher hält der Agent den echten Wert.",
+            "yourRules": "Deine Regeln, der Reihe nach geprüft; die erste, die eine Anfrage abdeckt, entscheidet:",
+            "connectorRules": "Die Regeln des Connectors, der Reihe nach geprüft; die erste, die eine Anfrage abdeckt, entscheidet:",
+            "noRules": "Keine Regeln: Jede Anfrage an seine Hosts geht durch.",
+            "anyMethod": "jede Methode",
+            "anyPath": "jeder Pfad",
+            "editRules": "Regeln bearbeiten",
+            "useConnectorRules": "Regeln des Connectors verwenden",
+            "rulesJson": "Regeln als JSON",
+            "notJson": "Regeln sind eine JSON-Liste von Objekten mit action (allow, ask oder deny) sowie optional methods, paths und why.",
+            "couldNotSave": "Konnte nicht speichern, wie der Agent diese Anmeldedaten bekommt"
+        },
         "secretEntryRow": {
             "accessTab": "Zugriffs-Tab",
             "agentUsesFreely": "Agent nutzt es frei",
@@ -886,6 +906,7 @@
             "setUpdateValue": "Wert setzen / aktualisieren",
             "singleLineValue": "Einzeiliger Wert",
             "typedOn": "getippt auf {detail}",
+            "viaGateway": "vom Anmeldedaten-Gateway angehängt an",
             "usedByAgent": "vom Agenten benutzt",
             "value": "Wert",
             "whoRelease": "Wer es freigeben kann"

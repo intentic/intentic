@@ -20,6 +20,7 @@ import type { Services } from "../../composition.js";
 import { serviceabilities } from "../../usage/serviceability/serviceability.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HarnessCredential } from "./agent-request.js";
+import { containerKeyEnv } from "../../seams/sealed-env.js";
 
 // What authenticates a Claude Code harness turn, per provider. Two mutually exclusive shapes: `claude` carries the
 // account's Anthropic OAuth; other providers carry a translator endpoint, bearer and explicit model. A refusal is a
@@ -77,8 +78,9 @@ const credentialEnv = (credential: HarnessCredential, model: string | undefined)
             };
         case "claude-oauth":
             return { CLAUDE_CODE_OAUTH_TOKEN: credential.token, ...(credential.gateway !== undefined ? { ANTHROPIC_BASE_URL: credential.gateway } : {}) };
+        // The container's own key, handed over by name: the daemon's environment no longer holds it (sealed-env.ts).
         case "container":
-            return credential.gateway !== undefined ? { ANTHROPIC_BASE_URL: credential.gateway } : {};
+            return { ...containerKeyEnv("claude"), ...(credential.gateway !== undefined ? { ANTHROPIC_BASE_URL: credential.gateway } : {}) };
     }
 };
 

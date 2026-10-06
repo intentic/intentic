@@ -89,7 +89,20 @@ export const DAEMON_LAYERS = [
     {
         name: "orchestration",
         about: "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings",
-        units: ["automations", "loops", "workflows", "ci", "chores", "needs", "approvals", "settings", "inventory", "portability", "migrations", "history"],
+        units: [
+            "automations",
+            "loops",
+            "workflows",
+            "ci",
+            "chores",
+            "needs",
+            "approvals",
+            "settings",
+            "inventory",
+            "portability",
+            "migrations",
+            "history",
+        ],
     },
     {
         name: "composition",

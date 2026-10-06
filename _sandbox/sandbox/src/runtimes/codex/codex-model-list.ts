@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { Model } from "@intentic/sandbox-contract";
+import { containerKeyEnv } from "../../seams/sealed-env.js";
 import { codexBinary } from "./codex-path.js";
 
 // The Codex runtime's own catalog, read from the CLI that will run the turn (app-server `model/list`): display names,
@@ -113,7 +114,8 @@ const listEnv = (codexHome: string): Record<string, string> => {
             env[key] = value;
         }
     }
-    return { ...env, CODEX_HOME: codexHome };
+    // The container's own key, as the turn path hands it: the daemon's environment no longer holds it (sealed-env.ts).
+    return { ...env, ...containerKeyEnv("codex"), CODEX_HOME: codexHome };
 };
 
 // Empty for every failure (no CLI in the image, an app-server that won't start, a malformed answer): this source

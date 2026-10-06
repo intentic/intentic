@@ -140,7 +140,11 @@ test("pluginDirsOf maps plugin capabilities to checkout dirs (honoring the subdi
 });
 
 test("echoConfig echoes url/ref/path/commit and hasToken, never the token", () => {
-    const full: Capability = { id: "p", kind: "plugin", config: { url: "https://x/y.git", ref: "v1", path: "plugins/p", token: "secret", commit: "a".repeat(40) } };
+    const full: Capability = {
+        id: "p",
+        kind: "plugin",
+        config: { url: "https://x/y.git", ref: "v1", path: "plugins/p", token: "secret", commit: "a".repeat(40) },
+    };
     expect(echoConfig(full, new Map())).toEqual({ url: "https://x/y.git", ref: "v1", path: "plugins/p", commit: "a".repeat(40), hasToken: true });
     const bare: Capability = { id: "q", kind: "plugin", config: { url: "https://x/y.git" } };
     expect(echoConfig(bare, new Map())).toEqual({ url: "https://x/y.git", hasToken: false });

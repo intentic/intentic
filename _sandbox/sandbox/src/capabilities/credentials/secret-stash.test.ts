@@ -92,9 +92,19 @@ test("the stash drops its oldest key rather than growing without end", () => {
 
 test("never echoed: a generated connection shows its public half, and only the private half is vaulted", () => {
     const pair = generateSshKey("intentic-box");
-    const box: Capability = { id: "box", kind: "ssh", config: { auth: "generated", host: "box.example.com", port: 22, user: "root", privateKey: pair.privateKey } };
+    const box: Capability = {
+        id: "box",
+        kind: "ssh",
+        config: { auth: "generated", host: "box.example.com", port: 22, user: "root", privateKey: pair.privateKey },
+    };
 
-    expect(sshHandler.echo(box.config, new Map())).toEqual({ host: "box.example.com", port: 22, user: "root", auth: "generated", publicKey: pair.publicKey });
+    expect(sshHandler.echo(box.config, new Map())).toEqual({
+        host: "box.example.com",
+        port: 22,
+        user: "root",
+        auth: "generated",
+        publicKey: pair.publicKey,
+    });
     // What echo leaves out is what the vault takes.
     expect(secretFieldsOf(box, new Map())).toEqual(["privateKey"]);
     expect(sshHandler.secret?.(box.config, new Map())).toBe("privateKey");

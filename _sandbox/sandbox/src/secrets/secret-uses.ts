@@ -14,8 +14,9 @@ export const DETAIL_MAX = 80;
 const SecretUseSchema = z.object({
     // The registry name the reference carried, `CLOUDFLARE_API_TOKEN`, `reddit/password`.
     name: z.string(),
-    // Which exit spent it: a shell command, a JS run's script, or a typed browser field.
-    lane: z.enum(["shell", "code", "browser"]),
+    // Which exit spent it: a shell command, a JS run's script, a typed browser field, or a request the credential gateway
+    // attached it to.
+    lane: z.enum(["shell", "code", "browser", "gateway"]),
     // Where it went, in the reader's terms: the head of the agent's command line, or the page's host.
     detail: z.string().optional(),
     // The verified email that released a gated use, never from an unverified click; absent on an ungated use.

@@ -852,6 +852,26 @@
             "localDevScriptSource": "Dev local : source du script",
             "runsScriptCheckoutOnly": "Lance le script depuis votre checkout, uniquement sur une machine qui a le dépôt"
         },
+        "secretCredentialPolicy": {
+            "heading": "Comment l'agent l'obtient",
+            "heldByGateway": "Gardé par la passerelle d'identifiants",
+            "handedOverByChoice": "Remis à l'agent, par votre choix",
+            "handedOverNoRoute": "Remis à l'agent",
+            "keepInGateway": "Le garder dans la passerelle d'identifiants",
+            "gatewayExplain": "L'agent ne le voit jamais : ses requêtes passent par la passerelle du sandbox, qui ajoute l'identifiant et vérifie d'abord les règles ci-dessous.",
+            "rawExplain": "L'agent détient la vraie valeur, pour un outil qui ne fonctionne pas sans elle. Les règles ci-dessous ne s'appliquent plus tant que vous ne le gardez pas dans la passerelle.",
+            "directExplain": "Ce connecteur ne parle pas un HTTP que la passerelle pourrait porter (une base de données, un serveur de courrier), donc l'agent détient la vraie valeur.",
+            "yourRules": "Vos règles, vérifiées dans l'ordre ; la première qui couvre une requête décide :",
+            "connectorRules": "Les règles du connecteur, vérifiées dans l'ordre ; la première qui couvre une requête décide :",
+            "noRules": "Aucune règle : toute requête vers ses hôtes passe.",
+            "anyMethod": "toute méthode",
+            "anyPath": "tout chemin",
+            "editRules": "Modifier les règles",
+            "useConnectorRules": "Utiliser les règles du connecteur",
+            "rulesJson": "Règles, en JSON",
+            "notJson": "Les règles sont une liste JSON d'objets avec action (allow, ask ou deny) et, en option, methods, paths et why.",
+            "couldNotSave": "Impossible d'enregistrer comment l'agent obtient cet identifiant"
+        },
         "secretEntryRow": {
             "accessTab": "Onglet Accès",
             "agentUsesFreely": "L’agent l’utilise librement",
@@ -889,6 +909,7 @@
             "setUpdateValue": "Définir / mettre à jour la valeur",
             "singleLineValue": "Valeur sur une ligne",
             "typedOn": "saisi sur {detail}",
+            "viaGateway": "ajouté par la passerelle d'identifiants à",
             "usedByAgent": "utilisé par l'agent",
             "value": "Valeur",
             "whoRelease": "Qui peut le libérer"

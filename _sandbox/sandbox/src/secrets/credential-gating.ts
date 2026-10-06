@@ -47,7 +47,9 @@ export const gatedCapabilities = (
 };
 
 // The shell environment with gated connectors' variables removed by suffix, mirroring personaCliEnv. Driven by a denied
-// set, not an allowlist, since the environment also carries PATH and other settings an allowlist would strip.
+// set, not an allowlist, since the environment also carries PATH and other settings an allowlist would strip. A card
+// whose credential the gateway holds keeps its variables: none of them is a credential, and its gate is enforced where
+// the credential is attached, on the request itself (broker/broker-gateway.ts), which asks the named approvers then.
 export const gatedCliEnv = (
     cliEnv: Record<string, string>,
     capabilities: readonly Capability[],
@@ -55,6 +57,9 @@ export const gatedCliEnv = (
     grants: CredentialGrants,
     conversationId: string | undefined,
     envSuffix: (id: string) => string,
+    // Whether a card's variables in `cliEnv` are the credential gateway's rather than its credential; filled by the
+    // caller (capabilities/cli-env.ts gatewayHeld), so this layer never reaches up to read the marker itself.
+    heldByGateway: (env: Readonly<Record<string, string>>, capability: string) => boolean = () => false,
 ): { readonly cliEnv: Record<string, string>; readonly withheld: readonly CredentialGate[] } => {
     if (gates.length === 0) {
         return { cliEnv, withheld: [] };
@@ -66,7 +71,7 @@ export const gatedCliEnv = (
             continue;
         }
         const gate = gates.find((entry) => entry.kind === "capability" && entry.subject === capability.id);
-        if (gate === undefined || released(grants, conversationId, capability.id)) {
+        if (gate === undefined || released(grants, conversationId, capability.id) || heldByGateway(cliEnv, capability.id)) {
             continue;
         }
         withheld.push(gate);
@@ -84,9 +89,7 @@ export const gatedCliEnv = (
 // Skill names for withheld capabilities, removed alongside their credential: a cheatsheet with no matching tool reads
 // to the model as an offer it will follow and fail. The turn note replaces it as the one thing the model should read
 // instead.
-export const gatedSkills = (withheld: readonly CredentialGate[]): string[] => [
-    ...new Set(withheld.map((gate) => `Skill(${gate.subject})`)),
-];
+export const gatedSkills = (withheld: readonly CredentialGate[]): string[] => [...new Set(withheld.map((gate) => `Skill(${gate.subject})`))];
 
 export const GATED_CREDENTIALS_TITLE = "Some connected accounts need a person's approval";
 

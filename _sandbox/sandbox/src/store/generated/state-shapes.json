@@ -31,10 +31,22 @@
       "since": "unreleased"
     }
   ],
+  "auth:credential-policy.json": [
+    {
+      "type": "{ delivery?: \"gateway\" | \"raw\"; rules?: ({ action: \"allow\" | \"ask\" | \"deny\"; methods?: string[]; paths?: string[]; why?: string })[] }",
+      "since": "unreleased"
+    }
+  ],
   "auth:credential-releases.json": [
     {
       "type": "Record<string, { approvedBy: string; at: number }>",
       "since": "v1.318.0"
+    }
+  ],
+  "auth:credential-rules.json": [
+    {
+      "type": "{ rules: ({ action: \"allow\" | \"ask\" | \"deny\"; methods?: string[]; paths?: string[]; why?: string })[] }",
+      "since": "unreleased"
     }
   ],
   "auth:extension-secrets.json": [
@@ -911,6 +923,10 @@
     {
       "type": "{ approvedBy?: string; at: number; detail?: string; lane: \"shell\" | \"code\" | \"browser\"; name: string }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ approvedBy?: string; at: number; detail?: string; lane: \"shell\" | \"code\" | \"browser\" | \"gateway\"; name: string }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/senders.json": [

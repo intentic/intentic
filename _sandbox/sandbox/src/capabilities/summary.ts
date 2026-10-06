@@ -12,5 +12,7 @@ export const secretField = (capability: Capability, connectors: ReadonlyMap<stri
     registry[capability.kind].secret?.(capability.config, connectors);
 
 // The non-secret echo of a capability's config for the list summary (an mcp token becomes hasToken).
-export const echoConfig = (capability: Capability, connectors: ReadonlyMap<string, ResolvedContribution>): Record<string, string | number | boolean> =>
-    registry[capability.kind].echo(capability.config, connectors);
+export const echoConfig = (
+    capability: Capability,
+    connectors: ReadonlyMap<string, ResolvedContribution>,
+): Record<string, string | number | boolean> => registry[capability.kind].echo(capability.config, connectors);
