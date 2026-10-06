@@ -89,8 +89,11 @@ const startRootSweeps = (phase: BootPhase): void => {
             ),
         HOURLY_MS,
     ).unref();
-    // Must run before any turn: panes inherit this daemon's mounts, and a pre-existing server can't be pinned later.
-    void pinTmuxServer(logger).then(() => reportTmuxServerNamespace(logger));
+    // Must run before any turn: panes inherit this daemon's mounts, and a pre-existing server can't be pinned later. The
+    // owner's ssh agent socket only where the tmux server is the container's: a daemon on someone's own machine shares
+    // their tmux, and their own agent is theirs.
+    const serverEnv = role.container ? { SSH_AUTH_SOCK: services.sshAgent.owner } : {};
+    void pinTmuxServer(logger, serverEnv).then(() => reportTmuxServerNamespace(logger));
     setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000).unref();
     // Root-scoped: a guest sharing the history root prunes nothing.
     const pruneLogs = (): Promise<void> =>

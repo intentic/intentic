@@ -32,7 +32,8 @@ it(`says what the release is FOR, in the terms the person deciding thinks in`, (
     expect(credentialLane(offer({ lane: `code` }))).toContain(`script`);
     expect(credentialLane(offer({ lane: `browser` }))).toContain(`type it into a page`);
     expect(credentialLane(offer({ lane: `otp` }))).toContain(`one-time code`);
-    const lanes = ([`shell`, `code`, `browser`, `otp`] as const).map((lane) => credentialLane(offer({ lane })));
+    expect(credentialLane(offer({ lane: `ssh` }))).toContain(`ssh agent is about to sign`);
+    const lanes = ([`shell`, `code`, `browser`, `otp`, `gateway`, `ssh`] as const).map((lane) => credentialLane(offer({ lane })));
     expect(new Set(lanes).size).toBe(lanes.length);
 });
 

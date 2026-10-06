@@ -21,6 +21,7 @@ import { contributedSkill, contributionRegistry } from "../contributions.js";
 import { restoreConnectorHooks } from "../cli/connector-hooks.js";
 import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess } from "../cli/git-access.js";
 import { stripNpmAuth, upsertNpmAuth } from "../cli/npm-access.js";
+import { fileSshKeyStore, type SshKeyStore } from "../ssh-key-store.js";
 import { linkSshHosts } from "../ssh-hosts.js";
 import { cliHandler } from "./cli.handler.js";
 
@@ -29,6 +30,9 @@ const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // Ctx exposing only what cliHandler touches, over a fresh temp workspace; HOME is a temp dir too, so the git-access
 // hook never touches the real home.
+// The daemon's key store, in its own temp dir: it is the auth root's, which a container recreate keeps.
+const keyStore = (): SshKeyStore => fileSshKeyStore(join(mkdtempSync(join(tmpdir(), "cli-cap-auth-")), "ssh-keys"));
+
 const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "cli-cap-"));
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "cli-cap-home-"));
@@ -39,6 +43,7 @@ const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: s
         extensionsDir: EXTENSIONS_DIR,
         historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")),
         terminalRun: createTerminalRunner(),
+        sshKeys: keyStore(),
     } as unknown as CapabilityCtx;
     return { ctx, root };
 };
@@ -196,10 +201,14 @@ test("cliEnvOf hands a brokered card's shell gateway addresses and a placeholder
         expect(env[name]).toMatch(/^http:\/\/127\.0\.0\.1:8790\/[\w-]+\.[\w-]+$/);
     }
     expect(gatewayHeld(env, "github")).toBe(true);
-    // Git reaches github.com through the gateway, in both remote spellings, once the filters have kept the card.
+    // Git reaches github.com through the gateway, in every remote spelling, once the filters have kept the card.
     const shell = shellEnvOf(env);
-    expect(shell["GIT_CONFIG_COUNT"]).toBe("2");
-    expect([shell["GIT_CONFIG_VALUE_0"], shell["GIT_CONFIG_VALUE_1"]].toSorted()).toEqual(["git@github.com:", "https://github.com/"]);
+    expect(shell["GIT_CONFIG_COUNT"]).toBe("3");
+    expect([shell["GIT_CONFIG_VALUE_0"], shell["GIT_CONFIG_VALUE_1"], shell["GIT_CONFIG_VALUE_2"]].toSorted()).toEqual([
+        "git@github.com:",
+        "https://github.com/",
+        "ssh://git@github.com/",
+    ]);
     expect(shell["GIT_CONFIG_KEY_0"]).toBe(`url.${env["GITHUB_GIT_URL_GITHUB"] ?? ""}/.insteadOf`);
 });
 
@@ -276,14 +285,16 @@ const gitHome = (): string => {
     return home;
 };
 const hostKey = (home: string, host: string): string => join(home, ".ssh", "intentic-hosts", `${host}.key`);
+const hostPub = (home: string, host: string): string => join(home, ".ssh", "intentic-hosts", `${host}.pub`);
 const hostConf = (home: string, host: string): string => join(home, ".ssh", "intentic-hosts", `${host}.conf`);
 const httpsRewrite = async (host: string): Promise<string[]> => {
     const { stdout } = await exec("git", ["config", "--global", "--get-all", `url.https://${host}/.insteadOf`]).catch(() => ({ stdout: "" }));
     return stdout.split("\n").filter((line) => line.trim() !== "");
 };
 
-test("git setup: writes a 0600 key + ssh alias + https creds, registers the public half, and returns no warning", async () => {
+test("git setup: keeps the key in the store, writes the alias + its public half + https creds, registers it, no warning", async () => {
     const home = gitHome();
+    const keys = keyStore();
     const uploads: { publicKey: string; title: string }[] = [];
     const deps: GitAccessDeps = {
         uploadKey: async (_host, publicKey, title) => void uploads.push({ publicKey, title }),
@@ -292,13 +303,17 @@ test("git setup: writes a 0600 key + ssh alias + https creds, registers the publ
     };
     const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
 
-    expect(await setupGitAccess(host, directExec, deps)).toBeUndefined();
+    expect(await setupGitAccess(host, directExec, keys, deps)).toBeUndefined();
 
-    expect(statSync(hostKey(home, "github.com")).mode & 0o777).toBe(0o600);
+    // The private half is the store's alone: 0600 there, and no key file beside the alias the agent's shell reads.
+    expect(statSync(keys.pathOf("github.com")).mode & 0o777).toBe(0o600);
+    expect(existsSync(hostKey(home, "github.com"))).toBe(false);
     const conf = readFileSync(hostConf(home, "github.com"), "utf8");
     expect(conf).toContain("Host github.com");
+    expect(conf).toContain(`IdentityFile "${hostPub(home, "github.com")}"`);
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://x-access-token:gh-tok@github.com");
-    const publicKey = readFileSync(`${hostKey(home, "github.com")}.pub`, "utf8").trim();
+    const publicKey = readFileSync(hostPub(home, "github.com"), "utf8").trim();
+    expect(publicKey).toMatch(/^ssh-ed25519 \S+ intentic-sandbox$/);
     expect(uploads).toEqual([{ publicKey, title: "intentic-sandbox" }]);
     expect(await httpsRewrite("github.com")).toEqual([]);
 });
@@ -314,9 +329,9 @@ test("git setup reroutes ssh over https + warns (no throw) when ssh-key registra
     };
     const host = gitHostOf({ provider: "github", token: "scopeless", git: "on" });
 
-    const warning = await setupGitAccess(host, directExec, deps);
+    const warning = await setupGitAccess(host, directExec, keyStore(), deps);
 
-    const publicKey = readFileSync(`${hostKey(home, "github.com")}.pub`, "utf8").trim();
+    const publicKey = readFileSync(hostPub(home, "github.com"), "utf8").trim();
     expect(warning).toContain("write:public_key");
     expect(warning).toContain(publicKey);
     expect(existsSync(hostConf(home, "github.com"))).toBe(false);
@@ -335,10 +350,12 @@ test("git setup wires native ssh anyway when the refused key is already on the a
         keyAuthenticates: async (_host, keyPath) => probed.push(keyPath) > 0,
     };
     const host = gitHostOf({ provider: "github", token: "scopeless", git: "on" });
+    const keys = keyStore();
 
-    expect(await setupGitAccess(host, directExec, deps)).toBeUndefined();
+    expect(await setupGitAccess(host, directExec, keys, deps)).toBeUndefined();
 
-    expect(probed).toEqual([hostKey(home, "github.com")]);
+    // The daemon's own probe reads the store's file; it is no turn's.
+    expect(probed).toEqual([keys.pathOf("github.com")]);
     // Writing the alias here is what lets the hand-added key survive a rebuild.
     expect(readFileSync(hostConf(home, "github.com"), "utf8")).toContain("Host github.com");
     expect(await httpsRewrite("github.com")).toEqual([]);
@@ -349,7 +366,7 @@ test("git setup (gitlab): host + https user derive from the instance url", async
     const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false };
     const host = gitHostOf({ provider: "gitlab", token: "gl-tok", url: "https://gitlab.example.com", git: "on" });
 
-    await setupGitAccess(host, directExec, deps);
+    await setupGitAccess(host, directExec, keyStore(), deps);
 
     expect(existsSync(hostConf(home, "gitlab.example.com"))).toBe(true);
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://oauth2:gl-tok@gitlab.example.com");
@@ -367,27 +384,30 @@ test("git setup gives a sandbox with no git identity the account's own, and keep
         accountIdentity: async () => ({ name: "Ada Lovelace", email: "42+ada@users.noreply.github.com" }),
     };
     const identity = async (key: string): Promise<string> => (await exec("git", ["config", "--global", "--get", key])).stdout.trim();
-    await setupGitAccess(host, directExec, deps);
+    const keys = keyStore();
+    await setupGitAccess(host, directExec, keys, deps);
     expect([await identity("user.name"), await identity("user.email")]).toEqual(["Ada Lovelace", "42+ada@users.noreply.github.com"]);
 
     gitHome();
     await exec("git", ["config", "--global", "user.name", "Owner"]);
     await exec("git", ["config", "--global", "user.email", "owner@example.com"]);
-    await setupGitAccess(host, directExec, deps);
+    await setupGitAccess(host, directExec, keys, deps);
     expect([await identity("user.name"), await identity("user.email")]).toEqual(["Owner", "owner@example.com"]);
 });
 
-test("git teardown: deletes the account key and removes the local key, ssh alias and https line", async () => {
+test("git teardown: deletes the account key and removes the held key, ssh alias and https line", async () => {
     const home = gitHome();
+    const keys = keyStore();
     let deleted = 0;
     const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1), keyAuthenticates: async () => false };
     const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
-    await setupGitAccess(host, directExec, deps);
+    await setupGitAccess(host, directExec, keys, deps);
 
-    await teardownGitAccess(host, directExec, deps);
+    await teardownGitAccess(host, directExec, keys, deps);
 
     expect(deleted).toBe(1);
-    expect(existsSync(hostKey(home, "github.com"))).toBe(false);
+    expect(await keys.has("github.com")).toBe(false);
+    expect(existsSync(hostPub(home, "github.com"))).toBe(false);
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).not.toContain("github.com");
 });
 
@@ -395,7 +415,7 @@ test("git teardown is a no-op (no account call) when nothing was ever set up", a
     gitHome();
     let deleted = 0;
     const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1), keyAuthenticates: async () => false };
-    await teardownGitAccess(gitHostOf({ provider: "github", token: "x", git: "off" }), directExec, deps);
+    await teardownGitAccess(gitHostOf({ provider: "github", token: "x", git: "off" }), directExec, keyStore(), deps);
     expect(deleted).toBe(0);
 });
 
@@ -410,7 +430,7 @@ test("status: a git-access connector pends while the container holds no git cred
     // Only the skill file is written here, mimicking a recreate that kept /work but wiped HOME.
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
 
-    await setupGitAccess(gitHostOf(gitlabOn), directExec, {
+    await setupGitAccess(gitHostOf(gitlabOn), directExec, ctx.sshKeys, {
         uploadKey: async () => {},
         deleteKey: async () => {},
         keyAuthenticates: async () => false,
@@ -423,6 +443,7 @@ test("git restore: a recreated container gets its credentials back without regis
     const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
     gitHome();
     await linkSshHosts(history);
+    const keys = keyStore();
     const uploads: string[] = [];
     const deps: GitAccessDeps = {
         uploadKey: async (_host, publicKey) => void uploads.push(publicKey),
@@ -430,15 +451,15 @@ test("git restore: a recreated container gets its credentials back without regis
         keyAuthenticates: async () => false,
     };
     const host = gitHostOf(gitlabOn);
-    await setupGitAccess(host, directExec, deps);
+    await setupGitAccess(host, directExec, keys, deps);
     expect(uploads).toHaveLength(1);
 
-    // Simulates the recreate: fresh container filesystem, the persisted volume untouched.
+    // Simulates the recreate: fresh container filesystem, the persisted volume and auth root untouched.
     const home = gitHome();
     await linkSshHosts(history);
-    expect(await gitAccessWired(host)).toBe(false);
+    expect(await gitAccessWired(host, keys)).toBe(false);
 
-    expect(await restoreGitAccess(host, directExec, deps)).toBeUndefined();
+    expect(await restoreGitAccess(host, directExec, keys, deps)).toBeUndefined();
 
     // No re-upload on restore: repeating it would pile up dead keys on the account.
     expect(uploads).toHaveLength(1);
@@ -447,7 +468,7 @@ test("git restore: a recreated container gets its credentials back without regis
     expect(readFileSync(hostConf(home, "gitlab.com"), "utf8")).toContain("Host gitlab.com");
     // ssh wired: no https reroute for ssh-form remotes.
     expect(await httpsRewrite("gitlab.com")).toEqual([]);
-    expect(await gitAccessWired(host)).toBe(true);
+    expect(await gitAccessWired(host, keys)).toBe(true);
 });
 
 test("git restore falls back to the full setup when no keypair was persisted", async () => {
@@ -459,9 +480,9 @@ test("git restore falls back to the full setup when no keypair was persisted", a
         keyAuthenticates: async () => false,
     };
 
-    await restoreGitAccess(gitHostOf(gitlabOn), directExec, deps);
+    await restoreGitAccess(gitHostOf(gitlabOn), directExec, keyStore(), deps);
 
-    expect(uploads).toEqual([readFileSync(`${hostKey(home, "gitlab.com")}.pub`, "utf8").trim()]);
+    expect(uploads).toEqual([readFileSync(hostPub(home, "gitlab.com"), "utf8").trim()]);
     expect(existsSync(hostConf(home, "gitlab.com"))).toBe(true);
 });
 
@@ -479,16 +500,17 @@ test("git restore keeps ssh-form remotes on https when the key had never been re
         keyAuthenticates: async () => false,
     };
     const host = gitHostOf(gitlabOn);
-    expect(await setupGitAccess(host, directExec, refused)).toContain("api scope");
+    const keys = keyStore();
+    expect(await setupGitAccess(host, directExec, keys, refused)).toContain("api scope");
 
     gitHome();
     await linkSshHosts(history);
-    await restoreGitAccess(host, directExec, refused);
+    await restoreGitAccess(host, directExec, keys, refused);
 
     // No alias beside the persisted key means the upload was refused; restore doesn't retry it (a re-add would).
     expect(uploads).toBe(1);
     expect(await httpsRewrite("gitlab.com")).toEqual(["git@gitlab.com:", "ssh://git@gitlab.com/"]);
-    expect(await gitAccessWired(host)).toBe(true);
+    expect(await gitAccessWired(host, keys)).toBe(true);
 });
 
 test("git access whose ssh alias was taken out from under it pends instead of reading active", async () => {
@@ -496,13 +518,13 @@ test("git access whose ssh alias was taken out from under it pends instead of re
     await writeWorkspaceFile(skillPath(root, "gitlab"), "---\nname: gitlab\n---\n");
     await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
     const host = gitHostOf(gitlabOn);
-    await setupGitAccess(host, directExec, { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false });
+    await setupGitAccess(host, directExec, ctx.sshKeys, { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false });
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
 
     // Repointing the managed dir strands the alias/key; the https credential in HOME survives but is unreachable.
     await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
 
-    expect(await gitAccessWired(host)).toBe(false);
+    expect(await gitAccessWired(host, ctx.sshKeys)).toBe(false);
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
 });
 
@@ -511,7 +533,8 @@ test("restoreConnectorHooks walks the manifest: hooked connectors only, one fail
     gitHome();
     await linkSshHosts(history);
     // Setup then recreate: restore then takes the persisted-key path, which must never call the account API.
-    await setupGitAccess(gitHostOf(gitlabOn), directExec, {
+    const keys = keyStore();
+    await setupGitAccess(gitHostOf(gitlabOn), directExec, keys, {
         uploadKey: async () => {},
         deleteKey: async () => {},
         keyAuthenticates: async () => false,
@@ -528,7 +551,7 @@ test("restoreConnectorHooks walks the manifest: hooked connectors only, one fail
         ],
     } as unknown as CapabilitiesStore;
 
-    await restoreConnectorHooks(capabilities, { warn: (message) => void warnings.push(message) });
+    await restoreConnectorHooks(capabilities, keys, { warn: (message) => void warnings.push(message) });
 
     const credentials = readFileSync(join(home, ".git-credentials"), "utf8");
     expect(credentials).toContain("@gitlab.com");
@@ -574,7 +597,7 @@ test("npm: apply writes the auth line + templated skill; a wiped HOME pends unti
     // HOME wipe survives at the connection but not the credential; status must say so until boot restore heals it.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "npm-cap-home-"));
     expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "pending", detail: "npm auth needs a re-add" });
-    await restoreConnectorHooks({ list: async () => [npm] } as unknown as CapabilitiesStore, { warn: () => {} });
+    await restoreConnectorHooks({ list: async () => [npm] } as unknown as CapabilitiesStore, ctx.sshKeys, { warn: () => {} });
     expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "active" });
 
     await cliHandler.remove!(ctx, "npm", npm.config);

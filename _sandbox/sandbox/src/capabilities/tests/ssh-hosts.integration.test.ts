@@ -1,7 +1,9 @@
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hostKeyPath, hostsDir, linkSshHosts, writeSshHost } from "../ssh-hosts.js";
+import { generateSshKey } from "../credentials/ssh-keys.js";
+import { fileSshKeyStore } from "../ssh-key-store.js";
+import { adoptLegacySshKeys, hostConfPath, hostKeyFilePath, hostPublicKeyPath, hostsDir, linkSshHosts, writeSshHost } from "../ssh-hosts.js";
 
 // HOME stands in for the container's ephemeral filesystem and `history` for the /history volume: a "recreate"
 // is a brand-new HOME pointed at the same history dir.
@@ -16,8 +18,8 @@ test("the managed dir is a symlink onto the history volume, and its aliases surv
     tempHome();
 
     await linkSshHosts(history);
-    await writeSshHost("box", { host: "1.2.3.4", user: "root", port: 22, identityFile: hostKeyPath("box") });
-    writeFileSync(hostKeyPath("box"), "PRIV\n", { mode: 0o600 });
+    await writeSshHost("box", { host: "1.2.3.4", user: "root", port: 22, identityFile: hostPublicKeyPath("box") });
+    writeFileSync(hostPublicKeyPath("box"), "ssh-ed25519 AAAA box\n");
 
     // The alias landed on the volume, not in HOME.
     expect(lstatSync(hostsDir()).isSymbolicLink()).toBe(true);
@@ -30,7 +32,7 @@ test("the managed dir is a symlink onto the history volume, and its aliases surv
 
     await linkSshHosts(history);
 
-    expect(readFileSync(hostKeyPath("box"), "utf8")).toBe("PRIV\n");
+    expect(readFileSync(hostPublicKeyPath("box"), "utf8")).toBe("ssh-ed25519 AAAA box\n");
     // ~/.ssh/config went with the container, so the Include is re-ensured: without it the alias is inert.
     expect(readFileSync(join(recreated, ".ssh", "config"), "utf8")).toContain("Include intentic-hosts/*.conf");
 });
@@ -63,4 +65,46 @@ test("a commented-out Include is not taken for the live one: the live line is pu
     expect(readFileSync(join(home, ".ssh", "config"), "utf8")).toBe(
         "Include intentic-hosts/*.conf\n# Include intentic-hosts/*.conf\nHost box\n    HostName 10.0.0.2\n",
     );
+});
+
+// An older build wrote each private key beside its alias, where the agent's shell reads it. Boot moves every one it can
+// sign with into the key store and repoints the alias at the public half; a crash part-way leaves the key somewhere.
+test("adoptLegacySshKeys moves a key file into the store, writes its public half and repoints the alias", async () => {
+    const history = mkdtempSync(join(tmpdir(), "ssh-hosts-history-"));
+    tempHome();
+    await linkSshHosts(history);
+    const pair = generateSshKey("intentic-sandbox");
+    await writeSshHost("box", { host: "1.2.3.4", user: "root", port: 22, identityFile: hostKeyFilePath("box") });
+    writeFileSync(hostKeyFilePath("box"), pair.privateKey, { mode: 0o600 });
+    // git access left ssh-keygen's own public file beside its key.
+    writeFileSync(`${hostKeyFilePath("box")}.pub`, `${pair.publicKey}\n`);
+    const keys = fileSshKeyStore(join(mkdtempSync(join(tmpdir(), "ssh-hosts-auth-")), "ssh-keys"));
+
+    expect(await adoptLegacySshKeys(keys)).toEqual(["box"]);
+
+    expect(await keys.get("box")).toBe(pair.privateKey);
+    expect(existsSync(hostKeyFilePath("box"))).toBe(false);
+    expect(existsSync(`${hostKeyFilePath("box")}.pub`)).toBe(false);
+    expect(readFileSync(hostPublicKeyPath("box"), "utf8")).toBe(`${pair.publicKey}\n`);
+    const conf = readFileSync(hostConfPath("box"), "utf8");
+    expect(conf).toContain(`IdentityFile "${hostPublicKeyPath("box")}"`);
+    expect(conf).toContain("HostName 1.2.3.4");
+    // Idempotent: a second boot has nothing left to move.
+    expect(await adoptLegacySshKeys(keys)).toEqual([]);
+});
+
+test("adoptLegacySshKeys leaves a key it cannot sign with (one with a passphrase) where it is", async () => {
+    const history = mkdtempSync(join(tmpdir(), "ssh-hosts-history-"));
+    tempHome();
+    await linkSshHosts(history);
+    const locked = "-----BEGIN OPENSSH PRIVATE KEY-----\nENCRYPTED\n-----END OPENSSH PRIVATE KEY-----\n";
+    await writeSshHost("locked", { host: "9.9.9.9", user: "root", port: 22, identityFile: hostKeyFilePath("locked") });
+    writeFileSync(hostKeyFilePath("locked"), locked, { mode: 0o600 });
+    const keys = fileSshKeyStore(join(mkdtempSync(join(tmpdir(), "ssh-hosts-auth-")), "ssh-keys"));
+
+    expect(await adoptLegacySshKeys(keys)).toEqual([]);
+
+    expect(readFileSync(hostKeyFilePath("locked"), "utf8")).toBe(locked);
+    expect(readFileSync(hostConfPath("locked"), "utf8")).toContain(`IdentityFile "${hostKeyFilePath("locked")}"`);
+    expect(await keys.aliases()).toEqual([]);
 });

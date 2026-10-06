@@ -2,15 +2,17 @@ import { errorMessage } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
 import type { CapabilitiesStore } from "../capabilities-store.js";
+import type { SshKeyStore } from "../ssh-key-store.js";
 import { gitAccessHook } from "./git-access.js";
 import { npmAccessHook } from "./npm-access.js";
 
-// Restrict connector hooks to providers with daemon-owned implementations.
+// Restrict connector hooks to providers with daemon-owned implementations. `keys` is where a hook keeps an SSH private
+// key it makes (git access's account key), never a file the agent reads.
 export interface ConnectorHook {
-    readonly apply: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
-    readonly remove: (config: CliConfig, exec: ExecInTerminal) => Promise<void>;
+    readonly apply: (config: CliConfig, exec: ExecInTerminal, keys: SshKeyStore) => Promise<string | undefined>;
+    readonly remove: (config: CliConfig, exec: ExecInTerminal, keys: SshKeyStore) => Promise<void>;
     // What a recreated container must get back at boot; the connection survives on /work, the effect does not.
-    readonly restore: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
+    readonly restore: (config: CliConfig, exec: ExecInTerminal, keys: SshKeyStore) => Promise<string | undefined>;
     // Hook with no visible commands (secret-bearing fs writes only); skipped from the job session's terminal.
     readonly silent?: true;
 }
@@ -19,7 +21,11 @@ export const CORE_CONNECTOR_HOOKS: Record<string, ConnectorHook> = { github: git
 
 // Boot restore over the manifest, the connector counterpart to reconnectVpns: side effects die with the container.
 // Best-effort per entry: a failure degrades one connection, never the daemon; status reports it, not a boot log.
-export const restoreConnectorHooks = async (capabilities: CapabilitiesStore, logger: { warn: (message: string) => void }): Promise<void> => {
+export const restoreConnectorHooks = async (
+    capabilities: CapabilitiesStore,
+    keys: SshKeyStore,
+    logger: { warn: (message: string) => void },
+): Promise<void> => {
     for (const capability of await capabilities.list()) {
         if (capability.kind !== "cli") {
             continue;
@@ -29,7 +35,7 @@ export const restoreConnectorHooks = async (capabilities: CapabilitiesStore, log
             continue;
         }
         try {
-            const warning = await hook.restore(capability.config, directExec);
+            const warning = await hook.restore(capability.config, directExec, keys);
             if (warning !== undefined) {
                 logger.warn(`connector ${capability.id}: ${warning}`);
             }

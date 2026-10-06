@@ -40,7 +40,7 @@ export const startBootRestores = (phase: BootPhase): void => {
     // A tunnel exit's client survives the daemon; only its SOCKS proxy is republished.
     void restoreExits(services.capabilities, services.logger);
     // Connector side effects lived in HOME and die with the container.
-    void restoreConnectorHooks(services.capabilities, services.logger);
+    void restoreConnectorHooks(services.capabilities, services.sshKeys, services.logger);
     const bootCtx = capabilityCtx(services);
     // Named here, or a failed start is an anonymous unhandled rejection and the only trace is a capability in error.
     void startDockerdIfEnabled(bootCtx).catch((error: unknown) =>

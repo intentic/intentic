@@ -141,6 +141,10 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // addresses (broker/broker-server.ts).
     const credentialGateway = await startCredentialGateway(services, logger);
     shutdown.push(() => void credentialGateway.stop());
+    // The ssh agent, its SSH half: the owner's socket, and every conversation socket a background job may still hold from
+    // before a restart (broker/ssh-agent-sockets.ts). A socket that cannot bind is logged, and ssh then signs nothing.
+    await services.sshAgent.start().catch((error: unknown) => logger.warn({ err: error }, "ssh agent: could not start; ssh keys are unusable until restart"));
+    shutdown.push(() => void services.sshAgent.stop());
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
     shutdown.push(() => services.announcer.stop());

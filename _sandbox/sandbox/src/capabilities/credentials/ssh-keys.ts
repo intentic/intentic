@@ -1,4 +1,5 @@
 import { generateKeyPairSync, randomBytes } from "node:crypto";
+import ssh2, { type ParsedKey } from "ssh2";
 
 // An SSH key the sandbox makes for a connection, so the person setting it up never handles a private key. ed25519,
 // written in OpenSSH's own container (PROTOCOL.key in the OpenSSH sources) by hand: node:crypto speaks PEM and JWK but
@@ -128,4 +129,22 @@ export const publicKeyOf = (privateKey: string): string | undefined => {
     }
     const comment = cipher === "none" && type === KEY_TYPE ? ed25519Comment(read.string()) : undefined;
     return [type, blob.toString("base64"), comment].filter((part) => part !== undefined && part !== "").join(" ");
+};
+
+// A private key the sandbox's ssh agent can sign with: unencrypted, in any format OpenSSH loads (its own container, PEM
+// or PKCS#8). Undefined for anything else, a key with a passphrase included: nothing here could ever type one.
+// ssh2 is CommonJS, and node's ESM loader finds no named `utils` export in it (bun does), so it is read off the default.
+export const loadPrivateKey = (privateKey: string): ParsedKey | undefined => {
+    const parsed: ParsedKey | ParsedKey[] | Error = ssh2.utils.parseKey(privateKey);
+    const key = Array.isArray(parsed) ? parsed[0] : parsed;
+    return key === undefined || key instanceof Error || !key.isPrivateKey() ? undefined : key;
+};
+
+// The authorized_keys line of a key the agent can sign with; undefined when loadPrivateKey cannot read it.
+export const publicLineOf = (privateKey: string): string | undefined => {
+    const key = loadPrivateKey(privateKey);
+    if (key === undefined) {
+        return undefined;
+    }
+    return [key.type, key.getPublicSSH().toString("base64"), key.comment].filter((part) => part !== "").join(" ");
 };

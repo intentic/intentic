@@ -153,7 +153,7 @@ export const cliHandler: CapabilityHandler = {
         if (hook !== undefined && hook.silent !== true && ctx.terminalRun.visible) {
             yield { kind: "terminal", session };
         }
-        const warning = await hook?.apply(cliConfig, terminalExec(ctx.terminalRun, session, ctx.workspace.root));
+        const warning = await hook?.apply(cliConfig, terminalExec(ctx.terminalRun, session, ctx.workspace.root), ctx.sshKeys);
         yield { kind: "log", message: `Connected ${provider}. The agent can use it next turn via its skill + the credential in its env.` };
         if (warning !== undefined) {
             yield { kind: "log", message: warning };
@@ -170,7 +170,7 @@ export const cliHandler: CapabilityHandler = {
         if (connector !== undefined && (await extensionRuntimeAbsent(connector.extension))) {
             return { state: "pending", detail: RUNTIME_ABSENT_DETAIL };
         }
-        if (cliConfig["git"] === "on" && CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined && !(await gitAccessWired(gitHostOf(cliConfig)))) {
+        if (cliConfig["git"] === "on" && CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined && !(await gitAccessWired(gitHostOf(cliConfig), ctx.sshKeys))) {
             return { state: "pending", detail: "git access needs a re-add" };
         }
         // npm's ~/.npmrc line is container-local too; missing here means the boot restore couldn't rewrite it.
@@ -191,6 +191,7 @@ export const cliHandler: CapabilityHandler = {
         await CORE_CONNECTOR_HOOKS[(config as CliConfig).provider]?.remove(
             config as CliConfig,
             terminalExec(ctx.terminalRun, capabilityJobSession(id), ctx.workspace.root),
+            ctx.sshKeys,
         );
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },

@@ -108,7 +108,8 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
 
     /* ---- credentials ---- */
 
-    // The ssh alias dir ~/.ssh/intentic-hosts symlinks to: per-host config, keys and passphrases.
+    // The ssh alias dir ~/.ssh/intentic-hosts symlinks to: per-host config, each key's public half, password files, and a
+    // key with a passphrase. Every other private key is in the key store under the auth root (ssh-keys/).
     {
         path: "ssh-hosts/",
         portability: "secret",

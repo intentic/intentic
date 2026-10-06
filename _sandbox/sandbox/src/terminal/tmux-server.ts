@@ -38,22 +38,44 @@ export const HOLDER_SESSION = "intentic-server-pin";
 // own sweeps.
 const SCRUBBED_SERVER_ENV = [...DAEMON_ONLY_ENV, DAEMON_GEN_ENV, ...CONTAINER_SECRET_ENV];
 
-/** Whether tmux already copies the owner stamp from a creating client into each new session it makes. */
-export const copiesOwnerStamp = (updateEnvironment: string): boolean =>
+const updateEnvironmentNames = (updateEnvironment: string): string[] =>
     updateEnvironment
         .split("\n")
         .map((line) => line.trim())
-        .includes(WORKLOAD_ENV);
+        .filter((line) => line !== "");
+
+/** Whether tmux already copies the owner stamp from a creating client into each new session it makes. */
+export const copiesOwnerStamp = (updateEnvironment: string): boolean => updateEnvironmentNames(updateEnvironment).includes(WORKLOAD_ENV);
+
+/**
+ * The update-environment list without `held`, or undefined when it names none of them. A name on that list is copied
+ * from whichever client creates a session, and UNSET in it when that client lacks it: netd's terminal client has no
+ * SSH_AUTH_SOCK, so the owner's own terminals would lose the socket the server's environment gives every pane.
+ */
+export const withoutHeldNames = (updateEnvironment: string, held: readonly string[]): string[] | undefined => {
+    const names = updateEnvironmentNames(updateEnvironment);
+    const kept = names.filter((name) => !held.includes(name));
+    return kept.length === names.length ? undefined : kept;
+};
 
 // Takes the daemon-only variables out of the server's global environment, and has a session made by a client whose
 // environment names a conversation (an agent's shell running `tmux new-session`) carry that owner, so the reaper can
-// tell the sessions an agent made by hand from a person's (system/boot/reaper.ts). Idempotent, best-effort.
-export const prepareTmuxServer = async (logger: Logger): Promise<void> => {
+// tell the sessions an agent made by hand from a person's (system/boot/reaper.ts). `serverEnv` is what every pane gets
+// from the server whoever made its session: the owner's ssh agent socket, which a turn's own pane overrides with its
+// conversation's (tmux-run -e). Idempotent, best-effort.
+export const prepareTmuxServer = async (logger: Logger, serverEnv: Readonly<Record<string, string>> = {}): Promise<void> => {
     for (const name of SCRUBBED_SERVER_ENV) {
         await forkedExec("tmux", ["set-environment", "-g", "-u", name], { timeout: 10_000 }).catch(() => undefined);
     }
+    for (const [name, value] of Object.entries(serverEnv)) {
+        await forkedExec("tmux", ["set-environment", "-g", name, value], { timeout: 10_000 }).catch(() => undefined);
+    }
     try {
         const { stdout } = await forkedExec("tmux", ["show-options", "-gv", "update-environment"], { timeout: 10_000 });
+        const kept = withoutHeldNames(stdout, Object.keys(serverEnv));
+        if (kept !== undefined) {
+            await forkedExec("tmux", ["set-option", "-g", "update-environment", kept.join(" ")], { timeout: 10_000 });
+        }
         if (!copiesOwnerStamp(stdout)) {
             await forkedExec("tmux", ["set-option", "-ga", "update-environment", WORKLOAD_ENV], { timeout: 10_000 });
         }
@@ -67,12 +89,12 @@ export const prepareTmuxServer = async (logger: Logger): Promise<void> => {
 
 // Best-effort: a container without tmux, or one where the server is already up (a daemon restart), must boot exactly as
 // before; not pinning is better than failing to start.
-export const pinTmuxServer = async (logger: Logger): Promise<void> => {
+export const pinTmuxServer = async (logger: Logger, serverEnv: Readonly<Record<string, string>> = {}): Promise<void> => {
     try {
         // `-d` forks; `-A` attaches rather than erroring if a server already exists (daemon restart).
         await forkedExec("tmux", ["new-session", "-A", "-d", "-s", HOLDER_SESSION], { timeout: 10_000 });
         await forkedExec("tmux", ["set-option", "-g", "exit-empty", "off"], { timeout: 10_000 });
-        await prepareTmuxServer(logger);
+        await prepareTmuxServer(logger, serverEnv);
         await forkedExec("tmux", ["kill-session", "-t", `=${HOLDER_SESSION}`], { timeout: 10_000 }).catch(() => undefined);
         logger.info({ session: HOLDER_SESSION }, "tmux: server pinned to the daemon's namespace");
     } catch (err) {

@@ -61,9 +61,12 @@ export const brokeredEnvOf = async (
         if (route.git) {
             const base = route.upstream.href.endsWith("/") ? route.upstream.href : `${route.upstream.href}/`;
             git.push({ gateway: `${address}/`, upstream: base });
-            // The ssh spelling of the same remote, for a service at the root of its host: `git@github.com:owner/repo`.
+            // Both ssh spellings of the same remote, for a service at the root of its host: `git@github.com:owner/repo`
+            // and `ssh://git@github.com/owner/repo`. A turn's git reaches the account only here, where the card's rules
+            // apply: the sandbox's ssh agent keeps the account's own ssh key for the owner's terminal.
             if (route.upstream.pathname === "/") {
                 git.push({ gateway: `${address}/`, upstream: `git@${route.upstream.hostname}:` });
+                git.push({ gateway: `${address}/`, upstream: `ssh://git@${route.upstream.hostname}/` });
             }
         }
     }

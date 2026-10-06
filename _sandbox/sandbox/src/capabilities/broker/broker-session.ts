@@ -30,7 +30,12 @@ const KEY_BYTES = 32;
 export interface BrokerSessions {
     readonly sign: (session: BrokerSession) => Promise<string>;
     readonly verify: (token: string) => Promise<BrokerSession | undefined>;
+    // A short tag over `purpose` under the same key: what makes a name nobody can guess without it, such as a
+    // conversation's ssh agent socket (ssh-agent-sockets.ts). Never the same as a signature, whatever `purpose` is.
+    readonly tag: (purpose: string) => Promise<string>;
 }
+
+const TAG_CHARS = 12;
 
 // Created once and kept beside the vault, root-only: a key that changed on every boot would strand every process still
 // holding an address, and one an agent could read would let it mint addresses for conversations not its own.
@@ -63,6 +68,11 @@ export const brokerSessionsFrom = (readKey: () => Promise<Buffer>): BrokerSessio
             .digest("base64url")
             .slice(0, SIGNATURE_CHARS);
     return {
+        tag: async (purpose) =>
+            createHmac("sha256", await keyOnce())
+                .update(`tag:${purpose}`)
+                .digest("base64url")
+                .slice(0, TAG_CHARS),
         sign: async ({ capability, route, upstream, conversationId }) => {
             const payload = Buffer.from(
                 JSON.stringify({ i: capability, r: route, u: upstream, ...(conversationId !== undefined ? { c: conversationId } : {}) }),

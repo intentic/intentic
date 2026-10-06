@@ -20,6 +20,7 @@ import { testConfig } from "../../testing.js";
 import { memoryCapabilitiesStore, memoryDismissalsStore } from "../capabilities-slice.testing.js";
 import { capabilitiesDocument, fileCapabilitiesStore } from "../capabilities-store.js";
 import { publicKeyOf } from "../credentials/ssh-keys.js";
+import { fileSshKeyStore } from "../ssh-key-store.js";
 
 // Capabilities routes, driven over the HTTP surface exactly as the browser does; split from app.integration.test.ts.
 // Fakes and the client are shared (route-services.testing.ts and its siblings); what lives here is what these routes
@@ -252,7 +253,9 @@ test("capabilities.sshKey answers a public key and a one-time token, which one a
     });
     const store = memoryCapabilitiesStore();
     const config = { ...testConfig, sandbox: { ...testConfig.sandbox, name: "Ada's box" } };
-    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store, config })));
+    // The key store sits in the auth root; the ssh card puts its private half there, never beside the alias.
+    const sshKeys = fileSshKeyStore(join(mkdtempSync(join(tmpdir(), "app-ssh-key-auth-")), "ssh-keys"));
+    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store, config, sshKeys })));
     const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
         errorCode((async () => collect(await client.capabilities.add(input)))());
 
@@ -268,6 +271,7 @@ test("capabilities.sshKey answers a public key and a one-time token, which one a
     const stored = await store.get("box");
     const storedKey = stored?.kind === "ssh" && stored.config.auth === "generated" ? stored.config.privateKey : "";
     expect(publicKeyOf(storedKey)).toBe(key.publicKey);
+    expect(await sshKeys.get("box")).toBe(storedKey);
     const [listed] = (await client.capabilities.list()).capabilities;
     expect(listed?.config).toEqual({ host: "box.example.com", port: 22, user: "deploy", auth: "generated", publicKey: key.publicKey });
     expect(listed?.secrets).toEqual(["privateKey"]);

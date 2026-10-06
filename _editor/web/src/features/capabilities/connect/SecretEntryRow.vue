@@ -326,6 +326,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         >{{ t(`capabilities.secretEntryRow.viaGateway`) }}
                         <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
                     >
+                    <!-- Signed with by the sandbox's ssh agent: the agent's ssh got a signature, never the key. -->
+                    <span v-else-if="row.entry.lastUse.lane === `ssh`"
+                        >{{ t(`capabilities.secretEntryRow.viaSshAgent`) }}
+                        <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
+                    >
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>

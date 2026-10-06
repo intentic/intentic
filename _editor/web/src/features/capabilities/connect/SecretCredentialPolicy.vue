@@ -9,8 +9,8 @@ import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { useCredentialGates, useCredentialPolicy } from "./useSecrets";
 
 // How a connection's credential reaches the agent, under its approver and host guard: held by the sandbox's credential
-// gateway (the default wherever the connector declares routes), or handed over as it is, and the method and path rules
-// the gateway enforces on every request it attaches the credential to. Only the owner changes either; everybody else
+// gateway (the default wherever the connector declares routes), an SSH key held by its ssh agent, or handed over as it
+// is, and the method and path rules the gateway enforces on every request it attaches the credential to. Only the owner changes either; everybody else
 // reads it. The rules editor is the plain JSON the daemon stores, since a rule is three short fields and a form for it
 // would hide the order that decides which rule wins.
 
@@ -22,6 +22,8 @@ const { isOwner } = useCredentialGates();
 const { setPolicy } = useCredentialPolicy();
 
 const policy = computed(() => row.entry.credential);
+// The gateway's rules and its on/off switch: for a card it carries, or one the owner set to raw that it could carry again.
+const gatewayCard = computed(() => policy.value?.delivery === `gateway` || policy.value?.delivery === `raw`);
 const editing = ref(false);
 const draft = ref(``);
 const draftError = ref<string | undefined>(undefined);
@@ -87,10 +89,12 @@ const ruleLine = (rule: BrokerRule): string =>
                     ? t(`capabilities.secretCredentialPolicy.heldByGateway`)
                     : policy.delivery === `raw`
                       ? t(`capabilities.secretCredentialPolicy.handedOverByChoice`)
-                      : t(`capabilities.secretCredentialPolicy.handedOverNoRoute`)
+                      : policy.delivery === `ssh-agent`
+                        ? t(`capabilities.secretCredentialPolicy.heldBySshAgent`)
+                        : t(`capabilities.secretCredentialPolicy.handedOverNoRoute`)
             }}</span>
             <ToggleSwitch
-                v-if="isOwner && policy.delivery !== `direct`"
+                v-if="isOwner && gatewayCard"
                 :model-value="policy.delivery === `gateway`"
                 :aria-label="t(`capabilities.secretCredentialPolicy.keepInGateway`)"
                 @update:model-value="toggleGateway"
@@ -102,11 +106,13 @@ const ruleLine = (rule: BrokerRule): string =>
                     ? t(`capabilities.secretCredentialPolicy.gatewayExplain`)
                     : policy.delivery === `raw`
                       ? t(`capabilities.secretCredentialPolicy.rawExplain`)
-                      : t(`capabilities.secretCredentialPolicy.directExplain`)
+                      : policy.delivery === `ssh-agent`
+                        ? t(`capabilities.secretCredentialPolicy.sshAgentExplain`)
+                        : t(`capabilities.secretCredentialPolicy.directExplain`)
             }}
         </p>
 
-        <template v-if="policy.delivery !== `direct`">
+        <template v-if="gatewayCard">
             <p class="pt-2 text-2xs text-muted">
                 {{
                     policy.rulesFrom === `owner`

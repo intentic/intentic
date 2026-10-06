@@ -1,15 +1,20 @@
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
-import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from "../ssh-hosts.js";
+import { generateSshKey, publicLineOf } from "../credentials/ssh-keys.js";
+import type { SshKeyStore } from "../ssh-key-store.js";
+import { adoptLegacySshKey, hostConfPath, hostPublicKeyPath, removeSshHost, writeHostPublicKey, writeSshHost } from "../ssh-hosts.js";
 import type { ConnectorHook } from "./connector-hooks.js";
 
 // With git access on, the account also names who commits here when the sandbox has no identity (ensureGitIdentity).
 // Git access on gets real git credentials beyond the curl-API skill: HTTPS always, set up first, and SSH best-effort.
 // SSH: a generated key registered via the token, alias written once confirmed; unregisterable keys route over https.
+// The key's private half is made in memory and goes straight into the daemon's key store: the alias names only the
+// public half, and the sandbox's ssh agent signs for the owner's own terminal (broker/ssh-agent-keys.ts keeps it from a
+// turn, whose git goes through the credential gateway instead).
 // Keyed by host; half this state lives on the volume, half on the container's fs, which restoreGitAccess restores.
 
 const KEY_TITLE = "intentic-sandbox";
@@ -85,14 +90,26 @@ const removeHttpsCredential = async (host: GitHost): Promise<void> => {
 };
 
 // Generates the key pair once (regenerating would orphan an already-registered key); registration isn't done here,
-// since it's retried on every apply.
-const ensureKeyPair = async (host: GitHost, exec: ExecInTerminal): Promise<string> => {
-    const keyPath = hostKeyPath(host.host);
-    if (!(await fileExists(keyPath))) {
-        await mkdir(hostsDir(), { recursive: true, mode: 0o700 });
-        await exec("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", KEY_TITLE, "-f", keyPath]);
+// since it's retried on every apply. Answers the public line, rewriting the alias's public file if it went missing.
+const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<string> => {
+    // A key an older build left beside the alias is the one on the account: adopted, never replaced by a new one.
+    const held = (await keys.get(host.host)) ?? ((await adoptLegacySshKey(host.host, keys)) ? await keys.get(host.host) : undefined);
+    if (held === undefined) {
+        const pair = generateSshKey(KEY_TITLE);
+        await keys.put(host.host, pair.privateKey);
+        await writeHostPublicKey(host.host, pair.publicKey);
+        return pair.publicKey;
     }
-    return (await readFile(`${keyPath}.pub`, "utf8")).trim();
+    const written = (await readFile(hostPublicKeyPath(host.host), "utf8").catch(() => "")).trim();
+    if (written !== "") {
+        return written;
+    }
+    const publicLine = publicLineOf(held);
+    if (publicLine === undefined) {
+        throw new Error(`the key held for ${host.host} could not be read`);
+    }
+    await writeHostPublicKey(host.host, publicLine);
+    return publicLine;
 };
 
 const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown): string => {
@@ -262,39 +279,51 @@ const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise
 // Returns undefined when native ssh is wired, or a warning when the key can't be registered and remotes route over
 // https.
 // HTTPS configures first and unconditionally so git works either way; the alias writes only once the key is confirmed.
-export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
+export const setupGitAccess = async (
+    host: GitHost,
+    exec: ExecInTerminal,
+    keys: SshKeyStore,
+    deps: GitAccessDeps = realDeps,
+): Promise<string | undefined> => {
     await ensureHttpsCredential(host, exec);
     await ensureGitIdentity(host, exec, deps);
-    const publicKey = await ensureKeyPair(host, exec);
+    const publicKey = await ensureKeyPair(host, keys);
     const refusal = await deps.uploadKey(host, publicKey, KEY_TITLE).then(
         () => undefined,
         (err: unknown) => err,
     );
     // A refused upload doesn't settle it: asks ssh directly, since a hand-added key may work despite the refusal.
-    if (refusal !== undefined && !(await deps.keyAuthenticates(host, hostKeyPath(host.host)))) {
+    // The daemon's own ssh reads the store's file directly: it is root, and this probe is no turn's.
+    if (refusal !== undefined && !(await deps.keyAuthenticates(host, keys.pathOf(host.host)))) {
         // Genuinely absent: drops any stale alias (keeps the keypair for later), routes remotes over https instead.
         await rm(hostConfPath(host.host), { force: true });
         await enableHttpsRewrite(host, exec);
         return sshRegistrationWarning(host, publicKey, refusal);
     }
     // On the account: wires the ssh alias and drops any https rewrite left by an earlier failed apply.
-    await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostKeyPath(host.host) });
+    await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostPublicKeyPath(host.host) });
     await disableHttpsRewrite(host, exec);
     return undefined;
 };
 
 // Boot half of setupGitAccess: re-derives what HOME lost (credential helper, https line, alias or rewrite).
 // No account call: a persisted keypair is already registered; a missing keypair is the one case needing the full apply.
-export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
-    if (!(await fileExists(hostKeyPath(host.host)))) {
-        return setupGitAccess(host, exec, deps);
+export const restoreGitAccess = async (
+    host: GitHost,
+    exec: ExecInTerminal,
+    keys: SshKeyStore,
+    deps: GitAccessDeps = realDeps,
+): Promise<string | undefined> => {
+    if (!(await keys.has(host.host))) {
+        return setupGitAccess(host, exec, keys, deps);
     }
     await ensureHttpsCredential(host, exec);
     // A recreated container lost its global git config, the identity with it.
     await ensureGitIdentity(host, exec, deps);
     // Alias next to the key means the key is on the account: written only after a successful upload.
     if (await fileExists(hostConfPath(host.host))) {
-        await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostKeyPath(host.host) });
+        await ensureKeyPair(host, keys);
+        await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostPublicKeyPath(host.host) });
         return undefined;
     }
     await enableHttpsRewrite(host, exec);
@@ -303,27 +332,34 @@ export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps
 
 // Whether both halves of access are in place: the https line alone doesn't work ssh remotes without the key or rewrite.
 // Neither route present looks active but fails Permission denied, what repointing ~/.ssh/intentic-hosts leaves behind.
-export const gitAccessWired = async (host: GitHost): Promise<boolean> => {
+export const gitAccessWired = async (host: GitHost, keys: SshKeyStore): Promise<boolean> => {
     const current = await readFile(credentialsPath(), "utf8").catch(() => "");
     if (!current.split("\n").some((entry) => entry.endsWith(`@${host.host}`))) {
         return false;
     }
     // Alias written only after a successful registration; its presence claims ssh only while the key still exists.
     if (await fileExists(hostConfPath(host.host))) {
-        return fileExists(hostKeyPath(host.host));
+        return keys.has(host.host);
     }
     return httpsRewriteEnabled(host);
 };
 
-export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<void> => {
-    // Never set up (or already off): no local files, no account key, no-op without touching the network.
-    if (!(await fileExists(hostKeyPath(host.host)))) {
+export const teardownGitAccess = async (
+    host: GitHost,
+    exec: ExecInTerminal,
+    keys: SshKeyStore,
+    deps: GitAccessDeps = realDeps,
+): Promise<void> => {
+    // Never set up (or already off): no local files, no account key, no-op without touching the network. A key an older
+    // build left beside the alias counts as set up.
+    await adoptLegacySshKey(host.host, keys);
+    if (!(await keys.has(host.host))) {
         return;
     }
     // Best-effort account cleanup first (needs network and a valid token); local files always go regardless.
     await deps.deleteKey(host, KEY_TITLE);
     await removeSshHost(host.host);
-    await rm(`${hostKeyPath(host.host)}.pub`, { force: true });
+    await keys.remove(host.host);
     await disableHttpsRewrite(host, exec);
     await removeHttpsCredential(host);
 };
@@ -331,15 +367,15 @@ export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, dep
 export const gitAccessHook: ConnectorHook = {
     // "on" sets up ssh+https; an explicit off (or a switched-off connection) tears down, so re-apply is idempotent both
     // ways.
-    apply: async (config, exec) => {
+    apply: async (config, exec, keys) => {
         const host = gitHostOf(config);
         if (config["git"] === "on") {
-            return setupGitAccess(host, exec);
+            return setupGitAccess(host, exec, keys);
         }
-        await teardownGitAccess(host, exec);
+        await teardownGitAccess(host, exec, keys);
         return undefined;
     },
-    remove: (config, exec) => teardownGitAccess(gitHostOf(config), exec),
+    remove: (config, exec, keys) => teardownGitAccess(gitHostOf(config), exec, keys),
     // Nothing to restore with git access off: the connector is then just env + skill, both already on /work.
-    restore: async (config, exec) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec) : undefined),
+    restore: async (config, exec, keys) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec, keys) : undefined),
 };

@@ -8,7 +8,7 @@ import { unmaskableSecrets } from "../agent/tools/agent-redaction.js";
 import { ensureApprovalsSkill } from "../approvals/approvals-store.js";
 import { writeAgentToken } from "../auth/tokens/agent-token.js";
 import { DOCKER_PANEL_KEY, localModelPanelKey } from "../ports/panel-keys.js";
-import { linkSshHosts } from "../capabilities/ssh-hosts.js";
+import { adoptLegacySshKeys, linkSshHosts } from "../capabilities/ssh-hosts.js";
 import type { Services } from "../composition.js";
 import { ensureProjectRepo } from "../git/remote/project-repo.js";
 import { ensureRepoGitDirs } from "../git/remote/repo-git-dirs.js";
@@ -60,7 +60,7 @@ interface BootChainStep {
 // sweep. Then what an earlier daemon run left running outside tmux (system/boot/generation-sweep.ts).
 const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promise<void> => {
     // A server that outlived the last daemon (or that netd started) still hands every new pane netd's sockets.
-    await prepareTmuxServer(logger);
+    await prepareTmuxServer(logger, { SSH_AUTH_SOCK: services.sshAgent.owner });
     // An events log that cannot be read spares whatever apply session exists: killing a live infra apply mid-run is the
     // costlier mistake.
     // A session that could not be adopted is swept as stale below, so the refusal is said, not dropped.
@@ -234,6 +234,20 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         when: ({ role }) => role.container,
         run: ({ config }) => linkSshHosts(config.historyRoot),
         failure: "ssh hosts dir not persisted, git access and ssh aliases will not survive a rebuild",
+    },
+    // After the link, which is where an older build left its keys: each goes into the key store, and its alias is
+    // repointed at the public half, so no private key stays where the agent's shell reads.
+    {
+        key: "sshKeys",
+        label: "Moving ssh keys into the key store",
+        when: ({ role }) => role.container,
+        run: async ({ services, logger }) => {
+            const moved = await adoptLegacySshKeys(services.sshKeys);
+            if (moved.length > 0) {
+                logger.info({ aliases: moved }, "ssh keys: moved into the key store; the agent signs with them through the ssh agent");
+            }
+        },
+        failure: "ssh keys not moved into the key store, so those aliases still read their key from a file the agent can read",
     },
     { key: "vaultSecrets", label: "Securing stored credentials", run: vaultLooseSecrets },
     // Before any step that starts a process of its own (boot-order.test.ts pins it).

@@ -568,6 +568,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         authRoot,
         cards: cardDeps({ conversations, cards, events }),
         host: { workspace, files: workspaceSlice.files, capabilities, config },
+        credentialGate: secretsSlice.credentialGate,
+        secretUses: secretsSlice.secretUses,
+        warn: (message, error) => logger.warn({ err: error }, message),
     });
     const extensionsSlice = createExtensionsSlice({
         config,
@@ -600,6 +603,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         forget: (conversationId) => {
             secretsSlice.credentialGrants.forget(conversationId);
             brokerSlice.rulePrompts.forget(conversationId);
+            void brokerSlice.sshAgent.forget(conversationId);
             // A purged conversation's grants go with it, so a reused id inherits nothing it was not given.
             void conversationGrants
                 .forget(conversationId)

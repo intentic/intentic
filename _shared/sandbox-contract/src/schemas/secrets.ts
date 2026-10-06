@@ -61,9 +61,9 @@ export const CredentialGateKindSchema = z
 export type CredentialGateKind = z.infer<typeof CredentialGateKindSchema>;
 
 export const CredentialLaneSchema = z
-    .enum(["shell", "code", "browser", "session", "otp", "gateway"])
+    .enum(["shell", "code", "browser", "session", "otp", "gateway", "ssh"])
     .describe(
-        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, or a request the credential gateway attaches it to.",
+        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, a request the credential gateway attaches it to, or a signature the sandbox's ssh agent makes with a held key.",
     );
 export type CredentialLane = z.infer<typeof CredentialLaneSchema>;
 
@@ -173,11 +173,12 @@ export const SecretHostGuardSetResultSchema = z.object({
 // How the agent gets one connection's credential, and what it may do with it there. `gateway` is the default for every
 // connector that declares gateway routes: the credential never enters the agent's shell, and the rules below are
 // enforced where it is attached. `raw` is the owner's explicit choice for a tool that needs the real value; `direct` is a
-// connector with no gateway route at all (a database's wire protocol, a mail server, a request signature).
+// connector with no gateway route at all (a database's wire protocol, a mail server, a request signature) or an SSH
+// machine signed into with a password; `ssh-agent` is an SSH machine's key, which the sandbox's ssh agent signs with.
 export const CredentialDeliveryModeSchema = z
-    .enum(["gateway", "raw", "direct"])
+    .enum(["gateway", "raw", "direct", "ssh-agent"])
     .describe(
-        "How the agent gets this connection's credential: `gateway` keeps it in the sandbox's credential gateway, which attaches it to each request the agent sends and checks the rules first; `raw` hands it to the agent because the owner chose that for a tool needing the real value; `direct` hands it over because the connector has no gateway route (a database, a mail server).",
+        "How the agent gets this connection's credential: `gateway` keeps it in the sandbox's credential gateway, which attaches it to each request the agent sends and checks the rules first; `raw` hands it to the agent because the owner chose that for a tool needing the real value; `direct` hands it over because nothing can use it on the agent's behalf (a database, a mail server, an SSH password); `ssh-agent` keeps an SSH key in the sandbox's ssh agent, which signs for the agent's ssh and never hands the key over.",
     );
 export type CredentialDeliveryMode = z.infer<typeof CredentialDeliveryModeSchema>;
 
@@ -236,8 +237,10 @@ export const SecretInventoryEntrySchema = z.object({
         .object({
             at: z.number().describe("When, in milliseconds."),
             lane: z
-                .enum(["shell", "code", "browser", "gateway"])
-                .describe("How it was used: a command, a script, typed into a page, or attached by the credential gateway to a request the agent sent."),
+                .enum(["shell", "code", "browser", "gateway", "ssh"])
+                .describe(
+                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, or a key the sandbox's ssh agent signed with for the agent.",
+                ),
             detail: z
                 .string()
                 .optional()
@@ -249,7 +252,9 @@ export const SecretInventoryEntrySchema = z.object({
     // Joined from the credential gateway's policy, on a connection's row only.
     credential: CredentialPolicySchema.omit({ subject: true })
         .optional()
-        .describe("How the agent gets this connection's credential and what it may do with it. Absent on everything but a connected command-line tool."),
+        .describe(
+            "How the agent gets this connection's credential and what it may do with it. Absent on everything but a connected command-line tool or SSH machine.",
+        ),
     // Joined from the gate policy, so the row can name the approver without a second call.
     gate: z
         .object({

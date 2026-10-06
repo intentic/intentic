@@ -109,7 +109,7 @@ describe("a brokered card's environment", () => {
         expect(brokered?.env["SERVICE_URL"]).toBe("https://svc.example.com");
         expect(brokered?.env["SERVICE_API_URL"]).toMatch(/^http:\/\/127\.0\.0\.1:8790\/[\w-]+\.[\w-]+$/);
         expect(JSON.stringify(brokered)).not.toContain("real-secret");
-        expect(brokered?.git.map((rewrite) => rewrite.upstream)).toEqual(["https://git.example.com/", "git@git.example.com:"]);
+        expect(brokered?.git.map((rewrite) => rewrite.upstream)).toEqual(["https://git.example.com/", "git@git.example.com:", "ssh://git@git.example.com/"]);
         const token = brokered?.env["SERVICE_API_URL"]?.split("/").at(-1) ?? "";
         expect(await sessions.verify(token)).toEqual({ capability: "service", route: 0, upstream: "https://api.example.com/", conversationId: "c1" });
     });
