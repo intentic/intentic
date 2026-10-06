@@ -25,6 +25,10 @@ const UNSIMULATED_WRITE = `Not simulated yet: a control sends it and gets the de
 
 export const UNSERVED = {
     "agents.get": NOT_THE_EDITORS,
+    // `extension dev`: an agent's or a person's CLI points the sandbox at a checkout and rebuilds it; the editor only clears it.
+    "extensions.devList": NOT_THE_EDITORS,
+    "extensions.devSet": NOT_THE_EDITORS,
+    "extensions.devReload": NOT_THE_EDITORS,
     "privacy.learn": NOT_THE_EDITORS,
     "capabilities.connection": NOT_THE_EDITORS,
     "capabilities.otp": NOT_THE_EDITORS,
@@ -264,6 +268,8 @@ export const UNSERVED = {
     "capabilities.setSecret": UNSIMULATED_WRITE,
     "capabilities.sshKey": UNSIMULATED_WRITE,
     "extensions.applyUpdate": UNSIMULATED_WRITE,
+    // The "Stop running the checkout" control on a row the fixture never marks as running one.
+    "extensions.devClear": UNSIMULATED_WRITE,
     "extensions.approve": UNSIMULATED_WRITE,
     "extensions.checkUpdates": UNSIMULATED_WRITE,
     "extensions.create": UNSIMULATED_WRITE,

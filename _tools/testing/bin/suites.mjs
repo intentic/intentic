@@ -162,7 +162,10 @@ const run = async (extra, selection) => {
             child.on("error", () => resolve(1));
             child.on("exit", (code) => resolve(code ?? 1));
         });
-        stop();
+        const peak = stop();
+        if (peak !== undefined) {
+            process.stderr.write(`suites: the largest bun process of this run peaked at ${formatGiB(peak.held)} of the ${formatGiB(ceiling)} ceiling\n`);
+        }
         process.off("SIGTERM", forward);
         process.off("SIGINT", forward);
         return status;
