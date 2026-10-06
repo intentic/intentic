@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract";
 import { Button, Card, ConfirmDialog, Meter, Notice, type NoticeModel } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { formatBytes, formatDateTime, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { NEAR_LIMIT } from "../../../agents/metrics/liveMetrics";
 import { storageCategoryLabel, storageCategoryText } from "./storageCategories";
 import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
@@ -18,6 +19,32 @@ const t = useT();
 const storage = useSandboxStorage();
 const scan = computed(() => storage.report.value?.scan);
 const scanning = storage.scanning;
+
+// A measurement is kept across restarts, so it can be days old: past a day the age is said in the warning tone, since
+// sizes that old are a guide to where the space went rather than what the disk holds now.
+const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+const now = useNow(() => scan.value !== undefined && !scanning.value, 60_000);
+const stale = computed(() => scan.value !== undefined && now.value - scan.value.finishedAt >= STALE_AFTER_MS);
+
+// One button that is Scan at rest and Stop while a scan runs, so the action stays where the eye already is and the row
+// never grows a second button. The handler returns nothing on purpose: a returned promise would press-lock the button
+// for the whole scan, and Stop is that same button. A press landing in the first moments of a scan is the tail of a
+// double-click on Scan, not a decision to stop, so it is dropped.
+const STOP_ARMS_AFTER_MS = 600;
+let scanStartedAt = 0;
+watch(scanning, (running) => {
+    if (running) {
+        scanStartedAt = Date.now();
+    }
+});
+const scanLabel = computed(() => (scan.value ? t(`sandbox.sandboxStorageCard.scanAgain`) : t(`sandbox.sandboxStorageCard.scan`)));
+const pressScan = (): void => {
+    if (!scanning.value) {
+        void storage.scan();
+    } else if (Date.now() - scanStartedAt >= STOP_ARMS_AFTER_MS) {
+        storage.cancel();
+    }
+};
 
 const disk = computed(() => {
     const volume = scan.value?.disk;
@@ -104,25 +131,54 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div class="flex min-w-0 items-center gap-2">
                 <Icon name="database" class="shrink-0 text-link" />
-                <h3 class="text-sm font-medium text-content">{{ t(`sandbox.sandboxStorageCard.heading`) }}</h3>
-                <span v-if="scan && !scanning" class="truncate text-2xs text-subtle" v-tooltip.top="formatDateTime(scan.finishedAt)">
-                    {{ t(`sandbox.sandboxStorageCard.measured`, { when: timeAgo(scan.finishedAt) }) }}
-                </span>
-                <span v-else-if="scanning" class="truncate text-2xs text-subtle">{{ t(`sandbox.sandboxStorageCard.measuring`) }}</span>
+                <!-- Baseline-aligned: the heading and its status are set in two sizes, and centring their boxes leaves the
+                     smaller line floating above the larger one's baseline. -->
+                <div class="flex min-w-0 items-baseline gap-2">
+                    <h3 class="text-sm font-medium text-content">{{ t(`sandbox.sandboxStorageCard.heading`) }}</h3>
+                    <span v-if="scanning" class="truncate text-2xs text-subtle">{{ t(`sandbox.sandboxStorageCard.measuring`) }}</span>
+                    <span
+                        v-else-if="scan"
+                        class="truncate text-2xs"
+                        :class="stale ? `text-warning` : `text-subtle`"
+                        v-tooltip.top="stale ? { title: formatDateTime(scan.finishedAt), note: t(`sandbox.sandboxStorageCard.staleNote`) } : formatDateTime(scan.finishedAt)"
+                    >
+                        <Icon v-if="stale" name="history" class="mr-1 inline-block align-[-0.125em]" />{{
+                            t(`sandbox.sandboxStorageCard.measured`, { when: timeAgo(scan.finishedAt, { now, days: true }) })
+                        }}
+                    </span>
+                </div>
             </div>
             <div class="ml-auto flex items-center gap-2">
-                <Button v-if="scanning" :label="t(`sandbox.sandboxStorageCard.stop`)" size="small" :text="true" severity="secondary" @click="storage.cancel()">
-                    <template #icon><Icon name="stop" /></template>
-                </Button>
+                <!-- Both faces share one grid cell, so the button is as wide as the wider of them and swapping them moves
+                     nothing on the row; they cross-fade, the leaving one shrinking a touch as the arriving one settles. -->
                 <Button
-                    :label="scan ? t(`sandbox.sandboxStorageCard.scanAgain`) : t(`sandbox.sandboxStorageCard.scan`)"
                     size="small"
                     severity="secondary"
-                    :loading="scanning"
-                    :disabled="storage.cleaningCategory.value !== undefined"
-                    @click="storage.scan()"
+                    :aria-label="scanning ? t(`sandbox.sandboxStorageCard.stop`) : scanLabel"
+                    :disabled="!scanning && storage.cleaningCategory.value !== undefined"
+                    @click="pressScan"
                 >
-                    <template #icon><Icon name="refresh" /></template>
+                    <span class="grid">
+                        <span
+                            class="col-start-1 row-start-1 inline-flex items-center justify-center gap-1.5 transition duration-200 ease-out motion-reduce:transition-none"
+                            :class="scanning ? `scale-90 opacity-0` : `scale-100 opacity-100`"
+                            aria-hidden="true"
+                        >
+                            <Icon name="refresh" />{{ scanLabel }}
+                        </span>
+                        <span
+                            class="col-start-1 row-start-1 inline-flex items-center justify-center gap-1.5 transition duration-200 ease-out motion-reduce:transition-none"
+                            :class="scanning ? `scale-100 opacity-100` : `scale-90 opacity-0`"
+                            aria-hidden="true"
+                        >
+                            <!-- A stop square inside the turning ring: what it is doing and what pressing it does, in one glyph. -->
+                            <span class="relative inline-flex size-[1em] items-center justify-center">
+                                <Icon v-if="scanning" name="spinner" spin class="absolute inset-0" />
+                                <span class="size-[0.3em] rounded-[1px] bg-current" />
+                            </span>
+                            {{ t(`sandbox.sandboxStorageCard.stop`) }}
+                        </span>
+                    </span>
                 </Button>
             </div>
         </div>

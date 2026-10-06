@@ -3417,6 +3417,7 @@
             "intro": "Sehen Sie, was den Speicherplatz dieser Sandbox füllt, und geben Sie frei, was gefahrlos weg kann. Ein Scan liest jede Datei auf den Volumes der Sandbox und kann daher eine Minute dauern.",
             "keptItems": "{count} Element ist geblieben: in Gebrauch oder am letzten Tag geändert. | {count} Elemente sind geblieben: in Gebrauch oder am letzten Tag geändert.",
             "measured": "Gemessen {when}",
+            "staleNote": "Der Speicher hat sich seitdem wahrscheinlich verändert. Scannen Sie erneut, um die aktuellen Größen zu sehen.",
             "measuring": "Wird gemessen…",
             "otherUsage": "Sonstige Belegung",
             "partial": "Der Scan hat sein Zeitlimit erreicht, bevor er alles gelesen hatte; jede Größe ist also mindestens so groß wie angegeben.",

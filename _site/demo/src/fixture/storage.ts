@@ -188,14 +188,39 @@ const scanAt = (finishedAt: number): StorageScan => {
     };
 };
 
-// Measured a quarter of an hour before the demo opened, so the card reads as a box somebody already looked at.
-let last = scanAt(Date.now() - 15 * 60_000);
+// Measured three days before the demo opened and kept across the box's restarts since, so the card opens on a figure
+// old enough to be flagged as such, and the rescan it invites is the next thing to try.
+let last = scanAt(Date.now() - 3 * 24 * 3_600_000);
 
-export const demoStorageReport = (): StorageReport => ({ scan: last, scanning: false });
+// A rescan takes a few seconds, as a real one takes minutes, so the button's Stop face can be seen and pressed.
+const SCAN_MS = 4_000;
+let running: { readonly timer: ReturnType<typeof setTimeout>; readonly done: PromiseWithResolvers<StorageReport> } | undefined;
 
-export const demoStorageScan = (now: number): StorageReport => {
-    last = scanAt(now);
-    return demoStorageReport();
+export const demoStorageReport = (): StorageReport => ({ scan: last, scanning: running !== undefined });
+
+export const demoStorageScan = (): Promise<StorageReport> => {
+    if (running !== undefined) {
+        return running.done.promise;
+    }
+    const done = Promise.withResolvers<StorageReport>();
+    const timer = setTimeout(() => {
+        running = undefined;
+        last = scanAt(Date.now());
+        done.resolve(demoStorageReport());
+    }, SCAN_MS);
+    running = { timer, done };
+    return done.promise;
+};
+
+// Stopped, the waiting press gets the measurement it already had.
+export const demoStorageCancel = (): { readonly ok: true } => {
+    if (running !== undefined) {
+        clearTimeout(running.timer);
+        const { done } = running;
+        running = undefined;
+        done.resolve(demoStorageReport());
+    }
+    return { ok: true };
 };
 
 export const demoStorageClean = (id: StorageCategoryId): StorageCleanResult => {

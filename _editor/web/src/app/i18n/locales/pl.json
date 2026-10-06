@@ -5973,6 +5973,7 @@
             "intro": "Zobacz, co zapełnia dysk tego sandboxa, i zwolnij to, co może bezpiecznie zniknąć. Skan czyta każdy plik na woluminach sandboxa, więc może potrwać minutę.",
             "keptItems": "{count} element został: w użyciu albo zmieniony w ciągu ostatniej doby. | {count} elementy zostały: w użyciu albo zmienione w ciągu ostatniej doby. | {count} elementów zostało: w użyciu albo zmienionych w ciągu ostatniej doby.",
             "measured": "Zmierzono {when}",
+            "staleNote": "Dysk prawdopodobnie się od tego czasu zmienił. Zeskanuj ponownie, aby zobaczyć aktualne rozmiary.",
             "measuring": "Trwa pomiar…",
             "otherUsage": "Inne użycie",
             "partial": "Skan osiągnął limit czasu, zanim przeczytał wszystko, więc każdy rozmiar jest co najmniej taki, jak podano.",

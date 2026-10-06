@@ -3430,6 +3430,7 @@
             "intro": "Mira qué está llenando el disco de este sandbox y libera lo que puede irse sin riesgo. Un análisis lee cada archivo de los volúmenes del sandbox, así que puede tardar un minuto.",
             "keptItems": "{count} elemento se quedó: en uso o modificado en el último día. | {count} elementos se quedaron: en uso o modificados en el último día.",
             "measured": "Medido {when}",
+            "staleNote": "Es probable que el disco haya cambiado desde entonces. Analiza de nuevo para ver los tamaños actuales.",
             "measuring": "Midiendo…",
             "otherUsage": "Otro uso",
             "partial": "El análisis alcanzó su límite de tiempo antes de leerlo todo, así que cada tamaño es como mínimo el indicado.",

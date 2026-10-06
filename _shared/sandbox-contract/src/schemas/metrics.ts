@@ -251,7 +251,7 @@ export const StorageScanSchema = z.object({
 export type StorageScan = z.infer<typeof StorageScanSchema>;
 
 export const StorageReportSchema = z.object({
-    scan: StorageScanSchema.optional().describe("The last scan that finished. Absent until one has, and again after the daemon restarts."),
+    scan: StorageScanSchema.optional().describe("The last scan that finished, kept across restarts; its `finishedAt` says how old it is. Absent until one has."),
     scanning: z.boolean().describe("Whether a scan is running now."),
 });
 export type StorageReport = z.infer<typeof StorageReportSchema>;

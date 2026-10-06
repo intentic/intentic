@@ -47,7 +47,7 @@ test("two scans asked for at once are one scan, and the report says one is runni
     const first = storage.scan();
     const second = storage.scan();
     expect(second).toBe(first);
-    expect(storage.report()).toEqual({ scanning: true });
+    expect(await storage.report()).toEqual({ scanning: true });
 
     held.release();
     const report = await first;
@@ -71,6 +71,15 @@ test("a cancelled scan leaves the last finished one standing", async () => {
     // The rescan never lands: what the finished scan measured is still the answer, and nothing is running.
     expect(await rescan).toEqual(finished);
     expect(finished.scan?.categories.map((category) => [category.id, category.bytes])).toEqual([["trash", 500]]);
+});
+
+test("the last scan outlives the daemon: a fresh one over the same volumes answers with it until it scans again", async () => {
+    const { roots } = await storageTree();
+    await plant(join(roots.history, "trash", "site-1789157842097", "index.html"), 500, NOW, OLD);
+    const finished = await storageOver(roots).scan();
+
+    const restarted = storageOver(roots);
+    expect(await restarted.report()).toEqual({ scan: finished.scan, scanning: false });
 });
 
 test("one clean at a time: a second one asked for meanwhile is refused, not queued", async () => {

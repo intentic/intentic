@@ -105,6 +105,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // When each housekeeping chore last ran (system/chore-clock.ts), so a restart does not run a daily one again; a moved
     // sandbox runs each once at its first boot.
     { path: "chore-clock.json", portability: "derived" },
+    // The last disk measurement (system/resources/storage/disk-storage.ts), kept so a restart still shows one, dated. About
+    // this machine's volumes, so a moved sandbox measures its own.
+    { path: "storage-scan.json", portability: "derived" },
 
     /* ---- credentials ---- */
 

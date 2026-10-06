@@ -37,7 +37,7 @@ import { automationApprovals, automationCatalog, automationsList, deleteAutomati
 import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning, switchDemoPairings } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoNameDictionary } from "./fixture/nameDictionary";
-import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
+import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
@@ -744,8 +744,8 @@ export const procedures = {
         metrics: () => demoMetrics(Date.now(), roster.agents),
         // The Overview's Disk card: a scan already on hand, a rescan on request, and a clean that frees its category.
         storage: () => demoStorageReport(),
-        scanStorage: () => demoStorageScan(Date.now()),
-        cancelStorageScan: () => ({ ok: true }),
+        scanStorage: () => demoStorageScan(),
+        cancelStorageScan: () => demoStorageCancel(),
         cleanStorage: ({ category }) => demoStorageClean(category),
         terminals: () => ({
             sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
