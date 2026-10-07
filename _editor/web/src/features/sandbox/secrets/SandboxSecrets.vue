@@ -15,7 +15,7 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, useTemplateRef } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import SecretEntryRow from "../../capabilities/connect/secrets/SecretEntryRow.vue";
 import SecretField from "../../capabilities/connect/secrets/SecretField.vue";
@@ -128,6 +128,14 @@ const newKeyProblem = computed<string | undefined>(() => {
     }
     return newKeyTaken.value ? t(`sandbox.sandboxSecrets.nameTaken`, { name: newKey.value }) : undefined;
 });
+// The add row opens from the page's own action bar: it clears any filter first, since a filter folds the row away.
+const newKeyInput = useTemplateRef<HTMLInputElement>(`newKeyInput`);
+const openAdd = async (): Promise<void> => {
+    clearFilters();
+    adding.value = true;
+    await nextTick();
+    newKeyInput.value?.focus();
+};
 const cancelAdd = (): void => {
     adding.value = false;
     newKey.value = ``;
@@ -197,8 +205,9 @@ const pushToCi = async (): Promise<void> => {
 
         <!-- One element, so its imprint is the whole page below the notices; spaced as the column it sits in. -->
         <div v-else v-skeleton-source="`sandbox.secrets`" class="flex flex-col gap-6">
-            <!-- Filter and scope narrow everything below as one control; the CI push button is separate and chromeless. -->
-            <div v-if="filterable || ciKnown" class="flex flex-wrap items-center justify-end gap-2">
+            <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
+                 needs no section of its own while there is nothing in it yet. -->
+            <div class="flex flex-wrap items-center justify-end gap-2">
                 <FilterBar
                     v-if="filterable"
                     v-model="query"
@@ -208,6 +217,10 @@ const pushToCi = async (): Promise<void> => {
                 >
                     <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
                 </FilterBar>
+                <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" :disabled="adding" @click="openAdd">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
+                <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" severity="secondary" />
                 <Button
                     v-if="ciKnown"
                     :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
@@ -250,7 +263,8 @@ const pushToCi = async (): Promise<void> => {
                 </RowGroup>
 
                 <!-- A person's own secrets need no DevOps: without it they go to the sandbox's own store, the one a need's card writes to too. -->
-                <RowGroup v-if="groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)">
+                <!-- Drawn only once it holds something, or while a new one is being named: an empty group is just a header. -->
+                <RowGroup v-if="(yours.length > 0 || adding) && groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)">
                     <SecretEntryRow
                         v-for="row in yours"
                         :key="row.entry.key"
@@ -258,12 +272,11 @@ const pushToCi = async (): Promise<void> => {
                         :expanded="opened === row.entry.key"
                         @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
                     />
-                    <!-- `<RowNote action>`, not another hand-written spelling of this row, aligned with the chevron column above. -->
-                    <RowNote v-if="!filtering && !adding" variant="action" :label="t(`sandbox.sandboxSecrets.addSecret`)" @click="adding = true" />
-                    <RowNote v-else-if="!filtering" variant="block">
+                    <RowNote v-if="!filtering && adding" variant="block">
                         <div class="flex flex-col gap-2">
                             <div class="flex items-start gap-2">
                                 <input
+                                    ref="newKeyInput"
                                     v-model="newKey"
                                     :placeholder="t(`sandbox.sandboxSecrets.keyName`)"
                                     autocapitalize="off"
@@ -315,15 +328,6 @@ const pushToCi = async (): Promise<void> => {
 
                 <!-- Same collapse-behind-toggle pattern as the Agent tab, once there are enough rows to crowd the rest of it. -->
                 <RowGroup v-if="groupVisible(visibleCredentials)" :label="t(`sandbox.sandboxSecrets.capabilityCredentials`)">
-                    <template #actions>
-                        <Button
-                            :as="RouterLink"
-                            to="/capabilities"
-                            :label="t(`sandbox.sandboxSecrets.manageCapabilities`)"
-                            size="small"
-                            severity="secondary"
-                        />
-                    </template>
                     <SecretEntryRow
                         v-for="row in visibleCredentials"
                         :key="row.entry.key"
