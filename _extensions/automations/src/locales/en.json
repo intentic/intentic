@@ -349,6 +349,7 @@
         "previousWeek": "Previous week",
         "nextWeek": "Next week",
         "paused": "{count} switched off | {count} switched off",
+        "allDay": "All day",
         "throughTheDay": "Runs through the day",
         "nothingThisWeek": "Nothing wakes on a clock this week.",
         "clickToSet": "Click any free time to set a one-time wake there.",

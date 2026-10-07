@@ -82,6 +82,7 @@ const CARDS: readonly { readonly event: AgentEvent; readonly field: RequestField
         settled: `skipped`,
     },
     {
+        // path-literals: content, a page's stored path as the event carries it
         event: { kind: `page_ask`, requestId: `r1`, page: { id: `p1`, title: `Pick one`, path: `.intentic/records/artifacts/pages/c/p1.r0.html` } },
         field: `pageAsk`,
         answer: { kind: `page_ask`, value: `{"pick":"B"}` },

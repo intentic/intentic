@@ -349,6 +349,7 @@
         "previousWeek": "Poprzedni tydzień",
         "nextWeek": "Następny tydzień",
         "paused": "{count} wyłączona | {count} wyłączone | {count} wyłączonych",
+        "allDay": "Cały dzień",
         "throughTheDay": "Działa przez cały dzień",
         "nothingThisWeek": "W tym tygodniu nic nie budzi się według zegara.",
         "clickToSet": "Kliknij wolny termin, żeby ustawić tam jednorazowe wybudzenie.",

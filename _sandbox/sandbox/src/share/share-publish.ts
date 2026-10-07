@@ -75,6 +75,7 @@ const MAX_PAGE_BYTES = 25 * 1024 * 1024;
 const copyPages = async (workspaceRoot: string, dir: string, pages: readonly SharePage[]): Promise<void> => {
     for (const page of pages) {
         const source = resolveWithin(workspaceRoot, page.source);
+        // allow(silent-catch): a page that cannot be read is left out of the share, as this function's comment says.
         const info = source === undefined ? undefined : await stat(source).catch(() => undefined);
         if (source === undefined || info === undefined || !info.isFile() || info.size > MAX_PAGE_BYTES) {
             continue;

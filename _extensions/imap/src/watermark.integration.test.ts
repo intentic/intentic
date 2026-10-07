@@ -57,7 +57,6 @@ test("writeWatermark leaves nothing staged beside the mark", async () => {
 });
 
 test("watermarkPath keeps one file per account in the extension's own state directory and sanitizes the id", () => {
-    const state = "/state/intentic.imap";
-    expect(watermarkPath(state, "my-inbox")).toBe(`${state}/my-inbox.json`);
-    expect(watermarkPath(state, "../escape me")).toBe(`${state}/.._escape_me.json`);
+    expect(watermarkPath("/state/extensions/intentic.imap", "my-inbox")).toBe("/state/extensions/intentic.imap/my-inbox.json");
+    expect(watermarkPath("/state/extensions/intentic.imap", "../escape me")).toBe("/state/extensions/intentic.imap/.._escape_me.json");
 });

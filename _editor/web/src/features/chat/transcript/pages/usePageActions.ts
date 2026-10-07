@@ -1,4 +1,5 @@
 import type { Page } from "@intentic/sandbox-contract";
+import { writeClipboard } from "@intentic/ui/clipboard";
 import { ref } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { usePaneView } from "../../panel/useChat-view";
@@ -37,7 +38,7 @@ export const usePageActions = (page: () => Page) => {
             const result = await sandboxRpc.public.publish({ path: page().path });
             published.value = result;
             if (result.url !== undefined) {
-                await navigator.clipboard?.writeText(result.url).catch(() => undefined);
+                await writeClipboard(result.url);
             }
         } catch (error) {
             publishFailed.value = error instanceof Error ? error.message : String(error);

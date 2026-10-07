@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { pagesContract, readMcpAppData } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
@@ -24,7 +25,7 @@ export const createPagesRoutes = (services: PagesRoutesDeps) => {
             if (file === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.page}" is not a page a chat showed` });
             }
-            const html = await readFile(file, "utf8").catch(() => undefined);
+            const html = await readFile(file, "utf8").catch(undefinedIfMissing);
             const app = html === undefined ? undefined : readMcpAppData(html);
             if (app === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `"${input.page}" is not an MCP server's app` });

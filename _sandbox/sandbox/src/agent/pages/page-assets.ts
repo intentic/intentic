@@ -1,5 +1,6 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // A page carries everything it shows inside itself, since the chat draws it in a frame that can reach nothing: the
 // pictures, stylesheets and scripts it names on disk are read in as data, and the ones it names on a well-known
@@ -117,11 +118,12 @@ const carrierFor = (context: PageCarryContext) => {
         if (reading === undefined) {
             reading = (async () => {
                 // Resolved through links first, so a link inside the workspace pointing out of it carries nothing.
+                // allow(silent-catch): a file the page names that cannot be resolved is left out of it, whatever the reason.
                 const real = await realpath(path).catch(() => undefined);
                 if (real === undefined || !inside(real)) {
                     return undefined;
                 }
-                const info = await stat(real).catch(() => undefined);
+                const info = await stat(real).catch(undefinedIfMissing);
                 if (info === undefined || !info.isFile() || info.size > MAX_FILE_BYTES) {
                     return undefined;
                 }
@@ -145,6 +147,7 @@ const carrierFor = (context: PageCarryContext) => {
                     const bytes = new Uint8Array(await response.arrayBuffer());
                     return bytes.byteLength > MAX_FILE_BYTES ? undefined : bytes;
                 } catch {
+                    // allow(silent-catch): an asset that cannot be fetched is not carried, and the page draws it as missing.
                     return undefined;
                 }
             })();

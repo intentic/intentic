@@ -77,6 +77,7 @@ const keepWarm = (): void => {
         }
         const closing = browser;
         browser = undefined;
+        // allow(silent-catch): an idle browser that fails to close is already gone or going; nothing waits on it.
         void closing?.then((open) => open?.close()).catch(() => undefined);
     }, IDLE_CLOSE_MS);
     idle.unref?.();
@@ -162,6 +163,7 @@ export const checkPage = async (html: string, options: { readonly width?: number
             }
             return { ok: true, check: { png: png.toString("base64"), width, contentHeight, capturedHeight, messages, errors } };
         } finally {
+            // allow(silent-catch): the check has its answer; a context that fails to close dies with the browser.
             await context.close().catch(() => undefined);
         }
     } catch (error) {

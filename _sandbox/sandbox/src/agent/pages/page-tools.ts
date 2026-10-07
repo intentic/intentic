@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
     type AgentEvent,
@@ -116,7 +117,7 @@ const sourceOf = async (args: PageArgs, deps: PageToolsDeps): Promise<{ html: st
     }
     const agentPath = isAbsolute(args.path!) ? args.path! : resolve(deps.cwd, args.path!);
     const file = inWorktree(agentPath, deps.placement);
-    const info = await stat(file).catch(() => undefined);
+    const info = await stat(file).catch(undefinedIfMissing);
     if (info === undefined || !info.isFile()) {
         return { refused: `There is no file at ${args.path}.` };
     }

@@ -137,9 +137,12 @@ const cadence = (bar: LaneBar): string =>
 
 /* ---- words ---- */
 
+// allow(format-tiers): rebuilt from activeLocale when the language changes; the kit has no weekday or date-range formatter.
 const weekdayFormat = computed(() => new Intl.DateTimeFormat(activeLocale.value, { weekday: `short` }));
+// allow(format-tiers): rebuilt from activeLocale when the language changes; the kit has no weekday or date-range formatter.
 const dayFormat = computed(() => new Intl.DateTimeFormat(activeLocale.value, { weekday: `long`, day: `numeric`, month: `long` }));
 const rangeLabel = computed(() =>
+    // allow(format-tiers): rebuilt from activeLocale when the language changes; the kit has no weekday or date-range formatter.
     new Intl.DateTimeFormat(activeLocale.value, { day: `numeric`, month: `short`, year: `numeric` }).formatRange(weekStart.value, addDays(weekStart.value, 6)),
 );
 const hourLabel = (hour: number): string => formatClock(instantAt(weekStart.value, hour * 60));
@@ -329,7 +332,7 @@ const HOUR_LINES = {
                     <!-- The lane: a rule firing through the day, one bar over the days it fires on. -->
                     <div v-if="lane.length > 0" class="grid gap-y-1 border-b border-line-subtle py-1.5" :style="GRID">
                         <div class="flex items-center justify-end pr-2" :style="{ gridRow: `1 / span ${lane.length}` }">
-                            <Icon name="repeat" class="text-2xs text-subtle" v-tooltip.top="t(`calendar.throughTheDay`)" />
+                            <Icon name="repeat" class="text-2xs text-subtle" v-tooltip.top="t(`calendar.allDay`)" />
                         </div>
                         <button
                             v-for="(bar, row) in lane"

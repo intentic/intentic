@@ -1855,7 +1855,7 @@
             "superseded": "{title}: una versión anterior, redibujada más abajo",
             "showEarlier": "Mostrar",
             "hideEarlier": "Plegar",
-            "openSource": "Abrir el archivo del que se construyó",
+            "openSource": "Abrir archivo",
             "fromFile": "de {path}",
             "expand": "Abrir a tamaño completo",
             "publish": "Publicar…",

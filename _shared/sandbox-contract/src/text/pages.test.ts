@@ -15,6 +15,7 @@ import {
 } from "./pages.js";
 import { foldTurn, userRow } from "./transcript-fold.js";
 
+// path-literals: content, a page's stored path as a transcript row carries it
 const PAGE: Page = { id: "a1b2c3d4e5", title: "Q3 revenue", path: ".intentic/records/artifacts/pages/c1/a1b2c3d4e5.r0.html" };
 
 describe("intoHead", () => {

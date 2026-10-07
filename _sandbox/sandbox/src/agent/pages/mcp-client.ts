@@ -106,6 +106,7 @@ export class McpClient {
                 capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } },
                 clientInfo: { name: "intentic", version: "1" },
             });
+            // allow(silent-catch): a notification has no answer to wait for; a server that missed it fails the next request, which says why.
             await this.post({ jsonrpc: "2.0", method: "notifications/initialized" }).catch(() => undefined);
         })();
         // A failed handshake is tried again on the next call rather than remembered.

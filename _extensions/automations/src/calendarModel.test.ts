@@ -111,7 +111,7 @@ describe(`calendarWeek`, () => {
         // Whatever the reader's clock, 03:00 in Tokyo is one instant; the slot is that instant on the reader's clock.
         const tokyo = automation(`tokyo`, { kind: `schedule`, cron: `0 3 * * *`, tz: ZoneSchema.parse(`Asia/Tokyo`) });
         const [first] = calendarWeek([tokyo], addDays(week, 7), now, zone).entries;
-        expect(first).toBeDefined();
+        expect(first?.at).toEqual(expect.any(Number));
         const inTokyo = new Intl.DateTimeFormat(`en-GB`, { timeZone: `Asia/Tokyo`, hour: `2-digit`, minute: `2-digit` }).format(first?.at);
         expect(inTokyo).toBe(`03:00`);
     });

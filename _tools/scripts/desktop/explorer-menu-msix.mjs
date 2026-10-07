@@ -25,8 +25,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { constants, crc32, deflateRawSync } from "node:zlib";
+import { repoRoot } from "../../constants/src/node.mjs";
 
-const ROOT = join(import.meta.dirname, "../../..");
+const ROOT = repoRoot(import.meta.url);
 const CRATE = join(ROOT, "_editor/desktop-app/explorer-menu");
 const ICONS = join(ROOT, "_editor/desktop-app/src-tauri/icons");
 const BLOCK = 64 * 1024;

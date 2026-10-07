@@ -35,6 +35,7 @@ export const pageSource = (path: string): Promise<string> => {
 
 // What a file beside the page reads as: everything was carried in when the page was shown, so this reaches only a page
 // built from a file (`source`), whose own relative links still name files beside it.
+// allow(silent-catch): a file the page names that cannot be read draws as missing, as a broken link does on the web.
 const loadAsset = (path: string): Promise<Blob | undefined> => readShared(path).catch(() => undefined);
 
 // The page, sealed and themed, for the frame's `srcdoc`; for an MCP server's app, the call it shows as well.

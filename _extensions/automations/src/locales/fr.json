@@ -249,6 +249,7 @@
         "previousWeek": "Semaine précédente",
         "nextWeek": "Semaine suivante",
         "paused": "{count} désactivée | {count} désactivées",
+        "allDay": "Toute la journée",
         "throughTheDay": "Tourne toute la journée",
         "nothingThisWeek": "Rien ne se réveille sur horaire cette semaine.",
         "clickToSet": "Cliquez sur un créneau libre pour y programmer un réveil unique.",

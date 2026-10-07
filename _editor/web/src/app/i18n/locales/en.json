@@ -3584,7 +3584,7 @@
             "superseded": "{title}: an earlier version, redrawn below",
             "showEarlier": "Show",
             "hideEarlier": "Fold away",
-            "openSource": "Open the file it was built from",
+            "openSource": "Open file",
             "fromFile": "from {path}",
             "expand": "Open full size",
             "publish": "Publish…",
@@ -5816,6 +5816,7 @@
             "remove": "Remove {label}",
             "slowerSharper": "Seconds slower, sharper",
             "thinks": "Thinks",
+            "orderTip": "Fallback order",
             "triedInOrder": "Tried in order: each one is used only when the ones above it can't answer."
         },
         "modelPinPicker": {

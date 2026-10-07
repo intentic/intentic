@@ -3584,7 +3584,7 @@
             "superseded": "{title}: wcześniejsza wersja, narysowana ponownie niżej",
             "showEarlier": "Pokaż",
             "hideEarlier": "Zwiń",
-            "openSource": "Otwórz plik, z którego ją zbudowano",
+            "openSource": "Otwórz plik",
             "fromFile": "z {path}",
             "expand": "Otwórz w pełnym rozmiarze",
             "publish": "Opublikuj…",
@@ -5486,6 +5486,7 @@
             "remove": "Usuń {label}",
             "slowerSharper": "Wolniej, ale trafniej",
             "thinks": "Myśli",
+            "orderTip": "Kolejność zapasowa",
             "triedInOrder": "Używane po kolei: każdy następny tylko wtedy, gdy poprzednie nie mogą odpowiedzieć."
         },
         "modelPinPicker": {

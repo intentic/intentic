@@ -1847,7 +1847,7 @@
             "superseded": "{title}: eine frühere Fassung, unten neu gezeichnet",
             "showEarlier": "Anzeigen",
             "hideEarlier": "Einklappen",
-            "openSource": "Die Datei öffnen, aus der sie gebaut wurde",
+            "openSource": "Datei öffnen",
             "fromFile": "aus {path}",
             "expand": "In voller Größe öffnen",
             "publish": "Veröffentlichen…",

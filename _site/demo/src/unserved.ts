@@ -59,6 +59,9 @@ export const UNSERVED = {
     "workspace.setup": NOT_THE_EDITORS,
     "workspace.sync": NOT_THE_EDITORS,
     "GET /system/sync/ssh": NOT_THE_EDITORS,
+    // What an extension's own backend or process asks about itself (its settings, what moved); the editor never does.
+    "GET /extension/settings": NOT_THE_EDITORS,
+    "GET /extension/events": NOT_THE_EDITORS,
     "POST /enroll": NOT_THE_EDITORS,
     "POST /automations/{id}/fire": NOT_THE_EDITORS,
     "POST /workflows/{id}/gate": NOT_THE_EDITORS,

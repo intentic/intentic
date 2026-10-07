@@ -39,7 +39,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                     class="w-3 shrink-0 text-2xs tabular-nums text-subtle"
                     :class="entries.length > 1 && `cursor-help`"
                     aria-hidden="true"
-                    v-tooltip.top="entries.length > 1 ? t(`sandbox.modelPinList.triedInOrder`) : undefined"
+                    v-tooltip.top="entries.length > 1 ? t(`sandbox.modelPinList.orderTip`) : undefined"
                     >{{ entry.index + 1 }}</span
                 >
                 <!-- The whole name is the trigger (and the picker's anchor), not just an icon beside it. -->

@@ -252,6 +252,7 @@
         "previousWeek": "Semana anterior",
         "nextWeek": "Semana siguiente",
         "paused": "{count} desactivada | {count} desactivadas",
+        "allDay": "Todo el día",
         "throughTheDay": "Se ejecuta durante el día",
         "nothingThisWeek": "Esta semana nada despierta por horario.",
         "clickToSet": "Haz clic en un hueco libre para programar ahí un despertar único.",

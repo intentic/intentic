@@ -248,6 +248,7 @@
         "previousWeek": "Vorherige Woche",
         "nextWeek": "Nächste Woche",
         "paused": "{count} ausgeschaltet | {count} ausgeschaltet",
+        "allDay": "Ganztägig",
         "throughTheDay": "Läuft über den Tag",
         "nothingThisWeek": "Diese Woche wacht nichts nach der Uhr auf.",
         "clickToSet": "Klicken Sie auf eine freie Zeit, um dort ein einmaliges Wecken zu setzen.",

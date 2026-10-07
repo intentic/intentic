@@ -1,7 +1,10 @@
 {
     "_deploy/cli": 2,
     "_devices/machine": 2,
-    "_editor/desktop-app": 2,
+    "_editor/desktop-app": {
+        "count": 6,
+        "why": "two Rust crates (src-tauri, explorer-menu) whose Cargo.toml, Cargo.lock, build.rs and src/lib.rs names Cargo fixes"
+    },
     "_extensions/connectors": 1,
     "_extensions/devices": 1,
     "_extensions/social": 1,

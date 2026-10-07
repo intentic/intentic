@@ -183,7 +183,7 @@ export const pageThemeCss = (theme: PageTheme, canvas = false): string =>
 const bootstrapScript = (canvas: boolean): string => `(function(){
 var style=document.getElementById("intentic-theme"),n=0,pending={},theme=null,canvas=${canvas ? `true` : `false`};
 var names=${JSON.stringify(PAGE_THEME_VARIABLES)};
-function apply(t){if(!t||typeof t!=="object"||!t.variables)return;var c=":root{color-scheme:"+(t.appearance==="light"?"light":"dark")+";";for(var i=0;i<names.length;i++){var v=t.variables[names[i]];if(typeof v==="string")c+=names[i]+":"+v.replace(/[;{}<>]/g,"")+";";}c+="}";if(style)style.textContent=c+${JSON.stringify(baseCss(false))}.replace("background:transparent;",canvas?"background:var(--background);":"background:transparent;");theme={appearance:t.appearance==="light"?"light":"dark",variables:t.variables};try{document.dispatchEvent(new CustomEvent("intentic:theme",{detail:theme}));}catch(e){}}
+function apply(t){if(!t||typeof t!=="object"||!t.variables)return;var c=":root{color-scheme:"+(t.appearance==="light"?"light":"dark")+";";for(var i=0;i<names.length;i++){var v=t.variables[names[i]];if(typeof v==="string")c+=names[i]+":"+v.replace(/[;{}<>]/g,"")+";";}c+="}";if(style)style.textContent=c+${JSON.stringify(baseCss(false))}.replace("background:transparent;",canvas?"background:var(--background);":"background:transparent;");theme={appearance:t.appearance==="light"?"light":"dark",variables:t.variables};document.dispatchEvent(new CustomEvent("intentic:theme",{detail:theme}));}
 var framed=window.parent!==window;
 function post(m){if(framed)window.parent.postMessage(m,"*");}
 function request(method,params){return new Promise(function(resolve,reject){if(!framed){reject(new Error("This page is not inside a chat."));return;}var id="intentic-"+(++n);pending[id]={resolve:resolve,reject:reject};post({jsonrpc:"2.0",id:id,method:method,params:params});});}
@@ -305,6 +305,7 @@ export const readMcpAppData = (html: string): McpAppData | undefined => {
         const data = JSON.parse(match[1] ?? ``) as Partial<McpAppData>;
         return typeof data.server === `string` && typeof data.tool === `string` ? { server: data.server, tool: data.tool, input: data.input, result: data.result } : undefined;
     } catch {
+        // allow(silent-catch): a block that does not parse is not an app's, as the comment on this function says.
         return undefined;
     }
 };

@@ -1847,7 +1847,7 @@
             "superseded": "{title} : une version antérieure, redessinée plus bas",
             "showEarlier": "Afficher",
             "hideEarlier": "Replier",
-            "openSource": "Ouvrir le fichier à partir duquel elle a été construite",
+            "openSource": "Ouvrir le fichier",
             "fromFile": "depuis {path}",
             "expand": "Ouvrir en grand",
             "publish": "Publier…",
