@@ -4304,7 +4304,7 @@
             "off": "Wyłączone",
             "offNote": "Nic nie jest przekierowywane ani odczytywane: każde zapytanie do modelu trafia do dostawcy tak jak dotąd.",
             "on": "Włączone",
-            "onNote": "Niezaufani dostawcy dostają tokeny takie jak ⟦PERSON_3⟧ zamiast danych osobowych, a prawdziwe wartości wracają na swoje miejsce w ich odpowiedziach. Środowiska, przed którymi bramka nie może stanąć (Cursor, agenty ACP, Pi), są odrzucane, chyba że ich dostawca jest zaufany.",
+            "onNote": "",
             "ownerOnly": "Tylko właściciel sandboxa może zmienić osłonę prywatności.",
             "ownerOnlyForget": "Tylko właściciel sandboxa może zapomnieć zbiór danych.",
             "receives": {
@@ -4348,7 +4348,7 @@
             "watch": "Obserwuj",
             "watchNote": "Każde zapytanie, które bramka może objąć, przechodzi przez nią: zapisuje, co by zamaskowała, i wysyła wszystko bez zmian.",
             "watched": "Obserwowano",
-            "whatItKeeps": "Imiona i nazwiska, numery dokumentów, rachunki i dane kontaktowe, chronione przed dostawcami modeli, którym nie ufasz.",
+            "whatItKeeps": "Niezaufani dostawcy dostają tokeny takie jak ⟦PERSON_3⟧ zamiast danych osobowych, a prawdziwe wartości wracają na swoje miejsce w ich odpowiedziach.",
             "wouldMask": "Wysłane bez zmian, bo osłona tylko obserwuje."
         },
         "agentProjectInstalls": {
