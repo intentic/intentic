@@ -11,9 +11,13 @@ import {
     ALLOW_VALUE_MAX,
     activityFindings,
     activitySummary,
-    allowListFrom,
+    allowAdding,
+    allowEdited,
+    allowKey,
     allowListProblem,
-    allowListText,
+    allowRemoving,
+    allowShown,
+    allowValuesFrom,
     excerptParts,
     findingTokens,
     foundIn,
@@ -22,7 +26,6 @@ import {
     providerMark,
     providerReceives,
     providerTrusted,
-    sameList,
     shownWord,
     sourceHost,
     traitsOf,
@@ -81,21 +84,41 @@ describe(`providerTrusted`, () => {
 });
 
 describe(`the allow list`, () => {
-    it(`reads one value per line, trimmed, with blanks and repeats dropped`, () => {
-        expect(allowListFrom(`  Acme Sp. z o.o.\n\nJan Kowalski\nAcme Sp. z o.o.\n   \n`)).toEqual([`Acme Sp. z o.o.`, `Jan Kowalski`]);
-        expect(allowListFrom(``)).toEqual([]);
+    it(`reads one value per line, trimmed, with blanks and repeats dropped as the shield reads them`, () => {
+        expect(allowValuesFrom(`  Acme Sp. z o.o.\r\n\nJan Kowalski\nACME sp.  z o.o.\n   \n`)).toEqual([`Acme Sp. z o.o.`, `Jan Kowalski`]);
+        expect(allowValuesFrom(``)).toEqual([]);
+        expect(allowKey(`  Acme\t Sp. `)).toBe(`acme sp.`);
     });
 
-    it(`writes back to the text it was read from`, () => {
-        const values = [`Acme`, `Jan Kowalski`];
-        expect(allowListFrom(allowListText(values))).toEqual(values);
+    it(`adds what is new at the end and says what was already there`, () => {
+        expect(allowAdding([`Acme`], `acme\nIntentic\n`)).toEqual({ kind: `added`, allow: [`Acme`, `Intentic`], added: [`Intentic`], already: [`acme`] });
+        expect(allowAdding([`Acme`], `  `)).toEqual({ kind: `added`, allow: [`Acme`], added: [], already: [] });
     });
 
-    // A blank line typed into the box is not a change; the draft is unsaved only when the values differ.
-    it(`compares lists by value and order`, () => {
-        expect(sameList(allowListFrom(`Acme\n\n`), [`Acme`])).toBe(true);
-        expect(sameList([`Acme`, `Jan`], [`Jan`, `Acme`])).toBe(false);
-        expect(sameList([`Acme`], [])).toBe(false);
+    // A pasted list with one value the contract would refuse lands not at all, rather than as the half before it.
+    it(`refuses an addition whole when a value or the list is too long`, () => {
+        const long = `x`.repeat(ALLOW_VALUE_MAX + 1);
+        expect(allowAdding([`Acme`], `Intentic\n${long}`)).toEqual({ kind: `refused`, problem: { kind: `tooLong`, value: long } });
+        const full = Array.from({ length: PRIVACY_ALLOW_MAX }, (_, index) => `value ${index}`);
+        expect(allowAdding(full, `one more`)).toEqual({ kind: `refused`, problem: { kind: `tooMany`, count: PRIVACY_ALLOW_MAX + 1 } });
+        expect(allowAdding(full, `value 3`).kind).toBe(`added`);
+    });
+
+    it(`edits a value in place, removes it when emptied, and merges it into one already listed`, () => {
+        expect(allowEdited([`Acme`, `Intentc`, `Zeta`], `Intentc`, ` Intentic `)).toEqual({ kind: `edited`, allow: [`Acme`, `Intentic`, `Zeta`] });
+        expect(allowEdited([`Acme`, `Zeta`], `Acme`, ``)).toEqual({ kind: `edited`, allow: [`Zeta`] });
+        expect(allowEdited([`Acme`, `Zeta`], `Zeta`, `ACME`)).toEqual({ kind: `edited`, allow: [`Acme`] });
+        expect(allowEdited([`Acme`], `Acme`, `ACME`)).toEqual({ kind: `edited`, allow: [`ACME`] });
+        expect(allowEdited([`Acme`], `Acme`, `x`.repeat(ALLOW_VALUE_MAX + 1)).kind).toBe(`refused`);
+    });
+
+    it(`removes one value and keeps the rest in order`, () => {
+        expect(allowRemoving([`Acme`, `Intentic`, `Zeta`], `Intentic`)).toEqual([`Acme`, `Zeta`]);
+    });
+
+    it(`draws the newest first, narrowed by a query read as the shield reads values`, () => {
+        expect(allowShown([`Acme`, `Intentic`, `acme labs`], ``)).toEqual([`acme labs`, `Intentic`, `Acme`]);
+        expect(allowShown([`Acme`, `Intentic`, `acme  labs`], `ACME l`)).toEqual([`acme  labs`]);
     });
 
     it(`names a value too long for the contract, and a list too long for it`, () => {

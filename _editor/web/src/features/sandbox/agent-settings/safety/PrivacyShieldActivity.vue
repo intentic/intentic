@@ -17,7 +17,7 @@ import {
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { type ActivityFinding, activityFindings, activitySummary, excerptParts, findingTokens } from "./privacyShield";
+import { type ActivityFinding, activityFindings, activitySummary, allowKey, excerptParts, findingTokens } from "./privacyShield";
 import PrivacyProviderMark from "./PrivacyProviderMark.vue";
 import { usePrivacyReveal } from "./usePrivacyShield";
 
@@ -74,7 +74,8 @@ const providerLabel = (id: string): string => providerOf(id)?.label ?? id;
 // The summary names every provider; a finding names its own only when the findings came from more than one.
 const severalProviders = computed(() => new Set(findings.value.map((finding) => finding.provider)).size > 1);
 
-const allowed = computed(() => new Set(policy?.allow ?? []));
+// Read as the shield reads it, so a value listed in other letter case still shows as left alone.
+const allowed = computed(() => new Set((policy?.allow ?? []).map(allowKey)));
 
 // The summary's facts, the ones with something to say.
 const facts = computed(() => {
@@ -218,7 +219,7 @@ const leadOf = (finding: ActivityFinding): { icon: `eye-slash` | `eye` | `times`
                     </template>
                     <template v-if="row.value !== undefined" #control>
                         <!-- A value the shield should have left alone goes on the never-masked list from where it was seen. -->
-                        <span v-if="allowed.has(row.value)" class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.neverMaskedNow`) }}</span>
+                        <span v-if="allowed.has(allowKey(row.value))" class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.neverMaskedNow`) }}</span>
                         <Button v-else size="small" severity="secondary" text :disabled="!ready" @click="emit(`neverMask`, row.value)">{{
                             t(`sandbox.agentPrivacyShield.neverMaskThis`)
                         }}</Button>

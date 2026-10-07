@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
     PERSONAL_DATA_CLASSES,
-    PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
     type PrivacyImages,
     type PrivacyNames,
@@ -21,7 +20,6 @@ import {
     SegmentedControl,
     SkeletonRows,
     SkeletonSnapshot,
-    ui,
     vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -29,10 +27,10 @@ import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref } from "vue";
-import { useDraft } from "../../../../lib/useDraft";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
-import { ALLOW_VALUE_MAX, allowListFrom, allowListProblem, allowListText, ledgerTime, sameList, withClass } from "./privacyShield";
+import { allowAdding, ledgerTime, withClass } from "./privacyShield";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
+import PrivacyNeverMasked from "./PrivacyNeverMasked.vue";
 import PrivacyShieldActivity from "./PrivacyShieldActivity.vue";
 import PrivacyTrustedProviders from "./PrivacyTrustedProviders.vue";
 import { usePrivacyLog, usePrivacyShield, usePrivacySources } from "./usePrivacyShield";
@@ -136,30 +134,13 @@ const forgetNotice = computed(() =>
 
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
 
-// The allow list is edited as text and saved on an explicit press, since a write per keystroke would replace the
-// whole policy dozens of times for one word.
-const allowDraft = useDraft(() => (policy.value === undefined ? undefined : allowListText(policy.value.allow)));
-const allowValues = computed(() => allowListFrom(allowDraft.value));
-const allowUnsaved = computed(() => policy.value !== undefined && !sameList(allowValues.value, policy.value.allow));
-const allowProblem = computed(() => {
-    const problem = allowListProblem(allowValues.value);
-    if (problem === undefined) {
-        return undefined;
-    }
-    return problem.kind === `tooMany`
-        ? t(`sandbox.agentPrivacyShield.allowTooMany`, { max: PRIVACY_ALLOW_MAX, count: problem.count })
-        : t(`sandbox.agentPrivacyShield.allowTooLong`, { max: ALLOW_VALUE_MAX, value: `${problem.value.slice(0, 40)}…` });
-});
-// The box is rewritten to what is saved (blanks and repeats gone), so it never shows a value twice that is stored once.
-const saveAllow = (): void => {
-    const allow = allowValues.value;
-    allowDraft.value = allowListText(allow);
-    write(`shield`, (current) => ({ ...current, allow }));
-};
-// A value the activity showed being masked, pressed as one to leave alone: added to what is saved, which the box above
-// follows unless it holds an edit of its own.
+// A value the activity showed being masked, pressed as one to leave alone: added to what is saved, unless the shield
+// already reads it as listed.
 const neverMask = (value: string): void => {
-    write(`activity`, (current) => ({ ...current, allow: allowListFrom(allowListText([...current.allow, value])) }));
+    write(`activity`, (current) => {
+        const added = allowAdding(current.allow, value);
+        return added.kind === `added` ? { ...current, allow: added.allow } : current;
+    });
 };
 
 // Shown while the shield runs, or while it still has something to show: a dataset taught while it was off is the
@@ -282,33 +263,11 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                     <!-- The lists both ways of finding names read, the model's way included: what they hold, and a word checked. -->
                     <PrivacyNameDictionary />
 
-                    <Row
-                        icon="check-circle"
-                        :title="t(`sandbox.agentPrivacyShield.neverMasked`)"
-                        :description="t(`sandbox.agentPrivacyShield.neverMaskedNote`)"
-                    >
-                        <template #below>
-                            <div class="flex flex-col gap-2">
-                                <textarea
-                                    v-model="allowDraft"
-                                    rows="4"
-                                    :disabled="!ready"
-                                    :aria-label="t(`sandbox.agentPrivacyShield.neverMasked`)"
-                                    :placeholder="t(`sandbox.agentPrivacyShield.neverMaskedPlaceholder`)"
-                                    :class="ui.input(`w-full resize-y font-mono`)"
-                                ></textarea>
-                                <div class="flex flex-wrap items-center justify-end gap-3">
-                                    <span v-if="allowProblem !== undefined" class="mr-auto text-2xs text-danger">{{ allowProblem }}</span>
-                                    <span v-else-if="allowUnsaved" class="mr-auto text-2xs text-warning">{{
-                                        t(`sandbox.agentPrivacyShield.notSavedYet`)
-                                    }}</span>
-                                    <Button size="small" :disabled="!allowUnsaved || allowProblem !== undefined" @click="saveAllow">
-                                        {{ t(`ui.action.save`) }}
-                                    </Button>
-                                </div>
-                            </div>
-                        </template>
-                    </Row>
+                    <PrivacyNeverMasked
+                        :allow="policy?.allow"
+                        :ready="ready"
+                        @write="(change) => write(`shield`, (current) => ({ ...current, allow: change(current.allow) }))"
+                    />
                 </template>
 
                 <RowNote v-if="saveNotice !== undefined && writtenFrom === `shield`" variant="block"><Notice :of="saveNotice" /></RowNote>

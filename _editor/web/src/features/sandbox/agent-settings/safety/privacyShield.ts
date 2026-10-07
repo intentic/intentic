@@ -43,24 +43,27 @@ export const withClass = (policy: PrivacyShieldPolicy, kind: PersonalDataClass, 
 export const providerTrusted = (provider: PrivacyProvider, policy: PrivacyShieldPolicy): boolean =>
     provider.local || policy.trusted.includes(provider.id);
 
-// The allow list as the textarea holds it: one value per line, blanks and repeats dropped, so what is saved is exactly
-// the set the owner sees once the draft is re-read from the daemon.
-export const allowListFrom = (text: string): string[] => [
-    ...new Set(
-        text
-            .split(`\n`)
-            .map((line) => line.trim())
-            .filter((line) => line !== ``),
-    ),
-];
+// The daemon's own reading of an allowed value (normalizeAllowed in the sandbox's detector): case, Unicode form and runs
+// of whitespace do not tell two values apart, so the list never holds "Acme" and "ACME" as two entries.
+export const allowKey = (value: string): string => value.normalize(`NFC`).toLowerCase().replace(/\s+/g, ` `).trim();
 
-export const allowListText = (allow: readonly string[]): string => allow.join(`\n`);
+// Values from typed or pasted text, one per line: trimmed, blanks dropped, and a value the shield reads as one already
+// given kept once, as first written.
+export const allowValuesFrom = (text: string): string[] => {
+    const seen = new Set<string>();
+    const values: string[] = [];
+    for (const line of text.split(/\r?\n/)) {
+        const value = line.trim();
+        const key = allowKey(value);
+        if (key !== `` && !seen.has(key)) {
+            seen.add(key);
+            values.push(value);
+        }
+    }
+    return values;
+};
 
-// Whether two lists are the same values in the same order; the draft is unsaved exactly when they differ.
-export const sameList = (left: readonly string[], right: readonly string[]): boolean =>
-    left.length === right.length && left.every((value, index) => value === right[index]);
-
-// Why a draft cannot be saved, said before the daemon refuses the whole policy for it.
+// Why a list cannot be saved, said before the daemon refuses the whole policy for it.
 export type AllowListProblem = { readonly kind: `tooLong`; readonly value: string } | { readonly kind: `tooMany`; readonly count: number };
 
 export const allowListProblem = (values: readonly string[]): AllowListProblem | undefined => {
@@ -69,6 +72,48 @@ export const allowListProblem = (values: readonly string[]): AllowListProblem | 
     }
     const tooLong = values.find((value) => value.length > ALLOW_VALUE_MAX);
     return tooLong === undefined ? undefined : { kind: `tooLong`, value: tooLong };
+};
+
+// What adding typed or pasted text comes to: the new list with what was new at its end, and which values it already held;
+// or the reason it cannot be saved, in which case nothing is added, so a pasted list never lands half.
+export type AllowAddition =
+    | { readonly kind: `added`; readonly allow: string[]; readonly added: string[]; readonly already: string[] }
+    | { readonly kind: `refused`; readonly problem: AllowListProblem };
+
+export const allowAdding = (allow: readonly string[], text: string): AllowAddition => {
+    const held = new Set(allow.map(allowKey));
+    const values = allowValuesFrom(text);
+    const added = values.filter((value) => !held.has(allowKey(value)));
+    const already = values.filter((value) => held.has(allowKey(value)));
+    const next = [...allow, ...added];
+    const problem = added.length === 0 ? undefined : allowListProblem(next);
+    return problem === undefined ? { kind: `added`, allow: next, added, already } : { kind: `refused`, problem };
+};
+
+// One value rewritten where it stands, to fix a typo without losing its place. Emptied, it is removed; rewritten into a
+// value the list already holds, the two become one.
+export type AllowEdit = { readonly kind: `edited`; readonly allow: string[] } | { readonly kind: `refused`; readonly problem: AllowListProblem };
+
+export const allowEdited = (allow: readonly string[], from: string, to: string): AllowEdit => {
+    const value = to.trim();
+    if (value.length > ALLOW_VALUE_MAX) {
+        return { kind: `refused`, problem: { kind: `tooLong`, value } };
+    }
+    const key = allowKey(value);
+    const elsewhere = key !== `` && allow.some((each) => each !== from && allowKey(each) === key);
+    if (key === `` || elsewhere) {
+        return { kind: `edited`, allow: allow.filter((each) => each !== from) };
+    }
+    return { kind: `edited`, allow: allow.map((each) => (each === from ? value : each)) };
+};
+
+export const allowRemoving = (allow: readonly string[], value: string): string[] => allow.filter((each) => each !== value);
+
+// The list as drawn: the newest first, so what was just added is at the top, narrowed to what holds the query as the
+// shield would read either.
+export const allowShown = (allow: readonly string[], query: string): string[] => {
+    const wanted = allowKey(query);
+    return allow.filter((value) => wanted === `` || allowKey(value).includes(wanted)).toReversed();
 };
 
 export interface FoundPart {
