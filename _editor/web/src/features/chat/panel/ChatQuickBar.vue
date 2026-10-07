@@ -251,7 +251,6 @@ const restingLine = computed(() => {
                     type="button"
                     class="chat-quick-context group mb-1.5 flex w-full flex-col gap-1 rounded-xl border border-line-strong bg-card/90 px-3 py-2 text-left shadow-lg backdrop-blur-md transition-colors hover:bg-overlay"
                     :aria-label="t(`chat.chatQuickBar.openFullChat`)"
-                    v-tooltip.top="t(`chat.chatQuickBar.openFullChat`)"
                     @click="openChat"
                 >
                     <span class="flex w-full min-w-0 items-center gap-2">
