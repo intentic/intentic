@@ -89,8 +89,19 @@ const removeHttpsCredential = async (host: GitHost): Promise<void> => {
     await writeFile(credentialsPath(), kept.length > 0 ? `${kept.join("\n")}\n` : "", { mode: 0o600 });
 };
 
+// A public line's identity: its type and key, without the comment, which a hand-edited or older file may word otherwise.
+const keyOfLine = (line: string): string => line.trim().split(/\s+/u).slice(0, 2).join(" ");
+
 // Generates the key pair once (regenerating would orphan an already-registered key); registration isn't done here,
-// since it's retried on every apply. Answers the public line, rewriting the alias's public file if it went missing.
+// since it's retried on every apply. Answers the public line of the key the STORE holds.
+//
+// THE STORE'S PRIVATE KEY IS THE ONE TRUTH, and the public file beside the alias is only ever derived from it. The
+// alias's config names that file with IdentitiesOnly, so ssh asks the agent for exactly the key the file holds; the
+// agent holds the store's. This used to trust the file whenever it existed, so a file left from an earlier key (it lives
+// on /history, the store under the auth root, and the two outlived each other) named a key the agent did not have:
+// every push from the owner's terminal died "Permission denied (publickey)" behind a warning about the .pub file's
+// permissions, while the store's key sat on the account the whole time, and the next setup registered the stale file's
+// key on the account instead of the held one (2026-10-07). A file that names any other key is rewritten here.
 const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<string> => {
     // A key an older build left beside the alias is the one on the account: adopted, never replaced by a new one.
     const held = (await keys.get(host.host)) ?? ((await adoptLegacySshKey(host.host, keys)) ? await keys.get(host.host) : undefined);
@@ -100,16 +111,15 @@ const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<string> 
         await writeHostPublicKey(host.host, pair.publicKey);
         return pair.publicKey;
     }
-    // allow(silent-catch): an unreadable public half is rewritten from the private key held in the store, just below.
-    const written = (await readFile(hostPublicKeyPath(host.host), "utf8").catch(() => "")).trim();
-    if (written !== "") {
-        return written;
-    }
     const publicLine = publicLineOf(held);
     if (publicLine === undefined) {
         throw new Error(`the key held for ${host.host} could not be read`);
     }
-    await writeHostPublicKey(host.host, publicLine);
+    // allow(silent-catch): an unreadable public half is rewritten from the private key held in the store, just below.
+    const written = (await readFile(hostPublicKeyPath(host.host), "utf8").catch(() => "")).trim();
+    if (keyOfLine(written) !== keyOfLine(publicLine)) {
+        await writeHostPublicKey(host.host, publicLine);
+    }
     return publicLine;
 };
 
@@ -347,12 +357,7 @@ export const gitAccessWired = async (host: GitHost, keys: SshKeyStore): Promise<
     return httpsRewriteEnabled(host);
 };
 
-export const teardownGitAccess = async (
-    host: GitHost,
-    exec: ExecInTerminal,
-    keys: SshKeyStore,
-    deps: GitAccessDeps = realDeps,
-): Promise<void> => {
+export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, keys: SshKeyStore, deps: GitAccessDeps = realDeps): Promise<void> => {
     // Never set up (or already off): no local files, no account key, no-op without touching the network. A key an older
     // build left beside the alias counts as set up.
     await adoptLegacySshKey(host.host, keys);

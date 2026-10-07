@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -318,6 +319,63 @@ test("git setup: keeps the key in the store, writes the alias + its public half 
     expect(await httpsRewrite("github.com")).toEqual([]);
 });
 
+// A public file left from another key named a key the agent does not hold: ssh, told IdentitiesOnly, asked the agent for
+// it and was refused, while the store's key sat registered on the account (2026-10-07). The store's key is the truth.
+const otherPublicLine = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), "git-cap-other-key-"));
+    execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "intentic-sandbox", "-f", join(dir, "k")]);
+    return readFileSync(join(dir, "k.pub"), "utf8").trim();
+};
+const heldPublicLine = (keys: SshKeyStore, alias: string): string =>
+    execFileSync("ssh-keygen", ["-y", "-f", keys.pathOf(alias)], { encoding: "utf8" })
+        .trim()
+        .split(" ")
+        .slice(0, 2)
+        .join(" ");
+
+test("git setup registers the store's key and rewrites a public file that names any other", async () => {
+    const home = gitHome();
+    const keys = keyStore();
+    const uploads: string[] = [];
+    const deps: GitAccessDeps = {
+        uploadKey: async (_host, publicKey) => void uploads.push(publicKey),
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    };
+    const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
+    await setupGitAccess(host, directExec, keys, deps);
+    writeFileSync(hostPub(home, "github.com"), `${otherPublicLine()}\n`);
+
+    await setupGitAccess(host, directExec, keys, deps);
+
+    const held = heldPublicLine(keys, "github.com");
+    expect(readFileSync(hostPub(home, "github.com"), "utf8")).toStartWith(held);
+    expect(uploads.map((line) => line.split(" ").slice(0, 2).join(" "))).toEqual([held, held]);
+});
+
+test("git restore repairs a public file that names another key, without calling the account", async () => {
+    const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
+    gitHome();
+    await linkSshHosts(history);
+    const keys = keyStore();
+    const uploads: string[] = [];
+    const deps: GitAccessDeps = {
+        uploadKey: async (_host, publicKey) => void uploads.push(publicKey),
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    };
+    const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
+    await setupGitAccess(host, directExec, keys, deps);
+    const home = gitHome();
+    await linkSshHosts(history);
+    writeFileSync(hostPub(home, "github.com"), `${otherPublicLine()}\n`);
+
+    expect(await restoreGitAccess(host, directExec, keys, deps)).toBeUndefined();
+
+    expect(readFileSync(hostPub(home, "github.com"), "utf8")).toStartWith(heldPublicLine(keys, "github.com"));
+    expect(uploads).toHaveLength(1);
+});
+
 test("git setup reroutes ssh over https + warns (no throw) when ssh-key registration is refused", async () => {
     const home = gitHome();
     const deps: GitAccessDeps = {
@@ -518,7 +576,11 @@ test("git access whose ssh alias was taken out from under it pends instead of re
     await writeWorkspaceFile(skillPath(root, "gitlab"), "---\nname: gitlab\n---\n");
     await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
     const host = gitHostOf(gitlabOn);
-    await setupGitAccess(host, directExec, ctx.sshKeys, { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false });
+    await setupGitAccess(host, directExec, ctx.sshKeys, {
+        uploadKey: async () => {},
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    });
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
 
     // Repointing the managed dir strands the alias/key; the https credential in HOME survives but is unreachable.
@@ -590,7 +652,9 @@ test("npm: apply writes the auth line + templated skill; a wiped HOME pends unti
     expect(skill).toContain("name: npm");
     expect(skill).toContain("$(otp npm)");
     expect(skill).toContain("$NPM_TOKEN_NPM");
-    expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe(`//registry.npmjs.org/:_authToken=npm-tok-1\n//127.0.0.1:8790/:_authToken=${GATEWAY_PLACEHOLDER}\n`);
+    expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe(
+        `//registry.npmjs.org/:_authToken=npm-tok-1\n//127.0.0.1:8790/:_authToken=${GATEWAY_PLACEHOLDER}\n`,
+    );
     expect(statSync(join(home, ".npmrc")).mode & 0o777).toBe(0o600);
     expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "active" });
 

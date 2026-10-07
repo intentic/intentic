@@ -98,10 +98,11 @@ export const writeSshHost = async (alias: string, spec: SshHostSpec): Promise<vo
     await writeFile(hostConfPath(alias), configBlock(alias, spec));
 };
 
-// Writes the public half beside the alias's config; the line is what authorized_keys holds, so it is no secret.
+// Writes the public half beside the alias's config; the line is what authorized_keys holds, so it is no secret. Atomic,
+// since it also REPLACES a stale one (git-access.ts) while an ssh may be reading it.
 export const writeHostPublicKey = async (alias: string, publicLine: string): Promise<void> => {
     await mkdir(hostsDir(), { recursive: true, mode: 0o700 });
-    await writeFile(hostPublicKeyPath(alias), publicLine.endsWith("\n") ? publicLine : `${publicLine}\n`, { mode: 0o644 });
+    await writeFileAtomic(hostPublicKeyPath(alias), publicLine.endsWith("\n") ? publicLine : `${publicLine}\n`, 0o644);
 };
 
 // Writes a key the agent cannot sign with (one with a passphrase) beside its alias, 0600 as ssh demands of a key file.
