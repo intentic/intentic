@@ -1,10 +1,42 @@
 import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary } from "@intentic/sandbox-contract";
 
 // Automations acme-shop runs unattended: one of each trigger kind (schedule, once, listener, workspace, event) so the
-// page's claim that they share one machine holds. `runs` give each row a real history.
+// page's claim that they share one machine holds, and enough on a clock (nightly, twice a weekday, every ten minutes,
+// one switched off) to fill a week of the calendar lens. `runs` give each row a real history.
 
 const minutes = (count: number): number => count * 60_000;
 const hours = (count: number): number => count * 3_600_000;
+
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6] as const;
+const WEEKDAYS = [1, 2, 3, 4, 5] as const;
+// A cron's moment, `daysAgo` days back at hh:mm UTC (the demo sandbox keeps no zone of its own, so UTC is the clock its
+// crons run on). Runs set from it, plus the seconds a real wake lands after its moment, sit on the calendar where the
+// rule says they should, which `now - hours(n)` never would.
+const firedAt = (now: number, daysAgo: number, hour: number, minute = 0): number => {
+    const day = new Date(now);
+    return Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() - daysAgo, hour, minute);
+};
+// The next hh:mm UTC after now on one of `weekdays` (0 = Sunday), what the daemon's nextRunOf answers for these rules.
+const nextAt = (now: number, hour: number, minute = 0, weekdays: readonly number[] = EVERY_DAY): number => {
+    for (let ahead = 0; ahead <= 7; ahead++) {
+        const at = firedAt(now, -ahead, hour, minute);
+        if (at > now && weekdays.includes(new Date(at).getUTCDay())) {
+            return at;
+        }
+    }
+    return now + hours(24);
+};
+// The last `count` fires of an hh:mm UTC rule before now, newest first, on `weekdays` only: what its ledger would hold.
+const firesBefore = (now: number, hour: number, minute: number, count: number, weekdays: readonly number[] = EVERY_DAY): number[] => {
+    const fires: number[] = [];
+    for (let back = 0; fires.length < count && back < 60; back++) {
+        const at = firedAt(now, back, hour, minute);
+        if (at < now && weekdays.includes(new Date(at).getUTCDay())) {
+            fires.push(at);
+        }
+    }
+    return fires;
+};
 
 const seed = (now: number): AutomationSummary[] => [
     {
@@ -15,13 +47,66 @@ const seed = (now: number): AutomationSummary[] => [
         chore: true,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         enabled: true,
-        nextRun: now + hours(9),
+        nextRun: nextAt(now, 3),
+        runs: firesBefore(now, 3, 0, 4).map((at, index) =>
+            index % 2 === 0
+                ? {
+                      at: at + 41_000,
+                      outcome: `completed` as const,
+                      detail: index === 0 ? `3 advisories, 2 patched` : `1 advisory, patched`,
+                      conversationId: index === 0 ? `cnv_dep_audit` : `cnv_dep_audit_prev`,
+                  }
+                : { at: at + 12_000, outcome: `skipped` as const, detail: `guard exited 1, no high advisories` },
+        ),
+    },
+    {
+        // Twice every weekday: the shape that shows two wakes a day stacking up on the calendar, and one of them failing.
+        id: `triage-issues`,
+        trigger: { kind: `schedule`, cron: `0 9,14 * * 1-5` },
+        prompt: `Read the issues opened since the last triage. Label each, close the duplicates with a link to the original, and open one conversation listing anything that needs a person.`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
+        enabled: true,
+        nextRun: Math.min(nextAt(now, 9, 0, WEEKDAYS), nextAt(now, 14, 0, WEEKDAYS)),
+        // The newest afternoon run failed, so the row and the calendar both have a failure to show.
         runs: [
-            { at: now - hours(7), outcome: `completed`, detail: `3 advisories, 2 patched`, conversationId: `cnv_dep_audit` },
-            { at: now - hours(31), outcome: `skipped`, detail: `guard exited 1, no high advisories` },
-            { at: now - hours(55), outcome: `completed`, detail: `1 advisory, patched`, conversationId: `cnv_dep_audit_prev` },
-            { at: now - hours(79), outcome: `skipped`, detail: `guard exited 1, no high advisories` },
-        ],
+            ...firesBefore(now, 14, 0, 3, WEEKDAYS).map((at, index) =>
+                index === 0
+                    ? { at: at + 52_000, outcome: `error` as const, detail: `the GitHub token was refused (401)` }
+                    : { at: at + 47_000, outcome: `completed` as const, detail: `9 labelled, 2 closed as duplicates`, conversationId: `cnv_triage_pm` },
+            ),
+            ...firesBefore(now, 9, 0, 3, WEEKDAYS).map((at) => ({
+                at: at + 31_000,
+                outcome: `completed` as const,
+                detail: `4 labelled`,
+                conversationId: `cnv_triage_am`,
+            })),
+        ].toSorted((a, b) => b.at - a.at),
+    },
+    {
+        // Every ten minutes, behind a guard that is almost always quiet: the cadence the calendar draws as one bar.
+        id: `uptime-probe`,
+        trigger: { kind: `schedule`, cron: `*/10 * * * *` },
+        guard: `curl -fsS https://acme.example/healthz > /dev/null && exit 1 || exit 0`,
+        prompt: `acme.example stopped answering its health check. Find out why from the deploy log and the last landed change, and say what to roll back if it is ours.`,
+        models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
+        chore: true,
+        enabled: true,
+        nextRun: Math.ceil(now / minutes(10)) * minutes(10),
+        runs: Array.from({ length: 8 }, (_, index) => ({
+            at: Math.floor(now / minutes(10)) * minutes(10) - minutes(10 * index),
+            outcome: index === 5 ? (`completed` as const) : (`skipped` as const),
+            detail: index === 5 ? `healthz timed out for 40s, recovered on its own` : `guard exited 1, healthy`,
+            ...(index === 5 ? { conversationId: `cnv_uptime_blip` } : {}),
+        })),
+    },
+    {
+        id: `release-notes`,
+        trigger: { kind: `schedule`, cron: `0 16 * * 5` },
+        prompt: `Draft this week's release notes from what landed on main since last Friday, grouped by area, for an approver to read before they go out.`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
+        // Off: the shape the calendar keeps out of the way until asked for.
+        enabled: false,
+        runs: [],
     },
     {
         // Never run and still ahead of its moment, which is what almost every one-time wake looks like: they exist to

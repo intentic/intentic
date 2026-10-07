@@ -7,26 +7,45 @@ import type { AutomationTemplate } from "@intentic/sandbox-contract";
 import { availableTemplates, type AvailableSource, glyph } from "./catalog";
 import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
+import { localInputOf } from "./cronSchedule";
+import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
 import { t } from "./i18n.js";
 
 // Composes inline in the list, at page width, matching how editing already works (AutomationRow) rather than in a
 // modal. Mounted only while open, so fields, pick and error always start empty. Keeps the dialog's handoff: a webhook
 // or Visitor chat isn't finished at save, so the panel swaps to what to paste instead of closing.
 
-const { prefill, listenerSources, templates } = defineProps<{
+const { prefill, at, listenerSources, templates } = defineProps<{
     prefill?: AutomationTemplate;
+    /** A moment picked on the calendar: the composer opens as a one-time wake there. */
+    at?: number;
     listenerSources: readonly AvailableSource[];
     templates: readonly AutomationTemplate[];
 }>();
 const emit = defineEmits<{ created: [id: string]; close: [] }>();
 
 const { automations, save } = useAutomations();
+const sandboxZone = useSandboxZone();
 const state = useAutomationForm(
     computed(() => listenerSources),
     computed(() => templates),
-    useSandboxZone(),
+    sandboxZone,
 );
 const { form, valid, touchAll, build, loadTemplate } = state;
+// Set once, at open. The schedule's own time and weekday follow the slot too, so switching the trigger to repeat keeps
+// the moment that was clicked rather than snapping back to the form's 09:00. And the clock it was clicked on: the
+// calendar is drawn on the reader's, so a reader whose sandbox keeps another zone gets a schedule on their own, or the
+// 12:15 they clicked would repeat at 12:15 somewhere else.
+if (at !== undefined) {
+    const local = localInputOf(at);
+    form.kind = `once`;
+    form.onceAt = local;
+    state.schedule.time = local.slice(11, 16);
+    state.schedule.days = [new Date(at).getDay()];
+    if (zoneLabel(sandboxZone.value, localZone()) !== undefined) {
+        form.tz = localZone();
+    }
+}
 
 const capabilities = computed(() => host().workspace.capabilities());
 const picked = ref<AutomationTemplate | undefined>(prefill);

@@ -18,8 +18,10 @@ import {
     vAction,
     vSkeletonSource,
 } from "@intentic/extension-ui";
-import { computed, reactive, ref } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
+import AutomationCalendar from "./AutomationCalendar.vue";
 import AutomationComposer from "./AutomationComposer.vue";
+import AutomationEditor from "./AutomationEditor.vue";
 import AutomationRow from "./AutomationRow.vue";
 import VisitorChatInstallDialog from "./VisitorChatInstallDialog.vue";
 import { host } from "./host";
@@ -30,6 +32,10 @@ import { t } from "./i18n.js";
 // Automations: trigger, then optional guard, then the prompt the agent wakes with; the daemon fires them and records
 // history. The page lists what's standing (two shelves of rows) and what else could be (the offers below). Creating
 // and editing happen inline, never in a dialog.
+//
+// Two lenses on the one list. The List is home: every trigger kind, its state, its controls. The Calendar answers what
+// the list cannot, across rows: what wakes when this week, what piles onto the same night, what ran and failed. Only
+// clock-driven automations have a place on it, which is why it is a second lens rather than the page.
 
 const { automations, isLoading, error: listError, save, setEnabled, remove, run } = useAutomations();
 // Only draws the wait once it's lasted long enough to be worth seeing.
@@ -61,6 +67,40 @@ const enabling = ref<string | undefined>(undefined);
 const confirmRemoveId = ref<string | undefined>(undefined);
 const search = ref(``);
 const view = ref<View>(`all`);
+
+// Which lens, remembered per browser: somebody who plans by the week opens on the week.
+type Lens = `list` | `calendar`;
+const LENS_KEY = `intentic.automations.lens`;
+const readLens = (): Lens => {
+    try {
+        return localStorage.getItem(LENS_KEY) === `calendar` ? `calendar` : `list`;
+    } catch {
+        // allow(silent-catch): storage refused (a locked-down browser) is the list, every time.
+        return `list`;
+    }
+};
+const lens = ref<Lens>(readLens());
+watch(lens, (next) => {
+    // An edit the calendar opened belongs to the calendar; the list edits in its rows.
+    editingId.value = undefined;
+    try {
+        localStorage.setItem(LENS_KEY, next);
+    } catch {
+        // allow(silent-catch): not remembering the lens costs one click next time, nothing more.
+    }
+});
+const lensOptions = computed(() => [
+    { label: t(`automationsView.list`), value: `list` as const, icon: `bars` as const },
+    { label: t(`automationsView.calendar`), value: `calendar` as const, icon: `calendar` as const },
+]);
+// A moment clicked on the calendar, which the composer opens on as a one-time wake.
+const createAt = ref<number | undefined>(undefined);
+// The automation the calendar is editing, in the card above it; the list edits inside its own row instead.
+const editingId = ref<string | undefined>(undefined);
+const editingAutomation = computed(() => automations.value.find((automation) => automation.id === editingId.value));
+// The card the calendar opened, brought into view: the click that opened it may be a screen further down.
+const topCard = ref<HTMLElement>();
+const revealTop = (): void => void nextTick(() => topCard.value?.scrollIntoView({ block: `nearest`, behavior: `smooth` }));
 
 const topError = computed(() => actionError.value ?? listError.value ?? catalogError.value);
 
@@ -120,6 +160,37 @@ const openFromSuggestion = (recipe: AutomationTemplate): void => {
 const closeComposer = (): void => {
     createOpen.value = false;
     createPrefill.value = undefined;
+    createAt.value = undefined;
+};
+const createAtSlot = (at: number): void => {
+    editingId.value = undefined;
+    createPrefill.value = undefined;
+    createAt.value = at;
+    createOpen.value = true;
+    revealTop();
+};
+const editFromCalendar = (id: string): void => {
+    closeComposer();
+    editingId.value = id;
+    revealTop();
+};
+const openNew = (): void => {
+    editingId.value = undefined;
+    createOpen.value = true;
+};
+// The calendar speaks in ids; the list's own handlers take the row.
+const byId = (id: string): AutomationSummary | undefined => automations.value.find((automation) => automation.id === id);
+const runById = (id: string): void => {
+    const automation = byId(id);
+    if (automation !== undefined) {
+        void runNow(automation);
+    }
+};
+const toggleById = (id: string, enabled: boolean): void => {
+    const automation = byId(id);
+    if (automation !== undefined) {
+        void toggle(automation, enabled);
+    }
 };
 
 // Enablement is its own mutation: a switch changes one fact and never serializes the automation around it.
@@ -173,23 +244,49 @@ const toggleDetail = (id: string): void => {
     <Page width="wide">
         <PageHeader :title="t(`automationsView.automations`)">
             <template #actions>
-                <PageAction icon="plus" :label="t(`automationsView.newAutomation`)" primary @click="createOpen = true" />
+                <SegmentedControl v-model="lens" :options="lensOptions" />
+                <PageAction icon="plus" :label="t(`automationsView.newAutomation`)" primary @click="openNew" />
             </template>
         </PageHeader>
 
         <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
         <div class="flex flex-col gap-6">
-            <!-- Keyed on the prefill, so picking a different suggestion while open remounts fresh instead of keeping stale fields. -->
-            <AutomationComposer
-                :templates="offered"
-                v-if="createOpen"
-                :key="createPrefill?.id ?? `blank`"
-                :prefill="createPrefill"
-                :listener-sources="listenerSources"
-                @created="expanded.add($event)"
-                @close="closeComposer"
-            />
+            <!-- Keyed on the prefill and the slot, so picking a different suggestion or moment while open remounts fresh
+                 instead of keeping stale fields. -->
+            <div v-if="createOpen" ref="topCard">
+                <AutomationComposer
+                    :templates="offered"
+                    :key="`${createPrefill?.id ?? `blank`}@${createAt ?? ``}`"
+                    :prefill="createPrefill"
+                    :at="createAt"
+                    :listener-sources="listenerSources"
+                    @created="expanded.add($event)"
+                    @close="closeComposer"
+                />
+            </div>
+
+            <!-- The calendar's edit form, shaped like the composer: the same card, the same place, for the other verb. -->
+            <section
+                v-if="lens === `calendar` && editingAutomation"
+                ref="topCard"
+                :key="editingAutomation.id"
+                class="flex flex-col gap-3 rounded-lg bg-card p-4 shadow-sm"
+            >
+                <div class="flex items-center gap-2">
+                    <Icon name="pencil" class="shrink-0 text-2xs text-subtle" />
+                    <h2 class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ editingAutomation.id }}</h2>
+                    <button type="button" :class="ui.iconButton()" :aria-label="t(`automationComposer.close`)" @click="editingId = undefined">
+                        <Icon name="times" class="text-xs" />
+                    </button>
+                </div>
+                <AutomationEditor
+                    :automation="editingAutomation"
+                    :listener-sources="listenerSources"
+                    :templates="offered"
+                    @done="editingId = undefined"
+                />
+            </section>
 
             <!-- Skeletons distinguish the pending list from a true empty state. -->
             <template v-if="isLoading">
@@ -201,6 +298,18 @@ const toggleDetail = (id: string): void => {
                     </RowGroup>
                 </SkeletonSnapshot>
             </template>
+
+            <AutomationCalendar
+                v-else-if="lens === `calendar`"
+                :automations="automations"
+                :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
+                :draft="createOpen ? createAt : undefined"
+                @create="createAtSlot"
+                @edit="editFromCalendar"
+                @run="runById"
+                @toggle="toggleById"
+                @list="lens = `list`"
+            />
 
             <!-- The header names both navigation destinations without adding another button. The second sentence points at the
                  offers section below, which is itself conditional: with nothing on offer here (a workspace whose capabilities
@@ -281,7 +390,7 @@ const toggleDetail = (id: string): void => {
             </div>
 
             <!-- Automation sections use one equal-width grid. -->
-            <section v-if="availableChores.length > 0 || availableSuggestions.length > 0" class="@container">
+            <section v-if="lens === `list` && (availableChores.length > 0 || availableSuggestions.length > 0)" class="@container">
                 <div class="mb-2.5 px-1">
                     <span :class="ui.sectionLabel()">{{ t(`automationsView.addAutomation`) }}</span>
                 </div>

@@ -9,8 +9,6 @@ import {
     DisclosureRow,
     formatDateTime,
     Icon,
-    Notice,
-    noticeOf,
     OverflowActions,
     ToggleSwitch,
     type IconName,
@@ -20,10 +18,9 @@ import { computed, ref } from "vue";
 import { nextIn, scheduleTriggerLabel, since } from "./cronSchedule";
 import { host } from "./host";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
-import AutomationFields from "./AutomationFields.vue";
+import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
 import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
-import { useAutomationForm } from "./useAutomationForm";
 import { t } from "./i18n.js";
 
 // Two lines only: what it's called, and what it does when; everything else (prompt, URL, wake settings, run ledger,
@@ -140,19 +137,10 @@ const openRun = (run: AutomationRun): void => {
 
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
 
-// Loaded fresh on Edit, discarded on Cancel, never half-typed against what the list shows as saved. No
-// save-as-you-type, unlike the acceptance rows this borrows from: a half-typed Visitor chat would turn visitors away
-// mid-keystroke.
+// The form itself is AutomationEditor's, mounted only while editing, so it loads fresh on every Edit.
 const editing = ref(false);
-const editError = ref<string | undefined>(undefined);
 const sandboxZone = useSandboxZone();
-const editForm = useAutomationForm(
-    computed(() => props.listenerSources),
-    computed(() => props.templates),
-    sandboxZone,
-);
-const { save, rotateToken } = useAutomations();
-const saving = computed(() => save.isPending.value);
+const { rotateToken } = useAutomations();
 // Two presses, like every undoable action here: the old URL dies the moment the daemon answers.
 const confirmingRotate = ref(false);
 const rotate = async (): Promise<void> => {
@@ -161,31 +149,10 @@ const rotate = async (): Promise<void> => {
 };
 
 const startEdit = (): void => {
-    editForm.load(props.automation);
-    editError.value = undefined;
     editing.value = true;
     // Editing implies reading what you are editing: a collapsed row would hide the form entirely.
     if (!props.expanded) {
         emit(`expand`);
-    }
-};
-
-const cancelEdit = (): void => {
-    editing.value = false;
-    editError.value = undefined;
-};
-
-const saveEdit = async (): Promise<void> => {
-    editForm.touchAll();
-    if (!editForm.valid.value || saving.value) {
-        return;
-    }
-    editError.value = undefined;
-    try {
-        await save.mutateAsync(editForm.build());
-        editing.value = false;
-    } catch (err) {
-        editError.value = err instanceof Error ? err.message : t(`automationRow.couldntSave`);
     }
 };
 
@@ -448,17 +415,14 @@ const verbs = computed((): ActionItem[] => [
         <!-- The prose half, on demand: what this automation actually says and does, then what it has done. -->
         <template #below>
             <!-- Not a dialog, same reasoning as the acceptance rows: a modal hides the list you're comparing against. -->
-            <div v-if="editing" class="flex flex-col gap-3 pr-3">
-                <Notice v-if="editError" :of="noticeOf(editError)" />
-                <AutomationFields :state="editForm" :name-locked="true" />
-                <!-- Match the composer's footer size because this is a form submit. -->
-                <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
-                    <Button :label="t(`automationRow.cancel`)" severity="secondary" :text="true" @click="cancelEdit" />
-                    <Button :label="t(`automationRow.save`)" :loading="saving" @click="saveEdit">
-                        <template #icon><Icon name="check" /></template>
-                    </Button>
-                </div>
-            </div>
+            <AutomationEditor
+                v-if="editing"
+                class="pr-3"
+                :automation="automation"
+                :listener-sources="listenerSources"
+                :templates="templates"
+                @done="editing = false"
+            />
 
             <!-- Two columns for two questions: what this is, and what it's done. -->
             <div v-else class="grid gap-x-6 gap-y-4 pr-3 @3xl:grid-cols-3">

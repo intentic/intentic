@@ -198,6 +198,7 @@
         "all": "Todas",
         "automations": "Automatizaciones",
         "buildOne": "Construye una con",
+        "calendar": "Calendario",
         "codeChores": "Tareas de código",
         "delete": "Eliminar",
         "deleteAutomation": "Eliminar la automatización",
@@ -205,6 +206,7 @@
         "filterAutomations": "Filtrar automatizaciones",
         "filterByNamePrompt": "Filtrar por nombre o indicación…",
         "integrations": "Integraciones",
+        "list": "Lista",
         "newAutomation": "Automatización nueva",
         "nothingMatchesFilter": "Nada coincide con este filtro.",
         "nothingRunsOnOwn": "Todavía no se ejecuta nada por su cuenta.",
@@ -244,5 +246,33 @@
         "lastRuns": "Última ejecución | Últimas {count} ejecuciones",
         "ran": "Hechas",
         "skipped": "Omitidas"
+    },
+    "calendar": {
+        "today": "Hoy",
+        "previousWeek": "Semana anterior",
+        "nextWeek": "Semana siguiente",
+        "paused": "{count} desactivada | {count} desactivadas",
+        "throughTheDay": "Se ejecuta durante el día",
+        "nothingThisWeek": "Esta semana nada despierta por horario.",
+        "clickToSet": "Haz clic en un hueco libre para programar ahí un despertar único.",
+        "elsewhere": "{count} automatización despierta con eventos, no por horario. | {count} automatizaciones despiertan con eventos, no por horario.",
+        "openList": "Ver la lista",
+        "yourClock": "Horas según tu reloj, {zone}",
+        "state": {
+            "upcoming": "Despierta",
+            "paused": "Desactivada",
+            "completed": "Ejecutada",
+            "error": "Falló",
+            "skipped": "Omitida",
+            "interrupted": "Interrumpida"
+        },
+        "peek": {
+            "oneTime": "Una sola vez",
+            "switchedOff": "Desactivada",
+            "guarded": "Comprueba primero y solo despierta si la comprobación encuentra algo.",
+            "afterSessions": "Se omite hasta que se haya ejecutado {count} sesión nueva. | Se omite hasta que se hayan ejecutado {count} sesiones nuevas.",
+            "openTranscript": "Abrir la transcripción",
+            "nextIn": "Próxima {when}"
+        }
     }
 }

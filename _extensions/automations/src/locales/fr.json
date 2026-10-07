@@ -195,6 +195,7 @@
         "all": "Toutes",
         "automations": "Automatisations",
         "buildOne": "Construisez-en une avec",
+        "calendar": "Calendrier",
         "codeChores": "Corvées de code",
         "delete": "Supprimer",
         "deleteAutomation": "Supprimer l'automatisation",
@@ -202,6 +203,7 @@
         "filterAutomations": "Filtrer les automatisations",
         "filterByNamePrompt": "Filtrer par nom ou consigne…",
         "integrations": "Intégrations",
+        "list": "Liste",
         "newAutomation": "Nouvelle automatisation",
         "nothingMatchesFilter": "Rien ne correspond à ce filtre.",
         "nothingRunsOnOwn": "Rien ne tourne encore tout seul.",
@@ -241,5 +243,33 @@
         "lastRuns": "Dernière exécution | {count} dernières exécutions",
         "ran": "Faites",
         "skipped": "Ignorées"
+    },
+    "calendar": {
+        "today": "Aujourd'hui",
+        "previousWeek": "Semaine précédente",
+        "nextWeek": "Semaine suivante",
+        "paused": "{count} désactivée | {count} désactivées",
+        "throughTheDay": "Tourne toute la journée",
+        "nothingThisWeek": "Rien ne se réveille sur horaire cette semaine.",
+        "clickToSet": "Cliquez sur un créneau libre pour y programmer un réveil unique.",
+        "elsewhere": "{count} automatisation se réveille sur événement, pas sur horaire. | {count} automatisations se réveillent sur événement, pas sur horaire.",
+        "openList": "Voir la liste",
+        "yourClock": "Heures selon votre horloge, {zone}",
+        "state": {
+            "upcoming": "Réveil",
+            "paused": "Désactivée",
+            "completed": "Exécutée",
+            "error": "Échec",
+            "skipped": "Ignorée",
+            "interrupted": "Interrompue"
+        },
+        "peek": {
+            "oneTime": "Une seule fois",
+            "switchedOff": "Désactivée",
+            "guarded": "Vérifie d'abord, et ne se réveille que si la vérification trouve quelque chose.",
+            "afterSessions": "Ignorée jusqu'à ce que {count} nouvelle session ait tourné. | Ignorée jusqu'à ce que {count} nouvelles sessions aient tourné.",
+            "openTranscript": "Ouvrir la transcription",
+            "nextIn": "Prochaine {when}"
+        }
     }
 }

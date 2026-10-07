@@ -249,6 +249,7 @@
         "all": "All",
         "automations": "Automations",
         "buildOne": "Build one with",
+        "calendar": "Calendar",
         "codeChores": "Code chores",
         "couldntRemove": "Could not remove the automation.",
         "couldntRun": "Could not run the automation.",
@@ -259,6 +260,7 @@
         "filterAutomations": "Filter automations",
         "filterByNamePrompt": "Filter by name or prompt…",
         "integrations": "Integrations",
+        "list": "List",
         "newAutomation": "New automation",
         "nothingMatchesFilter": "Nothing matches this filter.",
         "nothingRunsOnOwn": "Nothing runs on its own yet.",
@@ -341,5 +343,33 @@
             "th": "{day}th"
         },
         "weekdays": "Weekdays {time}"
+    },
+    "calendar": {
+        "today": "Today",
+        "previousWeek": "Previous week",
+        "nextWeek": "Next week",
+        "paused": "{count} switched off | {count} switched off",
+        "throughTheDay": "Runs through the day",
+        "nothingThisWeek": "Nothing wakes on a clock this week.",
+        "clickToSet": "Click any free time to set a one-time wake there.",
+        "elsewhere": "{count} automation wakes on events, not on a clock. | {count} automations wake on events, not on a clock.",
+        "openList": "See the list",
+        "yourClock": "Times on your clock, {zone}",
+        "state": {
+            "upcoming": "Wakes",
+            "paused": "Off",
+            "completed": "Ran",
+            "error": "Failed",
+            "skipped": "Skipped",
+            "interrupted": "Cut off"
+        },
+        "peek": {
+            "oneTime": "One time",
+            "switchedOff": "Switched off",
+            "guarded": "Checks first, and wakes only if its check finds something.",
+            "afterSessions": "Skipped until {count} new session has run. | Skipped until {count} new sessions have run.",
+            "openTranscript": "Open the transcript",
+            "nextIn": "Next {when}"
+        }
     }
 }

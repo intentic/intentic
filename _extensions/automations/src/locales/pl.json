@@ -249,6 +249,7 @@
         "all": "Wszystkie",
         "automations": "Automatyzacje",
         "buildOne": "Zbuduj jedną za pomocą",
+        "calendar": "Kalendarz",
         "codeChores": "Zadania przy kodzie",
         "couldntRemove": "Nie udało się usunąć automatyzacji.",
         "couldntRun": "Nie udało się uruchomić automatyzacji.",
@@ -259,6 +260,7 @@
         "filterAutomations": "Filtruj automatyzacje",
         "filterByNamePrompt": "Filtruj po nazwie albo prompcie…",
         "integrations": "Integracje",
+        "list": "Lista",
         "newAutomation": "Nowa automatyzacja",
         "nothingMatchesFilter": "Nic nie pasuje do tego filtra.",
         "nothingRunsOnOwn": "Nic jeszcze nie działa samo z siebie.",
@@ -341,5 +343,33 @@
             "th": "{day}."
         },
         "weekdays": "W dni robocze {time}"
+    },
+    "calendar": {
+        "today": "Dziś",
+        "previousWeek": "Poprzedni tydzień",
+        "nextWeek": "Następny tydzień",
+        "paused": "{count} wyłączona | {count} wyłączone | {count} wyłączonych",
+        "throughTheDay": "Działa przez cały dzień",
+        "nothingThisWeek": "W tym tygodniu nic nie budzi się według zegara.",
+        "clickToSet": "Kliknij wolny termin, żeby ustawić tam jednorazowe wybudzenie.",
+        "elsewhere": "{count} automatyzacja budzi się na zdarzenia, nie według zegara. | {count} automatyzacje budzą się na zdarzenia, nie według zegara. | {count} automatyzacji budzi się na zdarzenia, nie według zegara.",
+        "openList": "Zobacz listę",
+        "yourClock": "Godziny według Twojego zegara, {zone}",
+        "state": {
+            "upcoming": "Budzi",
+            "paused": "Wyłączona",
+            "completed": "Wykonano",
+            "error": "Nieudane",
+            "skipped": "Pominięto",
+            "interrupted": "Przerwano"
+        },
+        "peek": {
+            "oneTime": "Jednorazowo",
+            "switchedOff": "Wyłączona",
+            "guarded": "Najpierw sprawdza i budzi się tylko wtedy, gdy coś znajdzie.",
+            "afterSessions": "Pomijana, dopóki nie odbędzie się {count} nowa sesja. | Pomijana, dopóki nie odbędą się {count} nowe sesje. | Pomijana, dopóki nie odbędzie się {count} nowych sesji.",
+            "openTranscript": "Otwórz transkrypcję",
+            "nextIn": "Następne {when}"
+        }
     }
 }
