@@ -22,6 +22,13 @@ jest.mock("../../../workspace/home/thumbnails", () => ({
     },
 }));
 
+// What each picture was judged (shotLook.ts) by path; a path not set is an ordinary picture, unset in `unjudged` still coming.
+const judged = new Map<string, { plain: boolean; print: string | undefined }>();
+const unjudged = new Set<string>();
+jest.mock("./shotLooks", () => ({
+    shotLook: (_agent: string | undefined, path: string) => (unjudged.has(path) ? undefined : (judged.get(path) ?? { plain: false, print: path })),
+}));
+
 // The viewport is the observer's to judge, which jsdom has none of: each case says when its strip comes near.
 const nearing: (() => void)[] = [];
 jest.mock("../../../workspace/home/nearViewport", () => ({
@@ -44,11 +51,12 @@ const shotsOf = (...names: string[]): ChatShot[] =>
 
 let app: App | undefined;
 const view = jest.fn<(shot: ChatShot) => void>();
+const reveal = jest.fn<(shown: boolean) => void>();
 
-const mount = (shots: readonly ChatShot[]): HTMLElement => {
+const mount = (shots: readonly ChatShot[], revealed = false): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatTurnShots, { shots, agent: undefined, onView: view }) });
+    app = createApp({ render: () => h(ChatTurnShots, { shots, agent: undefined, revealed, onView: view, onReveal: reveal }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -59,6 +67,9 @@ const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.query
 
 beforeEach(() => {
     view.mockClear();
+    reveal.mockClear();
+    judged.clear();
+    unjudged.clear();
     tiles.clear();
     tileAsks.length = 0;
     viewAsks.length = 0;
@@ -152,5 +163,55 @@ describe(`ChatTurnShots`, () => {
         await nextTick();
         expect(looks()).toEqual([]);
         expect(view.mock.calls).toEqual([[shots[1]!]]);
+    });
+
+    // The tiles that open pictures, without the line's own press.
+    const tileButtons = (element: HTMLElement): HTMLButtonElement[] => buttons(element).filter((button) => button.closest(`.grid`) !== null);
+    const asideLine = (element: HTMLElement): HTMLElement | null => element.querySelector(`p`);
+
+    it(`sets a blank picture and a repeat aside behind one quiet line, whose press asks to show them`, async () => {
+        const shots = shotsOf(`blank`, `page`, `again`);
+        judged.set(shots[0]!.path, { plain: true, print: `white` });
+        judged.set(shots[1]!.path, { plain: false, print: `same` });
+        judged.set(shots[2]!.path, { plain: false, print: `same` });
+        const element = mount(shots);
+        await comeNear();
+        expect(tileButtons(element).map((button) => button.getAttribute(`aria-label`))).toEqual([`Open page`]);
+        expect(asideLine(element)?.textContent).toContain(`2 blank or repeated pictures hidden`);
+        asideLine(element)?.querySelector(`button`)?.click();
+        expect(reveal.mock.calls).toEqual([[true]]);
+    });
+
+    it(`once revealed, draws the set-aside pictures in their place, dimmed, and offers to hide them again`, async () => {
+        const shots = shotsOf(`blank`, `page`);
+        judged.set(shots[0]!.path, { plain: true, print: `white` });
+        const element = mount(shots, true);
+        await comeNear();
+        const [blank, page] = tileButtons(element);
+        expect(blank?.getAttribute(`aria-label`)).toBe(`Open blank`);
+        expect(blank?.className).toContain(`opacity-50`);
+        expect(page?.className).not.toContain(`opacity-50`);
+        expect(asideLine(element)?.textContent).toContain(`1 blank picture shown, dimmed`);
+        asideLine(element)?.querySelector(`button`)?.click();
+        expect(reveal.mock.calls).toEqual([[false]]);
+    });
+
+    it(`a turn whose every picture came out blank draws only the line`, async () => {
+        const shots = shotsOf(`white`, `black`);
+        judged.set(shots[0]!.path, { plain: true, print: `w` });
+        judged.set(shots[1]!.path, { plain: true, print: `b` });
+        const element = mount(shots);
+        await comeNear();
+        expect(tileButtons(element)).toEqual([]);
+        expect(asideLine(element)?.textContent).toContain(`2 blank pictures hidden`);
+    });
+
+    // A blank tile drawn and then pulled once judged would flash; the tile waits for both.
+    it(`draws no tile's picture before that picture is judged`, async () => {
+        const shots = shotsOf(`judged`, `coming`);
+        unjudged.add(shots[1]!.path);
+        mount(shots);
+        await comeNear();
+        expect(tileAsks).toEqual([shots[0]!.path]);
     });
 });

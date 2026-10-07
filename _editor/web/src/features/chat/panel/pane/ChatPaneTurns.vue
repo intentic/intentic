@@ -84,7 +84,11 @@ const error = computed(() => unsaidError(conversation.value.error.value, message
 // is not drawn a second time above it.
 const { notice: heldNotice } = useHeldQueue();
 const heldRow = computed(() => heldNotice.value?.id);
-const viewer = useShotViewer(turns, turnShots);
+const viewer = useShotViewer(
+    turns,
+    turnShots,
+    computed(() => conversation.value.scope.value),
+);
 provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
 // The column whose `path:line` links raise a preview of the file (FileRefPeek).
 const column = ref<HTMLElement>();
@@ -169,7 +173,14 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                     <!-- The documents the turn made or changed, for a person to open (ChatTurnDeliverables). -->
                     <ChatTurnDeliverables v-if="deliverablesOf(turn)" :deliverables="deliverablesOf(turn)!" />
                     <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->
-                    <ChatTurnShots v-if="stripOf(turn)" :shots="stripOf(turn)!" :agent="conversation.scope.value" @view="viewer.view" />
+                    <ChatTurnShots
+                        v-if="stripOf(turn)"
+                        :shots="stripOf(turn)!"
+                        :agent="conversation.scope.value"
+                        :revealed="viewer.revealed.value.has(turn.id)"
+                        @view="viewer.view"
+                        @reveal="viewer.reveal(turn.id, $event)"
+                    />
                     <!-- The fork point sits after the answer and inside its hover region. -->
                     <ChatForkCut v-if="!props.subagent" class="chat-cut-row" :cut="forkCuts.get(turn.id) ?? messages.length" />
                 </section>

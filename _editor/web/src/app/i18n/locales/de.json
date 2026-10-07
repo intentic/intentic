@@ -1563,9 +1563,18 @@
             "word": "Word-Dokument"
         },
         "chatTurnShots": {
+            "asideHidden": "{what} ausgeblendet",
+            "asideMixed": "{count} leeres oder wiederholtes Bild | {count} leere oder wiederholte Bilder",
+            "asidePlain": "{count} leeres Bild | {count} leere Bilder",
+            "asideRepeat": "{count} wiederholtes Bild | {count} wiederholte Bilder",
+            "asideShown": "{what} gedimmt angezeigt",
+            "hide": "Ausblenden",
             "open": "{name} öffnen",
             "openAll": "Alle {count} Bilder öffnen",
-            "region": "Bilder aus diesem Zug"
+            "plainTip": "Leer: nichts darauf",
+            "region": "Bilder aus diesem Zug",
+            "repeatTip": "Gleich wie ein früheres Bild",
+            "show": "Anzeigen"
         },
         "chatTurnStatus": {
             "attemptNothingLost": "(Versuch {attempt}, nichts verloren)",

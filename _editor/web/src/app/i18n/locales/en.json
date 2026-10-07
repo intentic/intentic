@@ -2979,10 +2979,19 @@
             "word": "Word document"
         },
         "chatTurnShots": {
+            "asideHidden": "{what} hidden",
+            "asideMixed": "{count} blank or repeated picture | {count} blank or repeated pictures",
+            "asidePlain": "{count} blank picture | {count} blank pictures",
+            "asideRepeat": "{count} repeated picture | {count} repeated pictures",
+            "asideShown": "{what} shown, dimmed",
+            "hide": "Hide",
             "more": "+{count}",
             "open": "Open {name}",
             "openAll": "Open all {count} pictures",
-            "region": "Pictures from this turn"
+            "plainTip": "Blank: nothing on it",
+            "region": "Pictures from this turn",
+            "repeatTip": "Same as an earlier picture",
+            "show": "Show"
         },
         "chatTurnStatus": {
             "attemptNothingLost": "(attempt {attempt}, nothing lost)",

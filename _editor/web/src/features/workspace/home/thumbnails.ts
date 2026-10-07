@@ -85,6 +85,11 @@ const pictureUrl = async (scope: string | undefined, path: string, size: Picture
     }
 };
 
+// A daemon rendition's bytes, for reading its pixels rather than drawing it (shotLooks.ts). WebP, which every engine
+// decodes; a refusal throws as SandboxHttpError for the caller to judge.
+export const renditionBlob = (scope: string | undefined, path: string, size: Exclude<PictureSize, "original">): Promise<Blob> =>
+    sandboxBlob(`/workspace/thumb?${queryOf(scope, path, size)}`, { headers: { accept: `image/webp` } });
+
 // One entry per size, scope and path: the same path names a different file in a conversation's own checkout.
 const keyOf = (scope: string | undefined, path: string, size: PictureSize): string =>
     JSON.stringify([size, path.startsWith(`${STATE_DIR}/`) ? undefined : scope, path]);

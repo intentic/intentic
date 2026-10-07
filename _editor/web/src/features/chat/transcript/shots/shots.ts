@@ -1,4 +1,5 @@
 import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { ShotLook } from "./shotLook";
 import type { ChatMessage, ChatTurn } from "../transcript";
 
 // The pictures a turn's tools showed the agent (a screenshot it took, an image it read back), for the strip at the
@@ -77,7 +78,43 @@ export const shotsByTurn = (
     turns: readonly ChatTurn[],
     attached: ReadonlySet<string>,
     previous: ReadonlyMap<number, readonly ChatShot[]> | undefined,
-): ReadonlyMap<number, readonly ChatShot[]> => new Map(turns.map((turn) => [turn.id, sameShots(previous?.get(turn.id), shotsOfTurn(turn, attached))]));
+): ReadonlyMap<number, readonly ChatShot[]> =>
+    new Map(turns.map((turn) => [turn.id, sameShots(previous?.get(turn.id), shotsOfTurn(turn, attached))]));
+
+// Why a shot is set aside: nothing on it (shotLook.ts), or the same pixels as one the turn showed before it.
+export type AsideReason = "plain" | "repeat";
+
+export interface SortedShots {
+    // What the strip and the viewer draw, in the turn's order.
+    readonly shown: readonly ChatShot[];
+    // Kept from the reader unless asked for, by key.
+    readonly aside: ReadonlyMap<string, AsideReason>;
+}
+
+// A turn's shots split into what is worth a look and what is not. A shot not yet judged is shown: nothing is held back on
+// a guess. A repeat is set aside after its first showing, which stays; a plain first showing is set aside as plain.
+export const sortShots = (shots: readonly ChatShot[], look: (shot: ChatShot) => ShotLook | undefined): SortedShots => {
+    const shown: ChatShot[] = [];
+    const aside = new Map<string, AsideReason>();
+    const seen = new Set<string>();
+    for (const shot of shots) {
+        const judged = look(shot);
+        const print = judged?.print;
+        if (print !== undefined && seen.has(print)) {
+            aside.set(shot.key, `repeat`);
+            continue;
+        }
+        if (print !== undefined) {
+            seen.add(print);
+        }
+        if (judged?.plain === true) {
+            aside.set(shot.key, `plain`);
+            continue;
+        }
+        shown.push(shot);
+    }
+    return { shown, aside };
+};
 
 // What a shot is called in a caption: the file's own name, which is the agent's caption when it named the shot.
 export const shotName = (path: string): string => {

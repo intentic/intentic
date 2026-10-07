@@ -3,7 +3,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatMessage, ChatTurn } from "../transcript";
-import { attachedPaths, shotName, shotsByTurn, shotsOfTurn } from "./shots";
+import type { ShotLook } from "./shotLook";
+import { attachedPaths, type ChatShot, shotKey, shotName, shotsByTurn, shotsOfTurn, sortShots } from "./shots";
 
 const SHOTS = `${STATE_DIR}/records/artifacts/browser`;
 
@@ -107,5 +108,48 @@ describe(`shotName`, () => {
         [`README`, `README`],
     ])(`names %s as %s`, (path, name) => {
         expect(shotName(path)).toBe(name);
+    });
+});
+
+describe(`sortShots`, () => {
+    const shotAt = (name: string): ChatShot => ({
+        key: shotKey(name, `${SHOTS}/${name}.png`),
+        path: `${SHOTS}/${name}.png`,
+        toolId: name,
+        turnId: 1,
+    });
+    const looks = new Map<string, ShotLook>();
+    const lookOf = (judged: ChatShot): ShotLook | undefined => looks.get(judged.path);
+
+    beforeEach(() => looks.clear());
+
+    it(`sets aside plain pictures and repeats of one shown earlier, keeping the first showing`, () => {
+        const [blank, page, again, other] = [shotAt(`blank`), shotAt(`page`), shotAt(`again`), shotAt(`other`)];
+        looks.set(blank.path, { plain: true, print: `p0` });
+        looks.set(page.path, { plain: false, print: `p1` });
+        looks.set(again.path, { plain: false, print: `p1` });
+        looks.set(other.path, { plain: false, print: `p2` });
+        const sorted = sortShots([blank, page, again, other], lookOf);
+        expect(sorted.shown).toEqual([page, other]);
+        expect([...sorted.aside]).toEqual([
+            [blank.key, `plain`],
+            [again.key, `repeat`],
+        ]);
+    });
+
+    it(`shows what is not judged yet, or could not be, holding nothing back on a guess`, () => {
+        const [coming, unreadable] = [shotAt(`coming`), shotAt(`unreadable`)];
+        looks.set(unreadable.path, { plain: false, print: undefined });
+        const sorted = sortShots([coming, unreadable], lookOf);
+        expect(sorted.shown).toEqual([coming, unreadable]);
+        expect(sorted.aside.size).toBe(0);
+    });
+
+    it(`calls a second blank a repeat, a third the same`, () => {
+        const shots = [shotAt(`a`), shotAt(`b`), shotAt(`c`)];
+        for (const each of shots) {
+            looks.set(each.path, { plain: true, print: `white` });
+        }
+        expect([...sortShots(shots, lookOf).aside.values()]).toEqual([`plain`, `repeat`, `repeat`]);
     });
 });

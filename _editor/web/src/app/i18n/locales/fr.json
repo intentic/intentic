@@ -1564,9 +1564,18 @@
             "word": "Document Word"
         },
         "chatTurnShots": {
+            "asideHidden": "Masquées : {what}",
+            "asideMixed": "{count} image vide ou répétée | {count} images vides ou répétées",
+            "asidePlain": "{count} image vide | {count} images vides",
+            "asideRepeat": "{count} image répétée | {count} images répétées",
+            "asideShown": "Affichées, atténuées : {what}",
+            "hide": "Masquer",
             "open": "Ouvrir {name}",
             "openAll": "Ouvrir les {count} images",
-            "region": "Images de ce tour"
+            "plainTip": "Vide : rien dessus",
+            "region": "Images de ce tour",
+            "repeatTip": "Identique à une image précédente",
+            "show": "Afficher"
         },
         "chatTurnStatus": {
             "attemptNothingLost": "(tentative {attempt}, rien de perdu)",

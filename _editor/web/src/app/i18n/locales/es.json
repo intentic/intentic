@@ -1571,9 +1571,18 @@
             "word": "Documento de Word"
         },
         "chatTurnShots": {
+            "asideHidden": "Ocultas: {what}",
+            "asideMixed": "{count} imagen en blanco o repetida | {count} imágenes en blanco o repetidas",
+            "asidePlain": "{count} imagen en blanco | {count} imágenes en blanco",
+            "asideRepeat": "{count} imagen repetida | {count} imágenes repetidas",
+            "asideShown": "Mostradas, atenuadas: {what}",
+            "hide": "Ocultar",
             "open": "Abrir {name}",
             "openAll": "Abrir las {count} imágenes",
-            "region": "Imágenes de este turno"
+            "plainTip": "En blanco: no hay nada",
+            "region": "Imágenes de este turno",
+            "repeatTip": "Igual que una imagen anterior",
+            "show": "Mostrar"
         },
         "chatTurnStatus": {
             "attemptNothingLost": "(intento {attempt}, no se ha perdido nada)",

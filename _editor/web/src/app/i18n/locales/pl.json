@@ -2979,10 +2979,19 @@
             "word": "Dokument Word"
         },
         "chatTurnShots": {
+            "asideHidden": "Ukryte: {what}",
+            "asideMixed": "{count} pusty lub powtórzony obraz | {count} puste lub powtórzone obrazy | {count} pustych lub powtórzonych obrazów",
+            "asidePlain": "{count} pusty obraz | {count} puste obrazy | {count} pustych obrazów",
+            "asideRepeat": "{count} powtórzony obraz | {count} powtórzone obrazy | {count} powtórzonych obrazów",
+            "asideShown": "Pokazane, przygaszone: {what}",
+            "hide": "Ukryj",
             "more": "+{count}",
             "open": "Otwórz {name}",
             "openAll": "Otwórz wszystkie obrazy ({count})",
-            "region": "Obrazy z tej tury"
+            "plainTip": "Pusty: nic na nim nie ma",
+            "region": "Obrazy z tej tury",
+            "repeatTip": "Taki sam jak wcześniejszy obraz",
+            "show": "Pokaż"
         },
         "chatTurnStatus": {
             "attemptNothingLost": "(próba {attempt}, nic nie przepadło)",
