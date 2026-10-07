@@ -202,6 +202,18 @@ check_nsis() {
     # runner exists, never executed before a user runs it.
     7z x -o"$out" -y "$exe" >/dev/null
     compare_scripts "nsis" "$out"
+    # "Open with Intentic" in Windows 11's own menu: the DLL beside the app (tauri.windows.conf.json), which the
+    # installer's hooks hand to regsvr32. Missing, every install falls back to the classic entry and says nothing.
+    if [ -z "$(find "$out" -maxdepth 2 -type f -name intentic_explorer_menu.dll -print -quit)" ]; then
+        fail "nsis: intentic_explorer_menu.dll did not ship"
+    else
+        echo "  ✓ nsis: explorer menu DLL present"
+    fi
+    # The release-signed package ships only when this build could sign it (stage-local-files.sh); a signing build
+    # without it means WINDOWS_SIGN_PUBLISHER was not given, and users meet a UAC prompt instead of nothing.
+    if [ -n "${WINDOWS_SIGN_TOOL:-}" ] && [ -z "$(find "$out" -maxdepth 2 -type f -name intentic-explorer-menu.msix -print -quit)" ]; then
+        fail "nsis: signing build without the signed intentic-explorer-menu.msix (set WINDOWS_SIGN_PUBLISHER)"
+    fi
     # No .desktop file on Windows — the scheme is a registry key the installer writes at install time, which is
     # only observable by installing. That assertion lives in @intentic/desktop-smoke-windows, which installs
     # this same artifact on a real Windows session and reads the key back before the app has ever run.

@@ -120,6 +120,9 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # The certificate's subject, exactly as Windows shows it: the publisher of the Explorer menu's package
+      # (stage-local-files.sh), which Windows registers only when it names who signed it.
+      WINDOWS_SIGN_PUBLISHER: ${{ secrets.WINDOWS_SIGN_PUBLISHER }}
       # Baked into the launcher UI at build time (desktop-app/vite.config.ts). Released installers only — a CI
       # or nightly build gets no key, so the artifacts nobody installs report nothing.
       POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
@@ -287,6 +290,9 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # The certificate's subject, exactly as Windows shows it: the publisher of the Explorer menu's package
+      # (stage-local-files.sh), which Windows registers only when it names who signed it.
+      WINDOWS_SIGN_PUBLISHER: ${{ secrets.WINDOWS_SIGN_PUBLISHER }}
       # Baked into the launcher UI at build time — released installers only, same as windows-build.
       POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
     steps:
@@ -404,6 +410,9 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # The certificate's subject, exactly as Windows shows it: the publisher of the Explorer menu's package
+      # (stage-local-files.sh), which Windows registers only when it names who signed it.
+      WINDOWS_SIGN_PUBLISHER: ${{ secrets.WINDOWS_SIGN_PUBLISHER }}
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:

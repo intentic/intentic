@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The identity package behind "Open with Intentic" in Windows 11's context menu (README.md says why there is one).
+  Two places fill in its publisher and version placeholders, which must be its signer's subject (Windows refuses a package whose
+  publisher is not who signed it) and a four-part version:
+    - build.rs, for the package register.rs signs on the user's PC with a certificate it makes there;
+    - _tools/scripts/desktop/explorer-menu-msix.mjs, for the package a release signs with Intentic's own certificate.
+  The file types are the document types the app opens; build.rs fails the build when they drift from tauri.conf.json's
+  `fileAssociations`.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap uap10 rescap desktop4 desktop5 com">
+  <Identity Name="Intentic.ExplorerMenu" Publisher="{PUBLISHER}" Version="{VERSION}" ProcessorArchitecture="neutral" />
+  <Properties>
+    <DisplayName>Intentic</DisplayName>
+    <PublisherDisplayName>Intentic</PublisherDisplayName>
+    <Logo>StoreLogo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+  <Applications>
+    <Application Id="Intentic" Executable="intentic-desktop.exe" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements AppListEntry="none" DisplayName="Intentic" Description="Open with Intentic" BackgroundColor="transparent" Square150x150Logo="Square150x150Logo.png" Square44x44Logo="Square44x44Logo.png" />
+      <Extensions>
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory\Background">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".csv">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".doc">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".docx">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".epub">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".json">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".log">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".markdown">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".md">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".odp">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".ods">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".odt">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".ppt">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".pptx">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".rtf">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".toml">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".txt">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".xls">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".xlsx">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".yaml">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".yml">
+              <desktop5:Verb Id="OpenWithIntentic" Clsid="36429087-24a5-49c9-892f-91db79a64196" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Intentic">
+              <com:Class Id="36429087-24a5-49c9-892f-91db79a64196" Path="intentic_explorer_menu.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

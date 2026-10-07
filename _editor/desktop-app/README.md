@@ -413,6 +413,15 @@ flowchart LR
   shows and `ic sandbox remove <name>` removes (recoverable for a week), and the agent where it was kept. `ic` and its
   PATH entry stay, since they are how the sandboxes are removed. Before, the uninstaller removed the app alone, and said
   nothing.
+- **"Open with Intentic" in Windows 11's own menu** ([explorer-menu](explorer-menu), 2026-10-07). The installer used to
+  register it as classic registry verbs only, which Windows 11 shows under "Show more options" and never in its new
+  menu: that menu lists only commands declared by an app package. `intentic_explorer_menu.dll`, installed beside the
+  app, is such a command, on folders, the space inside one and the document types the app opens, and the installer
+  hooks register the identity package that declares it (`regsvr32 /n /i:<mode>`). A release that holds the code-signing
+  certificate ships that package signed and it registers silently; otherwise the first interactive install signs one
+  on the PC behind one UAC prompt. Updates and passive installs never prompt. Wherever the package is not in place
+  (Windows 10, a declined prompt, a failure), the classic verb is written instead, so the entry is in one menu or the
+  other and never both.
 - **Deletes go to the Recycle Bin.** A delete in a local window reaches the sidecar, which asks the app (`ask`,
   `verb: trash`); the app moves the entry to the OS's Recycle Bin or Trash (the `trash` crate) when it lies strictly
   inside the folder of an open folder window, and answers.
@@ -508,6 +517,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder put in line for this computer's sandbox, and the project verbs its window runs.
 - [src-tauri/src/machine_sandbox.rs](src-tauri/src/machine_sandbox.rs) — this computer's own sandbox: the record every window hears, the thread that makes and watches it, and the folders it attaches.
+- [explorer-menu](explorer-menu) — "Open with Intentic" in Windows 11's own context menu: the menu command and the identity package it needs.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 

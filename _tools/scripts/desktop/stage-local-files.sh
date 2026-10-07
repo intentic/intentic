@@ -4,7 +4,12 @@
 #   • intentic-files, the sidecar that serves a folder to those windows (_devices/local-files), compiled with bun
 #     for each Rust target triple asked for, as src-tauri/binaries/intentic-files-<triple>[.exe] — the name
 #     tauri.conf.json's `externalBin` looks for, and which the installer puts beside the app as intentic-files;
-#   • the ONLYOFFICE editor page (_extensions/onlyoffice/dist/editor), which tauri.conf.json's `resources` carry.
+#   • the ONLYOFFICE editor page (_extensions/onlyoffice/dist/editor), which tauri.conf.json's `resources` carry;
+#   • for a Windows triple, "Open with Intentic" in Windows 11's context menu (_editor/desktop-app/explorer-menu): its
+#     DLL, and when this build signs Windows binaries and knows its certificate's subject (WINDOWS_SIGN_PUBLISHER),
+#     the identity package it registers, signed (explorer-menu-msix.mjs). Both land in src-tauri/binaries/explorer-menu/,
+#     which tauri.windows.conf.json puts beside the app. Without the package the DLL signs one on the user's PC
+#     instead, behind one UAC prompt (explorer-menu/README.md).
 #
 #   stage-local-files.sh                          # this host's triple
 #   stage-local-files.sh x86_64-pc-windows-msvc   # a cross build's
@@ -29,6 +34,31 @@ if [ "${#triples[@]}" -eq 0 ]; then
     triples=("$(rustc -vV | sed -n 's/^host: //p')")
 fi
 
+# "Open with Intentic" for Windows 11's own context menu: the DLL always, the release-signed package when there is a
+# certificate to sign it with. A package left from an earlier signed build is removed first, so an unsigned build
+# never ships a package whose signature it did not make.
+stage_explorer_menu() {
+    local crate="$ROOT/_editor/desktop-app/explorer-menu" out="$BINARIES/explorer-menu" target_dir
+    target_dir="${CARGO_TARGET_DIR:-$crate/target}"
+    rm -rf "$out"
+    mkdir -p "$out"
+    echo "==> explorer menu DLL"
+    case "$(uname -s)" in
+        MINGW* | MSYS* | CYGWIN*) cargo build --release --manifest-path "$crate/Cargo.toml" --target x86_64-pc-windows-msvc ;;
+        *) cargo xwin build --release --manifest-path "$crate/Cargo.toml" --target x86_64-pc-windows-msvc ;;
+    esac
+    cp "$target_dir/x86_64-pc-windows-msvc/release/intentic_explorer_menu.dll" "$out/"
+    bash "$ROOT/_tools/scripts/build/sign-windows.sh" "$out/intentic_explorer_menu.dll"
+    if [ -n "${WINDOWS_SIGN_TOOL:-}" ] && [ -n "${WINDOWS_SIGN_PUBLISHER:-}" ]; then
+        echo "==> explorer menu package, signed for ${WINDOWS_SIGN_PUBLISHER}"
+        node "$ROOT/_tools/scripts/desktop/explorer-menu-msix.mjs" \
+            --publisher "$WINDOWS_SIGN_PUBLISHER" --version "$VERSION" --out "$out/intentic-explorer-menu.msix"
+        bash "$ROOT/_tools/scripts/build/sign-windows.sh" "$out/intentic-explorer-menu.msix"
+    else
+        echo "==> no signed explorer menu package (needs WINDOWS_SIGN_TOOL and WINDOWS_SIGN_PUBLISHER); the DLL signs one on the PC"
+    fi
+}
+
 mkdir -p "$BINARIES"
 for triple in "${triples[@]}"; do
     ext=""
@@ -51,5 +81,8 @@ for triple in "${triples[@]}"; do
     # Shipped inside the installer and run by the app, so it faces the same publisher question as the app itself.
     if [ "$ext" = ".exe" ]; then
         bash "$ROOT/_tools/scripts/build/sign-windows.sh" "$out"
+    fi
+    if [ "$triple" = "x86_64-pc-windows-msvc" ]; then
+        stage_explorer_menu
     fi
 done

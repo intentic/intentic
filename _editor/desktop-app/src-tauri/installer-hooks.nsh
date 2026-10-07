@@ -97,6 +97,9 @@ Var IntenticAgentKept
       Sleep 500
     ${Loop}
     Delete "$APPDATA\${BUNDLEID}\roster.json"
+    ; The Explorer menu's package, while its DLL is still here to remove it (an update keeps it: the install that
+    ; follows re-registers only what changed, and asks nothing). Removing it also ends the surrogate holding the DLL.
+    !insertmacro INTENTIC_REGSVR32 "/s /u /n /i:quiet"
   ${EndIf}
 !macroend
 
@@ -122,20 +125,71 @@ Var IntenticAgentKept
   nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
   Pop $0
   Sleep 500
+  !insertmacro INTENTIC_EXPLORER_MENU_STEP_ASIDE
 !macroend
 
-; "OPEN WITH INTENTIC" ON A FOLDER, and on the empty space inside one — the folder half of what the file
-; associations in tauri.conf.json do for documents. The app reads the path it is handed as any second launch's
-; (src/local.rs `open_args`) and shows the folder in a window of its own; nothing runs in a sandbox until the
-; user asks for one there. Per user, under HKCU, like the install itself (`installMode: currentUser`), and gone
-; with the uninstall below: a verb left behind would start an app that is no longer there.
+; THE EXPLORER MENU'S DLL MAY BE IN USE (explorer-menu/README.md). Explorer's COM surrogate (a dllhost.exe) loads
+; intentic_explorer_menu.dll whenever a context menu opens and keeps it a while, and a loaded DLL cannot be overwritten:
+; the copy below would stop on "Error opening file for writing". It can be renamed, though, so the old copy steps aside
+; under a name of its own and goes at the next install or the uninstall, once nothing holds it. Killing the surrogate
+; instead would mean telling one dllhost from another, and ending somebody else's.
+!macro INTENTIC_EXPLORER_MENU_STEP_ASIDE
+  Delete "$INSTDIR\intentic_explorer_menu.dll.*.old"
+  ${If} ${FileExists} "$INSTDIR\intentic_explorer_menu.dll"
+    System::Call "kernel32::GetTickCount() i .r0"
+    Rename "$INSTDIR\intentic_explorer_menu.dll" "$INSTDIR\intentic_explorer_menu.dll.$0.old"
+  ${EndIf}
+!macroend
+
+; "OPEN WITH INTENTIC" ON A FOLDER, the space inside one and a document: the folder half of what the file associations
+; in tauri.conf.json do for documents. The app reads the paths it is handed as any second launch's (src/local.rs
+; `open_args`) and shows each in a window of its own; nothing runs in a sandbox until the user asks for one there.
+;
+; Two ways onto the menu, and why (explorer-menu/README.md has the measurements):
+;   - Windows 11's own menu lists only commands declared by a PACKAGE. intentic_explorer_menu.dll is that command, and
+;     its DllInstall registers the package that declares it: the release's signed one when this build carried one
+;     (intentic-explorer-menu.msix), else one it signs on this PC, which costs one UAC prompt the first time. `quiet`
+;     never prompts: an update the app runs in the background, a passive or a silent install keeps whatever
+;     registration is there, and an unattended first install goes without until an interactive one.
+;   - The classic registry verb, shown under "Show more options" on Windows 11 and as the menu itself on Windows 10.
+;     Written whenever the package is not in place (Windows 10, a declined prompt, any failure, which
+;     ~/.intentic/logs/explorer-menu.log names), and removed when it is, so the entry is never there twice.
+; Per user, under HKCU and in this user's packages, like the install itself (`installMode: currentUser`), and gone
+; with the uninstall below: an entry left behind would start an app that is no longer there.
 !macro NSIS_HOOK_POSTINSTALL
-  WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic" "" "Open with Intentic"
-  WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
-  WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
-  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "" "Open with Intentic"
-  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
-  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%V"'
+  StrCpy $1 "interactive"
+  ${If} $UpdateMode = 1
+  ${OrIf} $PassiveMode = 1
+  ${OrIf} ${Silent}
+    StrCpy $1 "quiet"
+  ${EndIf}
+  !insertmacro INTENTIC_REGSVR32 "/s /n /i:$1"
+  ${If} $0 == 0
+    DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
+    DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
+  ${Else}
+    WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic" "" "Open with Intentic"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "" "Open with Intentic"
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%V"'
+  ${EndIf}
+!macroend
+
+; regsvr32 on the menu's DLL, its exit code in $0 (0 is success). The 64-bit regsvr32 for a 64-bit DLL: this installer
+; may be a 32-bit process, whose System32 is SysWOW64, and Sysnative is how such a process names the real one (a 64-bit
+; process has no Sysnative, and its $SYSDIR is already right).
+!macro INTENTIC_REGSVR32 FLAGS
+  StrCpy $2 "$SYSDIR\regsvr32.exe"
+  ${If} ${FileExists} "$WINDIR\Sysnative\regsvr32.exe"
+    StrCpy $2 "$WINDIR\Sysnative\regsvr32.exe"
+  ${EndIf}
+  StrCpy $0 1
+  ${If} ${FileExists} "$INSTDIR\intentic_explorer_menu.dll"
+    nsExec::Exec '"$2" ${FLAGS} "$INSTDIR\intentic_explorer_menu.dll"'
+    Pop $0
+  ${EndIf}
 !macroend
 
 ; WHAT STAYS, said on the way out (2026-10-05): an uninstall that ends in silence lets the reader believe their
@@ -144,6 +198,8 @@ Var IntenticAgentKept
 !macro NSIS_HOOK_POSTUNINSTALL
   DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
   DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
+  ; Copies of the menu's DLL an earlier update stepped aside from (INTENTIC_EXPLORER_MENU_STEP_ASIDE).
+  Delete "$INSTDIR\intentic_explorer_menu.dll.*.old"
   ${If} $UpdateMode <> 1
   ${AndIf} $PassiveMode <> 1
   ${AndIf} ${FileExists} "$PROFILE\.intentic\ic\bin\ic.exe"

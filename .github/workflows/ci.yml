@@ -1069,6 +1069,8 @@ jobs:
       # other. And a build's fingerprint includes the stamped version, so jobs sharing a directory invalidate
       # each other's leaf crate and each pays a fresh LTO.
       CARGO_TARGET_DIR: /ci-cache/desktop-check-target
+      # For the Explorer menu's Windows-only crate (cargo-xwin) — the same shared MSVC splat every other cross-build uses.
+      XWIN_CACHE_DIR: /ci-cache/xwin
     # EACH STEP NEEDS WHAT IT READS AND NOTHING ELSE, so a failure in one does not hide the next. The launcher UI's
     # turbo step failing used to skip every cargo step after it: 21 runs in September 2026 never ran the crate's fmt,
     # clippy or tests at all, and what those would have said waited for the next push.
@@ -1107,6 +1109,12 @@ jobs:
         run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
       - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' }}
         run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
+      # "Open with Intentic" in Windows 11's own context menu (_editor/desktop-app/explorer-menu): a DLL that is ALL
+      # `#[cfg(windows)]`, so the Windows target is the only one that compiles any of it, and clippy runs there.
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --all --check
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo xwin clippy --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --target x86_64-pc-windows-msvc -- -D warnings
 
   # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_sandbox/ic), the binary
   # behind the connect/recreate/connect-host bootstrap shims, and the Windows launcher stub
