@@ -594,6 +594,9 @@
         "words": {
             "sendItAgain": "Enviarlo de nuevo",
             "troubleSigningInUse": "¿Problemas para iniciar sesión? Usa la página de Google.",
+            "continueOnGooglesPage": "Continuar en la página de Google",
+            "googleDidntComeBack": "El inicio de sesión no terminó en la ventana de Google. Continúa en la página de Google: funciona aunque se bloqueen las ventanas emergentes.",
+            "googleAnswerRefused": "Google respondió, pero con un inicio de sesión que este equipo da por caducado: puede que su reloj esté mal. Continúa en la página de Google.",
             "continueGoogleInBrowser": "Continuar con Google en tu navegador",
             "continueGoogle": "Continuar con Google"
         }
@@ -1518,9 +1521,12 @@
             "stillOpen": "{content} sin cerrar"
         },
         "chatToolCallsToggle": {
+            "hidden": "{count} llamada a herramienta oculta | {count} llamadas a herramientas ocultas",
             "hideToolCalls": "Ocultar las llamadas a herramientas",
             "hideTools": "Ocultar herramientas",
-            "showTools": "Mostrar herramientas"
+            "noneYet": "Aún no hay llamadas a herramientas en este chat",
+            "showTools": "Mostrar herramientas",
+            "showing": "Mostrando {count} llamada a herramienta | Mostrando {count} llamadas a herramientas"
         },
         "chatToolCard": {
             "background": "segundo plano",
@@ -1806,9 +1812,23 @@
             "workflow": "Flujo de trabajo"
         },
         "composerVoice": {
+            "failed": "No se pudo transcribir eso, inténtalo de nuevo.",
+            "listening": "Escuchando: una pausa envía, Esc detiene",
+            "micBlocked": "El micrófono está bloqueado para este sitio. Permítelo en los controles del sitio, a la izquierda de la barra de direcciones (y en los ajustes de privacidad de tu sistema, si allí también está desactivado), y vuelve a pulsar el micrófono.",
+            "needsRebuild": "La voz necesita una reconstrucción única del entorno de este sandbox.",
+            "noMic": "No se encontró ningún micrófono.",
+            "openEnvironment": "Abrir Entorno",
             "pauseSends": "Pausa para enviar",
             "preparing": "Preparando la voz…",
-            "stopVoice": "Detener voz"
+            "preparingFirstUse": "Preparando la voz (primer uso)…",
+            "sending": "Enviando: Esc para editar",
+            "stopVoice": "Detener voz",
+            "transcribing": "Transcribiendo…",
+            "unavailable": "La voz necesita una versión más reciente de este sandbox.",
+            "unsupportedBrowser": "No disponible en este navegador: no puede grabar audio para la entrada de voz. Un Chrome, Edge, Firefox o Safari actual sí puede.",
+            "unsupportedInsecure": "No disponible aquí: los navegadores solo dan el micrófono a páginas seguras (https).",
+            "unsupportedPolicy": "No disponible aquí: esta página no tiene permiso para usar el micrófono.",
+            "updateSandbox": "Actualizar el sandbox"
         },
         "turnBreak": {
             "flaggedStatus": "Detenido por las salvaguardas del modelo antes de hacer nada",
@@ -2346,6 +2366,8 @@
         },
         "connectFlow": {
             "alreadyPasteHere": "¿Ya lo tienes? Pégalo aquí",
+            "codeLabel": "Código de inicio de sesión",
+            "copyRefused": "Tu navegador no dejó que esta página copiara el código. Está seleccionado arriba: cópialo desde ahí.",
             "comeBackWithAddress": "Inicia sesión y luego vuelve aquí con la dirección a la que te lleva {destination}: su última página {wontLoad}, y eso es lo esperado.",
             "comeBackWithCode": "Inicia sesión y luego vuelve aquí con el código.",
             "finish": "Terminar",
@@ -2745,6 +2767,10 @@
             "approvedOverlayPendingRebuild": "Superposición aprobada (reconstrucción pendiente)",
             "awaitingReview": "esperando revisión",
             "contents": "Contenido",
+            "decideFirst": "Aprueba o rechaza primero el cambio de arriba, y una sola reconstrucción cubrirá ambos.",
+            "noRebuildHere": "El contenedor de este sandbox no lo inició el instalador de intentic, así que no se puede reconstruir desde aquí. Reconstrúyelo donde se ejecuta, a partir de la receta de Receta.",
+            "nothingToRebuild": "No hay nada aprobado esperando a construirse, así que reconstruir no cambiaría nada. Si {names} sigue sin funcionar, pide a un agente que averigüe por qué.",
+            "nothingToRebuildDecide": "Todavía no hay nada aprobado esperando a construirse. Aprueba el cambio de arriba y aquí se ofrecerá su reconstrucción.",
             "onlySandboxMaintainerDecide": "Solo un responsable del sandbox puede decidir sobre los cambios de entorno.",
             "onlySandboxOwnerApprove": "Solo el propietario del sandbox o un responsable puede aprobar o rechazar este cambio.",
             "onlySandboxOwnerRebuild": "Solo el propietario del sandbox puede reconstruirlo.",
@@ -2921,7 +2947,10 @@
             "buildLogTail": "Registro de compilación (final)",
             "buildMinutesCountAgainst": "Los minutos de compilación cuentan contra las horas despierto de este sandbox. Tus archivos en /work se conservan.",
             "buildingEnvironmentOnMachine": "Construyendo tu entorno en una máquina que llevamos nosotros. Esto tarda unos minutos; tu sandbox sigue funcionando mientras tanto y se reinicia sobre el resultado cuando esté listo.",
+            "builtNotSwitched": "La construcción terminó {ago}, pero este sandbox sigue en su imagen anterior.",
             "builtSandboxRestartingOnto": "Construido. Tu sandbox se está reiniciando sobre la imagen nueva; este panel se actualiza cuando vuelva.",
+            "rebuildAgain": "Reconstruir de nuevo",
+            "startedAgo": "Empezó {ago}.",
             "tryBuildAgain": "Intentar la compilación de nuevo"
         },
         "importCard": {
@@ -3287,6 +3316,7 @@
         },
         "sandboxAttention": {
             "agentProposedChangeTo": "El agente propuso un cambio en tu entorno",
+            "environmentBuilding": "Se está construyendo el nuevo entorno de tu sandbox",
             "filesOnlyOnCloudMachine": "Sus archivos solo están en la máquina en la nube, sin copia en este ordenador",
             "newSandboxVersionAvailable": "Hay una versión nueva del sandbox",
             "noAiAccountConnected": "No hay ninguna cuenta de IA conectada, el agente no puede ejecutar un turno",
@@ -4179,7 +4209,10 @@
             "signInNotChanged": "Tu sesión no ha cambiado. Comprueba la conexión y vuelve a intentarlo."
         },
         "setup": {
+            "addAnotherSandbox": "Añadir otro sandbox",
             "alreadyFreeMachineAccount": "Ya tienes la máquina gratuita que viene con tu cuenta. Elige otro escalón de arriba, o elimina el sandbox que la está usando.",
+            "alreadyHaveDetail": "Configurado y listo para trabajar.",
+            "alreadyHaveSandbox": "Ya tienes un sandbox. Abre un chat en él o añade otro.",
             "alreadyRunningSandboxContainer": "¿Ya tienes el contenedor del sandbox funcionando tras un dominio tuyo? Danos la dirección en la que responde. La comprobaremos y abriremos tu espacio de trabajo. Nada que instalar, nada que aprovisionar.",
             "alreadyRunningSandboxSomewhere": "¿Ya tienes un sandbox en marcha en algún sitio? Conéctalo por dominio →",
             "alreadyUsingYours": "Ya usas el tuyo",
@@ -4232,6 +4265,7 @@
             "nothingToDoAccount": "No tiene nada que ver con tu cuenta, y estamos añadiendo más. Prepararlo en tu propio ordenador lleva un par de minutos y no tiene límite alguno; o vuelve un poco más tarde y tendremos sitio.",
             "nothingToForwardTo": "sin nada a lo que reenviar. Inicia el contenedor del sandbox",
             "oneJobInstallingDocker": "está ahí para una sola tarea: instalar Docker si falta.",
+            "openChat": "Abrir chat",
             "otherWaysToSet": "Otras formas de prepararlo",
             "otherWaysToSet2": "Otras formas de prepararlo:",
             "outMachinesRightNow": "Ahora mismo no nos quedan máquinas: todas las que tenemos están en uso.",
@@ -4248,6 +4282,7 @@
             "pointIntenticAtSandbox": "Apunta intentic al sandbox que ya tienes en marcha. Una dirección, y estás dentro.",
             "preparingIntenticDomain": "Preparando tu dominio de intentic…",
             "rightNow": "Ahora mismo:",
+            "runOnComputerNotPhone": "Ejecuta esto en un terminal de tu ordenador, no en este teléfono.",
             "runOnMyOwn": "Ejecutarlo en mi propio ordenador",
             "running": "en marcha.",
             "runsNo": "Se ejecuta como tú, sin",
@@ -4256,12 +4291,14 @@
             "sandboxReachableAt": "✓ Tu sandbox estará accesible en",
             "sandboxesHereReachedAt": "A los sandboxes de aquí se llega por una dirección que ya tienes. ¿Ya tienes uno en marcha?",
             "setOneUpMe": "← Prepararme uno en su lugar",
+            "setUpFromComputer": "Se configura desde un ordenador",
             "setUpNow": "Prepáralo ahora",
             "setUpOnMy": "Prepararlo en mi propio ordenador",
             "setUpWorkspace": "Prepara tu espacio de trabajo",
             "settingOneUpNothing": "Te estamos preparando uno. Nada que rellenar.",
             "settingUpOnComputer": "Preparándolo en este ordenador. Estarás trabajando en él en un minuto o dos.",
             "showCommand": "Mostrar el comando",
+            "showCommandForComputer": "Mostrar el comando para tu ordenador",
             "showCommandServer": "Mostrar el comando para un servidor",
             "sleepsWhileYoureAway": "Duerme mientras estás fuera y despierta cuando vuelves. No hacemos copia de seguridad: activa la sincronización de escritorio, o guarda tu trabajo en un remoto de git.",
             "startInstantly": "Empezar al instante",

@@ -6,13 +6,21 @@ import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
 import { PUBLISH_ANCHOR } from "../access/publishAnchor";
+import { effectScope } from "vue";
 import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
 jest.mock(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
 jest.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
-jest.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending: { value: undefined }, proposal: { value: undefined } }) }));
+// An approved recipe not yet built, only where a test says so; and the hosted build of it, none unless a test starts one.
+const pending: { value: { hash: string; content: string } | undefined } = { value: undefined };
+jest.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending, proposal: { value: undefined } }) }));
+const hostedBuild: { value: { state: `building`; hash: string; startedAt: string } | undefined } = { value: undefined };
+jest.mock(`../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build: hostedBuild, applied: { value: undefined } }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
+    useSandbox: () => ({ active: { value: { id: `sb1`, hosted: { region: `iad`, warm: true } } }, reachable: { value: true } }),
+}));
 // No update unless a test offers one.
 const update = { available: false, staged: false };
 // Work held here alone, with no repository to push it to, only where a test says so.
@@ -34,6 +42,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    pending.value = undefined;
+    hostedBuild.value = undefined;
     unbacked.value = false;
     update.available = false;
     update.staged = false;
@@ -44,11 +54,14 @@ afterEach(() => {
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 });
 
-// `needs`, not `notes`: this is the half that claims something is owed, and the half the mobile menu heads with.
-const messages = async (): Promise<string[]> => {
+// The list as a surface holds it: inside a scope, as a component's setup is, which its clock is disposed with.
+const attention = async () => {
     const { useSandboxAttention } = await import(`./sandboxAttention`);
-    return useSandboxAttention().needs.value.map((item) => item.message);
+    return effectScope().run(() => useSandboxAttention())!;
 };
+
+// `needs`, not `notes`: this is the half that claims something is owed, and the half the mobile menu heads with.
+const messages = async (): Promise<string[]> => (await attention()).needs.value.map((item) => item.message);
 
 const NO_ACCOUNT = `No AI account connected, the agent can't run a turn`;
 
@@ -97,19 +110,36 @@ it(`stays quiet for a translator subscription`, async () => {
 // The switcher's update row clicked five times while already on /sandbox, going nowhere: both update notes point at
 // the update card's own button, which the switcher scrolls to and focuses once the page is there.
 it(`points both update notes at the update's own button rather than at the page`, async () => {
-    const { useSandboxAttention } = await import(`./sandboxAttention`);
     update.available = true;
-    expect(useSandboxAttention().notes.value.map((item) => item.to)).toEqual([`/sandbox#${UPDATE_ACTION_ANCHOR}`]);
+    expect((await attention()).notes.value.map((item) => item.to)).toEqual([`/sandbox#${UPDATE_ACTION_ANCHOR}`]);
     update.staged = true;
-    expect(useSandboxAttention().notes.value.map((item) => [item.to, item.badges])).toEqual([[`/sandbox#sandbox-update-action`, true]]);
+    expect((await attention()).notes.value.map((item) => [item.to, item.badges])).toEqual([[`/sandbox#sandbox-update-action`, true]]);
 });
 
 // "No repository to push this work to" landed on Environment with nothing saying where the fix was, and its reader
 // clicked it twice: it points at the Publish row, which says what it needs and links to connecting it.
 it(`points the missing repository at the Publish row, not at the page`, async () => {
-    const { useSandboxAttention } = await import(`./sandboxAttention`);
     unbacked.value = true;
-    expect(useSandboxAttention().needs.value.find((item) => item.message === `No repository to push this work to`)?.to).toBe(
+    expect((await attention()).needs.value.find((item) => item.message === `No repository to push this work to`)?.to).toBe(
         `/sandbox/environment#${PUBLISH_ANCHOR}`,
     );
+});
+
+// "Rebuild needed" for an hour, its reader clicking the Environment card's tabs and refresh without finding the rebuild:
+// the row points at the rebuild step itself, and carries the press a surface may offer beside it.
+it(`points the rebuild at the card's rebuild step, with the press beside it`, async () => {
+    pending.value = { hash: `h1`, content: `RUN true` };
+    const row = (await attention()).needs.value.find((item) => item.message === `Rebuild needed to finish setting up your new capabilities`);
+    expect([row?.to, row?.action]).toEqual([`/sandbox/environment#sandbox-rebuild`, `rebuild`]);
+});
+
+// A build the platform is running is nothing owed: the row stops asking for one and says it is under way.
+it(`says the environment is building instead of asking for a rebuild while one runs`, async () => {
+    pending.value = { hash: `h1`, content: `RUN true` };
+    hostedBuild.value = { state: `building`, hash: `h1`, startedAt: new Date().toISOString() };
+    const list = await attention();
+    expect(list.needs.value.map((item) => item.message)).not.toContain(`Rebuild needed to finish setting up your new capabilities`);
+    expect(list.notes.value.map((item) => [item.message, item.to])).toEqual([
+        [`Your sandbox's new environment is building`, `/sandbox/environment#sandbox-rebuild`],
+    ]);
 });

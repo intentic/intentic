@@ -588,6 +588,9 @@
         "words": {
             "sendItAgain": "Erneut senden",
             "troubleSigningInUse": "Probleme bei der Anmeldung? Nutzen Sie Googles eigene Seite.",
+            "continueOnGooglesPage": "Auf Googles Seite fortfahren",
+            "googleDidntComeBack": "Die Anmeldung in Googles Fenster wurde nicht abgeschlossen. Fahren Sie stattdessen auf Googles Seite fort: Das funktioniert auch, wenn Pop-ups blockiert werden.",
+            "googleAnswerRefused": "Google hat geantwortet, aber mit einer Anmeldung, die dieser Computer für bereits abgelaufen hält: Seine Uhr geht womöglich falsch. Fahren Sie stattdessen auf Googles Seite fort.",
             "continueGoogleInBrowser": "Im Browser mit Google weitermachen",
             "continueGoogle": "Weiter mit Google"
         }
@@ -1510,9 +1513,12 @@
             "stillOpen": "{content} noch offen"
         },
         "chatToolCallsToggle": {
+            "hidden": "{count} Werkzeugaufruf ausgeblendet | {count} Werkzeugaufrufe ausgeblendet",
             "hideToolCalls": "Werkzeugaufrufe ausblenden",
             "hideTools": "Tools ausblenden",
-            "showTools": "Tools einblenden"
+            "noneYet": "Noch keine Werkzeugaufrufe in diesem Chat",
+            "showTools": "Tools einblenden",
+            "showing": "{count} Werkzeugaufruf eingeblendet | {count} Werkzeugaufrufe eingeblendet"
         },
         "chatToolCard": {
             "background": "Hintergrund",
@@ -1798,9 +1804,23 @@
             "workflow": "Workflow"
         },
         "composerVoice": {
+            "failed": "Das ließ sich nicht transkribieren, versuch es noch einmal.",
+            "listening": "Ich höre zu: Pause sendet, Esc stoppt",
+            "micBlocked": "Das Mikrofon ist für diese Seite blockiert. Erlaube es in den Website-Einstellungen links in der Adressleiste (und in den Datenschutzeinstellungen deines Systems, falls es dort auch aus ist) und drück dann erneut auf das Mikrofon.",
+            "needsRebuild": "Sprache braucht einen einmaligen Neuaufbau der Umgebung dieser Sandbox.",
+            "noMic": "Kein Mikrofon gefunden.",
+            "openEnvironment": "Umgebung öffnen",
             "pauseSends": "Pause sendet",
             "preparing": "Sprache wird vorbereitet…",
-            "stopVoice": "Sprache stoppen"
+            "preparingFirstUse": "Sprache wird vorbereitet (erste Nutzung)…",
+            "sending": "Wird gesendet: Esc zum Bearbeiten",
+            "stopVoice": "Sprache stoppen",
+            "transcribing": "Wird transkribiert…",
+            "unavailable": "Sprache braucht eine neuere Version dieser Sandbox.",
+            "unsupportedBrowser": "In diesem Browser nicht verfügbar: Er kann kein Audio für die Spracheingabe aufnehmen. Ein aktuelles Chrome, Edge, Firefox oder Safari kann es.",
+            "unsupportedInsecure": "Hier nicht verfügbar: Browser geben das Mikrofon nur sicheren (https-)Seiten.",
+            "unsupportedPolicy": "Hier nicht verfügbar: Diese Seite darf das Mikrofon nicht verwenden.",
+            "updateSandbox": "Sandbox aktualisieren"
         },
         "turnBreak": {
             "flaggedStatus": "Von den Schutzmechanismen des Modells gestoppt, bevor Arbeit anfiel",
@@ -2336,6 +2356,8 @@
         },
         "connectFlow": {
             "alreadyPasteHere": "Schon vorhanden? Fügen Sie es hier ein",
+            "codeLabel": "Anmeldecode",
+            "copyRefused": "Ihr Browser hat dieser Seite das Kopieren des Codes nicht erlaubt. Er ist oben markiert: Kopieren Sie ihn von dort.",
             "comeBackWithAddress": "Melden Sie sich an und kommen Sie dann mit der Adresse hierher zurück, auf der {destination} landet — ihre letzte Seite {wontLoad}, und das ist zu erwarten.",
             "comeBackWithCode": "Melden Sie sich an und kommen Sie dann mit dem Code hierher zurück.",
             "finish": "Fertigstellen",
@@ -2733,6 +2755,10 @@
             "approvedOverlayPendingRebuild": "Genehmigtes Overlay (Neubau ausstehend)",
             "awaitingReview": "wartet auf Prüfung",
             "contents": "Inhalt",
+            "decideFirst": "Genehmigen oder verwerfen Sie zuerst die Änderung oben, dann deckt ein Neubau beides ab.",
+            "noRebuildHere": "Der Container dieser Sandbox wurde nicht vom Installer von intentic gestartet, deshalb kann er nicht von hier aus neu gebaut werden. Bauen Sie ihn dort neu, wo er läuft, nach dem Rezept unter „Rezept“.",
+            "nothingToRebuild": "Nichts Genehmigtes wartet auf einen Build, ein Neubau würde also nichts ändern. Wenn {names} trotzdem nicht funktioniert, lassen Sie einen Agenten die Ursache suchen.",
+            "nothingToRebuildDecide": "Noch wartet nichts Genehmigtes auf einen Build. Genehmigen Sie die Änderung oben, dann wird der Neubau hier angeboten.",
             "onlySandboxMaintainerDecide": "Nur ein Sandbox-Maintainer kann über Umgebungsänderungen entscheiden.",
             "onlySandboxOwnerApprove": "Nur der Eigentümer der Sandbox oder ein Maintainer kann diese Änderung genehmigen oder ablehnen.",
             "onlySandboxOwnerRebuild": "Nur der Eigentümer der Sandbox kann sie neu bauen.",
@@ -2909,7 +2935,10 @@
             "buildLogTail": "Build-Protokoll (Ende)",
             "buildMinutesCountAgainst": "Build-Minuten zählen gegen die Wachstunden dieser Sandbox. Ihre Dateien in /work bleiben erhalten.",
             "buildingEnvironmentOnMachine": "Ihre Umgebung wird auf einer Maschine gebaut, die wir betreiben. Das dauert ein paar Minuten; Ihre Sandbox arbeitet währenddessen weiter und startet auf dem Ergebnis neu, sobald es bereit ist.",
+            "builtNotSwitched": "Der Build wurde {ago} fertig, aber diese Sandbox läuft noch auf ihrem alten Image.",
             "builtSandboxRestartingOnto": "Gebaut. Ihre Sandbox startet auf dem neuen Image neu; dieses Panel aktualisiert sich, sobald sie zurück ist.",
+            "rebuildAgain": "Erneut neu bauen",
+            "startedAgo": "Begonnen {ago}.",
             "tryBuildAgain": "Den Build erneut versuchen"
         },
         "importCard": {
@@ -3274,6 +3303,7 @@
         },
         "sandboxAttention": {
             "agentProposedChangeTo": "Der Agent hat eine Änderung an Ihrer Umgebung vorgeschlagen",
+            "environmentBuilding": "Die neue Umgebung Ihrer Sandbox wird gebaut",
             "filesOnlyOnCloudMachine": "Die Dateien liegen nur auf der Cloud-Maschine, keine Kopie auf diesem Computer",
             "newSandboxVersionAvailable": "Eine neue Sandbox-Version ist verfügbar",
             "noAiAccountConnected": "Kein KI-Konto verbunden, der Agent kann keinen Zug ausführen",
@@ -4160,7 +4190,10 @@
             "signInNotChanged": "Ihre Anmeldung wurde nicht geändert. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
         },
         "setup": {
+            "addAnotherSandbox": "Weitere Sandbox hinzufügen",
             "alreadyFreeMachineAccount": "Sie haben bereits die kostenlose Maschine, die zu Ihrem Konto gehört. Wählen Sie oben eine andere Stufe, oder löschen Sie die Sandbox, die sie belegt.",
+            "alreadyHaveDetail": "Eingerichtet und bereit zum Arbeiten.",
+            "alreadyHaveSandbox": "Sie haben bereits eine Sandbox. Öffnen Sie darin einen Chat oder fügen Sie eine weitere hinzu.",
             "alreadyRunningSandboxContainer": "Sie betreiben den Sandbox-Container schon hinter einer eigenen Domain? Nennen Sie uns die Adresse, unter der er antwortet. Wir prüfen sie und öffnen dann Ihren Workspace. Nichts zu installieren, nichts bereitzustellen.",
             "alreadyRunningSandboxSomewhere": "Sie betreiben irgendwo schon eine Sandbox? Per Domain verbinden →",
             "alreadyUsingYours": "Sie benutzen bereits Ihre eigene",
@@ -4213,6 +4246,7 @@
             "nothingToDoAccount": "Hat nichts mit Ihrem Konto zu tun, und wir bauen aus. Die Einrichtung auf Ihrem eigenen Computer dauert ein paar Minuten und hat überhaupt keine Grenzen — oder schauen Sie etwas später wieder vorbei, dann haben wir Platz.",
             "nothingToForwardTo": "ohne Ziel zum Weiterleiten. Starten Sie den Sandbox-Container",
             "oneJobInstallingDocker": "ist für eine einzige Aufgabe da: Docker zu installieren, wenn es fehlt.",
+            "openChat": "Chat öffnen",
             "otherWaysToSet": "Andere Wege zur Einrichtung",
             "otherWaysToSet2": "Andere Wege zur Einrichtung:",
             "outMachinesRightNow": "Uns sind gerade die Maschinen ausgegangen — jede, die wir betreiben, ist in Benutzung.",
@@ -4229,6 +4263,7 @@
             "pointIntenticAtSandbox": "Richten Sie intentic auf die Sandbox, die Sie schon betreiben. Eine Adresse, und Sie sind drin.",
             "preparingIntenticDomain": "Ihre intentic-Domain wird vorbereitet…",
             "rightNow": "Gerade jetzt:",
+            "runOnComputerNotPhone": "Führen Sie das in einem Terminal auf Ihrem Computer aus, nicht auf diesem Telefon.",
             "runOnMyOwn": "Auf meinem eigenen Computer laufen lassen",
             "running": "läuft.",
             "runsNo": "Läuft als Sie, kein",
@@ -4238,12 +4273,14 @@
             "sandboxReachableAt": "✓ Ihre Sandbox wird erreichbar sein unter",
             "sandboxesHereReachedAt": "Sandboxes hier erreicht man unter einer Adresse, die Sie bereits haben. Betreiben Sie schon eine?",
             "setOneUpMe": "← Stattdessen eine für mich einrichten",
+            "setUpFromComputer": "Wird an einem Computer eingerichtet",
             "setUpNow": "Jetzt einrichten",
             "setUpOnMy": "Auf meinem eigenen Computer einrichten",
             "setUpWorkspace": "Ihren Workspace einrichten",
             "settingOneUpNothing": "Wir richten eine für Sie ein. Nichts auszufüllen.",
             "settingUpOnComputer": "Wird auf diesem Computer eingerichtet. In ein, zwei Minuten arbeiten Sie darin.",
             "showCommand": "Befehl anzeigen",
+            "showCommandForComputer": "Befehl für Ihren Computer anzeigen",
             "showCommandServer": "Befehl für einen Server anzeigen",
             "sleepsWhileYoureAway": "Sie schläft, während Sie weg sind, und wacht auf, wenn Sie wiederkommen. Wir sichern sie nicht: schalten Sie die Desktop-Synchronisierung ein, oder halten Sie Ihre Arbeit in einem Git-Remote.",
             "startInstantly": "Sofort starten",

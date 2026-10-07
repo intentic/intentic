@@ -1,5 +1,6 @@
 import { sleep } from "@intentic/base/async";
 import { ref, type Ref } from "vue";
+import { track } from "../../../app/analytics";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { createSegmenter, resampleTo16k, wavOf16k } from "./voiceAudio";
@@ -46,35 +47,86 @@ export type VoiceState = `idle` | `preparing` | `listening`;
 // /speech); `failed` is an utterance lost mid-session; the rest are the microphone's own.
 export type VoiceError = `mic-blocked` | `no-mic` | `needs-rebuild` | `unavailable` | `failed`;
 
+// Why this page can never capture, whatever the sandbox says: served over plain http, a Permissions-Policy that
+// withholds the microphone (nginx.conf shipped `microphone=()` and every Chromium refused every press), or a browser
+// without getUserMedia or AudioWorklet.
+export type VoiceUnsupported = `insecure` | `policy` | `browser`;
+
+/** The slice of the page the capability check reads, so a test can hand it a browser of its own. */
+export interface VoicePage {
+    readonly isSecureContext?: boolean;
+    readonly navigator?: { readonly mediaDevices?: { readonly getUserMedia?: unknown } };
+    readonly AudioWorkletNode?: unknown;
+    readonly document?: {
+        readonly permissionsPolicy?: { readonly allowsFeature?: (feature: string) => boolean };
+        readonly featurePolicy?: { readonly allowsFeature?: (feature: string) => boolean };
+    };
+}
+
+/**
+ * What stops this page from ever capturing, asked before the mic is offered rather than after a press: each of these
+ * fails every press the same way, and a press that can only fail reads as one that didn't take (replays show it
+ * pressed again and again).
+ */
+export const voiceUnsupported = (page: VoicePage = globalThis as VoicePage): VoiceUnsupported | undefined => {
+    // First: an insecure page hides mediaDevices and AudioWorklet outright, which would read as an old browser.
+    if (page.isSecureContext === false) {
+        return `insecure`;
+    }
+    // Chromium's answer (`featurePolicy`, renamed `permissionsPolicy` in the spec); Firefox and Safari have neither and
+    // count as allowed, since they ask the person instead.
+    const policy = page.document?.permissionsPolicy ?? page.document?.featurePolicy;
+    if (policy?.allowsFeature?.(`microphone`) === false) {
+        return `policy`;
+    }
+    if (typeof page.navigator?.mediaDevices?.getUserMedia !== `function` || typeof page.AudioWorkletNode !== `function`) {
+        return `browser`;
+    }
+    return undefined;
+};
+
 interface SpeechStatus {
     readonly provisioned: boolean;
     readonly model: `absent` | `downloading` | `ready`;
 }
 
 const STATUS_POLL_MS = 2500;
-// Live microphone level (RMS, 0..1), the listening indicator's pulse.
-const ERROR_DISMISS_MS = 8000;
 
 export function useVoiceInput(): {
     state: Ref<VoiceState>;
-    /** Utterances transcribing right now, "Transcribing…" while > 0. */
+    /** Live microphone level (RMS, 0..1), the listening indicator's pulse. */
     level: Ref<number>;
-    /** A failed capture leaves its error on-screen; auto-clear it so it doesn't hold composer space forever. */
+    /** Utterances transcribing right now, "Transcribing…" while > 0. */
     pending: Ref<number>;
+    /**
+     * The last failure, held until the next press, typing (`dismiss`) or the dismiss control: it used to clear itself
+     * after 8 s, and a person who looked back at the composer found nothing to say why the mic hadn't come on.
+     */
     error: Ref<VoiceError | undefined>;
+    /** How many times in a row this same failure has come back: a press that fails again must not look like nothing. */
+    repeats: Ref<number>;
     start(onTranscript: (text: string) => void): void;
     stop(): void;
+    dismiss(): void;
 } {
     const state = ref<VoiceState>(`idle`);
     const level = ref(0);
     const pending = ref(0);
     const error = ref<VoiceError>();
+    const repeats = ref(0);
 
-    let dismiss: ReturnType<typeof setTimeout> | undefined;
+    // Outlives a press's clearing of `error`, so a press that meets the same failure counts as a repeat. Forgotten once
+    // the mic actually comes on.
+    let last: VoiceError | undefined;
     const fail = (code: VoiceError): void => {
+        repeats.value = code === last ? repeats.value + 1 : 0;
+        last = code;
         error.value = code;
-        clearTimeout(dismiss);
-        dismiss = setTimeout(() => (error.value = undefined), ERROR_DISMISS_MS);
+        // The replays could only show a press that changed nothing; the code says which wall it hit.
+        track(`voice_failed`, { code });
+    };
+    const dismiss = (): void => {
+        error.value = undefined;
     };
 
     // The live capture chain, torn down by stop(); `generation` invalidates async start arms that resolve late.
@@ -87,7 +139,7 @@ export function useVoiceInput(): {
         generation += 1;
         controller?.abort();
         controller = undefined;
-        stream?.getTracks().forEach((track) => track.stop());
+        stream?.getTracks().forEach((audioTrack) => audioTrack.stop());
         stream = undefined;
         void context?.close().catch(() => {});
         context = undefined;
@@ -98,7 +150,6 @@ export function useVoiceInput(): {
 
     const start = (onTranscript: (text: string) => void): void => {
         teardown();
-        clearTimeout(dismiss);
         error.value = undefined;
         state.value = `preparing`;
         const mine = generation;
@@ -119,6 +170,10 @@ export function useVoiceInput(): {
                         signal,
                     });
                     if (alive() && text !== ``) {
+                        // A lost utterance's line is about that one; the next that gets through answers it.
+                        if (error.value === `failed`) {
+                            error.value = undefined;
+                        }
                         onTranscript(text);
                     }
                 })
@@ -168,7 +223,7 @@ export function useVoiceInput(): {
                     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
                 });
                 if (!alive()) {
-                    captured.getTracks().forEach((track) => track.stop());
+                    captured.getTracks().forEach((audioTrack) => audioTrack.stop());
                     return;
                 }
                 stream = captured;
@@ -197,6 +252,8 @@ export function useVoiceInput(): {
                 capture.port.start();
                 audio.createMediaStreamSource(captured).connect(capture);
                 state.value = `listening`;
+                last = undefined;
+                repeats.value = 0;
             } catch (cause) {
                 if (!alive()) {
                     return;
@@ -218,5 +275,5 @@ export function useVoiceInput(): {
         })();
     };
 
-    return { state, level, pending, error, start, stop: teardown };
+    return { state, level, pending, error, repeats, start, stop: teardown, dismiss };
 }

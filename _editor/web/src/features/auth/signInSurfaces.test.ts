@@ -43,6 +43,7 @@ jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
         cancelSignIn: jest.fn(),
         getIdToken: jest.fn(() => new Promise<never>(() => {})),
         adoptIdToken: jest.fn(),
+        refusedCredentials: ref(0),
     }),
 }));
 jest.mock(`../../client/auth/useAuth`, () => ({

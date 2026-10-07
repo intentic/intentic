@@ -34,9 +34,9 @@ import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
 import { useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { useSubagentRoster } from "../fleet/subagentRoster";
-import { chatWide } from "../../chat/panel/chatPanelLayout";
+import { chatWide, showParkedChat } from "../../chat/panel/chatPanelLayout";
 import { subagentOnScreen } from "../../chat/panel/subagent/subagentView";
-import { openRunInChat } from "../../chat/run/openRun";
+import { openRunInChat, pointAtChat } from "../../chat/run/openRun";
 import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import LaneHeader from "../../../components/LaneHeader.vue";
@@ -193,7 +193,23 @@ provide(CHILD_ROWS, {
     setRowEl: setCardEl,
 });
 const { announcement, pendingPurge, purging, pulsing, toggleArchive, confirmPurge } = useArchiveDoor({ view, move, agents });
-const { stoppingRuns, stopRun, archiveRun, restoreRun, openRunGraph, releaseWake, synthesize } = useBoardPresses({ workflows, agents, router });
+const { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, releaseWake, synthesize } = useBoardPresses({
+    workflows,
+    agents,
+    router,
+    chat: {
+        strip: chatStrip,
+        // Where ChatPanel draws a run's diagram: a wide panel, on a desktop.
+        diagram: computed(() => chatWide.value && !mobile.value),
+        mobile,
+        // As an agent card's press does (cardSelection.focusAgent): a parked chat opens its transcript to show what moved.
+        follow: (run) => {
+            void openRunInChat(run);
+            showParkedChat();
+        },
+        point: pointAtChat,
+    },
+});
 useBoardCommands({ agents, filterField });
 // A filtered board is a result set wearing the lanes' shape, so it doesn't drag: half the lanes may read "no matches"
 // and a drop would act on a lane the user isn't really seeing.
@@ -473,7 +489,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             :selected="chatStrip.run?.runId === run.runId"
                             :needs-you="needingYou.has(run.runId)"
                             :stopping="stoppingRuns.has(run.runId)"
-                            @open="openRunInChat(run)"
+                            @open="openRun(run)"
                             @graph="openRunGraph(run)"
                             @stop="stopRun(run)"
                             @archive="archiveRun(run)"

@@ -27,6 +27,8 @@ interface World {
     readonly project?: string;
     // What the platform's trash holds for this account: nothing unless a test removed a sandbox first.
     readonly trash?: { readonly sandboxes: TrashedSandbox[] } | Error;
+    // The sandbox this browser has selected, if any.
+    readonly active?: string;
 }
 
 const scopes: EffectScope[] = [];
@@ -94,7 +96,7 @@ const stage = (world: World = {}) => {
             }),
         );
         const arrival = useSetupArrival({
-            sandbox: unstubbed<SetupArrivalHost[`sandbox`]>(`sandbox`, { list, select }),
+            sandbox: unstubbed<SetupArrivalHost[`sandbox`]>(`sandbox`, { list, select, activeSandboxId: ref(world.active) }),
             platform: unstubbed<SetupArrivalHost[`platform`]>(`platform`, {
                 hostedOffer: platform.hostedOffer,
                 addressOffer: platform.addressOffer,
@@ -160,6 +162,49 @@ describe(`a browser's arrival`, () => {
         expect(hosted.machine.value).toBe(`hosted`);
         expect(hosted.hostedSince.value).toBe(Date.now());
         expect(hostedProvision).not.toHaveBeenCalled();
+    });
+});
+
+/* AN ACCOUNT THAT ALREADY WORKS IN A SANDBOX. A phone, its hosted sandbox connected fourteen seconds after sign-up,
+ * tapped "Add sandbox" in the Menu: a draft was made unasked, and the picker it landed on had nothing left to pick (its
+ * free machine already in use, its own-computer rung a terminal command). That sandbox is offered back first now, and a
+ * second is made only when asked for. */
+describe(`an account that already works in a sandbox`, () => {
+    const working = sandboxSummary({ id: `live`, lastSeenAt: `2026-10-06T05:55:14Z`, hosted: { region: `iad`, warm: true } });
+
+    it(`holds that sandbox up and makes nothing`, async () => {
+        const { create, hostedProvision, arrival } = stage({ rows: [working], hosted: { enabled: true, remaining: 0 } });
+        await arrival.readArrival();
+        expect({ held: arrival.held.value?.id, loaded: arrival.loaded.value }).toEqual({ held: `live`, loaded: true });
+        expect([create, hostedProvision].map((call) => call.mock.calls.length)).toEqual([0, 0]);
+    });
+
+    it(`offers the selected one back when the account has several`, async () => {
+        const other = sandboxSummary({ id: `other`, lastSeenAt: `2026-10-06T06:00:00Z` });
+        const { arrival } = stage({ rows: [working, other], active: `other` });
+        await arrival.readArrival();
+        expect(arrival.held.value?.id).toBe(`other`);
+    });
+
+    it(`makes another once asked, exactly as an arrival without the question would`, async () => {
+        const { create, arrival } = stage({ rows: [working], hosted: { enabled: true, remaining: 0 } });
+        await arrival.readArrival();
+        await arrival.addAnother();
+        expect({ held: arrival.held.value, made: create.mock.calls.length, arrival: arrival.arrival.value }).toEqual({
+            held: undefined,
+            made: 1,
+            arrival: `choose`,
+        });
+    });
+
+    it(`does not hold a visit that asked for a row, a rung or the options of its own`, async () => {
+        const draft = sandboxSummary({ id: `draft`, token: `tok` });
+        const asked: readonly Record<string, string>[] = [{ sandbox: `draft` }, { machine: `mine` }, { elsewhere: `1` }];
+        for (const query of asked) {
+            const { arrival } = stage({ rows: [working, draft], query });
+            await arrival.readArrival();
+            expect(arrival.held.value).toBe(undefined);
+        }
     });
 });
 

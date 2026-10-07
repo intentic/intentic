@@ -40,19 +40,27 @@ export function pinnedList<T>(list: {
     readonly knobs?: boolean;
     readonly helperJobs?: boolean;
 }): PinnedList {
-    const entries = computed<readonly PinnedEntry[]>(() =>
-        list.read().map((stored, index) => {
+    const entries = computed<readonly PinnedEntry[]>(() => {
+        const seen = new Map<string, number>();
+        return list.read().map((stored, index) => {
             const pin = list.decode(stored);
             const described = describePin(pin, String(stored));
+            // A row's identity is the model it names, never its words: the label moves when a provider's catalog lands
+            // (the picker refreshes them all on open), and a row keyed on it was redrawn under its own open picker, which
+            // lost its anchor and shut, so the press that opened it read as doing nothing. Counted, so a list that holds
+            // one model twice still keys each row apart.
+            const name = pin === undefined ? `raw:${String(stored)}` : modelPinKey(pin);
+            const repeat = seen.get(name) ?? 0;
+            seen.set(name, repeat + 1);
             return {
-                key: `${index}:${described.label}`,
+                key: repeat === 0 ? name : `${name}#${repeat}`,
                 index,
                 pin,
                 detail: pin === undefined ? undefined : list.detail?.(pin),
                 ...described,
             };
-        }),
-    );
+        });
+    });
     return {
         knobs: list.knobs === true,
         helperJobs: list.helperJobs === true,

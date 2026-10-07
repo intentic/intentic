@@ -5,6 +5,7 @@ import "@intentic/testing/dom";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { installI18n } from "@intentic/ui/i18n";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 interface Flow {
     provider: string;
@@ -37,7 +38,13 @@ jest.mock(`../../chat/run/useChat`, () => ({
 }));
 // Stubbed, not imported, so assertions test the panel's own markup, not <Button>'s current rendering.
 jest.mock(`@intentic/ui`, () => ({
-    ui: { inputSm: (extra: string) => extra, textAction: (extra: string) => extra, linkButton: (extra: string) => extra },
+    ui: {
+        inputSm: (extra: string) => extra,
+        textAction: (extra: string) => extra,
+        linkButton: (extra: string) => extra,
+        iconButton: (extra: string) => extra,
+        inputInline: (extra: string) => extra,
+    },
     // `as`/`href` honoured since the panel's first control is a link to the provider, and its target is asserted here.
     Button: defineComponent({
         props: { label: String, disabled: Boolean, loading: Boolean, as: String, href: String },
@@ -117,7 +124,8 @@ it(`a device sign-in copies its code with the press that opens the page, and say
         expect(host.textContent).not.toContain(`Code copied`);
 
         host.querySelector<HTMLAnchorElement>(`a[href="https://auth.openai.com/codex/device"]`)!.click();
-        await nextTick();
+        // The write and the note it raises are several awaits deep; a macrotask flush avoids counting ticks.
+        await new Promise((resolve) => setTimeout(resolve));
         await nextTick();
 
         expect(writes).toEqual([`K7QX-2MPD`]);
@@ -132,6 +140,80 @@ it(`a device sign-in copies its code with the press that opens the page, and say
             Object.defineProperty(navigator, `clipboard`, held);
         }
     }
+});
+
+// What the clipboard does with a write, for the tests below: lands it, or refuses it as a browser may.
+const withClipboard = async (writeText: (text: string) => Promise<void>, run: () => Promise<void>): Promise<void> => {
+    const held = Object.getOwnPropertyDescriptor(navigator, `clipboard`);
+    Object.defineProperty(navigator, `clipboard`, { configurable: true, value: { writeText, readText: async () => `` } });
+    try {
+        await run();
+    } finally {
+        if (held === undefined) {
+            Reflect.deleteProperty(navigator, `clipboard`);
+        } else {
+            Object.defineProperty(navigator, `clipboard`, held);
+        }
+    }
+};
+
+const codeButton = (host: HTMLElement, code: string): HTMLButtonElement =>
+    [...host.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === code)!;
+
+// A reader on Firefox pressed the code four times, rage-clicking: after Open the copied note was already up for good,
+// so a press on the code changed nothing on screen, and a refused copy said nothing at all.
+describe(`a press on the device code`, () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it(`answers every press with its own Copied, heard as well as seen`, async () => {
+        await withClipboard(
+            async () => undefined,
+            async () => {
+                const host = await mount({ provider: `codex`, url: `https://auth.openai.com/codex/device`, code: `K7QX-2MPD`, flow: `device` });
+                jest.useFakeTimers();
+                const live = (): string => host.querySelector(`[aria-live]`)?.textContent?.trim() ?? ``;
+
+                // The held note goes up with the first copy and stays; what follows has to show past it.
+                codeButton(host, `K7QX-2MPD`).click();
+                await advanceTimersByTimeAsync(0);
+                expect(host.textContent).toContain(`Code copied: paste it on the page that opened.`);
+                expect(live()).toBe(`Copied`);
+
+                await advanceTimersByTimeAsync(1_600);
+                expect(live(), `the acknowledgement outstayed its moment`).toBe(``);
+
+                codeButton(host, `K7QX-2MPD`).click();
+                await advanceTimersByTimeAsync(0);
+                expect(live(), `a second press changed nothing`).toBe(`Copied`);
+                expect(host.querySelector(`button[aria-label="Copy the code"]`)?.textContent).toContain(`Copied`);
+            },
+        );
+    });
+
+    it(`says a refused copy, and leaves the code selected for the reader's own`, async () => {
+        await withClipboard(
+            async () => {
+                throw new DOMException(`Clipboard write is not allowed.`, `NotAllowedError`);
+            },
+            async () => {
+                const host = await mount({ provider: `codex`, url: `https://auth.openai.com/codex/device`, code: `K7QX-2MPD`, flow: `device` });
+
+                codeButton(host, `K7QX-2MPD`).click();
+                await new Promise((resolve) => setTimeout(resolve));
+                await nextTick();
+
+                expect(host.textContent).toContain(`Your browser didn't let this page copy the code.`);
+                expect(host.textContent).not.toContain(`Code copied`);
+                expect(host.querySelector(`[aria-live]`)?.textContent).toContain(`didn't let this page copy`);
+                const field = host.querySelector<HTMLInputElement>(`input[readonly]`)!;
+                expect(field.value).toBe(`K7QX-2MPD`);
+                expect(document.activeElement).toBe(field);
+                expect([field.selectionStart, field.selectionEnd]).toEqual([0, `K7QX-2MPD`.length]);
+            },
+        );
+    });
 });
 
 it(`a minted device sign-in with no code waits rather than showing an empty code box`, async () => {

@@ -852,6 +852,9 @@
             "openBrowserAgain": "Otwórz ponownie",
             "sendItAgain": "Wyślij ponownie",
             "troubleSigningInUse": "Kłopot z logowaniem? Skorzystaj z własnej strony Google.",
+            "continueOnGooglesPage": "Kontynuuj na stronie Google",
+            "googleDidntComeBack": "Logowanie w oknie Google nie zostało dokończone. Kontynuuj na stronie Google: działa nawet wtedy, gdy wyskakujące okna są blokowane.",
+            "googleAnswerRefused": "Google odpowiedział, ale logowaniem, które ten komputer uznaje za już wygasłe: jego zegar może być źle ustawiony. Kontynuuj na stronie Google.",
             "continueGoogleInBrowser": "Kontynuuj przez Google w przeglądarce",
             "continueGoogle": "Kontynuuj przez Google"
         }
@@ -2921,9 +2924,12 @@
             "stillOpen": "{content} wciąż otwarte"
         },
         "chatToolCallsToggle": {
+            "hidden": "Ukryto {count} wywołanie narzędzia | Ukryto {count} wywołania narzędzi | Ukryto {count} wywołań narzędzi",
             "hideToolCalls": "Ukryj wywołania narzędzi",
             "hideTools": "Ukryj narzędzia",
-            "showTools": "Pokaż narzędzia"
+            "noneYet": "W tym czacie nie ma jeszcze wywołań narzędzi",
+            "showTools": "Pokaż narzędzia",
+            "showing": "Pokazano {count} wywołanie narzędzia | Pokazano {count} wywołania narzędzi | Pokazano {count} wywołań narzędzi"
         },
         "chatToolCard": {
             "background": "w tle",
@@ -3298,16 +3304,21 @@
         "composerVoice": {
             "failed": "Nie udało się tego rozpoznać, spróbuj ponownie.",
             "listening": "Słucham: pauza wysyła, Esc zatrzymuje",
-            "micBlocked": "Dostęp do mikrofonu jest zablokowany. Zezwól na niego w ustawieniach witryny w przeglądarce i spróbuj ponownie.",
-            "needsRebuild": "Głos wymaga jednorazowej aktualizacji sandboxa: najpierw uruchom przebudowę na karcie Środowisko na stronie Sandbox.",
+            "micBlocked": "Mikrofon jest zablokowany dla tej witryny. Zezwól na niego w ustawieniach witryny po lewej stronie paska adresu (i w ustawieniach prywatności systemu, jeśli tam też jest wyłączony), a potem ponownie naciśnij mikrofon.",
+            "needsRebuild": "Głos wymaga jednorazowej przebudowy środowiska tego sandboxa.",
             "noMic": "Nie znaleziono mikrofonu.",
+            "openEnvironment": "Otwórz Środowisko",
             "pauseSends": "Pauza wysyła",
             "preparing": "Przygotowanie głosu…",
             "preparingFirstUse": "Przygotowuję głos (pierwsze użycie)…",
             "sending": "Wysyłam: Esc, by edytować",
             "stopVoice": "Zatrzymaj głos",
             "transcribing": "Rozpoznaję mowę…",
-            "unavailable": "Głos nie jest dostępny w tym sandboxie: zaktualizuj go i spróbuj ponownie."
+            "unavailable": "Głos wymaga nowszej wersji tego sandboxa.",
+            "unsupportedBrowser": "Niedostępne w tej przeglądarce: nie potrafi nagrywać dźwięku do wprowadzania głosowego. Aktualny Chrome, Edge, Firefox lub Safari potrafi.",
+            "unsupportedInsecure": "Niedostępne tutaj: przeglądarki udostępniają mikrofon tylko bezpiecznym stronom (https).",
+            "unsupportedPolicy": "Niedostępne tutaj: ta strona nie ma pozwolenia na używanie mikrofonu.",
+            "updateSandbox": "Zaktualizuj sandbox"
         },
         "turnBreak": {
             "anotherAccount": "inne konto",
@@ -4508,6 +4519,8 @@
         },
         "connectFlow": {
             "alreadyPasteHere": "Już to masz? Wklej tutaj",
+            "codeLabel": "Kod logowania",
+            "copyRefused": "Przeglądarka nie pozwoliła tej stronie skopiować kodu. Jest zaznaczony powyżej: skopiuj go stamtąd.",
             "comeBackWithAddress": "Zaloguj się, a potem wróć tutaj z adresem, na który przekieruje Cię {destination}. Ta ostatnia strona {wontLoad} i tak ma być.",
             "comeBackWithCode": "Zaloguj się, a potem wróć tutaj z kodem.",
             "codeCopied": "Kod skopiowany: wklej go na stronie, która się otworzyła.",
@@ -5094,6 +5107,10 @@
             "approvedOverlayPendingRebuild": "Zatwierdzona nakładka (oczekuje na przebudowę)",
             "awaitingReview": "czeka na przegląd",
             "contents": "Zawartość",
+            "decideFirst": "Najpierw zatwierdź albo odrzuć zmianę powyżej, wtedy jedna przebudowa obejmie obie.",
+            "noRebuildHere": "Kontener tego sandboxa nie został uruchomiony przez instalator intentic, więc nie da się go stąd przebudować. Przebuduj go tam, gdzie działa, według przepisu z zakładki Przepis.",
+            "nothingToRebuild": "Nic zatwierdzonego nie czeka na zbudowanie, więc przebudowa niczego nie zmieni. Jeśli {names} nadal nie działa, poproś agenta, żeby sprawdził dlaczego.",
+            "nothingToRebuildDecide": "Nic zatwierdzonego jeszcze nie czeka na zbudowanie. Zatwierdź zmianę powyżej, a przebudowa pojawi się tutaj.",
             "onlySandboxMaintainerDecide": "Tylko opiekun sandboxa może decydować o zmianach środowiska.",
             "onlySandboxOwnerApprove": "Tylko właściciel sandboxa albo opiekun może zatwierdzić albo odrzucić tę zmianę.",
             "proposalAdds": "Zatwierdź zmiany dotyczące: {names}.",
@@ -5324,8 +5341,11 @@
             "buildLogTail": "Dziennik budowania (koniec)",
             "buildMinutesCountAgainst": "Minuty budowania liczą się do godzin czuwania tego sandboxa. Twoje pliki w /work zostają.",
             "buildingEnvironmentOnMachine": "Budujemy Twoje środowisko na maszynie, którą prowadzimy. Zajmuje to kilka minut; Twój sandbox pracuje w tym czasie dalej i restartuje na wyniku, gdy będzie gotowy.",
+            "builtNotSwitched": "Budowanie zakończyło się {ago}, ale ten sandbox nadal działa na starym obrazie.",
             "builtSandboxRestartingOnto": "Zbudowane. Twój sandbox restartuje na nowym obrazie; ten panel zaktualizuje się, gdy wróci.",
             "couldNotStart": "Nie udało się uruchomić budowania.",
+            "rebuildAgain": "Przebuduj ponownie",
+            "startedAgo": "Rozpoczęto {ago}.",
             "tryBuildAgain": "Spróbuj zbudować jeszcze raz"
         },
         "importCard": {
@@ -5778,6 +5798,7 @@
         "sandboxAttention": {
             "agentProposedChangeTo": "Agent zaproponował zmianę w Twoim środowisku",
             "desktopSyncStopped": "Synchronizacja z pulpitem zatrzymała się na {devices}, jej folder się nie synchronizuje",
+            "environmentBuilding": "Trwa budowanie nowego środowiska Twojego sandboxa",
             "filesOnlyOnCloudMachine": "Pliki są tylko na maszynie w chmurze, bez kopii na tym komputerze",
             "newSandboxVersionAvailable": "Jest nowa wersja sandboxa",
             "noAiAccountConnected": "Nie podłączono konta AI, agent nie może wykonać tury",
@@ -7529,7 +7550,10 @@
         "setup": {
             "acceptedNeverAnswered": "Ten adres przyjął połączenie, ale nie odpowiedział.",
             "acceptedNeverAnsweredDetail": "Coś nasłuchuje, ale nie odpowiada: sandbox, który dopiero się uruchamia, albo proxy skierowane na zły port. Odczekaj chwilę i spróbuj ponownie.",
+            "addAnotherSandbox": "Dodaj kolejny sandbox",
             "alreadyFreeMachineAccount": "Masz już darmową maszynę, która przychodzi z Twoim kontem. Wybierz wyżej inny szczebel albo usuń sandbox, który ją zajmuje.",
+            "alreadyHaveDetail": "Skonfigurowany i gotowy do pracy.",
+            "alreadyHaveSandbox": "Masz już sandbox. Otwórz w nim czat albo dodaj kolejny.",
             "alreadyRunningSandboxContainer": "Masz już kontener sandboxa za własną domeną? Podaj adres, pod którym odpowiada. Sprawdzimy go i otworzymy Twoją przestrzeń roboczą. Nic do instalowania, nic do zaprowiantowania.",
             "alreadyRunningSandboxSomewhere": "Masz już gdzieś działający sandbox? Podłącz go przez domenę →",
             "alreadyUsingYours": "Używasz już swojego",
@@ -7594,6 +7618,7 @@
             "nothingToDoAccount": "Nie ma to nic wspólnego z Twoim kontem, a my dokładamy kolejne. Konfiguracja na własnym komputerze zajmuje dwie minuty i nie ma żadnych limitów — albo zajrzyj trochę później, wtedy będziemy mieć miejsce.",
             "nothingToForwardTo": "i nie ma dokąd przekierowywać. Uruchom kontener sandboxa",
             "oneJobInstallingDocker": "jest tam do jednego zadania: zainstalować Dockera, jeśli go brakuje.",
+            "openChat": "Otwórz czat",
             "otherWaysToSet": "Inne sposoby konfiguracji",
             "otherWaysToSet2": "Inne sposoby konfiguracji:",
             "outMachinesRightNow": "Właśnie skończyły nam się maszyny — każda, którą mamy, jest w użyciu.",
@@ -7612,6 +7637,7 @@
             "pointIntenticAtSandbox": "Wskaż intentic sandbox, który już masz uruchomiony. Jeden adres i jesteś w środku.",
             "preparingIntenticDomain": "Przygotowywanie Twojej domeny intentic…",
             "rightNow": "Właśnie teraz:",
+            "runOnComputerNotPhone": "Uruchom to w terminalu na komputerze, nie na tym telefonie.",
             "runOnMyOwn": "Uruchom go na moim własnym komputerze",
             "running": "działa.",
             "runsNo": "Działa jako Ty, bez",
@@ -7624,12 +7650,14 @@
             "sandboxesHereReachedAt": "Do sandboxów tutaj dociera się pod adresem, który już masz. Masz już jeden uruchomiony?",
             "setOneUpMe": "← Zamiast tego postaw mi jeden",
             "setUpBeforeLastSeen": "Ten sandbox był już skonfigurowany, ostatnio odpowiedział {when}.",
+            "setUpFromComputer": "Konfiguracja na komputerze",
             "setUpNow": "Skonfiguruj teraz",
             "setUpOnMy": "Skonfiguruj na moim własnym komputerze",
             "setUpWorkspace": "Skonfiguruj swoją przestrzeń roboczą",
             "settingOneUpNothing": "Stawiamy jeden dla Ciebie. Nic do wypełnienia.",
             "settingUpOnComputer": "Konfigurujemy go na tym komputerze. Za minutę albo dwie będziesz w nim pracować.",
             "showCommand": "Pokaż polecenie",
+            "showCommandForComputer": "Pokaż polecenie dla komputera",
             "showCommandServer": "Pokaż polecenie dla serwera",
             "sleepsWhileYoureAway": "Śpi, kiedy Cię nie ma, i budzi się, gdy wracasz. Nie robimy kopii zapasowej: włącz synchronizację z pulpitem albo trzymaj swoją pracę w zdalnym repozytorium git.",
             "startInstantly": "Zacznij natychmiast",

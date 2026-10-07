@@ -34,6 +34,8 @@ export interface LadderInput {
     readonly commandOffered: boolean;
     // The installer offered in place of the command, whose name the own-computer rung carries.
     readonly installer: { readonly label: string } | undefined;
+    // Read on a phone, which pastes nothing into a terminal: the own-computer rung says it is set up from a computer.
+    readonly mobile?: boolean;
 }
 
 // What the machine on offer costs in hours, never a bare 'Free' where a ceiling applies: the account's free hours,
@@ -69,9 +71,11 @@ export const ladderOptionsOf = (input: LadderInput): readonly MachineOption[] =>
                   title: t(`setup.setup.myOwnComputer`),
                   meta: t(`setup.machineLadder.mostPower`),
                   note:
-                      input.installer === undefined
-                          ? t(`setup.machineLadder.onePastedCommand`)
-                          : t(`setup.machineLadder.installer`, { label: input.installer.label }),
+                      input.mobile === true
+                          ? t(`setup.setup.setUpFromComputer`)
+                          : input.installer === undefined
+                            ? t(`setup.machineLadder.onePastedCommand`)
+                            : t(`setup.machineLadder.installer`, { label: input.installer.label }),
               },
           ]
         : []),

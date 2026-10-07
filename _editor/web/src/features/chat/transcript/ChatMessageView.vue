@@ -421,6 +421,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
     <!-- Delegated markdown controls (copy buttons, file links), since both live inside v-html. -->
     <!-- A folded message renders like any other row: no pin, no extra inset. -->
     <!-- Blocks within a message share the transcript's own gap (.chat-stack, --chat-gap). -->
+    <!-- `data-card-request` names the ask a card row holds, so the bar above the composer goes to that card (ChatWaitingBar). -->
     <div
         ref="row"
         class="chat-message chat-stack flex flex-col"
@@ -436,6 +437,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             'chat-prompt-pinned': pinned,
             'chat-doomed': doomed,
         }"
+        :data-card-request="card === undefined ? undefined : requestId"
         @click="onMarkdownClick"
         @pointerdown="copyCodeFromEvent"
     >
@@ -448,7 +450,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 type="button"
                 class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium"
                 v-tooltip.top="t(`chat.chatMessageView.openBeside`)"
-                @click="openClaimed(errandSubject)"
+                @click="openClaimed(errandSubject, $event.currentTarget as Element)"
             >
                 <Icon name="expand" class="text-2xs" />
                 {{ errandSubject.label }}

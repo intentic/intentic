@@ -1,7 +1,11 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { flashElement } from "@intentic/ui/motion";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { agentSeed } from "../../agents/fleet/useAgents-actions";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { raiseFloating } from "../../../workbench/window/floating";
+import { chatParked, showParkedChat } from "../panel/chatPanelLayout";
+import { drawsChat } from "./chatEcho";
 import type { RunSession } from "./chatRun";
 import { summonChat } from "./summon";
 import { useChat } from "./useChat";
@@ -49,4 +53,19 @@ export const openRunInChat = async (run: WorkflowRun | string): Promise<void> =>
     if ((await sandboxRpc.workflows.runs()).runs.some((entry) => entry.runId === run)) {
         summonChat({ kind: `run`, runId: run });
     }
+};
+
+// Points at the chat for a press that found it already showing what was asked for (chatRun's `shown`), so the press
+// still answers: the window holding the chat comes forward, a parked chat opens its transcript, and a chat on screen
+// is ringed for a moment. Never opens a window or moves the panes.
+export const pointAtChat = (): void => {
+    if (!drawsChat.value) {
+        raiseFloating(`chat`);
+        return;
+    }
+    if (chatParked.value) {
+        showParkedChat();
+        return;
+    }
+    flashElement(document.querySelector(`.chat-panel`));
 };

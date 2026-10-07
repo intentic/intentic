@@ -5,6 +5,7 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { idTokenClaims } from "../../client/auth/googleToken";
+import { hasFedCm, useGooglePress } from "./googlePress";
 import { handoffSpent, markHandoffSpent } from "./handoffSpent";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
@@ -27,7 +28,7 @@ const t = useT();
 
 const route = useRoute();
 const { user, refresh, signInWithGoogle, signInWithGoogleCredential } = useAuth();
-const { getIdToken, renderButton, adoptIdToken } = useGoogleIdentity();
+const { getIdToken, renderButton, adoptIdToken, refusedCredentials } = useGoogleIdentity();
 
 const error = ref<NoticeModel | undefined>(undefined);
 const working = ref(false);
@@ -49,6 +50,27 @@ const googleEmail = ref<string | undefined>(undefined);
 const handingEmail = computed(() => googleEmail.value ?? user.value?.email);
 
 const googleButton = ref<HTMLElement>();
+
+// A press on Google's button that came back with no answer (googlePress.ts), told apart here as on /login: this page is
+// the same door, and a pop-up nothing answers leaves it looking just as dead.
+const press = useGooglePress(googleButton, `desktop-auth`);
+// No FedCM: Google's button can only open a pop-up, so Google's own page is a real button from the start.
+const popupOnly = !hasFedCm();
+// Google's answer was refused (a clock set wrong puts a fresh token past its expiry). The mint keeps waiting on the
+// button, so this is said beside it rather than as the failure box, which would take the button away from a mint
+// still waiting on it.
+const refused = ref(false);
+watch(refusedCredentials, () => {
+    refused.value = true;
+    press.answered();
+});
+const stallNotice = computed<NoticeModel | undefined>(() =>
+    refused.value
+        ? noticeOf(t(`auth.words.googleAnswerRefused`), { tone: `warning` })
+        : press.stalled.value
+          ? noticeOf(t(`auth.words.googleDidntComeBack`), { tone: `warning` })
+          : undefined,
+);
 
 // Minimum life left to hand over a token; Google's last about an hour, most of which this asks for.
 const HANDOFF_USABLE_FOR_MS = 45 * 60 * 1000;
@@ -166,6 +188,7 @@ const hand = async (): Promise<void> => {
             // daemon to spend it on, so a nearly-expired one is re-minted here instead. `pick`: no silent attempt at
             // all, so Google's chooser is the only road to a credential.
             idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS, pick: picking.value });
+            press.answered();
         }
         if (idToken === undefined) {
             error.value = noticeOf(t(`auth.desktopAuth.needsGoogleSignIn`));
@@ -389,11 +412,24 @@ onMounted(() => {
                             <template #icon><Icon name="external-link" /></template>
                         </Button>
                     </div>
-
-                    <!-- The button is always rendered because blocked frames are indistinguishable. -->
-                    <button v-if="googleReady" type="button" class="escape" v-action="useGooglesOwnPage">
-                        {{ t(`auth.words.troubleSigningInUse`) }}
-                    </button>
+                    <template v-else>
+                        <!-- Google's button failed in front of the reader: said, and its road around promoted to the primary action. -->
+                        <Notice v-if="stallNotice" :of="stallNotice" class="mt-4 rounded-none text-left" />
+                        <div v-if="stallNotice || popupOnly" class="gate-actions">
+                            <Button
+                                :label="t(`auth.words.continueOnGooglesPage`)"
+                                :severity="stallNotice ? undefined : `secondary`"
+                                class="w-full justify-center"
+                                @click="useGooglesOwnPage"
+                            >
+                                <template #icon><Icon name="google" /></template>
+                            </Button>
+                        </div>
+                        <!-- The escape is always rendered because blocked frames are indistinguishable. -->
+                        <button v-else type="button" class="escape" v-action="useGooglesOwnPage">
+                            {{ t(`auth.words.troubleSigningInUse`) }}
+                        </button>
+                    </template>
                 </template>
             </section>
 

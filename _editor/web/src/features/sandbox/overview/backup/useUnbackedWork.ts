@@ -1,13 +1,14 @@
-import type { GitRemoteRepo } from "@intentic/sandbox-contract";
+import { STARTER_REPO, type GitRemoteRepo } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { fetchWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 import { workspaceTreeKey } from "../../../workspace/health/workspaceTreeKey";
+import { holdsWork, onlyStarter, starterStateOf } from "./madeWork";
 
-// Whether this workspace holds work that exists only here: files in it, and no repository in it pointing at a
-// remote. Both halves matter — a fresh sandbox has no remote either, and telling somebody to connect a repository
-// before they have written anything is a nag about nothing.
+// Whether this workspace holds work that exists only here: work somebody made (madeWork.ts says what counts), and no
+// repository in it pointing at a remote. Both halves matter — a fresh sandbox has no remote either, and telling somebody
+// to connect a repository before they have made anything is a nag about nothing.
 
 /* One lookup per repo, so this is polled on the slow clock a standing condition deserves, never on a change. */
 const REMOTES_POLL_MS = 5 * 60_000;
@@ -27,11 +28,24 @@ export function useUnbackedWork() {
         queryFn: fetchWorkspaceTree,
         enabled: computed(() => remotes.value?.length === 0),
     });
-    // An empty workspace is not unbacked work, it is no work; a tree that has not landed says nothing either way.
-    const hasFiles = computed(() => (tree.data.value?.tree.length ?? 0) > 0);
+    // The top level is all that decides it; a tree that has not landed says nothing either way.
+    const names = computed(() => tree.data.value?.tree.map((entry) => entry.name));
+
+    // The starter site's own history, asked only while it is all there is to judge: one commit of log (a second means
+    // somebody built on it) and the change list the Changes panel already holds, which the daemon pushes fresh.
+    const starterOnly = computed(() => remotes.value?.length === 0 && onlyStarter(names.value));
+    const { query: log } = useSandboxQuery({
+        ...rpcQuery(`git.log`, { repo: STARTER_REPO, limit: 1 }),
+        enabled: starterOnly,
+        refetchInterval: REMOTES_POLL_MS,
+    });
+    const { query: changes } = useSandboxQuery({ ...rpcQuery(`git.changes`), enabled: starterOnly });
+    const starter = computed(() =>
+        starterStateOf({ ...(log.data.value === undefined ? {} : { data: log.data.value }), failed: log.isError.value }, changes.data.value),
+    );
 
     return {
         remotes,
-        unbacked: computed(() => hasFiles.value && remotes.value?.length === 0),
+        unbacked: computed(() => remotes.value?.length === 0 && holdsWork(names.value, starter.value)),
     };
 }

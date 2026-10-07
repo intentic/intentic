@@ -3,7 +3,7 @@ import { computed, ref, type Ref, watch } from "vue";
 import type { RouteLocationNormalizedLoaded } from "vue-router";
 import type { apiClient } from "../../../lib/useApi";
 import type { useSandbox } from "../../../client/sandbox/useSandbox";
-import { type Arrival, arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, rowToOpen, touched } from "../setupArrival";
+import { alreadyWorking, type Arrival, arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, rowToOpen, touched } from "../setupArrival";
 import { lanesFor, readOffer } from "../setupLanes";
 import { type Machine, type MachineOption, requestedRung } from "./machineLadder";
 import type { CommandLaneApi } from "./useCommandLane";
@@ -12,13 +12,16 @@ import type { SetupRow } from "./useSetupRow";
 
 // What arriving on /setup does by itself, once: reads the platform's two offers with the account's rows, settles the row
 // this visit works on, decides the arrival (setupArrival.ts) and takes it, and hands the setup to the app the moment a
-// code exists for the `local` arrival. No identity or machine question is asked of the reader here.
+// code exists for the `local` arrival. No identity or machine question is asked of the reader here, with one exception
+// asked before anything is made: an account that already works in a sandbox is shown it (`held`), and a new one is made
+// only once the reader says so (`addAnother`).
 
 type Platform = (typeof apiClient)[`sandbox`];
 type SandboxStore = ReturnType<typeof useSandbox>;
 
 export interface SetupArrivalHost {
-    readonly sandbox: Pick<SandboxStore, `list` | `select`>;
+    // `activeSandboxId` names which working sandbox to offer back when the account has several.
+    readonly sandbox: Pick<SandboxStore, `list` | `select` | `activeSandboxId`>;
     // `trash` says whether this account removed a sandbox it can still restore (`ArrivalInput.removedRecently`).
     readonly platform: Pick<Platform, `hostedOffer` | `addressOffer` | `trash`>;
     readonly row: SetupRow;
@@ -73,6 +76,11 @@ export const useSetupArrival = ({
     // The app handoff fires once: a re-mint (a lane switch, a retry) is ordinary, and must not reopen the app's
     // installer window each time.
     const handedOff = ref(false);
+    // The sandbox this account already works in, while the page offers it instead of making another; undefined once the
+    // reader asked for another, or when there was none to offer.
+    const held = ref<SandboxSummary | undefined>(undefined);
+    // The reader's answer to `held`: from here on this visit makes a sandbox, as every visit did before the question.
+    let anotherAsked = false;
 
     // What the provision spine can offer (setupLanes.ts); the page states it and never switches lanes on it.
     const lanes = computed(() =>
@@ -144,9 +152,26 @@ export const useSetupArrival = ({
         ]);
         hosted.recordOffer(hostedRead);
         command.recordOffer(addressRead);
-        const idleMachine = await openRow(rows);
         // A rung picked before this page outranks the arrival: it preselects the picker and is `arrivalFor`'s own answer.
         const asked = requestedRung(ladder.value, route.query[`machine`]);
+        // Read before `openRow`, which makes the draft: holding is the decision not to make one yet.
+        const named = route.query[`sandbox`];
+        held.value = anotherAsked
+            ? undefined
+            : alreadyWorking(
+                  rows,
+                  {
+                      named: rows.some((entry) => entry.id === named),
+                      project,
+                      requestedMachine: asked !== undefined,
+                      elsewhere: elsewhere.value,
+                  },
+                  sandbox.activeSandboxId.value,
+              );
+        if (held.value !== undefined) {
+            return;
+        }
+        const idleMachine = await openRow(rows);
         const facts: ArrivalInput = {
             inApp: inApp.value,
             // Read before any create, so a row minted seconds ago is never counted as company for itself.
@@ -196,11 +221,18 @@ export const useSetupArrival = ({
         runHere();
     });
 
+    // The reader asked for another sandbox after all: the arrival runs as it would have, draft and all.
+    const addAnother = async (): Promise<void> => {
+        anotherAsked = true;
+        held.value = undefined;
+        await readArrival();
+    };
+
     // A replacement sandbox lands on the picker rather than another automatic start, and may be handed to the app anew.
     const forget = (): void => {
         arrival.value = `choose`;
         handedOff.value = false;
     };
 
-    return { arrival, elsewhere, loaded, lanes, laneTakeable, readArrival, forget };
+    return { arrival, elsewhere, loaded, lanes, laneTakeable, held, readArrival, addAnother, forget };
 };

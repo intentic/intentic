@@ -683,8 +683,10 @@ html:not([data-mode="dark"]) .entry-frame {
         background: color-mix(in oklab, var(--color-brand-600) 10%, transparent);
     }
 
-    /* An unticked box is paper with a rule round it; a ticked one carries the ember and a white mark. */
-    html:not([data-mode="dark"]) .entry .p-checkbox-box {
+    /* An unticked box is paper with a rule round it; a ticked one carries the ember and a white mark. The paper is
+       scoped to the unticked box: written for every box, it outranked the dark block's ticked ember, and a ticked box
+       drew a white mark on white, read as unticked by a reader who pressed it seven times on /setup. */
+    html:not([data-mode="dark"]) .entry .p-checkbox:not(.p-checkbox-checked) .p-checkbox-box {
         background: var(--plate);
     }
     html:not([data-mode="dark"]) .entry .p-checkbox-icon {

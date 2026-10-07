@@ -153,6 +153,29 @@ export const resumedRow = (row: Pick<SandboxSummary, `lastSeenAt` | `removedAt`>
 // A machine of ours on a row nothing has ever run on (`ArrivalInput.hostedIdle`).
 export const hostedIdle = (row: SandboxSummary): boolean => (row.hosted ?? null) !== null && (row.lastSeenAt ?? null) === null;
 
+// What the visit asked for by itself, before this page decides anything: a row (`?sandbox=`, only one the list has), a
+// folder (`?project=`), a rung (`?machine=`, one the ladder offers), or the options (`?elsewhere=1`).
+export interface VisitAsk {
+    readonly named: boolean;
+    readonly project: boolean;
+    readonly requestedMachine: boolean;
+    readonly elsewhere: boolean;
+}
+
+// A sandbox this account already works in, held up before anything is made: undefined when the visit asked for
+// something of its own, or nothing has ever checked in (`lastSeenAt`, roster.ts's test for a working sandbox). The
+// active one when it is among them. Arriving here with one already running (the Menu's "Add sandbox", a bookmark, the
+// back button) is far more often looking for it than asking for a second, and the draft made unasked for that
+// arrival left a phone on a picker whose every rung was already answered: its free machine spent on the first
+// sandbox, its own-computer rung a terminal command (2026-10-06).
+export const alreadyWorking = (rows: readonly SandboxSummary[], ask: VisitAsk, activeId: string | undefined): SandboxSummary | undefined => {
+    if (ask.named || ask.project || ask.requestedMachine || ask.elsewhere) {
+        return undefined;
+    }
+    const working = rows.filter((entry) => entry.lastSeenAt !== null);
+    return working.find((entry) => entry.id === activeId) ?? working[0];
+};
+
 // The row this visit works on: the one the URL names, else the account's single unfinished one while it has no working
 // one; undefined, meaning a fresh draft, for anything that is not the owner's.
 export const rowToOpen = (rows: readonly SandboxSummary[], named: string | undefined): SandboxSummary | undefined => {

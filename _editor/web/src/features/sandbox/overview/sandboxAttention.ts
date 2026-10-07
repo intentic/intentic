@@ -1,14 +1,19 @@
 import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
+import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { acpProviders, endpointProviders } from "../../chat/accounts/providerCatalog";
 import { accessKnown, providerReady } from "../../chat/session/access";
 import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
 import { useRole } from "../../../client/sandbox/useRole";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { DEVICES_PATH } from "../devices/deviceLinks";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
+import { buildUnderWay, hostedBuildPhase } from "../environment/rebuild/hostedBuildPhase";
+import { REBUILD_ANCHOR } from "../environment/rebuildAnchor";
+import { useHostedBuild } from "../secrets/useHostedBuild";
 import { useSandboxVersion } from "./version/useSandboxVersion";
 import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
 import { useSandboxBackup } from "./backup/useSandboxBackup";
@@ -51,10 +56,15 @@ export interface SandboxAttentionItem {
     // Lets a `note` badge the chip when no `needs` does; only a staged update qualifies today, since acting on it is
     // one click.
     readonly badges?: boolean;
+    // A press a surface may offer beside the row itself, where it is safe to take from there: only the rebuild today,
+    // and only where useRebuildOffer says so. The row's link to the step stays either way.
+    readonly action?: "rebuild";
 }
 
 // Both update notes point at the update card's button rather than at the page (updateAnchor.ts).
 const UPDATE_ACTION = `/sandbox#${UPDATE_ACTION_ANCHOR}`;
+// The rebuild's rows point at the Environment card's rebuild step, which scrolls to and focuses it (rebuildAnchor.ts).
+const REBUILD_STEP = `/sandbox/environment#${REBUILD_ANCHOR}`;
 
 // An available update stays a quiet note (still downloading in the background); once staged it may badge the
 // chip (`badges`), since applying it is now one click and a half-minute restart.
@@ -82,6 +92,17 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
 export function useSandboxAttention() {
     const { isGuest } = useRole();
     const { pending, proposal } = useEnvironment();
+    // A hosted sandbox's build, which the platform runs for minutes: "Rebuild needed" over a build already under way
+    // asked an hour of its reader for something they had already done, or that nobody needed to do.
+    const { active } = useSandbox();
+    const { build, applied } = useHostedBuild(() => (active.value?.hosted ? active.value.id : undefined));
+    // Ticks only while a finished build of the waiting recipe is in its swap's window, the one phase that ends on the
+    // clock (hostedBuildPhase.ts): past it, the row asks for the rebuild again rather than calling it under way.
+    const now = useNow(() => build.value?.state === `built` && build.value.hash === pending.value?.hash, 60_000);
+    const rebuilding = computed(() => {
+        const recipe = pending.value;
+        return recipe !== undefined && buildUnderWay(hostedBuildPhase(build.value, applied.value, recipe.hash, now.value));
+    });
     const { updateAvailable, updateStaged } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
     const { stoppedOn, heldPorts } = useSyncHealth();
@@ -112,13 +133,26 @@ export function useSandboxAttention() {
                 },
             },
             {
-                when: pending.value !== undefined,
+                when: pending.value !== undefined && !rebuilding.value,
                 item: {
                     icon: `exclamation-triangle`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.rebuildNeededToFinish`),
-                    to: `/sandbox/environment`,
+                    to: REBUILD_STEP,
                     kind: `needs`,
+                    action: `rebuild`,
+                },
+            },
+            // The same condition while the platform works on it: nothing owed, so a note, still pointing at the step,
+            // which says since when.
+            {
+                when: rebuilding.value,
+                item: {
+                    icon: `box`,
+                    tone: `info`,
+                    message: t(`sandbox.sandboxAttention.environmentBuilding`),
+                    to: REBUILD_STEP,
+                    kind: `note`,
                 },
             },
             {

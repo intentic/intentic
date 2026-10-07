@@ -5,6 +5,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../../client/auth/useAuth";
 import { useBrowserHandoff } from "./browserHandoff";
+import { hasFedCm, useGooglePress } from "./googlePress";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { desktopVersion } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
@@ -14,7 +15,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
-const { getIdToken, renderButton } = useGoogleIdentity();
+const { getIdToken, renderButton, refusedCredentials } = useGoogleIdentity();
 const router = useRouter();
 const route = useRoute();
 
@@ -41,12 +42,30 @@ const steps = computed<readonly string[]>(() =>
 );
 
 // Mints one Google credential and spends it on both the platform and the sandbox, removing the second ask; the
-// credential the sandbox gets is unchanged. The escape link is unconditional because one failure mode (a button
-// that renders but can't be clicked) is invisible from here.
+// credential the sandbox gets is unchanged. The road around it is offered unconditionally because one failure mode (a
+// button that renders but can't be clicked) is invisible from here; a press that went nowhere is seen only afterwards.
 const googleButton = ref<HTMLElement>();
 // Whether Google's button shows; true so the container exists to render into, false once refused or rejected.
 const googleReady = ref(true);
 const error = ref<string>();
+
+// A press on Google's button that comes back with no answer (googlePress.ts).
+const press = useGooglePress(googleButton, `login`);
+// No FedCM: Google's button opens a pop-up that can fail without a word, so the road around it is a real button from
+// the first frame here, not the small print under it.
+const popupOnly = !hasFedCm();
+// Google answered and the answer was refused (most often a clock set wrong, which puts a fresh token past its expiry).
+// The button still waits for a press, but the reader is told why that one did not sign in, and given the road that does
+// not depend on this machine's clock.
+const refused = ref(false);
+watch(refusedCredentials, () => {
+    refused.value = true;
+    press.answered();
+});
+// What the page says once Google's button has failed in front of the reader; undefined while it has not.
+const stallNote = computed(() =>
+    refused.value ? t(`auth.words.googleAnswerRefused`) : press.stalled.value ? t(`auth.words.googleDidntComeBack`) : undefined,
+);
 
 // The desktop window's wait for the browser (browserHandoff.ts), drawn in the button's place.
 const handoff = useBrowserHandoff();
@@ -74,6 +93,7 @@ const signInWithCredential = async (): Promise<void> => {
         if (idToken === undefined) {
             return; // Dismissed, or Google unavailable; the fallback is already on screen.
         }
+        press.answered();
         await signInWithGoogleCredential(idToken);
         await router.push(destination.value);
     } catch {
@@ -138,7 +158,11 @@ watch(
                 <span class="entry-corner entry-corner-br"></span>
                 <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
 
-                <p v-if="error" class="gate-error">{{ error }}</p>
+                <!-- A live region standing from the first frame, so a note that appears in it is read out, not just drawn. -->
+                <div role="status">
+                    <p v-if="error" class="gate-error">{{ error }}</p>
+                    <p v-else-if="stallNote" class="gate-error">{{ stallNote }}</p>
+                </div>
 
                 <!-- Google's button also supplies the sandbox credential, one sign-in for both. -->
                 <div v-show="googleReady" class="entry-socket">
@@ -165,8 +189,20 @@ watch(
                     <template #icon><Icon name="google" /></template>
                 </Button>
 
+                <!-- The road around Google's button as a real button: the page's primary action once that button has failed
+                     in front of the reader, and a secondary one from the start where it can only open a pop-up. -->
+                <Button
+                    v-else-if="!desktop && (stallNote || popupOnly)"
+                    :label="t(`auth.words.continueOnGooglesPage`)"
+                    :severity="stallNote ? undefined : `secondary`"
+                    class="mt-4 w-full justify-center"
+                    @click="redirectSignIn"
+                >
+                    <template #icon><Icon name="google" /></template>
+                </Button>
+
                 <!-- Embedded-button failures are handled by the direct login path. -->
-                <button v-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
+                <button v-else-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
                     {{ t(`auth.words.troubleSigningInUse`) }}
                 </button>
 

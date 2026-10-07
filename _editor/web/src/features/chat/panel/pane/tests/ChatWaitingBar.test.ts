@@ -79,8 +79,9 @@ describe(`a card the agent is parked on`, () => {
         expect(bar.keepPlanning).toHaveBeenCalledTimes(1);
     });
 
-    // "Read plan" goes to the card where it is drawn, the newest one live in this pane.
-    it(`scrolls to the drawn card on Read plan`, async () => {
+    // "Read plan" goes to this plan's own card, wherever it is drawn: not the newest card live in the pane (an offer pinned
+    // under it), and not by scrolling alone, which moved nothing for a card already on screen.
+    it(`goes to the plan's own card on Read plan, and gives it the keyboard`, async () => {
         const chat = new Conversation(`c1`);
         chat.transcript.adopt([
             { id: 1, role: `user`, text: `plan it` },
@@ -89,16 +90,28 @@ describe(`a card the agent is parked on`, () => {
         const bar = mountBar(chat);
         const pane = document.createElement(`div`);
         pane.className = `chat-pane`;
-        const card = document.createElement(`div`);
-        card.dataset[`cardLive`] = ``;
-        const scrolled = jest.fn();
-        card.scrollIntoView = scrolled;
-        pane.append(card, bar.element);
+        // Each card in its row, as ChatMessageView draws it, the plan's first and a newer one under it.
+        const cardIn = (requestId: string) => {
+            const row = document.createElement(`div`);
+            row.dataset[`cardRequest`] = requestId;
+            const card = document.createElement(`div`);
+            card.dataset[`cardLive`] = ``;
+            const scrolled = jest.fn();
+            card.scrollIntoView = scrolled;
+            row.append(card);
+            pane.append(row);
+            return { card, scrolled };
+        };
+        const plan = cardIn(`d1`);
+        const newer = cardIn(`offer-2`);
+        pane.append(bar.element);
         document.body.append(pane);
         await nextTick();
 
         bar.press(`Read plan`);
-        expect(scrolled).toHaveBeenCalledTimes(1);
+        expect(plan.scrolled).toHaveBeenCalledTimes(1);
+        expect(newer.scrolled).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(plan.card);
         expect(retryHydrate).not.toHaveBeenCalled();
         pane.remove();
     });

@@ -852,6 +852,9 @@
             "openBrowserAgain": "Open it again",
             "sendItAgain": "Send it again",
             "troubleSigningInUse": "Trouble signing in? Use Google's own page.",
+            "continueOnGooglesPage": "Continue on Google's page",
+            "googleDidntComeBack": "Google's sign-in didn't finish in its window. Continue on Google's page instead: it works where pop-ups are blocked.",
+            "googleAnswerRefused": "Google answered, but with a sign-in this computer counts as already expired: its clock may be wrong. Continue on Google's page instead.",
             "continueGoogleInBrowser": "Continue with Google in your browser",
             "continueGoogle": "Continue with Google"
         }
@@ -2921,9 +2924,12 @@
             "stillOpen": "{content} still open"
         },
         "chatToolCallsToggle": {
+            "hidden": "{count} tool call hidden | {count} tool calls hidden",
             "hideToolCalls": "Hide tool calls",
             "hideTools": "Hide tools",
-            "showTools": "Show tools"
+            "noneYet": "No tool calls in this chat yet",
+            "showTools": "Show tools",
+            "showing": "Showing {count} tool call | Showing {count} tool calls"
         },
         "chatToolCard": {
             "background": "background",
@@ -3339,16 +3345,21 @@
         "composerVoice": {
             "failed": "Couldn't transcribe that, try again.",
             "listening": "Listening, pause to send, Esc to stop",
-            "micBlocked": "Microphone access is blocked. Allow it in your browser's site settings, then try again.",
-            "needsRebuild": "Voice needs a one-time sandbox update, run the rebuild on the Sandbox page's Environment card first.",
+            "micBlocked": "The microphone is blocked for this site. Allow it in the site controls at the left of the address bar (and in your system's privacy settings, if it's off there too), then press the mic again.",
+            "needsRebuild": "Voice needs a one-time rebuild of this sandbox's environment.",
             "noMic": "No microphone was found.",
+            "openEnvironment": "Open Environment",
             "pauseSends": "Pause to send",
             "preparing": "Preparing voice…",
             "preparingFirstUse": "Preparing voice (first use)…",
             "sending": "Sending: Esc to edit",
             "stopVoice": "Stop voice",
             "transcribing": "Transcribing…",
-            "unavailable": "Voice isn't available on this sandbox, update it, then try again."
+            "unavailable": "Voice needs a newer version of this sandbox.",
+            "unsupportedBrowser": "Unavailable in this browser: it can't record audio for voice input. A current Chrome, Edge, Firefox or Safari can.",
+            "unsupportedInsecure": "Unavailable here: browsers only give the microphone to secure (https) pages.",
+            "unsupportedPolicy": "Unavailable here: this page isn't allowed to use the microphone.",
+            "updateSandbox": "Update the sandbox"
         },
         "chatWaitingBar": {
             "planWaiting": "Plan waiting for your approval",
@@ -4848,6 +4859,8 @@
         },
         "connectFlow": {
             "alreadyPasteHere": "Already have it? Paste it here",
+            "codeLabel": "Sign-in code",
+            "copyRefused": "Your browser didn't let this page copy the code. It's selected above: copy it from there.",
             "comeBackWithAddress": "Sign in, then come back here with the address {destination} lands on — its last page {wontLoad}, and that's expected.",
             "comeBackWithCode": "Sign in, then come back here with the code.",
             "codeCopied": "Code copied: paste it on the page that opened.",
@@ -5412,6 +5425,10 @@
             "approvedOverlayPendingRebuild": "Approved overlay (pending rebuild)",
             "awaitingReview": "awaiting review",
             "contents": "Contents",
+            "decideFirst": "Approve or reject the change above first, so one rebuild covers both.",
+            "noRebuildHere": "This sandbox's container wasn't started by intentic's installer, so it can't be rebuilt from here. Rebuild it where it runs, from the recipe under Recipe.",
+            "nothingToRebuild": "Nothing approved is waiting to be built, so a rebuild would change nothing. If {names} still isn't working, ask an agent to find out why.",
+            "nothingToRebuildDecide": "Nothing approved is waiting to be built yet. Approve the change above, and its rebuild is offered here.",
             "onlySandboxMaintainerDecide": "Only a sandbox maintainer can decide on environment changes.",
             "onlySandboxOwnerApprove": "Only the sandbox's owner or a maintainer can approve or reject this change.",
             "proposalAdds": "Approve changes to {names}.",
@@ -5642,8 +5659,11 @@
             "buildLogTail": "Build log (tail)",
             "buildMinutesCountAgainst": "Build minutes count against this sandbox's awake hours. Your files in /work are kept.",
             "buildingEnvironmentOnMachine": "Building your environment on a machine we run. This takes a few minutes; your sandbox keeps working meanwhile and restarts onto the result when it is ready.",
+            "builtNotSwitched": "The build finished {ago}, but this sandbox is still on its old image.",
             "builtSandboxRestartingOnto": "Built. Your sandbox is restarting onto the new image; this panel updates when it is back.",
             "couldNotStart": "Could not start the build.",
+            "rebuildAgain": "Rebuild again",
+            "startedAgo": "Started {ago}.",
             "tryBuildAgain": "Try the build again"
         },
         "importCard": {
@@ -6085,6 +6105,7 @@
         "sandboxAttention": {
             "agentProposedChangeTo": "The agent proposed a change to your environment",
             "desktopSyncStopped": "Desktop sync stopped on {devices}, its folder isn't syncing",
+            "environmentBuilding": "Your sandbox's new environment is building",
             "filesOnlyOnCloudMachine": "Its files are only on the cloud machine, no copy on this computer",
             "newSandboxVersionAvailable": "A new sandbox version is available",
             "noAiAccountConnected": "No AI account connected, the agent can't run a turn",
@@ -7869,7 +7890,10 @@
         "setup": {
             "acceptedNeverAnswered": "That address accepted the connection but never answered.",
             "acceptedNeverAnsweredDetail": "Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give it a moment and try again.",
+            "addAnotherSandbox": "Add another sandbox",
             "alreadyFreeMachineAccount": "You already have the free machine your account comes with. Pick another rung above, or delete the sandbox that's using it.",
+            "alreadyHaveDetail": "Set up and ready to work in.",
+            "alreadyHaveSandbox": "You already have a sandbox. Open a chat in it, or add another one.",
             "alreadyRunningSandboxContainer": "Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then open your workspace. Nothing to install, nothing to provision.",
             "alreadyRunningSandboxSomewhere": "Already running a sandbox somewhere? Connect it by domain →",
             "alreadyUsingYours": "Already using yours",
@@ -7934,6 +7958,7 @@
             "nothingToDoAccount": "Nothing to do with your account, and we're adding more. Setting it up on your own computer takes a couple of minutes and has no limits at all, or check back a little later and we'll have room.",
             "nothingToForwardTo": "with nothing to forward to. Start the sandbox container",
             "oneJobInstallingDocker": "is there for one job: installing Docker if it's missing.",
+            "openChat": "Open chat",
             "otherWaysToSet": "Other ways to set up",
             "otherWaysToSet2": "Other ways to set up:",
             "outMachinesRightNow": "We're out of machines right now — every one we run is in use.",
@@ -7952,6 +7977,7 @@
             "pointIntenticAtSandbox": "Point intentic at the sandbox you're already running. One address, and you're in.",
             "preparingIntenticDomain": "Preparing your intentic domain…",
             "rightNow": "Right now:",
+            "runOnComputerNotPhone": "Run this in a terminal on your computer, not on this phone.",
             "runOnMyOwn": "Run it on my own computer",
             "running": "running.",
             "runsNo": "Runs as you, no",
@@ -7964,12 +7990,14 @@
             "sandboxesHereReachedAt": "Sandboxes here are reached at an address you already have. Already running one?",
             "setOneUpMe": "← Set one up for me instead",
             "setUpBeforeLastSeen": "This sandbox was set up before and last answered {when}.",
+            "setUpFromComputer": "Set up from a computer",
             "setUpNow": "Set it up now",
             "setUpOnMy": "Set it up on my own computer",
             "setUpWorkspace": "Set up your workspace",
             "settingOneUpNothing": "Setting one up for you. Nothing to fill in.",
             "settingUpOnComputer": "Setting it up on this computer. You'll be working in it in a minute or two.",
             "showCommand": "Show the command",
+            "showCommandForComputer": "Show the command for your computer",
             "showCommandServer": "Show the command for a server",
             "sleepsWhileYoureAway": "It sleeps while you're away and wakes when you come back. We don't back it up: turn on desktop sync, or keep your work in a git remote.",
             "startInstantly": "Start instantly",

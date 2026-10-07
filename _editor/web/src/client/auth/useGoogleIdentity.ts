@@ -60,6 +60,10 @@ const needsSignIn = ref(false);
 // Email in the current credential; set when a token materializes, cleared with it, so a denial names the account.
 // allow(module-state): the Google credential, which the platform and every daemon accept alike
 const signedInEmail = ref<string | undefined>();
+// How many credentials Google answered with that this module refused (unreadable, or inside the near-expiry guard by
+// this machine's clock). A count rather than a flag so a page can say so again on the second refusal.
+// allow(module-state): the Google credential, which the platform and every daemon accept alike
+const refusedCredentials = ref(0);
 
 let token: string | undefined;
 let expiresAt = 0;
@@ -159,8 +163,18 @@ const ensureInitialized = async (): Promise<void> => {
                 if (!acceptingCredential) {
                     return;
                 }
-                const accepted = acceptCredential(response.credential);
-                settle?.(accepted ? response.credential : undefined);
+                if (acceptCredential(response.credential)) {
+                    settle?.(response.credential);
+                    return;
+                }
+                refusedCredentials.value += 1;
+                reportGate({ reason: `refused`, mode: mintMode });
+                // A caller showing its own button keeps waiting on it: ended here, the page read the undefined as a
+                // dismissal and every later press of that same button was dropped, no mint being left to take it. The
+                // shared overlay closes and is raised afresh by the next ask, so its mint can end.
+                if (mintMode !== `button`) {
+                    settle?.(undefined);
+                }
             },
         });
         initializedAutoSelect = autoSelect;
@@ -429,7 +443,7 @@ const adoptIdToken = (credential: string): boolean => {
 };
 
 export function useGoogleIdentity() {
-    return { needsSignIn, signedInEmail, getIdToken, warmIdToken, adoptIdToken, clearCredential, renderButton, cancelSignIn };
+    return { needsSignIn, signedInEmail, refusedCredentials, getIdToken, warmIdToken, adoptIdToken, clearCredential, renderButton, cancelSignIn };
 }
 
 // One Google credential per window: a hot-reloaded rerun would forget the minted token and raise the sign-in gate

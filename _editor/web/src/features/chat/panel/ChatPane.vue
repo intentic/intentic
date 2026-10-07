@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { FACE_SIZES, Icon, Notice, PersonaFace, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { Button, FACE_SIZES, Icon, Notice, PersonaFace, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { loopDesignWords } from "../models/run-settings/loopDesignWords";
 import type { Conversation } from "../session/conversation";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -334,8 +334,8 @@ const { open: waysOpen, ways: hasWays, fallbackName, canReset, resetting, note: 
 const waysAnchor = ref<HTMLElement>();
 
 // Hands-free voice: the mic, and what the pause does; below the send, since the pause is the send.
-const voice = useComposerVoice({ draft, reachable, grew: grow, send: submit });
-const { on: voiceOn, state: voiceState, level: voiceLevel, buttonHint: voiceHint, errorMessage: voiceErrorMessage, toggle: toggleVoice } = voice;
+const voice = useComposerVoice({ draft, reachable, manages: useRole().canShip, grew: grow, send: submit });
+const { on: voiceOn, state: voiceState, level: voiceLevel, buttonHint: voiceHint, failure: voiceFailure, toggle: toggleVoice } = voice;
 // Leaving exits hands-free, so a mic isn't left recording a pane nobody's looking at; the draft is untouched.
 watch([() => props.conversation, () => props.focused], voice.quit);
 
@@ -747,7 +747,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         type="button"
                                         class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                         :class="{ 'composer-active': voiceOn }"
-                                        :disabled="!reachable && !voiceOn"
+                                        :disabled="voice.unsupported !== undefined || (!reachable && !voiceOn)"
                                         @click="toggleVoice"
                                         v-tooltip.top="voiceHint"
                                         :aria-pressed="voiceOn"
@@ -820,7 +820,26 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             </div>
                         </form>
 
-                        <p v-if="voiceErrorMessage" class="px-1 text-2xs text-danger">{{ voiceErrorMessage }}</p>
+                        <!-- Held until the next press, typing or ×, with the page that fixes it; keyed on the repeat count so the same
+                             failure again re-announces (role=alert) and shakes instead of looking like a press that didn't take. -->
+                        <Notice
+                            v-if="voiceFailure"
+                            :key="voiceFailure.repeats"
+                            :tone="voiceFailure.tone"
+                            icon="microphone"
+                            size="sm"
+                            :class="{ 'ui-shake': voiceFailure.repeats > 0 }"
+                            :dismiss-label="t(`ui.action.dismiss`)"
+                            data-voice-failure
+                            @dismiss="voice.dismiss()"
+                        >
+                            {{ voiceFailure.message }}
+                            <template v-if="voiceFailure.action" #actions>
+                                <Button :as="RouterLink" :to="voiceFailure.action.to" size="small" severity="secondary" :text="true">
+                                    {{ voiceFailure.action.label }}
+                                </Button>
+                            </template>
+                        </Notice>
                         <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
                         <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
                         <!-- What the badge changes about the press, said under the box about to do it: the message goes to a design, not this chat. -->

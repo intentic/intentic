@@ -4,6 +4,7 @@
 // worth saying up front, that build minutes are awake minutes.
 import "@intentic/testing/dom";
 import type { HostedBuildState } from "@intentic/api-contract";
+import { timeAgo } from "@intentic/ui";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 const build = ref<HostedBuildState | undefined>(undefined);
@@ -44,19 +45,36 @@ it(`offers the build, says what it costs, and sends the approved content with it
     expect(rebuild).toHaveBeenCalledWith(`h1`, `FROM x\nRUN true\n`);
 });
 
-it(`narrates a build in flight and offers nothing to press`, () => {
-    build.value = { state: `building`, hash: `h1`, startedAt: `2026-09-04T10:00:00.000Z` };
+// Minutes ago, as an ISO stamp: the phases are read against the clock.
+const ago = (minutes: number): string => new Date(Date.now() - minutes * 60_000).toISOString();
+
+// An hour under "Rebuild needed" read the same as a minute: the narration says when the build began.
+it(`narrates a build in flight, says when it started, and offers nothing to press`, () => {
+    build.value = { state: `building`, hash: `h1`, startedAt: ago(50) };
     const el = mount();
     expect(el.textContent).toContain(`Building your environment`);
+    expect(el.textContent).toContain(`Started ${timeAgo(Date.parse(build.value.startedAt))}.`);
     expect(el.querySelector(`button`)).toBeNull();
 });
 
 it(`says the sandbox is restarting once the platform has pointed it at the built image`, () => {
-    build.value = { state: `built`, hash: `h1`, startedAt: `2026-09-04T10:00:00.000Z`, finishedAt: `2026-09-04T10:05:00.000Z` };
+    build.value = { state: `built`, hash: `h1`, startedAt: ago(6), finishedAt: ago(1) };
     applied.value = `h1`;
     const el = mount();
     expect(el.textContent).toContain(`restarting onto the new image`);
     expect(el.querySelector(`button`)).toBeNull();
+});
+
+// "Restarting onto the new image" stood for as long as anyone looked, with no button, while the sandbox still reported
+// the old one: past the swap's few minutes, the build is said to have finished and the button comes back.
+it(`gives the button back once the swap has had its minutes and the sandbox is still on the old image`, async () => {
+    build.value = { state: `built`, hash: `h1`, startedAt: ago(70), finishedAt: ago(60) };
+    applied.value = `h1`;
+    const el = mount();
+    expect(el.textContent).toContain(`The build finished ${timeAgo(Date.parse(ago(60)))}, but this sandbox is still on its old image.`);
+    buttonSaying(el, `Rebuild again`)!.click();
+    await nextTick();
+    expect(rebuild).toHaveBeenCalledWith(`h1`, `FROM x\nRUN true\n`);
 });
 
 it(`shows a failure's reason and log tail, and offers to try again`, () => {

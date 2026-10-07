@@ -7,6 +7,7 @@ import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { memoryShare, sendAnywayTip } from "../../transcript/held/memoryTip";
 import { usePaneView } from "../useChat-view";
 import { pendingDecisionOf, type WaitKind } from "./pendingDecision";
+import { showWaitingCard, waitingCardIn } from "./waitingCard";
 
 // What waits on the reader, pinned right above the composer so it is on screen at any scroll position: the card the
 // agent is parked on (or, before this window has drawn it, what the agents list says it waits for), and a message held
@@ -47,10 +48,18 @@ const showLabel = computed(() => {
     }
     return decision.value.kind === `plan` ? t(`chat.chatWaitingBar.readPlan`) : t(`ui.action.answer`);
 });
+// To this ask's own card, on screen or not: scrolled to, given the keyboard and ringed, so the press always shows where
+// to answer (waitingCard.ts).
 const scrollToCard = (): void => {
-    // A NodeList has no `.at`: spread, so the newest drawn card is the last.
-    const cards = [...(root.value?.closest(`.chat-pane`)?.querySelectorAll(`[data-card-live]`) ?? [])];
-    cards.at(-1)?.scrollIntoView({ block: `center`, behavior: `smooth` });
+    const asked = decision.value;
+    const pane = root.value?.closest(`.chat-pane`);
+    if (asked?.requestId === undefined || pane === null || pane === undefined) {
+        return;
+    }
+    const card = waitingCardIn(pane, asked.requestId);
+    if (card !== undefined) {
+        showWaitingCard(card, asked.kind);
+    }
 };
 const fetching = ref(false);
 const show = (): void => {

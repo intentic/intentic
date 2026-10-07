@@ -26,6 +26,7 @@ import { usePanels } from "../features/extensions/usePanels";
 import { useRole } from "../client/sandbox/useRole";
 import { useInbox } from "../features/needs/inbox/useInbox";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
+import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
 import { identityHue } from "../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
@@ -82,6 +83,10 @@ const { capabilities } = useCapabilities();
 const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
 // The one row to everything waiting on a person, with what it counts said on the row, since a phone has no hover.
 const { badge: inboxBadge } = useInbox();
+// "Rebuild needed" carries its own press where one press is the whole errand (useRebuildOffer); the row still links to
+// the card's step, which says why wherever the press is not offered.
+const rebuildOffer = useRebuildOffer();
+const { offered: rebuildOffered, busy: rebuildBusy, notice: rebuildNotice } = rebuildOffer;
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -162,7 +167,17 @@ const logout = async (): Promise<void> => {
                 :title="t(`needs.inbox.title`)"
                 :description="inboxBadge.tooltip"
             />
-            <MenuRow v-for="item in sandboxAttention" :key="item.message" :to="item.to" :icon="item.icon" :tone="item.tone" :title="item.message" />
+            <template v-for="item in sandboxAttention" :key="item.message">
+                <MenuRow :to="item.to" :icon="item.icon" :tone="item.tone" :title="item.message" />
+                <MenuRow
+                    v-if="item.action === `rebuild` && rebuildOffered"
+                    :icon="rebuildBusy ? `spinner` : `bolt`"
+                    :tone="rebuildNotice ? `danger` : `default`"
+                    :title="t(`sandbox.words.rebuildNow`)"
+                    :description="rebuildNotice?.title ?? t(`sandbox.hostedRebuild.buildMinutesCountAgainst`)"
+                    @press="rebuildBusy || rebuildOffer.start()"
+                />
+            </template>
         </RowGroup>
 
         <!-- Quieter ink; none of these carry the tab's badge, so none should read as the reason it's flagged. -->

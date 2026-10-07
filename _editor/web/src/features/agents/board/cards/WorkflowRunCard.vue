@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatMoney, Icon, timeAgo, ui } from "@intentic/ui";
+import { formatMoney, Icon, timeAgo, ui, useDevice } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../../fleet/useWorkflowRuns";
@@ -10,13 +10,13 @@ import { useT } from "@intentic/ui/i18n";
 // since it shares the column, but no provider/branch/worktree/transcript, so Land/Archive/diff don't apply.
 // Shows only what a run has: progress through the graph, what's burning right now, and Stop.
 // Clicking opens its live sessions side by side, one pane per attempt; that's why it lives on this board and not only
-// the workflows page.
+// the workflows page. What a press does when the chat already shows them is the board's (boardPresses.openRun).
 
 // `dense` is the stacked, narrow board, exactly as AgentCard means it: it does not change what this row says, only
 // that it is drawn at the ledger's weight, since a stacked board's lanes are told apart by their order.
 const t = useT();
 
-const { run, dense } = defineProps<{ run: WorkflowRun; dense?: boolean; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
+const { run, dense, selected } = defineProps<{ run: WorkflowRun; dense?: boolean; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
 const emit = defineEmits<{ open: []; stop: []; graph: []; archive: []; restore: [] }>();
 
 const lane = computed(() => laneOfRun(run));
@@ -34,6 +34,14 @@ const done = computed(() => run.steps.filter((step) => step.state === `done`).le
 // than as a hierarchy.
 const bigLane = computed(() => dense !== true && lane.value !== `finished`);
 
+// The row's presses that wait for a hover, drawn at rest where there is no hover (a touch screen); the diagram's also on
+// the row the chat is showing, where pressing the row again only points at the chat: one reader pressed a selected row
+// twenty times before finding the diagram's press under the pointer.
+const { coarse } = useDevice();
+const HOVER_REVEAL = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100`;
+const hoverAction = computed(() => (coarse.value ? `` : HOVER_REVEAL));
+const graphAction = computed(() => (coarse.value || selected ? `` : HOVER_REVEAL));
+
 const TONE: Record<WorkflowRun["state"], string> = {
     running: `text-link`,
     done: `text-success`,
@@ -49,11 +57,13 @@ const TONE: Record<WorkflowRun["state"], string> = {
         role="button"
         tabindex="0"
         :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
-        class="session-card group flex w-full select-none flex-col rounded-2xl border border-dashed text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col rounded-2xl border border-dashed text-left outline-none [--card-border:var(--color-line-strong)] focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
             bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
-            /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them. */
+            /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them.
+               The dashes take their ink from `--card-border` above, since `.session-card` rests every card's border at transparent:
+               left there, the run read as one more agent card. */
             lane === 'attention' ? 'session-card-attention' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
@@ -91,7 +101,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.openRunsGraph`)"
                 v-tooltip.top="t(`agents.workflowRunCard.openGraph`)"
-                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                class="shrink-0 rounded p-1 text-subtle hover:text-content"
+                :class="graphAction"
                 @click.stop="emit(`graph`)"
             >
                 <Icon name="external-link" class="text-2xs" />
@@ -103,7 +114,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 :aria-label="t(`agents.workflowRunCard.archiveRun`)"
                 v-tooltip.top="{ title: t(`agents.workflowRunCard.archive`), note: t(`agents.words.allKept`) }"
                 :disabled="stopping"
-                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                class="shrink-0 rounded p-1 text-subtle hover:bg-content/10 hover:text-content"
+                :class="hoverAction"
                 @click.stop="emit(`archive`)"
             >
                 <Icon name="box" class="text-2xs" />
@@ -115,7 +127,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 :aria-label="t(`agents.workflowRunCard.restoreRun`)"
                 v-tooltip.top="t(`agents.workflowRunCard.restore`)"
                 :disabled="stopping"
-                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                class="shrink-0 rounded p-1 text-subtle hover:bg-content/10 hover:text-content"
+                :class="hoverAction"
                 @click.stop="emit(`restore`)"
             >
                 <Icon name="undo" class="text-2xs" />

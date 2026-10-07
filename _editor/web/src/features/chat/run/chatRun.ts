@@ -116,6 +116,27 @@ export const runToFollow = (run: WorkflowRun, showing: readonly string[]): RunSe
     return front;
 };
 
+// What a press on a run's row (`live`, as the row summons it) would put on screen, read before it is pressed, since a press
+// that changes nothing reads as dead: one board card took twenty presses, four of them rage clicks, from a reader whose
+// chat already showed the run. `follow`: the panes or the diagram move. `shown`: the chat already shows the run, so the
+// press can only point at it. `graph`: this chat has nothing of the run to show (an ended run's sessions are not in the
+// panes and there is no room for the diagram), so the row's own diagram is what answers. `diagram` is whether this
+// panel can draw the diagram at all (wide, on a desktop), as ChatPanel decides it.
+export type RunPress = `follow` | `shown` | `graph`;
+
+export const runPress = (run: WorkflowRun, view: ChatRunView | undefined, showing: readonly string[], diagram: boolean): RunPress => {
+    const following = runToFollow(run, showing);
+    if (following !== undefined) {
+        return `follow`;
+    }
+    const before = diagram && view?.runId === run.runId && showingRunGraph(run, view, showing);
+    const after = diagram && showingRunGraph(run, { runId: run.runId, mode: `live` }, showing);
+    if (after !== before) {
+        return `follow`;
+    }
+    return after || paneShowsRun(run, showing) ? `shown` : `graph`;
+};
+
 // Whether these chats are still following the run, or a deliberate look at something specific — decided from what was
 // pressed, not a second gesture. The live band stays `live`; any other (finished, failed) band is `pinned`.
 export const modeForSessions = (run: WorkflowRun, conversationIds: readonly string[]): ChatRunMode =>

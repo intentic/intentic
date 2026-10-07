@@ -13,7 +13,11 @@ import type { SandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 
 const remoteRepos = jest.fn<SandboxRpc[`git`][`remoteRepos`]>();
 const tree = jest.fn<SandboxRpc[`workspace`][`tree`]>();
-jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ git: { remoteRepos }, workspace: { tree } }) }));
+const log = jest.fn<SandboxRpc[`git`][`log`]>();
+const changes = jest.fn<SandboxRpc[`git`][`changes`]>();
+jest.mock("../../../../client/sandbox/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({ git: { remoteRepos, log, changes }, workspace: { tree } }),
+}));
 // Every name the import graph takes from the raw client, since bun links an ESM import against exactly what this
 // factory returns; nothing here calls it.
 jest.mock("../../../../client/sandbox/sandboxClient", () => ({
@@ -66,6 +70,8 @@ beforeEach(() => {
     queryClient.clear();
     remoteRepos.mockReset();
     tree.mockReset();
+    log.mockReset();
+    changes.mockReset();
 });
 
 test(`never walks the tree while a repository has a remote`, async () => {
@@ -84,4 +90,60 @@ test(`reads the tree once no repository has a remote, and warns because files ar
 
     await waitFor(() => expect(unbacked.value).toBe(true));
     expect(asked).toEqual([`git.remoteRepos`, `workspace.tree`]);
+});
+
+// A brand-new hosted sandbox: the daemon's dotted state and the seeded starter site, one commit, no remote. Its owner,
+// on a phone, was told their work had nowhere to go before they had sent a message (2026-10-06).
+const SEED = {
+    sha: `a`.repeat(40),
+    short: `aaaaaaa`,
+    parents: [],
+    subject: `chore: starter site`,
+    body: ``,
+    author: `agent`,
+    email: `a@b`,
+    at: 0,
+    refs: [],
+    head: true,
+};
+const fresh = (more: boolean): string[] => {
+    const asked = daemon([]);
+    tree.mockImplementation(async () => {
+        asked.push(`workspace.tree`);
+        return {
+            root: WORKSPACE_ROOT,
+            tree: [
+                { path: `.intentic`, name: `.intentic`, type: `dir` },
+                { path: `site`, name: `site`, type: `dir` },
+            ],
+            hidden: 0,
+            barren: [],
+        };
+    });
+    log.mockImplementation(async () => {
+        asked.push(`git.log`);
+        return { repo: `site`, branch: `main`, commits: [SEED], hasMore: more };
+    });
+    changes.mockImplementation(async () => {
+        asked.push(`git.changes`);
+        return { repos: [] };
+    });
+    return asked;
+};
+
+test(`stays quiet on a fresh workspace, whose only content is the starter site it was seeded with`, async () => {
+    const asked = fresh(false);
+    const { unbacked } = mounted(() => useUnbackedWork());
+
+    await waitFor(() => expect(asked).toContain(`git.log`));
+    await waitFor(() => expect(asked).toContain(`git.changes`));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unbacked.value).toBe(false);
+});
+
+test(`warns once the starter site has a commit past its seed, an agent's landed work`, async () => {
+    fresh(true);
+    const { unbacked } = mounted(() => useUnbackedWork());
+
+    await waitFor(() => expect(unbacked.value).toBe(true));
 });

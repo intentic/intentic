@@ -9,6 +9,7 @@ import {
     CopyButton,
     InfoHint,
     Notice,
+    SandboxLogo,
     SegmentedControl,
     StepSection,
     timeAgo,
@@ -221,6 +222,7 @@ const ladderOptions = computed(() =>
         // The command redeems a setup code, so it is offered only where addresses are, even in the app.
         commandOffered: addressed.value,
         installer: installer.value,
+        mobile: mobile.value,
     }),
 );
 
@@ -239,7 +241,9 @@ const {
     loaded,
     lanes,
     laneTakeable,
+    held,
     readArrival,
+    addAnother,
     forget: forgetArrival,
 } = useSetupArrival({
     sandbox,
@@ -254,6 +258,17 @@ const {
     warmCredential: warmSandboxCredential,
     runHere,
 });
+
+// The sandbox the account already works in, opened the way a finished setup opens its own: on a phone, straight into a
+// chat, which is where the reader who came here looking for it gets to work.
+const openHeld = async (): Promise<void> => {
+    const working = held.value;
+    if (working === undefined) {
+        return;
+    }
+    sandbox.select(working.id);
+    await enterWorkspace();
+};
 
 // The picker is on screen when the arrival could answer nothing for itself, or when the reader asked for it; one rung
 // is not a picker, so it takes a real choice. The untaken rung folds behind a link off the same facts.
@@ -433,7 +448,8 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
 
                 <!-- Lede must match the lane and ask a question only when the picker actually shows, keyed on `ladderShown`. -->
                 <p class="mast-lede">
-                    <template v-if="lane === `attach`">{{ t(`setup.setup.pointIntenticAtSandbox`) }}</template>
+                    <template v-if="held !== undefined">{{ t(`setup.setup.alreadyHaveSandbox`) }}</template>
+                    <template v-else-if="lane === `attach`">{{ t(`setup.setup.pointIntenticAtSandbox`) }}</template>
                     <!-- Nothing to start, so no promised minute or two; reads the same verdict the card below does. -->
                     <template v-else-if="loaded && !laneTakeable">{{ t(`setup.setup.heresWhatPlatformDo`) }}</template>
                     <!-- A project's one fact before anything runs, whichever machine: what happens to the folder. -->
@@ -449,9 +465,35 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
             <!-- Two columns from xl (steps + docked panel); below that, one column and the panel folds into step 2's (i) hint. -->
             <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
+                    <!-- AN ACCOUNT THAT ALREADY WORKS SOMEWHERE is shown that sandbox before anything is made for it: the draft this
+                         page used to make unasked left a phone on a picker with nothing left to pick. Opening it leads; another
+                         sandbox is one press away and proceeds exactly as a visit without the question would. -->
+                    <section v-if="held !== undefined" class="entry-frame work-card run-card flex flex-col gap-4">
+                        <span class="entry-corner entry-corner-tl"></span>
+                        <span class="entry-corner entry-corner-tr"></span>
+                        <span class="entry-corner entry-corner-bl"></span>
+                        <span class="entry-corner entry-corner-br"></span>
+                        <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
+                        <div class="flex min-w-0 items-center gap-3">
+                            <SandboxLogo :size="32" :image="held.image ?? null" :name="held.name" />
+                            <span class="flex min-w-0 flex-col">
+                                <span class="truncate text-sm font-medium text-content">{{ held.name }}</span>
+                                <span class="text-xs text-muted">{{ t(`setup.setup.alreadyHaveDetail`) }}</span>
+                            </span>
+                        </div>
+                        <div class="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
+                            <Button :label="t(`setup.setup.openChat`)" class="w-full justify-center md:w-fit" v-action="openHeld">
+                                <template #icon><Icon name="comments" /></template>
+                            </Button>
+                            <button type="button" :class="ui.linkButton(`self-center md:self-auto`)" v-action="addAnother">
+                                {{ t(`setup.setup.addAnotherSandbox`) }}
+                            </button>
+                        </div>
+                    </section>
+
                     <!-- Titled since it asks for something (a form needs a heading); an icon, not a number, since there's no step 2. -->
                     <StepSection
-                        v-if="lane === `attach`"
+                        v-else-if="lane === `attach`"
                         icon="link"
                         :title="t(`setup.setup.connectSandbox`)"
                         class="entry-frame rounded-none work-card"
@@ -615,7 +657,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                     </div>
 
                     <!-- Replaces auto-switching to attach on a failed or empty offer; states which lane fact is true instead. -->
-                    <div v-if="loaded && lane === `provision` && !laneTakeable" class="flex flex-col items-start gap-3 py-1">
+                    <div v-if="loaded && held === undefined && lane === `provision` && !laneTakeable" class="flex flex-col items-start gap-3 py-1">
                         <!-- Could not ask; offers a retry, not a verdict that the platform provisions nothing on a failed request. -->
                         <template v-if="lanes.kind === `unreachable`">
                             <Notice
@@ -1007,16 +1049,21 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 <button v-if="project === undefined" type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
                                     <template v-if="showCommand">{{ t(`setup.setup.hideCommand`) }}</template>
                                     <template v-else-if="desktop">{{ t(`setup.setup.showCommandServer`) }}</template>
+                                    <!-- A phone has no terminal: the command it reveals is for a computer, and says so before it is pressed. -->
+                                    <template v-else-if="mobile">{{ t(`setup.setup.showCommandForComputer`) }}</template>
                                     <template v-else>{{ t(`setup.setup.showCommand`) }}</template>
                                 </button>
                             </nav>
 
                             <div v-if="commandVisible" class="flex flex-col gap-2">
-                                <!-- The machine line fills the desktop reference slot. -->
-                                <p v-if="!mobile" class="flex items-center gap-2.5 text-xs text-muted">
+                                <!-- The machine line fills the desktop reference slot. On a phone it says where the command runs,
+                                     which is not here: a phone that copied it, toggled its options and picked a shell got nowhere
+                                     (2026-10-06). -->
+                                <p class="flex items-center gap-2.5 text-xs text-muted">
                                     <Icon name="terminal" class="shrink-0 text-link" />
                                     <span class="min-w-0">
                                         <template v-if="desktop">{{ t(`setup.setup.copyPasteIntoTerminal`) }}</template>
+                                        <template v-else-if="mobile">{{ t(`setup.setup.runOnComputerNotPhone`) }}</template>
                                         <template v-else>{{ t(`setup.setup.pasteIntoTerminalComputer`) }}</template>
                                     </span>
                                 </p>
@@ -1071,8 +1118,9 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             </div>
 
                             <!-- Sudo checkbox stays beside the command it rewrites, unix-only, and only while the command is on screen. -->
+                            <!-- Not on a phone: whether Docker is already there is a fact about a computer this page cannot see. -->
                             <div
-                                v-if="environment.production && commandVisible && runTab === `unix`"
+                                v-if="environment.production && commandVisible && runTab === `unix` && !mobile"
                                 class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"
                             >
                                 <label class="flex cursor-pointer items-center gap-2">
@@ -1085,8 +1133,16 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 </span>
                             </div>
 
-                            <!-- Sync for widths with no reference column; survives folding in the app, but not on the compose tab. -->
-                            <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" :project="project?.name" class="xl:hidden" />
+                            <!-- Sync for widths with no reference column; survives folding in the app, but not on the compose tab.
+                                 Not on a phone, which has no local folder to sync: the computer the command runs on gets the
+                                 default, and a box there was toggled seven times in a row by a reader with nothing to decide. -->
+                            <SetupSyncOption
+                                v-if="syncOffered && !mobile"
+                                v-model="syncEnabled"
+                                :folder="syncDir"
+                                :project="project?.name"
+                                class="xl:hidden"
+                            />
                         </template>
 
                         <!-- Keep the spinner visible while polling and use color to show ownership. -->

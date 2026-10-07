@@ -1,4 +1,6 @@
 import { browserOwnsClick } from "@intentic/ui";
+import { flashElement } from "@intentic/ui/motion";
+import { afterPaint } from "../../lib/afterPaint";
 import { type SideInput, sideTabId } from "./sideTabs";
 import { claimLink, describeTab, revealSideView, sideViewOf } from "./sideViews";
 
@@ -13,9 +15,25 @@ export interface ClaimedLink {
     readonly label: string;
 }
 
+// Rings what a claimed link opened, once it is drawn: a link whose tab was already in front changed nothing on screen,
+// and one in an agent's reply was clicked twelve times running. The main area when it is what shows the thing (a lent
+// tab, the preview while the reader stands on /preview), else the side panel. Asked of the document the press came
+// from, since a popped-out chat draws its own side panel.
+const pointAtClaimed = (view: string, doc: Document): void => {
+    void afterPaint().then(() => {
+        flashElement(doc.querySelector(sideViewOf(view)?.lent?.() === true ? `main` : `.side-tabs`));
+    });
+};
+
 // Opens what a claim names where this window can show it (revealSideView). Answers whether anything opened, so a
-// claimed link that can't be shown stays a link.
-export const openClaimed = (claimed: Pick<ClaimedLink, `view` | `input`>): boolean => revealSideView(claimed.view, claimed.input);
+// claimed link that can't be shown stays a link. `from` is the pressed element, for which window to point in.
+export const openClaimed = (claimed: Pick<ClaimedLink, `view` | `input`>, from?: Element | null): boolean => {
+    const opened = revealSideView(claimed.view, claimed.input);
+    if (opened) {
+        pointAtClaimed(claimed.view, from?.ownerDocument ?? document);
+    }
+    return opened;
+};
 
 // A link written into plain text, up to where prose would end it: whitespace, or a closing bracket or stop after it.
 const LINK_IN_TEXT = /https?:\/\/[^\s<>"'`]+/gu;
@@ -50,7 +68,7 @@ export const openClaimedLinkFromEvent = (event: MouseEvent): void => {
     if (claimed === undefined) {
         return;
     }
-    if (openClaimed(claimed)) {
+    if (openClaimed(claimed, link)) {
         event.preventDefault();
     }
 };

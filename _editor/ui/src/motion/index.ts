@@ -6,6 +6,7 @@
 //   than stopped when motion is off, and where it may run on the compositor.
 // - fold.ts — a tray folding out from under its card, and a column sliding its units to make room (FLIP).
 // - reveal.ts — rows arriving in reading order when a list of sessions shows, and leaving in it when a press clears them.
+// - flash.ts — the ring a press draws round what it points at, when it lands on something already on screen.
 //
 // Its stylesheet is ../styles/motion.css: the duration and curve tokens, the switch that stills every transition, and
 // the few CSS recipes the views use (a chart growing from its baseline, the workspace arriving).
@@ -22,6 +23,7 @@ export {
 } from "./choice.js";
 export { setDeveloperBuild, useCompositedLoops, useReducedMotion, useTouchMotion } from "./loops.js";
 export { canAnimate, FOLD_EASE, FOLD_MS, slideFrom, stopSlide, trayFold, useFoldFlip } from "./fold.js";
+export { FLASH_MS, flashElement } from "./flash.js";
 export {
     DISMISS_MS,
     DISMISS_STEP_MS,

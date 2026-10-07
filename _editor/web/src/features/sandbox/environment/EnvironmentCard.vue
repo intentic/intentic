@@ -3,7 +3,8 @@ import type { Environment, EnvironmentItem } from "@intentic/sandbox-contract";
 import { Button, Code, ConfirmDialog, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
@@ -11,6 +12,8 @@ import { useEnvironmentContents } from "./useEnvironmentContents";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import HostedRebuild from "./rebuild/HostedRebuild.vue";
+import { rebuildRouteOf } from "./rebuild/rebuildRoute";
+import { REBUILD_ANCHOR } from "./rebuildAnchor";
 import HostRecreate from "../../capabilities/connect/hosts/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
 import RuntimeInstalls from "./RuntimeInstalls.vue";
@@ -156,13 +159,45 @@ const fromCheckout = computed(
     () => pending.value !== undefined && localImage.value !== undefined && slug.value !== undefined && canOperate.value,
 );
 
-// Whether the first row has anything to hold: a proposal to decide, an approved recipe with a way to build it, or a
-// checkout to rebuild from.
-const step = computed(
-    () =>
-        proposal.value !== undefined ||
-        fromCheckout.value ||
-        (pending.value !== undefined && (hosted.value !== undefined || serverManaged.value || slug.value !== undefined)),
+// What Contents says arrives with a rebuild, named where the card says why none is offered.
+const arriving = computed(() => groups.value.flatMap((group) => group.items).filter((item) => item.state === `after-rebuild`));
+
+// How a rebuild happens from here, or why it doesn't (rebuildRoute.ts). Every lane draws something: the card once drew
+// nothing at all for a container with no rebuild route, under a banner asking for one.
+const route = computed(() =>
+    rebuildRouteOf({
+        pending: pending.value !== undefined,
+        arriving: arriving.value.length > 0,
+        hosted: hosted.value !== undefined,
+        owner: isOwner.value,
+        serverManaged: serverManaged.value,
+        fromCheckout: fromCheckout.value,
+        slug: slug.value,
+    }),
+);
+
+// Whether the first row has anything to hold: a proposal to decide, or the rebuild and what stands in for it.
+const step = computed(() => proposal.value !== undefined || route.value !== undefined);
+
+// ARRIVING ON THE BANNER'S LINK (`#sandbox-rebuild`) lands on the rebuild rather than the top of the page: the step is
+// scrolled to and its button focused, or the step itself where it is a sentence. Watched rather than done once on mount,
+// since the card draws only once the environment is read, after the router's own scroll found nothing to scroll to.
+const currentRoute = useRoute();
+const rebuildStep = ref<HTMLElement>();
+let arrivedFor: string | undefined;
+watch(
+    [() => currentRoute.fullPath, rebuildStep],
+    async ([path, element]) => {
+        if (element === undefined || currentRoute.hash !== `#${REBUILD_ANCHOR}` || arrivedFor === path) {
+            return;
+        }
+        arrivedFor = path;
+        await nextTick();
+        element.scrollIntoView({ block: `center`, behavior: `smooth` });
+        // A real action button, not the command's OS tabs or its copy button, which come first in a command lane.
+        (element.querySelector<HTMLElement>(`.p-button:not([disabled])`) ?? element).focus({ preventScroll: true });
+    },
+    { immediate: true, flush: `post` },
 );
 </script>
 
@@ -216,33 +251,54 @@ const step = computed(
                 <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerApprove`) }}</p>
             </template>
 
-            <!-- The platform builds it, for the sandbox's owner alone (sandbox.routes.ts `hostedRebuild`): a maintainer, who
-                 may approve the change above, still sees the build with no button rather than one answered "sandbox not found". -->
-            <template v-if="pending && hosted">
-                <HostedRebuild v-if="isOwner" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />
-                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
-            </template>
-            <p v-else-if="pending && serverManaged" class="text-2xs text-subtle">
-                {{ t(`sandbox.environmentCard.appliesOnNext`) }}
-                <span class="font-mono">intentic deploy apply</span>
-                {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
-            </p>
-            <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->
-            <p v-else-if="fromCheckout" data-executor="checkout" class="text-2xs text-subtle">
-                {{ t(`sandbox.environmentCard.buildsWithCheckoutRebuild`) }}
-                <RouterLink to="/sandbox" class="font-medium text-link hover:underline">{{ t(`sandbox.environmentCard.sandboxTab`) }}</RouterLink>
-            </p>
-            <!-- `bare`: no paragraph under the button, since its confirmation says what the rebuild costs; the class
-                 puts back the column `bare` drops, so a running log keeps its gap. -->
-            <HostRecreate
-                v-else-if="pending && slug"
-                :slug="slug"
-                :hash="pending.hash"
-                action="Rebuild"
-                bare
-                :text="proposal !== undefined"
-                class="flex flex-col gap-2"
-            />
+            <!-- The rebuild, or the sentence standing in for it: the banner's link lands here, so it is never empty.
+                 Focusable itself for the lanes that are a sentence, so arriving on one is read out rather than lost. -->
+            <div v-if="route" :id="REBUILD_ANCHOR" ref="rebuildStep" tabindex="-1" class="flex flex-col gap-2 outline-none">
+                <!-- Both waiting: deciding first folds the proposal into the one rebuild, so the order is said, and the
+                     rebuild below drops a tier. -->
+                <p v-if="proposal && pending" class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.decideFirst`) }}</p>
+                <!-- The platform builds it, for the sandbox's owner alone (sandbox.routes.ts `hostedRebuild`): a maintainer, who
+                     may approve the change above, still sees the build with no button rather than one answered "sandbox not found". -->
+                <HostedRebuild
+                    v-if="route === `hosted` && pending && hosted"
+                    :sandbox-id="hosted"
+                    :hash="pending.hash"
+                    :content="pending.content"
+                    :text="proposal !== undefined"
+                />
+                <p v-else-if="route === `owner-only`" class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
+                <p v-else-if="route === `server`" class="text-2xs text-subtle">
+                    {{ t(`sandbox.environmentCard.appliesOnNext`) }}
+                    <span class="font-mono">intentic deploy apply</span>
+                    {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
+                </p>
+                <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->
+                <p v-else-if="route === `checkout`" data-executor="checkout" class="text-2xs text-subtle">
+                    {{ t(`sandbox.environmentCard.buildsWithCheckoutRebuild`) }}
+                    <RouterLink to="/sandbox" class="font-medium text-link hover:underline">{{ t(`sandbox.environmentCard.sandboxTab`) }}</RouterLink>
+                </p>
+                <!-- `bare`: no paragraph under the button, since its confirmation says what the rebuild costs; the class
+                     puts back the column `bare` drops, so a running log keeps its gap. -->
+                <HostRecreate
+                    v-else-if="route === `device` && pending && slug"
+                    :slug="slug"
+                    :hash="pending.hash"
+                    action="Rebuild"
+                    bare
+                    :text="proposal !== undefined"
+                    class="flex flex-col gap-2"
+                />
+                <!-- A container the installer did not start: nothing here can rebuild it, and the recipe is what to take. -->
+                <p v-else-if="route === `elsewhere`" class="text-xs text-content">{{ t(`sandbox.environmentCard.noRebuildHere`) }}</p>
+                <!-- Contents says something arrives with a rebuild, yet nothing approved is waiting to be built. -->
+                <p v-else-if="route === `nothing-pending`" class="text-xs text-content">
+                    {{
+                        proposal
+                            ? t(`sandbox.environmentCard.nothingToRebuildDecide`)
+                            : t(`sandbox.environmentCard.nothingToRebuild`, { names: arriving.map((item) => item.name).join(`, `) })
+                    }}
+                </p>
+            </div>
 
             <Notice v-if="actionNotice && decidedAt === `step`" :of="actionNotice" />
         </RowNote>

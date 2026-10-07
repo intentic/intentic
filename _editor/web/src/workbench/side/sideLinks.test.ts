@@ -78,6 +78,27 @@ it(`leaves a file mention to its own handler`, () => {
     expect(click(`<a class="md-file-link" href="https://github.com/acme/web/actions/runs/42">run.ts</a>`)).toBe(false);
 });
 
+// A link whose tab is already in front changes nothing on screen, and one was clicked twelve times running: every press
+// rings the panel it opened in instead.
+// The ring waits for the panel to be drawn (afterPaint), at most a frame and a task.
+const painted = (): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, 150));
+
+it(`rings the side panel a claimed link opened in, the tab already in front included`, async () => {
+    // Rings the cases above asked for land first, so they cannot be counted as this one's.
+    await painted();
+    const tabs = document.createElement(`section`);
+    tabs.className = `side-tabs`;
+    const rung = jest.fn((_frames: Keyframe[], _timing: KeyframeAnimationOptions) => ({}) as Animation);
+    // SAFETY: the ring reads nothing back from the animation it starts, so a stand-in that only records suffices.
+    tabs.animate = rung as unknown as HTMLElement[`animate`];
+    document.body.append(tabs);
+    expect(click(RUN)).toBe(true);
+    expect(click(RUN)).toBe(true);
+    await painted();
+    tabs.remove();
+    expect(rung).toHaveBeenCalledTimes(2);
+});
+
 it(`goes to the claiming view's home where there is no side panel`, () => {
     sideDocked.value = false;
     expect(click(RUN)).toBe(true);

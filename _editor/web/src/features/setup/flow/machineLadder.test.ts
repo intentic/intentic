@@ -64,6 +64,11 @@ describe(`the picker's rungs`, () => {
         expect(ladderOptionsOf({ ...offered, installer: { label: `Windows` } })[1]?.note).toBe(`A Windows installer`);
     });
 
+    // A phone pastes nothing into a terminal: its own-computer rung says where that setup happens instead.
+    it(`tells a phone the own computer is set up from a computer, not by a pasted command`, () => {
+        expect(ladderOptionsOf({ ...offered, mobile: true })[1]?.note).toBe(`Set up from a computer`);
+    });
+
     it(`honours an asked-for rung only while it is on offer`, () => {
         expect(requestedRung(ladderOptionsOf(offered), `mine`)).toBe(`mine`);
         expect(requestedRung(ladderOptionsOf({ ...offered, hostedOffered: false }), `hosted`)).toBe(undefined);

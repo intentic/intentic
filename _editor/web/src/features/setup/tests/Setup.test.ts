@@ -389,7 +389,45 @@ it(`numbers the next sandbox instead of colliding with the first`, async () => {
     sandboxes.value = [existing];
     list.mockResolvedValue([existing]);
     await mount();
-    expect(create).toHaveBeenCalledWith(`workspace-2`);
+    buttonLabelled(`Add another sandbox`)!.click();
+    await waitFor(() => expect(create).toHaveBeenCalledWith(`workspace-2`));
+});
+
+// A phone tapped "Add sandbox" fourteen seconds after its hosted sandbox connected, and landed on a draft it never asked
+// for, on a picker with nothing left to pick. The account's sandbox is offered first now; nothing is made until asked.
+it(`offers the sandbox an account already works in, and makes nothing until another is asked for`, async () => {
+    const existing = sandboxRow({ id: `s1`, name: `acme-shop`, lastSeenAt: `2026-10-06T05:55:14.000Z`, hosted: { region: `iad`, warm: true } });
+    sandboxes.value = [existing];
+    list.mockResolvedValue([existing]);
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 0 });
+    const el = await mount();
+    expect(el.textContent).toContain(`You already have a sandbox`);
+    expect(el.textContent).toContain(`acme-shop`);
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    expect(create).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+
+    buttonLabelled(`Open chat`)!.click();
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/`));
+    expect(create).not.toHaveBeenCalled();
+});
+
+// The phone's own-computer lane: the setup is mailed to a computer (SetupHandoff, stubbed here), and the command, one
+// press away, says it is for one.
+// The two switches about that computer (sync, Docker) are not asked of a phone, which can answer neither.
+it(`keeps a phone's command for a computer, and asks the phone nothing about that computer`, async () => {
+    mobileDevice.value = true;
+    query.value = { machine: `mine` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    expect(el.textContent).toContain(`Set up from a computer`);
+    buttonLabelled(`Show the command for your computer`)!.click();
+    await nextTick();
+    expect(el.textContent).toContain(`Run this in a terminal on your computer, not on this phone.`);
+    expect(el.textContent).not.toContain(`Also sync a local folder`);
+    expect(el.textContent).not.toContain(`I already have Docker`);
 });
 
 it(`resumes an unfinished sandbox rather than making a second`, async () => {
@@ -1170,6 +1208,7 @@ it(`opens the sandbox the account already lists at a live address of ours, and d
     list.mockResolvedValue([listed]);
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
+    buttonLabelled(`Add another sandbox`)!.click();
     await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
     buttonLabelled(`Use a different address`)!.click();
     await nextTick();

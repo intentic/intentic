@@ -1,7 +1,18 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { projectDirNameFor } from "@intentic/sandbox-contract";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
-import { arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, resumedRow, rowToOpen, setupProjectOf, touched } from "../setupArrival";
+import {
+    alreadyWorking,
+    arrivalFor,
+    type ArrivalInput,
+    hostedIdle,
+    projectPrefersHosted,
+    resumedRow,
+    rowToOpen,
+    setupProjectOf,
+    touched,
+    type VisitAsk,
+} from "../setupArrival";
 
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
@@ -281,5 +292,26 @@ describe(`what a resumed row is said to be`, () => {
 
     it(`is one that never ran when nothing ever reported`, () => {
         expect(resumedRow({ lastSeenAt: null, removedAt: null })).toBe(`never-ran`);
+    });
+});
+
+/* THE SANDBOX AN ACCOUNT ALREADY WORKS IN, offered before a new one is made: only one that has checked in, the selected
+ * one first, and never for a visit that asked for something of its own. */
+describe(`alreadyWorking`, () => {
+    const plain: VisitAsk = { named: false, project: false, requestedMachine: false, elsewhere: false };
+    const live = sandboxSummary({ id: `live`, lastSeenAt: `2026-10-06T05:55:14Z` });
+    const second = sandboxSummary({ id: `second`, lastSeenAt: `2026-10-06T06:00:00Z` });
+    const draft = sandboxSummary({ id: `draft` });
+
+    it(`is the selected working sandbox, else the first, and none while nothing has checked in`, () => {
+        expect(alreadyWorking([draft, live, second], plain, `second`)?.id).toBe(`second`);
+        expect(alreadyWorking([draft, live, second], plain, `draft`)?.id).toBe(`live`);
+        expect(alreadyWorking([draft], plain, undefined)).toBe(undefined);
+    });
+
+    it(`stands aside for a row, a folder, a rung or the options the visit asked for`, () => {
+        for (const ask of [{ named: true }, { project: true }, { requestedMachine: true }, { elsewhere: true }]) {
+            expect(alreadyWorking([live], { ...plain, ...ask }, `live`)).toBe(undefined);
+        }
     });
 });

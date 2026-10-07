@@ -27,7 +27,13 @@ const getIdToken = jest.fn<(options?: { gate?: boolean; usableFor?: number }) =>
 // An ordinary browser, where Google's button renders; the webview refusal case is signInSurfaces.test.ts's case.
 const renderButton = jest.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
 const adoptIdToken = jest.fn<(credential: string) => boolean>().mockReturnValue(true);
-jest.mock(`../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
+// Bumped by the module each time it refuses an answer Google gave (useGoogleIdentity.refused.test.ts).
+const refusedCredentials = ref(0);
+jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
+    useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken, refusedCredentials }),
+}));
+// The stall's funnel event, recorded rather than sent.
+jest.mock(`../../app/analytics`, () => ({ track: jest.fn() }));
 const signInWithGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string } | null>({ email: `owner@example.com` });
@@ -78,12 +84,16 @@ beforeEach(() => {
     signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
     handoff.mockReset();
     googleIdToken.mockReset().mockResolvedValue({});
+    refusedCredentials.value = 0;
+    // A browser with FedCM, as on /login's tests; a test that wants one without it leaves this out.
+    Object.assign(window, { IdentityCredential: {} });
 });
 
 afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    Reflect.deleteProperty(window, `IdentityCredential`);
 });
 
 it(`puts Google's button up the moment the platform says it holds nothing, with no timer between`, async () => {
@@ -179,6 +189,45 @@ it(`always offers Google's own page while the embedded button is up`, async () =
     // Same link: state and challenge intact, so the handoff resumes on return.
     expect(signInWithGoogle).toHaveBeenCalledWith(expect.stringContaining(`state=nonce-1`));
     expect(signInWithGoogle.mock.calls[0]?.[0]).toContain(`challenge=chal-1`);
+});
+
+// The OS browser the app opens is the reader's default, Firefox as often as not, where Google's button can only open a
+// pop-up that fails without a word; the road around it is a real button there, and the primary one once a press failed.
+describe(`where Google's button can only open a pop-up`, () => {
+    const googlesPage = (el: HTMLElement): HTMLButtonElement | undefined =>
+        [...el.querySelectorAll(`button`)].find((node) => node.textContent?.includes(`Continue on Google's page`));
+
+    beforeEach(() => {
+        Reflect.deleteProperty(window, `IdentityCredential`);
+    });
+
+    it(`offers Google's own page as a button beside Google's`, async () => {
+        const el = await mount();
+        await nextTick();
+
+        expect(googlesPage(el)?.className ?? ``).toContain(`p-button-secondary`);
+        googlesPage(el)?.click();
+        await nextTick();
+
+        expect(renderButton).toHaveBeenCalledTimes(1);
+        expect(signInWithGoogle).toHaveBeenCalledWith(expect.stringContaining(`state=nonce-1`));
+    });
+
+    // The mint keeps waiting on the button after a refusal, so the note goes beside it rather than into the failure box,
+    // whose Try again would start a second hand-off racing the first.
+    it(`says why a refused answer did not sign in, and keeps Google's button up`, async () => {
+        const el = await mount();
+        await nextTick();
+
+        refusedCredentials.value += 1;
+        await nextTick();
+
+        expect(el.textContent).toContain(`its clock may be wrong`);
+        expect(el.textContent).not.toContain(`Try again`);
+        expect(el.querySelector(`.entry-socket-slot`)).not.toBeNull();
+        expect(googlesPage(el)?.className ?? ``).toContain(`p-button`);
+        expect(googlesPage(el)?.className).not.toContain(`p-button-secondary`);
+    });
 });
 
 // The default OS browser the app opens is often signed out or on another account; this is the ordinary case, not

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
-import { Button, ui, CopyButton } from "@intentic/ui";
+import { Button, ui } from "@intentic/ui";
 import { formatList } from "@intentic/ui/format";
 import { computed, nextTick, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useChat } from "../../chat/run/useChat";
@@ -207,17 +207,40 @@ const openedProvider = (): void => {
 // A device sign-in's code goes with the press that opens its page, which asks for it: a reader who had to come back
 // for it pressed Open three times and copied it by hand. Written inside the press, the gesture a clipboard write
 // needs; the code stays on screen and copies on a press of its own for a browser that refuses.
+// Each press acknowledges itself for a moment: the held note below was already up after Open, so a press on the code
+// changed nothing on screen, and a reader pressed it four times over.
+const { copied: justCopied, copy: copyText } = useCopied();
 // Held, not flashed: the note says the code is on the clipboard for as long as the flow waits on it.
-const { copied: codeCopied, copy: copyText, reset: forgetCodeCopied } = useCopied(Number.POSITIVE_INFINITY);
-const copyCode = (event?: Event): void => {
+const codeCopied = ref(false);
+// The browser refused the write (no clipboard off a secure page, a press it would not count, a declined permission):
+// said, and the code put in a field already selected, since text inside a button cannot be selected by hand everywhere.
+const copyRefused = ref(false);
+const codeField = useTemplateRef<HTMLInputElement>(`codeField`);
+// Counts the presses, so one made while the last one's Copied is still up redraws it and is announced again.
+const copyPresses = ref(0);
+const forgetCodeCopied = (): void => {
+    codeCopied.value = false;
+    copyRefused.value = false;
+};
+const copyCode = async (event?: Event): Promise<void> => {
     const code = flow.value?.code;
     if (code === undefined || code === ``) {
         return;
     }
-    void copyText(code, event?.target instanceof Element ? event.target : undefined);
+    const landed = await copyText(code, event?.target instanceof Element ? event.target : undefined);
+    copyPresses.value += 1;
+    codeCopied.value = landed;
+    copyRefused.value = !landed;
+    if (!landed) {
+        await nextTick();
+        codeField.value?.focus();
+        codeField.value?.select();
+    }
 };
+// What the live region says, so a press is heard as well as seen.
+const copyAnnouncement = computed(() => (copyRefused.value ? t(`sandbox.connectFlow.copyRefused`) : justCopied.value ? t(`ui.action.copied`) : ``));
 const openDevicePage = (event: Event): void => {
-    copyCode(event);
+    void copyCode(event);
     openedProvider();
 };
 
@@ -301,8 +324,22 @@ watch(flow, (live) => {
             <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
             <p v-if="hint" :class="[bodyText, `text-subtle`]">{{ hint }}</p>
             <!-- Device code is read, not typed: sized for a second screen, and copied by a press on it as well as by the icon. -->
-            <div v-if="flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
+            <div
+                v-if="flow.code"
+                class="relative flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5 text-base"
+            >
+                <!-- A refused copy leaves the code in a field already selected, for the reader's own copy. -->
+                <input
+                    v-if="copyRefused"
+                    ref="codeField"
+                    readonly
+                    :value="flow.code"
+                    :aria-label="t(`sandbox.connectFlow.codeLabel`)"
+                    :class="ui.inputInline(`min-w-0 flex-1 font-mono font-semibold tracking-[0.2em]`)"
+                    @focus="codeField?.select()"
+                />
                 <button
+                    v-else
                     type="button"
                     class="min-w-0 truncate text-left font-mono text-base font-semibold tracking-[0.2em] text-content"
                     :title="t(`sandbox.connectFlow.copyCode`)"
@@ -310,9 +347,28 @@ watch(flow, (live) => {
                 >
                     {{ flow.code }}
                 </button>
-                <CopyButton :text="flow.code" />
+                <button
+                    type="button"
+                    :aria-label="t(`sandbox.connectFlow.copyCode`)"
+                    :class="justCopied ? ui.iconButton(`w-auto px-1.5 text-success`) : ui.iconButton(`text-subtle`)"
+                    @click="copyCode"
+                >
+                    <!-- Keyed by the press, so each one pops its own tick (the checkbox's) rather than leaving the last one standing. -->
+                    <span
+                        :key="justCopied ? copyPresses : 0"
+                        class="flex items-center gap-1 text-2xs"
+                        :class="{ 'motion-safe:animate-[ui-check-in_160ms_cubic-bezier(0.2,0.9,0.3,1.25)]': justCopied }"
+                    >
+                        <Icon :name="justCopied ? `check` : `copy`" />
+                        <span v-if="justCopied" aria-hidden="true">{{ t(`ui.action.copied`) }}</span>
+                    </span>
+                </button>
+                <span class="sr-only" aria-live="polite"
+                    ><span :key="copyPresses">{{ copyAnnouncement }}</span></span
+                >
             </div>
-            <p v-if="flow.code && codeCopied" :class="[bodyText, `text-subtle`]">{{ t(`sandbox.connectFlow.codeCopied`) }}</p>
+            <p v-if="flow.code && copyRefused" :class="[bodyText, `text-warning`]">{{ t(`sandbox.connectFlow.copyRefused`) }}</p>
+            <p v-else-if="flow.code && codeCopied" :class="[bodyText, `text-subtle`]">{{ t(`sandbox.connectFlow.codeCopied`) }}</p>
             <!-- Kept beside the copied note: the wait is still on after the code went to the clipboard. -->
             <p class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}</p>
         </template>

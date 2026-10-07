@@ -3,7 +3,7 @@ import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun } from "@inte
 
 // Needs jsdom: pure arithmetic still reaches dagre through @intentic/ui's index. Real modules, not mocks, since the
 // layout itself is what's under test.
-import { modeForSessions, paneShowsRun, runOnFocus, runToFollow, showingRunGraph } from "./chatRun";
+import { modeForSessions, paneShowsRun, runOnFocus, runPress, runToFollow, showingRunGraph } from "./chatRun";
 import { runColumns } from "./runColumns";
 
 // Which sessions a column opens: the arithmetic between a diagram click and a pane set, wrong in a way that only shows
@@ -176,4 +176,42 @@ test("opening the live band keeps following, opening a settled one pins", () => 
 test("the diagram asked for outright stays up whatever the run does", () => {
     const design = run([step(`a`)], [{}]);
     expect(showingRunGraph(design, { runId: `r1`, mode: `graph` }, [`wf-r1-a`])).toBe(true);
+});
+
+// A press on a run's row must change something on screen: one board card took twenty presses from a reader whose chat
+// already showed the run, so the press reads ahead what it would do.
+describe(`a press on a run's row`, () => {
+    const live = { runId: `r1`, mode: `live` } as const;
+    const going = (): ReturnType<typeof run> => run([step(`a`), step(`b`)], [{ state: `running` }, { state: `running` }]);
+    const ended = (): ReturnType<typeof run> => ({ ...run([step(`a`), step(`b`)], [{ state: `done` }, { state: `done` }]), state: `done` });
+
+    test("moves the panes onto the run's live sessions when they are not showing", () => {
+        expect(runPress(going(), undefined, [`a-chat-of-its-own`], false)).toBe(`follow`);
+        expect(runPress(going(), live, [`wf-r1-a`], false)).toBe(`follow`);
+    });
+
+    test("only points at the chat once it already shows the run's live sessions", () => {
+        expect(runPress(going(), live, [`wf-r1-a`, `wf-r1-b`], false)).toBe(`shown`);
+        expect(runPress(going(), live, [`wf-r1-b`, `wf-r1-a`], true)).toBe(`shown`);
+        // Pinned to the same panes, the press changes the mode and nothing a reader can see.
+        expect(runPress(going(), { runId: `r1`, mode: `pinned` }, [`wf-r1-a`, `wf-r1-b`], false)).toBe(`shown`);
+    });
+
+    test("leaves the diagram for the panes, where the panel was drawing it", () => {
+        expect(runPress(going(), { runId: `r1`, mode: `graph` }, [`wf-r1-a`, `wf-r1-b`], true)).toBe(`follow`);
+    });
+
+    test("opens the row's own diagram for an ended run a docked chat has nothing of", () => {
+        expect(runPress(ended(), undefined, [`a-chat-of-its-own`], false)).toBe(`graph`);
+        expect(runPress(ended(), live, [`a-chat-of-its-own`], false)).toBe(`graph`);
+    });
+
+    test("draws an ended run's diagram where the panel has room for it, and only points once it is up", () => {
+        expect(runPress(ended(), undefined, [`a-chat-of-its-own`], true)).toBe(`follow`);
+        expect(runPress(ended(), live, [`a-chat-of-its-own`], true)).toBe(`shown`);
+    });
+
+    test("points at an ended run's chats still open in the panes", () => {
+        expect(runPress(ended(), undefined, [`wf-r1-a`], false)).toBe(`shown`);
+    });
 });

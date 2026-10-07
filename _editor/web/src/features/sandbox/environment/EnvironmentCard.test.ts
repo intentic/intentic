@@ -5,7 +5,7 @@ import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import PrimeVue from "primevue/config";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // An applied overlay and nothing pending, the ordinary baseline state.
@@ -34,6 +34,11 @@ const contentsReadAt = ref(0);
 const state = ref<Environment>(environment);
 // What Contents lists; empty unless a test draws rows.
 const contentsGroups = ref<ContentsGroup[]>([]);
+// The container's sandbox name; undefined is a container the installer did not start, which no rebuild here can reach.
+const slug = ref<string | undefined>(`demo`);
+// Where the reader is; the attention list's link carries the rebuild's anchor.
+const route = reactive({ fullPath: `/sandbox/environment`, hash: `` });
+jest.mock(`vue-router`, () => ({ useRoute: () => route }));
 jest.mock(`./useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
@@ -46,7 +51,7 @@ jest.mock(`./useEnvironment`, () => ({
         applied,
         recurring,
         serverManaged: ref(false),
-        slug: ref(`demo`),
+        slug,
         localImage,
     }),
 }));
@@ -120,6 +125,9 @@ afterEach(() => {
     applied.value = environment.approved;
     recurring.value = [];
     localImage.value = undefined;
+    slug.value = `demo`;
+    route.fullPath = `/sandbox/environment`;
+    route.hash = ``;
     active.value = { id: `sb1`, role: `owner` };
     app?.unmount();
     app = undefined;
@@ -208,6 +216,56 @@ it(`asks for the decision before the build, and draws the build a tier down whil
     const rebuild = el.querySelector(`[data-executor="host"]`);
     expect(approve?.compareDocumentPosition(rebuild!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(rebuild?.getAttribute(`data-text`)).toBe(`true`);
+});
+
+// Both waiting at once is the state the banner's reader sat in: the order is said, not only drawn.
+it(`says to decide the proposal first when a recipe is also waiting to be built`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    proposal.value = { content: `${OVERLAY}RUN apt-get install -y imagemagick\n`, hash: `proposed` };
+    expect(mount().textContent).toContain(`Approve or reject the change above first`);
+});
+
+// "Rebuild needed" for an hour on a card that drew nothing: a container the installer did not start has no rebuild
+// from here, and the card now says so instead of drawing a blank under the banner.
+it(`says why there is no rebuild here for a container nobody here started`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    slug.value = undefined;
+    const el = mount();
+    expect(el.querySelector(`[data-executor]`)).toBeNull();
+    expect(el.querySelector(`#sandbox-rebuild`)?.textContent).toContain(`can't be rebuilt from here`);
+});
+
+// Contents marks a capability as arriving with a rebuild while nothing approved waits to be built: the card says that
+// a rebuild would change nothing yet, and what to do instead, rather than leaving the label unanswered.
+it(`answers "arrives after rebuild" when nothing approved is waiting to be built`, () => {
+    contentsGroups.value = [
+        { origin: `capability`, label: `From your capabilities`, items: [{ id: `capability:whisper`, name: `Whisper`, origin: `capability`, state: `after-rebuild`, tools: [] }] },
+    ];
+    expect(mount().querySelector(`#sandbox-rebuild`)?.textContent).toContain(`If Whisper still isn't working`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    proposal.value = { content: `${OVERLAY}RUN apt-get install -y imagemagick\n`, hash: `proposed` };
+    expect(mount().querySelector(`#sandbox-rebuild`)?.textContent).toContain(`Approve the change above`);
+});
+
+it(`stays silent about rebuilding when nothing waits and nothing is arriving`, () => {
+    expect(mount().querySelector(`#sandbox-rebuild`)).toBeNull();
+});
+
+// The banner's link lands on the rebuild itself: scrolled to, and its button focused, not the page's top.
+it(`scrolls to the rebuild and focuses it when the banner's link brought the reader`, async () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    slug.value = undefined;
+    route.fullPath = `/sandbox/environment#sandbox-rebuild`;
+    route.hash = `#sandbox-rebuild`;
+    const scrolled = jest.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const el = mount();
+    await nextTick();
+    await nextTick();
+    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(el.querySelector(`#sandbox-rebuild`));
 });
 
 it(`keeps Approve disabled until the proposed contents have loaded and names the decision`, async () => {
