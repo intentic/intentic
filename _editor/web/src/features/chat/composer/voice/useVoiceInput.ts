@@ -1,4 +1,4 @@
-import { sleep } from "@intentic/base/async";
+import { Latest, sleep } from "@intentic/base/async";
 import { ref, type Ref } from "vue";
 import { track } from "../../../../app/analytics";
 import { sandboxJson } from "../../../../client/sandbox/sandboxClient";
@@ -129,16 +129,14 @@ export function useVoiceInput(): {
         error.value = undefined;
     };
 
-    // The live capture chain, torn down by stop(); `generation` invalidates async start arms that resolve late.
-    let generation = 0;
+    // The live capture chain, torn down by stop(). Each press's signal aborts with its teardown (or the next press), which
+    // cancels its daemon calls and its status wait and tells every async arm that resolves late it speaks for nobody.
+    const presses = new Latest();
     let stream: MediaStream | undefined;
     let context: AudioContext | undefined;
-    let controller: AbortController | undefined;
 
     const teardown = (): void => {
-        generation += 1;
-        controller?.abort();
-        controller = undefined;
+        presses.abort();
         stream?.getTracks().forEach((audioTrack) => audioTrack.stop());
         stream = undefined;
         void context?.close().catch(() => {});
@@ -152,10 +150,8 @@ export function useVoiceInput(): {
         teardown();
         error.value = undefined;
         state.value = `preparing`;
-        const mine = generation;
-        const alive = (): boolean => generation === mine;
-        controller = new AbortController();
-        const signal = controller.signal;
+        const signal = presses.next();
+        const alive = (): boolean => !signal.aborted;
 
         // Utterances transcribe one at a time; chaining keeps transcripts in speech order despite network reordering.
         let chain: Promise<void> = Promise.resolve();
@@ -213,7 +209,7 @@ export function useVoiceInput(): {
                     if (status.model === `ready`) {
                         break;
                     }
-                    await sleep(STATUS_POLL_MS);
+                    await sleep(STATUS_POLL_MS, { signal });
                     if (!alive()) {
                         return;
                     }

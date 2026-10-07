@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Latest, SingleFlight, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { AnnounceBody, IngressOutput } from "@intentic/api-contract/ingress";
 import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract";
@@ -100,19 +101,25 @@ const verdictOf = (answer: IngressAnswer<IngressOutput<"announce">>, at: number)
 };
 
 export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
-    let timer: NodeJS.Timeout | undefined;
     let fastUntil = 0;
     let backoff = 2_000;
     let lastLoggedAt = 0;
     let status: AnnounceState = { state: "off" };
-    let inFlight: Promise<AnnounceState> | undefined;
+    // From start() to stop(). A stop aborts it, which cuts the registration in flight and ends whatever wait is
+    // pending, so nothing is announced or scheduled after one.
+    const running = new Latest();
+    // Whose verdict decides the next announce: the loop's, until a Reconnect takes the turn with an announce of its
+    // own. Taking it ends the loop's wait, which that announce makes moot, and a loop caught mid-announce shares the
+    // Reconnect's answer without acting on it a second time.
+    const turn = new Latest();
+    // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
+    const flight = new SingleFlight<"announce", AnnounceState>();
     // The same body on every announce, the heartbeat's included: fixed for this process's life.
     const announceBody: AnnounceBody = { daemonUrl: config.sandbox.publicUrl, version, instance: instanceId(), ...whereThisRuns(config) };
 
-    // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
-    const register = (): Promise<AnnounceState> => {
-        inFlight ??= callIngress(config, { route: "announce", input: announceBody })
-            .then(
+    const register = (signal: AbortSignal): Promise<AnnounceState> =>
+        flight.run("announce", () =>
+            callIngress(config, { route: "announce", input: announceBody, signal }).then(
                 (answer) => verdictOf(answer, Date.now()),
                 (error: Error): AnnounceState => ({
                     state: "unreachable",
@@ -120,12 +127,8 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
                     retrying: true,
                     at: Date.now(),
                 }),
-            )
-            .finally(() => {
-                inFlight = undefined;
-            });
-        return inFlight;
-    };
+            ),
+        );
 
     // Every attempt while fast, then once per quiet window, so a sandbox the platform forgot doesn't fill its log. A
     // heartbeat that lands is logged only when it is news: the first registration, or one after a failure.
@@ -144,35 +147,46 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
         }
     };
 
-    const schedule = (): void => {
-        clearTimeout(timer);
-        timer = setTimeout(() => void cycle(), backoff);
-        backoff = Math.min(backoff * 2, Date.now() < fastUntil ? FAST_CAP_MS : SLOW_CAP_MS);
-    };
-
-    // The next announce after this one: an hour on (the heartbeat) once registered, the backoff while it is not, and
+    // The wait before the next announce: an hour on (the heartbeat) once registered, the backoff while it is not, and
     // none at all after a deletion record. A heartbeat the platform does not answer, or answers 404 (it forgot this
     // sandbox), goes back to retrying from the shortest wait; a 410 is final here as anywhere.
-    const settle = (next: AnnounceState): AnnounceState => {
+    const gapAfter = (next: AnnounceState): number | undefined => {
+        if (next.state === "registered") {
+            backoff = 2_000;
+            return heartbeatDelay();
+        }
+        if (next.retrying === false) {
+            return undefined;
+        }
+        const gap = backoff;
+        backoff = Math.min(backoff * 2, Date.now() < fastUntil ? FAST_CAP_MS : SLOW_CAP_MS);
+        return gap;
+    };
+
+    // Records a verdict reached while `mine` holds the turn and waits out the gap it calls for on that same signal, so
+    // a stop or a Reconnect ends the wait rather than leaving it to fire. One reached after either is theirs to act on.
+    const settle = (next: AnnounceState, run: AbortSignal, mine: AbortSignal): AnnounceState => {
+        if (mine.aborted) {
+            return next;
+        }
         const before = status;
         status = next;
         report(next, before);
-        if (next.state === "registered") {
-            clearTimeout(timer);
-            backoff = 2_000;
-            timer = setTimeout(() => void cycle(), heartbeatDelay());
-        } else if (next.retrying !== false) {
-            schedule();
+        const gap = gapAfter(next);
+        if (gap !== undefined) {
+            void sleep(gap, { signal: mine }).then(() => cycle(run, mine));
         }
         return next;
     };
 
-    const cycle = async (): Promise<void> => {
-        settle(await register());
+    const cycle = async (run: AbortSignal, mine: AbortSignal): Promise<void> => {
+        if (!mine.aborted) {
+            settle(await register(run), run, mine);
+        }
     };
 
     // The platform's answer to an adoption: its status and reason, or 0 when it could not be reached.
-    const adopt = async (adoption: Adoption): Promise<{ status: number; detail: string }> => {
+    const adopt = async (adoption: Adoption, signal: AbortSignal): Promise<{ status: number; detail: string }> => {
         try {
             const answer = await callIngress(config, {
                 route: "adopt",
@@ -184,6 +198,7 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
                     version,
                     ...adoptionPresentation(adoption),
                 },
+                signal,
             });
             return { status: answer.status, detail: answer.status === 200 ? "adopted" : (answer.refusal ?? "").slice(0, 300) };
         } catch (error) {
@@ -193,27 +208,30 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
 
     return {
         start: () => {
+            const run = running.next();
             fastUntil = Date.now() + FAST_WINDOW_MS;
             status = { state: "pending", at: Date.now() };
-            void cycle(); // the setup wizard is usually watching right now
+            void cycle(run, turn.next(run)); // the setup wizard is usually watching right now
         },
-        stop: () => clearTimeout(timer),
+        stop: () => running.abort(),
         status: () => status,
         relink: async (adoption) => {
-            if (status.state === "off") {
+            // Never started (a headless run, nothing to register with) or stopped: a Reconnect starts nothing again.
+            const run = running.current;
+            if (run === undefined) {
                 return { announce: status };
             }
             // Someone is watching again: retries go back to fast, starting from the shortest wait.
-            clearTimeout(timer);
+            const mine = turn.next(run);
             fastUntil = Date.now() + FAST_WINDOW_MS;
             backoff = 2_000;
-            const first = await register();
+            const first = await register(run);
             if (first.reason !== "unknown" || adoption === undefined) {
-                return { announce: settle(first) };
+                return { announce: settle(first, run, mine) };
             }
-            const adopted = await adopt(adoption);
+            const adopted = await adopt(adoption, run);
             logger.info({ status: adopted.status, detail: adopted.detail }, "platform adoption answered");
-            return { announce: settle(adopted.status === 200 ? await register() : first), adoption: adopted };
+            return { announce: settle(adopted.status === 200 ? await register(run) : first, run, mine), adoption: adopted };
         },
     };
 };

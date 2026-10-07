@@ -561,3 +561,89 @@ it(`adoptSession stores a session another ceremony minted, served from then on w
     expect(fetchMock).not.toHaveBeenCalled();
     expect(state.minted).toBe(0);
 });
+
+// Invalidating or clearing retires what is in flight: its exchange is cancelled, as a real fetch is by its signal,
+// rather than left to finish into a result nobody keeps.
+const parkedFetch = () => {
+    const signals: AbortSignal[] = [];
+    const answers: ((response: Response) => void)[] = [];
+    const fetchMock = jest.fn(
+        (_url: string, init: RequestInit) =>
+            new Promise<Response>((resolve, reject) => {
+                const signal = init.signal!;
+                signals.push(signal);
+                answers.push(resolve);
+                signal.addEventListener(`abort`, () => reject(signal.reason), { once: true });
+            }),
+    );
+    return { fetchMock, signals, answers };
+};
+
+it(`clearSessions cancels an establishment's exchange in flight, and its caller gets nothing`, async () => {
+    const { fetchMock, signals } = parkedFetch();
+    stubGlobal(`fetch`, fetchMock);
+    const { getSessionToken, clearSessions } = (await load()).useSandboxSession();
+    const pending = getSessionToken();
+    await waitFor(() => expect(signals).toHaveLength(1));
+
+    clearSessions();
+
+    expect(signals[0]!.aborted).toBe(true);
+    await expect(pending).resolves.toBeUndefined();
+    expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
+});
+
+it(`invalidating a sandbox cancels its renewal in flight, and a renewal after it goes out afresh`, async () => {
+    localStorage.setItem(`intentic.session.sb-1`, session({ expiresAt: Date.now() + 3 * DAY_MS }));
+    const { fetchMock, signals, answers } = parkedFetch();
+    stubGlobal(`fetch`, fetchMock);
+    const { getSessionToken, invalidateSession, adoptSession } = (await load()).useSandboxSession();
+    await getSessionToken();
+    await waitFor(() => expect(signals).toHaveLength(1));
+
+    invalidateSession(`sb-1`);
+    expect(signals[0]!.aborted).toBe(true);
+
+    // A new near-expiry session, as a passkey ceremony would bring: its renewal is not held behind the retired one.
+    await new Promise((resolve) => setTimeout(resolve));
+    adoptSession(`sb-1`, { token: `sess-next`, expiresAt: Date.now() + 3 * DAY_MS, email: `o@x.com` });
+    await getSessionToken();
+    await waitFor(() => expect(signals).toHaveLength(2));
+    answers[1]!(sessionResponse(`sess-renewed`));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``).token).toBe(`sess-renewed`));
+});
+
+// A retired establishment used to carry on to the sign-in moment, and threw away whatever the person signed in with.
+it(`an establishment retired before it reached the sign-in moment raises no gate`, async () => {
+    const fetchMock = jest.fn(async () => sessionResponse());
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { useSignInPrompt } = await import("./signInPrompt");
+    const { getSessionToken, clearSessions } = useSandboxSession();
+    const pending = getSessionToken();
+    clearSessions();
+
+    await expect(pending).resolves.toBeUndefined();
+    expect({ minted: state.minted, prompt: useSignInPrompt().prompt.value, exchanged: fetchMock.mock.calls.length }).toEqual({
+        minted: 0,
+        prompt: undefined,
+        exchanged: 0,
+    });
+});
+
+// The cooldown is for a sandbox that failed to answer; one whose establishment was retired did not.
+it(`a background establishment retired mid-exchange holds no cooldown for the next poll`, async () => {
+    state.cachedIdToken = `cached-token`;
+    const { fetchMock, signals, answers } = parkedFetch();
+    stubGlobal(`fetch`, fetchMock);
+    const { getSessionToken, invalidateSession } = (await load()).useSandboxSession();
+    const first = getSessionToken(otherBox, { background: true });
+    await waitFor(() => expect(signals).toHaveLength(1));
+    invalidateSession(`sb-2`);
+    await expect(first).resolves.toBeUndefined();
+
+    const second = getSessionToken(otherBox, { background: true });
+    await waitFor(() => expect(signals).toHaveLength(2));
+    answers[1]!(sessionResponse(`sess-sb2`));
+    await expect(second).resolves.toEqual({ token: `sess-sb2`, kind: `session` });
+});

@@ -324,6 +324,27 @@ describe("startSshTunnel and the pool", () => {
         await pool.stopAll();
     });
 
+    // A watcher loop abandoned for a stall has its pool stopped, and may come back from its stuck step mid-pass. It used
+    // to bind the sandbox's port again there, a listener nobody stopped, and the loop that replaced it could not bind.
+    it("binds nothing once retired, and lets go of a bind the retirement lands on midway", async () => {
+        stubGlobal("WebSocket", FakeSocket);
+        const port = syncSshPort(target.sandboxId);
+        const retired = new AbortController();
+        const pool = createTunnelPool(() => {}, retired.signal);
+
+        try {
+            const midway = pool.reconcile([target]);
+            retired.abort();
+            await midway;
+            expect(await tunnelReady(port, 200)).toBe(false);
+
+            await pool.reconcile([target]);
+            expect(await tunnelReady(port, 200)).toBe(false);
+        } finally {
+            await pool.stopAll();
+        }
+    });
+
     // A moved base needs a rebind: the listener closes over the address it dials, so without one a promoted-to-loopback
     // pairing would keep opening streams to its old public URL. Proven by where the next connection actually goes.
     it("rebinds a pairing whose resolved base moved, so later streams use the new address", async () => {

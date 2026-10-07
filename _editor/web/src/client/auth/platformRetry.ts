@@ -1,3 +1,4 @@
+import { within } from "@intentic/base/async";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { useAuth } from "./useAuth";
 import { returnPath, signInAt } from "../../lib/routes/signIn";
@@ -19,12 +20,11 @@ export const ENTRY_BUDGET_MS = 1500;
 
 // A platform that hangs rather than refuses must not hold the boot on a blank splash: past the budget the caller is
 // told nothing came back. The ask itself keeps running, and the screen's own retry collects whatever it answers.
-const within = <T>(work: Promise<T>): Promise<T | undefined> =>
-    Promise.race([work, new Promise<undefined>((resolve) => setTimeout(resolve, ENTRY_BUDGET_MS, undefined))]);
+const withinBudget = <T>(work: Promise<T>): Promise<T | undefined> => within(work, ENTRY_BUDGET_MS, undefined);
 
 // Entry rule for /platform-unavailable. A direct hit (a reload, a bookmark, a restored tab) asks again before the
 // screen is drawn, so refreshing the page recovers exactly like pressing "Try again" — otherwise the URL pins the
 // reader to a dead screen no reload can leave. A redirect from a check that just failed carries `redirectedFrom`
 // and skips the duplicate ask; it also cannot loop, since this only ever redirects on an answer.
 export const retryOnEntry = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> =>
-    to.redirectedFrom === undefined ? ((await within(platformRetry(to.query[`returnTo`]))) ?? true) : true;
+    to.redirectedFrom === undefined ? ((await withinBudget(platformRetry(to.query[`returnTo`]))) ?? true) : true;

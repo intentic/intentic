@@ -8,7 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { createBackoff, pollUntil } from "@intentic/base/async";
+import { anySignal, createBackoff, Delayer, Latest, pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { freePort } from "@intentic/base/fs";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
@@ -196,14 +196,23 @@ export const createExtensionBackend = (
         }
     };
 
-    let generation = 0;
     let desired = false;
     let host: SpawnedHost | undefined;
     let state: ExtensionBackendState = { state: "stopped", extensions: [] };
     // Climbs while the host keeps dying on arrival; resets the moment one answers /health.
     const ladder = createBackoff({ floorMs: BACKOFF_START_MS, capMs: BACKOFF_CAP_MS });
-    let debounce: NodeJS.Timeout | undefined;
+    // The converge in flight. A newer one, or stop(), aborts it: it then spawns no host that nothing would own, and stops
+    // polling /health for one it no longer wants, rather than carrying on to be ignored.
+    const converging = new Latest();
+    const debounce = new Delayer<void>(RESTART_DEBOUNCE_MS);
+    // The wait before trying again after a host died or never answered. A timer and not a Delayer, since its length is
+    // the ladder's; one slot, cleared before it is set, so a second schedule replaces the first instead of leaving it to
+    // fire after stop() cleared only the second.
     let retry: NodeJS.Timeout | undefined;
+    const retryLater = (): void => {
+        clearTimeout(retry);
+        retry = setTimeout(() => void converge(), ladder.next());
+    };
 
     // The host's whole process group, SIGKILL after a grace, as the service supervisor ends its children: a SIGTERM to
     // the host alone left anything a backend started running, and a host wedged in an extension's code kept its port
@@ -271,9 +280,9 @@ export const createExtensionBackend = (
         return { runnable, reported, tokenReach, tools, owners: ownership.owners };
     };
 
-    // The host's /health answer, or undefined if it died first or never answered in time; the caller treats both misses
-    // alike.
-    const waitHealthy = async (spawned: SpawnedHost): Promise<BackendHealth | undefined> => {
+    // The host's /health answer, or undefined if it died first, never answered in time, or the converge waiting on it was
+    // aborted; the caller treats every miss alike.
+    const waitHealthy = async (spawned: SpawnedHost, signal: AbortSignal): Promise<BackendHealth | undefined> => {
         let health: BackendHealth | undefined;
         await pollUntil(
             async () => {
@@ -284,7 +293,8 @@ export const createExtensionBackend = (
                 try {
                     const response = await fetch(`http://127.0.0.1:${spawned.port}/health`, {
                         headers: { [BACKEND_HOST_HEADER]: spawned.hostToken },
-                        signal: AbortSignal.timeout(HEALTH_POLL_MS * 4),
+                        // The converge's signal too, so a stop cuts a probe already in flight instead of waiting it out.
+                        signal: anySignal(signal, AbortSignal.timeout(HEALTH_POLL_MS * 4)),
                     });
                     if (response.ok) {
                         health = (await response.json()) as BackendHealth;
@@ -295,7 +305,7 @@ export const createExtensionBackend = (
                 }
                 return false;
             },
-            { intervalMs: HEALTH_POLL_MS, timeoutMs: healthTimeoutMs },
+            { intervalMs: HEALTH_POLL_MS, timeoutMs: healthTimeoutMs, signal },
         );
         return health;
     };
@@ -304,19 +314,20 @@ export const createExtensionBackend = (
     let hostStatuses: readonly BackendExtensionStatus[] = [];
 
     const converge = async (): Promise<void> => {
-        const run = ++generation;
+        const signal = converging.next();
         clearTimeout(retry);
         let collected: Awaited<ReturnType<typeof collect>>;
         try {
             collected = await collect();
         } catch (error) {
-            // Nothing learnt, so nothing to change: a host already running keeps running on what it was given.
-            if (host === undefined) {
+            // Nothing learnt, so nothing to change: a host already running keeps running on what it was given. Nor does
+            // a converge already superseded or stopped report it, over whatever state came after it.
+            if (host === undefined && !signal.aborted) {
                 state = { state: "error", detail: errorMessage(error), extensions: [] };
             }
             return;
         }
-        if (run !== generation) {
+        if (signal.aborted) {
             return;
         }
         // Read at request time, so these land whether or not the host restarts.
@@ -338,6 +349,11 @@ export const createExtensionBackend = (
         }
         state = { state: "starting", extensions: collected.reported };
         const port = await freePort();
+        // Asked again after the last wait before the spawn: a host started for a converge stopped or superseded meanwhile
+        // would belong to nobody, left running after stop() or beside the next converge's own.
+        if (signal.aborted) {
+            return;
+        }
         const hostToken = randomBytes(32).toString("hex");
         const config: BackendDeviceConfig = {
             port,
@@ -371,17 +387,17 @@ export const createExtensionBackend = (
                 state = { state: "error", detail: error.message, extensions: collected.reported };
             }
         });
-        child.on("exit", (code, signal) => {
+        child.on("exit", (code, exitSignal) => {
             if (host !== spawned || !desired) {
                 return;
             }
             // Uninvited death: report it and respawn with backoff rather than leave /x dead forever.
-            state = { state: "error", detail: `the backend host exited (${signal ?? code})`, extensions: collected.reported };
+            state = { state: "error", detail: `the backend host exited (${exitSignal ?? code})`, extensions: collected.reported };
             host = undefined;
-            retry = setTimeout(() => void converge(), ladder.next());
+            retryLater();
         });
-        const health = await waitHealthy(spawned);
-        if (run !== generation) {
+        const health = await waitHealthy(spawned, signal);
+        if (signal.aborted) {
             return;
         }
         if (health === undefined) {
@@ -400,7 +416,7 @@ export const createExtensionBackend = (
                 detail: `the backend host did not become healthy within ${healthTimeoutMs / 1_000}s`,
                 extensions: collected.reported,
             };
-            retry = setTimeout(() => void converge(), ladder.next());
+            retryLater();
             return;
         }
         ladder.reset();
@@ -421,13 +437,12 @@ export const createExtensionBackend = (
             if (!desired) {
                 return;
             }
-            clearTimeout(debounce);
-            debounce = setTimeout(() => void converge(), RESTART_DEBOUNCE_MS);
+            void debounce.trigger(converge);
         },
         stop: () => {
             desired = false;
-            generation += 1;
-            clearTimeout(debounce);
+            converging.abort();
+            debounce.cancel();
             clearTimeout(retry);
             kill();
             state = { state: "stopped", extensions: [] };

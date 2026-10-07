@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import type { AgentEvent, UsageWindow } from "@intentic/sandbox-contract";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
@@ -513,6 +514,17 @@ test("a stopped turn's error frames never reach the stream, and the ledger calls
         { conversationId: "frames-cancel", event: { kind: "resume-superseded" } },
         { conversationId: "frames-cancel", event: { kind: "turn-got-somewhere" } },
     ]);
+});
+
+// A caller's signal can outlive the turns it starts. Each turn links into it with anySignal rather than a listener of its
+// own, so one that ended unstopped leaves nothing behind on it; the test above is the stop still reaching the turn.
+test("a turn that ends unstopped leaves nothing listening on its caller's signal", async () => {
+    const caller = new AbortController();
+    const { services: s } = turnServices(scripted([{ kind: "session", sessionId: "s-caller" }, { kind: "done" }]));
+
+    await collect(streamAgent(s, { prompt: "go", conversationId: "frames-caller" }, caller.signal));
+
+    expect(getEventListeners(caller.signal, "abort")).toHaveLength(0);
 });
 
 test("a routed runtime's readings are re-measured, the cache clock dropped, and what it proved filed on its card", async () => {

@@ -1,3 +1,4 @@
+import { anySignal, SingleFlight } from "@intentic/base/async";
 import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import type { SandboxSummary } from "@intentic/api-contract";
@@ -44,9 +45,12 @@ const { activeSandboxId } = useSandbox();
 // In-memory mirror of persisted sessions, hydrated lazily, so presentedEmail reacts without re-reading storage.
 // allow(module-state): daemon sessions keyed by sandbox id
 const sessions = ref<Record<string, StoredSession>>({});
-// One in-flight establish per sandbox: shared both ways, but background can't satisfy a waiting caller.
-const inflight = new Map<string, { readonly pending: Promise<SandboxBearer | undefined>; readonly background: boolean }>();
-const renewing = new Set<string>();
+// One in-flight establish per sandbox and kind: a press's answers a poll too, but a poll's never answers a press, which
+// may need to prompt. Two flights rather than one entry a press overwrites, so neither's end can drop the other's.
+const pressing = new SingleFlight<string, SandboxBearer | undefined>();
+const polling = new SingleFlight<string, SandboxBearer | undefined>();
+const establishing = (sandboxId: string): Promise<SandboxBearer | undefined> | undefined => pressing.joined(sandboxId) ?? polling.joined(sandboxId);
+const renewals = new SingleFlight<string, void>();
 // Cooldown before re-asking a sandbox that just failed; a foreground press is never held back by it.
 const ESTABLISH_COOLDOWN_MS = 30_000;
 const failedAt = new Map<string, number>();
@@ -55,12 +59,21 @@ const establishHolds = (sandboxId: string): boolean => {
     const at = failedAt.get(sandboxId);
     return at !== undefined && Date.now() - at < ESTABLISH_COOLDOWN_MS;
 };
-// Per-sandbox generation retires a late establish; the global one is for clearSessions, retiring all at once.
-let allGeneration = 0;
-const sandboxGenerations = new Map<string, number>();
-const generationOf = (sandboxId: string): string => `${allGeneration}.${sandboxGenerations.get(sandboxId) ?? 0}`;
-const retireGeneration = (sandboxId: string): void => {
-    sandboxGenerations.set(sandboxId, (sandboxGenerations.get(sandboxId) ?? 0) + 1);
+// A sandbox's establishes and renewals in flight share one signal, aborted when its session is invalidated (every
+// sandbox's, when all are cleared): their exchange is cancelled, no sign-in is raised for them, and nothing they still
+// mint is stored over what was just thrown away.
+const retirements = new Map<string, AbortController>();
+const retirementOf = (sandboxId: string): AbortSignal => {
+    let controller = retirements.get(sandboxId);
+    if (controller === undefined) {
+        controller = new AbortController();
+        retirements.set(sandboxId, controller);
+    }
+    return controller.signal;
+};
+const retire = (sandboxId: string): void => {
+    retirements.get(sandboxId)?.abort();
+    retirements.delete(sandboxId);
 };
 
 type SessionMessage =
@@ -135,7 +148,7 @@ const stepUpFrom = (body: unknown): StepUp => {
 
 // Exchanges a verified bearer for a fresh session. A raw fetch on purpose: routing through sandboxRpc would
 // recurse back into this module's own headers hook.
-const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unauthorized` | StepUp> => {
+const exchange = async (target: SandboxTarget, bearer: string, signal: AbortSignal): Promise<StoredSession | `unauthorized` | StepUp> => {
     try {
         // allow(contract-paths): the exchange mints the session sandboxRpc's headers hook asks this module for, so the typed client would recurse
         const response = await fetch(`${target.base}/system/session`, {
@@ -144,7 +157,7 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
                 authorization: `Bearer ${bearer}`,
                 ...(target.connectToken !== undefined ? { "x-intentic-connect": target.connectToken } : {}),
             },
-            signal: AbortSignal.timeout(10_000),
+            signal: anySignal(AbortSignal.timeout(10_000), signal),
         });
         if (response.status === 401) {
             return `unauthorized`;
@@ -175,23 +188,23 @@ const daemonAnswers = async (target: SandboxTarget): Promise<boolean> => {
 
 // A hosted sandbox's owner can present a signed platform ticket instead of a Google proof; asked only when no
 // Google proof is in hand, and any refusal falls through to Google. Never stored.
-const ownerTicketFor = async (target: SandboxTarget): Promise<string | undefined> => {
+const ownerTicketFor = async (target: SandboxTarget, signal: AbortSignal): Promise<string | undefined> => {
     if (target.ownerVouched !== true || target.sandboxId === undefined) {
         return undefined;
     }
     try {
         // Loaded here, not at top: the client reads page environment at import, and this module also runs pageless.
         const { apiClient } = await import("../../lib/useApi");
-        return (await apiClient.sandbox.ownerTicket({ sandboxId: target.sandboxId })).ticket;
+        return (await apiClient.sandbox.ownerTicket({ sandboxId: target.sandboxId }, { signal })).ticket;
     } catch {
         return undefined;
     }
 };
 
 // The proof already in hand, free of interruption: a cached Google credential, or a platform ticket on a hosted box.
-const heldProof = async (target: SandboxTarget, background: boolean): Promise<string | undefined> => {
+const heldProof = async (target: SandboxTarget, background: boolean, signal: AbortSignal): Promise<string | undefined> => {
     const held = await getIdToken({ interactive: false });
-    return held !== undefined || background ? held : ownerTicketFor(target);
+    return held !== undefined || background ? held : ownerTicketFor(target, signal);
 };
 
 type SignInChoice = { readonly kind: `google`; readonly idToken: string } | { readonly kind: `session`; readonly session: StoredSession };
@@ -199,8 +212,8 @@ type SignInChoice = { readonly kind: `google`; readonly idToken: string } | { re
 // The sign-in moment for someone with nothing in hand: Google's gate goes up, and a passkey is offered beside it once
 // the daemon says one is registered for this origin; whichever the person answers with settles it, and the other road
 // is closed so nothing stays parked.
-const chooseSignIn = async (target: SandboxTarget): Promise<SignInChoice | undefined> => {
-    if (!(await daemonAnswers(target))) {
+const chooseSignIn = async (target: SandboxTarget, signal: AbortSignal): Promise<SignInChoice | undefined> => {
+    if (!(await daemonAnswers(target)) || signal.aborted) {
         return undefined;
     }
     const viaPasskey = raiseSignIn({ kind: `choose`, target, passkey: false }).then(
@@ -225,8 +238,18 @@ const stepUp = async (target: SandboxTarget, bearer: string, required: PasskeyRe
 
 // Exchanges a Google proof, following the daemon's three answers: a session; a refusal, which kills the proof and
 // earns one interactive retry when someone is waiting; or the passkey step-up, which a background poll never enters.
-const settleExchange = async (target: SandboxTarget, idToken: string, background: boolean, retry: boolean): Promise<StoredSession | undefined> => {
-    const minted = await exchange(target, idToken);
+// A retired establishment follows none of them: it clears no proof and raises no gate.
+const settleExchange = async (
+    target: SandboxTarget,
+    idToken: string,
+    background: boolean,
+    retry: boolean,
+    signal: AbortSignal,
+): Promise<StoredSession | undefined> => {
+    const minted = await exchange(target, idToken, signal);
+    if (signal.aborted) {
+        return undefined;
+    }
     if (minted === `unauthorized`) {
         // A background poll's refusal says nothing about the credential; only a foreground rejection clears it.
         if (background) {
@@ -239,7 +262,7 @@ const settleExchange = async (target: SandboxTarget, idToken: string, background
         // A rejected proof is dead; drop it and let this action drive one interactive retry rather than looping.
         void import("../../app/analytics").then(({ track }) => track(`sandbox_signin_gate`, { reason: `daemon-401` })).catch(() => undefined);
         const replacement = await getIdToken();
-        return replacement === undefined ? undefined : settleExchange(target, replacement, false, false);
+        return replacement === undefined ? undefined : settleExchange(target, replacement, false, false, signal);
     }
     if (`stepUp` in minted) {
         return background ? undefined : stepUp(target, idToken, minted.stepUp);
@@ -248,69 +271,59 @@ const settleExchange = async (target: SandboxTarget, idToken: string, background
 };
 
 // One establishment's road to a session: a held proof exchanged, else (for a foreground caller) the sign-in moment.
-const mintSession = async (target: SandboxTarget, background: boolean): Promise<StoredSession | undefined> => {
-    const held = await heldProof(target, background);
+const mintSession = async (target: SandboxTarget, background: boolean, signal: AbortSignal): Promise<StoredSession | undefined> => {
+    const held = await heldProof(target, background, signal);
+    if (signal.aborted) {
+        return undefined;
+    }
     if (held !== undefined) {
-        return settleExchange(target, held, background, true);
+        return settleExchange(target, held, background, true, signal);
     }
     if (background) {
         return undefined;
     }
-    const chosen = await chooseSignIn(target);
+    const chosen = await chooseSignIn(target, signal);
     if (chosen === undefined) {
         return undefined;
     }
-    return chosen.kind === `session` ? chosen.session : settleExchange(target, chosen.idToken, false, true);
+    return chosen.kind === `session` ? chosen.session : settleExchange(target, chosen.idToken, false, true, signal);
 };
 
 // The sign-in moment: spends a proof (cached, a passkey, or freshly minted Google for a foreground caller) and
 // exchanges it. Network or malformed-response failures are thrown, not swallowed: a daemon that can't mint a session is
-// broken, not just old.
-const establish = (target: SandboxTarget & { readonly sandboxId: string }, background: boolean): Promise<SandboxBearer | undefined> => {
-    const generation = generationOf(target.sandboxId);
-    const pending: Promise<SandboxBearer | undefined> = (async (): Promise<SandboxBearer | undefined> => {
-        const minted = await mintSession(target, background);
-        if (minted === undefined || generationOf(target.sandboxId) !== generation) {
+// broken, not just old. One that was retired answers nothing and holds no cooldown: the sandbox did not fail.
+const establish = async (target: SandboxTarget & { readonly sandboxId: string }, background: boolean): Promise<SandboxBearer | undefined> => {
+    const retired = retirementOf(target.sandboxId);
+    try {
+        const minted = await mintSession(target, background, retired);
+        if (retired.aborted) {
+            return undefined;
+        }
+        if (minted === undefined) {
+            noteEstablishFailure(target.sandboxId);
             return undefined;
         }
         write(target.sandboxId, minted);
         return { token: minted.token, kind: `session` };
-    })()
-        .then((bearer) => {
-            if (bearer === undefined) {
-                noteEstablishFailure(target.sandboxId);
-            }
-            return bearer;
-        })
-        .catch((error: unknown) => {
-            noteEstablishFailure(target.sandboxId);
-            throw error;
-        })
-        .finally(() => {
-            if (inflight.get(target.sandboxId)?.pending === pending) {
-                inflight.delete(target.sandboxId);
-            }
-        });
-    inflight.set(target.sandboxId, { pending, background });
-    return pending;
+    } catch (error) {
+        if (retired.aborted) {
+            return undefined;
+        }
+        noteEstablishFailure(target.sandboxId);
+        throw error;
+    }
 };
 
-const renew = async (target: SandboxTarget & { readonly sandboxId: string }, sessionToken: string): Promise<void> => {
-    if (renewing.has(target.sandboxId)) {
-        return;
-    }
-    const generation = generationOf(target.sandboxId);
-    renewing.add(target.sandboxId);
-    try {
-        const minted = await exchange(target, sessionToken);
-        if (minted !== `unauthorized` && !(`stepUp` in minted) && generation === generationOf(target.sandboxId)) {
+// One renewal per sandbox at a time; a caller meanwhile joins it. A failed renewal changes nothing: the session works
+// until expiry, a real rejection re-establishes next call.
+const renew = (target: SandboxTarget & { readonly sandboxId: string }, sessionToken: string): Promise<void> =>
+    renewals.run(target.sandboxId, async () => {
+        const retired = retirementOf(target.sandboxId);
+        const minted = await exchange(target, sessionToken, retired);
+        if (minted !== `unauthorized` && !(`stepUp` in minted) && !retired.aborted) {
             write(target.sandboxId, minted);
         }
-        // A failed renewal changes nothing: the session works until expiry, a real rejection re-establishes next call.
-    } finally {
-        renewing.delete(target.sandboxId);
-    }
-};
+    });
 
 // The raw Google proof as a bearer, for the one caller that legitimately spends it: loopback, with no sandbox
 // id to key a session by.
@@ -339,14 +352,17 @@ const servedSession = (target: SandboxTarget & { readonly sandboxId: string }): 
 // One establishment per sandbox at a time, and one per cooldown for background readers; an in-flight background
 // attempt never silently answers a foreground press.
 const establishShared = (target: SandboxTarget & { readonly sandboxId: string }, background: boolean): Promise<SandboxBearer | undefined> => {
-    const running = inflight.get(target.sandboxId);
-    if (running !== undefined && (background || !running.background)) {
-        return running.pending;
+    if (!background) {
+        return pressing.run(target.sandboxId, () => establish(target, false));
     }
-    if (background && establishHolds(target.sandboxId)) {
+    const running = establishing(target.sandboxId);
+    if (running !== undefined) {
+        return running;
+    }
+    if (establishHolds(target.sandboxId)) {
         return Promise.resolve(undefined);
     }
-    return establish(target, background);
+    return polling.run(target.sandboxId, () => establish(target, true));
 };
 
 // The bearer for a sandbox: a valid session (renewed in the background when due) or a freshly established one.
@@ -363,10 +379,10 @@ const getSessionToken = async (target = currentSandboxTarget(), options?: { read
 // Cancels a sign-in gate left behind after switching away from the sandbox that raised it, since an establish's
 // mint isn't bound to any one sandbox. Left alone if the sandbox being switched to has its own establish in flight.
 watch(activeSandboxId, (id, previous) => {
-    if (previous === undefined || previous === id || !inflight.has(previous)) {
+    if (previous === undefined || previous === id || establishing(previous) === undefined) {
         return;
     }
-    if (id !== undefined && inflight.has(id)) {
+    if (id !== undefined && establishing(id) !== undefined) {
         return;
     }
     cancelSignIn();
@@ -382,7 +398,7 @@ const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true):
     if (sandboxId === undefined) {
         return;
     }
-    retireGeneration(sandboxId);
+    retire(sandboxId);
     const rest = { ...sessions.value };
     delete rest[sandboxId];
     sessions.value = rest;
@@ -409,9 +425,11 @@ const rejectSessionToken = (target: SandboxTarget, rejected: SandboxBearer): voi
 
 // Sign-out or account deletion: forgets every sandbox's session, alongside useAuth's clearCredential.
 const clearSessions = (broadcast = true): void => {
-    allGeneration += 1;
+    for (const controller of retirements.values()) {
+        controller.abort();
+    }
+    retirements.clear();
     sessions.value = {};
-    renewing.clear();
     for (const key of storedKeys(SESSION_KEY_PREFIX)) {
         removeStoredValue(key);
     }

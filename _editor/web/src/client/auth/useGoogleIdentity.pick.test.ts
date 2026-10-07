@@ -3,7 +3,8 @@
 // ordinary way is handed back the very account the reader just rejected, which is what made the app's switch press
 // land on the same refusal every time.
 import "@intentic/testing/dom";
-import { freshImport } from "@intentic/testing/bun";
+import { within } from "@intentic/base/async";
+import { advanceTimersByTimeAsync, freshImport } from "@intentic/testing/bun";
 
 // Configured client id, overriding bun.setup.ts's empty default, so the storage key below is the real one.
 // Assigned, not `??=`, since the setup file already ran.
@@ -142,5 +143,69 @@ describe(`the sign-in gate's funnel`, () => {
         await flush();
 
         expect(track).toHaveBeenCalledWith(`sandbox_signin_gate`, { reason: `skipped`, mode: `button` });
+    });
+});
+
+// A mint ended before it finished (a sign-out, a switch) used to be told only by a counter its epilogue read: what it
+// had started went on, and spoke for whichever mint came after it.
+describe(`a retired mint`, () => {
+    // Google's script as a page that has not fetched it yet holds it: absent until its tag reports the load.
+    const loadGisLater = (): (() => void) => {
+        const gis = window.google;
+        delete window.google;
+        return () => {
+            window.google = gis;
+            document.querySelector(`script[src^="https://accounts.google.com/gsi/client"]`)?.dispatchEvent(new Event(`load`));
+        };
+    };
+
+    it(`asks Google nothing once the script loads after a sign-out, and its caller gets nothing`, async () => {
+        const load = loadGisLater();
+        const { getIdToken, clearCredential, needsSignIn } = await fresh();
+
+        const minted = getIdToken();
+        await flush();
+        clearCredential();
+        load();
+        await flush();
+
+        expect(await within(minted, 1_000, `still waiting`)).toBeUndefined();
+        expect(prompt).not.toHaveBeenCalled();
+        expect(needsSignIn.value).toBe(false);
+    });
+
+    it(`hands its callers nothing when a switch replaces it before the script loads, and makes no silent attempt`, async () => {
+        const load = loadGisLater();
+        const { getIdToken } = await fresh();
+
+        const first = getIdToken();
+        await flush();
+        const switched = getIdToken({ pick: true });
+        load();
+        await flush();
+
+        expect(await within(first, 1_000, `still waiting`)).toBeUndefined();
+        expect(prompt).not.toHaveBeenCalled();
+        choose({ credential: PICKED });
+        expect(await switched).toBe(PICKED);
+    });
+
+    it(`leaves no silent guard behind to report against the switch that replaced it`, async () => {
+        jest.useFakeTimers();
+        try {
+            const { getIdToken } = await fresh();
+            void getIdToken();
+            await advanceTimersByTimeAsync(0);
+            expect(prompt).toHaveBeenCalledTimes(1);
+
+            void getIdToken({ pick: true });
+            await advanceTimersByTimeAsync(10_000);
+            jest.useRealTimers();
+            await flush();
+
+            expect(track).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

@@ -360,6 +360,82 @@ test("a stop during resolution opens nothing, and a socket a slow resolver still
     await waitFor(() => expect(late[0]?.closed).toEqual({ code: 1000, reason: "stopping" }));
 });
 
+// The redial used to be a bare timer: a link stopped while it waited on the ladder still dialled when the wait ran
+// out (a real socket, closed again only once the resolver had answered), read "connecting" while it did, and held
+// the process open for as long as the rung, fifteen minutes and more in a long outage.
+test("a stop during the wait on the ladder ends the wait: nothing is dialled and nothing is left armed", async () => {
+    jest.useFakeTimers();
+    try {
+        const { link, sockets } = dialling(60_000);
+        await waitFor(() => expect(sockets).toHaveLength(1));
+        sockets[0]?.opens();
+        sockets[0]?.drops(1006);
+        expect(link.state()).toBe("connecting");
+
+        link.stop();
+        await link.done;
+        expect(link.state()).toBe("closed");
+        expect(jest.getTimerCount()).toBe(0);
+        await advanceTimersByTimeAsync(120_000);
+        expect(sockets).toHaveLength(1);
+        expect(link.state()).toBe("closed");
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+// A socket abandoned for its silence can still deliver a frame it had buffered; that is no reason to arm a watchdog
+// for it again, which used to fire later only to find the socket already given up.
+test("a frame from a socket already abandoned arms nothing", async () => {
+    jest.useFakeTimers();
+    try {
+        const { link, sockets } = dialling(60_000);
+        await waitFor(() => expect(sockets).toHaveLength(1));
+        sockets[0]?.opens();
+        await advanceTimersByTimeAsync(SILENCE_MS);
+        expect(sockets[0]?.closed).toEqual({ code: 1000, reason: "no heartbeat" });
+        // The ladder's wait is the one timer now.
+        expect(jest.getTimerCount()).toBe(1);
+        sockets[0]?.says();
+        expect(jest.getTimerCount()).toBe(1);
+        link.stop();
+        await link.done;
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+// A hello that has to be fetched (the webext reads its token from storage) can resolve after the link is gone.
+test("a hello that resolves after a stop sends nothing and announces no connection", async () => {
+    let hand: ((hello: Record<string, unknown>) => void) | undefined;
+    const sockets: FakeSocket[] = [];
+    const said: string[] = [];
+    const link = dialPeer<FakeSocket>({
+        open: async () => {
+            const socket = new FakeSocket();
+            sockets.push(socket);
+            return { socket, said: "connected" };
+        },
+        hello: () =>
+            new Promise((resolve) => {
+                hand = resolve;
+            }),
+        attach: () => undefined,
+        backoff: ladder(),
+        silenceMs: SILENCE_MS,
+        log: (message) => void said.push(message),
+        revoked: () => undefined,
+    });
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    sockets[0]?.opens();
+    link.stop();
+    await link.done;
+    hand?.({ type: "hello" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(sockets[0]?.sent).toEqual([]);
+    expect(said).toEqual([]);
+});
+
 test("a pairing that is gone by the next attempt ends the loop rather than dialling nowhere", async () => {
     let pairings = 1;
     const sockets: FakeSocket[] = [];

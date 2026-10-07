@@ -1155,6 +1155,62 @@ describe(`Conversation`, () => {
         ]);
     });
 
+    // A closed tab is done with this conversation: the look for a queued turn must not attach a stream after it.
+    it(`stops looking for the queued turn once the tab closes`, async () => {
+        const conversation = new Conversation(`c1`);
+        let controller!: ReadableStreamDefaultController<AttachFrame>;
+        const body = new ReadableStream<AttachFrame>({
+            start(c) {
+                controller = c;
+                c.enqueue(frameOf(head()));
+            },
+        });
+        let attaches = 0;
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.attach`) {
+                attaches += 1;
+                return Promise.resolve(body);
+            }
+            if (procedure === `agent.run`) {
+                return Promise.resolve({ delivered: `started`, run: `r1` });
+            }
+            return Promise.resolve({ ok: true });
+        });
+
+        const turn = conversation.turn.send(`start`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        // Something waits in the daemon's queue, so the turn's end sets this window looking for the one it starts.
+        conversation.queue.value = { items: [{ id: `m-2`, text: `and the docs`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 1 };
+        controller.enqueue(frameOf({ kind: `end` }));
+        controller.close();
+        await turn;
+        // The tab closes before the first look (FOLLOW_MS after the end) fires.
+        conversation.turn.abort();
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        expect(attaches).toBe(1);
+    });
+
+    // Two probes can be out at once; a send must stop both, not only the one assigned last.
+    it(`aborts every reattach probe in flight when a message is sent`, async () => {
+        const conversation = new Conversation(`c1`);
+        const probes: AbortSignal[] = [];
+        daemon.mockImplementation((procedure: string, _input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.attach` && options?.signal !== undefined && probes.length < 2) {
+                probes.push(options.signal);
+                return new Promise<never>(() => undefined);
+            }
+            // The send itself waits on the daemon for the rest of the test.
+            return new Promise<never>(() => undefined);
+        });
+
+        void conversation.turn.reattach();
+        void conversation.turn.reattach();
+        await waitFor(() => expect(probes).toHaveLength(2));
+        void conversation.turn.send(`start`, settings);
+        expect(probes.map((signal) => signal.aborted)).toEqual([true, true]);
+        conversation.turn.abort();
+    });
+
     // The daemon joins what waits into one turn; each message leaves this window as it is typed, files and all.
     it(`sends each message said mid-turn to the daemon as it is typed, with its files`, async () => {
         const conversation = new Conversation(`c1`);

@@ -6,6 +6,8 @@
 // decline with a note wakes it with the note. A bare decline, or no answer at all, wakes nobody, as a resumed turn treats
 // a bare deny (turn-resume.ts).
 
+import { unlessAborted } from "@intentic/base/async";
+
 export interface HeldOutcome {
     readonly decision: "approved" | "declined" | "unanswered";
     // The owner's own words on a decline, when they gave any.
@@ -36,18 +38,6 @@ export interface HeldCards {
 export type HeldCardWake = (conversationId: string, prompt: string) => Promise<void>;
 
 const STOPPED = Symbol("stopped");
-
-const stoppedBy = (signal: AbortSignal | undefined): Promise<typeof STOPPED> =>
-    new Promise((resolve) => {
-        if (signal === undefined) {
-            return;
-        }
-        if (signal.aborted) {
-            resolve(STOPPED);
-            return;
-        }
-        signal.addEventListener("abort", () => resolve(STOPPED), { once: true });
-    });
 
 // A fence longer than any run of backticks in the text, so a command quoting backticks cannot close it early.
 const fenced = (text: string): string => {
@@ -100,7 +90,7 @@ export const createHeldCards = (wake: HeldCardWake): HeldCards => {
                 return;
             }
             const settled = Promise.all(cards.map((card) => card.settled));
-            const outcomes = await Promise.race([settled, stoppedBy(signal)]);
+            const outcomes = await unlessAborted(settled, signal, STOPPED);
             for (const card of cards) {
                 drop(conversationId, card);
             }

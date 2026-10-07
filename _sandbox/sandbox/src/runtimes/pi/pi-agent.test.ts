@@ -17,7 +17,9 @@ const cards = parkedCards(memoryFleet().conversations);
 
 const SESSION_FILE = "/auth/pi/sessions/s1.jsonl";
 
-type Responder = PiResponse | ((command: Record<string, unknown>) => PiResponse);
+// A function responder sees the request's signal and may answer later, or never (a Pi that took the command and went
+// quiet).
+type Responder = PiResponse | ((command: Record<string, unknown>, signal?: AbortSignal) => PiResponse | Promise<PiResponse>);
 
 interface FakePi {
     readonly spawn: PiSpawn;
@@ -56,7 +58,12 @@ const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses:
         spawn: (_config, _cwd, spawnedHandlers) => {
             handlers = spawnedHandlers;
             return {
-                request: async (command) => {
+                request: async (command, signal) => {
+                    // The production transport's contract (pi-rpc): a request whose signal has already aborted is never
+                    // written.
+                    if (signal?.aborted === true) {
+                        throw signal.reason;
+                    }
                     sent.push(command);
                     if (exited) {
                         // The production transport's answer once the process is gone (pi-rpc settleExit).
@@ -64,7 +71,7 @@ const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses:
                     }
                     const type = command["type"] as string;
                     const responder = responses[type] ?? defaults[type] ?? { success: false, error: `unscripted command ${type}` };
-                    const response = typeof responder === "function" ? responder(command) : responder;
+                    const response = typeof responder === "function" ? await responder(command, signal) : responder;
                     if (type === "prompt" && response.success) {
                         const script = prompts[Math.min(promptCount, prompts.length - 1)] ?? [];
                         promptCount += 1;
@@ -432,6 +439,50 @@ test("an abort sends Pi's abort and ends the turn without a spurious error", asy
     setTimeout(() => controller.abort(), 10);
     const events = await turn;
     expect(pi.sent).toContainEqual({ type: "abort" });
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
+// Pi answers a prompt only once its preflight (auth, a compaction, an extension's hooks) is through, and starts the run
+// right after; its `abort` cannot reach a run that has not started. A prompt nobody waits for any more must not become
+// a run nobody reads.
+test("a prompt Pi never answers is given up at the deadline: the request is told to stop, and Pi is aborted and killed", async () => {
+    jest.useFakeTimers();
+    try {
+        let promptSignal: AbortSignal | undefined;
+        const { promise: prompted, resolve: notePrompt } = Promise.withResolvers<void>();
+        const pi = fakePi([], {
+            prompt: (_command, signal) => {
+                promptSignal = signal;
+                notePrompt();
+                return new Promise<PiResponse>(() => {});
+            },
+        });
+        const turn = collect(createPiAgent(pi.spawn)(CONFIG, request()));
+        await prompted;
+        await advanceTimersByTimeAsync(15_000);
+        jest.useRealTimers();
+        const events = await turn;
+        expect(events.find((event) => event.kind === "error")).toMatchObject({ message: expect.stringContaining("did not answer the prompt within 15s") });
+        expect(promptSignal?.aborted).toBe(true);
+        expect(pi.sent).toContainEqual({ type: "abort" });
+        expect(pi.killed()).toBe(true);
+        expect(events.at(-1)).toEqual({ kind: "done" });
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a turn stopped while setup is still asking Pi never sends its prompt, and ends without an error", async () => {
+    const controller = new AbortController();
+    const pi = fakePi([[{ type: "agent_settled" }]], {
+        get_state: () => {
+            controller.abort();
+            return { success: true, data: { sessionFile: SESSION_FILE } };
+        },
+    });
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request({ signal: controller.signal })));
+    expect(pi.sent.filter((command) => command["type"] === "prompt")).toEqual([]);
     expect(events.some((event) => event.kind === "error")).toBe(false);
     expect(events.at(-1)).toEqual({ kind: "done" });
 });

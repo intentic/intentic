@@ -1,4 +1,5 @@
 import type { Logger } from "pino";
+import { anySignal, Latest, sleep } from "@intentic/base/async";
 import { containerDrift } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
@@ -52,12 +53,17 @@ const wording = (publicUrl: string) => ({
 });
 
 // One round trip to our own public address, over plain fetch since this must verify TLS like a real browser would.
-// Every failure is worded for the setup page it lands on, and for the lane this sandbox is actually on.
-export const probeSelf = async (publicUrl: string, expectedId: string | undefined): Promise<{ ok: true } | { ok: false; detail: string }> => {
+// Every failure is worded for the setup page it lands on, and for the lane this sandbox is actually on. `signal` is the
+// caller's stop, which cuts the probe as its own timeout does.
+export const probeSelf = async (
+    publicUrl: string,
+    expectedId: string | undefined,
+    signal?: AbortSignal,
+): Promise<{ ok: true } | { ok: false; detail: string }> => {
     const says = wording(publicUrl);
     let response: Response;
     try {
-        response = await fetch(`${publicUrl}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        response = await fetch(`${publicUrl}/health`, { signal: anySignal(AbortSignal.timeout(PROBE_TIMEOUT_MS), signal) });
     } catch (error) {
         const timedOut = error instanceof DOMException && error.name === "TimeoutError";
         return { ok: false, detail: timedOut ? says.timedOut : says.unreachable };
@@ -81,11 +87,11 @@ export const createReachReporter = (
     bootOf: () => BootTracker | undefined = () => undefined,
     cgroup: () => Promise<CgroupReading> = () => readCgroup(),
 ): ReachReporter => {
-    let timer: NodeJS.Timeout | undefined;
-    let deadline = 0;
-    let backoff = 3_000;
     let status: ReachState = { state: "off" };
     let unsubscribeBoot: (() => void) | undefined;
+    // From start() to stop(). A stop aborts the probe in flight and ends the wait between probes, and the loop reads it
+    // after every step, so nothing is probed, reported or scheduled once it has happened.
+    const watching = new Latest();
     const publicUrl = config.sandbox.publicUrl;
     const expectedId = sandboxIdFromToken(config.connectToken);
 
@@ -145,24 +151,34 @@ export const createReachReporter = (
         });
     };
 
-    const attempt = async (): Promise<void> => {
-        const verdict = await probeSelf(publicUrl, expectedId);
-        if (verdict.ok) {
-            logger.info({ publicUrl }, "sandbox is reachable at its public address");
-            status = { state: "reachable", at: Date.now() };
-            await tell("reachable");
-            return; // Proved: go quiet, like the announce does after its ack.
+    // Probes until its own address answers or the give-up window is spent, backing off between misses.
+    const watch = async (signal: AbortSignal): Promise<void> => {
+        const deadline = Date.now() + REACH_GIVE_UP_MS;
+        let backoff = 3_000;
+        // Says "checking" before the first probe resolves, so the page knows a daemon exists and is testing itself.
+        await tell("checking", undefined, true);
+        while (!signal.aborted) {
+            const verdict = await probeSelf(publicUrl, expectedId, signal);
+            if (signal.aborted) {
+                return; // a probe cut by the stop says nothing about the address
+            }
+            if (verdict.ok) {
+                logger.info({ publicUrl }, "sandbox is reachable at its public address");
+                status = { state: "reachable", at: Date.now() };
+                await tell("reachable");
+                return; // Proved: go quiet, like the announce does after its ack.
+            }
+            const spent = Date.now() >= deadline;
+            logger.warn({ publicUrl, detail: verdict.detail }, "sandbox is not reachable at its public address yet");
+            status = { state: "unreachable", detail: verdict.detail, retrying: !spent, at: Date.now() };
+            // retrying stays true until spent: only the last post promotes a quiet wait into a standing card.
+            await tell("unreachable", verdict.detail, !spent);
+            if (spent) {
+                return;
+            }
+            await sleep(backoff, { signal });
+            backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
         }
-        const spent = Date.now() >= deadline;
-        logger.warn({ publicUrl, detail: verdict.detail }, "sandbox is not reachable at its public address yet");
-        status = { state: "unreachable", detail: verdict.detail, retrying: !spent, at: Date.now() };
-        // retrying stays true until spent: only the last post promotes a quiet wait into a standing card.
-        await tell("unreachable", verdict.detail, !spent);
-        if (spent) {
-            return;
-        }
-        timer = setTimeout(() => void attempt(), backoff);
-        backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
     };
 
     return {
@@ -178,14 +194,12 @@ export const createReachReporter = (
                 void tell("unreachable", detail, false);
                 return;
             }
-            deadline = Date.now() + REACH_GIVE_UP_MS;
             status = { state: "checking", at: Date.now() };
             reportWhenConverged();
-            // Says "checking" before the first probe resolves, so the page knows a daemon exists and is testing itself.
-            void tell("checking", undefined, true).then(() => attempt());
+            void watch(watching.next());
         },
         stop: () => {
-            clearTimeout(timer);
+            watching.abort();
             unsubscribeBoot?.();
             unsubscribeBoot = undefined;
         },

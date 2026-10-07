@@ -11,6 +11,7 @@ import type {
     SpawnedProcess,
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
+import { whenAborted } from "@intentic/base/async";
 import { refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -898,12 +899,9 @@ export async function* runAgent(
     queryFn: QueryFn = defaultQuery,
     usageFetch: typeof fetch = fetch,
 ): AsyncGenerator<AgentEvent> {
+    // The SDK's own, not the turn's signal: it takes a controller and aborts it itself when its query closes, which must
+    // not stop the turn. The turn's signal is linked into it where the SDK starts, below.
     const abortController = new AbortController();
-    if (request.signal.aborted) {
-        abortController.abort();
-    } else {
-        request.signal.addEventListener("abort", () => abortController.abort(), { once: true });
-    }
 
     // Pins which installed Claude Code copy this turn uses, so the query fn, tool servers and CLI binary all match.
     await refreshClaudeSdk();
@@ -1016,6 +1014,10 @@ export async function* runAgent(
                   return steering.push(request.spec.prompt);
               };
 
+    // Linked here and not where the controller is made: nothing reads it before the SDK starts on the next line (a turn
+    // stopped earlier still reaches it aborted), and from here every way out passes the `finally` that unlinks it, so
+    // the turn's signal keeps no listener once the SDK has settled.
+    const unlink = whenAborted(request.signal, () => abortController.abort());
     const pump = (async () => {
         try {
             for await (const event of streamSdk({
@@ -1082,6 +1084,7 @@ export async function* runAgent(
         yield* queue;
     } finally {
         await pump;
+        unlink();
     }
     yield { kind: "done" };
 }

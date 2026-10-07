@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed, ref, watch } from "vue";
+import { anySignal, Latest, sleep } from "@intentic/base/async";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import { readIntenticLines } from "../../lib/intenticStream";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
@@ -33,8 +34,10 @@ export function useApplyProgress() {
     const reattaching = ref(false);
     // Whether this run's tmux session was seen alive; absence reads as "finished" only after presence.
     let sawSession = false;
-    // Invalidates stale attach loops after the run they belonged to ended.
-    let attachGeneration = 0;
+    // The events stream of the run being followed. The run ending, a newer run, or the view going away aborts it at once,
+    // its fetch and its reattach wait with it, rather than on whatever line it happened to read next.
+    const following = new Latest();
+    onScopeDispose(() => following.dispose());
 
     const error = computed(() => startError.value ?? state.value.error);
     const nodes = computed(() => [...state.value.nodes.values()]);
@@ -57,7 +60,7 @@ export function useApplyProgress() {
 
     const finishRun = (): void => {
         sawSession = false;
-        attachGeneration += 1;
+        following.abort();
         reattaching.value = false;
         applying.value = false;
         refreshWorld();
@@ -88,24 +91,23 @@ export function useApplyProgress() {
     // Tails the durable apply events into reduced state, replaying from {kind:"start"}. The terminal exit ends
     // the run; a dropped/stalled stream visibly reattaches, safe since the log is durable and the reducer resets on
     // replay.
-    const attach = async (): Promise<void> => {
-        const generation = attachGeneration;
-        const controller = new AbortController();
+    const attach = async (run: AbortSignal): Promise<void> => {
+        const stalled = new AbortController();
         let stall: ReturnType<typeof setTimeout> | undefined;
         const armStall = (): void => {
             clearTimeout(stall);
-            stall = setTimeout(() => controller.abort(new DOMException(`events stream stalled`, `TimeoutError`)), STALL_MS);
+            stall = setTimeout(() => stalled.abort(new DOMException(`events stream stalled`, `TimeoutError`)), STALL_MS);
         };
         try {
-            const lines = await sandboxRpc.intentic.applyEvents(undefined, { signal: controller.signal }).catch((failure: unknown) => {
+            const lines = await sandboxRpc.intentic.applyEvents(undefined, { signal: anySignal(run, stalled.signal) }).catch((failure: unknown) => {
                 throw failure instanceof SandboxHttpError ? new Error(`events stream unavailable (${failure.status})`) : failure;
             });
             reattaching.value = false;
             armStall();
             for await (const line of readIntenticLines(lines)) {
-                if (generation !== attachGeneration) {
-                    controller.abort();
-                    return; // a newer run took over: this loop is stale.
+                // A line already read when the run was let go of speaks for nobody.
+                if (run.aborted) {
+                    return;
                 }
                 armStall();
                 state.value = reduceApplyLine(state.value, line);
@@ -117,13 +119,14 @@ export function useApplyProgress() {
             // Clean stream end without a terminal exit: the job was SIGKILLed. Let the poll confirm and finish.
         } catch {
             // Stream dropped or stalled: reattach while the run is still live, visibly, never silently.
-            if (generation === attachGeneration && applying.value) {
-                reattaching.value = true;
-                setTimeout(() => {
-                    if (generation === attachGeneration && applying.value) {
-                        void attach();
-                    }
-                }, REATTACH_DELAY_MS);
+            clearTimeout(stall);
+            if (run.aborted || !applying.value) {
+                return;
+            }
+            reattaching.value = true;
+            await sleep(REATTACH_DELAY_MS, { signal: run });
+            if (!run.aborted && applying.value) {
+                void attach(run);
             }
         } finally {
             clearTimeout(stall);
@@ -139,7 +142,7 @@ export function useApplyProgress() {
         state.value = initialApplyState();
         startError.value = undefined;
         applying.value = true;
-        attachGeneration += 1;
+        const run = following.next();
         try {
             await sandboxRpc.intentic.apply();
         } catch (err) {
@@ -148,7 +151,7 @@ export function useApplyProgress() {
             return;
         }
         openFocused(APPLY_SESSION);
-        void attach();
+        void attach(run);
         watchApply();
     };
 
@@ -161,8 +164,7 @@ export function useApplyProgress() {
         });
         if (listed?.some((session) => session.name === APPLY_SESSION && session.running)) {
             applying.value = true;
-            attachGeneration += 1;
-            void attach();
+            void attach(following.next());
             watchApply();
             sawSession = true;
         }

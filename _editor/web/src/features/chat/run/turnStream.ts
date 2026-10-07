@@ -138,7 +138,9 @@ export const followRun = async (
             if (`end` in opening) {
                 return opening.end;
             }
-            await sleep(ladder.next());
+            // A stop during the wait ends it there and then (the loop's head reads the abort), rather than after up to
+            // the ladder's cap of a backoff nobody is waiting for.
+            await sleep(ladder.next(), { signal: controller.signal });
             continue;
         }
         const { frames } = opening;
@@ -169,7 +171,7 @@ export const followRun = async (
             if (idleRounds >= 3) {
                 return attached;
             }
-            await sleep(ladder.next());
+            await sleep(ladder.next(), { signal: controller.signal });
         } else {
             idleRounds = 0;
         }

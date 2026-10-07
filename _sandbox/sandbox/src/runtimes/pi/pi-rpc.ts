@@ -1,6 +1,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import type { Readable, Writable } from "node:stream";
+import { whenAborted } from "@intentic/base/async";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import { parseEnvBlock, splitCommand } from "../acp/acp-spawn.js";
 import { spawnAs } from "../../workload/workload-class.js";
@@ -31,9 +32,12 @@ export interface PiProcessHandlers {
 }
 
 export interface PiProcess {
-    // Send a correlated command and await its response line. Rejects only when the process is gone; a refused command
-    // is an ordinary {success: false} response, never a throw.
-    readonly request: (command: Record<string, unknown>) => Promise<PiResponse>;
+    // Send a correlated command and await its response line. A refused command, or one sent to a process that is gone,
+    // is an ordinary {success: false} response, never a throw. Rejects only when `signal` aborts, with its reason: the
+    // wait ends and its id is forgotten, so an answer that comes later is dropped like any line nobody asked for. Pi has
+    // no per-command cancel, so a command already written may still take effect on its side; one whose signal had
+    // aborted before the call is never written.
+    readonly request: (command: Record<string, unknown>, signal?: AbortSignal) => Promise<PiResponse>;
     // Fire-and-forget write (extension_ui_response has no response line of its own).
     readonly send: (command: Record<string, unknown>) => void;
     readonly alive: () => boolean;
@@ -136,14 +140,27 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
         };
 
         return {
-            request: (command) =>
-                new Promise<PiResponse>((resolve) => {
+            request: (command, signal) =>
+                new Promise<PiResponse>((resolve, reject) => {
+                    if (signal?.aborted === true) {
+                        reject(signal.reason);
+                        return;
+                    }
                     if (dead) {
                         resolve({ success: false, error: "the pi process exited" });
                         return;
                     }
                     const id = `req-${++nextId}`;
-                    pending.set(id, resolve);
+                    // A request given up on takes its resolver with it, so `pending` holds only waits someone is still on;
+                    // without this a timed-out one sat there for the life of the process.
+                    const unwatch = whenAborted(signal, () => {
+                        pending.delete(id);
+                        reject(signal?.reason);
+                    });
+                    pending.set(id, (response) => {
+                        unwatch();
+                        resolve(response);
+                    });
                     send({ ...command, id });
                 }),
             send,

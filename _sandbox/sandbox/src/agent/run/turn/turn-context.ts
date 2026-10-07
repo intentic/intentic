@@ -1,3 +1,4 @@
+import { TimeoutError, withDeadline } from "@intentic/base/async";
 import type { QueryRequest, ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 
@@ -230,21 +231,20 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
     if (evidence === undefined) {
         return { skipped: "ineligible", durationMs: durationMs() };
     }
-    const controller = new AbortController();
     // Cheap classes first, and ONE deadline over all of them: outline and a literal grep are SQLite and rg, while the
     // fused query runs the semantic scan and the cross-encoder. Ordering this way means a slow `q` costs itself and not
     // the lookups that would have answered anyway.
-    const attempt = (async () => {
+    const attempt = async (signal: AbortSignal) => {
         const done: Array<{ lookup: Lookup; text: string; paths: string[] }> = [];
         let building = false;
         let threw: unknown;
         let ran = 0;
         for (const lookup of lookupsFor(evidence)) {
-            if (controller.signal.aborted) {
+            if (signal.aborted) {
                 break;
             }
             ran += 1;
-            const outcome = await deps.iq.run(lookup.request, controller.signal).catch((error: unknown) => {
+            const outcome = await deps.iq.run(lookup.request, signal).catch((error: unknown) => {
                 // One class declining (a path the engine rejects, a pattern it will not take) must not cost the others
                 // their answers; only every class throwing means retrieval itself is broken.
                 threw ??= error;
@@ -260,19 +260,16 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
             }
         }
         return { done, building, brokeThroughout: threw !== undefined && done.length === 0 && ran > 0, error: threw };
-    })();
-    // Raced rather than left to the abort alone: the signal only reaches the query's cancellable half (the rg child);
-    // the model stages run on another thread and ignore it, so a stuck query would hang without this.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => {
-            controller.abort();
-            resolve(undefined);
-        }, RETRIEVAL_DEADLINE_MS);
+    };
+    // A deadline that also races, not the abort alone: the signal only reaches the query's cancellable half (the rg
+    // child); the model stages run on another thread and ignore it, so a stuck query would hang without the race. Every
+    // lookup's own failure is caught above, so the deadline is the one rejection to read as a skip.
+    const outcome = await withDeadline(attempt, RETRIEVAL_DEADLINE_MS).catch((error: unknown) => {
+        if (error instanceof TimeoutError) {
+            return undefined;
+        }
+        throw error;
     });
-    const outcome = await Promise.race([attempt, deadline]);
-    clearTimeout(timer);
-    controller.abort();
     // Exit 1 is grep's "no hits" convention; a `building` index only covers part of the workspace. Logged at debug, not
     // warn: none of this is a fault.
     const skip = (skipped: TurnContextSkip): TurnContextOutcome => {

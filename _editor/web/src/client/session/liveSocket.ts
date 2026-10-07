@@ -1,4 +1,4 @@
-import { createBackoff } from "@intentic/base/async";
+import { createBackoff, Latest } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { effectScope, onScopeDispose, type Ref, watch } from "vue";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -44,11 +44,13 @@ export interface LiveChannel<Out> {
 }
 
 export interface LiveSocketOptions<Address, Out> {
-    // Where to dial, undefined while the sandbox is unreachable or nobody is signed in; a throw retries like a drop.
-    readonly mint: () => Promise<Address | undefined>;
+    // Where to dial, undefined while the sandbox is unreachable or nobody is signed in; a throw retries like a drop. The
+    // signal aborts once this dial is superseded or the socket closed, so its request can be cancelled, not just ignored.
+    readonly mint: (signal: AbortSignal) => Promise<Address | undefined>;
     readonly open: (address: Address, link: LiveLink) => LiveChannel<Out>;
-    // A permit held for the life of one channel (the terminal's stream budget), handed back once it closes.
-    readonly lease?: () => Promise<(() => void) | undefined>;
+    // A permit held for the life of one channel (the terminal's stream budget), handed back once it closes. The signal is
+    // mint's: a wait for a permit nobody needs any more can stop queueing.
+    readonly lease?: (signal: AbortSignal) => Promise<(() => void) | undefined>;
     readonly onOpen?: () => void;
     // Always an Error: a thrown non-Error arrives wrapped, its text as the message.
     readonly onMintFailed?: (error: Error) => void;
@@ -88,18 +90,16 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
     const ladder = createBackoff({ floorMs: timing.retryMs, capMs: timing.maxRetryMs, stableMs: timing.stableMs });
     let channel: LiveChannel<Out> | undefined;
     let retry: number | undefined;
-    let ended = true;
-    // Bumped on every fresh dial and every close, so a mint or lease still in flight for the one before stands down.
-    let generation = 0;
+    // From connect() until the next connect(), end() or close(); its retries share it. Aborted there, so a mint or lease
+    // still in flight is told to stop, and a straggler's late open or close is nobody's.
+    const session = new Latest();
     let ponged = false;
 
-    const stale = (dialled: number): boolean => ended || dialled !== generation;
-
-    const schedule = (dialled: number, uptimeMs = 0): void => {
-        retry = window.setTimeout(() => void dial(dialled), ladder.next(uptimeMs));
+    const schedule = (signal: AbortSignal, uptimeMs = 0): void => {
+        retry = window.setTimeout(() => void dial(signal), ladder.next(uptimeMs));
     };
 
-    const watchChannel = (dialled: number, release: (() => void) | undefined): LiveLink & { mine?: LiveChannel<Out> } => {
+    const watchChannel = (signal: AbortSignal, release: (() => void) | undefined): LiveLink & { mine?: LiveChannel<Out> } => {
         let ping: number | undefined;
         let openedAt = 0;
         let heardAt = 0;
@@ -107,7 +107,7 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
         const link: LiveLink & { mine?: LiveChannel<Out> } = {
             current: () => link.mine !== undefined && channel === link.mine,
             opened: () => {
-                if (ended || channel !== link.mine) {
+                if (signal.aborted || channel !== link.mine) {
                     link.mine?.close();
                     return;
                 }
@@ -142,53 +142,55 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
                     released = true;
                     release?.();
                 }
-                if (stale(dialled) || channel !== link.mine) {
+                if (signal.aborted || channel !== link.mine) {
                     return;
                 }
                 options.onDrop?.(code, reason);
-                if (!stale(dialled)) {
-                    schedule(dialled, openedAt === 0 ? 0 : Date.now() - openedAt);
+                if (!signal.aborted) {
+                    schedule(signal, openedAt === 0 ? 0 : Date.now() - openedAt);
                 }
             },
         };
         return link;
     };
 
-    const dial = async (dialled: number): Promise<void> => {
+    // Re-reads the signal after each await even though mint and lease are handed it: one may not honour it, and its
+    // callbacks may end the socket themselves.
+    const dial = async (signal: AbortSignal): Promise<void> => {
         window.clearTimeout(retry);
         retry = undefined;
-        if (stale(dialled)) {
+        if (signal.aborted) {
             return;
         }
         let address: Address | undefined;
         try {
-            address = await options.mint();
+            address = await options.mint(signal);
         } catch (error) {
-            if (stale(dialled)) {
+            if (signal.aborted) {
                 return;
             }
             options.onMintFailed?.(error instanceof Error ? error : new Error(errorMessage(error)));
-            if (!stale(dialled)) {
-                schedule(dialled);
+            if (!signal.aborted) {
+                schedule(signal);
             }
             return;
         }
-        if (stale(dialled)) {
+        if (signal.aborted) {
             return;
         }
         if (address === undefined) {
             options.onUnreachable?.();
-            if (!stale(dialled)) {
-                schedule(dialled);
+            if (!signal.aborted) {
+                schedule(signal);
             }
             return;
         }
-        const release = options.lease === undefined ? undefined : await options.lease();
-        if (stale(dialled)) {
+        const release = options.lease === undefined ? undefined : await options.lease(signal);
+        if (signal.aborted) {
             release?.();
             return;
         }
-        const link = watchChannel(dialled, release);
+        const link = watchChannel(signal, release);
         const mine = options.open(address, link);
         link.mine = mine;
         // Replaces any straggler; its handlers see they are no longer current and stay silent.
@@ -196,17 +198,17 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
         channel = mine;
     };
 
+    // The session is aborted before this, so the old channel's close, however soon it answers, is nobody's.
     const letGo = (): void => {
         window.clearTimeout(retry);
         retry = undefined;
-        generation += 1;
         const old = channel;
         channel = undefined;
         old?.close();
     };
 
     const close = (): void => {
-        ended = true;
+        session.abort();
         letGo();
     };
 
@@ -215,22 +217,23 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
     const scope = effectScope(true);
     scope.run(() =>
         watch(options.reachable ?? sandboxReachable, (up) => {
-            if (up && retry !== undefined) {
+            const current = session.current;
+            if (up && retry !== undefined && current !== undefined) {
                 ladder.reset();
-                void dial(generation);
+                void dial(current);
             }
         }),
     );
 
     return {
         connect: () => {
+            const signal = session.next();
             letGo();
-            ended = false;
             ladder.reset();
-            void dial(generation);
+            void dial(signal);
         },
         end: () => {
-            ended = true;
+            session.abort();
             window.clearTimeout(retry);
             retry = undefined;
         },

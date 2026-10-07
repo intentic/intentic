@@ -1,5 +1,26 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, serialLock, sleep, SingleFlight, watchQueue, whenAborted, withTimeout } from "./async.js";
+import {
+    anySignal,
+    Coalescer,
+    createBackoff,
+    Delayer,
+    keyedLock,
+    Latest,
+    narrate,
+    pollFor,
+    pollUntil,
+    retry,
+    serialLock,
+    sleep,
+    SingleFlight,
+    TimeoutError,
+    unlessAborted,
+    watchQueue,
+    whenAborted,
+    withDeadline,
+    within,
+    withTimeout,
+} from "./async.js";
 
 beforeEach(() => {
     jest.useFakeTimers();
@@ -592,5 +613,313 @@ describe("watchQueue", () => {
         watch.push("landed");
         expect(await first).toEqual({ done: false, value: "landed" });
         await reader.return(undefined);
+    });
+});
+
+describe(`SingleFlight after dispose`, () => {
+    it(`keeps a run started after a dispose joinable when the run from before it settles`, async () => {
+        const flight = new SingleFlight<string, string>();
+        const { promise: before, resolve: finishBefore } = Promise.withResolvers<string>();
+        void flight.run(`k`, () => before);
+        flight.dispose();
+        const { promise: after } = Promise.withResolvers<string>();
+        const current = flight.run(`k`, () => after);
+        finishBefore(`old`);
+        await before;
+        await Promise.resolve();
+        expect(flight.joined(`k`)).toBe(current);
+    });
+});
+
+describe(`Latest`, () => {
+    it(`aborts the attempt before when the next one starts, and only that one`, () => {
+        const latest = new Latest();
+        const first = latest.next();
+        const second = latest.next();
+        expect(first.aborted).toBe(true);
+        expect(second.aborted).toBe(false);
+        expect(latest.isCurrent(first)).toBe(false);
+        expect(latest.isCurrent(second)).toBe(true);
+        expect(latest.current).toBe(second);
+    });
+
+    it(`lets a finished attempt go without aborting it, and leaves a newer one alone`, () => {
+        const latest = new Latest();
+        const first = latest.next();
+        const second = latest.next();
+        latest.done(first);
+        expect(latest.current).toBe(second);
+        latest.done(second);
+        expect(second.aborted).toBe(false);
+        expect(latest.current).toBeUndefined();
+        expect(latest.isCurrent(second)).toBe(false);
+    });
+
+    it(`follows a parent signal, and stops the current attempt on abort and dispose`, () => {
+        const latest = new Latest();
+        const parent = new AbortController();
+        const child = latest.next(parent.signal);
+        parent.abort();
+        expect(child.aborted).toBe(true);
+        expect(latest.isCurrent(child)).toBe(false);
+
+        const next = latest.next();
+        latest.dispose();
+        expect(next.aborted).toBe(true);
+        expect(latest.current).toBeUndefined();
+    });
+});
+
+describe(`anySignal`, () => {
+    it(`aborts with the first of its signals, with that signal's reason, skipping undefined ones`, () => {
+        const a = new AbortController();
+        const b = new AbortController();
+        const linked = anySignal(a.signal, undefined, b.signal);
+        b.abort(`because`);
+        expect(linked.aborted).toBe(true);
+        expect(linked.reason).toBe(`because`);
+    });
+
+    it(`hands back a lone signal as itself, and none as one that never aborts`, () => {
+        const only = new AbortController().signal;
+        expect(anySignal(undefined, only)).toBe(only);
+        expect(anySignal().aborted).toBe(false);
+    });
+});
+
+describe(`retry`, () => {
+    it(`tries again after each wait until the task resolves`, async () => {
+        const task = jest.fn(async (attempt: number) => {
+            if (attempt < 3) {
+                throw new Error(`blip ${attempt}`);
+            }
+            return `ok`;
+        });
+        const result = retry(task, { attempts: 5, delayMs: (attempt) => attempt * 100 });
+        await advanceTimersByTimeAsync(100);
+        expect(task).toHaveBeenCalledTimes(2);
+        await advanceTimersByTimeAsync(199);
+        expect(task).toHaveBeenCalledTimes(2);
+        await advanceTimersByTimeAsync(1);
+        await expect(result).resolves.toBe(`ok`);
+        expect(task).toHaveBeenCalledTimes(3);
+    });
+
+    it(`rethrows the last failure when the tries run out`, async () => {
+        const result = retry(
+            async (attempt) => {
+                throw new Error(`blip ${attempt}`);
+            },
+            { attempts: 2, delayMs: () => 10 },
+        ).catch((error: unknown) => error);
+        await advanceTimersByTimeAsync(10);
+        expect(await result).toMatchObject({ message: `blip 2` });
+    });
+
+    it(`stops in the wait when the signal aborts, rejecting with the abort's reason as fetch would`, async () => {
+        const controller = new AbortController();
+        const task = jest.fn(async () => {
+            throw new Error(`blip`);
+        });
+        const result = retry(task, { attempts: Number.POSITIVE_INFINITY, delayMs: () => 5_000, signal: controller.signal }).catch(
+            (error: unknown) => error,
+        );
+        await advanceTimersByTimeAsync(10);
+        controller.abort();
+        await advanceTimersByTimeAsync(0);
+        const error = await result;
+        expect(error).toBeInstanceOf(DOMException);
+        expect(error).toMatchObject({ name: `AbortError` });
+        expect(task).toHaveBeenCalledTimes(1);
+    });
+
+    it(`rethrows the try's own failure when the signal aborted during it`, async () => {
+        const controller = new AbortController();
+        const result = retry(
+            async () => {
+                controller.abort();
+                throw new Error(`cut off`);
+            },
+            { attempts: 5, delayMs: () => 10, signal: controller.signal },
+        );
+        await expect(result).rejects.toThrow(`cut off`);
+    });
+
+    it(`draws its waits from a backoff ladder`, async () => {
+        const backoff = createBackoff({ floorMs: 100, capMs: 1_000, random: () => 1 });
+        const task = jest.fn(async (attempt: number) => {
+            if (attempt < 3) {
+                throw new Error(`blip`);
+            }
+            return attempt;
+        });
+        const result = retry(task, { attempts: 3, delayMs: () => backoff.next() });
+        await advanceTimersByTimeAsync(200);
+        expect(task).toHaveBeenCalledTimes(2);
+        await advanceTimersByTimeAsync(400);
+        await expect(result).resolves.toBe(3);
+    });
+});
+
+describe(`pollFor`, () => {
+    it(`probes now, then every interval, until a probe answers with a value`, async () => {
+        let answers = 0;
+        const probe = jest.fn(async () => (++answers >= 3 ? `landed` : undefined));
+        const outcome = pollFor(probe, { intervalMs: 50, until: Date.now() + 10_000 });
+        expect(probe).toHaveBeenCalledTimes(1);
+        await advanceTimersByTimeAsync(100);
+        await expect(outcome).resolves.toEqual({ kind: `found`, value: `landed` });
+    });
+
+    it(`waits an interval before the first probe when asked to`, async () => {
+        const probe = jest.fn(async () => `now`);
+        const outcome = pollFor(probe, { intervalMs: 3_000, until: Date.now() + 60_000, delayFirst: true });
+        await advanceTimersByTimeAsync(2_999);
+        expect(probe).not.toHaveBeenCalled();
+        await advanceTimersByTimeAsync(1);
+        await expect(outcome).resolves.toEqual({ kind: `found`, value: `now` });
+    });
+
+    it(`expires at the deadline itself, not on the first tick after it`, async () => {
+        const outcome = pollFor(async () => undefined, { intervalMs: 3_000, until: Date.now() + 4_000 });
+        let settled = false;
+        void outcome.then(() => {
+            settled = true;
+        });
+        await advanceTimersByTimeAsync(3_999);
+        expect(settled).toBe(false);
+        await advanceTimersByTimeAsync(1);
+        await expect(outcome).resolves.toEqual({ kind: `expired` });
+    });
+
+    it(`ends the moment its signal aborts, and drops an answer that arrives after`, async () => {
+        const controller = new AbortController();
+        const waiting = pollFor(async () => undefined, { intervalMs: 3_000, until: Date.now() + 60_000, signal: controller.signal });
+        await advanceTimersByTimeAsync(10);
+        controller.abort();
+        await advanceTimersByTimeAsync(0);
+        await expect(waiting).resolves.toEqual({ kind: `aborted` });
+
+        const late = new AbortController();
+        const { promise: answer, resolve } = Promise.withResolvers<string>();
+        const reading = pollFor(() => answer, { intervalMs: 3_000, until: Date.now() + 60_000, signal: late.signal });
+        late.abort();
+        resolve(`too late`);
+        await expect(reading).resolves.toEqual({ kind: `aborted` });
+    });
+
+    it(`polls on through a throwing probe when told to, and propagates one otherwise`, async () => {
+        let calls = 0;
+        const outcome = pollFor(
+            async () => {
+                calls += 1;
+                if (calls === 1) {
+                    throw new Error(`blip`);
+                }
+                return `ok`;
+            },
+            { intervalMs: 50, until: Date.now() + 10_000, retryOnError: true },
+        );
+        await advanceTimersByTimeAsync(50);
+        await expect(outcome).resolves.toEqual({ kind: `found`, value: `ok` });
+        expect(calls).toBe(2);
+
+        await expect(
+            pollFor(
+                async () => {
+                    throw new Error(`gone`);
+                },
+                { intervalMs: 50, until: Date.now() + 10_000 },
+            ),
+        ).rejects.toThrow(`gone`);
+    });
+});
+
+describe(`withDeadline`, () => {
+    it(`answers with the task when it settles in time`, async () => {
+        await expect(withDeadline(async () => `ok`, 1_000)).resolves.toBe(`ok`);
+    });
+
+    it(`aborts the task's signal at the deadline and rejects with a TimeoutError`, async () => {
+        let seen: AbortSignal | undefined;
+        const result = withDeadline(
+            (signal) => {
+                seen = signal;
+                return new Promise<never>(() => undefined);
+            },
+            100,
+            { message: `no answer` },
+        ).catch((error: unknown) => error);
+        await advanceTimersByTimeAsync(99);
+        expect(seen?.aborted).toBe(false);
+        await advanceTimersByTimeAsync(1);
+        const error = await result;
+        expect(error).toBeInstanceOf(TimeoutError);
+        expect(error).toMatchObject({ message: `no answer` });
+        expect(seen?.aborted).toBe(true);
+        expect(seen?.reason).toBe(error);
+    });
+
+    it(`stops with the caller's abort, even for a task that ignores its signal`, async () => {
+        const controller = new AbortController();
+        let seen: AbortSignal | undefined;
+        const result = withDeadline(
+            (signal) => {
+                seen = signal;
+                return new Promise<never>(() => undefined);
+            },
+            10_000,
+            { signal: controller.signal },
+        ).catch((error: unknown) => error);
+        controller.abort(`stopped`);
+        expect(await result).toBe(`stopped`);
+        expect(seen?.aborted).toBe(true);
+    });
+});
+
+describe(`within`, () => {
+    it(`answers with the promise when it settles first, and the fallback once the time passes`, async () => {
+        await expect(within(Promise.resolve(`ok`), 1_000, `late`)).resolves.toBe(`ok`);
+        const waiting = within(new Promise<never>(() => undefined), 100, `late`);
+        await advanceTimersByTimeAsync(100);
+        await expect(waiting).resolves.toBe(`late`);
+    });
+
+    it(`leaves no timer behind when the promise wins`, async () => {
+        const cleared = jest.spyOn(globalThis, `clearTimeout`);
+        try {
+            await within(Promise.resolve(1), 5_000, 0);
+            expect(cleared).toHaveBeenCalledTimes(1);
+        } finally {
+            cleared.mockRestore();
+        }
+    });
+});
+
+describe(`unlessAborted`, () => {
+    it(`answers with the promise when it settles first, and the fallback the moment the signal aborts`, async () => {
+        const controller = new AbortController();
+        await expect(unlessAborted(Promise.resolve(`ok`), controller.signal, `stopped`)).resolves.toBe(`ok`);
+        const waiting = unlessAborted(new Promise<never>(() => undefined), controller.signal, `stopped`);
+        controller.abort();
+        await expect(waiting).resolves.toBe(`stopped`);
+        await expect(unlessAborted(new Promise<never>(() => undefined), controller.signal, `already`)).resolves.toBe(`already`);
+    });
+
+    it(`waits on the promise alone with no signal, and passes its rejection on`, async () => {
+        await expect(unlessAborted(Promise.resolve(1), undefined, 0)).resolves.toBe(1);
+        await expect(unlessAborted(Promise.reject(new Error(`broke`)), new AbortController().signal, 0)).rejects.toThrow(`broke`);
+    });
+
+    it(`leaves no listener on the signal however the race ends`, async () => {
+        const controller = new AbortController();
+        const added = jest.spyOn(controller.signal, `addEventListener`);
+        const removed = jest.spyOn(controller.signal, `removeEventListener`);
+        for (let read = 0; read < 3; read += 1) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one read after another, as a stream loop does
+            await unlessAborted(Promise.resolve(read), controller.signal, -1);
+        }
+        expect(added).toHaveBeenCalledTimes(3);
+        expect(removed).toHaveBeenCalledTimes(3);
     });
 });

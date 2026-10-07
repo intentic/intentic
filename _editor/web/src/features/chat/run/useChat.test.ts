@@ -339,10 +339,89 @@ describe(`useChat provider reconciliation`, () => {
         await advanceTimersByTimeAsync(3_000);
         expect(chat.nativeConnectFlow.value).toBeUndefined();
         expect(chat.managedAccounts.value).toEqual([existing, added]);
-        expect(daemon.mock.calls.filter(([procedure]) => procedure === `accounts.status`)).toEqual([
+        const reads = daemon.mock.calls.filter(([procedure]) => procedure === `accounts.status`);
+        expect(reads.map(([procedure, input]) => [procedure, input])).toEqual([
             [`accounts.status`, { provider: `claude`, handshake: `st-c` }],
             [`accounts.status`, { provider: `claude`, handshake: `st-c` }],
         ]);
+        // Each read rides the attempt's own signal, so a cancel can take back the one in flight.
+        expect(reads.every(([, , options]) => options?.signal instanceof AbortSignal)).toBe(true);
+    });
+
+    // A read still out when the sign-in is put down must not land it, or fail it, a moment later: it is cancelled.
+    it(`cancels the status read in flight when a watched sign-in is put down`, async () => {
+        jest.useFakeTimers();
+        resetSandboxScope();
+        const chat = useChat();
+        chat.setManagedProvider(`claude`);
+        let read: AbortSignal | undefined;
+        daemonAnswers((procedure, _input, options) => {
+            if (procedure === `accounts.start`) {
+                return Promise.resolve({
+                    url: `https://claude.ai/oauth/authorize`,
+                    code: ``,
+                    state: `st-d`,
+                    flow: `redirect`,
+                    variant: ``,
+                    handshake: `st-d`,
+                    expiresAt: Date.now() + 900_000,
+                    catchers: [{ kind: `device`, label: `rog` }],
+                });
+            }
+            if (procedure === `accounts.status`) {
+                read = options?.signal;
+                return new Promise<never>(() => undefined);
+            }
+            if (procedure === `accounts.cancel`) {
+                return Promise.resolve({ ok: true });
+            }
+            return undefined;
+        });
+        mockConnections({ accounts: () => [] });
+
+        await chat.startConnect();
+        await advanceTimersByTimeAsync(3_000);
+        expect(read?.aborted).toBe(false);
+        chat.cancelConnect();
+        expect(read?.aborted).toBe(true);
+        expect(chat.nativeConnectFlow.value).toBeUndefined();
+    });
+
+    // The daemon's `expiresAt` is when the attempt dies, so that is when the card says so: not on the poll's next tick.
+    it(`says a watched sign-in expired at its deadline, not on the poll tick after it`, async () => {
+        jest.useFakeTimers();
+        resetSandboxScope();
+        const chat = useChat();
+        chat.setManagedProvider(`claude`);
+        daemonAnswers((procedure) => {
+            if (procedure === `accounts.start`) {
+                return Promise.resolve({
+                    url: `https://claude.ai/oauth/authorize`,
+                    code: ``,
+                    state: `st-e`,
+                    flow: `redirect`,
+                    variant: ``,
+                    handshake: `st-e`,
+                    expiresAt: Date.now() + 4_000,
+                    catchers: [{ kind: `device`, label: `rog` }],
+                });
+            }
+            if (procedure === `accounts.status`) {
+                return Promise.resolve({ status: `wait` });
+            }
+            if (procedure === `accounts.cancel`) {
+                return Promise.resolve({ ok: true });
+            }
+            return undefined;
+        });
+        mockConnections({ accounts: () => [] });
+
+        await chat.startConnect();
+        await advanceTimersByTimeAsync(3_999);
+        expect(chat.nativeConnectFlow.value?.handshake).toBe(`st-e`);
+        await advanceTimersByTimeAsync(1);
+        expect(chat.nativeConnectFlow.value).toBeUndefined();
+        expect(chat.signInFailure.value?.provider).toBe(`claude`);
     });
 
     it(`leaves the Google sign-in up when the account read that should show the new row didn't answer`, async () => {

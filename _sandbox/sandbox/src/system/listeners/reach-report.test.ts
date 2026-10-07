@@ -144,6 +144,40 @@ describe("createReachReporter", () => {
         expect(posted).toHaveLength(settled);
     });
 
+    /* WHAT A STOP LEAVES BEHIND. stop() used to clear only the timer between probes, so a stop that landed while the
+     * "checking" post or a probe was in flight still probed, reported and scheduled the next probe after it. */
+    it("probes nothing after a stop that lands while it is still saying it is checking", async () => {
+        const probe = jest.fn(async () => new Response("nope", { status: 404 }));
+        stubGlobal("fetch", probe);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
+        reporter.start({ by: "tunnel" });
+        reporter.stop();
+        await advanceTimersByTimeAsync(10 * 60_000);
+
+        expect(probe).not.toHaveBeenCalled();
+        expect(posted.map((post) => post.body)).toEqual([expect.objectContaining({ reach: "checking" })]);
+    });
+
+    it("cuts the probe in flight at a stop, and reports and schedules nothing after it", async () => {
+        const signals: AbortSignal[] = [];
+        // A tunnel that accepts the connection and never answers: only an abort ends this probe.
+        stubGlobal("fetch", (_url: string, init: { signal: AbortSignal }) => {
+            signals.push(init.signal);
+            return new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
+        });
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
+        reporter.start({ by: "tunnel" });
+        await settle();
+        expect(signals).toHaveLength(1);
+
+        reporter.stop();
+        expect(signals[0]?.aborted).toBe(true);
+        await advanceTimersByTimeAsync(10 * 60_000);
+        expect(signals).toHaveLength(1);
+        expect(posted.map((post) => post.body)).toEqual([expect.objectContaining({ reach: "checking" })]);
+        expect(reporter.status().state).toBe("checking");
+    });
+
     it("is off until started: a headless run has no address to probe", () => {
         expect(createReachReporter(config, logger, undefined, noCgroup).status()).toEqual({ state: "off" });
     });

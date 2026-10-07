@@ -1,3 +1,5 @@
+import { anySignal, sleep, whenAborted } from "@intentic/base/async";
+
 // The one outbound socket a peer (machine agent, webext, runner) holds to its sandbox: hello carries the enrollment
 // token in the frame, then the link is pure oRPC. Reconnects on backoff after any drop except a revoked enrollment
 // (code 1008), which never retries.
@@ -85,17 +87,13 @@ export interface PeerLink {
 }
 
 export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink => {
+    // The loop's whole life: every way it ends (a stop, a revocation, a pairing gone) aborts this, and everything the
+    // loop arms hangs off it, so nothing it left behind can dial, wait or fire once it is over. A stopped link that
+    // kept a timer armed is a process the runtime keeps alive for a socket nobody holds any more.
     const stopping = new AbortController();
+    const done = new Promise<void>((resolve) => void whenAborted(stopping.signal, () => resolve()));
     let socket: S | undefined;
-    let waiting = false;
     let openedAt: number | undefined;
-    // The live attempt's watchdog, reachable from `stop`: a stopped link that left a timer armed is a process
-    // the runtime keeps alive for a socket nobody holds any more.
-    let disarmWatchdog: () => void = () => undefined;
-    let resolveDone: () => void = () => undefined;
-    const done = new Promise<void>((resolve) => {
-        resolveDone = resolve;
-    });
     // Consecutive attempts that have failed since this link was last open, and when the loop last complained out
     // loud: between them they are the whole of the quiet rule above.
     let failures = 0;
@@ -124,9 +122,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
     };
 
     const open = async (): Promise<void> => {
-        waiting = true;
         const attempt = await spec.open(stopping.signal);
-        waiting = false;
         // Aborted while resolving: nothing to open, `done` settled; a socket handed over late is closed, not dialled.
         if (stopping.signal.aborted) {
             attempt?.socket.close(1000, "stopping");
@@ -134,35 +130,26 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         }
         if (attempt === undefined) {
             stopping.abort();
-            resolveDone();
             return;
         }
         const ws = attempt.socket;
         socket = ws;
 
+        // This socket's own life, ended by its drop or by the loop's. Its watchdog is cleared with it, so no way out of
+        // an attempt leaves a timer armed, and whatever the socket still emits afterwards speaks for nothing.
+        const dropped = new AbortController();
+        const live = anySignal(dropped.signal, stopping.signal);
         let watchdog: ReturnType<typeof setTimeout> | undefined;
-        const disarm = (): void => {
-            if (watchdog !== undefined) {
-                clearTimeout(watchdog);
-                watchdog = undefined;
-            }
-        };
-        disarmWatchdog = disarm;
+        whenAborted(live, () => clearTimeout(watchdog));
 
-        /* An attempt drop is recorded when either endpoint notices the closed far end. */
-        let dropped = false;
+        /* An attempt drop is recorded when either endpoint notices the closed far end; the first to notice ends it. */
         const drop = (said: string): void => {
-            if (dropped) {
-                return;
+            if (live.aborted) {
+                return; // noticed already, or the link was stopped and owes the ladder nothing
             }
-            dropped = true;
-            disarm();
+            dropped.abort();
             if (socket === ws) {
                 socket = undefined;
-            }
-            if (stopping.signal.aborted) {
-                resolveDone();
-                return;
             }
             const rung = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
             openedAt = undefined;
@@ -172,12 +159,15 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             // lockstep every link that entered the long outage together.
             const delay = failures >= LONG_OUTAGE_ATTEMPTS ? LONG_OUTAGE_MS + rung : rung;
             complain(said, delay);
-            waiting = true;
-            setTimeout(() => void open(), delay);
+            // The wait hangs off the stop: a link stopped during it is done at once and never dials again.
+            void sleep(delay, { signal: stopping.signal }).then(() => (stopping.signal.aborted ? undefined : open()));
         };
 
         const arm = (): void => {
-            disarm();
+            clearTimeout(watchdog);
+            if (live.aborted) {
+                return; // a frame from a socket already abandoned proves nothing about the link
+            }
             watchdog = setTimeout(() => {
                 /* ABANDONED, not closed politely. A close frame sent to an end that is gone waits on a reply. */
                 ws.close(1000, "no heartbeat");
@@ -191,7 +181,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         ws.addEventListener("message", arm);
 
         ws.addEventListener("open", () => {
-            if (dropped) {
+            if (live.aborted) {
                 return; // abandoned mid-connect: this socket is already closed and its replacement is on the ladder
             }
             openedAt = Date.now();
@@ -203,6 +193,10 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             arm();
             spec.attach(ws);
             const send = (hello: Record<string, unknown>): void => {
+                // A hello that resolves after its socket dropped, or the link stopped, has no connection to announce.
+                if (live.aborted) {
+                    return;
+                }
                 ws.send(JSON.stringify(hello));
                 if (attempt.said !== undefined) {
                     spec.log(attempt.said);
@@ -220,13 +214,10 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         ws.addEventListener("close", (event) => {
             /* A revocation is answered here rather than through `drop`: it is the one close that ends the loop. */
             if (event.code === PEER_UNAUTHORIZED) {
-                dropped = true;
-                disarm();
                 if (socket === ws) {
                     socket = undefined;
                 }
                 stopping.abort();
-                resolveDone();
                 spec.revoked();
                 return;
             }
@@ -249,15 +240,15 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         done,
         stop: (reason = "stopping") => {
             stopping.abort();
-            waiting = false;
-            disarmWatchdog();
             // Forgotten before the close frame arrives, so `state` reads closed the moment the peer asked.
             const held = socket;
             socket = undefined;
             held?.close(1000, reason);
-            resolveDone();
         },
-        state: () => (socket?.readyState === OPEN ? "open" : socket !== undefined || waiting ? "connecting" : "closed"),
+        // Short of an open socket, a loop still running is "connecting" (a dial resolving, a handshake, a wait on the
+        // ladder) and a finished one is closed: read off the loop itself, not a flag kept beside it that a redial
+        // firing after the stop could set back.
+        state: () => (socket?.readyState === OPEN ? "open" : stopping.signal.aborted ? "closed" : "connecting"),
         outage: () => (failingSince === undefined ? undefined : { failures, since: failingSince }),
     };
 };

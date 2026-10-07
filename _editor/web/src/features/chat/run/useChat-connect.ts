@@ -1,3 +1,4 @@
+import { Latest, pollFor } from "@intentic/base/async";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed } from "vue";
 import { messageOr } from "@intentic/ui/async";
@@ -68,16 +69,19 @@ const landSignIn = (provider: AgentProvider): void => {
 // Routed row key, namespaced away from the provider id: native and translator accounts of the same provider
 // are separate connections. `name` picks one subscription; omitted, the provider's sign-in.
 export const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
-// The poll behind a subscription sign-in; a switch abandons the sign-in with the sandbox it was connecting.
-const translatorPollTimer = sandboxValue<ReturnType<typeof setTimeout> | undefined>(
-    () => undefined,
-    (timer) => clearTimeout(timer),
+// How often a sign-in's poll asks whether it landed.
+const SIGN_IN_POLL_MS = 3_000;
+
+// The poll behind a subscription sign-in, one attempt at a time; a switch abandons it with the sandbox it was connecting.
+// Aborting it cancels the status read in flight too, so an abandoned attempt can neither land nor fail on screen.
+const translatorPoll = sandboxValue(
+    () => new Latest(),
+    (poll) => poll.abort(),
 );
 
-// Takes down a subscription sign-in and the poll behind it; the timer is cleared too, so a tick can't fire
-// against an attempt that is already finished or abandoned.
+// Takes down a subscription sign-in and the poll behind it.
 const settleTranslator = (): void => {
-    clearTimeout(translatorPollTimer.value);
+    translatorPoll.value.abort();
     translatorConnectFlow.value = undefined;
     connectSent.value = false;
 };
@@ -85,44 +89,37 @@ const settleTranslator = (): void => {
 // Provider's own account label for the sign-in-expired sentence, not a hardcoded default.
 const translatorProviderLabel = (target: KeyedProvider): string => providerSpec(target)?.accountLabel ?? target;
 
-// Polls this exact attempt: reconnecting an existing identity replaces its credential without increasing the account count.
-const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Promise<void> => {
-    if (translatorConnectFlow.value?.provider !== target) {
+// Polls this exact attempt until it lands, fails or expires: reconnecting an existing identity replaces its credential
+// without increasing the account count.
+const pollTranslator = async (target: KeyedProvider, state: string, until: number): Promise<void> => {
+    const signal = translatorPoll.value.next();
+    const outcome = await pollFor(
+        async () => {
+            const result = await sandboxRpc.translator.status({ provider: target, state }, { signal });
+            return result.status === `wait` ? undefined : result;
+        },
+        // A failed read is a blip (sandbox or translator); the handshake asks again, bounded by its deadline.
+        { intervalMs: SIGN_IN_POLL_MS, until, signal, delayFirst: true, retryOnError: true },
+    );
+    if (outcome.kind === `aborted`) {
         return;
     }
-    if (Date.now() > deadline) {
+    if (outcome.kind === `expired`) {
         failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: translatorProviderLabel(target) }));
         settleTranslator();
         return;
     }
-    const flow = translatorConnectFlow.value;
-    if (flow?.provider !== target) {
+    if (outcome.value.status === `error`) {
+        settleTranslator();
+        failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: outcome.value.error }));
         return;
     }
-    try {
-        const result = await sandboxRpc.translator.status({ provider: target, state: flow.state });
-        if (translatorConnectFlow.value !== flow) {
-            return;
-        }
-        if (result.status === "ok") {
-            await refreshTranslatorAccounts();
-            if (translatorConnectFlow.value === flow) {
-                translatorConnectFlow.value = undefined;
-                error.value = null;
-                landSignIn(target);
-            }
-            return;
-        }
-        if (result.status === "error") {
-            settleTranslator();
-            failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: result.error }));
-            return;
-        }
-        // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
-    } catch {
-        // Transient (sandbox or translator blip); keep polling until the deadline.
+    await refreshTranslatorAccounts();
+    if (!signal.aborted) {
+        settleTranslator();
+        error.value = null;
+        landSignIn(target);
     }
-    translatorPollTimer.value = setTimeout(() => void pollTranslatorOnce(target, deadline), 3_000);
 };
 
 // Starts a subscription login for a routed provider; returns a sign-in URL and, for some providers, a
@@ -145,7 +142,7 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
             return;
         }
         translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
-        translatorPollTimer.value = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
+        void pollTranslator(target, started.state, Date.now() + CODEX_POLL_DEADLINE_MS);
     } catch (caught) {
         failSignIn(target, messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`)));
     } finally {
@@ -229,18 +226,15 @@ export const connectLabel = sandboxRef(() => ``);
 
 // Device-code sign-in expires after 15 minutes; stop polling past it.
 const CODEX_POLL_DEADLINE_MS = 15 * 60 * 1000;
-// Same, for a native sign-in's poll.
-const nativePollTimer = sandboxValue<ReturnType<typeof setTimeout> | undefined>(
-    () => undefined,
-    (timer) => clearTimeout(timer),
+// The poll behind a native sign-in, as translatorPoll is for a subscription's.
+const nativePoll = sandboxValue(
+    () => new Latest(),
+    (poll) => poll.abort(),
 );
 
-// Clears the poll timer and connect UI state only; for a sign-in that finished, there's nothing else to abandon.
+// Stops the poll and clears the connect UI state only; for a sign-in that finished, there's nothing else to abandon.
 const settleConnect = (): void => {
-    if (nativePollTimer.value !== undefined) {
-        clearTimeout(nativePollTimer.value);
-        nativePollTimer.value = undefined;
-    }
+    nativePoll.value.abort();
     nativeConnectFlow.value = undefined;
     connectLabel.value = ``;
     connectSent.value = false;
@@ -283,88 +277,73 @@ export const landedSince = (before: AccountsBefore, now: readonly OauthAccount[]
             (before.stale.has(account.id) && !unservable(account)),
     );
 
-// One poll tick for sign-ins that finish out of band: checks whether an account landed since the sign-in started (paste
-// finishes via completeConnect instead). Checked against the flow object it started for, so a restarted handshake
-// retires old ticks.
-const pollNativeOnce = async (target: AgentProvider, deadline: number, before: AccountsBefore): Promise<void> => {
-    const flow = nativeConnectFlow.value;
-    if (flow?.provider !== target) {
-        return;
-    }
-    if (Date.now() > deadline) {
-        cancelConnect();
-        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }));
-        return;
-    }
-    try {
-        const connectedAccounts = await refreshAccounts(target);
-        // By handshake, not object identity: redeeming a grant re-stamps the same attempt, and a tick that read that
-        // as a replacement would retire the very poll the credential has to land through.
-        if (nativeConnectFlow.value?.handshake !== flow.handshake) {
-            return;
-        }
-        if (landedSince(before, connectedAccounts)) {
-            settleConnect();
-            error.value = null;
-            landSignIn(target);
-            // Load the catalog now so the picker is populated immediately, not after the next reselect.
-            void loadProviderModels(target);
-            return;
-        }
-        // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
-    } catch {
-        // Transient (sandbox blip); keep polling until the deadline.
-    }
-    if (nativeConnectFlow.value?.handshake !== flow.handshake) {
-        return;
-    }
-    nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, deadline, before), 3000);
+// Ends a native sign-in's poll that ran out of time, as the daemon's own `expiresAt` says the attempt has.
+const expireNative = (target: AgentProvider): void => {
+    cancelConnect();
+    failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }));
 };
 
-// One poll tick for a sign-in the daemon keeps a record of (every one somebody of the owner's is watching the landing
-// for): reads the attempt itself, so adding a second account is not mistaken for done because the first exists.
-const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Promise<void> => {
-    const flow = nativeConnectFlow.value;
-    if (flow?.provider !== target) {
+// Polls a sign-in that finishes out of band by the account list: done once an account landed since the sign-in started
+// (paste finishes via completeConnect instead). Redeeming a grant re-stamps the same attempt without touching this poll,
+// which the credential still has to land through; only a settle, a cancel or a new start ends it.
+const pollNativeList = async (target: AgentProvider, until: number, before: AccountsBefore): Promise<void> => {
+    const signal = nativePoll.value.next();
+    const outcome = await pollFor(async () => (landedSince(before, await refreshAccounts(target)) ? true : undefined), {
+        intervalMs: SIGN_IN_POLL_MS,
+        until,
+        signal,
+        delayFirst: true,
+        // A failed read is a blip (a sandbox restart); the handshake asks again, bounded by its deadline.
+        retryOnError: true,
+    });
+    if (outcome.kind === `expired`) {
+        expireNative(target);
         return;
     }
-    if (Date.now() > deadline) {
-        cancelConnect();
-        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }));
+    if (outcome.kind === `found`) {
+        settleConnect();
+        error.value = null;
+        landSignIn(target);
+        // Load the catalog now so the picker is populated immediately, not after the next reselect.
+        void loadProviderModels(target);
+    }
+};
+
+// Polls a sign-in the daemon keeps a record of (every one somebody of the owner's is watching the landing for): reads the
+// attempt itself, so adding a second account is not mistaken for done because the first exists.
+const pollNativeStatus = async (target: AgentProvider, handshake: string, until: number): Promise<void> => {
+    const signal = nativePoll.value.next();
+    const outcome = await pollFor(
+        async () => {
+            // SAFETY: a native flow is only ever started by startConnect, through the accounts door, for a native provider.
+            const result = await sandboxRpc.accounts.status({ provider: target as NativeProvider, handshake }, { signal });
+            return result.status === `wait` ? undefined : result;
+        },
+        // A failed read is a blip (sandbox or translator); the handshake asks again, bounded by its deadline.
+        { intervalMs: SIGN_IN_POLL_MS, until, signal, delayFirst: true, retryOnError: true },
+    );
+    if (outcome.kind === `aborted`) {
         return;
     }
-    try {
-        // SAFETY: a native flow is only ever started by startConnect, through the accounts door, for a native provider.
-        const result = await sandboxRpc.accounts.status({ provider: target as NativeProvider, handshake: flow.handshake });
-        if (nativeConnectFlow.value?.handshake !== flow.handshake) {
-            return;
-        }
-        if (result.status === `ok`) {
-            if (result.account !== undefined) {
-                addAccount(target, result.account);
-            }
-            await refreshAccounts(target);
-            if (nativeConnectFlow.value?.handshake === flow.handshake) {
-                settleConnect();
-                error.value = null;
-                landSignIn(target);
-            }
-            void loadProviderModels(target);
-            return;
-        }
-        if (result.status === `error`) {
-            settleConnect();
-            failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: result.error }));
-            return;
-        }
-        // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
-    } catch {
-        // Transient (sandbox blip); keep polling until the deadline.
-    }
-    if (nativeConnectFlow.value?.handshake !== flow.handshake) {
+    if (outcome.kind === `expired`) {
+        expireNative(target);
         return;
     }
-    nativePollTimer.value = setTimeout(() => void pollNativeStatusOnce(target, deadline), 3000);
+    if (outcome.value.status === `error`) {
+        settleConnect();
+        failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: outcome.value.error }));
+        return;
+    }
+    if (outcome.value.account !== undefined) {
+        addAccount(target, outcome.value.account);
+    }
+    await refreshAccounts(target);
+    if (!signal.aborted) {
+        settleConnect();
+        error.value = null;
+        landSignIn(target);
+    }
+    void loadProviderModels(target);
 };
 
 // Step 1 of a native connect: Claude mints an authorize URL + PKCE challenge; Grok mints a device code and
@@ -419,9 +398,9 @@ export const startConnect = async (variant?: string): Promise<void> => {
         // paste-back never polls, and every other shape watches the account list. Both until the daemon's own
         // `expiresAt`, not a local deadline, since that's the attempt that actually expires.
         if ((body.catchers ?? []).length > 0) {
-            nativePollTimer.value = setTimeout(() => void pollNativeStatusOnce(target, body.expiresAt), 3000);
+            void pollNativeStatus(target, body.handshake, body.expiresAt);
         } else if (body.flow !== `paste`) {
-            nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, body.expiresAt, before), 3000);
+            void pollNativeList(target, body.expiresAt, before);
         }
     } finally {
         accountBusy.value = undefined;

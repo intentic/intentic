@@ -229,3 +229,66 @@ test("a disposed socket dials nothing more, even when the sandbox comes back", a
 
     expect({ dialled: dialled.length, closes: dialled[0]!.closes, retrying: socket.retrying() }).toEqual({ dialled: 1, closes: 1, retrying: false });
 });
+
+test("a mint still in flight is aborted when the socket dials afresh or closes, and its failure is nobody's", async () => {
+    const minting: AbortSignal[] = [];
+    let failures = 0;
+    const { live: socket, dialled } = harness({
+        // Answers only by failing once told to stop, as a cancelled ticket request does.
+        mint: (signal) => {
+            minting.push(signal);
+            return new Promise((_resolve, reject) => signal.addEventListener(`abort`, () => reject(new Error(`aborted`)), { once: true }));
+        },
+        onMintFailed: () => (failures += 1),
+    });
+    live.push(socket);
+    socket.connect();
+    socket.connect();
+    expect(minting.map((signal) => signal.aborted)).toEqual([true, false]);
+
+    socket.close();
+    await new Promise((resolve) => setTimeout(resolve, FAST.maxRetryMs * 3));
+
+    expect({ aborted: minting.map((signal) => signal.aborted), failures, dialled: dialled.length, retrying: socket.retrying() }).toEqual({
+        aborted: [true, true],
+        failures: 0,
+        dialled: 0,
+        retrying: false,
+    });
+});
+
+test("a lease still being waited for is given up when the socket closes, and nothing is dialled on it", async () => {
+    const leasing: AbortSignal[] = [];
+    const { live: socket, dialled } = harness({
+        // A permit pool that is full: the wait ends only when told to stop, with nothing granted.
+        lease: (signal) => {
+            leasing.push(signal);
+            return new Promise((resolve) => signal.addEventListener(`abort`, () => resolve(undefined), { once: true }));
+        },
+    });
+    live.push(socket);
+    socket.connect();
+    await waitFor(() => expect(leasing).toHaveLength(1));
+
+    socket.close();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect({ aborted: leasing[0]!.aborted, dialled: dialled.length }).toEqual({ aborted: true, dialled: 0 });
+});
+
+test("a retry dials under the same signal as the dial it follows, live until the socket is let go", async () => {
+    const minting: AbortSignal[] = [];
+    const { live: socket, dialled } = harness({
+        mint: async (signal) => {
+            minting.push(signal);
+            return minting.length === 1 ? undefined : `wss://sandbox.test/live`;
+        },
+    });
+    live.push(socket);
+    socket.connect();
+    await waitFor(() => expect(dialled).toHaveLength(1));
+
+    expect({ same: minting[0] === minting[1], aborted: minting[1]!.aborted }).toEqual({ same: true, aborted: false });
+    socket.end();
+    expect(minting[1]!.aborted).toBe(true);
+});

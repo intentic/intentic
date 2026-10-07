@@ -4,6 +4,12 @@ import type { IDisposable } from "./lifecycle.js";
 // Delayer restarts on every call (a search box); Coalescer opens on the first call and holds the window (a watcher that
 // never goes quiet); SingleFlight shares one run per key; keyedLock queues them. Plus sleep, withTimeout, pollUntil
 // and createBackoff below. All are disposables: a pending timer is a live handle.
+//
+// Cancellation is an AbortSignal throughout, never a flag or a counter compared after an await: Latest hands each new
+// attempt a signal and aborts the one before it, anySignal links a caller's signal into one of your own, retry and
+// pollFor stop waiting the moment theirs aborts, and withDeadline tells the work to stop when its time is up rather
+// than only ceasing to wait for it. `within` and `unlessAborted` are the soft waits: they stop waiting (at a time, at
+// an abort) and leave the work running.
 
 // Trailing debounce: `trigger` restarts the wait, so the task runs once, `delay` after the last call; every caller in
 // the window shares that result. Superseded callers are not rejected, only the effect was requested.
@@ -126,7 +132,10 @@ export class SingleFlight<K, T> implements IDisposable {
             return existing;
         }
         const started = task().finally(() => {
-            this.running.delete(key);
+            // Only its own entry: a run started after a dispose holds the key now, and must stay joinable.
+            if (this.running.get(key) === started) {
+                this.running.delete(key);
+            }
         });
         this.running.set(key, started);
         return started;
@@ -218,6 +227,226 @@ export const withTimeout = async <T>(promise: Promise<T>, ms: number, message = 
         ]);
     } finally {
         clearTimeout(timer);
+    }
+};
+
+// Raised by withDeadline when the time runs out, and handed to the work as its signal's reason, so a catch can tell a
+// deadline from a stop or a failure of the work's own.
+export class TimeoutError extends Error {
+    override readonly name = `TimeoutError`;
+}
+
+// Runs `task` with a signal that aborts when `ms` pass or the caller's own signal aborts, and rejects at that moment
+// even if the task ignores its signal. Unlike withTimeout, the work is told to stop (a fetch is cancelled, a stream
+// closed), not just no longer waited for. Rejects with a TimeoutError at the deadline, with the caller's abort reason
+// on a stop.
+export const withDeadline = async <T>(
+    task: (signal: AbortSignal) => Promise<T>,
+    ms: number,
+    options?: { readonly signal?: AbortSignal | undefined; readonly message?: string },
+): Promise<T> => {
+    const deadline = new AbortController();
+    const signal = anySignal(deadline.signal, options?.signal);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let unsubscribe = (): void => {};
+    const cut = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+            const error = new TimeoutError(options?.message ?? `timed out after ${ms}ms`);
+            deadline.abort(error);
+            reject(error);
+        }, ms);
+        unsubscribe = whenAborted(options?.signal, () => reject(options?.signal?.reason));
+    });
+    try {
+        return await Promise.race([task(signal), cut]);
+    } finally {
+        clearTimeout(timer);
+        unsubscribe();
+    }
+};
+
+// What `promise` settles to, or `fallback` once `ms` pass first; the timer is cleared however it ends. The work goes on
+// regardless: this is for a wait that may give up on an answer it can live without (a best-effort read, a close that
+// may never come), never for stopping anything. Stopping is withDeadline's.
+export const within = async <T, F>(promise: Promise<T>, ms: number, fallback: F): Promise<T | F> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<F>((resolve) => {
+                timer = setTimeout(() => resolve(fallback), ms);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+// What `promise` settles to, or `fallback` the moment `signal` aborts first (at once if it already has); the listener
+// goes however the race ends. A loop that races each read against one long-lived promise instead (a grace that has not
+// started) leaves a reaction on it per read, and every value it raced stays reachable until that promise settles: a
+// turn's every frame, for a turn that is never stopped. The work goes on regardless, as with `within`.
+export const unlessAborted = async <T, F>(promise: Promise<T>, signal: AbortSignal | undefined, fallback: F): Promise<T | F> => {
+    if (signal === undefined) {
+        return promise;
+    }
+    let unsubscribe = (): void => {};
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<F>((resolve) => {
+                unsubscribe = whenAborted(signal, () => resolve(fallback));
+            }),
+        ]);
+    } finally {
+        unsubscribe();
+    }
+};
+
+// Every signal given, as one: aborts when the first of them does, with its reason. Undefined entries are skipped, so an
+// optional caller signal links without a branch, and the native link (AbortSignal.any) leaves no listener behind on a
+// long-lived parent, which a hand-written addEventListener does.
+export const anySignal = (...signals: readonly (AbortSignal | undefined)[]): AbortSignal => {
+    const present = signals.filter((signal): signal is AbortSignal => signal !== undefined);
+    const [only] = present;
+    return present.length === 1 && only !== undefined ? only : AbortSignal.any(present);
+};
+
+// One attempt at a time: `next()` aborts the attempt before it and hands the new one its own signal, so a superseded
+// attempt is stopped (its fetch cancelled, its poll ended) rather than left to finish and be ignored by a counter
+// compared after every await. `isCurrent` is that comparison when a step cannot take a signal; `done` forgets an
+// attempt that finished without aborting it, and leaves a newer one alone (what a `finally` wants).
+export class Latest implements IDisposable {
+    private controller: AbortController | undefined;
+    private signal: AbortSignal | undefined;
+
+    // Aborts the attempt in flight, if any, and starts the next. Its signal also aborts with `parent`.
+    next(parent?: AbortSignal): AbortSignal {
+        this.abort();
+        const controller = new AbortController();
+        const signal = anySignal(controller.signal, parent);
+        this.controller = controller;
+        this.signal = signal;
+        return signal;
+    }
+
+    // The attempt running now, if one is.
+    get current(): AbortSignal | undefined {
+        return this.signal;
+    }
+
+    // Whether `signal` is still the running attempt: not superseded, not aborted, not done.
+    isCurrent(signal: AbortSignal): boolean {
+        return signal === this.signal && !signal.aborted;
+    }
+
+    // Stops the attempt in flight without starting another.
+    abort(): void {
+        const controller = this.controller;
+        this.controller = undefined;
+        this.signal = undefined;
+        controller?.abort();
+    }
+
+    // The attempt behind `signal` has finished: it stops being current, and is not aborted. A newer one is untouched.
+    done(signal: AbortSignal): void {
+        if (signal === this.signal) {
+            this.controller = undefined;
+            this.signal = undefined;
+        }
+    }
+
+    dispose(): void {
+        this.abort();
+    }
+}
+
+export interface RetryOptions {
+    // Tries in all, the first included; Infinity for a loop only the signal ends.
+    readonly attempts: number;
+    // The wait after try `attempt` (1-based) fails: `() => 500` for a fixed one, `() => ladder.next()` to draw from a
+    // backoff ladder. A failure that is an answer rather than a blip (a refusal) should not be thrown at all: return it.
+    readonly delayMs: (attempt: number) => number;
+    readonly signal?: AbortSignal | undefined;
+}
+
+// Read through a call, so a check after an await is not narrowed away by the same check before it.
+const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
+// Runs `task` until it resolves, rethrowing the last failure when the tries run out or the signal aborted during the
+// try. A stop during the wait after one cuts it short and rejects with the signal's reason, as an aborted fetch does,
+// so a caller telling a stop from a failure (an AbortError) reads both the same way.
+// `task` gets the attempt number, and is expected to hand the same signal to whatever it calls.
+export const retry = async <T>(task: (attempt: number) => Promise<T>, options: RetryOptions): Promise<T> => {
+    const { signal } = options;
+    for (let attempt = 1; ; attempt += 1) {
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- tries are sequential by definition
+            return await task(attempt);
+        } catch (error) {
+            if (attempt >= options.attempts || isAborted(signal)) {
+                throw error;
+            }
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between tries
+            await sleep(options.delayMs(attempt), { signal });
+            if (signal !== undefined && isAborted(signal)) {
+                // oxlint-disable-next-line typescript/only-throw-error -- the abort's own reason, as fetch rejects with it
+                throw signal.reason;
+            }
+        }
+    }
+};
+
+export type PollOutcome<T> = { readonly kind: `found`; readonly value: T } | { readonly kind: `expired` } | { readonly kind: `aborted` };
+
+export interface PollForOptions {
+    readonly intervalMs: number;
+    // Epoch ms the poll gives up at. The last wait is cut short to land on it, so expiry is said at the deadline, not on
+    // the first tick after it.
+    readonly until: number;
+    readonly signal?: AbortSignal | undefined;
+    // Wait one interval before the first probe (something nobody can have finished yet); otherwise the first probe is now.
+    readonly delayFirst?: boolean;
+    // A probe that throws is a blip, probed again next interval (a sign-in's status read across a network hiccup).
+    // Otherwise a throw propagates.
+    readonly retryOnError?: boolean;
+    readonly now?: (() => number) | undefined;
+}
+
+// Probes until one answers with a value (undefined: not yet), the deadline passes, or the signal aborts. A probe that
+// answers after its poll was aborted speaks for nobody: the outcome is `aborted`, so a superseded attempt cannot act on
+// what it read. One that answers after the deadline but before an abort still counts: what it found did land.
+export const pollFor = async <T>(probe: () => Promise<T | undefined>, options: PollForOptions): Promise<PollOutcome<T>> => {
+    const now = options.now ?? Date.now;
+    const { signal } = options;
+    const wait = (): Promise<void> => sleep(Math.max(0, Math.min(options.intervalMs, options.until - now())), { signal });
+    if (options.delayFirst === true) {
+        await wait();
+    }
+    for (;;) {
+        if (isAborted(signal)) {
+            return { kind: `aborted` };
+        }
+        if (now() >= options.until) {
+            return { kind: `expired` };
+        }
+        let value: T | undefined;
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
+            value = await probe();
+        } catch (error) {
+            if (options.retryOnError !== true) {
+                throw error;
+            }
+        }
+        if (isAborted(signal)) {
+            return { kind: `aborted` };
+        }
+        if (value !== undefined) {
+            return { kind: `found`, value };
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between probes
+        await wait();
     }
 };
 

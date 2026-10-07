@@ -67,3 +67,34 @@ test("a consumer leaving early returns the runtime's stream, as a for-await woul
     }
     expect(returned).toBe(true);
 });
+
+// Every read used to race one promise of the grace, pending for as long as nobody stops the turn: each race left a
+// reaction on it, and every frame of the turn stayed reachable until the turn ended.
+test("a long turn that is never stopped keeps none of the frames already passed on", async () => {
+    const reads = 400;
+    const passed: WeakRef<object>[] = [];
+    const { promise: endTurn, resolve: ending } = Promise.withResolvers<void>();
+    async function* turn(): AsyncGenerator<{ readonly payload: number[] }> {
+        for (let read = 0; read < reads; read += 1) {
+            const frame = { payload: Array.from({ length: 1_000 }, () => read) };
+            passed.push(new WeakRef(frame));
+            yield frame;
+        }
+        await endTurn;
+    }
+    const frames = endedAfterStop(turn(), new AbortController().signal, () => {})[Symbol.asyncIterator]();
+    for (let read = 0; read < reads; read += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the consumer reads frame by frame, as the turn's does
+        await frames.next();
+    }
+    // The turn is still open: the stream waits on its next read.
+    const last = frames.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    Bun.gc(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    Bun.gc(true);
+
+    expect(passed.filter((frame) => frame.deref() !== undefined).length).toBeLessThan(reads / 10);
+    ending();
+    await expect(last).resolves.toMatchObject({ done: true });
+});

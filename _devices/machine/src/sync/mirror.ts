@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import net from "node:net";
-import { setTimeout as sleep } from "node:timers/promises";
+import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { writeFileAtomic } from "@intentic/base/fs";
@@ -1155,8 +1155,9 @@ const standingSweeps = async (
    of each pass was only ever reported: an await that never settled (a child with no bound, a socket nothing closed) left
    the process up, the pidfile claimed, mirroring, the git bridge and file sync stopped, and `status` saying "stalled"
    to nobody. Every child call is bounded now, and on top of that the loop marks its progress at every step; a loop with
-   no progress for WATCHER_STALL_MS is abandoned (it stops at its next step, whenever its stuck await returns), its
-   tunnels are released, it says so in one line, and a fresh loop takes over with fresh memory. The agent's own hang
+   no progress for WATCHER_STALL_MS is abandoned (its signal aborts: it stops at the next step it marks, whenever its
+   stuck await returns, and its tunnel pool binds nothing more), its tunnels are released, it says so in one line, and
+   a fresh loop takes over with fresh memory. The agent's own hang
    watchdog (watchdog.ts) is for the other kind of stuck: an event loop that cannot run at all. */
 export const WATCHER_STALL_MS = 20 * 60_000;
 const STALL_CHECK_MS = 30_000;
@@ -1167,7 +1168,8 @@ export const watcherStalled = (progress: number, now: number): boolean => now - 
 
 /** One run of the loop, and how its stall check reads it. */
 interface Generation {
-    abandoned: boolean;
+    // Aborts when the run is abandoned for a stall.
+    readonly signal: AbortSignal;
     progress: number;
     step: string;
     stopTransports: (() => Promise<void>) | undefined;
@@ -1185,7 +1187,8 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
 // One loop under its stall check: "done" when the loop ended by itself (nothing left paired), "stalled" when it was
 // abandoned. A loop that throws throws through, as it always did, for the resident agent's retry ladder.
 const watchGeneration = async (log: Log): Promise<"done" | "stalled"> => {
-    const generation: Generation = { abandoned: false, progress: Date.now(), step: "starting", stopTransports: undefined };
+    const abandon = new AbortController();
+    const generation: Generation = { signal: abandon.signal, progress: Date.now(), step: "starting", stopTransports: undefined };
     const loop = watchLoop(log, generation);
     let timer: NodeJS.Timeout | undefined;
     const stall = new Promise<"stalled">((resolve) => {
@@ -1198,7 +1201,7 @@ const watchGeneration = async (log: Log): Promise<"done" | "stalled"> => {
     try {
         const outcome = await Promise.race([loop.then(() => "done" as const), stall]);
         if (outcome === "stalled") {
-            generation.abandoned = true;
+            abandon.abort();
             // Whatever the abandoned loop does when its stuck step returns is its own; it stops at its next check.
             loop.catch(() => undefined);
             log(
@@ -1243,7 +1246,7 @@ const watchLoop = async (log: Log, generation: Generation): Promise<void> => {
             return;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await sleep(POLL_MS);
+        await sleep(POLL_MS, { signal: generation.signal });
     }
 };
 
@@ -1267,7 +1270,7 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     // is made of change their transport (a docker pairing moved onto ssh, a pairing retired).
     const sshConfig = pairingSshConfig(initial.pairings);
     await guard(say, "refreshing the ssh configuration", async () => await writeManagedSshConfig(sshConfig));
-    const tunnels = createTunnelPool(say);
+    const tunnels = createTunnelPool(say, generation.signal);
     generation.stopTransports = tunnels.stopAll;
     // Where each pairing's daemon is dialled, held for the watcher's lifetime (daemon-base.ts owns the policy) and
     // cached per sandbox, so most ticks cost only a map lookup.
@@ -1287,8 +1290,11 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         log,
         say,
         mutagen,
-        live: () => !generation.abandoned,
+        live: () => !generation.signal.aborted,
+        // An abandoned run stops at the next step it marks, rather than running the rest of its pass beside the run
+        // that replaced it; its loop's rejection is dropped by the stall check, which already said why.
         progress: (step) => {
+            generation.signal.throwIfAborted();
             generation.progress = Date.now();
             generation.step = step;
         },

@@ -1,3 +1,4 @@
+import { TimeoutError, withDeadline } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import type { ToolCard, ToolContent, ToolDefinition, ToolResult } from "@intentic/extension-api";
@@ -32,23 +33,22 @@ export const toToolResult = (value: unknown): ToolResult => {
 
 const failure = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
 
-// Runs one call under the host's deadline and the client's own signal, whichever ends first.
+// Runs one call under the host's deadline and the client's own signal, whichever ends first; either aborts the call's
+// signal and answers at once, whether or not the tool heeds it.
 const runCall = async (tool: ToolDefinition, args: Readonly<Record<string, unknown>>, signal: AbortSignal, conversationId?: string): Promise<ToolResult> => {
-    const deadline = AbortSignal.timeout(TOOL_CALL_DEADLINE_MS);
-    const both = AbortSignal.any([signal, deadline]);
-    const aborted = new Promise<ToolResult>((resolve) => {
-        const answer = (): void =>
-            resolve(failure(deadline.aborted ? `${tool.name} did not answer within ${TOOL_CALL_DEADLINE_MS / 60_000} minutes` : `${tool.name} was cancelled`));
-        if (both.aborted) {
-            answer();
-        } else {
-            both.addEventListener("abort", answer, { once: true });
+    try {
+        const answer = await withDeadline(
+            async (both) => tool.call(args, { signal: both, ...(conversationId === undefined ? {} : { conversationId }) }),
+            TOOL_CALL_DEADLINE_MS,
+            { signal },
+        );
+        return toToolResult(answer);
+    } catch (error) {
+        if (error instanceof TimeoutError) {
+            return failure(`${tool.name} did not answer within ${TOOL_CALL_DEADLINE_MS / 60_000} minutes`);
         }
-    });
-    const ran = (async () => toToolResult(await tool.call(args, { signal: both, ...(conversationId === undefined ? {} : { conversationId }) })))().catch(
-        (error: unknown) => failure(errorMessage(error)),
-    );
-    return Promise.race([ran, aborted]);
+        return failure(signal.aborted ? `${tool.name} was cancelled` : errorMessage(error));
+    }
 };
 
 // One tool as `tools/list` names it. A declared effect is spelled by the helper the daemon's own tools use, both hints

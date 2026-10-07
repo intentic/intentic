@@ -1,3 +1,5 @@
+import { anySignal, whenAborted } from "@intentic/base/async";
+import { DisposableStore } from "@intentic/base/lifecycle";
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { PendingChildCard } from "./children.js";
 import { whenFileAppears } from "../tools/file-appears.js";
@@ -41,23 +43,18 @@ const waitForJobs = (
             resolve({ outcome: "aborted" });
             return;
         }
-        const stops: (() => void)[] = [];
-        let poll: ReturnType<typeof setInterval> | undefined;
+        // What the wait holds (its deadline, the caller's abort, each job's watch and follow, the poll) joins this store
+        // as it is made, and the first answer disposes the lot, so every way out tears down alike.
+        const held = new DisposableStore();
         let settled = false;
         const settle = (outcome: Promise<WorkWaitOutcome>): void => {
             if (settled) {
                 return;
             }
             settled = true;
-            for (const stop of stops.splice(0)) {
-                stop();
-            }
-            clearInterval(poll);
-            clearTimeout(deadline);
-            options.signal?.removeEventListener("abort", onAbort);
+            held.dispose();
             resolve(outcome);
         };
-        const onAbort = (): void => settle(Promise.resolve({ outcome: "aborted" }));
         const look = (): void => {
             const done = jobs.find(jobFinished);
             if (done !== undefined) {
@@ -82,24 +79,28 @@ const waitForJobs = (
             Math.max(0, options.timeoutMs),
         );
         deadline.unref();
-        options.signal?.addEventListener("abort", onAbort, { once: true });
+        held.push(() => clearTimeout(deadline));
+        held.push(whenAborted(options.signal, () => settle(Promise.resolve({ outcome: "aborted" }))));
+        let poll: ReturnType<typeof setInterval> | undefined;
         for (const job of jobs) {
-            const stop = whenFileAppears(jobStatusPath(job), look);
+            // Held before anything can answer: a look below that answers (a job already at a prompt) disposes it too.
+            const watch = whenFileAppears(jobStatusPath(job), look);
+            if (watch !== undefined) {
+                held.push(watch);
+            }
             if (settled) {
-                stop?.();
                 return;
             }
             // Hears the job start waiting for input the moment the daemon is sure of it; one already waiting answers now.
-            stops.push(followRun(job.dir, look));
+            held.push(followRun(job.dir, look));
             look();
             if (settled) {
                 return;
             }
-            if (stop === undefined) {
-                poll ??= setInterval(look, JOB_POLL_MS);
+            if (watch === undefined && poll === undefined) {
+                poll = setInterval(look, JOB_POLL_MS);
                 poll.unref();
-            } else {
-                stops.push(stop);
+                held.push(() => clearInterval(poll));
             }
         }
     });
@@ -128,14 +129,12 @@ const wordsSaid = (actors: Actors, conversationId: string, signal: AbortSignal):
             grace = setTimeout(() => resolve({ outcome: "message" }), HEARD_GRACE_MS);
             grace.unref();
         });
-        signal.addEventListener(
-            "abort",
-            () => {
-                stop();
-                clearTimeout(grace);
-            },
-            { once: true },
-        );
+        // whenAborted, not a bare listener: one added to a signal that has already aborted never fires, and would hold
+        // the steer listener for good.
+        whenAborted(signal, () => {
+            stop();
+            clearTimeout(grace);
+        });
     });
 
 /**
@@ -150,14 +149,11 @@ export const waitForWork = async (
     if (options.signal?.aborted === true) {
         return { outcome: "aborted" };
     }
+    // The wait's own end joined with the caller's stop: whichever comes first ends the park and the listening alike.
     const heard = new AbortController();
-    const abort = (): void => heard.abort();
-    options.signal?.addEventListener("abort", abort, { once: true });
+    const signal = anySignal(heard.signal, options.signal);
     try {
-        const result = await Promise.race([
-            parkOnWork(actors, conversationId, { ...options, signal: heard.signal }),
-            wordsSaid(actors, conversationId, heard.signal),
-        ]);
+        const result = await Promise.race([parkOnWork(actors, conversationId, { ...options, signal }), wordsSaid(actors, conversationId, signal)]);
         // This wait hands the child's ending over, so a copy of its report still queued for this conversation would
         // arrive a second time: it comes back out.
         if ((result.outcome === "finished" || result.outcome === "blocked") && result.agent !== undefined) {
@@ -165,7 +161,6 @@ export const waitForWork = async (
         }
         return result;
     } finally {
-        options.signal?.removeEventListener("abort", abort);
         heard.abort();
     }
 };
@@ -182,17 +177,16 @@ const parkOnWork = async (actors: Actors, conversationId: string, options: Subag
     if (jobs.length === 0) {
         return fromSubagent(actors, conversationId, options);
     }
+    // The loser of the race is stopped with the winner's answer, or with the caller's stop.
     const race = new AbortController();
-    const abort = (): void => race.abort();
-    options.signal?.addEventListener("abort", abort, { once: true });
+    const signal = anySignal(race.signal, options.signal);
     try {
-        const children = fromSubagent(actors, conversationId, { ...options, signal: race.signal }).then((result) =>
+        const children = fromSubagent(actors, conversationId, { ...options, signal }).then((result) =>
             // No child to wait on is not a move.
             result.outcome === "unknown-target" ? NEVER : result,
         );
-        return await Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal: race.signal, until: options.until })]);
+        return await Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal, until: options.until })]);
     } finally {
-        options.signal?.removeEventListener("abort", abort);
         race.abort();
     }
 };

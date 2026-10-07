@@ -1,5 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { getEventListeners } from "node:events";
 import { homedir } from "node:os";
 import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -2807,4 +2808,42 @@ test("a flagged turn asks the CLI not to switch models by itself, and a cut resu
     await collect({ ...request, spec: { ...request.spec, resumeAt: "good-result" } }, queryFn);
     // No session to cut: the entry means nothing without the session it was cut from.
     expect(seen?.resumeSessionAt).toBeUndefined();
+});
+
+// The SDK gets a controller of its own, since it aborts that itself when its query closes, which must not stop the turn.
+// The turn's signal is linked into it, so a stop reaches the SDK whether it came before the SDK started or during it.
+test("a stop reaches the SDK through a controller of its own, before the SDK starts or while it runs", async () => {
+    withoutTmux();
+    const early = new AbortController();
+    early.abort();
+    let abortedAtStart: boolean | undefined;
+    await collect({ ...request, signal: early.signal }, async function* (args) {
+        abortedAtStart = args.options.abortController?.signal.aborted;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    });
+    expect(abortedAtStart).toBe(true);
+
+    const turn = new AbortController();
+    let sdk: AbortController | undefined;
+    await collect({ ...request, signal: turn.signal }, async function* (args) {
+        sdk = args.options.abortController;
+        turn.abort();
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    });
+    expect(sdk?.signal.aborted).toBe(true);
+
+    const closing = new AbortController();
+    await collect({ ...request, signal: closing.signal }, async function* (args) {
+        args.options.abortController?.abort();
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    });
+    expect(closing.signal.aborted).toBe(false);
+});
+
+// The link is undone once the SDK has settled: a turn that ended unstopped leaves its signal nothing to keep.
+test("a turn that ends unstopped leaves nothing listening on its signal", async () => {
+    withoutTmux();
+    const turn = new AbortController();
+    await collect({ ...request, signal: turn.signal }, fakeQuery({ type: "result", subtype: "success", session_id: "s" }));
+    expect(getEventListeners(turn.signal, "abort")).toHaveLength(0);
 });

@@ -2,6 +2,8 @@
 // cap. Only the clock and the wait live here; what a loop does once one passes (cancel, kill, refuse) stays its own, since
 // each vendor stops differently.
 
+import { within } from "@intentic/base/async";
+
 export interface TurnTimeouts {
     readonly inactivityMs: number;
     readonly maxTurnMs: number;
@@ -109,16 +111,13 @@ export const idleWait = (): IdleWait => {
     return {
         wake: () => resolveWake(),
         park: async (ms) => {
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            await Promise.race([
+            await within(
                 new Promise<void>((resolve) => {
                     resolveWake = resolve;
                 }),
-                new Promise<void>((resolve) => {
-                    timer = setTimeout(resolve, ms);
-                }),
-            ]);
-            clearTimeout(timer);
+                ms,
+                undefined,
+            );
             resolveWake = idle;
         },
     };

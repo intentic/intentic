@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { within } from "@intentic/base/async";
 import type { AccountUsage, LoginStatus, OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
@@ -53,13 +54,6 @@ const USAGE_WAIT_MS = 1_500;
 
 // How long a forced read waits (longer: the caller is watching a spinner); bounded by READ_TIMEOUT_MS (8s).
 const FORCED_USAGE_WAIT_MS = 9_000;
-
-// Waits for `work` no longer than `ms`; what is still running after that lands on a later read.
-const within = async (work: Promise<unknown>, ms: number): Promise<void> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([work, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
-    clearTimeout(timer);
-};
 
 // How long a started attempt stays answerable; only bounds how long a forgotten attempt's verifier is kept.
 const LOGIN_WINDOW_MS = 15 * 60_000;
@@ -222,7 +216,8 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
                     ...(force ? { maxAgeMs: 0, watched: true } : {}),
                     withinMs,
                 }),
-                within(Promise.all(marked.map((id) => services.claudeSeatCheck.recheck(id, { force }))), withinMs),
+                // Waited for no longer than the reading; a recheck still running then lands on a later read.
+                within(Promise.all(marked.map((id) => services.claudeSeatCheck.recheck(id, { force }))), withinMs, undefined),
             ]);
             // A duplicate left from before reconnects landed in place is the boot merge's (account-identity.ts), which
             // moves its pins to the survivor first; reading a list never deletes anything.

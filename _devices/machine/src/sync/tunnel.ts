@@ -182,12 +182,20 @@ export const startSshTunnel = async (target: TunnelTarget, log: Log): Promise<((
 // Every pairing's transport, held by the mirror watcher process rather than a second thing to keep alive.
 // Reconciled, not started once, so a concurrent setup/uninstall adds or drops a pairing's transport without
 // restarting this process.
-export const createTunnelPool = (log: Log) => {
+// `signal` retires the pool for good: a reconcile after it binds nothing, and a bind it lands on midway is released at
+// once. A watcher loop abandoned for a stall (mirror.ts) has its pool stopped, and may come back from its stuck step
+// still mid-pass; it must not take a sandbox's port again from the loop that replaced it.
+export const createTunnelPool = (log: Log, signal?: AbortSignal) => {
     // The base each live listener was bound for, beside its stop: a listener closes over the address it dials, so
     // the pool must remember what it was told.
     const running = new Map<string, { readonly base: string; readonly stop: () => Promise<void> }>();
+    // Read through a call: a bind awaited in between may land after the pool was retired.
+    const retired = (): boolean => signal?.aborted === true;
     return {
         reconcile: async (targets: readonly TunnelTarget[]): Promise<void> => {
+            if (retired()) {
+                return;
+            }
             const wanted = new Set(targets.map((target) => target.sandboxId));
             for (const [sandboxId, held] of running) {
                 if (!wanted.has(sandboxId)) {
@@ -214,6 +222,10 @@ export const createTunnelPool = (log: Log) => {
                 }
                 // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: a bind per pairing, serialized on purpose
                 const stop = await startSshTunnel(target, log);
+                if (stop !== undefined && retired()) {
+                    await stop();
+                    return;
+                }
                 if (stop !== undefined) {
                     running.set(target.sandboxId, { base: target.base, stop });
                     log(`  sync transport for ${target.sandboxId} listening on 127.0.0.1:${syncSshPort(target.sandboxId)}`);

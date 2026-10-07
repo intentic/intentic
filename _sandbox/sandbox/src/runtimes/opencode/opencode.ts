@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { sleep, whenAborted, within } from "@intentic/base/async";
 import {
     type Config as OpenCodeConfig,
     createOpencodeClient,
@@ -350,16 +351,11 @@ const SSE_RETRY_DELAY_MS = 1_000;
 export const abortWhileConnecting = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
     const connecting = new AbortController();
-    const abort = (): void => connecting.abort(request.signal.reason);
-    if (request.signal.aborted) {
-        abort();
-    } else {
-        request.signal.addEventListener("abort", abort, { once: true });
-    }
+    const unlink = whenAborted(request.signal, () => connecting.abort(request.signal.reason));
     try {
         return await fetch(new Request(request, { signal: connecting.signal }));
     } finally {
-        request.signal.removeEventListener("abort", abort);
+        unlink();
     }
 };
 
@@ -427,9 +423,8 @@ const watchSessionEvents = ({ replies, judgeOf }: OpenCodeClients, directory: st
             } catch {
                 // allow(silent-catch): the stream ended or never opened, which is counted and retried below
             }
-            await new Promise((resolve) => {
-                setTimeout(resolve, STREAM_RETRY_MS).unref();
-            });
+            // Cut short by the boot's end, so `ended` frees the directory at once rather than a retry wait later.
+            await sleep(STREAM_RETRY_MS, { signal, unref: true });
         }
     })().finally(ended);
 };
@@ -452,15 +447,11 @@ const readGeminiModels = async (gemini: OpenCodeGeminiConfig | undefined): Promi
     if (gemini === undefined) {
         return undefined;
     }
-    const expired = Promise.withResolvers<undefined>();
-    const timer = setTimeout(() => expired.resolve(undefined), CATALOG_TIMEOUT_MS).unref();
     try {
-        return await Promise.race([gemini.models(), expired.promise]);
+        return await within(gemini.models(), CATALOG_TIMEOUT_MS, undefined);
     } catch {
         // allow(silent-catch): failed discovery retains the working registration or lets Grok boot without Google
         return undefined;
-    } finally {
-        clearTimeout(timer);
     }
 };
 

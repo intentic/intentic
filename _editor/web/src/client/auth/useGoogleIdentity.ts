@@ -1,4 +1,4 @@
-import { pollUntil } from "@intentic/base/async";
+import { Latest, pollUntil, whenAborted } from "@intentic/base/async";
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
@@ -76,8 +76,10 @@ let initializedAutoSelect: boolean | undefined;
 let picking = false;
 // The single in-flight mint, so concurrent callers share one prompt/gate instead of racing for it.
 let inflight: Promise<string | undefined> | undefined;
-// Counts mints so a retired one can't run its epilogue over the state of the mint that replaced it.
-let mintGeneration = 0;
+// The mint in flight. Its signal aborts when it ends however it ends (settled, retired, replaced), which ends its silent
+// attempt with it: a guard timer or a moment GIS reports late cannot act on the mint after it, and a mint retired while
+// GIS was still loading prompts nobody once it loads.
+const mints = new Latest();
 // Resolves the in-flight mint; called by the credential callback or cancelSignIn (undefined on dismissal).
 let settle: ((token: string | undefined) => void) | undefined;
 // True only while a real mint is waiting, so a callback queued before sign-out can't repopulate the cache after.
@@ -200,8 +202,8 @@ type MintMode = "gate" | "button" | "silent";
 let mintMode: MintMode = "gate";
 
 // First attempt: FedCM One Tap / auto re-auth. On skip, dismissal, or guard timeout, act per mode and record the
-// reason. Returns the guard timer so `mint()` clears it once settled.
-const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
+// reason; all of it speaks for the mint behind `signal` alone, and ends when it does.
+const trySilent = (signal: AbortSignal): void => {
     // What the mode does once the silent attempt is over (the MintMode table above).
     const giveUp = (): void => {
         if (mintMode === `gate`) {
@@ -211,7 +213,7 @@ const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
         }
     };
     const silentFailed = (reason: "skipped" | "dismissed" | "guard-timeout" | "webview"): void => {
-        if (settle === undefined) {
+        if (signal.aborted) {
             return;
         }
         reportGate({ reason, mode: mintMode });
@@ -221,12 +223,16 @@ const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
     // failure. Raise the gate now, offering the hand-off to the real browser.
     if (desktopVersion() !== undefined) {
         silentFailed(`webview`);
-        return undefined;
+        return;
     }
     // No guard when the caller shows its own button: the timer only raises the shared overlay, which would make an
     // already-visible button wait five seconds for a second one.
     const guard = mintMode === `button` ? undefined : setTimeout(() => silentFailed(`guard-timeout`), SILENT_GUARD_MS);
+    whenAborted(signal, () => clearTimeout(guard));
     window.google?.accounts?.id?.prompt((moment) => {
+        if (signal.aborted) {
+            return;
+        }
         if (moment.isSkippedMoment()) {
             clearTimeout(guard);
             silentFailed(`skipped`);
@@ -236,15 +242,12 @@ const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
             // any silent attempt that ended: the button's flow may be closed unanswered, and a warm-up left waiting on
             // it would hold every later mint that joins it. A caller showing its own button waits for its answer.
             clearTimeout(guard);
-            if (settle !== undefined) {
-                giveUp();
-            }
+            giveUp();
         } else if (moment.isDismissedMoment() && moment.getDismissedReason() !== `credential_returned`) {
             clearTimeout(guard);
             silentFailed(`dismissed`);
         }
     });
-    return guard;
 };
 
 // What a switch does instead of the silent attempt: Google re-selects the account already approved for this client,
@@ -263,15 +266,19 @@ const openChooser = (mode: MintMode): void => {
 // entirely: its whole point is that Google asks.
 const mint = async (mode: MintMode): Promise<string | undefined> => {
     mintMode = mode;
-    const generation = ++mintGeneration;
-    const current = (): boolean => generation === mintGeneration;
+    const signal = mints.next();
     try {
         await ensureInitialized();
     } catch {
-        if (current()) {
+        if (mints.isCurrent(signal)) {
+            mints.done(signal);
             picking = false;
             inflight = undefined;
         }
+        return undefined;
+    }
+    // Retired while GIS loaded (a sign-out, a switch, a dismissal): it asks Google nothing, and its callers get nothing.
+    if (signal.aborted) {
         return undefined;
     }
     const minted = new Promise<string | undefined>((resolve) => {
@@ -281,13 +288,15 @@ const mint = async (mode: MintMode): Promise<string | undefined> => {
     if (picking) {
         openChooser(mode);
     }
-    const guard = picking ? undefined : trySilent();
+    if (!picking) {
+        trySilent(signal);
+    }
     const result = await minted;
-    // A mint retired by a later one owns none of this state any more; its caller already has its undefined.
-    if (!current()) {
+    // A retired mint owns none of this state any more: retireMint reset it, or the mint that replaced it holds it.
+    if (!mints.isCurrent(signal)) {
         return result;
     }
-    clearTimeout(guard);
+    mints.abort();
     settle = undefined;
     acceptingCredential = false;
     picking = false;
@@ -297,12 +306,14 @@ const mint = async (mode: MintMode): Promise<string | undefined> => {
 };
 
 // Ends the mint in flight with nothing and leaves the module ready for the next one; a dismissal, a sign-out and a
-// switch all need exactly this much. The retired mint's own epilogue is skipped by its generation check.
+// switch all need exactly this much. A mint still loading GIS ends too, once it loads, and its own epilogue is skipped.
 const retireMint = (): void => {
+    mints.abort();
     settle?.(undefined);
     settle = undefined;
     inflight = undefined;
     acceptingCredential = false;
+    picking = false;
 };
 
 // Which failure road a mint takes, read off the asker's standing (see the MintMode table above).
@@ -432,7 +443,7 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean
 // sandboxSession's watch).
 const cancelSignIn = (): void => {
     needsSignIn.value = false;
-    settle?.(undefined);
+    retireMint();
 };
 
 // For a credential minted elsewhere (the desktop app's webview, which can't run GIS, hands off through the real

@@ -2,6 +2,7 @@
 // TurnFold maps each message onto typed frames. An SDK message with no mapping is dropped; the terminal `done` frame is
 // emitted by runAgent, not here.
 import type { Options, Query, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
+import { within } from "@intentic/base/async";
 import { sdk } from "../../engines/claude-sdk.js";
 import {
     type AgentEvent,
@@ -71,17 +72,8 @@ async function* steeredInput(first: string, steering: SteeringQueue): AsyncGener
 // Grace window after a steered result: a message means another turn is coming; silence means the stream ended.
 const STEER_GRACE_MS = 1000;
 
-const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>): Promise<IteratorResult<SDKMessage, void> | undefined> => {
-    let timer: NodeJS.Timeout | undefined;
-    const expired = new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => resolve(undefined), STEER_GRACE_MS);
-    });
-    try {
-        return await Promise.race([next, expired]);
-    } finally {
-        clearTimeout(timer);
-    }
-};
+const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>): Promise<IteratorResult<SDKMessage, void> | undefined> =>
+    within(next, STEER_GRACE_MS, undefined);
 
 // Task types the turn need not wait for at stream end, since each outlives the process or never ends; anything else is
 // waited on by default:

@@ -1,5 +1,5 @@
 import { type AcpAgentConfig, type AgentCommand, type AgentEvent, PI } from "@intentic/sandbox-contract";
-import { whenAborted, withTimeout } from "@intentic/base/async";
+import { whenAborted, withDeadline } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { imageBlock } from "../../agent/prompt/attachment-images.js";
 import {
@@ -16,7 +16,7 @@ import { withStderrTail } from "../decorators/vendor-errors.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { createPiEventMapper } from "./pi-events.js";
 import { answerExtensionUi, type PiDialog } from "./pi-extension-ui.js";
-import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
+import type { PiEvent, PiProcess, PiResponse, PiSpawn } from "./pi-rpc.js";
 
 // Pi provider adapter (same seam as runAgent/createCodexAgent/createOpenCodeAgent/runAcpAgent): AgentRequest in, AgentEvent
 // frames out, over Pi's RPC. One process per turn (Pi persists sessions as files; resume is `switch_session` on a fresh
@@ -27,6 +27,16 @@ import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 // Setup commands (switch_session/get_state/set_model/…) answer immediately or the process is not speaking the protocol,
 // same hard-race reasoning as ACP's initialize guard.
 const SETUP_TIMEOUT_MS = 15_000;
+
+// A command as the transport takes it.
+type PiCommand = Parameters<PiProcess["request"]>[0];
+
+// One setup command under that deadline. The deadline ends the request, not only the wait: its id is forgotten, so a late
+// answer is dropped. Pi has no per-command cancel, so the command may still land on its side, which these can afford: a
+// switch, state read or model pin that times out fails the turn, and the turn's end kills the process; a thinking level
+// that lands late is still the one asked for; the rest only read.
+const setup = (proc: PiProcess, command: PiCommand): Promise<PiResponse> =>
+    withDeadline((signal) => proc.request(command, signal), SETUP_TIMEOUT_MS);
 
 // How long a turn waits for Pi to settle after an abort was sent, before the process is killed outright.
 const ABORT_GRACE_MS = 5_000;
@@ -58,6 +68,34 @@ async function* askHeld(dialog: PiDialog | undefined, hold: () => () => void): A
     } finally {
         release();
     }
+}
+
+// Sends the prompt and waits for Pi to accept it, like a setup command, though a stop ends the wait too. Answers whether
+// the turn goes on; when it does not, it has said why, unless the turn was stopped. No answer is not a refusal: the prompt
+// may already be on Pi's stdin, and Pi starts its run once the prompt's preflight (auth, a compaction, an extension's
+// hooks) is through, which its `abort` cannot reach, since until then there is no run to abort. Killing the process is
+// the one way to be sure no run starts that nobody is reading; the session file survives it, so the next send resumes. A
+// turn stopped before this point never writes the prompt at all.
+async function* sendPrompt(proc: PiProcess, stop: AbortSignal, prompt: PiCommand, abort: () => void): AsyncGenerator<AgentEvent, boolean> {
+    let accepted: PiResponse;
+    try {
+        accepted = await withDeadline((signal) => proc.request(prompt, signal), SETUP_TIMEOUT_MS, { signal: stop });
+    } catch {
+        abort();
+        proc.kill();
+        if (!stop.aborted) {
+            yield {
+                kind: "error",
+                message: withStderrTail(`Pi did not answer the prompt within ${SETUP_TIMEOUT_MS / 1000}s. It was stopped; send again to retry.`, proc.stderrTail()),
+            };
+        }
+        return false;
+    }
+    if (!accepted.success) {
+        yield { kind: "error", message: withStderrTail(`Pi rejected the prompt: ${accepted.error ?? "unknown error"}`, proc.stderrTail()) };
+        return false;
+    }
+    return true;
 }
 
 // One prompt turn on the warm process: send the prompt, stream mapped events until agent_settled (or a watchdog fires,
@@ -93,9 +131,7 @@ async function* runPiTurn(
     const unwatchAbort = whenAborted(request.signal, sendAbort);
 
     try {
-        const accepted = await withTimeout(proc.request(prompt), SETUP_TIMEOUT_MS).catch(() => ({ success: false, error: "no response" }));
-        if (!accepted.success) {
-            yield { kind: "error", message: withStderrTail(`Pi rejected the prompt: ${accepted.error ?? "unknown error"}`, proc.stderrTail()) };
+        if (!(yield* sendPrompt(proc, request.signal, prompt, sendAbort))) {
             return settled(true);
         }
 
@@ -181,7 +217,7 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
             // accepts is the coded self-heal every runtime shares: the client drops the id and the next send starts
             // fresh.
             if (request.spec.sessionId !== undefined) {
-                const switched = await withTimeout(proc.request({ type: "switch_session", sessionPath: request.spec.sessionId }), SETUP_TIMEOUT_MS);
+                const switched = await setup(proc, { type: "switch_session", sessionPath: request.spec.sessionId });
                 if (!switched.success) {
                     yield {
                         kind: "error",
@@ -191,7 +227,7 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
                     return;
                 }
             }
-            const stateResponse = await withTimeout(proc.request({ type: "get_state" }), SETUP_TIMEOUT_MS);
+            const stateResponse = await setup(proc, { type: "get_state" });
             const sessionFile = (stateResponse.data as { sessionFile?: unknown } | undefined)?.sessionFile;
             if (typeof sessionFile === "string" && sessionFile !== "") {
                 yield { kind: "session", sessionId: sessionFile };
@@ -202,14 +238,7 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
                 const slash = request.spec.model.indexOf("/");
                 const picked =
                     slash > 0
-                        ? await withTimeout(
-                              proc.request({
-                                  type: "set_model",
-                                  provider: request.spec.model.slice(0, slash),
-                                  modelId: request.spec.model.slice(slash + 1),
-                              }),
-                              SETUP_TIMEOUT_MS,
-                          )
+                        ? await setup(proc, { type: "set_model", provider: request.spec.model.slice(0, slash), modelId: request.spec.model.slice(slash + 1) })
                         : { success: false, error: `expected provider/model-id, got "${request.spec.model}"` };
                 if (!picked.success) {
                     yield { kind: "error", message: `Pi could not use the model "${request.spec.model}": ${picked.error ?? "unknown error"}` };
@@ -219,11 +248,11 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
             // Effort rides Pi's own thinking scale (shares the wire's tier names); a tier the model doesn't offer is
             // refused by Pi and tolerated, since reasoning depth is advisory.
             if (request.spec.effort !== undefined) {
-                await withTimeout(proc.request({ type: "set_thinking_level", level: request.spec.effort }), SETUP_TIMEOUT_MS).catch(() => undefined);
+                await setup(proc, { type: "set_thinking_level", level: request.spec.effort }).catch(() => undefined);
             }
             // Pi's extension/skill/template commands, for the composer's `/` popover; invoking one is plain `/name …`
             // prompt text (the get_commands contract). Best-effort: an empty list is not an error.
-            const commands = await withTimeout(proc.request({ type: "get_commands" }), SETUP_TIMEOUT_MS).catch(() => undefined);
+            const commands = await setup(proc, { type: "get_commands" }).catch(() => undefined);
             const items = (commands?.data as { commands?: { name?: unknown; description?: unknown }[] } | undefined)?.commands;
             if (Array.isArray(items) && items.length > 0) {
                 const mapped: AgentCommand[] = items
@@ -246,7 +275,7 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
 
             // Context-window fill for the conversation, read once the turn settles. Pi's own estimate, the same number
             // its footer shows. Best-effort: a killed process simply reports nothing.
-            const stats = await withTimeout(proc.request({ type: "get_session_stats" }), SETUP_TIMEOUT_MS).catch(() => undefined);
+            const stats = await setup(proc, { type: "get_session_stats" }).catch(() => undefined);
             const context = (stats?.data as { contextUsage?: { tokens?: unknown; contextWindow?: unknown } } | undefined)?.contextUsage;
             if (typeof context?.tokens === "number" && typeof context.contextWindow === "number" && context.contextWindow > 0) {
                 yield { kind: "context_usage", tokens: context.tokens, contextWindow: context.contextWindow };

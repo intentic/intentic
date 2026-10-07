@@ -1,4 +1,4 @@
-import { sleep } from "@intentic/base/async";
+import { Latest, retry, sleep, within } from "@intentic/base/async";
 import {
     type ConversationQueue,
     deriveTitle,
@@ -221,8 +221,14 @@ export class TurnClient {
     // unchanged they keep it, so a daemon that took them after all answers the resend rather than delivering it twice.
     private unanswered: { readonly id: string; readonly text: string } | undefined;
 
-    // In-flight reattach probe (see reattach), aborted by a send so the two never race the same run.
-    private probe: AbortController | undefined;
+    // In-flight reattach probes (see reattach), every one aborted by a send so none races the same run. A set, not one
+    // slot: two probes can be in flight at once (a hydration and a failure's re-probe), and a single slot overwritten by
+    // the second, then cleared by the first one's `finally`, left a probe nothing could abort.
+    private readonly probes = new Set<AbortController>();
+
+    // The look for the turn a queue starts behind one that ended (followQueued): a newer ending supersedes it, and a
+    // closed tab ends its waits rather than letting it attach a stream after the tab has gone.
+    private readonly queuedFollow = new Latest();
 
     // Tool ids this turn has already drawn, so a card's first arrival can be told from its updates; cleared per turn.
     private liveTools = new Set<string>();
@@ -397,7 +403,7 @@ export class TurnClient {
     // here, so whatever follows may be a wait. An errand opens `composing`, its words not written yet.
     private openTurn(text: string, attachments: readonly ChatAttachment[], settings: TurnSettings, composing = false): OpenedTurn {
         // A pending reattach probe must not race this send's stream, nor must a superseded resume fire one later.
-        this.probe?.abort();
+        this.abortProbes();
         this.host.failures.cancelProbe();
         // Whether the turn goes on in this session is the daemon's to say (routing.ts); a new session it names on the
         // session frame is what cuts the segment here (turnFacts.ts).
@@ -441,17 +447,12 @@ export class TurnClient {
 
     // One message to the daemon, sent again under the same id while no answer comes back. A refusal is an answer; a
     // Stop or a closed tab ends the tries.
-    private async post(body: ProcedureInput<`agent.run`>, signal: AbortSignal): Promise<MessageReceipt | SandboxHttpError> {
-        for (let attempt = 1; ; attempt += 1) {
-            try {
-                return await orRefusal(sandboxRpc.agent.run(body, { signal, context: { at: this.host.box.value } }));
-            } catch (error) {
-                if (signal.aborted || attempt >= SEND_ATTEMPTS) {
-                    throw error;
-                }
-                await sleep(SEND_RETRY_MS * attempt, { signal });
-            }
-        }
+    private post(body: ProcedureInput<`agent.run`>, signal: AbortSignal): Promise<MessageReceipt | SandboxHttpError> {
+        return retry(() => orRefusal(sandboxRpc.agent.run(body, { signal, context: { at: this.host.box.value } })), {
+            attempts: SEND_ATTEMPTS,
+            delayMs: (attempt) => SEND_RETRY_MS * attempt,
+            signal,
+        });
     }
 
     // Turned away at the door: the daemon refused the words before taking them, says why, and hands them back.
@@ -1053,7 +1054,7 @@ export class TurnClient {
         if (this.ending.value === undefined) {
             return;
         }
-        await Promise.race([new Promise<void>((settled) => this.settleWaiters.push(settled)), sleep(ENDING_CLOSE_MS)]);
+        await within(new Promise<void>((settled) => this.settleWaiters.push(settled)), ENDING_CLOSE_MS, undefined);
     }
 
     // Asks the daemon to cancel this turn. The request is retained as a barrier: its response means the run has released
@@ -1113,7 +1114,8 @@ export class TurnClient {
     // Called bare when the tab closes: the turn lands its work, and reopening reattaches to it.
     abort(): void {
         this.host.transcript.settle();
-        this.probe?.abort();
+        this.abortProbes();
+        this.queuedFollow.abort();
         const phase = this.phase.value;
         if (phase.kind !== `idle`) {
             phase.controller.abort();
@@ -1121,13 +1123,25 @@ export class TurnClient {
         this.host.failures.cancelProbe();
     }
 
+    private abortProbes(): void {
+        for (const probe of this.probes) {
+            probe.abort();
+        }
+        this.probes.clear();
+    }
+
     // Looks for the turn the queue starts behind one that just ended, a few times, until it is found or a turn is live.
     private async followQueued(ended: string): Promise<void> {
-        for (let attempt = 1; attempt <= FOLLOW_ATTEMPTS; attempt += 1) {
-            await sleep(FOLLOW_MS * attempt);
-            if (this.streaming.value || (await this.reattach(ended))) {
-                return;
+        const signal = this.queuedFollow.next();
+        try {
+            for (let attempt = 1; attempt <= FOLLOW_ATTEMPTS; attempt += 1) {
+                await sleep(FOLLOW_MS * attempt, { signal });
+                if (signal.aborted || this.streaming.value || (await this.reattach(ended))) {
+                    return;
+                }
             }
+        } finally {
+            this.queuedFollow.done(signal);
         }
     }
 
@@ -1141,7 +1155,7 @@ export class TurnClient {
         }
         const { host } = this;
         const controller = new AbortController();
-        this.probe = controller;
+        this.probes.add(controller);
         let engaged = false;
         const attached = (head: AttachHead): TurnContext | undefined => {
             // A send that started between this probe's entry check and the daemon's reply owns the stream.
@@ -1173,7 +1187,7 @@ export class TurnClient {
                 host.box.value,
             );
         } finally {
-            this.probe = undefined;
+            this.probes.delete(controller);
             if (engaged) {
                 this.endTurn();
             }

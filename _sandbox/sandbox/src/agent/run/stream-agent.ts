@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { anySignal } from "@intentic/base/async";
 import { readableProviderText } from "../providers/provider-error-text.js";
 import {
     type AgentEvent,
@@ -126,18 +127,17 @@ const recordSystemPrompt = (services: Services, input: RoutedTurn, request: Agen
 export async function* streamAgent(services: Services, sent: TurnInput, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
     // Routed as it comes in, for a caller that reached the body without the port (a suite, a runner's mirror).
     const input = withRuntimeDefaults(sent);
+    // A controller of the turn's own, since /agent/stop ends this turn and not the caller's; the caller's signal still
+    // ends it. Linked with anySignal rather than a listener on the caller's, which a caller that outlives the turn
+    // would keep for good.
     const controller = new AbortController();
-    if (signal?.aborted === true) {
-        controller.abort();
-    } else {
-        signal?.addEventListener("abort", () => controller.abort(), { once: true });
-    }
+    const turnSignal = anySignal(controller.signal, signal);
     let steering: SteeringQueue | undefined;
     try {
         // Steering exists only where the runtime declares it; others register abort alone.
         steering = capabilitiesOf(input.agent, input.harness).steering ? new SteeringQueue() : undefined;
         const control: ActiveTurn = { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) };
-        yield* runConversationTurn(services, input, controller.signal, control);
+        yield* runConversationTurn(services, input, turnSignal, control);
     } finally {
         steering?.close();
     }

@@ -200,6 +200,50 @@ describe("createAnnouncer", () => {
         expect(announcer.status().state).toBe("registered");
     });
 
+    /* WHAT A STOP LEAVES BEHIND, which used to be the next attempt: stop() only cleared the pending timer, so an
+     * announce already in flight scheduled the one after it when it answered, and a Reconnect after the stop started
+     * the loop again. */
+    describe("stop", () => {
+        it("cuts the announce in flight and schedules nothing after it", async () => {
+            outcomes.push({ hang: true });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            announcer.stop();
+            const [, options] = requestMock.mock.calls[0] ?? [];
+            expect(options).toHaveProperty("signal.aborted", true);
+            // The fake exchange ignores the signal and hangs into its idle cut, as a platform mid-answer might.
+            await advanceTimersByTimeAsync(60_000 + 30 * 60_000);
+            expect(requestMock).toHaveBeenCalledTimes(1);
+            expect(announcer.status().state).toBe("pending");
+        });
+
+        it("ends the heartbeat's wait, and a Reconnect after it starts nothing", async () => {
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await settle();
+            announcer.stop();
+            expect(jest.getTimerCount()).toBe(0);
+            expect(await announcer.relink()).toEqual({ announce: { state: "registered", at: expect.any(Number) } });
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 3);
+            expect(requestMock).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    // A Reconnect pressed while the loop's own announce is in flight shares it; the verdict is then the Reconnect's to
+    // act on. Both used to, so the failure was logged twice and the ladder climbed two rungs for one attempt.
+    it("acts once on an announce a Reconnect shared with the loop", async () => {
+        outcomes.push({ hang: true });
+        const announcer = createAnnouncer(config, logger);
+        announcer.start();
+        const relinked = announcer.relink();
+        await advanceTimersByTimeAsync(60_000);
+        expect((await relinked).announce).toMatchObject({ state: "unreachable", retrying: true });
+        expect(requestMock).toHaveBeenCalledTimes(1);
+        // The shortest wait the Reconnect asked for, not the rung after it.
+        await advanceTimersByTimeAsync(2_000);
+        expect(requestMock).toHaveBeenCalledTimes(2);
+    });
+
     // status() is what /health serves and ic's postflight/doctor read; each verdict below is a sentence a user actually
     // sees.
     describe("status", () => {

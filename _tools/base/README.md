@@ -24,6 +24,14 @@ flowchart LR
   so content cannot forge its own end. It marks taint and does not defend against a hostile model.
 - `lifecycle.ts` is teardown as a store: whatever needs undoing registers when it is created, a member that throws
   does not stop the rest, and failures surface together. Every scheduler in `async.ts` is disposable.
+- `async.ts` cancels with an `AbortSignal`, never with a counter compared after an await:
+  - `Latest` aborts the previous attempt when the next one starts.
+  - `anySignal` links a caller's signal into your own.
+  - `retry` and `pollFor` stop waiting the moment their signal aborts, and `pollFor` expires at its deadline rather
+    than on the tick after it.
+  - `withDeadline` aborts the work when time runs out. `withTimeout` and `within` only stop waiting for it.
+  - `unlessAborted` stops waiting at an abort. Racing every read of a loop against one promise that stays pending
+    instead keeps every value raced alive until that promise settles.
 - `ssh-config.ts` is the one reading of a managed `Include` line in someone's `~/.ssh/config`: only a live line counts
   (a commented-out one is not an include), ours goes first, and every other line is left byte for byte. The daemon's
   ssh hosts and the machine agent's sync aliases both write theirs through it, with `writeFileAtomic`.
