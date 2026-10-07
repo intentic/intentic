@@ -1,10 +1,10 @@
 # The CI runner fleet
 
-Six self-hosted GitHub Actions runners, living in one WSL2 distribution on one machine, run almost every CI, release and nightly job inside containers on the host's Docker.
+Eight self-hosted GitHub Actions runners, living in one WSL2 distribution on one machine, run almost every CI, release and nightly job inside containers on the host's Docker. Six share the work; two are kept for the pipeline's first two jobs.
 
 ```mermaid
 flowchart LR
-    gh["GitHub Actions<br/>self-hosted, intentic"] --> fleet(["six runner processes<br/>systemd units in WSL2"])
+    gh["GitHub Actions<br/>self-hosted, intentic"] --> fleet(["eight runner processes<br/>systemd units in WSL2"])
     fleet --> job["job container<br/>ci-base · ci-desktop"]
     job --> sock["host Docker<br/>/var/run/docker.sock"]
     job --> cache["/ci-cache<br/>pnpm · turbo · cargo"]
@@ -13,10 +13,10 @@ flowchart LR
     task -.-> sock
 ```
 
-- Every Linux instance carries the labels `intentic` and `desktop`; jobs ask for `[self-hosted, intentic]` or `[self-hosted, intentic, desktop]`. [`.github/actionlint.yaml`](../../.github/actionlint.yaml) declares the labels, so a job asking for one no runner carries fails the lint. The Windows machine carries only `windows-desktop` ([ci-runner-windows.md](ci-runner-windows.md)).
+- Six Linux instances (`radarsu-worker-N`) carry the labels `intentic` and `desktop`; jobs ask for `[self-hosted, intentic]` or `[self-hosted, intentic, desktop]`. Two more (`radarsu-light-N`) carry only `intentic-light`, which only `changes` and `preflight` ask for. Those two jobs start every pipeline and take seconds, but on the shared runners they waited behind the previous push's long jobs, up to 7.5 minutes, and every other job of the push, including the ones whose start cancels a superseded push, waited with them. [`.github/actionlint.yaml`](../../.github/actionlint.yaml) declares the labels, so a job asking for one no runner carries fails the lint. The Windows machine carries only `windows-desktop` ([ci-runner-windows.md](ci-runner-windows.md)).
 - Jobs run in `ghcr.io/intentic/ci-base` or `ci-desktop` and mount `/ci-cache` and, where they drive Docker, the host docker socket. `/ci-cache` sits on the same filesystem as the runners' work directories so pnpm can hard-link from its store.
 - One job, `verify-machine`, starts its container `--privileged` with a tmpfs at `/history`: the worktree-isolation suites need `unshare --mount` and an overlay mount, as a sandbox has them. It needs nothing of the host beyond what Docker Desktop grants any privileged container, and a job mounting the docker socket already holds as much.
-- Nothing inside a container can see that six jobs share the box. The test suites size their workers from a pool every job draws from: `TEST_SLOTS: "16"` one-GiB slots in `TEST_SLOTS_DIR: /ci-cache/test-slots`, held by flock ([`test-memory-pool.mjs`](../../_tools/scripts/lib/test-memory-pool.mjs)), set in `ci.yml` and `verify.yml`. A run takes at most three quarters of what is free and never waits; one that finds nothing runs one worker. 16 is what the 26 GB WSL VM leaves after typechecks, builds and Docker: change it with the VM's `memory=`. What still sizes by division (the e2e tiers, `nightly.yml`) reads `CI_HOST_JOBS: "6"`, which [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs) divides memory by. Change it with the fleet.
+- Nothing inside a container can see that six jobs share the box. The test suites size their workers from a pool every job draws from: `TEST_SLOTS: "16"` one-GiB slots in `TEST_SLOTS_DIR: /ci-cache/test-slots`, held by flock ([`test-memory-pool.mjs`](../../_tools/scripts/lib/test-memory-pool.mjs)), set in `ci.yml` and `verify.yml`. A run takes at most three quarters of what is free. The first `TEST_SLOTS_RESERVED: "6"` are only for the verify groups (`TEST_SLOTS_PRIORITY: gate` in `verify.yml`), whose suites the release and the platform deploy wait on, and `verify-clocks`, which gates nothing, holds at most `TEST_SLOTS_CAP: "6"`. A suite that wants three workers or more and finds less than half of them free waits up to `TEST_SLOTS_WAIT: "90"` seconds for room, then runs with what it holds, one worker at least. Without the band, the web suite once ran on one worker for 14.6 minutes instead of 4.3 on four. 16 is what the 26 GB WSL VM leaves after typechecks, builds and Docker: change it with the VM's `memory=`. What still sizes by division (the e2e tiers, `nightly.yml`) reads `CI_HOST_JOBS: "6"`, which [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs) divides memory by. Change it with the fleet.
 - The web's vue-tsc keeps its build info in `/ci-cache/tsbuildinfo` (`TSBUILDINFO_SHARE_DIR`), so a check on any runner starts from the last passing one rather than from whatever push that runner last saw.
 - A newer push supersedes the older one's measurement. Every job that only measures carries a per-job concurrency group with `cancel-in-progress`, so its copy for the older push stops when the newer push's starts; the jobs that publish or deploy carry none. A superseded push publishes nothing, because every publishing job requires its gates to have succeeded, and the push on top publishes instead.
 - The host's Docker Desktop also runs the owner's sandboxes, so nothing here prunes a tagged image or a volume.
@@ -60,7 +60,7 @@ Space freed inside the distro stays in its VHDX until a compaction. When one pas
 ## Registering a runner
 
 1. In the distro, create `/ci-cache` and turn on Docker Desktop's WSL integration for the distro.
-2. Settings > Actions > Runners > New self-hosted runner (Linux x64) gives a token. In a new directory per instance: `./config.sh --url https://github.com/intentic --token <token> --name <host>-<n> --labels intentic,desktop --unattended`.
+2. Settings > Actions > Runners > New self-hosted runner (Linux x64) gives a token. In a new directory per instance (`~/actions-runner-<n>`, which the janitor's glob covers): `./config.sh --url https://github.com/intentic/intentic --token <token> --name <host>-<n> --labels intentic,desktop --unattended`. A light-lane instance is `--name <host>-light-<n> --labels intentic-light`, nothing else: a runner that also carried `intentic` would be handed any job and be busy when a pipeline's first job needs it.
 3. `sudo ./svc.sh install && sudo ./svc.sh start`.
 4. On Windows, from an ordinary PowerShell, run [`setup-wsl-fleet.ps1`](../../_tools/scripts/ci/setup-wsl-fleet.ps1). The first time add `-Restart`, which applies `vmIdleTimeout=-1`. It also points each runner's `.env` at the job-started hook (`ACTIONS_RUNNER_HOOK_JOB_STARTED`) and restarts that runner once it is idle.
 

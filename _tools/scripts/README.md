@@ -34,7 +34,12 @@ flowchart LR
   task counts to the memory free when they start (`verify/test-workers.mjs`). Every bun test process, in `suites` and
   in the re-runs of failures alone, is held under a memory ceiling (`lib/memory-ceiling.mjs`) that kills and names a
   runaway suite. On the CI fleet `suites` takes its workers from the host's test memory pool instead
-  (`lib/test-memory-pool.mjs`): one-GiB flock slots every job on the box draws from, never waited on.
+  (`lib/test-memory-pool.mjs`): one-GiB flock slots every job on the box draws from. A band of them is kept for the
+  gate jobs, a job can be capped, and a big suite that finds the pool short waits a bounded time for room. On CI
+  `suites` also ends a bun that reported every file and never exited (`lib/bun-progress.mjs`), keeping its verdict.
+- `verify/changed-packages.mjs` names the packages whose own files a push changed, which CI's `quick` job
+  typechecks. Unlike turbo's `[base...HEAD]`, a changed lockfile or root `package.json` does not make that every
+  package.
 - `verify/clock-suites.mjs` is CI's `verify-clocks`: the test files whose text touches dates, zones or crons, run in
   UTC+14 and UTC-11. `lib/seed-buildinfo.mjs` starts the web's vue-tsc from a sibling worktree's build info, and on the
   fleet from the last passing check's (`TSBUILDINFO_SHARE_DIR`).

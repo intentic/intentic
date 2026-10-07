@@ -7,6 +7,7 @@ import { freeBytesOf, readReadingSync, ROOM_SOCKET } from "../../constants/src/m
 import {
     availableMemory,
     hostJobs,
+    leastSlots,
     maxWorkers,
     slotsPerWorker,
     standaloneWorkers,
@@ -95,6 +96,17 @@ test("from a pool, a run starts the workers its slots pay for, and one when it g
     assert.equal(workersForSlots(12, 1, 6), 6);
     assert.equal(workersForSlots(2, 3, 6), 1);
     assert.equal(workersForSlots(0, 1, 6), 1);
+});
+
+test("from a pool, only a run that would spread over three workers or more waits, and for half of them", () => {
+    // The web: 877 files want 6 workers of 3 slots, and wait for 3 of them.
+    assert.equal(leastSlots(6, 3), 9);
+    // Five wanted rounds the half up.
+    assert.equal(leastSlots(5, 2), 6);
+    assert.equal(leastSlots(3, 1), 2);
+    // One or two workers is never worth a wait.
+    assert.equal(leastSlots(2, 3), 0);
+    assert.equal(leastSlots(1, 1), 0);
 });
 
 test("a caller's own TEST_WORKERS wins, and an empty one is unset", () => {

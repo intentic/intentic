@@ -115,6 +115,19 @@ export const readWorkspaceGraph = (root) => {
     return { packages, byDir, dependents };
 };
 
+// The packages holding one of `changed`, each path owned by the deepest member containing it. A root file (GLOBAL, a
+// README) belongs to none: it changes no package's own source, whatever it does to the graph around them.
+export const ownersOf = (graph, changed) => {
+    const owners = new Set();
+    for (const path of changed) {
+        const owner = graph.byDir.find(([dir]) => path === dir || path.startsWith(`${dir}/`));
+        if (owner) {
+            owners.add(owner[1]);
+        }
+    }
+    return owners;
+};
+
 // The packages a set of changed paths reaches: those containing a changed file, plus everything that transitively
 // depends on one. `global` set means a root file changed, so `affected` is every package. `throughAssets: false` is the
 // closure a typecheck and a test run need: an asset-only package is affected itself but reaches no dependent, so an
@@ -124,13 +137,7 @@ export const affectedBy = (graph, changed, { throughAssets = true } = {}) => {
     if (globalHit !== undefined) {
         return { global: globalHit, seeds: new Set(), affected: new Set(graph.packages.keys()) };
     }
-    const seeds = new Set();
-    for (const path of changed) {
-        const owner = graph.byDir.find(([dir]) => path === dir || path.startsWith(`${dir}/`));
-        if (owner) {
-            seeds.add(owner[1]);
-        }
-    }
+    const seeds = ownersOf(graph, changed);
     // Breadth-first up the reverse edges: a package is affected when anything it depends on is.
     const affected = new Set();
     const queue = [...seeds];

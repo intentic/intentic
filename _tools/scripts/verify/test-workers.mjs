@@ -79,6 +79,14 @@ export const slotsPerWorker = (workerBytes, slotBytes) => Math.max(1, Math.ceil(
 // every run did before the pool.
 export const workersForSlots = (slots, perWorker, wanted) => Math.max(1, Math.min(wanted, Math.floor(slots / perWorker)));
 
+// What a run waits for when the pool is short (TEST_SLOTS_WAIT, test-memory-pool.mjs): the slots for half the workers it
+// wanted. Only a run that wants WAIT_FROM_WORKERS or more waits at all: one that would spread over two workers loses
+// little on one, and a small suite should never sit behind a big one. Its worker count is fixed when bun starts, so a
+// suite that starts short-handed stays that way: the web's 877 files took 14.6 minutes on the one worker a crowded pool
+// gave it and 4.3 on four (runs 37694899281 and 37694488316, 2026-10-07).
+export const WAIT_FROM_WORKERS = 3;
+export const leastSlots = (wanted, perWorker) => (wanted < WAIT_FROM_WORKERS ? 0 : Math.ceil(wanted / 2) * perWorker);
+
 // The value to hand `suites`, as a string for an env block. An empty variable counts as unset, as `${VAR:-}` reads it.
 export const testWorkers = (env = process.env, freeBytes = availableMemory()) => {
     const own = env.TEST_WORKERS;

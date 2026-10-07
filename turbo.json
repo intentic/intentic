@@ -66,7 +66,8 @@
         // TEST_WORKERS bounds a repo-wide run's memory (test-workers.mjs sizes it to the free memory), and
         // TEST_MEMORY_CEILING_MB moves the ceiling each bun process is held under; `envMode: strict` drops any
         // variable not named here. TEST_SLOTS_DIR and TEST_SLOTS name the CI host's test memory pool, which `suites`
-        // sizes its workers from when no TEST_WORKERS is given (_tools/scripts/lib/test-memory-pool.mjs), and
+        // sizes its workers from when no TEST_WORKERS is given (_tools/scripts/lib/test-memory-pool.mjs), the other
+        // TEST_SLOTS_* say which band of it a job draws from, how much one run may hold and how long it may wait, and
         // TEST_WORKERS_MAX caps what one run asks it for. On the TASK, not in `globalPassThroughEnv`, which mirrors the Dockerfile's ENV
         // blocks and is diffed against them; passThrough keeps the VALUE out of the cache key. INTENTIC_TURN_OWNER
         // is the stamp the sandbox's reaper finds a stopped conversation's leftovers by (system/boot/reaper.ts):
@@ -82,6 +83,10 @@
                 "TEST_MEMORY_CEILING_MB",
                 "TEST_SLOTS_DIR",
                 "TEST_SLOTS",
+                "TEST_SLOTS_RESERVED",
+                "TEST_SLOTS_PRIORITY",
+                "TEST_SLOTS_CAP",
+                "TEST_SLOTS_WAIT",
                 "TEST_WORKERS_MAX",
                 "CI_HOST_JOBS",
                 "SUITES_JUNIT_DIR",

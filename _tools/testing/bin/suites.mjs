@@ -8,9 +8,10 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
+import { watchProgress } from "../../scripts/lib/bun-progress.mjs";
 import { ceilingBytes, formatGiB, processTree, watchMemory } from "../../scripts/lib/memory-ceiling.mjs";
-import { acquireSlots, poolOf, SLOT_BYTES } from "../../scripts/lib/test-memory-pool.mjs";
-import { maxWorkers, slotsPerWorker, standaloneWorkers, wantedWorkers, workersForSlots } from "../../scripts/verify/test-workers.mjs";
+import { acquireAtLeast, poolOf, SLOT_BYTES } from "../../scripts/lib/test-memory-pool.mjs";
+import { leastSlots, maxWorkers, slotsPerWorker, standaloneWorkers, wantedWorkers, workersForSlots } from "../../scripts/verify/test-workers.mjs";
 
 // Unit: purely a hang detector, since nothing in a unit suite waits on anything. Integration: real work on a shared
 // machine, room for two 30s waitFor SETTLES.
@@ -24,8 +25,9 @@ const INTEGRATION_GLOBS = INTEGRATION_MARKERS.map((marker) => `**/*.${marker}.te
 // Worker count per run, decided as each run starts. `TEST_WORKERS` set by the caller wins: it is how a repo-wide fan-out
 // bounds memory (test-workers.mjs sizes it to the cgroup). On a CI host with a test memory pool (TEST_SLOTS_DIR,
 // ../../scripts/lib/test-memory-pool.mjs) the run takes slots for the workers its file count is worth, so a big suite
-// spreads out when the host is quiet and runs on one worker when it is not. Anywhere else a lone run sizes itself to the
-// box, since one worker per core on the web package is 2 GiB a core.
+// spreads out when the host is quiet; when it is not, a big one waits up to TEST_SLOTS_WAIT for half its workers'
+// worth, then runs with what it holds. Anywhere else a lone run sizes itself to the box, since one worker per core on
+// the web package is 2 GiB a core.
 const GIB = 1024 ** 3;
 // `--worker-gib=N` in a package's test script: what one of ITS workers holds at its peak, which is what a worker costs
 // the pool. One GiB unless the package says otherwise; the web and the daemon say otherwise (their package.json).
@@ -42,10 +44,12 @@ const sized = async (files) => {
     }
     const wanted = wantedWorkers(files, maxWorkers());
     const perWorker = slotsPerWorker(workerGib * GIB, SLOT_BYTES);
-    const held = await acquireSlots(pool, wanted * perWorker);
+    const held = await acquireAtLeast(pool, wanted * perWorker, leastSlots(wanted, perWorker));
     const workers = workersForSlots(held.slots, perWorker, wanted);
+    const waited = held.waitedMs > 0 ? `, after waiting ${String(Math.round(held.waitedMs / 1000))} s for room` : "";
+    const band = pool.gate ? "" : pool.reserved > 0 ? ` (${String(pool.reserved)} kept for the gates)` : "";
     process.stderr.write(
-        `suites: ${String(workers)} worker${workers === 1 ? "" : "s"} for ${String(files)} files (${String(wanted)} wanted), holding ${String(held.slots)} of the host's ${String(pool.total)} GiB test pool\n`,
+        `suites: ${String(workers)} worker${workers === 1 ? "" : "s"} for ${String(files)} files (${String(wanted)} wanted), holding ${String(held.slots)} of the host's ${String(pool.total)} GiB test pool${band}${waited}\n`,
     );
     return { workers: String(workers), release: held.release };
 };
@@ -154,29 +158,39 @@ const reportStoodDown = () => {
     );
 };
 
-// How many files of one kind a run will see, for the worker count: the chosen ones, or every one bun would discover.
-const filesOf = (integration) =>
+// The files of one kind a run will see, for the worker count and the stall watch: the chosen ones, or every one bun
+// would discover.
+const filesFor = (integration) =>
     chosen === undefined
-        ? globSync(TEST_FILES, { exclude: IGNORES }).filter((file) => INTEGRATION_NAME.test(file) === integration).length
-        : (integration ? chosen.integration : chosen.unit).length;
+        ? globSync(TEST_FILES, { exclude: IGNORES }).filter((file) => INTEGRATION_NAME.test(file) === integration)
+        : integration
+          ? chosen.integration
+          : chosen.unit;
+
+// ON CI, bun's output passes through a watch that ends a run bun finished and never exited (bun-progress.mjs): run
+// 37694899281's verify-clocks reported every file and then held its runner for 27 minutes until the job timed out.
+// Anywhere else bun keeps the terminal, colours and all.
+const watchStalls = process.env.CI === "true" && !watch;
 
 // `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.
 // Every bun process of the run is held under a memory ceiling (memory-ceiling.mjs): one that passes it is a test
 // holding memory it never gives back, and the run is killed there rather than left to swap the machine to a halt.
-// `files` is how many the run will see, which sizes its workers; a watch passes none and runs bun's default.
-const run = async (extra, selection, files) => {
+// `files` are the ones the run will see, whose count sizes its workers; a watch passes none and runs bun's default.
+// `timeoutMs` is the run's per-test timeout, which tells the stall watch how long a silent test may still be running.
+const run = async (extra, selection, files, timeoutMs) => {
     const home = throwawayHome();
-    const { workers, release } = files === undefined ? { workers: undefined, release: () => {} } : await sized(files);
+    const { workers, release } = files === undefined ? { workers: undefined, release: () => {} } : await sized(files.length);
     const parallel = workers === undefined ? [] : [`--parallel=${workers}`];
     try {
         const child = spawn(
             "bun",
             ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...parallel, ...extra, ...selection],
             {
-                stdio: "inherit",
+                stdio: watchStalls ? ["inherit", "pipe", "pipe"] : "inherit",
                 env: { ...process.env, HOME: home, USERPROFILE: home, [STOOD_DOWN_FILE]: stoodDown },
             },
         );
+        const stalls = watchStalls && files !== undefined ? watchProgress(child, { expected: files, timeoutMs }) : () => undefined;
         const ceiling = ceilingBytes();
         const stop = watchMemory(child, {
             ceiling,
@@ -201,10 +215,12 @@ const run = async (extra, selection, files) => {
         };
         process.once("SIGTERM", forward);
         process.once("SIGINT", forward);
-        const status = await new Promise((resolve) => {
+        const exited = await new Promise((resolve) => {
             child.on("error", () => resolve(1));
             child.on("exit", (code) => resolve(code ?? 1));
         });
+        // A run the stall watch ended keeps the verdict it read off bun's output, not the kill's exit code.
+        const status = stalls()?.status ?? exited;
         const peak = stop();
         if (peak !== undefined) {
             process.stderr.write(
@@ -234,7 +250,8 @@ const unit =
         : await run(
               [`--timeout=${UNIT_TIMEOUT_MS}`, ...report("unit"), ...ignoreArgs([...IGNORES, ...INTEGRATION_GLOBS])],
               chosen?.unit ?? [],
-              filesOf(false),
+              filesFor(false),
+              UNIT_TIMEOUT_MS,
           );
 const integration =
     chosen?.integration.length === 0
@@ -242,7 +259,8 @@ const integration =
         : await run(
               [`--timeout=${INTEGRATION_TIMEOUT_MS}`, ...report("integration"), ...ignoreArgs(IGNORES)],
               chosen?.integration ?? INTEGRATION_FILTERS,
-              filesOf(true),
+              filesFor(true),
+              INTEGRATION_TIMEOUT_MS,
           );
 reportStoodDown();
 process.exit(unit === 0 && integration === 0 ? 0 : 1);

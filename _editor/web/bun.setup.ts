@@ -12,6 +12,23 @@ import { sourceAliases } from "./source-aliases.js";
 // needs: `en` is compiled in, so it merges in this tick and fetches nothing.
 void registerCatalog(appCatalog);
 
+// WHAT THE APP REGISTERS AT BOOT AND A TEST'S BARE `createApp` DOES NOT: installUi's v-tooltip, v-longpress, v-action,
+// v-middleclick and <Icon>, installI18n's <i18n-t>, the router's <RouterLink> and <RouterView>. Vue warns on every
+// render of every component using one, and prints the component trace with its props for bun's console to inspect in
+// full. On one CI run that was 7,636 warnings and about 360,000 of the job's 375,000 log lines, chatTabs*.test.ts alone
+// some 300,000, formatting reactive objects no test reads (run 37694488316, 2026-10-07). They say nothing about the code
+// under test, since the app does register these, so they are dropped here by exact name. Every other Vue warning still
+// prints, an unknown component's included.
+const APP_GLOBALS =
+    /^\[Vue warn\]: Failed to resolve (?:directive: (?:tooltip|longpress|action|middleclick)|component: (?:Icon|i18n-t|RouterLink|RouterView))(?:\s|$)/u;
+const warn = console.warn.bind(console);
+console.warn = (...args: unknown[]): void => {
+    if (typeof args[0] === `string` && APP_GLOBALS.test(args[0])) {
+        return;
+    }
+    warn(...args);
+};
+
 // Vite's compile-time env, as the runtime reads it here: `import.meta.env` is `process.env` under bun.
 process.env[`BASE_URL`] ??= `/`;
 process.env[`DEV`] ??= `true`;

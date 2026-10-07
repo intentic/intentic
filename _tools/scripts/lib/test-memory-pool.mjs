@@ -10,29 +10,64 @@
 // the job that starts a second later is not left with nothing, and the kernel gives the slots back when the holder exits,
 // however it exits: a killed job cannot leak one.
 //
-// NEVER A WAIT. A run that finds the pool empty gets nothing and runs one worker, which is what every run got before the
-// pool existed; so the pool can only ever add workers, never stall a job behind another.
+// FIRST COME WAS NOT ENOUGH. On the second pipeline after the pool landed (run 37694899281, 2026-10-07) the web suite,
+// the one the platform gate waits on, found 2 slots free and ran its 877 files on ONE worker for 14.6 minutes, while
+// verify-clocks (which gates nothing) and a superseded push's jobs held the rest; on the run before, with the pool to
+// itself, the same suite took 4.3 minutes on four. So the pool has three more knobs, all off unless a job sets them:
+//   TEST_SLOTS_RESERVED  the first N slots only a gate run may take (TEST_SLOTS_PRIORITY=gate: verify.yml's groups,
+//                        whose suites production and the release wait on); every other run draws from the rest.
+//   TEST_SLOTS_CAP       the most slots one run of this job may hold (verify-clocks: its two zones are worth a few
+//                        workers, not the box).
+//   TEST_SLOTS_WAIT      seconds a run that got less than it needs may keep polling for more (acquireAtLeast). A big
+//                        suite that starts short-handed stays short-handed, since bun's worker count is fixed at start,
+//                        so a bounded wait for room is worth minutes; a small suite never waits.
 import { spawn } from "node:child_process";
 
 export const SLOT_BYTES = 1024 ** 3;
 // The most of what is free one run may take, in percent.
 export const SHARE_PERCENT = 75;
+// How often a waiting run asks the pool again.
+export const POLL_MS = 5_000;
+
+const wholeNumber = (raw) => {
+    const value = Number(raw);
+    return raw !== undefined && raw !== "" && Number.isInteger(value) && value >= 0 ? value : undefined;
+};
 
 // The pool this process may draw from, or undefined where none is configured (a laptop, a sandbox: those size from their
-// own free memory, test-workers.mjs).
+// own free memory, test-workers.mjs). `reserved` is clamped below the total, so an open run always has a slot to try.
 export const poolOf = (env = process.env) => {
     const dir = env.TEST_SLOTS_DIR;
     const total = Number(env.TEST_SLOTS);
-    return dir === undefined || dir === "" || !Number.isInteger(total) || total < 1 ? undefined : { dir, total };
+    if (dir === undefined || dir === "" || !Number.isInteger(total) || total < 1) {
+        return undefined;
+    }
+    const cap = wholeNumber(env.TEST_SLOTS_CAP);
+    return {
+        dir,
+        total,
+        reserved: Math.min(total - 1, wholeNumber(env.TEST_SLOTS_RESERVED) ?? 0),
+        gate: env.TEST_SLOTS_PRIORITY === "gate",
+        cap: cap === undefined || cap < 1 ? undefined : cap,
+        waitMs: (wholeNumber(env.TEST_SLOTS_WAIT) ?? 0) * 1000,
+    };
 };
 
-// Bash holds the locks, since node has no flock: it tries every slot without waiting, keeps the share it may, prints how
-// many it kept, then waits on stdin. Closing stdin (release, or this process dying) ends it, and its locks with it.
+// The slot numbers a run of `pool` may try, first to last: a gate run every slot, the reserved band first; any other
+// run only the slots above it.
+export const slotRange = (pool) => ({ first: pool.gate ? 1 : (pool.reserved ?? 0) + 1, last: pool.total });
+
+// What one run may hold of `want`: no more than the job's cap.
+const capped = (pool, want) => Math.min(want, pool?.cap ?? want);
+
+// Bash holds the locks, since node has no flock: it tries every slot in its range without waiting, keeps the share it
+// may, prints how many it kept, then waits on stdin. Closing stdin (release, or this process dying) ends it, and its locks
+// with it.
 const HOLDER = `
-dir=$1 total=$2 want=$3 share=$4
+dir=$1 first=$2 last=$3 want=$4 share=$5
 mkdir -p "$dir" 2>/dev/null || { echo 0; exit 0; }
 held=()
-for i in $(seq 1 "$total"); do
+for i in $(seq "$first" "$last"); do
   exec {fd}>>"$dir/slot-$i" 2>/dev/null || continue
   if flock -n "$fd"; then held+=("$fd"); else exec {fd}>&-; fi
 done
@@ -50,13 +85,15 @@ const NOTHING = Object.freeze({ slots: 0, release: () => {} });
 // bash, no flock, an unwritable directory) holds nothing, and the caller runs as it would have without a pool.
 export const acquireSlots = (pool, want) =>
     new Promise((resolve) => {
-        if (pool === undefined || want < 1) {
+        const asked = capped(pool, want);
+        if (pool === undefined || asked < 1) {
             resolve(NOTHING);
             return;
         }
+        const { first, last } = slotRange(pool);
         let child;
         try {
-            child = spawn("bash", ["-c", HOLDER, "test-memory-pool", pool.dir, String(pool.total), String(want), String(SHARE_PERCENT)], {
+            child = spawn("bash", ["-c", HOLDER, "test-memory-pool", pool.dir, String(first), String(last), String(asked), String(SHARE_PERCENT)], {
                 stdio: ["pipe", "pipe", "ignore"],
             });
         } catch {
@@ -91,3 +128,34 @@ export const acquireSlots = (pool, want) =>
             settle({ slots, release: () => child.stdin.end() });
         });
     });
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Up to `want` slots, and if the first answer holds fewer than `least`, more asked for every `pollMs` until it does or
+// the pool's TEST_SLOTS_WAIT runs out. What each ask got is kept, so a run that waits never ends with less than it had.
+// `least` past what the job may hold (its cap) is lowered to the cap: a wait for slots the cap forbids would always time
+// out. `waitedMs` is how long it actually waited, for the run's own log line.
+export const acquireAtLeast = async (pool, want, least, { pollMs = POLL_MS } = {}) => {
+    const limit = capped(pool, want);
+    const goal = Math.min(least, limit);
+    const holders = [await acquireSlots(pool, limit)];
+    const held = () => holders.reduce((sum, holder) => sum + holder.slots, 0);
+    const started = Date.now();
+    const deadline = started + (pool?.waitMs ?? 0);
+    while (held() < goal && Date.now() < deadline) {
+        await pause(Math.min(pollMs, deadline - Date.now()));
+        const more = await acquireSlots(pool, limit - held());
+        if (more.slots > 0) {
+            holders.push(more);
+        }
+    }
+    return {
+        slots: held(),
+        waitedMs: held() < goal || holders.length > 1 ? Date.now() - started : 0,
+        release: () => {
+            for (const holder of holders) {
+                holder.release();
+            }
+        },
+    };
+};

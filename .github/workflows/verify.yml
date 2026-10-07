@@ -41,6 +41,11 @@ env:
   # WSL VM's 26 GB, leaving the rest to typechecks, builds and Docker.
   TEST_SLOTS_DIR: /ci-cache/test-slots
   TEST_SLOTS: "16"
+  # These groups are the gates production and the release wait on, so their suites may also draw from the six slots
+  # ci.yml keeps back from every other job, and a big one short of half its workers waits up to 90 s for room.
+  TEST_SLOTS_RESERVED: "6"
+  TEST_SLOTS_PRIORITY: gate
+  TEST_SLOTS_WAIT: "90"
   # Where a passing vue-tsc check leaves its build info for the next one on any runner (seed-buildinfo.mjs).
   TSBUILDINFO_SHARE_DIR: /ci-cache/tsbuildinfo
 

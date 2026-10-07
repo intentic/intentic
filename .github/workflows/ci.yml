@@ -96,6 +96,12 @@ env:
   # pair, and docs/ops/ci-runner.md says when to change them.
   TEST_SLOTS_DIR: /ci-cache/test-slots
   TEST_SLOTS: "16"
+  # The first six slots are the gates' alone (verify.yml's groups set TEST_SLOTS_PRIORITY=gate): a job here that gates
+  # nothing cannot leave the web suite one worker, which is how run 37694899281 spent 14.6 minutes on it instead of 4.3.
+  # A suite that would spread over three workers or more and finds less than half of them free waits up to 90 s for
+  # room, holding what it got (test-memory-pool.mjs).
+  TEST_SLOTS_RESERVED: "6"
+  TEST_SLOTS_WAIT: "90"
   # Where a passing vue-tsc check leaves its build info for the next one on any runner (seed-buildinfo.mjs).
   TSBUILDINFO_SHARE_DIR: /ci-cache/tsbuildinfo
 
@@ -127,7 +133,11 @@ jobs:
     # To run CI on an outside contribution, push its branch to this repository and open the pull request from
     # there — having read the diff first.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, intentic]
+    # ON THE LIGHT LANE, with `preflight`: two runner processes on the same host that carry `intentic-light` and
+    # nothing else, so no other job can land on them and the two roots never queue. On the six shared runners they
+    # did: a push's `preflight` waited 7.5 minutes behind the previous push's 15-minute jobs (run 37694899281), and
+    # every job of the new push waited with it, including the copies whose start cancels the superseded push's.
+    runs-on: [self-hosted, intentic-light]
     # IN THE CONTAINER like every job that only reads the checkout, and that placement is worth ~4.5 minutes
     # per pipeline. This used to be a host job, and a host job on these runners must first chown the whole
     # persistent workspace back from the container jobs (which run as root) before checkout can write
@@ -277,7 +287,8 @@ jobs:
     # The second DAG root — see the fork boundary on `changes`. The verify groups and `e2e-hermetic` hang off
     # this one (they wait for it, and its skip skips them), so it carries the same guard rather than inheriting one.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, intentic]
+    # The light lane, for `changes`' reason.
+    runs-on: [self-hosted, intentic-light]
     timeout-minutes: 15
     container:
       # Hardcoded rather than an `env` reference: workflow-level `env` is not one of the contexts available to
@@ -352,9 +363,13 @@ jobs:
   # still type-check and test each whole closure, dependents included. Main's fix agent hears this job with the rest
   # of the run, once the run has finished measuring (_sandbox/sandbox/src/ci/main-fixer.ts).
   #
-  # The range is the one `changes` reads, from the same event fields. `[<base>...HEAD]` selects the packages with a
-  # file changed between the two commits and reads nothing of the working tree, and `--only` leaves their
-  # dependencies' typecheck out: the declarations those read come from the emit, the same one verify.yml runs. The
+  # The range is the one `changes` reads, from the same event fields. The typecheck covers the packages holding a file
+  # the range changed (_tools/scripts/verify/changed-packages.mjs), and `--only` leaves their dependencies' typecheck
+  # out: the declarations those read come from the emit, the same one verify.yml runs. Not turbo's `[<base>...HEAD]`,
+  # which reads a changed root file (the lockfile, the root package.json, turbo.json) as every package changed: a pnpm
+  # bump made this job typecheck all 97 packages for 9 to 10 minutes, at the same moment the verify groups typechecked
+  # the same 97 and each missed the others' cache (runs 37694488316, 37694899281). A root file's reach is the verify
+  # groups' to measure; they typecheck every package of their closures on every push. The
   # push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) asks the same range what only a
   # range can answer: every check the manifest lists with a `tidy` finding counted only when the range added it
   # (preflight merely warns about tidiness, and the nightly tidy job reads it a day later with no author attached),
@@ -434,9 +449,15 @@ jobs:
         shell: bash
         env:
           BASE: ${{ steps.base.outputs.sha }}
-        run: >-
-          pnpm turbo run typecheck "--filter=[$BASE...HEAD]" --only --continue=dependencies-successful
-          --output-logs=errors-only --concurrency="$(node _tools/scripts/verify/test-workers.mjs --typecheck-concurrency)"
+        # One `--filter=<name>` per word, which is why $filters goes unquoted; empty when no package's own file changed,
+        # and the script has said so.
+        run: |
+          set -euo pipefail
+          filters="$(node _tools/scripts/verify/changed-packages.mjs "$BASE")"
+          if [ -z "$filters" ]; then exit 0; fi
+          # shellcheck disable=SC2086
+          pnpm turbo run typecheck $filters --only --continue=dependencies-successful \
+            --output-logs=errors-only --concurrency="$(node _tools/scripts/verify/test-workers.mjs --typecheck-concurrency)"
       # After the install: the linter and the checks that read templates need it, and so does the tidy checks' run at
       # the base, in a throwaway worktree lent this one's node_modules (check-snapshot.mjs).
       - name: Check what the push changed
@@ -834,6 +855,9 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       PNPM_STORE: /ci-cache/pnpm-store
       TURBO_CACHE_DIR: /ci-cache/turbo
+      # It gates nothing, so it draws from the open band and holds at most six slots a run: two web workers or three of
+      # the daemon's. Uncapped it took ten to twelve of the sixteen while the platform gate's web suite ran on one.
+      TEST_SLOTS_CAP: "6"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

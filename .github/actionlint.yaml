@@ -2,7 +2,7 @@
 #
 # actionlint checks `runs-on` against the labels GitHub itself offers, so without this file every job on the
 # fleet reports "label is unknown" — 40 findings across 10 workflows, all of them the same non-finding, which
-# is exactly how a linter gets ignored and then removed. Declaring the three real labels here turns that noise
+# is exactly how a linter gets ignored and then removed. Declaring the real labels here turns that noise
 # off and turns the check back ON: a job that asks for a label the fleet does not carry now fails the lint
 # instead of queueing forever against a runner that will never pick it up.
 #
@@ -19,3 +19,7 @@ self-hosted-runner:
         # The single interactive Windows machine, which carries NEITHER of the two above: `runs-on` is an AND
         # over labels, so a Windows box carrying `intentic` would be handed container jobs it cannot run.
         - windows-desktop
+        # Two Linux runner processes on the same host that carry ONLY this label, so the pipeline's two roots
+        # (`changes`, `preflight`) never queue behind the six shared runners' long jobs. Not `intentic`: a runner
+        # carrying both would be handed any job and be busy when a root needs it.
+        - intentic-light
