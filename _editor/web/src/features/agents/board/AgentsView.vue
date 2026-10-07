@@ -56,8 +56,6 @@ import { followAcross, useBoardScope } from "./view/boardScope";
 import { useBoardView } from "./view/boardView";
 import { useCardMenu } from "./view/cardMenu";
 import { useFamilyArchive } from "./view/familyArchive";
-import { useResumeAll } from "./view/resumeAll";
-import { providerLabel } from "@intentic/sandbox-contract";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
 import { useFoundCard } from "./view/foundCard";
 import { boardStarters } from "./view/firstScreen";
@@ -157,13 +155,6 @@ const foundAnnouncement = computed(() =>
 const withFamilies = (ids: readonly string[]): string[] => lanes.withFamilies(ids, agents.agentById);
 const familyArchive = useFamilyArchive({ archive, familyIds, agentById: agents.agentById, coarse });
 const { pending: pendingFamilyArchive } = familyArchive;
-// One press for the agents one provider's limit stopped together (resumeAll.ts).
-const { groups: limitStopped, busy: resumingAll, resume: resumeAll } = useResumeAll({
-    fleet: agents.fleet,
-    resumeHeldTurn: agents.resumeHeldTurn,
-    resendAtReset: (id) => agents.setBreakPolicy(id, `limit`, `resend`),
-    notice,
-});
 const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
     mobile,
     peeked,
@@ -252,7 +243,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
 // cards in them arrive in reading order, row one of every lane together, then row two, so the board is seen filling
 // the way it is read and the opening lasts as long as the longest lane, capped, never as long as every card. Stacked
 // on a narrow screen, the lanes are one column read top to bottom, so the whole board is one column here too. Rows are
-// what a lane holds (`data-reveal`): held wakes, limit groups, runs and agent cards with their trays.
+// what a lane holds (`data-reveal`): held wakes, runs and agent cards with their trays.
 //
 // A CARD ARRIVING after that scale-fades into its lane (`lane` below): a new agent, or a filter's matches coming back.
 // Each card sits in its own <Transition>, which only plays an entrance with `appear`, so `appear` turns on once the
@@ -447,36 +438,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             @approve="releaseWake(entry.id, `approve`)"
                             @reject="releaseWake(entry.id, `reject`)"
                         />
-                    </div>
-                    <!-- Agents one provider's usage limit stopped together get one press here, not one Continue each. -->
-                    <div v-if="lane.key === 'attention' && !view.archive && limitStopped.length > 0" class="flex flex-col gap-1.5 pb-2.5">
-                        <div
-                            v-for="group in limitStopped"
-                            :key="group.provider"
-                            data-reveal
-                            class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg border border-line px-3 py-2 text-2xs text-muted"
-                        >
-                            <span class="min-w-0">{{
-                                t(`agents.agentsView.limitStopped`, { count: group.ids.length, provider: providerLabel(group.provider) }, group.ids.length)
-                            }}</span>
-                            <Button
-                                size="small"
-                                severity="secondary"
-                                class="shrink-0 whitespace-nowrap"
-                                :disabled="resumingAll.has(group.provider)"
-                                v-tooltip.top="{
-                                    title: providerLabel(group.provider),
-                                    note: group.reopensAt === undefined ? t(`agents.agentsView.resumeAllNowHint`) : t(`agents.agentsView.resumeAllWhenBackHint`),
-                                }"
-                                @click="resumeAll(group)"
-                            >
-                                <Icon :name="resumingAll.has(group.provider) ? `spinner` : `play`" :spin="resumingAll.has(group.provider)" />{{
-                                    group.reopensAt === undefined
-                                        ? t(`agents.agentsView.resumeAllNow`)
-                                        : t(`agents.agentsView.resumeAllWhenBack`, { provider: providerLabel(group.provider) })
-                                }}
-                            </Button>
-                        </div>
                     </div>
                     <!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-3.5 pb-2.5">

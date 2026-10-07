@@ -22,7 +22,6 @@ import {
     limitBack,
     limitCorner,
     limitCountdown,
-    limitGroups,
     memoryHeld,
     onlyOwnerCanAnswer,
     promptHeldJob,
@@ -982,50 +981,6 @@ describe("landedDelivery", () => {
         expect(landedDelivery({ delivery: { ...base, state: `too-large` } })?.text).toBe(
             `Too large to deliver by itself: press "Bring back changes" in the folder's window`,
         );
-    });
-});
-
-// One press for the agents a provider's limit stopped together.
-describe("limitGroups", () => {
-    const stopped = (id: string, over: Partial<AgentStanding> & { provider?: `claude` | `zai` } = {}) => ({
-        id,
-        provider: `zai` as const,
-        status: `error` as const,
-        attention: none,
-        failureCode: `rate_limit`,
-        limitHeld: true,
-        ...over,
-    });
-
-    it("gathers two or more held turns of one provider, and books them when every reset is known and ahead", () => {
-        const at = (minutes: number): number => Math.round((NOW + minutes * 60_000) / 1_000);
-        expect(limitGroups([stopped(`a`, { limitResetsAt: at(10) }), stopped(`b`, { limitResetsAt: at(40) })], NOW)).toEqual([
-            { provider: `zai`, ids: [`a`, `b`], reopensAt: at(40) * 1_000 },
-        ]);
-    });
-
-    it("sends them now when any reset is unknown or already past", () => {
-        expect(limitGroups([stopped(`a`), stopped(`b`, { limitResetsAt: Math.round(NOW / 1_000) + 600 })], NOW)).toEqual([
-            { provider: `zai`, ids: [`a`, `b`] },
-        ]);
-        expect(limitGroups([stopped(`a`, { limitResetsAt: Math.round(NOW / 1_000) - 1 }), stopped(`b`)], NOW)).toEqual([
-            { provider: `zai`, ids: [`a`, `b`] },
-        ]);
-    });
-
-    it("leaves out a lone card, another provider, a booked resend, a turn not held, and another box's card", () => {
-        expect(
-            limitGroups(
-                [
-                    stopped(`a`),
-                    stopped(`b`, { provider: `claude` }),
-                    stopped(`c`, { limitScheduled: true }),
-                    stopped(`d`, { limitHeld: false }),
-                    { ...stopped(`e`), sandboxId: `box-2` },
-                ],
-                NOW,
-            ),
-        ).toEqual([]);
     });
 });
 

@@ -4,7 +4,6 @@ import {
     type AgentAttention,
     type AgentJob,
     type AgentOrigin,
-    type AgentProvider,
     type AgentStatus,
     type AgentSummary,
     type AgentWatch,
@@ -129,43 +128,6 @@ export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boo
 // for Active, as an armed watch does: a card counted in the badge and the tab title for the hours until a reset the
 // reader already answered was a call nobody could answer. The stall still shows, on the card's own chip and clock.
 export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
-
-// Agents one provider's spent allowance stopped, each holding its refused turn and none booked to go again, gathered
-// for the board's one press instead of a walk down the lane pressing each (seven presses on seven cards, on a phone).
-// Only groups of two or more: one card already carries its own press. `reopensAt` is the latest reset among them (ms)
-// when every one of them published one still ahead, which is when "Resume all when it's back" can book them all
-// (the resume pass fires a held turn at its reset once the conversation answers the limit with a resend); otherwise
-// the press sends them all now, and one still refused says so on its own card.
-export interface LimitGroup {
-    readonly provider: AgentProvider;
-    readonly ids: readonly string[];
-    readonly reopensAt?: number;
-}
-export const limitGroups = (
-    agents: readonly (AgentStanding & {
-        readonly id: string;
-        readonly provider: AgentProvider;
-        readonly archivedAt?: number | undefined;
-        readonly sandboxId?: string | undefined;
-    })[],
-    now: number,
-): LimitGroup[] => {
-    const byProvider = new Map<AgentProvider, (typeof agents)[number][]>();
-    for (const agent of agents) {
-        if (limited(agent) && agent.limitHeld === true && !limitScheduled(agent) && agent.archivedAt === undefined && agent.sandboxId === undefined) {
-            byProvider.set(agent.provider, [...(byProvider.get(agent.provider) ?? []), agent]);
-        }
-    }
-    return [...byProvider.entries()]
-        .filter(([, held]) => held.length > 1)
-        .map(([provider, held]) => {
-            const ahead = held.flatMap((agent) =>
-                agent.limitResetsAt === undefined || agent.limitResetsAt * 1_000 <= now ? [] : [agent.limitResetsAt * 1_000],
-            );
-            const ids = held.map((agent) => agent.id);
-            return ahead.length === held.length ? { provider, ids, reopensAt: Math.max(...ahead) } : { provider, ids };
-        });
-};
 
 // A booked move: the owner's policy is already carrying the held turn to another account, on the resume pass's next
 // beat, seconds away, so the card names where it is going rather than when it goes.
