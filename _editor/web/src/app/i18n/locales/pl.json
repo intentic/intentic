@@ -4585,19 +4585,22 @@
             "announcedWhilePlatformOn": "Ogłosił {announced}, podczas gdy platforma ma w rejestrze {expected}. Dopóki się nie zgodzą, wszystko wysłane pod zapisany adres go mija.",
             "sandboxCheckingInUnder": "Ten sandbox melduje się pod adresem, którego platforma dla niego nie trzyma",
             "sandboxDoesNotAnswer": "Ten sandbox nie odpowiada pod swoim publicznym adresem",
-            "sandboxSetUpBefore": "Ten sandbox został skonfigurowany, zanim potrzebował {enables}",
-            "publicAddressDidNotAnswer": "Jego publiczny adres nie odpowiedział, gdy sandbox sprawdził go od środka."
+            "publicAddressDidNotAnswer": "Jego publiczny adres nie odpowiedział, gdy sandbox sprawdził go od środka.",
+            "unreachableElsewhere": "Niedostępny z innych urządzeń",
+            "setupPredatesPublicAddress": "Jego konfiguracja jest starsza niż publiczne adresy, więc otworzy go tylko komputer, na którym działa.",
+            "setupOutOfDate": "Jego konfiguracja jest nieaktualna"
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Podłącz komputer, na którym działa ten sandbox, żeby naprawić go stąd.",
-            "missingContainer": "Brakuje w tym kontenerze:",
-            "onlySandboxsOwnerReconnect": "Tylko właściciel tego sandboxa może go podłączyć ponownie.",
-            "openSetupScreen": "Otwórz jego ekran konfiguracji",
-            "reconnectSandbox": "Podłącz ten sandbox ponownie",
+            "connectComputerRunsSandbox": "Albo podłącz komputer, na którym działa, żeby naprawić go stąd.",
+            "onlySandboxsOwnerReconnect": "Tylko właściciel może go ponownie połączyć.",
+            "openSetupScreen": "Otwórz konfigurację",
+            "reconnectSandbox": "Połącz ponownie",
             "reconnecting": "Ponowne łączenie…",
             "reconnectingSandbox": "Ponowne łączenie tego sandboxa",
-            "replacesContainer": "Zastępuje kontener na {host}. Jego pliki, historia i silnik Dockera zostają.",
-            "sandboxReplacedPageReconnects": "Jeśli sandbox został wymieniony, ta strona połączy się sama, gdy tylko wróci."
+            "replacesContainer": "Odbudowuje jego kontener na {host}. Pliki, historia i Docker zostają.",
+            "sandboxReplacedPageReconnects": "Jeśli został wymieniony, ta strona połączy się sama, gdy wróci.",
+            "missingEnv": "Brakuje w jego kontenerze:",
+            "details": "Szczegóły"
         },
         "controlTokensSection": {
             "expired": "wygasł",

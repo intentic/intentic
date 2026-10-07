@@ -39,14 +39,23 @@ describe(`containerNotices`, () => {
         expect(notices[0]?.detail).toBe(`nothing answered.`);
     });
 
-    it(`names the missing keys and the repair when the container drifted`, () => {
+    // A gap the editor knows gets its own short, translated words; the card's action row is the repair.
+    it(`words a known drift gap itself and names the missing keys`, () => {
         const notices = containerNotices({ bootReport: report({ retrying: false, drift: [REACHABILITY_GAP] }), announceRefusal: null });
         expect(notices).toHaveLength(1);
         expect(notices[0]?.fault).toBe(`drift`);
         expect(notices[0]?.keys).toEqual([`SANDBOX_GRANT`, `INGRESS_URL`]);
-        expect(notices[0]?.repair).toContain(`setup command`);
-        // detail is rendered verbatim from the requirements table, not reworded here.
-        expect(notices[0]?.detail).toBe(REACHABILITY_GAP.lost);
+        expect(notices[0]?.title).toBe(`Unreachable from other devices`);
+        expect(notices[0]?.detail).not.toBe(REACHABILITY_GAP.lost);
+        expect(notices[0]?.repair).toBeUndefined();
+    });
+
+    // A newer daemon's requirement the editor has no words for still says something true: the daemon's own sentence.
+    it(`falls back to the daemon's sentence for a drift gap it does not know`, () => {
+        const unknown = { ...REACHABILITY_GAP, key: `someday`, lost: `Something it needs is missing.` };
+        const notices = containerNotices({ bootReport: report({ retrying: false, drift: [unknown] }), announceRefusal: null });
+        expect(notices[0]?.title).toBe(`Its setup is out of date`);
+        expect(notices[0]?.detail).toBe(`Something it needs is missing.`);
     });
 
     // Two copies taking turns at one address are why it stops answering: the copies are the errand, not the silence.

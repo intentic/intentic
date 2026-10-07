@@ -2402,17 +2402,20 @@
             "announcedWhilePlatformOn": "Sie hat {announced} angekündigt, während die Plattform {expected} verzeichnet hat. Solange die beiden nicht übereinstimmen, verfehlt alles, was an die verzeichnete Adresse geht, sie.",
             "sandboxCheckingInUnder": "Diese Sandbox meldet sich unter einer Adresse, die die Plattform nicht für sie führt",
             "sandboxDoesNotAnswer": "Diese Sandbox antwortet nicht an ihrer öffentlichen Adresse",
-            "sandboxSetUpBefore": "Diese Sandbox wurde eingerichtet, bevor sie {enables} brauchte"
+            "unreachableElsewhere": "Von anderen Geräten nicht erreichbar",
+            "setupPredatesPublicAddress": "Ihre Einrichtung ist älter als öffentliche Adressen, daher kann sie nur der Computer öffnen, auf dem sie läuft.",
+            "setupOutOfDate": "Ihre Einrichtung ist veraltet"
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Verbinden Sie den Computer, der diese Sandbox betreibt, um sie von hier aus zu reparieren.",
-            "missingContainer": "Fehlt in diesem Container:",
-            "onlySandboxsOwnerReconnect": "Nur der Eigentümer dieser Sandbox kann sie neu verbinden.",
-            "openSetupScreen": "Ihren Einrichtungsbildschirm öffnen",
-            "reconnectSandbox": "Diese Sandbox neu verbinden",
+            "connectComputerRunsSandbox": "Oder verbinden Sie den Computer, auf dem sie läuft, um sie von hier zu reparieren.",
+            "onlySandboxsOwnerReconnect": "Nur ihr Eigentümer kann sie neu verbinden.",
+            "openSetupScreen": "Einrichtung öffnen",
+            "reconnectSandbox": "Neu verbinden",
             "reconnecting": "Wird neu verbunden…",
-            "replacesContainer": "Ersetzt den Container auf {host}. Seine Dateien, seine Historie und seine Docker-Engine bleiben erhalten.",
-            "sandboxReplacedPageReconnects": "Wenn die Sandbox ersetzt wurde, verbindet sich diese Seite von selbst wieder, sobald sie zurück ist."
+            "replacesContainer": "Baut ihren Container auf {host} neu auf. Dateien, Historie und Docker bleiben.",
+            "sandboxReplacedPageReconnects": "Wurde sie ersetzt, verbindet sich diese Seite von selbst, sobald sie zurück ist.",
+            "missingEnv": "Fehlt in ihrem Container:",
+            "details": "Details"
         },
         "controlTokensSection": {
             "expired": "abgelaufen",

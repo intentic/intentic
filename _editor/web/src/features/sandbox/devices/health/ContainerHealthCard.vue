@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, Code, Icon } from "@intentic/ui";
+import { Button, Icon, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
@@ -39,6 +39,13 @@ const busy = ref(false);
 const failure = ref<string | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 const lines = ref<string[]>([]);
+
+// The missing env names are evidence for a bug report or a `docker inspect`, not something to act on, so they open
+// on asking. One open at a time: in practice there is only ever one drift notice.
+const openDetails = ref<string | undefined>(undefined);
+const toggleDetails = (key: string): void => {
+    openDetails.value = openDetails.value === key ? undefined : key;
+};
 
 const repair = async (): Promise<void> => {
     const deviceId = host.value?.hostId;
@@ -79,60 +86,80 @@ const repair = async (): Promise<void> => {
 </script>
 
 <template>
-    <section v-if="notices.length > 0" class="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3">
-        <div v-for="notice of notices" :key="notice.fault" class="flex flex-col gap-2">
-            <div class="flex items-start gap-2">
-                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-                <div class="flex min-w-0 flex-col gap-1">
-                    <p class="text-sm font-medium text-content">{{ notice.title }}</p>
-                    <p class="text-xs text-muted">{{ notice.detail }}</p>
-                    <!-- The env by name, for a bug report or a `docker inspect` — evidence a reader may skip, so it sits under the sentence that does not need it. -->
-                    <p v-if="notice.keys?.length" class="flex flex-wrap items-center gap-1 text-xs text-muted">
-                        <span>{{ t(`sandbox.containerHealthCard.missingContainer`) }}</span>
-                        <Code v-for="key of notice.keys" :key="key" :code="key" />
-                    </p>
-                    <p v-if="notice.repair" class="text-xs text-muted">{{ notice.repair }}</p>
-                </div>
-            </div>
+    <!-- Title, one sentence, then the action row: the reader learns what is wrong, why, and the one thing that fixes it,
+         without a paragraph. What the fix does is said beside its button, quietly, rather than above it as prose. -->
+    <section v-if="notices.length > 0" class="flex flex-col gap-4 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3">
+        <div v-for="(notice, index) of notices" :key="`${notice.fault}:${index}`" class="flex items-start gap-3">
+            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+            <div class="flex min-w-0 flex-1 flex-col gap-1">
+                <p class="text-sm font-medium text-content">{{ notice.title }}</p>
+                <p class="text-xs text-muted">{{ notice.detail }}</p>
+                <p v-if="notice.repair" class="text-xs text-muted">{{ notice.repair }}</p>
 
-            <div class="flex flex-wrap items-center gap-2 pl-6">
-                <!-- Named for what it does to the container, not for the fault: "Repair" hides that this replaces it. -->
-                <Button
-                    v-if="canRepair"
-                    size="small"
-                    severity="secondary"
-                    :loading="busy"
-                    :disabled="busy"
-                    :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
-                    @click="repair"
-                />
-                <!-- The same repair by hand, for the owner with no machine connected. Never a member's: /setup on a sandbox
-                     they do not own starts a new one on their own account (setupArrival.ts `rowToOpen`). -->
-                <Button
-                    v-else-if="isOwner"
-                    :as="RouterLink"
-                    :to="{ path: `/setup`, query: { sandbox: active?.id } }"
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    :label="t(`sandbox.containerHealthCard.openSetupScreen`)"
-                >
-                    <template #icon><Icon name="arrow-up-right" /></template>
-                </Button>
-                <p v-if="canRepair" class="text-xs text-muted">
-                    {{ t(`sandbox.containerHealthCard.replacesContainer`, { host: host?.label ?? t(`shared.thisMachine`) }) }}
+                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <!-- Named for what it does to the container, not for the fault: "Repair" hides that this replaces it. -->
+                    <Button
+                        v-if="canRepair"
+                        size="small"
+                        severity="secondary"
+                        :loading="busy"
+                        :disabled="busy"
+                        :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
+                        @click="repair"
+                    >
+                        <template v-if="!busy" #icon><Icon name="refresh" /></template>
+                    </Button>
+                    <!-- The same repair by hand, for the owner with no machine connected. Never a member's: /setup on a sandbox
+                         they do not own starts a new one on their own account (setupArrival.ts `rowToOpen`). -->
+                    <Button
+                        v-else-if="isOwner"
+                        :as="RouterLink"
+                        :to="{ path: `/setup`, query: { sandbox: active?.id } }"
+                        size="small"
+                        severity="secondary"
+                        :label="t(`sandbox.containerHealthCard.openSetupScreen`)"
+                    >
+                        <template #icon><Icon name="arrow-up-right" /></template>
+                    </Button>
+                    <!-- `basis-48`: below that width the caption takes a line of its own instead of squeezing beside the button. -->
+                    <p class="min-w-0 grow basis-48 text-2xs text-subtle">
+                        <template v-if="canRepair">
+                            {{ t(`sandbox.containerHealthCard.replacesContainer`, { host: host?.label ?? t(`shared.thisMachine`) }) }}
+                        </template>
+                        <template v-else-if="!isOwner">{{ t(`sandbox.containerHealthCard.onlySandboxsOwnerReconnect`) }}</template>
+                        <template v-else>{{ t(`sandbox.containerHealthCard.connectComputerRunsSandbox`) }}</template>
+                    </p>
+                    <button
+                        v-if="notice.keys?.length"
+                        type="button"
+                        :class="ui.textAction(`ml-auto shrink-0 gap-1 text-2xs`)"
+                        :aria-expanded="openDetails === `${notice.fault}:${index}`"
+                        @click="toggleDetails(`${notice.fault}:${index}`)"
+                    >
+                        {{ t(`sandbox.containerHealthCard.details`) }}
+                        <Icon
+                            name="chevron-right"
+                            class="transition-transform"
+                            :class="{ 'rotate-90': openDetails === `${notice.fault}:${index}` }"
+                            aria-hidden="true"
+                        />
+                    </button>
+                </div>
+
+                <!-- Plain mono chips, selectable by hand: a copy button on a one-word chip sits on top of the word. -->
+                <p v-if="notice.keys?.length && openDetails === `${notice.fault}:${index}`" class="flex flex-wrap items-center gap-1.5 text-2xs text-muted">
+                    <span>{{ t(`sandbox.containerHealthCard.missingEnv`) }}</span>
+                    <code v-for="key of notice.keys" :key="key" class="rounded bg-content/10 px-1 py-0.5 font-mono text-content select-all">{{ key }}</code>
                 </p>
-                <p v-else-if="!isOwner" class="text-xs text-muted">{{ t(`sandbox.containerHealthCard.onlySandboxsOwnerReconnect`) }}</p>
-                <p v-else class="text-xs text-muted">{{ t(`sandbox.containerHealthCard.connectComputerRunsSandbox`) }}</p>
             </div>
         </div>
 
-        <!-- The machine's own narration, verbatim; a reconnect takes a while and prints as it goes. -->
-        <pre v-if="lines.length > 0" class="max-h-40 overflow-auto rounded border border-line-subtle p-2 text-xs text-muted">{{
+        <!-- The machine's own narration, verbatim; a reconnect takes a while and prints as it goes. Indented to the text column. -->
+        <pre v-if="lines.length > 0" class="ml-7 max-h-40 overflow-auto rounded border border-line-subtle p-2 text-2xs text-muted">{{
             lines.join(`\n`)
         }}</pre>
-        <p v-if="done" class="text-xs text-content">{{ done }}</p>
-        <p v-if="failure" class="text-xs text-danger">
+        <p v-if="done" class="ml-7 text-xs text-content">{{ done }}</p>
+        <p v-if="failure" class="ml-7 text-xs text-danger">
             {{ failure }}
             <!-- Said next to the error rather than instead of it: this call cuts its own connection by design. -->
             <span class="text-muted">{{ t(`sandbox.containerHealthCard.sandboxReplacedPageReconnects`) }}</span>

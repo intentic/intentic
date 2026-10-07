@@ -8,12 +8,22 @@ export interface ContainerNotice {
     readonly fault: ContainerFault;
     // Product-facing wording, not environment variable names.
     readonly title: string;
-    // Rendered verbatim as received from the daemon; do not reword it here.
+    // One sentence. The editor's own words where it knows the fault; a gap it has no words for shows the daemon's.
     readonly detail: string;
+    // What to do by hand. Absent for drift: the card's own action row (reconnect, setup screen) is the repair.
     readonly repair?: string;
     // Populated only for the drift fault: the environment keys this container is missing.
     readonly keys?: readonly string[];
 }
+
+// Drift gaps the editor words itself, by the requirement's key: short, and translated, which the daemon's sentence is
+// not. A key missing here (a newer daemon's requirement) falls back to the daemon's own `lost`.
+const DRIFT_COPY: Readonly<Partial<Record<string, () => { readonly title: string; readonly detail: string }>>> = {
+    reachability: () => ({
+        title: t(`sandbox.containerHealth.unreachableElsewhere`),
+        detail: t(`sandbox.containerHealth.setupPredatesPublicAddress`),
+    }),
+};
 
 export type ContainerEvidence = Pick<SandboxSummary, "bootReport" | "announceRefusal"> & Partial<Pick<SandboxSummary, "duplicateCopies">>;
 
@@ -24,9 +34,7 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
     // Drift outranks the others: a recreate replays the same missing env, so restarting cannot clear it.
     const drift: ContainerNotice[] = (report?.drift ?? []).map((gap) => ({
         fault: "drift",
-        title: t(`sandbox.containerHealth.sandboxSetUpBefore`, { enables: gap.enables }),
-        detail: gap.lost,
-        repair: gap.repair,
+        ...(DRIFT_COPY[gap.key]?.() ?? { title: t(`sandbox.containerHealth.setupOutOfDate`), detail: gap.lost }),
         keys: gap.missing,
     }));
     if (drift.length > 0) {

@@ -2412,17 +2412,20 @@
             "announcedWhilePlatformOn": "Anunció {announced}, mientras que la plataforma tiene {expected} registrado. Hasta que ambos coincidan, todo lo que se envíe a la dirección registrada no le llega.",
             "sandboxCheckingInUnder": "Este sandbox se está reportando bajo una dirección que la plataforma no tiene registrada para él",
             "sandboxDoesNotAnswer": "Este sandbox no responde en su dirección pública",
-            "sandboxSetUpBefore": "Este sandbox se configuró antes de que necesitara {enables}"
+            "unreachableElsewhere": "Inaccesible desde otros dispositivos",
+            "setupPredatesPublicAddress": "Su configuración es anterior a las direcciones públicas, así que solo puede abrirlo el ordenador en el que se ejecuta.",
+            "setupOutOfDate": "Su configuración está desactualizada"
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Conecta el ordenador que ejecuta este sandbox para repararlo desde aquí.",
-            "missingContainer": "Falta en este contenedor:",
-            "onlySandboxsOwnerReconnect": "Solo el propietario de este sandbox puede volver a conectarlo.",
-            "openSetupScreen": "Abrir su pantalla de configuración",
-            "reconnectSandbox": "Volver a conectar este sandbox",
+            "connectComputerRunsSandbox": "O conecta el ordenador en el que se ejecuta para repararlo desde aquí.",
+            "onlySandboxsOwnerReconnect": "Solo su propietario puede volver a conectarlo.",
+            "openSetupScreen": "Abrir configuración",
+            "reconnectSandbox": "Volver a conectar",
             "reconnecting": "Reconectando…",
-            "replacesContainer": "Reemplaza el contenedor en {host}. Sus archivos, su historial y su motor de Docker se conservan.",
-            "sandboxReplacedPageReconnects": "Si el sandbox fue reemplazado, esta página se reconecta sola en cuanto vuelva."
+            "replacesContainer": "Reconstruye su contenedor en {host}. Archivos, historial y Docker se conservan.",
+            "sandboxReplacedPageReconnects": "Si se reemplazó, esta página se reconecta sola cuando vuelva.",
+            "missingEnv": "Falta en su contenedor:",
+            "details": "Detalles"
         },
         "controlTokensSection": {
             "expired": "caducado",

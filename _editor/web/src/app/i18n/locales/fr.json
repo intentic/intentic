@@ -2402,17 +2402,20 @@
             "announcedWhilePlatformOn": "Il a annoncé {announced}, alors que la plateforme a {expected} en fiche. Tant que les deux ne concordent pas, tout ce qui est envoyé à l'adresse enregistrée le rate.",
             "sandboxCheckingInUnder": "Ce sandbox se signale sous une adresse que la plateforme ne détient pas pour lui",
             "sandboxDoesNotAnswer": "Ce sandbox ne répond pas à son adresse publique",
-            "sandboxSetUpBefore": "Ce sandbox a été installé avant d'avoir besoin de {enables}"
+            "unreachableElsewhere": "Injoignable depuis d'autres appareils",
+            "setupPredatesPublicAddress": "Son installation est antérieure aux adresses publiques : seul l'ordinateur qui le fait tourner peut l'ouvrir.",
+            "setupOutOfDate": "Son installation n'est plus à jour"
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Connectez l'ordinateur qui fait tourner ce sandbox pour le réparer d'ici.",
-            "missingContainer": "Absent de ce conteneur :",
-            "onlySandboxsOwnerReconnect": "Seul le propriétaire de ce sandbox peut le reconnecter.",
-            "openSetupScreen": "Ouvrir son écran d'installation",
-            "reconnectSandbox": "Reconnecter ce sandbox",
+            "connectComputerRunsSandbox": "Ou connectez l'ordinateur qui le fait tourner pour le réparer d'ici.",
+            "onlySandboxsOwnerReconnect": "Seul son propriétaire peut le reconnecter.",
+            "openSetupScreen": "Ouvrir l'installation",
+            "reconnectSandbox": "Reconnecter",
             "reconnecting": "Reconnexion…",
-            "replacesContainer": "Remplace le conteneur sur {host}. Ses fichiers, son historique et son moteur Docker sont conservés.",
-            "sandboxReplacedPageReconnects": "Si le sandbox a été remplacé, cette page se reconnecte toute seule dès son retour."
+            "replacesContainer": "Reconstruit son conteneur sur {host}. Fichiers, historique et Docker sont conservés.",
+            "sandboxReplacedPageReconnects": "S'il a été remplacé, cette page se reconnecte dès son retour.",
+            "missingEnv": "Absent de son conteneur :",
+            "details": "Détails"
         },
         "controlTokensSection": {
             "expired": "expiré",

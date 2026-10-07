@@ -23,11 +23,10 @@ export const CONTAINER_REQUIREMENTS: readonly ContainerRequirement[] = [
         key: "reachability",
         requires: ["SANDBOX_GRANT", "INGRESS_URL"],
         given: ["SANDBOX_PUBLIC_URL"],
-        enables: "reaching this sandbox at its public address, from anywhere",
-        lost:
-            "Its public address answers 502 to everyone, including this browser when it is not on the same machine as the sandbox. " +
-            "On that machine the workspace still works, over a direct connection that never leaves it — which is why this can go unnoticed for a long time.",
-        repair: "Re-run this sandbox's setup command. It carries a freshly signed grant, and it keeps the workspace, its history and its Docker engine.",
+        // Kept to a sentence each: a client may show them as sent (the editor words this key itself, translated).
+        enables: "reaching it at its public address",
+        lost: "Its public address answers 502 everywhere except on the computer it runs on.",
+        repair: "Re-run its setup command. Files, history and Docker are kept.",
     },
 ];
 

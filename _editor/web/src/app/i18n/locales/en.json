@@ -4925,19 +4925,22 @@
             "announcedWhilePlatformOn": "It announced {announced}, while the platform has {expected} on record. Until the two agree, anything sent to the recorded address misses it.",
             "sandboxCheckingInUnder": "This sandbox is checking in under an address the platform does not hold for it",
             "sandboxDoesNotAnswer": "This sandbox does not answer at its public address",
-            "sandboxSetUpBefore": "This sandbox was set up before it needed {enables}",
-            "publicAddressDidNotAnswer": "Its public address did not answer when the sandbox checked it from the inside."
+            "publicAddressDidNotAnswer": "Its public address did not answer when the sandbox checked it from the inside.",
+            "unreachableElsewhere": "Unreachable from other devices",
+            "setupPredatesPublicAddress": "Its setup predates public addresses, so only the computer it runs on can open it.",
+            "setupOutOfDate": "Its setup is out of date"
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Connect the computer that runs this sandbox to repair it from here.",
-            "missingContainer": "Missing from this container:",
-            "onlySandboxsOwnerReconnect": "Only this sandbox's owner can reconnect it.",
-            "openSetupScreen": "Open its setup screen",
-            "reconnectSandbox": "Reconnect this sandbox",
+            "connectComputerRunsSandbox": "Or connect the computer it runs on to fix it from here.",
+            "onlySandboxsOwnerReconnect": "Only its owner can reconnect it.",
+            "openSetupScreen": "Open setup",
+            "reconnectSandbox": "Reconnect",
             "reconnecting": "Reconnecting…",
             "reconnectingSandbox": "Reconnecting this sandbox",
-            "replacesContainer": "Replaces the container on {host}. Its files, its history and its Docker engine are kept.",
-            "sandboxReplacedPageReconnects": "If the sandbox was replaced, this page reconnects on its own once it is back."
+            "replacesContainer": "Rebuilds its container on {host}. Files, history and Docker stay.",
+            "sandboxReplacedPageReconnects": "If it was replaced, this page reconnects once it's back.",
+            "missingEnv": "Missing from its container:",
+            "details": "Details"
         },
         "controlTokensSection": {
             "expired": "expired",
