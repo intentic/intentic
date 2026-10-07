@@ -4,7 +4,18 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { test } from "node:test";
 import { freeBytesOf, readReadingSync, ROOM_SOCKET } from "../../constants/src/memory-room.mjs";
-import { availableMemory, hostJobs, standaloneWorkers, testWorkers, typecheckConcurrency, workersFor } from "./test-workers.mjs";
+import {
+    availableMemory,
+    hostJobs,
+    maxWorkers,
+    slotsPerWorker,
+    standaloneWorkers,
+    testWorkers,
+    typecheckConcurrency,
+    wantedWorkers,
+    workersFor,
+    workersForSlots,
+} from "./test-workers.mjs";
 
 const GIB = 1024 ** 3;
 const CORES = 16;
@@ -61,6 +72,29 @@ test("free memory is the room formula's free memory, asked once per process", ()
     if (formula !== undefined && !existsSync(ROOM_SOCKET)) {
         assert.ok(Math.abs(first - formula) < 512 * 1024 ** 2, `${first} is the formula's ${formula}, give or take what moved since`);
     }
+});
+
+test("from a pool, a package wants a worker per twenty files, within the cores and the cap", () => {
+    assert.equal(wantedWorkers(3, 6), 1);
+    assert.equal(wantedWorkers(20, 6), 1);
+    assert.equal(wantedWorkers(21, 6), 2);
+    assert.equal(wantedWorkers(875, 6), 6);
+    assert.equal(wantedWorkers(0, 6), 1);
+    assert.equal(maxWorkers({}, CORES), 6);
+    assert.equal(maxWorkers({ TEST_WORKERS_MAX: "8" }, CORES), 8);
+    assert.equal(maxWorkers({ TEST_WORKERS_MAX: "64" }, CORES), CORES);
+    assert.equal(maxWorkers({ TEST_WORKERS_MAX: "0" }, CORES), 6);
+    assert.equal(maxWorkers({}, 4), 4);
+});
+
+test("from a pool, a run starts the workers its slots pay for, and one when it got none", () => {
+    assert.equal(slotsPerWorker(3 * GIB, GIB), 3);
+    assert.equal(slotsPerWorker(1.4 * GIB, GIB), 2);
+    assert.equal(slotsPerWorker(0.3 * GIB, GIB), 1);
+    assert.equal(workersForSlots(12, 3, 6), 4);
+    assert.equal(workersForSlots(12, 1, 6), 6);
+    assert.equal(workersForSlots(2, 3, 6), 1);
+    assert.equal(workersForSlots(0, 1, 6), 1);
 });
 
 test("a caller's own TEST_WORKERS wins, and an empty one is unset", () => {

@@ -16,8 +16,8 @@
         "watch": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
         "build": "vite build && esbuild src/app/environments/environment.deployment.ts --bundle --minify --target=es2024 --outfile=dist/assets/js/env.js",
         "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh web",
-        "test": "suites",
-        "typecheck": "node ../../_tools/scripts/lib/seed-buildinfo.mjs .cache/tsbuildinfo && node --max-old-space-size=6144 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.app.json",
+        "test": "suites --worker-gib=3",
+        "typecheck": "node ../../_tools/scripts/lib/seed-buildinfo.mjs .cache/tsbuildinfo && node --max-old-space-size=6144 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.app.json && node ../../_tools/scripts/lib/seed-buildinfo.mjs --save .cache/tsbuildinfo",
         "wallpaper:art": "node scripts/wallpaper-art.mjs"
     },
     "dependencies": {

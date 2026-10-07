@@ -16,7 +16,7 @@
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "dev": "tsx watch ./src/main.ts",
-        "test": "suites",
+        "test": "suites --worker-gib=2",
         "test:watch": "suites --watch",
         "e2e": "INTENTIC_E2E=1 suites e2e",
         "e2e:providers": "INTENTIC_E2E_PROVIDERS=1 suites wire.e2e",

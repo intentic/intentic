@@ -11,6 +11,13 @@
 // Only for a `--noEmit` program (the web's vue-tsc): a `tsc -b` build info also vouches for emitted output this tree does
 // not have, which is why the worktree mirror leaves caches out (isolation.ts). Every failure is no seed: the check then
 // runs from nothing, as it did before.
+//
+// ON THE CI FLEET THE NEAREST BUILD INFO IS THE LAST PIPELINE'S, not this runner's own. Six runners keep six workspaces,
+// so the build info a runner already holds is from whichever push it last checked, often many commits back, and the web's
+// check there took 5 minutes under load (2026-10-07). With TSBUILDINFO_SHARE_DIR set (ci.yml points it at /ci-cache), a
+// check that passes saves its build info there (`--save`, after the check), and the next check on any runner starts from
+// that one when it is newer than its own. Every job container sees the checkout at the same path, so the relative paths a
+// build info records mean the same files on all of them; the program re-checks whatever hashes differ, as from a sibling.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -84,8 +91,50 @@ export const checkedClean = (text) => {
     return Array.isArray(pending) && pending.length === 0;
 };
 
+// Copied whole and parsed before it is put in place: whoever wrote `source` may be writing it again this moment.
+const adopt = (source, wanted, said) => {
+    const staged = `${wanted}.seed-${process.pid}`;
+    mkdirSync(dirname(wanted), { recursive: true });
+    try {
+        copyFileSync(source, staged);
+        if (!checkedClean(readFileSync(staged, "utf8"))) {
+            return false;
+        }
+        renameSync(staged, wanted);
+        process.stderr.write(`seed-buildinfo: ${said}\n`);
+        return true;
+    } catch {
+        // allow(silent-catch): a copy caught mid-write or pruned mid-read is no seed
+        return false;
+    } finally {
+        rmSync(staged, { force: true });
+    }
+};
+
+const mtimeOf = (path) => {
+    try {
+        return statSync(path).mtimeMs;
+    } catch {
+        // allow(silent-catch): an absent file is older than any that exists
+        return Number.NEGATIVE_INFINITY;
+    }
+};
+
+// Where this checkout's `file` is kept on the fleet, by its path in the repository, or undefined off it.
+export const sharedPath = (shareDir, prefix, file) => (shareDir === undefined || shareDir === "" ? undefined : join(shareDir, prefix, file));
+
+// This checkout's fleet copy of `file`, asking git where the package sits only when there is a fleet to ask about.
+const fleetCopy = (file) => {
+    const shareDir = process.env.TSBUILDINFO_SHARE_DIR;
+    return shareDir === undefined || shareDir === "" ? undefined : sharedPath(shareDir, git("rev-parse", "--show-prefix"), file);
+};
+
 const seed = (file) => {
     const wanted = resolve(file);
+    const shared = fleetCopy(file);
+    if (shared !== undefined && mtimeOf(shared) > mtimeOf(wanted) && adopt(shared, wanted, `started from the fleet's newest build info`)) {
+        return;
+    }
     if (existsSync(wanted)) {
         return;
     }
@@ -98,35 +147,27 @@ const seed = (file) => {
         .map((candidate, order) => ({ ...candidate, order, apart: distance(candidate.head, head) }))
         .toSorted((a, b) => a.apart - b.apart || a.order - b.order)
         .map(({ path }) => path);
-    if (sources.length === 0) {
-        return;
-    }
-    // Copied whole and parsed before it is put in place: a sibling's check may be writing it this moment.
-    const staged = `${wanted}.seed-${process.pid}`;
-    mkdirSync(dirname(wanted), { recursive: true });
-    try {
-        for (const source of sources) {
-            try {
-                copyFileSync(source, staged);
-                if (checkedClean(readFileSync(staged, "utf8"))) {
-                    renameSync(staged, wanted);
-                    process.stderr.write(`seed-buildinfo: started from ${dirname(dirname(source))}'s build info\n`);
-                    return;
-                }
-            } catch {
-                // allow(silent-catch): a copy caught mid-write or pruned mid-read is skipped for the next one
-            }
+    for (const source of sources) {
+        if (adopt(source, wanted, `started from ${dirname(dirname(source))}'s build info`)) {
+            return;
         }
-    } finally {
-        rmSync(staged, { force: true });
+    }
+};
+
+// After a check that passed: this build info becomes the one the fleet's next check starts from.
+const save = (file) => {
+    const shared = fleetCopy(file);
+    if (shared !== undefined && existsSync(resolve(file))) {
+        adopt(resolve(file), shared, `kept this check's build info for the next one`);
     }
 };
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     try {
-        const [file] = process.argv.slice(2);
+        const args = process.argv.slice(2);
+        const file = args.find((arg) => !arg.startsWith("--"));
         if (file !== undefined) {
-            seed(file);
+            (args.includes("--save") ? save : seed)(file);
         }
     } catch {
         // allow(silent-catch): no git, no sibling, an unreadable copy: the check runs from nothing, as it always could

@@ -65,7 +65,9 @@
         // only CI ever sees: 67 of 100 main pipelines failed this job while the whole suite ran nowhere else.
         // TEST_WORKERS bounds a repo-wide run's memory (test-workers.mjs sizes it to the free memory), and
         // TEST_MEMORY_CEILING_MB moves the ceiling each bun process is held under; `envMode: strict` drops any
-        // variable not named here. On the TASK, not in `globalPassThroughEnv`, which mirrors the Dockerfile's ENV
+        // variable not named here. TEST_SLOTS_DIR and TEST_SLOTS name the CI host's test memory pool, which `suites`
+        // sizes its workers from when no TEST_WORKERS is given (_tools/scripts/lib/test-memory-pool.mjs), and
+        // TEST_WORKERS_MAX caps what one run asks it for. On the TASK, not in `globalPassThroughEnv`, which mirrors the Dockerfile's ENV
         // blocks and is diffed against them; passThrough keeps the VALUE out of the cache key. INTENTIC_TURN_OWNER
         // is the stamp the sandbox's reaper finds a stopped conversation's leftovers by (system/boot/reaper.ts):
         // stripped here, a test run whose conversation had stopped was invisible to it. `CI` is in the HASH instead:
@@ -75,7 +77,17 @@
             "dependsOn": ["^build"],
             "outputs": [],
             "env": ["CI"],
-            "passThroughEnv": ["TEST_WORKERS", "TEST_MEMORY_CEILING_MB", "CI_HOST_JOBS", "SUITES_JUNIT_DIR", "INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION"]
+            "passThroughEnv": [
+                "TEST_WORKERS",
+                "TEST_MEMORY_CEILING_MB",
+                "TEST_SLOTS_DIR",
+                "TEST_SLOTS",
+                "TEST_WORKERS_MAX",
+                "CI_HOST_JOBS",
+                "SUITES_JUNIT_DIR",
+                "INTENTIC_TURN_OWNER",
+                "INTENTIC_AGENT_SESSION"
+            ]
         },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
         // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo
@@ -93,10 +105,12 @@
         // `^typecheck` is what replaces that invalidation without going stale: a check reads its dependencies'
         // emitted .d.ts, so a change in a dependency has to re-run it, and a dependency's task hash says
         // exactly that. It propagates through packages that have no typecheck script of their own.
+        // TSBUILDINFO_SHARE_DIR is where a CI check keeps its build info for the next one on any runner
+        // (_tools/scripts/lib/seed-buildinfo.mjs): a path, so passed through rather than hashed.
         "typecheck": {
             "dependsOn": ["^typecheck"],
             "outputs": [],
-            "passThroughEnv": ["INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION"]
+            "passThroughEnv": ["INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION", "TSBUILDINFO_SHARE_DIR"]
         },
         "check": {
             "dependsOn": ["^build"],

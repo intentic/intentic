@@ -1,7 +1,7 @@
 # CI for the intentic monorepo.
 #
-# One workflow, one DAG, three INDEPENDENT verify groups — test-core, test-platform, test-site, plus the
-# desktop jobs — each gating only the artifacts it proves. A broken group publishes nothing of its own and
+# One workflow, one DAG, two INDEPENDENT verify groups — verify-core and verify-platform, plus the desktop
+# jobs — each gating only the artifacts it proves. A broken group publishes nothing of its own and
 # blocks nothing of anyone else's. That split is the whole reason this is one workflow rather than several:
 # `needs` edges only exist inside a workflow, and those edges are what the split buys.
 #
@@ -44,6 +44,17 @@ on:
 # has no per-job opt-out of a workflow-level cancel, so the shape that keeps the verify jobs cancellable
 # without ever queueing a main push is a group main pushes cannot collide in at all.
 # Releases stay serialized — by the release job's own `concurrency: release`.
+#
+# SUPERSEDED MEASUREMENT IS CANCELLED PER JOB. The workflow-level group above never cancels on main, so every push used
+# to be measured to the end even when a newer one had already landed on top of it: 54 of 248 main pipelines in
+# September and October 2026 were superseded before they finished, a quarter of all runner-minutes, on a fleet where
+# jobs were queueing for 18 minutes. So each job that only MEASURES carries a group of its own, per ref and per job,
+# with cancel-in-progress: when the newer push's copy of a job starts, the older push's copy stops. The jobs that
+# publish or deploy carry none, so a release, an image push or a production roll is never cut off halfway. A cancelled
+# gate is not a passed one: everything that publishes requires its gates to have SUCCEEDED (or, for netd-check, to
+# have been skipped), so a superseded push publishes nothing and the push on top of it publishes instead. Main's fix
+# agent reads a cancelled job as an outcome rather than a failure (ci/providers.ts), so it acts on the newest push.
+# The cost: a burst of pushes faster than a job finishes measures only the last of them.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -79,6 +90,14 @@ env:
   # divides the memory budget by this before sizing a `bun test` fan-out. Kept at workflow level so a job added later
   # inherits it rather than having to remember it — the one that forgets is the one that takes the fleet down.
   CI_HOST_JOBS: "6"
+  # THE HOST'S TEST MEMORY POOL: one-GiB slots every job on the box draws its test workers from
+  # (_tools/scripts/lib/test-memory-pool.mjs), so a big suite spreads out when the box is quiet and runs on one worker
+  # when it is not. 16 of the WSL VM's 26 GB; the rest is for typechecks, builds and Docker. verify.yml holds the same
+  # pair, and docs/ops/ci-runner.md says when to change them.
+  TEST_SLOTS_DIR: /ci-cache/test-slots
+  TEST_SLOTS: "16"
+  # Where a passing vue-tsc check leaves its build info for the next one on any runner (seed-buildinfo.mjs).
+  TSBUILDINFO_SHARE_DIR: /ci-cache/tsbuildinfo
 
 jobs:
   # Which parts of the tree moved. Actions has no per-job `changes:` key, so the answer is computed once
@@ -349,6 +368,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-quick
+      cancel-in-progress: true
     timeout-minutes: 20
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -450,6 +472,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-migrations
+      cancel-in-progress: true
     timeout-minutes: 15
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -648,15 +673,17 @@ jobs:
   # publishes nothing of its own and blocks nothing of anyone else's — which is what makes the `needs` edges on
   # the publishing jobs below mean anything.
   #
-  # COVERAGE IS UNCHANGED against the single unfiltered job, and that is checkable rather than hoped: with
-  # `turbo run <task> --dry=json`, the union of these three closures plus desktop-check's is exactly the 70
-  # packages the old job covered, for `typecheck` and for `build test` alike. Re-run that comparison when
-  # adding a group; a package in no group is a package nothing checks, and turbo will not say so.
+  # COVERAGE IS CHECKABLE RATHER THAN HOPED: with `turbo run <task> --dry=json`, the union of verify-core's and
+  # verify-platform's closures plus desktop-check's two packages is every package, for `typecheck` and for `build
+  # test` alike. Re-run that comparison when adding a group; a package in no group is a package nothing checks, and
+  # turbo will not say so.
   #
   # The groups deliberately OVERLAP on shared packages (_sandbox contracts, _deploy resources, _tools), because
   # turbo's `pkg...` includes a package's dependencies: a shared lib break fails every dependent group, which is
-  # the correct blast radius. The duplicated
-  # work is a turbo cache replay off the shared /ci-cache dir, not a second build.
+  # the correct blast radius. That overlap is NOT free, and pretending it was cost the most of anything in this file:
+  # the groups run side by side, so a task both closures hold is computed twice, never replayed from the other's cache.
+  # A third group, verify-site, held nothing verify-core did not except the web's suite (checked with --dry=json on
+  # 2026-10-07), and was removed for it. Keep the overlap to what a group's own gate needs.
   # The OSS core: every npm-published package plus the sandbox image's tree.
   #
   # The two desktop packages are subtracted rather than left to fall in with the rest: the launcher UI is the
@@ -685,6 +712,10 @@ jobs:
   verify-core:
     needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
+    # Superseded by a newer push's copy of this job: see SUPERSEDED in the header.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-verify-core
+      cancel-in-progress: true
     uses: ./.github/workflows/verify.yml
     with:
       filters: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke --filter=!@intentic/web"
@@ -693,9 +724,17 @@ jobs:
   # The hosted platform — api, web, prisma, api-contract, capability-catalog, e2e — and their closure, which
   # reaches every extension, because web declares their UI bundles as workspace dependencies and compiles them
   # in. Gates images-platform, and is the only thing that does: this job alone decides whether production rolls.
+  #
+  # THE ONE JOB THAT RUNS THE WEB'S SUITE (875 files, the largest in the repo). It used to run in five jobs a push:
+  # here, verify-site, desktop-check and both verify-clocks legs, at 19 to 25 minutes each on one worker, which was half
+  # of every pipeline's runner-minutes (2026-10-07). verify-core subtracts web, desktop-check tests only the desktop
+  # packages, verify-clocks runs only the web files that can see a clock, and verify-site is gone.
   verify-platform:
     needs: preflight
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-verify-platform
+      cancel-in-progress: true
     uses: ./.github/workflows/verify.yml
     with:
       # @intentic/ingress rides this gate rather than only verify-core's, because this job is the one thing
@@ -720,6 +759,9 @@ jobs:
     needs: preflight
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-verify-providers
+      cancel-in-progress: true
     timeout-minutes: 30
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -761,24 +803,26 @@ jobs:
   # 25-hour spread means no off-by-one can hide. Neither observes summer time, so a failure here is a zone bug and
   # never a changeover flake.
   #
-  # A subset, not the whole tree: these are the packages that bucket days, evaluate crons or format dates. Widen the
-  # filter when another one starts doing so — `_tools/checks/time-zones.mjs` is what notices the code, this is what
-  # notices the behaviour.
+  # THE FILES THAT CAN SEE A CLOCK, NOT WHOLE PACKAGES. This job used to run the four packages' entire suites, the web's
+  # 875 files among them, once per zone as a two-leg matrix: 47 runner-minutes a push, the largest single cost in the
+  # pipeline (2026-10-07), nearly all of it suites whose answer cannot depend on the zone. clock-suites.mjs selects the
+  # test files whose own text touches dates, zones, crons or a fake clock (about a fifth of them) and runs those in
+  # both zones, one after the other, every zone and package whatever the one before it did; its log groups each
+  # `zone: package` run, so an east-only or west-only failure still says which. Its header says what a selection by
+  # text can miss and how a suite opts in. Widen the package list when another one starts bucketing days or
+  # evaluating crons: `_tools/checks/time-zones.mjs` is what notices the code, this is what notices the behaviour.
+  #
+  # No TURBO_FORCE any more: the suites run outside turbo, so there is no UTC result for turbo to replay in their place,
+  # and the build below is the same build every other job replays.
   verify-clocks:
     # After ci-base for verify-core's reason: @intentic/sandbox's suites need the tools the image carries.
     needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
-    # The legs carry @intentic/web's whole suite, which alone takes 18 to 20 minutes (verify-site and verify-platform,
-    # 1100s and 1167s on 2026-10-06), beside the sandbox's: at 20 minutes every leg of three runs that day was cancelled
-    # before web reported, at a peak of 4.3 GiB, well under the ceiling. The verify jobs that run the same suite have 60.
-    timeout-minutes: 40
-    strategy:
-      # Both legs always run: knowing a bug is east-only or west-only is most of the diagnosis, and stopping at the
-      # first failure throws that away.
-      fail-fast: false
-      matrix:
-        tz: [Pacific/Kiritimati, Pacific/Niue]
+    timeout-minutes: 30
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-verify-clocks
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-base:latest
       volumes:
@@ -790,10 +834,6 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       PNPM_STORE: /ci-cache/pnpm-store
       TURBO_CACHE_DIR: /ci-cache/turbo
-      TZ: ${{ matrix.tz }}
-      # Turbo hashes inputs, not the environment, so without this the UTC job's cached results would be replayed
-      # here and both legs would pass having run nothing.
-      TURBO_FORCE: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -802,25 +842,13 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      # Proves the zone actually took before anything is judged by it: a container without tzdata silently reports
-      # UTC, and this whole job would then be a slower copy of one that already ran.
-      - name: The runner is on the zone it claims
-        run: |
-          node -e '
-            const want = process.env.TZ;
-            const got = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            if (got !== want) {
-              console.error(`this leg asked for ${want} and the runtime reports ${got}; tzdata is missing from the image`);
-              process.exit(1);
-            }
-            console.log(`${got}, offset ${-new Date().getTimezoneOffset() / 60}h from UTC`);
-          '
-      # `@intentic/ui` is absent on purpose and not by oversight: the kit holds the formatters every date on screen
-      # goes through, and it has no test script at all, so naming it here would claim a coverage that does not exist.
-      # Its formatters are exercised through `@intentic/web`, which imports them.
-      # TEST_WORKERS for the reason verify.yml spells out: turbo is invoked directly, so nothing else sizes the fan-out
-      # to a box this job shares with five others.
-      - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run test --filter=@intentic/sandbox --filter=@intentic/sandbox-contract --filter=@intentic/ext-automations --filter=@intentic/web --continue=dependencies-successful
+      # What the suites import of their dependencies is those dependencies' dist, as under `turbo run test`'s `^build`.
+      - run: pnpm turbo run build --filter=@intentic/sandbox^... --filter=@intentic/sandbox-contract^... --filter=@intentic/ext-automations^... --filter=@intentic/web^... --continue=dependencies-successful
+      # `@intentic/ui` is absent on purpose and not by oversight: the kit holds the formatters every date on screen goes
+      # through, and it has no test script at all, so naming it here would claim a coverage that does not exist. Its
+      # formatters are exercised through `@intentic/web`, which imports them. The script checks that each zone took
+      # before it judges anything by it (a container without tzdata silently reports UTC).
+      - run: node _tools/scripts/verify/clock-suites.mjs _sandbox/sandbox _shared/sandbox-contract _extensions/automations _editor/web
 
   # THE SUITES THAT NEED MORE OF THE MACHINE THAN A VERIFY GROUP HAS, run where it is provided on purpose. Each one
   # asks for its need with `requires(…, { lane: "machine" })` (@intentic/testing/requires): in this job, which names the
@@ -852,6 +880,9 @@ jobs:
     needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-verify-machine
+      cancel-in-progress: true
     timeout-minutes: 30
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -935,6 +966,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.perf-instr == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-perf-instr
+      cancel-in-progress: true
     timeout-minutes: 30
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -965,6 +999,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.perf-browser == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-perf-browser
+      cancel-in-progress: true
     timeout-minutes: 30
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -999,6 +1036,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.local-face == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-local-face
+      cancel-in-progress: true
     timeout-minutes: 20
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1030,16 +1070,10 @@ jobs:
           path: _tools/e2e/.cache/local-face-results/
           retention-days: 7
 
-  # The marketing site and the content/integration libs behind it. It gates no deploy — the site publishes from
-  # Cloudflare's own git integration, outside this pipeline, so nothing here can stop a bad one — which makes
-  # this the pull-request gate and the `needs` a future site-deploy job would hang off.
-  verify-site:
-    needs: preflight
-    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
-    uses: ./.github/workflows/verify.yml
-    with:
-      filters: "--filter=./_site/*..."
-    secrets: inherit
+  # NO verify-site. The marketing site's closure (`./_site/*...`) is wholly inside verify-core's, which typechecks,
+  # builds and tests every site package already; the one task it held that verify-core did not was the web's suite,
+  # which verify-platform owns. The site publishes from Cloudflare's own git integration and nothing here gated it, so
+  # a future site-deploy job hangs off verify-core.
 
   # The desktop app: Rust fmt/clippy/tests + the launcher UI build. Runs only when the desktop tree changes —
   # on pull requests as the gate, and on main so a broken desktop surfaces before the release cross-builds the
@@ -1049,6 +1083,9 @@ jobs:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-desktop-check
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
@@ -1089,7 +1126,12 @@ jobs:
       # after a cargo build. Through turbo rather than a bare `pnpm --filter … build` because this job OWNS the
       # desktop packages — the verify matrix subtracts them, so their build happens HERE or nowhere. No separate
       # typecheck: desktop-app's build IS `vue-tsc --noEmit && vite build`.
-      - run: pnpm turbo run build test --filter=@intentic/desktop-app... --filter=@intentic/desktop-smoke... --continue=dependencies-successful
+      #
+      # THE TWO DESKTOP PACKAGES' OWN TESTS, NOT THEIR CLOSURE'S. The filter used to end in `...`, which made every
+      # dependency a target too, and desktop-app depends on the web: this job ran the web's 875-file suite (19 minutes on
+      # 2026-10-07) beside verify-platform running the same one. Every dependency's tests belong to verify-core or
+      # verify-platform; `test`'s `^build` still builds the dependencies these two need.
+      - run: pnpm turbo run build test --filter=@intentic/desktop-app --filter=@intentic/desktop-smoke --continue=dependencies-successful
       # The launcher scripts, staged out of the commit (stage-desktop-scripts.sh). tauri-build resolves the
       # resource glob while CARGO builds, so clippy and test below need it as much as a bundle does — and the
       # desktop-app `build` above, which stages on its own, is a turbo task that a cache hit skips. `git archive`
@@ -1125,6 +1167,9 @@ jobs:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.ic == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-ic-check
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
@@ -1193,6 +1238,9 @@ jobs:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.netd == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-netd-check
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
@@ -1279,19 +1327,23 @@ jobs:
   # WINDOWS: the NSIS installer is also verified as an archive here (tier 1 reads it with 7z) — and EXECUTED by
   # the two jobs below, which is a thing no Linux runner can do.
   #
-  # AND NOT WHEN THE RELEASE IS ABOUT TO DO IT PROPERLY. `release` builds this same tree at the REAL version —
-  # linux-build runs the identical build-desktop.sh + verify-desktop-install.sh pair, windows-build +
-  # windows-verify the identical Windows pair — and it does not need this job, so on a releasing push all of
-  # this was a second set of artifacts, at 0.0.0, in their own cargo target directories (no cache shared with
-  # the release's, by design), gating nothing. Four release-profile Tauri builds for one commit, and the two
-  # Windows halves serialized on the ONE Windows machine, with the redundant one ahead of the release's in the
-  # queue. The empty-version check is what keeps this job to the pushes where it is the only desktop coverage
-  # there is; the release's own jobs are the coverage on every other one. A manual dispatch with desktop_smoke
-  # also runs this job on a branch, to check a CI-only fix on the same desktop runner before it reaches main.
+  # FROM THE START OF THE PIPELINE, NOT AFTER THE RELEASE HAS DECIDED. `release` builds this same tree at the REAL
+  # version (linux-build runs the identical build-desktop.sh + verify-desktop-install.sh pair), so this job used to
+  # wait on the release call and run only when it released nothing, to save a second release-profile build on a
+  # releasing push. That wait was every gate the release has (verify-core, verify-providers, verify-machine): the
+  # build started 28 minutes into a pipeline and the desktop chain behind it was the last thing to finish in 17 of 31
+  # pushes (2026-10-03 to 10-07). It now starts beside the verify groups, and the cost is said plainly: on a releasing
+  # push this Linux build is a second one, in its own cargo target directory, on the Linux fleet. The scarce half, the
+  # ONE Windows machine, still runs only one smoke per push: desktop-verify-windows keeps the release gate. A manual
+  # dispatch with desktop_smoke also runs this job on a branch, to check a CI-only fix on the same desktop runner
+  # before it reaches main.
   desktop-verify:
-    needs: [changes, preflight, ci-base, ci-desktop, release]
-    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
+    needs: [changes, preflight, ci-base, ci-desktop]
+    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
     runs-on: [self-hosted, intentic, desktop]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-desktop-verify
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
@@ -1332,14 +1384,18 @@ jobs:
   # same checkout and handed to the shim through IC_BIN, its own local-dev override. The Linux setup tier does
   # exactly this, for exactly this reason.
   #
-  # Gated on an empty release version for the reason desktop-verify spells out: on a releasing push the
-  # release's own windows-build cross-builds this same installer at the real version and windows-verify runs
-  # it on the same single Windows machine, so this pair was a redundant cross-build plus a redundant
-  # install/uninstall cycle sitting AHEAD of the release's in that machine's queue.
+  # From the start of the pipeline, for the reason desktop-verify spells out: the cross-build is a few minutes on the
+  # Linux fleet, and waiting for the release's verdict before starting it put those minutes on the tail of every push.
+  # What must not run twice is the Windows half, on the one Windows machine: desktop-verify-windows waits for the
+  # release and runs only when it released nothing, since on a releasing push the release's own windows-verify runs
+  # the installer at the real version on that same machine.
   desktop-windows-build:
-    needs: [changes, preflight, ci-base, ci-desktop, release]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    needs: [changes, preflight, ci-base, ci-desktop]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-desktop-windows-build
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
@@ -1405,9 +1461,17 @@ jobs:
   # main rather than sit in the nightly. The tiers that DO need a Docker daemon and a connected account are the
   # `deep` call in nightly.yml. A glob for the installer: this job builds at 0.0.0 and holds no version to
   # demand, unlike release.yml's call.
+  #
+  # AFTER THE RELEASE'S VERDICT, and only when it released nothing: on a releasing push the release's own windows-verify
+  # runs the real-version installer on the same single Windows machine, and this one would be a redundant
+  # install/uninstall cycle in that machine's queue. The installer itself is built from the pipeline's start
+  # (desktop-windows-build), so all this waits for is the verdict.
   desktop-verify-windows:
-    needs: [desktop-windows-build]
-    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' }}
+    needs: [desktop-windows-build, release]
+    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && needs.release.outputs.version == '' }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-desktop-verify-windows
+      cancel-in-progress: true
     uses: ./.github/workflows/windows-smoke.yml
     with:
       artifact-name: windows-desktop-artifacts
@@ -1433,6 +1497,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-e2e-billing
+      cancel-in-progress: true
     container:
       image: ghcr.io/intentic/ci-base:latest
       volumes:
@@ -1475,6 +1542,9 @@ jobs:
     needs: [changes, preflight]
     if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-e2e-signin
+      cancel-in-progress: true
     timeout-minutes: 25
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1578,7 +1648,7 @@ jobs:
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-machine.result == 'success'
-      && needs.netd-check.result != 'failure'
+      && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: [self-hosted, intentic]
     container:
@@ -1663,6 +1733,9 @@ jobs:
   # a boot proof of its own to run here, and the arm64 half is a GitHub-hosted runner's hour.
   #
   # The cost, said plainly: one more amd64 image build, on the fleet, for each failing main push that changes the image.
+  #
+  # NOT FOR A GATE THAT WAS CANCELLED. A gate a newer push superseded (SUPERSEDED in the header) did not fail: the push on
+  # top builds this image, published or dry, so building it here too would be one more image for a commit nobody ships.
   images-dry:
     needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
@@ -1672,7 +1745,10 @@ jobs:
       && !(needs.preflight.result == 'success'
         && needs.verify-core.result == 'success'
         && needs.verify-machine.result == 'success'
-        && needs.netd-check.result != 'failure')
+        && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped'))
+      && needs.verify-core.result != 'cancelled'
+      && needs.verify-machine.result != 'cancelled'
+      && needs.netd-check.result != 'cancelled'
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1737,7 +1813,7 @@ jobs:
       && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-machine.result == 'success'
-      && needs.netd-check.result != 'failure'
+      && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -1858,7 +1934,7 @@ jobs:
       && needs.verify-platform.result == 'success'
       && needs.e2e-billing.result == 'success'
       && needs.e2e-signin.result == 'success'
-      && needs.netd-check.result != 'failure'
+      && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1948,7 +2024,8 @@ jobs:
   # whole point of it is that a release cannot be cut without every provider's real CLI having been driven. A
   # gate that a skip satisfies is a gate that disappears exactly when someone disables it.
   # verify-machine is required the same way, since it runs every pipeline. netd-check runs only when netd or
-  # the daemon's end of its socket moved, so it is held to `!= 'failure'`, as images-platform holds it.
+  # the daemon's end of its socket moved, so it is held to success-or-skipped, as images-platform holds it: a skip is
+  # "nothing of netd's moved", while a cancel is "a newer push superseded this one", which proves nothing.
   # Preflight is required by name, for the reason `images` spells out: the verify groups no longer carry its verdict.
   release:
     needs: [preflight, verify-core, verify-providers, verify-machine, netd-check, ci-base, ci-desktop]
@@ -1958,7 +2035,7 @@ jobs:
       && needs.verify-core.result == 'success'
       && needs.verify-providers.result == 'success'
       && needs.verify-machine.result == 'success'
-      && needs.netd-check.result != 'failure'
+      && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')
       && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
     concurrency:

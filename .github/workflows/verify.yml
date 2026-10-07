@@ -1,12 +1,12 @@
-# One verify group: build + test a release group's closure. Called three times from ci.yml with different
-# filters.
+# One verify group: typecheck, build and test a release group's closure. Called twice from ci.yml (verify-core and
+# verify-platform) with different filters.
 #
 # A REUSABLE WORKFLOW rather than a matrix, and the reason is the DAG. Actions reports a matrix job's result as
 # one aggregate across every leg, so `needs: verify` would be 'failure' when ANY group broke — and `images`
 # would then wait on the marketing site, and a platform deploy would wait on the desktop launcher UI. That is
 # precisely the coupling the split exists to remove: a failed group must publish nothing of its own and block
-# nothing of anyone else's. Three separate callers give three separately-nameable results. Actions supports no
-# YAML anchors, so this file is how one definition serves all three without a matrix.
+# nothing of anyone else's. Separate callers give separately-nameable results. Actions supports no YAML anchors,
+# so this file is how one definition serves every caller without a matrix.
 name: verify
 
 on:
@@ -33,8 +33,16 @@ env:
   INDEXNOW_ENABLED: "0"
   # SIX RUNNER PROCESSES SHARE ONE BOX (docs/ops/ci-runner.md), and no cgroup says so: these containers are started
   # without `--memory`, so each job reads the whole machine's RAM and no ceiling at all. test-workers.mjs divides by
-  # this to size the `bun test` fan-out; without it every job sized itself as though the box were its own.
+  # this where it sizes a fan-out by division (the e2e tiers); the suites below size from the pool instead.
   CI_HOST_JOBS: "6"
+  # THE HOST'S TEST MEMORY POOL, in one-GiB slots every job on the box draws from (_tools/scripts/lib/test-memory-pool.mjs).
+  # Each `suites` run takes slots for the workers its file count is worth, so the web suite spreads over several workers
+  # when the box is quiet and runs on one when it is not. The same pair as ci.yml's, and sized with the fleet: 16 of the
+  # WSL VM's 26 GB, leaving the rest to typechecks, builds and Docker.
+  TEST_SLOTS_DIR: /ci-cache/test-slots
+  TEST_SLOTS: "16"
+  # Where a passing vue-tsc check leaves its build info for the next one on any runner (seed-buildinfo.mjs).
+  TSBUILDINFO_SHARE_DIR: /ci-cache/tsbuildinfo
 
 jobs:
   verify:
@@ -62,64 +70,39 @@ jobs:
         with:
           lockfile-drift: measure
 
-      # `typecheck` is the one that reads the TEST files. `build` cannot: an emitting package excludes *.test.ts
-      # so test code stays out of dist, which left the tests unchecked by anything but their own execution —
-      # hand-built fakes drifted out of shape with the seams they stand in for, and only ever said so as an
-      # opaque 500 in some unrelated suite.
+      # `typecheck` is the one that reads the TEST files. `build` cannot: an emitting package excludes *.test.ts to keep test
+      # code out of dist, which left the tests unchecked by anything but their own execution: hand-built fakes drifted out
+      # of shape with the seams they stand in for, and only ever said so as an opaque 500 in some unrelated suite.
       #
-      # It needs nothing from the build graph: the emit below writes its own declarations, which is what makes the
-      # same check runnable in an agent worktree — it used to depend on `^build`, and a pnpm `build` dies EXDEV
-      # in a worktree, so the check that decided main's health was the one check nobody could run locally.
+      # It needs nothing from the build graph: the emit below writes its own declarations, which is what makes the same
+      # check runnable in an agent worktree. It used to depend on `^build`, and a pnpm `build` dies EXDEV in a worktree, so
+      # the check that decided main's health was the one check nobody could run locally.
       #
-      # THE DECLARATIONS ALONE, NOT `pnpm prepass`. The root script is the checks manifest and then this emit, and
-      # the manifest is preflight's to run (from the checkout) and `quick`'s (after a fresh install). Run here too,
-      # a failing check skipped this group's typecheck and every test behind it — which would hide them again now
-      # that the groups run whatever preflight concluded. The emit is the one real dependency the steps below have.
-      #
-      # Invoked directly rather than through `pnpm typecheck`, because the root script cannot take a filter. It is
-      # repo-wide and unfilterable either way (~45 packages of `tsgo -b`), so each of the three groups pays it — the
-      # standing cost of the split, against a platform deploy that no longer waits on the marketing site.
+      # THE DECLARATIONS ALONE, NOT `pnpm prepass`. The root script is the checks manifest and then this emit, and the
+      # manifest is preflight's to run (from the checkout) and `quick`'s (after a fresh install). Run here too, a failing
+      # check skipped this group's typecheck and every test behind it. The emit is the one real dependency the step below
+      # has. Invoked directly rather than through `pnpm typecheck`, because the root script cannot take a filter.
       - id: declarations
         run: node _tools/scripts/build/emit-declarations.mjs
-      # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual
-      # substitution BEFORE the shell sees the line, so the value becomes script rather than an argument to it
-      # — the shape zizmor calls template-injection and the one every Actions exploit writeup starts from. The
-      # inputs here come from three literals in ci.yml and are not attacker-reachable today, but the fix costs
-      # a line and the shape is what gets copied into the next workflow.
+      # ONE turbo graph for `typecheck build test`. Two invocations are a hard barrier: the typecheck used to finish
+      # before any build or test started, so the web's vue-tsc (5 minutes under load, 2026-10-07) sat in front of the
+      # web's tests (20) instead of beside them. Nothing in a test reads a typecheck, so in one graph each package's
+      # tests start the moment its own deps are built while the typechecks run beside them.
       #
-      # UNQUOTED ON PURPOSE below: this is a list of turbo flags, and the word splitting is the point — `"$X"`
-      # would hand turbo one argument spelled `--filter=a --filter=b`. That is the one case where quoting is
-      # wrong, so it is said out loud rather than left to look like an oversight.
-      - run: pnpm turbo run typecheck $FILTERS --continue=dependencies-successful
-        env:
-          FILTERS: ${{ inputs.filters }}
-
-      # ONE turbo invocation for `build test`, not two: separate calls are a hard barrier — every package must
-      # finish building before ANY test starts. A single graph lets each package's tests run the moment its own
-      # deps are built while the rest of the group is still compiling.
+      # `--continue=dependencies-successful`: turbo otherwise stops at the first failing task, so a failed pipeline
+      # reported one broken package and the next push found the next one. Continuing into everything whose own
+      # dependencies still pass makes one run say everything that is wrong, and a type error no longer hides the tests
+      # behind it: it used to fail a step of its own and skip this one.
       #
-      # `--continue=dependencies-successful` on both: turbo otherwise stops at the first failing task, so a failed
-      # pipeline reports one broken package and the next push finds the next one. Continuing into everything
-      # whose own dependencies still pass makes one run say everything that is wrong.
-      # Through the environment, unquoted, for the two reasons the typecheck step above spells out.
+      # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual substitution
+      # BEFORE the shell sees the line, so the value becomes script rather than an argument to it: the shape zizmor calls
+      # template-injection. The inputs here come from literals in ci.yml and are not attacker-reachable today, but the fix
+      # costs a line and the shape is what gets copied into the next workflow. UNQUOTED ON PURPOSE: this is a list of
+      # turbo flags, and the word splitting is the point; `"$X"` would hand turbo one argument spelled `--filter=a --filter=b`.
       #
-      # AND THE STEP BOUNDARY IS THE SAME DEFECT ONE LEVEL UP. Actions stops a job at its first failing step, so
-      # everything the paragraph above buys inside turbo was being thrown away between the two invocations: a
-      # type error in any package meant this step never ran, the pipeline reported the type error alone, and the
-      # test failures underneath it were found by the next push. That is precisely "one broken package and the
-      # next push finds the next one", written in YAML instead of in turbo's scheduler.
-      #
-      # `!cancelled()` rather than `always()`: a cancelled run has been asked to stop and must not spend a
-      # runner finishing this. `steps.declarations.outcome == 'success'` is the one real dependency in the chain —
-      # the declarations this reads are what that step emits, so without them the failures here would be missing
-      # modules rather than anything about the tree. A failed typecheck still fails the JOB; it just no longer
-      # decides how much of the tree gets measured.
-      #
-      # TEST_WORKERS IS COMPUTED HERE FOR THE SAME REASON THE ROOT `test` SCRIPT COMPUTES IT: turbo is invoked
-      # directly, so the root script that would have set it is not in the chain. Unset, `suites` falls back to the
-      # sizing for a run that is ALONE on the machine — and six of these jobs are not, which is how a passing pipeline
-      # became six runners losing contact with the server mid-test.
-      - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run build test $FILTERS --continue=dependencies-successful
+      # NO TEST_WORKERS: each `suites` run sizes itself from the host's pool (TEST_SLOTS_DIR above), which knows what the
+      # other jobs on the box hold right now. A fixed count computed here could only divide the box by six.
+      - run: pnpm turbo run typecheck build test $FILTERS --continue=dependencies-successful
         if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
         env:
           FILTERS: ${{ inputs.filters }}

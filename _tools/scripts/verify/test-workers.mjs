@@ -57,6 +57,28 @@ export const availableMemory = () => (asked ??= askFreeSync() ?? freemem());
 export const standaloneWorkers = (freeBytes = availableMemory(), cores = availableParallelism(), jobs = hostJobs()) =>
     Math.min(cores, Math.max(1, Math.floor((freeBytes * FAN_OUT_SHARE) / (jobs * STANDALONE_WORKER_BYTES))));
 
+// SIZING FROM THE CI HOST'S POOL (../lib/test-memory-pool.mjs), where one is configured: what `suites` asks for, and what
+// it may run with what it got. A worker per FILES_PER_WORKER files, since a worker's start (the preloads, a jsdom, the
+// module graph) is a second or two that a handful of files never pays back; never past the cores or TEST_WORKERS_MAX.
+// Measured on the web suite on omen (2026-10-07, 217 files): 142 s on one worker, 83 s on four, 58 s on eight.
+export const FILES_PER_WORKER = 20;
+export const DEFAULT_MAX_WORKERS = 6;
+
+export const maxWorkers = (env = process.env, cores = availableParallelism()) => {
+    const raw = Number(env.TEST_WORKERS_MAX);
+    return Math.max(1, Math.min(cores, Number.isInteger(raw) && raw >= 1 ? raw : DEFAULT_MAX_WORKERS));
+};
+
+// Workers worth starting for `files` test files.
+export const wantedWorkers = (files, most) => Math.max(1, Math.min(most, Math.ceil(files / FILES_PER_WORKER)));
+
+// Slots one worker holds: its peak over the pool's one-GiB slots, rounded up, so a worker is never under-counted.
+export const slotsPerWorker = (workerBytes, slotBytes) => Math.max(1, Math.ceil(workerBytes / slotBytes));
+
+// Workers the slots held pay for, never more than were wanted, and one at least: a run the pool had nothing for runs as
+// every run did before the pool.
+export const workersForSlots = (slots, perWorker, wanted) => Math.max(1, Math.min(wanted, Math.floor(slots / perWorker)));
+
 // The value to hand `suites`, as a string for an env block. An empty variable counts as unset, as `${VAR:-}` reads it.
 export const testWorkers = (env = process.env, freeBytes = availableMemory()) => {
     const own = env.TEST_WORKERS;
