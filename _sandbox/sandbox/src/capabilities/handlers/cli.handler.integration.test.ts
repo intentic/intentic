@@ -353,7 +353,9 @@ test("git setup registers the store's key and rewrites a public file that names 
     expect(uploads.map((line) => line.split(" ").slice(0, 2).join(" "))).toEqual([held, held]);
 });
 
-test("git restore repairs a public file that names another key, without calling the account", async () => {
+// The alias was confirmed for the file's key, not the held one, so restore registers the held key rather than trusting
+// the alias: trusting it left ssh offering a key the account had never seen, on every boot (2026-10-07).
+test("git restore repairs a public file that names another key and registers the held key", async () => {
     const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
     gitHome();
     await linkSshHosts(history);
@@ -372,8 +374,11 @@ test("git restore repairs a public file that names another key, without calling 
 
     expect(await restoreGitAccess(host, directExec, keys, deps)).toBeUndefined();
 
-    expect(readFileSync(hostPub(home, "github.com"), "utf8")).toStartWith(heldPublicLine(keys, "github.com"));
-    expect(uploads).toHaveLength(1);
+    const held = heldPublicLine(keys, "github.com");
+    expect(readFileSync(hostPub(home, "github.com"), "utf8")).toStartWith(held);
+    expect(uploads.map((line) => line.split(" ").slice(0, 2).join(" "))).toEqual([held, held]);
+    expect(readFileSync(hostConf(home, "github.com"), "utf8")).toContain("Host github.com");
+    expect(await httpsRewrite("github.com")).toEqual([]);
 });
 
 test("git setup reroutes ssh over https + warns (no throw) when ssh-key registration is refused", async () => {

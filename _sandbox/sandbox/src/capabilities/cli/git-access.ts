@@ -101,15 +101,21 @@ const keyOfLine = (line: string): string => line.trim().split(/\s+/u).slice(0, 2
 // on /history, the store under the auth root, and the two outlived each other) named a key the agent did not have:
 // every push from the owner's terminal died "Permission denied (publickey)" behind a warning about the .pub file's
 // permissions, while the store's key sat on the account the whole time, and the next setup registered the stale file's
-// key on the account instead of the held one (2026-10-07). A file that names any other key is rewritten here.
-const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<string> => {
+// key on the account instead of the held one (2026-10-07). A file that names any other key is rewritten here, and
+// `rewritten` says so: an alias confirmed for the old file's key proves nothing about the held one (restoreGitAccess).
+interface KeyPair {
+    readonly publicLine: string;
+    readonly rewritten: boolean;
+}
+
+const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<KeyPair> => {
     // A key an older build left beside the alias is the one on the account: adopted, never replaced by a new one.
     const held = (await keys.get(host.host)) ?? ((await adoptLegacySshKey(host.host, keys)) ? await keys.get(host.host) : undefined);
     if (held === undefined) {
         const pair = generateSshKey(KEY_TITLE);
         await keys.put(host.host, pair.privateKey);
         await writeHostPublicKey(host.host, pair.publicKey);
-        return pair.publicKey;
+        return { publicLine: pair.publicKey, rewritten: true };
     }
     const publicLine = publicLineOf(held);
     if (publicLine === undefined) {
@@ -117,10 +123,11 @@ const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<string> 
     }
     // allow(silent-catch): an unreadable public half is rewritten from the private key held in the store, just below.
     const written = (await readFile(hostPublicKeyPath(host.host), "utf8").catch(() => "")).trim();
-    if (keyOfLine(written) !== keyOfLine(publicLine)) {
-        await writeHostPublicKey(host.host, publicLine);
+    if (keyOfLine(written) === keyOfLine(publicLine)) {
+        return { publicLine, rewritten: false };
     }
-    return publicLine;
+    await writeHostPublicKey(host.host, publicLine);
+    return { publicLine, rewritten: true };
 };
 
 const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown): string => {
@@ -299,7 +306,7 @@ export const setupGitAccess = async (
 ): Promise<string | undefined> => {
     await ensureHttpsCredential(host, exec);
     await ensureGitIdentity(host, exec, deps);
-    const publicKey = await ensureKeyPair(host, keys);
+    const { publicLine: publicKey } = await ensureKeyPair(host, keys);
     const refusal = await deps.uploadKey(host, publicKey, KEY_TITLE).then(
         () => undefined,
         (err: unknown) => err,
@@ -319,7 +326,10 @@ export const setupGitAccess = async (
 };
 
 // Boot half of setupGitAccess: re-derives what HOME lost (credential helper, https line, alias or rewrite).
-// No account call: a persisted keypair is already registered; a missing keypair is the one case needing the full apply.
+// No account call while the alias still names the key it was confirmed for. A missing keypair, or an alias whose public
+// file had to be rewritten to the held key, needs the full apply: the alias was written for whatever key the file named
+// then, and that need not be the held one. Trusting it left every boot pointing ssh at a key GitHub had never been
+// given, "Permission denied (publickey)" that no rebuild could clear, only re-adding the capability (2026-10-07).
 export const restoreGitAccess = async (
     host: GitHost,
     exec: ExecInTerminal,
@@ -334,7 +344,10 @@ export const restoreGitAccess = async (
     await ensureGitIdentity(host, exec, deps);
     // Alias next to the key means the key is on the account: written only after a successful upload.
     if (await fileExists(hostConfPath(host.host))) {
-        await ensureKeyPair(host, keys);
+        if ((await ensureKeyPair(host, keys)).rewritten) {
+            // Registering the same key again is the provider's no-op (422 / 400), so this cannot pile up account keys.
+            return setupGitAccess(host, exec, keys, deps);
+        }
         await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostPublicKeyPath(host.host) });
         return undefined;
     }
