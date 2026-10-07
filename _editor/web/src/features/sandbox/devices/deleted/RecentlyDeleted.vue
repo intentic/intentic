@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, ui } from "@intentic/ui";
-import { SANDBOX_RECOVERY_DAYS } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useTemplateRef, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -72,8 +71,6 @@ const restore = async (trashId: string): Promise<void> => {
         <RowGroup
             v-if="shows !== `error`"
             :label="t(`sandbox.words.recentlyDeleted`)"
-            :count="shows === `rows` ? trash.recoverable.value.length : undefined"
-            :caption="t(`sandbox.recentlyDeleted.keptForDays`, { count: SANDBOX_RECOVERY_DAYS }, SANDBOX_RECOVERY_DAYS)"
             :equal-rows="shows === `rows`"
         >
             <div v-if="shows === `reading`" role="status" aria-busy="true">
