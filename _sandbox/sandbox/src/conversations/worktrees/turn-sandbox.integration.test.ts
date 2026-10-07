@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { link, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
@@ -85,13 +85,18 @@ const inside = (anchor: IsolationAnchor, script: string) => {
     return { code: ran.status, out: `${ran.stdout}${ran.stderr}`.trim() };
 };
 
+// A zombie has ended: what it lacks is a parent to collect its exit status, which is PID 1's job once its own parent
+// has gone. A sandbox's container runs docker-init there, which collects; CI's job container runs `tail -f /dev/null`,
+// which never does, so there every ended anchor stayed a zombie and read as running.
 const alive = (pid: number): boolean => {
+    let stat: string;
     try {
-        process.kill(pid, 0);
-        return true;
+        stat = readFileSync(`/proc/${String(pid)}/stat`, "utf8");
     } catch {
         return false;
     }
+    // The state follows the command, which is in parentheses and may hold any character, the last ")" included.
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) !== "Z";
 };
 
 const until = async (condition: () => boolean, ms: number): Promise<boolean> => {

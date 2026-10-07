@@ -50,13 +50,25 @@ const charsOf = (lines: readonly OcrLine[]) => {
 };
 
 // A reading with fewer sure characters than this, or less sure of them on the whole, is tried again upside down, and
-// the way up that reads more is kept. Text upside down reads as a few unsure characters of nothing: a page with three
+// the way up that reads more is kept (keptReading). Text upside down reads as a few unsure characters of nothing: a page with three
 // lines on its head read as 15 characters at 0.58 to 0.81 (11 sure ones), the right way up as 63 at 0.99 and over.
 const RETRY_BELOW = 24;
 const SURE_SHARE = 0.9;
+const mostlySure = (chars: { readonly all: number; readonly sure: number }): boolean => chars.sure >= SURE_SHARE * chars.all;
 const settled = (lines: readonly OcrLine[]): boolean => {
     const chars = charsOf(lines);
-    return chars.sure >= RETRY_BELOW && chars.sure >= SURE_SHARE * chars.all;
+    return chars.sure >= RETRY_BELOW && mostlySure(chars);
+};
+
+/**
+ * Which way up to keep once the upright reading has not settled: the reading upside down only where it reads more sure
+ * characters and is itself mostly sure. A reading that is mostly unsure is what text on its head looks like, so it never
+ * displaces an upright one, however many characters it strings together: a phone photo whose line the detector half
+ * found read "Faktura" upright and 28 characters of nothing (81% sure) turned over, and the nothing was kept.
+ */
+export const keptReading = (upright: readonly OcrLine[], turned: readonly OcrLine[]): readonly OcrLine[] => {
+    const turnedChars = charsOf(turned);
+    return turnedChars.sure > charsOf(upright).sure && mostlySure(turnedChars) ? turned : upright;
 };
 
 // A line read off the picture turned upside down, placed back on the picture as it is: every corner turned a half turn
@@ -155,7 +167,7 @@ export const loadOcrEngine = async (dir: string): Promise<OcrEngine> => {
                 return upright;
             }
             const turned = (await readUpright(rotateHalfTurn(image))).map((line) => turnedBack(line, image.width, image.height));
-            return charsOf(turned).sure > charsOf(upright).sure ? turned : upright;
+            return [...keptReading(upright, turned)];
         },
         release: async () => {
             await Promise.all([detector.release(), recognizer.release()]);

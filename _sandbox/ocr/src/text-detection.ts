@@ -4,7 +4,7 @@ import { type Raster, resizeBilinear } from "./raster.js";
 // PP-OCRv6's text detector around its ONNX model: the image scaled as PaddleOCR scales it, normalized as it was
 // trained, and the probability map the model answers turned into one box per line of text by Differentiable
 // Binarization's post-processing (threshold, blobs, smallest rotated rectangle, score, grow). The parameters are the
-// OCR pipeline's own defaults in PaddleOCR 3.7 (paddlex/configs/pipelines/OCR.yaml).
+// OCR pipeline's own defaults in PaddleOCR 3.7 (paddlex/configs/pipelines/OCR.yaml), except `boxThreshold`.
 
 export const DETECTION = {
     // An image whose shorter side is below this is scaled up to it; nothing is scaled down below the longest side.
@@ -12,8 +12,11 @@ export const DETECTION = {
     maxSideLength: 4000,
     // A pixel is text where the model's probability passes this.
     threshold: 0.3,
-    // A blob is a line where its mean probability passes this.
-    boxThreshold: 0.6,
+    // A blob is a line where its mean probability passes this. PaddleOCR's 0.6 dropped the most of a line a phone photo
+    // held: on a mottled background at 4000 x 3000 the blob for "4815162342 z dnia 12.03.2026" scored 0.583, and only
+    // "Faktura" was read (measured 2026-10-07, in DejaVu Sans). The shield is here to find text, so a missed line costs
+    // more than a box of noise, which reads as nothing that looks like personal data.
+    boxThreshold: 0.5,
     // How far a found box is grown back out, the model having been trained on shrunk ones.
     unclipRatio: 1.5,
     minSize: 3,

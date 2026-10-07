@@ -118,6 +118,11 @@ export class TurnRun implements LiveRun {
     private readonly followers = new Set<Mailbox<AttachEntry>>();
     private readonly listeners = new Set<Mailbox<AgentEvent>>();
     private waiters: (() => void)[] = [];
+    // Resolved once the settled run's durable transcript is written (or was not to be) and its journal entry is gone.
+    private markRecorded: () => void = () => undefined;
+    private readonly recorded = new Promise<void>((resolve) => {
+        this.markRecorded = resolve;
+    });
 
     constructor(
         // The user's message the turn opens with, or the notice standing in for a repeated one; for a run carried on
@@ -192,13 +197,28 @@ export class TurnRun implements LiveRun {
         this.wake();
     }
 
-    // Resolves only once the detached pump has fully unwound; stop uses this as its acknowledgement boundary.
+    // Resolves once the run has finished: its last frame is folded and it no longer holds the conversation. Stop uses this
+    // as its acknowledgement boundary. The durable transcript may still be being written then (waitUntilRecorded).
     async waitUntilFinished(): Promise<void> {
         while (!this.done) {
             await new Promise<void>((resolve) => {
                 this.waiters.push(resolve);
             });
         }
+    }
+
+    /**
+     * Resolves once the settled run is on the record: its transcript written and its journal entry gone. What follows
+     * this run in its conversation and writes the record too waits for this, or its rows land above this run's: a parked
+     * turn's answer started on waitUntilFinished was recorded before the work it answered on a loaded machine.
+     */
+    waitUntilRecorded(): Promise<void> {
+        return this.recorded;
+    }
+
+    /** @internal The pump's own end: everything a settled run writes is written. */
+    recordedNow(): void {
+        this.markRecorded();
     }
 
     // Attach: rows and facts so far on the head, then everything that lands from this instant on. Head and subscription
@@ -471,7 +491,12 @@ export function startTurnRun(
                 }
             }
             // No longer in flight, however it ended; only an unseen turn deserves resuming.
-            journal({ kind: "unjournalled" });
+            try {
+                journal({ kind: "unjournalled" });
+            } finally {
+                // Whatever the journal answered, so what waits on the record is never held for good.
+                run.recordedNow();
+            }
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
             deps.events.publish("run.settled", {
                 conversationId: input.conversationId,

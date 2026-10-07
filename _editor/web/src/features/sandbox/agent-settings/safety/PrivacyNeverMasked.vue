@@ -160,7 +160,7 @@ const LIST = `max-h-72 overflow-y-auto`;
         <template #below>
             <div class="flex flex-col gap-2" :class="{ 'pointer-events-none opacity-60': !ready }">
                 <form class="flex items-center gap-2" @submit.prevent="submit">
-                    <div class="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-canvas px-2.5 focus-within:border-primary-500">
+                    <div class="ui-field-shell flex h-8 min-w-0 flex-1 items-center gap-2 px-2.5">
                         <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
                         <input
                             ref="field"
@@ -172,7 +172,7 @@ const LIST = `max-h-72 overflow-y-auto`;
                             :disabled="!ready"
                             :aria-label="t(`sandbox.agentPrivacyShield.neverMaskedField`)"
                             :placeholder="t(`sandbox.agentPrivacyShield.neverMaskedPlaceholder`)"
-                            class="min-w-0 flex-1 bg-transparent text-xs text-content outline-none placeholder:text-subtle"
+                            class="field-bare min-w-0 flex-1 md:text-xs"
                             @input="feedback = undefined"
                             @paste="paste"
                             @keydown.esc="typed = ``"

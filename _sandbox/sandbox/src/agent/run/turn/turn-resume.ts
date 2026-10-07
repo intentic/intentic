@@ -798,7 +798,8 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
     services.logger.info({ conversationId, requests: requests.length }, "parked turn rehydrated, its requests are back where they were");
     // Detached: the handoff waits out the whole run, and a request may sit unanswered for days without blocking boot.
     void (async () => {
-        await run.waitUntilFinished();
+        // On the record first: the answer's turn writes its own rows, and they belong under the work they answer.
+        await run.waitUntilRecorded();
         if (followUp === undefined) {
             return;
         }

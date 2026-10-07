@@ -636,6 +636,34 @@ describe(`a run on an archived conversation`, () => {
     });
 });
 
+describe(`the record`, () => {
+    it(`is written before what waits on it goes on, though the run finished before it`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        let write: (() => void) | undefined;
+        const writing = new Promise<void>((resolve) => {
+            write = resolve;
+        });
+        const run = started(startTurnRun(deps, turnFn, turn(`c-record`), { opening, transcript: () => writing }));
+        const order: string[] = [];
+        void run.waitUntilFinished().then(() => order.push(`finished`));
+        void run.waitUntilRecorded().then(() => order.push(`recorded`));
+        push({ kind: `done` });
+        close();
+        await waitFor(() => expect(order).toEqual([`finished`]));
+        write?.();
+        await waitFor(() => expect(order).toEqual([`finished`, `recorded`]));
+    });
+
+    it(`is on it at once for a run that wrote nothing down`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const run = started(startTurnRun(deps, turnFn, turn(`c-unrecorded`), { opening }));
+        push({ kind: `done` });
+        close();
+        await run.waitUntilRecorded();
+        expect(run.done).toBe(true);
+    });
+});
+
 describe(`the settle notice`, () => {
     it(`carries the turn's actor, its failure and its last words`, async () => {
         const heard: DomainEventMap["run.settled"][] = [];
