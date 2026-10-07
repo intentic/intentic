@@ -2768,16 +2768,11 @@
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Your agent is waiting for you",
-            "conversation": "Conversation",
-            "conversationSoFar": "The conversation so far",
-            "fullChat": "Full chat",
-            "hideConversation": "Hide conversation",
-            "minimize": "Minimize",
             "openChatAgentWaiting": "Open the chat: your agent is waiting for an answer",
             "openFullChat": "Open the full chat",
-            "pressToKeepOpen": "Press to keep open",
             "titleWaitingForYou": "{title} · waiting for you",
-            "writeToAgentHere": "Write to your agent from here"
+            "writeToAgentHere": "Write to your agent from here",
+            "you": "You"
         },
         "chatRailChecklist": {
             "chatsChecklist": "This chat's checklist",

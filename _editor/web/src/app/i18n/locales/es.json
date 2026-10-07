@@ -1383,16 +1383,11 @@
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Tu agente te está esperando",
-            "conversation": "Conversación",
-            "conversationSoFar": "La conversación hasta ahora",
-            "fullChat": "Chat completo",
-            "hideConversation": "Ocultar conversación",
-            "minimize": "Minimizar",
             "openChatAgentWaiting": "Abre el chat: tu agente espera una respuesta",
             "openFullChat": "Abrir el chat completo",
-            "pressToKeepOpen": "Pulsa para fijar",
             "titleWaitingForYou": "{title} · te espera",
-            "writeToAgentHere": "Escribe a tu agente desde aquí"
+            "writeToAgentHere": "Escribe a tu agente desde aquí",
+            "you": "Tú"
         },
         "chatRailChecklist": {
             "chatsChecklist": "La lista de tareas de este chat",

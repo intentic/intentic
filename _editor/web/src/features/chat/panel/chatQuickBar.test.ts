@@ -1,13 +1,13 @@
-// Pins the floating composer's two contracts: it draws exactly where no composer is already on screen, and what the
-// pill grows into is the chat's own composer rather than a second one. The hover rules are here because both
-// directions were wrong at first — an opening that stole the caret could never close again.
+// Pins the floating scratch pad's contracts: it draws exactly where no composer is already on screen, what the pill
+// opens into is the chat's own composer rather than a second one, and it is open exactly while the reader is in it.
+// Reading the chat is /chat's job: nothing here draws a transcript, and every ask to see one goes there.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
-import { quickBarShowAsk, quickBarTranscript } from "./chatPanelLayout";
+import { quickBarShowAsk } from "./chatPanelLayout";
 import { draftConversation, reveal } from "./useChat-reveal";
 
 import { queryClient } from "../../../lib/queryPersistence";
@@ -27,9 +27,6 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-    // jsdom's frame clock is an interval it starts once, on whichever timers are installed then, so it dies with the
-    // first test's fake timers; the card's leave transition waits two frames, which ride the current clock instead.
-    globalThis.requestAnimationFrame = (run: FrameRequestCallback): number => Number(setTimeout(() => run(performance.now()), 16));
 })();
 
 // An empty roster and an empty ledger: neither the fleet nor a workflow run is what these tests are about.
@@ -61,12 +58,12 @@ const mount = async (component: Parameters<typeof h>[0], props?: Record<string, 
     await settle();
 };
 
-// The bar floats over the section's own area, which the shell hands it; everything else is the rail and the overlays.
+// The bar floats over the section's own area; everything else is the rail and the overlays.
 const mountBar = async (): Promise<void> => {
     const page = document.createElement(`main`);
     page.append(document.createElement(`button`));
     document.body.append(page);
-    await mount(ChatQuickBar, { page });
+    await mount(ChatQuickBar);
 };
 const onThePage = (): Element | null => document.querySelector(`main button`);
 const railLink = (): HTMLAnchorElement => {
@@ -78,49 +75,31 @@ const railLink = (): HTMLAnchorElement => {
 };
 
 const bar = (): HTMLElement | null => document.querySelector(`.chat-quick-float`);
-// The resting pill is itself the control: the one that grows the composer or, while a card waits, opens the chat.
+// The resting pill is itself the control: the one that opens the composer or, while a card waits, the chat.
 const press = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`.chat-quick-pill`)!;
 const line = (): string => press().textContent?.trim() ?? ``;
 const opened = (): boolean => bar()?.classList.contains(`chat-quick-open`) === true;
+const context = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`.chat-quick-context`)!;
+const said = (): string => document.querySelector(`.chat-quick-said`)?.textContent?.replace(/\s+/gu, ` `).trim() ?? ``;
+const open = async (): Promise<void> => {
+    press().click();
+    await settle();
+};
 
-const hoverIn = (): void => void bar()?.dispatchEvent(new Event(`pointerenter`));
-const hoverOut = (): void => void bar()?.dispatchEvent(new Event(`pointerleave`));
-// The transcript's only affordance: the eye in the corner of the box it looks into.
-const handle = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`.chat-quick-eye`);
-const hoverHandle = (): void => void handle()?.dispatchEvent(new Event(`pointerenter`));
-const escape = (): void => void bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
+const escape = (): KeyboardEvent => {
+    const event = new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true });
+    bar()?.dispatchEvent(event);
+    return event;
+};
 const pressOn = (target: Element | null): void => void target?.dispatchEvent(new Event(`pointerdown`, { bubbles: true }));
-const caretLeavesFor = (next: Element | null): void =>
-    void bar()?.dispatchEvent(new FocusEvent(`focusout`, { bubbles: true, relatedTarget: next }));
-// A press on the transcript's own glass: where a selection starts.
-const card = (): HTMLElement | null => document.querySelector(`.chat-quick-card`);
-const openTranscriptByHover = async (): Promise<void> => {
-    hoverHandle();
-    jest.advanceTimersByTime(200);
-    await settle();
-};
-const said = (): void => useChat().active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
-// The transcript's card fading out, which the panel's turns wait for before they unmount: the render that starts it,
-// then the frames the transition runs on.
-const fadeOut = async (): Promise<void> => {
-    await settle();
-    jest.advanceTimersByTime(200);
-    await settle();
-};
-// Past both delays the pill uses, so a test never has to restate either one.
-const waitOutHover = async (): Promise<void> => {
-    jest.advanceTimersByTime(1_000);
-    await settle();
-};
+const caretLandsOn = (target: Element | null): void => void target?.dispatchEvent(new FocusEvent(`focusin`, { bubbles: true }));
 
 beforeEach(async () => {
-    jest.useFakeTimers();
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
     localStorage.clear();
     chatFullSlot.value = null;
-    quickBarTranscript.value = false;
     resetSandboxScope();
     // The home this whole surface exists for; `side` keeps its column, and then there is nothing to park.
     useLayout().setChatHome(`rail`);
@@ -130,7 +109,6 @@ beforeEach(async () => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    jest.useRealTimers();
 });
 
 it(`draws where no composer is already on screen, and nowhere else`, async () => {
@@ -157,53 +135,26 @@ it(`publishes its slot only while it draws, so the panel parks when it doesn't`,
     expect(chatBarSlot.value).toBeNull();
 });
 
-it(`hovering takes the box and never the caret, so a passing pointer can't capture the keyboard`, async () => {
+it(`opens on a press and takes the caret, since a press is the one gesture that means to type`, async () => {
     const chat = useChat();
     await mountBar();
     const caretRequests = chat.composerFocus.value;
 
-    hoverIn();
-    await waitOutHover();
-
-    expect(opened()).toBe(true);
-    expect(chat.composerFocus.value).toBe(caretRequests);
-});
-
-it(`closes again when the pointer leaves an empty box`, async () => {
-    await mountBar();
-    hoverIn();
-    await waitOutHover();
-
-    hoverOut();
-    await waitOutHover();
-
-    expect(opened()).toBe(false);
-});
-
-it(`keeps words on screen: a box with a draft in it stays open when the pointer goes`, async () => {
-    const chat = useChat();
-    await mountBar();
-    hoverIn();
-    await waitOutHover();
-    chat.active.value.draft.value = `half a thought`;
-    await settle();
-
-    hoverOut();
-    await waitOutHover();
-
-    expect(opened()).toBe(true);
-});
-
-it(`a press takes the caret, since it is the one gesture that means to type`, async () => {
-    const chat = useChat();
-    await mountBar();
-    const caretRequests = chat.composerFocus.value;
-
-    press().click();
-    await settle();
+    await open();
 
     expect(opened()).toBe(true);
     expect(chat.composerFocus.value).toBe(caretRequests + 1);
+});
+
+// A pointer crossing the bottom of the area on its way to a scrollbar or the terminal is not asking for anything.
+it(`never opens for a pointer passing over it`, async () => {
+    await mountBar();
+
+    bar()?.dispatchEvent(new Event(`pointerenter`));
+    press().dispatchEvent(new Event(`pointerenter`));
+    await settle();
+
+    expect(opened()).toBe(false);
 });
 
 it(`rises for a caret summoned anywhere: "New agent" pressed on a board is typed into here`, async () => {
@@ -238,36 +189,84 @@ it(`sizes itself by whichever form is in flow, never by a measured height`, asyn
     await mountBar();
     expect(bar()!.style.height).toBe(``);
 
-    press().click();
-    await settle();
+    await open();
 
     expect(bar()!.style.height).toBe(``);
 });
 
-// The pill is the whole resting form: a second control on it was one more thing to mean, in the one place the reader
-// came to write a sentence.
-it(`rests as one control and nothing else, so its only press is the composer`, async () => {
+// The pill is the whole resting form, and the open pad is the composer under one header: who it writes to and where
+// that conversation stands. A minimize, a transcript toggle and a full-chat button were three more things to mean over
+// a page the reader came to write about; the header is the one way to the conversation, and it says so.
+it(`is one control at rest, and grows one header of its own when open`, async () => {
+    useChat().active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    // What a hand can reach: the form not showing is inert, and the composer's own controls are the chat's.
+    const reachable = (): Element[] =>
+        [...document.querySelectorAll(`.chat-quick-float button`)].filter(
+            (button) => !button.closest(`[inert]`) && (!button.closest(`.chat-quick-host`) || button.classList.contains(`chat-quick-context`)),
+        );
     await mountBar();
+    expect(reachable()).toEqual([press()]);
 
-    expect(document.querySelectorAll(`.chat-quick-float button`)).toHaveLength(1);
+    await open();
+
+    expect(reachable()).toEqual([context()]);
 });
 
-// The card holding the turn is drawn in the transcript, and the pill grows into a composer with none: offering one
-// here would read as the way to answer, and the answer is not a message.
+// Open, the pill that named the chat is gone; without the header the box would be addressed to nobody.
+it(`says, open, which chat it writes to and the last thing said there`, async () => {
+    const chat = useChat();
+    chat.active.value.title.value = `Add Stripe checkout`;
+    chat.active.value.transcript.restoreMessages([
+        { role: `user`, text: `wire up **checkout**` },
+        { role: `assistant`, text: `## Done\n\nThe \`/pay\` route now [redirects](https://stripe.com) to Stripe.` },
+    ]);
+    await mountBar();
+    await open();
+
+    expect(context().textContent).toContain(`Add Stripe checkout`);
+    expect(said()).toBe(`Done The /pay route now redirects to Stripe.`);
+});
+
+it(`marks the last words as the reader's own when the agent has not answered yet`, async () => {
+    useChat().active.value.transcript.restoreMessages([{ role: `user`, text: `wire up checkout` }]);
+    await mountBar();
+    await open();
+
+    expect(said()).toBe(`You: wire up checkout`);
+});
+
+it(`takes the reader to the conversation from the header, closing the pad`, async () => {
+    const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
+    await mountBar();
+    await open();
+
+    context().click();
+    await settle();
+
+    expect([opened(), push.mock.calls]).toEqual([false, [[`/chat`]]]);
+    push.mockRestore();
+});
+
+// The card holding the turn is drawn in the transcript, and the pill opens a composer with none: offering one here
+// would read as the way to answer, and the answer is not a message.
 it(`turns into a door while a card waits for an answer, rather than a box that cannot send one`, async () => {
     const chat = useChat();
     chat.active.value.transcript.restoreMessages([
         { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } },
     ]);
+    const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
     await mountBar();
 
     expect(line()).toContain(`waiting for you`);
     expect(press().hasAttribute(`aria-expanded`)).toBe(false);
 
-    hoverIn();
-    await waitOutHover();
-
+    focusComposer();
+    await settle();
     expect(opened()).toBe(false);
+
+    await open();
+    expect([opened(), push.mock.calls]).toEqual([false, [[`/chat`]]]);
+    push.mockRestore();
 });
 
 it(`says what is running while it rests, since the pill is the only sign a parked turn leaves`, async () => {
@@ -285,11 +284,10 @@ it(`invites when there is nothing to report`, async () => {
 });
 
 // Escape means four things in the composer (stop the turn, abandon an edit, quit hands-free, dismiss a list), and
-// closing the pill is last in that queue.
-it(`closes on Escape, unless the composer claimed that press`, async () => {
+// closing the pad is last in that queue. Closed from the keyboard, the caret goes back to the pill.
+it(`closes on Escape unless the composer claimed that press, and hands the caret to the pill`, async () => {
     await mountBar();
-    press().click();
-    await settle();
+    await open();
 
     const claimed = new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true });
     claimed.preventDefault();
@@ -299,160 +297,63 @@ it(`closes on Escape, unless the composer claimed that press`, async () => {
 
     escape();
     await settle();
+    expect([opened(), document.activeElement]).toEqual([false, press()]);
+});
+
+it(`closes when the reader presses anywhere else, the page and the rail alike`, async () => {
+    await mountBar();
+    await open();
+    pressOn(onThePage());
+    await settle();
+    expect(opened()).toBe(false);
+
+    await open();
+    pressOn(railLink());
+    await settle();
     expect(opened()).toBe(false);
 });
 
-// The box can say what is being written but not what was said, and the transcript is the one thing it has no room
-// for — so the way to it is an affordance, not a navigation, offered only where there is something to read.
-it(`offers the transcript only on the open box, and only once something has been said`, async () => {
-    const chat = useChat();
+it(`closes when the caret lands anywhere else`, async () => {
     await mountBar();
-    press().click();
+    await open();
+
+    caretLandsOn(onThePage());
     await settle();
-    expect(handle()).toBeNull();
 
-    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
-    await settle();
-    expect(handle()).not.toBeNull();
-
-    // Resting, the pill is the whole form: its own line already carries what the chat is up to.
-    press().click();
-    await settle();
-    expect(handle()).toBeNull();
-});
-
-// A borrowed transcript and a borrowed box both end with the pointer, the transcript first: its grace and its fade
-// together are over before the box's grace is.
-it(`folds a borrowed transcript away with the pointer, before the box itself goes`, async () => {
-    said();
-    await mountBar();
-    hoverIn();
-    await waitOutHover();
-
-    await openTranscriptByHover();
-    expect(quickBarTranscript.value).toBe(true);
-
-    hoverOut();
-    jest.advanceTimersByTime(350);
-    await settle();
-    expect([quickBarTranscript.value, opened()]).toEqual([false, true]);
-
-    await waitOutHover();
     expect(opened()).toBe(false);
 });
 
-it(`gives an overshot edge its transcript back when the pointer returns in time`, async () => {
-    said();
+it(`stays open for presses and the caret inside it`, async () => {
     await mountBar();
-    hoverIn();
-    await waitOutHover();
-    await openTranscriptByHover();
+    await open();
+    const inside = document.querySelector(`.chat-quick-host`)!;
 
-    hoverOut();
-    jest.advanceTimersByTime(100);
-    hoverIn();
-    await waitOutHover();
-
-    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
-});
-
-// A board card's click asks for the chat itself: before, the pill only changed its title and readers clicked again.
-it(`shows the chat's turns, kept, when a board card asks for them`, async () => {
-    said();
-    await mountBar();
-    quickBarShowAsk.value += 1;
-    await settle();
-    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
-
-    // A second card's click while it is open keeps it open, rather than folding what the first one opened.
-    quickBarShowAsk.value += 1;
-    await settle();
-    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
-});
-
-// Selecting a line to copy starts with a press on the transcript and often ends past its edge: neither may fold it.
-it(`keeps the box and its transcript once pressed, so a selection survives the pointer leaving`, async () => {
-    said();
-    await mountBar();
-    hoverIn();
-    await waitOutHover();
-    await openTranscriptByHover();
-
-    pressOn(card());
-    hoverOut();
-    await waitOutHover();
-
-    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
-});
-
-// The caret goes to nothing on a press on text, and to the page when a view it opens takes it: neither is a gesture.
-it(`never folds for the caret moving, wherever it goes`, async () => {
-    await mountBar();
-    hoverIn();
-    await waitOutHover();
-
-    caretLeavesFor(null);
-    caretLeavesFor(onThePage());
+    pressOn(inside);
+    caretLandsOn(inside);
     await settle();
 
     expect(opened()).toBe(true);
 });
 
-it(`folds the transcript and an empty box on a press on the page`, async () => {
-    said();
-    await mountBar();
-    press().click();
-    await settle();
-    handle()!.click();
-    await settle();
-
-    pressOn(onThePage());
-    await settle();
-
-    expect([quickBarTranscript.value, opened()]).toEqual([false, false]);
-});
-
-// The bar follows the reader from view to view: switching on the rail is not going back to the page under it.
-it(`keeps the box and its transcript through a view switch on the rail`, async () => {
-    said();
-    await mountBar();
-    press().click();
-    await settle();
-    handle()!.click();
-    await settle();
-
-    const link = railLink();
-    pressOn(link);
-    caretLeavesFor(link);
-    await settle();
-
-    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
-});
-
-// Words hold the composer open against the page, so copying from it into them is one press away, and the box's own
-// minimize is what folds them; the pill carries them from there.
-it(`keeps a box holding words through a press on the page, and folds it only on its own minimize`, async () => {
+// The draft is the conversation's, so closing loses nothing: the pill carries the words until they are sent.
+it(`keeps a draft through closing, and wears it on the pill`, async () => {
     const chat = useChat();
     await mountBar();
-    press().click();
-    await settle();
+    await open();
     chat.active.value.draft.value = `half a thought`;
     await settle();
 
     pressOn(onThePage());
     await settle();
-    expect(opened()).toBe(true);
 
-    document.querySelector<HTMLButtonElement>(`.chat-quick-fold`)!.click();
-    await settle();
     expect([opened(), line()]).toEqual([false, `half a thought`]);
+    expect(chat.active.value.draft.value).toBe(`half a thought`);
 });
 
 // The model list, the mode menu and their kind hang off the composer but are teleported to the body.
 it(`counts the menus the composer opens as part of the box`, async () => {
     await mountBar();
-    press().click();
-    await settle();
+    await open();
     const menu = document.createElement(`div`);
     menu.className = `ui-anchored`;
     const row = document.createElement(`button`);
@@ -460,92 +361,29 @@ it(`counts the menus the composer opens as part of the box`, async () => {
     document.body.append(menu);
 
     pressOn(row);
-    caretLeavesFor(row);
+    caretLandsOn(row);
     await settle();
 
     expect(opened()).toBe(true);
 });
 
-// A press keeps what a hover only borrows — the transcript's only door for a keyboard or a touch, neither of which can
-// hover — and then one Escape undoes one thing, in the order they were opened.
-it(`keeps the transcript on a press, and gives it back one Escape before the box`, async () => {
-    said();
-    await mountBar();
-    press().click();
-    await settle();
-
-    handle()!.click();
-    await settle();
-    expect(quickBarTranscript.value).toBe(true);
-
-    escape();
-    await fadeOut();
-    expect([quickBarTranscript.value, opened()]).toEqual([false, true]);
-
-    escape();
-    await settle();
-    expect(opened()).toBe(false);
-});
-
-// The eye stays on the transcript it opened: pressing a borrowed one keeps it, pressing a kept one folds it.
-it(`keeps a borrowed transcript on the eye's press, and folds it on the next`, async () => {
-    said();
-    await mountBar();
-    hoverIn();
-    await waitOutHover();
-    await openTranscriptByHover();
-
-    handle()!.click();
-    hoverOut();
-    await waitOutHover();
-    expect([quickBarTranscript.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([true, `true`]);
-
-    handle()!.click();
-    await fadeOut();
-    expect([quickBarTranscript.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([false, `false`]);
-});
-
-// A press on transcript text leaves the caret on the body, and a view switch leaves it on the rail: the reader's
-// Escape lands there, and the page keeps its own.
-it(`hears an Escape that lands off the page while the box is the last thing pressed`, async () => {
-    said();
-    await mountBar();
-    press().click();
-    await settle();
-    handle()!.click();
-    await settle();
-    const escapeOn = (target: Element | null): void =>
-        void target?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
-
-    escapeOn(onThePage());
-    await settle();
-    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
-
-    escapeOn(railLink());
-    await fadeOut();
-    expect([quickBarTranscript.value, opened()]).toEqual([false, true]);
-
-    escapeOn(document.body);
-    await settle();
-    expect(opened()).toBe(false);
-});
-
-it(`opens the full chat from the transcript's corner, folding the box behind it`, async () => {
-    said();
+// A board card's click asks for the chat's turns, and the pad has none to show: before, the pill only changed its
+// title and readers clicked again. Every ask goes, since the same ask twice must act twice.
+it(`opens /chat when a board card asks to see the chat`, async () => {
     const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
     await mountBar();
-    press().click();
+    await open();
+
+    quickBarShowAsk.value += 1;
+    await settle();
+    quickBarShowAsk.value += 1;
     await settle();
 
-    document.querySelector<HTMLButtonElement>(`.chat-quick-full`)!.click();
-    await settle();
-
-    expect(push.mock.calls).toEqual([[`/chat`]]);
-    expect(opened()).toBe(false);
+    expect([opened(), push.mock.calls]).toEqual([false, [[`/chat`], [`/chat`]]]);
     push.mockRestore();
 });
 
-// The other half of the contract: what the pill grows into is the panel, wearing one presentation.
+// The other half of the contract: what the pill opens into is the panel, wearing one presentation.
 it(`the panel's floating presentation is the composer alone: no list, no transcript, one chat`, async () => {
     const chat = useChat();
     chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
@@ -555,27 +393,21 @@ it(`the panel's floating presentation is the composer alone: no list, no transcr
     useLayout().setChatWidth(1_200);
     await mount(ChatPanel, { bar: true });
 
-    // The footer is the composer's own row, drawn whether or not a daemon is answering; the turns are what `bare` withholds.
+    // The footer is the composer's own row, drawn whether or not a daemon is answering; the turns are what the strip withholds.
     expect(document.querySelectorAll(`.chat-footer`)).toHaveLength(1);
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(0);
+    expect(document.body.textContent).not.toContain(`an earlier turn`);
     expect(document.querySelectorAll(`.chat-pane`)).toHaveLength(1);
-});
-
-// A transcript is this pane's turns arriving, not a transcript built beside the one /chat draws. The card they need is the
-// strip's own, so the panel only clips to it — and the composer keeps the one class that holds its rect still, which
-// is what stops it jumping 13px up and 38px narrower as the transcript lands above it.
-it(`a transcript lifts the withheld turns without moving the composer they arrive over`, async () => {
-    const chat = useChat();
-    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
-    quickBarTranscript.value = true;
-    await mount(ChatPanel, { bar: true });
-
-    expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
-    expect(document.body.textContent).toContain(`an earlier turn`);
-    expect(document.querySelector(`.chat-panel`)!.classList.contains(`chat-transcript-lifted`)).toBe(true);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
     expect(document.querySelector(`.chat-scroller`)!.classList.contains(`mb-3`)).toBe(false);
-    expect(document.querySelector(`.chat-footer`)!.classList.contains(`pt-3`)).toBe(false);
+});
+
+// A scratch pad sends a note: the knobs that only tune a send (the overflow, hands-free voice) are the full chat's.
+it(`the pad's row drops the knobs that only tune a send`, async () => {
+    await mount(ChatPanel, { bar: true });
+
+    expect(document.querySelector(`[aria-label="More composer settings"]`)).toBeNull();
+    expect(document.querySelector(`[aria-label="Talk hands-free"]`)).toBeNull();
 });
 
 it(`the same panel drawn anywhere else still has its transcript, and a composer that is not the strip's`, async () => {
@@ -590,4 +422,5 @@ it(`the same panel drawn anywhere else still has its transcript, and a composer 
     expect(document.querySelector(`.chat-scroller`)!.classList.contains(`mb-3`)).toBe(true);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`pt-3`)).toBe(true);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`py-3`)).toBe(false);
+    expect(document.querySelector(`[aria-label="More composer settings"]`)).not.toBeNull();
 });

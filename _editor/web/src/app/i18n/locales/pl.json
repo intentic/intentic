@@ -2768,16 +2768,11 @@
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Twój agent na Ciebie czeka",
-            "conversation": "Rozmowa",
-            "conversationSoFar": "Dotychczasowa rozmowa",
-            "fullChat": "Pełny czat",
-            "hideConversation": "Ukryj rozmowę",
-            "minimize": "Zwiń",
             "openChatAgentWaiting": "Otwórz czat: Twój agent czeka na odpowiedź",
             "openFullChat": "Otwórz cały czat",
-            "pressToKeepOpen": "Naciśnij, by przypiąć",
             "titleWaitingForYou": "{title} · czeka na Ciebie",
-            "writeToAgentHere": "Pisz do swojego agenta stąd"
+            "writeToAgentHere": "Pisz do swojego agenta stąd",
+            "you": "Ty"
         },
         "chatRailChecklist": {
             "chatsChecklist": "Lista zadań tego czatu",

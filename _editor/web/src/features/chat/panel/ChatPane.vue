@@ -76,12 +76,12 @@ const props = defineProps<{
     focused: boolean;
     // Whether this pane's column can be closed back into a single view; decided by the panel, not this chat.
     closable: boolean;
-    // Composer and its notices alone, no transcript: what the quick bar hosts, so writing from another area is this
-    // chat's own composer rather than a second one. The turns are withheld, never the chat — the stream, the draft and
-    // every pick are the same conversation the full surface shows. A transcript lifts it, and what arrives is these turns.
-    bare?: boolean;
-    // This pane is the floating strip's. Independent of `bare`, which is about the turns: this is about everything the
-    // strip has no reader for — the status row is about a chat nobody is looking at, over a page they are.
+    // This pane is the quick bar's scratch pad (ChatQuickBar): the composer alone, so writing from another area is this
+    // chat's own composer rather than a second one. The turns are withheld, never the chat: the stream, the draft and
+    // every pick are the same conversation the full surface shows. So is everything the pad has no reader for, over a
+    // page they are looking at: the status row, the cards waiting on them, what the turn left running, and the
+    // overflow and hands-free voice. The model and its effort stay, since they decide how the agent answers, and a
+    // control set away from its default still rides the row, since it changes what Send does.
     strip?: boolean;
 }>();
 // Working in a pane focuses it (a click, or the caret arriving via Tab or a closed picker); the × ends the column.
@@ -116,6 +116,8 @@ const personaPill = ref<HTMLElement>();
 const laterPill = ref<HTMLElement>();
 // The overflow's button; also the anchor three pickers fall back to when their own chip isn't in the row.
 const morePill = ref<HTMLElement>();
+// The box itself: the scratch pad draws no overflow, so a picker reached another way (a `/` command) opens over this.
+const composerForm = ref<HTMLElement>();
 const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
 const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
 // The picker behind the paperclip (useChatAttachments.onPick).
@@ -152,7 +154,7 @@ const { pin, realizing } = usePaneScroll({
     scroller,
     content,
     conversationId: () => props.conversation.conversationId,
-    bare: () => props.bare,
+    bare: () => props.strip,
     messageCount: () => messages.value.length,
     streaming,
     grow,
@@ -166,6 +168,9 @@ const { takeFocus, closeHint } = usePaneFocus({
     input,
     grow,
 });
+
+// Placed somewhere other than here: the one placement the scratch pad shows, since it is not the default.
+const placed = computed(() => props.conversation.runner.value !== undefined || props.conversation.box.value !== undefined);
 
 // The badge for what the next message runs through: a loop, a workflow, or nothing.
 const runThrough = useRunThrough(chat, { reachable, connected, staged, draft });
@@ -225,7 +230,13 @@ const {
     runThrough,
     steered,
     editing,
-    pills: { mode: modePill, persona: personaPill, runThrough: runThroughPill, later: laterPill, more: morePill },
+    pills: {
+        mode: modePill,
+        persona: personaPill,
+        runThrough: runThroughPill,
+        later: laterPill,
+        more: computed(() => morePill.value ?? composerForm.value),
+    },
 });
 // What an agent's card is called, for a message booked to wait on it.
 const titleOf = (conversationId: string): string | undefined => {
@@ -256,6 +267,9 @@ useQueuedAttachments({ conversationId: () => props.conversation.conversationId, 
 // The chip offering the file the user is looking at, only for a conversation running where that file lives.
 const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = useEditorContextChip();
 const editorChip = computed(() => editorTarget.value !== undefined && !remote.value);
+// The chip row above the text. Its gap to the text is its own bottom padding rather than the textarea's top: that one
+// scrolls away with a draft past the box's height, and the first line then ran into the chips.
+const chipRow = computed(() => attachments.value.length > 0 || editorChip.value);
 
 // What the daemon reads the sent message as opening this chat on, asked once on a turnless chat (chatRoute.ts).
 const chatRoute = useChatRoute(() => props.conversation);
@@ -416,19 +430,17 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <div
             ref="scroller"
             class="chat-scroller flex flex-1 flex-col"
-            :class="[bare ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing, 'mb-3': !strip }]"
+            :class="[strip ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing, 'mb-3': !strip }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
-                <!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
-                <ChatPaneTurns v-if="!bare">
+                <!-- The scratch pad withholds the turns, so no message component mounts and the scroller shrinks to the composer. -->
+                <ChatPaneTurns v-if="!strip">
                     <template #empty>
                         <ChatPaneEmpty :unset="modelReading.unset" :on-trial="onTrial" :provider-name="providerName" />
                     </template>
                 </ChatPaneTurns>
 
                 <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
-                <!-- The strip's composer keeps ONE rect whether or not a transcript is open above it (chat.css): its padding is room a
-     transcript adds above the box, never around it, since everything else would move the box being typed in. -->
                 <div
                     ref="footer"
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
@@ -443,11 +455,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
                         <!-- The turn stopped before finishing, and the way on (ChatContinueStrip): a word to it, so a subagent's is its parent's. -->
-                        <ChatContinueStrip v-if="!subagentOf" :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
+                        <ChatContinueStrip v-if="!subagentOf && !strip" :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
-                        <ChatLeftRunning />
+                        <ChatLeftRunning v-if="!strip" />
                         <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
-                        <ChatWaitingBar v-if="!bare" :can-drive="canDrive" @approve="approvePlan()" @keep-planning="keepPlanning()" />
+                        <ChatWaitingBar v-if="!strip" :can-drive="canDrive" @approve="approvePlan()" @keep-planning="keepPlanning()" />
                         <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's or a stop. -->
                         <ChatSubagentBar
                             v-if="subagentOf"
@@ -461,15 +473,16 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         />
                         <template v-else>
                         <!-- What the queue holds is drawn at the transcript's foot (ChatPaneTurns); with no transcript, here, a line each. -->
-                        <ChatHeldMessages v-if="bare" compact />
+                        <ChatHeldMessages v-if="strip" compact />
                         <!-- What waits for the next turn: the conversation's queue, the same in every window. -->
                         <ChatQueue />
                         <!-- An armed edit, and the two ways out of it. -->
                         <ChatEditNotice />
                         <!-- What the runtime's extensions show while the turn runs: a status line each, gone when it ends (ChatAgentStatus). -->
-                        <ChatAgentStatus />
+                        <ChatAgentStatus v-if="!strip" />
                         <!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                         <form
+                            ref="composerForm"
                             class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"
                             :class="{ 'composer-voice': voiceAgent }"
                             @submit.prevent="submit()"
@@ -484,10 +497,10 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             />
                             <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
                             <ChatAttachmentStrip
-                                v-if="attachments.length > 0 || editorChip"
+                                v-if="chipRow"
                                 :attachments="attachments"
                                 staged
-                                class="flex-wrap px-3 pt-3"
+                                class="flex-wrap px-3 pt-3 pb-2"
                                 @remove="staging.remove"
                             >
                                 <!-- The editor-context chip attaches the open file or selection when enabled. -->
@@ -512,7 +525,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 name="draft"
                                 :disabled="!canDrive"
                                 :placeholder="composerPlaceholder"
-                                class="field-bare block w-full resize-none overflow-y-auto px-4 py-3 leading-relaxed md:text-xs"
+                                class="field-bare block w-full resize-none overflow-y-auto px-4 pb-3 leading-relaxed md:text-xs"
+                                :class="chipRow ? `pt-1` : `pt-3`"
                                 :style="{ maxHeight: `${composerCap}px` }"
                                 @input="onInput"
                                 @keydown="onKeydown"
@@ -575,7 +589,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
 
                                     <!-- Placement controls the machine, not the message. -->
                                     <button
-                                        v-if="placementShown"
+                                        v-if="placementShown && (!strip || placed)"
                                         ref="placementPill"
                                         type="button"
                                         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
@@ -727,7 +741,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
 
                                     <!-- The overflow lists shaping controls that remain at their defaults. -->
                                     <button
-                                        v-if="moreRows.length > 0"
+                                        v-if="moreRows.length > 0 && !strip"
                                         ref="morePill"
                                         type="button"
                                         class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
@@ -743,7 +757,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
 
                                     <!-- Hands-free voice: one tap arms it, and the pause is the send (useComposerVoice). -->
                                     <button
-                                        v-if="canDrive"
+                                        v-if="canDrive && !strip"
                                         type="button"
                                         class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                         :class="{ 'composer-active': voiceOn }"
@@ -865,8 +879,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         </div>
 
         <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
-        <!-- Withheld from the strip, transcript or no transcript: floating over another page, readouts about a chat are a second row of text
-             around a box asked for as one. -->
+        <!-- Withheld from the strip: floating over another page, readouts about a chat are a second row of text around a box
+             asked for as one. -->
         <!-- The composer's own hints and refusals say nothing where the subagent bar stands in the composer's place. -->
         <ChatPaneStatus v-if="connected && !strip" :block="subagentOf ? undefined : refusal" :hint="subagentOf ? `` : composerHint" />
 

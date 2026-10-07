@@ -33,6 +33,7 @@ const MINIMAL: DemoMode = {
     extensions: [],
     teammate: false,
     openChats: false,
+    quiet: true,
 };
 
 // Three agents matching the landing page's three claims; three extensions plus viewers for file previews.
@@ -44,13 +45,14 @@ const DEFAULT: DemoMode = {
     extensions: [`intentic.acceptance`, `intentic.documentation`, `intentic.pipelines`, `intentic.viewers`],
     teammate: true,
     openChats: true,
+    quiet: true,
 };
 
-// Every lane and extension: kept as the one mode that shows the whole product at once.
+// Every lane and extension, and the one mode served loud: every state a surface distinguishes, there to be explored.
 const FULL: DemoMode = {
     id: `full`,
     label: `Everything`,
-    note: `The whole fleet, every extension.`,
+    note: `The whole fleet, every extension, every state.`,
     teammate: true,
     openChats: true,
 };
@@ -80,6 +82,7 @@ const DESK: DemoMode = {
     extensions: [`intentic.projects`, `intentic.viewers`],
     teammate: false,
     openChats: true,
+    quiet: true,
 };
 
 export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, DESK];
@@ -168,12 +171,12 @@ export const enabledExtensions = (): readonly string[] | undefined => {
 
 // QUIET: the same recording on an uneventful afternoon. The recording is built to show every state a surface
 // distinguishes (a prompt cache about to cool, a key an agent is waiting for, a failing pipeline, a teammate's reaction, a
-// plugin's warning), which is right for a visitor exploring and wrong for a picture whose job is to show the workspace
-// at rest. Quiet takes those out where they are served (daemon.ts, needs.ts, turn.ts) and leaves every agent, file
-// and conversation where it was. The showcase mode is always quiet; any other mode is quiet when the session holds
-// the key below, which only the screenshots harness writes, so the desk can be shot quiet too. The key's value is a
-// JSON list of the disturbances a shot still needs, since some pictures are OF one: the Environment shot is of the
-// change an agent proposed.
+// plugin's warning), which is right for a visitor hunting edge cases and wrong for one meeting the product, and for a
+// picture whose job is to show the workspace at rest. Quiet takes those out where they are served (daemon.ts,
+// needs.ts, turn.ts) and leaves every agent, file and conversation where it was. Every mode but Everything is quiet;
+// Everything is too when the session holds the key below, which only the screenshots harness writes. The key's value
+// is a JSON list of the disturbances a shot still needs, since some pictures are OF one: the Environment shot is of
+// the change an agent proposed.
 const QUIET_KEY = `intentic.demo.quiet`;
 
 /** A disturbance a quiet session can ask to keep. */

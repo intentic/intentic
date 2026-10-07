@@ -20,7 +20,8 @@ import type { ViewEvent } from "./boardView";
 // just focused a card, a click opens the chat as a look rather than navigating, a modified click composes panes, and a
 // link uncovers its card. Every gesture is a summons, since the panel it composes may be another window's.
 // A click must put the chat's turns on screen: with the chat's home on the rail, the look used to land in the quick
-// bar's pill, which named the agent and showed nothing, so readers clicked three and four times (showParkedChat).
+// bar's pill, which named the agent and showed nothing, so readers clicked three and four times. It opens /chat
+// there now (showParkedChat).
 // A double-click is two clicks and nothing more; it used to open the review page, while the chat rail's renamed.
 
 // The keys that turn a click on a card into a pane gesture.

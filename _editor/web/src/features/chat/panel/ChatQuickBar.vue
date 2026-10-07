@@ -1,43 +1,38 @@
 <script setup lang="ts">
-import { isOverlayTarget, ProgressRing, ui, useHoverIntent } from "@intentic/ui";
-import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
+import { Icon, isOverlayTarget, ProgressRing } from "@intentic/ui";
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { quickBarShowAsk, quickBarTranscript, chatParked } from "./chatPanelLayout";
+import { chatParked, quickBarShowAsk } from "./chatPanelLayout";
 import { chatBarSlot } from "../../../workbench/window/panelSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
 import { useT } from "@intentic/ui/i18n";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
 import { contextPct } from "../../agents/fleet/agentStatus";
-import { CLOSED, type QuickBar, type QuickBarEvent, stepQuickBar } from "./quickBarHold";
+import { lastWords } from "./lastWords";
 
-// The parked chat's home: a pill over the bottom of the area that grows into the focused chat's own composer (the panel
-// teleports into `slot`), with that pane's own transcript unfolding above it on request (quickBarTranscript). Hover borrows the
-// box and a press keeps it until the reader dismisses it (quickBarHold.ts).
-
-// The section's area the bar floats over: a press there is the one gesture that means the reader went back to the page.
-const { page } = defineProps<{ page: HTMLElement | undefined }>();
+// The parked chat's scratch pad: a pill over the bottom of the area that opens into the focused chat's own composer (the
+// panel teleports into `slot`). It is for writing to the agent from wherever the reader is, so open it says who that
+// is and where the conversation stands, in one header above the box: the chat's face and title, and the last thing
+// said in it. Reading the conversation is /chat's job, and the header is the way there; no transcript is drawn here.
+// The box is open while the reader is in it: a press or the caret landing anywhere else closes it, and so does Escape.
+// A draft is the conversation's own, so closing loses nothing: the pill shows the draft until it is sent.
 
 const t = useT();
 
 const router = useRouter();
 const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
 
-// The box and its transcript, moved only by `apply` (quickBarHold.ts).
-const bar = shallowRef<QuickBar>(CLOSED);
-const expanded = computed(() => bar.value.box !== `closed`);
-// A press, the caret or a summons has made the box the reader's: only a dismissal closes it, never the pointer.
-const kept = computed(() => bar.value.box === `kept`);
-// The transcript is shown, and a press has kept it past the pointer that borrowed it.
-const transcriptOpen = computed(() => bar.value.transcript !== `closed`);
-const transcriptKept = computed(() => bar.value.transcript === `kept`);
+const open = ref(false);
 // Whether the box has ever opened: its closing animation must not play on a box that starts closed.
 const woken = ref(false);
 const float = useTemplateRef(`float`);
 const slot = useTemplateRef(`slot`);
+const pill = useTemplateRef(`pill`);
 
 const title = computed(() => active.value.title.value ?? undefined);
-const hasTranscript = computed(() => messages.value.length > 0);
+// Where the conversation stands, for the open pad's header: the last words said in it, by either side.
+const said = computed(() => lastWords(messages.value));
 
 // What the pill is for right now, most urgent first; `asking` is news only, since its card is drawn in the transcript.
 type Standing = `asking` | `working` | `unsent` | `named` | `inviting`;
@@ -63,134 +58,87 @@ const rim = computed<{ percent: number; tone: string; spin: boolean } | undefine
     return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
 });
 
-// A pointer crossing the bottom of the area on its way to a scrollbar or the terminal must not unfold the box, and one
-// overshooting an edge can cross back; the transcript's grace is shorter, so it always folds before the box. The eye is
-// reached on purpose, so its intent only has to outlast a pointer crossing it.
-const boxHover = useHoverIntent({ open: 250, close: 400 });
-const transcriptHover = useHoverIntent({ open: 140, close: 200 });
-
-const words = (): boolean => draft.value.trim() !== ``;
-const onPage = (node: EventTarget | null): boolean => node instanceof Node && page?.contains(node) === true;
-
-// The one place the bar moves. The panel is told the transcript is wanted in the same render it opens, so Escape reads
-// true at once; it is told it is no longer wanted when the card has finished fading (`onTranscriptGone`), since the turns
-// fade with the card and must stay mounted until then. A clock whose surface closed by another route is stopped too.
-const apply = (event: QuickBarEvent): void => {
-    const before = bar.value;
-    const next = stepQuickBar(before, event);
-    bar.value = next;
-    if (next.transcript !== `closed`) {
-        quickBarTranscript.value = true;
-    }
-    if (next.box !== `closed` && !woken.value) {
-        woken.value = true;
-    }
-    if (next.box === `closed` && before.box !== `closed`) {
-        boxHover.hide();
-    }
-    if (next.transcript === `closed` && before.transcript !== `closed`) {
-        transcriptHover.hide();
-    }
-};
-const onTranscriptGone = (): void => {
-    if (!transcriptOpen.value) {
-        quickBarTranscript.value = false;
-    }
-};
-
-// Only a press or a summons takes the caret: taken on hover, it would route the next keystroke away from the page.
+// A question is answered where its card is drawn, which is /chat, so nothing opens for one. Only a press asks for the
+// caret here: a summons (New agent, a board starter) brings its own.
 const expand = (caret: boolean): void => {
-    apply({ kind: `open`, keep: caret, asking: standing.value === `asking` });
-    if (caret && kept.value) {
+    if (standing.value === `asking`) {
+        return;
+    }
+    open.value = true;
+    woken.value = true;
+    if (caret) {
         focusComposer();
     }
 };
-const collapse = (): void => apply({ kind: `fold` });
+const collapse = (): void => {
+    open.value = false;
+};
 
-const onEnter = (): void => {
-    transcriptHover.cancel();
-    boxHover.enter(() => expand(false));
-};
-const onLeave = (): void => {
-    transcriptHover.leave(() => apply({ kind: `transcriptLeave` }));
-    boxHover.leave(() => apply({ kind: `leave`, words: words() }));
-};
-// A press anywhere on the box's content keeps it and whatever it is showing; the tools act on their own presses.
-const onPressInside = (event: Event): void => {
-    if (!(event.target instanceof Element && event.target.closest(`.chat-quick-tools`) !== null)) {
-        apply({ kind: `press` });
+// The menus the composer opens (the model list and its kind) are teleported to the body, and count as the box.
+const elsewhere = (target: EventTarget | null): boolean =>
+    target instanceof Node && float.value?.contains(target) !== true && !isOverlayTarget(target);
+// Capture phase, so a page that stops its own presses cannot hide from the box that the reader went back to it.
+const onPressAnywhere = (event: Event): void => {
+    if (elsewhere(event.target)) {
+        collapse();
     }
 };
-// What the reader going back to the page ends: the transcript always, the box unless it holds words. Nothing else
-// does: the rail switching views, a menu, a dialog, or the caret moving anywhere leaves the box as it is.
-const onPagePress = (event: Event): void => {
-    if (onPage(event.target)) {
-        apply({ kind: `release`, words: words() });
-    }
-};
-// A press on transcript text or on the rail leaves the caret off the page and out of the box, so that is where the
-// reader's Escape lands; kept, the box was the last thing pressed and the key is its. Menus and dialogs are teleported
-// to the body and answer their own Escape.
-const onStrayEscape = (event: KeyboardEvent): void => {
-    const target = event.target;
-    if (event.key !== `Escape` || !kept.value || !(target instanceof Element) || float.value?.contains(target) === true) {
-        return;
-    }
-    if (!onPage(target) && !isOverlayTarget(target)) {
-        onEscape(event);
+const onFocusAnywhere = (event: FocusEvent): void => {
+    if (elsewhere(event.target)) {
+        collapse();
     }
 };
 const disarm = (): void => {
-    document.removeEventListener(`pointerdown`, onPagePress, true);
-    document.removeEventListener(`keydown`, onStrayEscape);
+    document.removeEventListener(`pointerdown`, onPressAnywhere, true);
+    document.removeEventListener(`focusin`, onFocusAnywhere, true);
 };
-// Capture phase, so a page that stops its own presses cannot hide from the box that the reader went back to it.
-watch(expanded, (isOpen) => {
+watch(open, (isOpen) => {
     disarm();
     if (isOpen) {
-        document.addEventListener(`pointerdown`, onPagePress, true);
-        document.addEventListener(`keydown`, onStrayEscape);
+        document.addEventListener(`pointerdown`, onPressAnywhere, true);
+        document.addEventListener(`focusin`, onFocusAnywhere, true);
     }
 });
 onBeforeUnmount(disarm);
 
-const onFocusIn = (): void => apply({ kind: `focus` });
-// Escape is the composer's first (a turn to stop, an edit to drop) and it claims one with preventDefault; then the
-// transcript, then the box: one press undoes one thing.
+// Escape is the composer's first (a turn to stop, an edit to drop, a list to dismiss) and it claims one with
+// preventDefault. Closed by the keyboard, the caret goes back to the pill rather than falling to the page.
 const onEscape = (event: KeyboardEvent): void => {
-    if (!event.defaultPrevented) {
-        apply({ kind: `escape` });
+    if (event.defaultPrevented || !open.value) {
+        return;
     }
+    collapse();
+    void nextTick(() => pill.value?.focus({ preventScroll: true }));
 };
 
-const onEyeEnter = (): void => transcriptHover.enter(() => apply({ kind: `transcript`, keep: false }));
-const onEyeLeave = (): void => {
-    if (!transcriptOpen.value) {
-        transcriptHover.cancel();
-    }
-};
-// A press keeps what a hover only borrowed, and a second press folds it: keyboard and touch have no hover to borrow with.
-const onEyePress = (): void => apply({ kind: `transcript`, keep: true });
+// The header's press: the conversation itself, where its turns are read.
 const openChat = (): void => {
     collapse();
     void router.push(`/chat`);
 };
 
-// Anything that asks for the caret (New agent, a board starter, a summons from another window) grows the pill; the
-// caret itself is already on its way from whoever raised the signal.
+// A press on the pill is the one way in: the composer with the caret in it, or, while a card waits, the chat itself.
+const onPress = (): void => {
+    if (standing.value === `asking`) {
+        void router.push(`/chat`);
+        return;
+    }
+    expand(true);
+};
+
+// Anything that asks for the caret (New agent, a board starter, a summons from another window) opens the pad; the caret
+// itself is already on its way from whoever raised the signal.
 watch(composerFocus, () => {
     if (chatParked.value) {
         expand(false);
     }
 });
 
-// A board card's click asks for the chat itself, not a pill naming it (showParkedChat): the box and its transcript, kept,
-// as a press and the eye's press keep them, a question waiting included, since its card is drawn in that transcript.
+// A board card's click, or a run it follows, asks to see the chat's turns (showParkedChat), and the pad draws none:
+// the turns are on /chat, so that is where the ask goes.
 watch(quickBarShowAsk, () => {
-    apply({ kind: `open`, keep: true, asking: false });
-    if (bar.value.transcript !== `kept`) {
-        apply({ kind: `transcript`, keep: true });
-    }
+    collapse();
+    void router.push(`/chat`);
 });
 
 // The slot is published only while the pill is on screen, and leaving closes the box over a surface with its own.
@@ -207,7 +155,6 @@ watch(
 onBeforeUnmount(() => {
     chatBarSlot.value = null;
     collapse();
-    quickBarTranscript.value = false;
 });
 
 const restingLine = computed(() => {
@@ -221,22 +168,6 @@ const restingLine = computed(() => {
     }
     return title.value ?? (standing.value === `working` ? t(`ui.status.working`) : t(`chat.words.askAnything`));
 });
-
-// A question is answered where its card is drawn, so while one waits the press is a door rather than a disclosure.
-const onPress = (): void => {
-    if (standing.value === `asking`) {
-        collapse();
-        void router.push(`/chat`);
-        return;
-    }
-    if (expanded.value) {
-        collapse();
-        return;
-    }
-    expand(true);
-};
-
-const tool = ui.iconButton(`rounded-full text-subtle`);
 </script>
 
 <template>
@@ -247,42 +178,30 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
         style="grid-area: workspace"
     >
         <!-- One width at every state with the forms centred in it, so only opacity and transform ever animate. Nothing
-             hit-tests on this element itself: each form claims pointer events back for its own rect. -->
+             hit-tests on this element itself: each form claims pointer events back for its own rect. Narrower than the
+             chat's own column, since it is a note to the agent rather than a place to read. -->
         <div
             ref="float"
-            class="chat-quick-float pointer-events-none relative w-[51rem] max-w-full"
-            :class="{ 'chat-quick-open': expanded, 'chat-quick-transcript': transcriptOpen, 'chat-quick-woken': woken }"
-            @pointerenter="onEnter"
-            @pointerleave="onLeave"
-            @pointerdown.capture="onPressInside"
-            @focusin="onFocusIn"
+            class="chat-quick-float pointer-events-none relative w-[36rem] max-w-full"
+            :class="{ 'chat-quick-open': open, 'chat-quick-woken': woken }"
             @keydown.esc="onEscape"
         >
-            <!-- The transcript's glass: exactly the box's rect, drawn here so it can arrive without the composer moving. Its
-                 fade out (chat.css) is what the panel's turns wait for before they unmount; a box folding whole takes it
-                 with it in the same render, so no fade is waited for then. -->
-            <Transition name="chat-quick-card" :css="expanded" @after-leave="onTranscriptGone">
-                <div
-                    v-if="transcriptOpen"
-                    class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/85 shadow-2xl backdrop-blur-2xl"
-                ></div>
-            </Transition>
-
             <!-- The form not showing leaves the flow, so the box is always the size of what is in it. `inert` is not a
                  boolean Vue knows, so a false value is written as `undefined` to drop the attribute. -->
             <div
                 class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
-                    expanded
+                    open
                         ? `pointer-events-none absolute inset-x-0 bottom-0 scale-110 opacity-0 duration-200 ease-out`
                         : `pointer-events-auto duration-150 ease-out`
                 "
             >
                 <button
+                    ref="pill"
                     type="button"
                     class="chat-quick-pill ui-chip h-9 max-w-[22rem] py-0 pr-3.5 pl-1 text-left"
-                    :inert="expanded || undefined"
-                    :aria-expanded="standing === `asking` ? undefined : expanded"
+                    :inert="open || undefined"
+                    :aria-expanded="standing === `asking` ? undefined : open"
                     :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
                     @click="onPress"
                 >
@@ -315,70 +234,47 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
                 </button>
             </div>
 
-            <!-- The grown form: the panel's own composer and nothing of this component's around it, opening out of the
+            <!-- The open form: the panel's own composer and nothing of this component's around it, opening out of the
                  pill's footprint through a clip (chat.css). -->
             <div
                 class="chat-quick-host w-full origin-bottom transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
-                    expanded
+                    open
                         ? `pointer-events-auto relative duration-[260ms] ease-out`
                         : `pointer-events-none absolute inset-x-0 bottom-0 opacity-0 duration-100 ease-in`
                 "
-                :inert="!expanded || undefined"
+                :inert="!open || undefined"
             >
-                <div ref="slot" class="contents"></div>
-            </div>
-
-            <!-- The open box's own controls, on its top edge wherever that edge is: the transcript, the full chat, and a way
-                 to fold even a box that words are holding open. -->
-            <div
-                v-if="expanded"
-                class="chat-quick-tools pointer-events-auto absolute -top-3.5 right-3 z-10 flex items-center gap-0.5 rounded-full border border-line-strong bg-card/90 p-0.5 shadow-md backdrop-blur-md"
-            >
-                <template v-if="hasTranscript">
-                    <button
-                        type="button"
-                        class="chat-quick-eye relative"
-                        :class="[tool, transcriptOpen && `bg-primary-500/15 text-primary-500 hover:bg-primary-500/20 hover:text-primary-500`]"
-                        v-tooltip.top="
-                            transcriptKept
-                                ? t(`chat.chatQuickBar.hideConversation`)
-                                : { title: t(`chat.chatQuickBar.conversation`), note: t(`chat.chatQuickBar.pressToKeepOpen`) }
-                        "
-                        :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
-                        :aria-expanded="transcriptOpen"
-                        @pointerenter="onEyeEnter"
-                        @pointerleave="onEyeLeave"
-                        @click="onEyePress"
-                    >
-                        <Icon name="eye" class="text-2xs" />
-                        <!-- An answer arriving where nobody is looking: the one sign the box can give that there is news to read. -->
-                        <span
-                            v-if="streaming && !transcriptOpen"
-                            class="chat-quick-news absolute top-0.5 right-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-link motion-reduce:animate-none"
-                        ></span>
-                    </button>
-                    <button
-                        type="button"
-                        class="chat-quick-full"
-                        :class="tool"
-                        v-tooltip.top="t(`chat.chatQuickBar.fullChat`)"
-                        :aria-label="t(`chat.chatQuickBar.openFullChat`)"
-                        @click="openChat"
-                    >
-                        <Icon name="expand" class="text-2xs" />
-                    </button>
-                </template>
+                <!-- Who the composer under it writes to and where that conversation stands, so the pad is never a box
+                     addressed to nobody; the whole header is the way to the conversation itself. -->
                 <button
                     type="button"
-                    class="chat-quick-fold"
-                    :class="tool"
-                    v-tooltip.top="t(`chat.chatQuickBar.minimize`)"
-                    :aria-label="t(`chat.chatQuickBar.minimize`)"
-                    @click="collapse"
+                    class="chat-quick-context group mb-1.5 flex w-full flex-col gap-1 rounded-xl border border-line-strong bg-card/90 px-3 py-2 text-left shadow-lg backdrop-blur-md transition-colors hover:bg-overlay"
+                    :aria-label="t(`chat.chatQuickBar.openFullChat`)"
+                    v-tooltip.top="t(`chat.chatQuickBar.openFullChat`)"
+                    @click="openChat"
                 >
-                    <Icon name="chevron-down" class="text-2xs" />
+                    <span class="flex w-full min-w-0 items-center gap-2">
+                        <span class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+                            <ProgressRing
+                                v-if="rim !== undefined"
+                                :value="rim.percent"
+                                :size="24"
+                                :stroke="1.5"
+                                class="absolute inset-0"
+                                :class="[rim.tone, rim.spin ? `animate-spin [animation-duration:2.4s]` : ``]"
+                            />
+                            <IdentityTile :title="title" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
+                        </span>
+                        <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title ?? t(`chat.words.newChat`) }}</span>
+                        <span v-if="streaming" class="shrink-0 text-2xs text-link">{{ t(`ui.status.working`) }}</span>
+                        <Icon name="arrow-right" class="shrink-0 text-2xs text-subtle transition-colors group-hover:text-content" />
+                    </span>
+                    <span v-if="said !== undefined" class="chat-quick-said line-clamp-2 pl-8 text-2xs text-muted">
+                        <span v-if="said.who === `you`" class="text-subtle">{{ t(`chat.chatQuickBar.you`) }}: </span>{{ said.text }}
+                    </span>
                 </button>
+                <div ref="slot" class="contents"></div>
             </div>
         </div>
     </div>

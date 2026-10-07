@@ -123,12 +123,12 @@ export const RETIRED = [
         since: "2026-09-25",
     },
     {
-        // `peek` is left to one idea: a tab opened as a look (Conversation.peek). A hover card is a quick look, and what the
-        // quick bar unfolds is its transcript.
+        // `peek` is left to one idea: a tab opened as a look (Conversation.peek). A hover card is a quick look, and the
+        // quick bar no longer unfolds anything: its turns are read on /chat.
         id: "peek-look",
         pattern:
             /\b(HomePeek|homePeek|PicturePeek|picturePeek|PeekBox|peekBox|PeekKind|PeekPlan|peekPlan|peekContent|peekLines|PEEK_LINES|PEEK_BYTES|FilePeek|filePeek|attachmentPeeks?|peekOmitted|peekLead|chatBarPeek)\b|chat-quick-peeking|chat-peeking|chat-peek-(card|turns)|[Bb]ottom strip/,
-        became: "quick look (a card a hover raises) or the quick bar's transcript; `peek` names only a tab opened as a look",
+        became: "quick look (a card a hover raises); `peek` names only a tab opened as a look",
         since: "2026-09-25",
     },
     {

@@ -56,7 +56,7 @@ export const openRunInChat = async (run: WorkflowRun | string): Promise<void> =>
 };
 
 // Points at the chat for a press that found it already showing what was asked for (chatRun's `shown`), so the press
-// still answers: the window holding the chat comes forward, a parked chat opens its transcript, and a chat on screen
+// still answers: the window holding the chat comes forward, a parked chat opens /chat, and a chat on screen
 // is ringed for a moment. Never opens a window or moves the panes.
 export const pointAtChat = (): void => {
     if (!drawsChat.value) {

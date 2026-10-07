@@ -1375,16 +1375,11 @@
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Ihr Agent wartet auf Sie",
-            "conversation": "Unterhaltung",
-            "conversationSoFar": "Die bisherige Unterhaltung",
-            "fullChat": "Ganzer Chat",
-            "hideConversation": "Unterhaltung ausblenden",
-            "minimize": "Minimieren",
             "openChatAgentWaiting": "Den Chat öffnen: Ihr Agent wartet auf eine Antwort",
             "openFullChat": "Den ganzen Chat öffnen",
-            "pressToKeepOpen": "Drücken hält offen",
             "titleWaitingForYou": "{title} · wartet auf Sie",
-            "writeToAgentHere": "Von hier aus an Ihren Agenten schreiben"
+            "writeToAgentHere": "Von hier aus an Ihren Agenten schreiben",
+            "you": "Sie"
         },
         "chatRailChecklist": {
             "chatsChecklist": "Die Checkliste dieses Chats",

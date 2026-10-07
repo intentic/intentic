@@ -202,7 +202,7 @@ const { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, re
         // Where ChatPanel draws a run's diagram: a wide panel, on a desktop.
         diagram: computed(() => chatWide.value && !mobile.value),
         mobile,
-        // As an agent card's press does (cardSelection.focusAgent): a parked chat opens its transcript to show what moved.
+        // As an agent card's press does (cardSelection.focusAgent): a parked chat opens /chat to show what moved.
         follow: (run) => {
             void openRunInChat(run);
             showParkedChat();

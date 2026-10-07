@@ -29,16 +29,11 @@ export const chatInSidePanel = computed(() => !chatOnRail.value && !floating.flo
 // PoppablePanels, so the strip cannot draw over a panel that went somewhere else.
 export const chatParked = computed(() => floating.shows.value && chatOnRail.value && chatFullSlot.value === null);
 
-// The strip's transcript, while a pointer is asking to read it (ChatQuickBar's handle). A module ref for the same
-// reason the dock slots are: the pill that asks and the panel that answers sit on opposite sides of the teleport.
-// What it turns on is the pane's own turns — never a second transcript.
-// allow(module-state): a pointer asking to read the strip's turns, layout
-export const quickBarTranscript = ref(false);
-
 // A surface outside the chat asking the parked chat to show its focused conversation's turns now (a board card's click,
-// which otherwise only swapped the pill's title): ChatQuickBar opens its box and transcript, kept. A counter, since the
-// same ask twice must act twice. Nothing happens where the chat has a column or a window of its own: it is on screen.
-// allow(module-state): a one-way ask across the teleport, like quickBarTranscript
+// which otherwise only swapped the pill's title): the quick bar draws no turns, so ChatQuickBar answers with /chat. A
+// counter, since the same ask twice must act twice. Nothing happens where the chat has a column or a window of its own:
+// it is on screen.
+// allow(module-state): a one-way ask across the teleport, like the dock slots
 export const quickBarShowAsk = ref(0);
 export const showParkedChat = (): void => {
     if (chatParked.value) {

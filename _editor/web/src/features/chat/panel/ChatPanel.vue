@@ -8,7 +8,7 @@ import type { Conversation } from "../session/conversation";
 import { traceFocus } from "../run/focusTrace";
 import { openRunSessions } from "../run/openRun";
 import { DEFAULT_RAIL_WIDTH, railWidth } from "../../agents/board/columnWidth";
-import { quickBarTranscript, chatOnRail, chatWide } from "./chatPanelLayout";
+import { chatOnRail, chatWide } from "./chatPanelLayout";
 import { shownSideTabs } from "../../../workbench/side/sideViews";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
@@ -33,7 +33,8 @@ import { useT } from "@intentic/ui/i18n";
 // one — everything that bar offered is a tap away on the same form factor. A prop, not a `mobile` check, since
 // docked/floating panels need their own strip regardless of device.
 // `bar` is the quick strip's presentation (ChatQuickBar): the focused chat's composer and nothing else, in a row the
-// shell sizes to its content. It implies no header, since the strip draws its own.
+// shell sizes to its content. It implies no header and no transcript: the strip is a scratch pad, and /chat is where
+// the turns are read.
 const { tabs = true, bar = false } = defineProps<{ tabs?: boolean; bar?: boolean }>();
 
 const t = useT();
@@ -46,20 +47,9 @@ const { mobile } = useDevice();
 // The panel's own element; its width decides whether the capacity rail fits.
 const root = ref<HTMLElement>();
 
-// The strip, asked for its transcript (ChatQuickBar's handle). It withholds the turns until then, so a transcript is this
-// pane's own turns arriving — never a second transcript beside the one /chat draws.
-const lifted = computed(() => bar && quickBarTranscript.value);
 // What the panel lies on. The strip is one composer floating over someone else's page, so it paints nothing: the box
-// draws its own edge and a surface behind it reads as a tray. A transcript needs a card, since turns cannot be read over a
-// page showing through them — but that card is the strip's own (ChatQuickBar draws it, so it can arrive without the
-// composer arriving with it). All this does is clip the turns to its shape and refuse to outgrow the view; the top
-// padding is the band the strip's tools stand in, so they never cover a pinned prompt.
-const ground = computed(() => {
-    if (!bar) {
-        return `ground-card h-full overflow-hidden bg-card`;
-    }
-    return lifted.value ? `chat-transcript-lifted ground-card max-h-[60vh] overflow-hidden rounded-2xl pt-3` : ``;
-});
+// draws its own edge and a surface behind it reads as a tray.
+const ground = computed(() => (bar ? `` : `ground-card h-full overflow-hidden bg-card`));
 
 // How narrow a chat may shrink (useLayout's MIN_PANE_PX), imported rather than restated since the docked column
 // shares the same floor. Written as a custom property in app pixels, not rem, so it can't drift from the column's
@@ -323,7 +313,6 @@ watch(
                         :conversation="conversation"
                         :focused="conversation.conversationId === activeId"
                         :closable="split"
-                        :bare="bar && !lifted"
                         :strip="bar"
                         @focus="setActive(conversation.conversationId)"
                         @close="closePane(conversation.conversationId)"
