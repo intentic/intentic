@@ -7,13 +7,16 @@ import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
 import type { Services } from "../../composition.js";
 import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { stateRelPath } from "../../state-paths.js";
+import { liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { callForApp } from "./mcp-apps.js";
+import { reportPageErrors } from "./page-errors.js";
 
 // The /pages routes: what an MCP server's app, drawn in a chat, asks of its own server while a reader uses it. The page
 // names its server and tool (stored inside it when it was shown, mcp-apps.ts); the request names only the page and the
-// tool, so an app can reach no server but the one it was shown for, and there only a tool its server lets it call.
+// tool, so an app can reach no server but the one it was shown for, and there only a tool its server lets it call. And
+// what a page threw as it drew, handed to the turn that showed it (page-errors.ts).
 
-export type PagesRoutesDeps = Pick<Services, "capabilities" | "workspace">;
+export type PagesRoutesDeps = Pick<Services, "capabilities" | "workspace" | "conversations" | "turns">;
 
 const PAGES_DIR = `${stateRelPath(".intentic/records/artifacts/", "pages")}/`;
 
@@ -42,5 +45,15 @@ export const createPagesRoutes = (services: PagesRoutesDeps) => {
             }
             return { result: answer.result };
         }),
+        reportErrors: i.reportErrors.handler(async ({ input }) => ({
+            told: await reportPageErrors(
+                {
+                    workspaceRoot: services.workspace.root,
+                    runningSince: (conversationId) => liveRunOf(services.conversations, conversationId)?.startedAt,
+                    steer: async (conversationId, text) => (await services.turns.steer(conversationId, { text, voice: "sandbox" })) === true,
+                },
+                input,
+            ),
+        })),
     };
 };

@@ -11,6 +11,7 @@ import {
     readMcpAppData,
     sealedPage,
     SEALED_PAGE_POLICY,
+    sizedFirst,
     standalonePage,
 } from "./pages.js";
 import { foldTurn, userRow } from "./transcript-fold.js";
@@ -138,5 +139,23 @@ describe("publishedPage", () => {
         const published = publishedPage(standalonePage(`<html><head></head><body>x</body></html>`));
         expect(published.indexOf(SEALED_PAGE_POLICY)).toBeLessThan(published.indexOf(`intentic-page-defaults`));
         expect(published).toContain(`ui/notifications/size-changed`);
+    });
+});
+
+describe("sizedFirst", () => {
+    const page = `<!DOCTYPE html><html><head><script>var a = "</script>";</script></head><body>x</body></html>`;
+    const shell = sizedFirst(page);
+
+    it("carries the page whole inside one script the page cannot close", () => {
+        expect(shell.startsWith(`<!DOCTYPE html><script>`)).toBe(true);
+        expect(shell.endsWith(`</script>`)).toBe(true);
+        // The only `</` left is the shell's own closing tag: the page's markup cannot end the script early.
+        expect(shell.split(`</`).length).toBe(2);
+    });
+
+    it("writes back exactly the page it was given", () => {
+        const literal = /var page=(".*?"),done=/.exec(shell)?.[1];
+        expect(literal).toBeDefined();
+        expect(JSON.parse(literal!)).toBe(page);
     });
 });

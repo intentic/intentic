@@ -3597,7 +3597,11 @@
             "dismiss": "Dismiss",
             "drafting": "Drawing a page…",
             "draftingTitled": "Drawing {title}…",
-            "notAnApp": "This page is not an MCP server's app."
+            "notAnApp": "This page is not an MCP server's app.",
+            "threw": "Its script threw an error | Its scripts threw {count} errors",
+            "agentTold": "the agent heard it",
+            "askFix": "Ask to fix",
+            "fixRequest": "The page \"{title}\" (id \"{id}\") threw in my chat:\n{errors}\n\nFix it and show it again with replaces: \"{id}\"."
         }
     },
     "common": {

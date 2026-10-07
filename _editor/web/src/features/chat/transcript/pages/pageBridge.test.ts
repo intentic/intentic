@@ -1,6 +1,6 @@
 // What a page in the chat may say to the window around it, read where it arrives: the two dialects (the sealed
 // document's link guide, the page bridge's JSON-RPC) become a handful of asks, and everything else is nothing.
-import { PAGE_BRIDGE, PAGE_FALLBACK_THEMES, PAGE_VALUE_MAX } from "@intentic/sandbox-contract";
+import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_FALLBACK_THEMES, PAGE_VALUE_MAX } from "@intentic/sandbox-contract";
 import { withPageDraft } from "../../session/turnClient";
 import { initializeResult, readPageAsk, themeMessage } from "./pageBridge";
 
@@ -25,6 +25,17 @@ describe(`readPageAsk`, () => {
             text: `Build B`,
         });
         expect(readPageAsk(rpc(PAGE_BRIDGE.submit, { value: { pick: `B`, sizes: [1, 2] } }, 3))).toEqual({ kind: `submit`, id: 3, value: `{"pick":"B","sizes":[1,2]}` });
+    });
+
+    it(`reads what the page's scripts threw, trimmed and cut to the cap, and nothing for an empty one`, () => {
+        expect(readPageAsk(rpc(PAGE_BRIDGE.error, { message: ` TypeError: x is undefined at draw (about:srcdoc:12:3) ` }))).toEqual({
+            kind: `error`,
+            message: `TypeError: x is undefined at draw (about:srcdoc:12:3)`,
+        });
+        const long = readPageAsk(rpc(PAGE_BRIDGE.error, { message: `e`.repeat(PAGE_ERROR_CHARS * 2) }));
+        expect(long?.kind === `error` && long.message.length).toBe(PAGE_ERROR_CHARS);
+        expect(readPageAsk(rpc(PAGE_BRIDGE.error, { message: `  ` }))).toBeUndefined();
+        expect(readPageAsk(rpc(PAGE_BRIDGE.error, { message: 42 }))).toBeUndefined();
     });
 
     it(`refuses what a page has no business asking: another scheme, an empty message, an answer too large to be one`, () => {

@@ -1,4 +1,4 @@
-import { PAGE_BRIDGE, PAGE_VALUE_MAX, type PageTheme, pageValueText } from "@intentic/sandbox-contract";
+import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_VALUE_MAX, type PageTheme, pageValueText } from "@intentic/sandbox-contract";
 import { PreviewAskSchema } from "../../../workspace/viewers/html/htmlDocument";
 
 // What a page in the chat may say to the window around it, read where it arrives: the page's own scripts can post
@@ -18,6 +18,8 @@ export type PageAsk =
     | { readonly kind: "openFile"; readonly path: string }
     // Words for the chat's composer, which the person then sends (or not).
     | { readonly kind: "message"; readonly id: string | number; readonly text: string }
+    // An uncaught error in the page's own scripts, for the agent that showed it and the reader's line under it.
+    | { readonly kind: "error"; readonly message: string }
     // An `ask_page` page's answer, as JSON text, or a refusal when it is too large to be one.
     | { readonly kind: "submit"; readonly id: string | number; readonly value: string }
     | { readonly kind: "oversize"; readonly id: string | number }
@@ -79,6 +81,10 @@ export const readPageAsk = (data: unknown): PageAsk | undefined => {
         }
         case PAGE_BRIDGE.initialized:
             return { kind: `initialized` };
+        case PAGE_BRIDGE.error: {
+            const message = params[`message`];
+            return typeof message === `string` && message.trim() !== `` ? { kind: `error`, message: message.trim().slice(0, PAGE_ERROR_CHARS) } : undefined;
+        }
         case PAGE_BRIDGE.toolsCall: {
             const name = params[`name`];
             const args = params[`arguments`];

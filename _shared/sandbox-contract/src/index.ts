@@ -96,7 +96,7 @@ export * from "./protocol/vitals.js";
 export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
-export { pagesContract, PageAppCallResultSchema, PageAppCallSchema } from "./contracts/pages.contract.js";
+export { pagesContract, PageAppCallResultSchema, PageAppCallSchema, PageErrorsResultSchema, PageErrorsSchema } from "./contracts/pages.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";

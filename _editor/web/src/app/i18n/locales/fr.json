@@ -1864,7 +1864,11 @@
             "dismiss": "Ignorer",
             "drafting": "Dessin d'une page…",
             "draftingTitled": "Dessin de {title}…",
-            "notAnApp": "Cette page n'est pas l'application d'un serveur MCP."
+            "notAnApp": "Cette page n'est pas l'application d'un serveur MCP.",
+            "threw": "Son script a levé une erreur | Ses scripts ont levé {count} erreurs",
+            "agentTold": "l'agent est prévenu",
+            "askFix": "Demander une correction",
+            "fixRequest": "La page \"{title}\" (id \"{id}\") a levé des erreurs dans mon chat :\n{errors}\n\nCorrige-la et affiche-la de nouveau avec replaces: \"{id}\"."
         }
     },
     "common": {

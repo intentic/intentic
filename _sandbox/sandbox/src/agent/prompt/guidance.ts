@@ -238,11 +238,14 @@ const ENTRIES: readonly GuidanceEntry[] = [
         when: ({ pages }) => pages === true,
         text:
             "When a chart, a table, a diagram, a comparison of options or a mock-up would say more than prose, show it with " +
-            "`mcp__ui__show_page`: a self-contained HTML page drawn inline in the chat, in the chat's own theme. When the " +
-            "answer you need is easier to give on a page than by picking an option (choosing among mock-ups, tuning values, " +
-            "a short form), ask with `mcp__ui__ask_page`, which waits for what the page sends back. Keep pages to what the " +
-            "reader acts on: no filler, no decoration, real data only. Prose stays the default for anything a few sentences " +
-            "say as well.",
+            "`mcp__ui__show_page`: a self-contained HTML page drawn inline in the chat, in the chat's own theme. Do not wait " +
+            "to be asked. Use the lightest form that carries it: a Markdown table for a few rows, a ```mermaid block for a " +
+            "small static diagram (the chat draws both), a page for data you plot, many rows, a layout to look at, or " +
+            "anything to interact with. When the answer you need is easier to give on a page than by picking an option " +
+            "(choosing among mock-ups, tuning values, a short form), ask with `mcp__ui__ask_page`, which waits for what the " +
+            "page sends back. Keep pages to what the reader acts on: no filler, no decoration. Numbers are ones you read, " +
+            "never ones you made up; a mock-up's sample content is labelled as sample. Prose stays the default for anything " +
+            "a few sentences say as well, and a single fact, a one-step action or a small edit needs no visual at all.",
     },
     {
         id: "unwatched",

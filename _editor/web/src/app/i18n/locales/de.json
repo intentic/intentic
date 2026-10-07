@@ -1864,7 +1864,11 @@
             "dismiss": "Verwerfen",
             "drafting": "Zeichne eine Seite…",
             "draftingTitled": "Zeichne {title}…",
-            "notAnApp": "Diese Seite ist nicht die App eines MCP-Servers."
+            "notAnApp": "Diese Seite ist nicht die App eines MCP-Servers.",
+            "threw": "Ihr Skript hat einen Fehler geworfen | Ihre Skripte haben {count} Fehler geworfen",
+            "agentTold": "der Agent weiß davon",
+            "askFix": "Um Korrektur bitten",
+            "fixRequest": "Die Seite \"{title}\" (id \"{id}\") hat in meinem Chat Fehler geworfen:\n{errors}\n\nBehebe sie und zeige sie erneut mit replaces: \"{id}\"."
         }
     },
     "common": {

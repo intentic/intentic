@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { sizedFirst } from "@intentic/sandbox-contract";
 import { EmptyState } from "@intentic/ui";
 import type { IconName, Tip, TipRow } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
@@ -6,7 +7,7 @@ import { useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { changeEpochOf } from "../../changes/live/useWorkspaceLive";
-import { type AssetLoader, buildPreviewDocument, type PreviewDocument, PreviewAskSchema, sizedFirst } from "./htmlDocument";
+import { type AssetLoader, buildPreviewDocument, type PreviewDocument, PreviewAskSchema } from "./htmlDocument";
 
 // A web page rendered, in a frame sealed off from this window (htmlDocument.ts has what goes in and why). The frame has
 // scripts and an opaque origin: no `allow-same-origin`, so it cannot read this window, its storage or its cookies; no

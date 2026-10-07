@@ -1872,7 +1872,11 @@
             "dismiss": "Descartar",
             "drafting": "Dibujando una página…",
             "draftingTitled": "Dibujando {title}…",
-            "notAnApp": "Esta página no es la app de un servidor MCP."
+            "notAnApp": "Esta página no es la app de un servidor MCP.",
+            "threw": "Su script lanzó un error | Sus scripts lanzaron {count} errores",
+            "agentTold": "el agente ya lo sabe",
+            "askFix": "Pedir que lo arregle",
+            "fixRequest": "La página \"{title}\" (id \"{id}\") lanzó errores en mi chat:\n{errors}\n\nArréglala y vuelve a mostrarla con replaces: \"{id}\"."
         }
     },
     "common": {

@@ -221,8 +221,9 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   in the chat's own theme; `mcp__ui__ask_page` draws one as a card and waits for what the page sends back with
   `window.intentic.submit(value)`. Pages run sealed: scripts yes, network no. Files they name on disk and
   libraries on the usual CDNs (jsDelivr, unpkg, cdnjs, d3js.org, cdn.plot.ly, Google Fonts) are carried in when
-  the page is shown; anything else does not load. `check: true` lays the page out headless first and returns a
-  picture and its console. A page's button can put words in the composer (`window.intentic.send`), never send
+  the page is shown; anything else does not load. `check: true` lays the page out headless first, in a frame like
+  the chat's, and returns a picture and its console. What a page's scripts throw in your chat is told to the agent
+  while the turn that showed it runs; after that, the page's caption offers **Ask to fix**, which fills the composer. A page's button can put words in the composer (`window.intentic.send`), never send
   them. Each page is a file under `.intentic/records/artifacts/pages/<conversation>/`; its caption opens it full
   size or publishes it to the outbox. A connected MCP server's own app (an MCP Apps `ui://` resource) is drawn
   the same way after a call to its tool. The owner can switch all of it off (Sandbox ▸ Agent ▸ Tools ▸ Pages

@@ -66,8 +66,11 @@ flowchart LR
 - Pages in chat (`agent/pages/`, 2026-10-07): the Claude Code loop's `ui` server carries `show_page` and `ask_page`
   beside `ask`, unless settings `chatPages` is off. A page is one HTML document, written inline or named by path.
   The files it names on disk, and libraries on the CDNs in `page-assets.ts`, are carried into it as data. With
-  `check`, the sandbox's headless Chromium lays it out at the column width and the agent gets a picture and its
-  console (`page-check.ts`). It is filed under `.intentic/records/artifacts/pages/<conversation>/` and never
+  `check`, the sandbox's headless Chromium lays it out the way the chat draws it (a sandboxed frame at the column
+  width, written in through the same `sizedFirst` shell, sized by the height its bridge reports) and the agent gets a
+  picture and its console (`page-check.ts`). What its scripts throw later in a reader's chat comes back over the
+  bridge: `POST /pages/errors` says it into the turn that drew the page while that turn runs (`page-errors.ts`), and
+  otherwise the page's caption offers the reader an ask that fills the composer. It is filed under `.intentic/records/artifacts/pages/<conversation>/` and never
   rewritten (`page-store.ts`); a `replaces` redraw is a new file, and the earlier row folds. `page` frames draw it
   inline. `page_ask` parks the turn until the page's `intentic.submit` answers it. `page_draft` turn facts stream the
   markup while the model writes it (`page-draft.ts` reads `input_json_delta`). The editor draws pages sealed: scripts

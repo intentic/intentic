@@ -3597,7 +3597,11 @@
             "dismiss": "Odrzuć",
             "drafting": "Rysuję stronę…",
             "draftingTitled": "Rysuję {title}…",
-            "notAnApp": "Ta strona nie jest aplikacją serwera MCP."
+            "notAnApp": "Ta strona nie jest aplikacją serwera MCP.",
+            "threw": "Skrypt strony rzucił błąd | Skrypty strony rzuciły {count} błędy | Skrypty strony rzuciły {count} błędów",
+            "agentTold": "agent o tym wie",
+            "askFix": "Poproś o poprawkę",
+            "fixRequest": "Strona \"{title}\" (id \"{id}\") rzuciła błędy w moim czacie:\n{errors}\n\nPopraw ją i pokaż ponownie z replaces: \"{id}\"."
         }
     },
     "common": {

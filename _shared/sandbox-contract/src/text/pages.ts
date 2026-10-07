@@ -39,7 +39,14 @@ export const PAGE_BRIDGE = {
     openLink: `ui/open-link`,
     message: `ui/message`,
     submit: `intentic/submit`,
+    // An uncaught error in the page's own scripts, told as it happens: the chat hands it to the agent that showed the
+    // page while its turn still runs, and offers the reader the ask afterwards.
+    error: `intentic/page-error`,
 } as const;
+
+// How many distinct errors a page tells, and how long each may be: enough to fix it by, never a flood.
+export const PAGE_ERRORS_MAX = 10;
+export const PAGE_ERROR_CHARS = 600;
 
 // The width the chat's reply column usually is, which the check lays a page out at and measures it by.
 export const PAGE_COLUMN_WIDTH = 720;
@@ -156,14 +163,18 @@ export const PAGE_THEME_GUIDE =
     `The chat hands the page its live theme as CSS custom properties on :root, and they follow the reader's light/dark ` +
     `switch while the page is open: ${PAGE_THEME_VARIABLES.join(`, `)}. --background is the conversation's own ` +
     `background; --chart-1 … --chart-5 are a categorical series that reads in both looks. Style with these instead of ` +
-    `fixed colours, so the page looks like part of the chat in either look.`;
+    `fixed colours, so the page looks like part of the chat in either look. CSS and SVG styled with var(--…) follow a ` +
+    `switch by themselves; a canvas, or a chart library handed colours as values, does not: read them with ` +
+    `getComputedStyle(document.documentElement) and draw again on the document's \`intentic:theme\` event.`;
 
 // How a page sits in a reply, for the same description.
 export const PAGE_LAYOUT_GUIDE =
     `The page is drawn inline in the reply column (about ${PAGE_COLUMN_WIDTH}px wide on a desktop, about 360px on a phone), ` +
     `borderless, on the conversation's own background: leave html and body without a background, use a fluid width, and ` +
     `add no outer card, border or page title of your own, since the page is part of your reply. Let the content set the ` +
-    `height (no 100vh on html or body): the frame grows to fit. Give charts fixed pixel heights.`;
+    `height (no 100vh on html or body): the frame grows to fit. Give charts fixed pixel heights. Size anything you draw ` +
+    `from its container's width when you draw it, and draw again when that width changes (a ResizeObserver on the ` +
+    `container): the column narrows on a phone and when a side panel opens, so a width read once at load goes stale.`;
 
 // The base every page starts from: the theme's colours and fonts (native controls in the accent too), no margin, no
 // scrollbar (the frame fits the page).
@@ -186,6 +197,10 @@ var names=${JSON.stringify(PAGE_THEME_VARIABLES)};
 function apply(t){if(!t||typeof t!=="object"||!t.variables)return;var c=":root{color-scheme:"+(t.appearance==="light"?"light":"dark")+";";for(var i=0;i<names.length;i++){var v=t.variables[names[i]];if(typeof v==="string")c+=names[i]+":"+v.replace(/[;{}<>]/g,"")+";";}c+="}";if(style)style.textContent=c+${JSON.stringify(baseCss(false))}.replace("background:transparent;",canvas?"background:var(--background);":"background:transparent;");theme={appearance:t.appearance==="light"?"light":"dark",variables:t.variables};document.dispatchEvent(new CustomEvent("intentic:theme",{detail:theme}));}
 var framed=window.parent!==window;
 function post(m){if(framed)window.parent.postMessage(m,"*");}
+var told={},faults=0;function fault(t){t=String(t).slice(0,${PAGE_ERROR_CHARS});if(told[t]||faults>=${PAGE_ERRORS_MAX})return;told[t]=1;faults++;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.error)},params:{message:t}});}
+function said(x,fallback){return x&&typeof x.stack==="string"?x.stack.split("\\n").slice(0,2).map(function(l){return l.trim();}).join(" "):fallback;}
+window.addEventListener("error",function(e){if(e instanceof ErrorEvent)fault(said(e.error,(e.message||"Script error")+(e.lineno?" (line "+e.lineno+")":"")));});
+window.addEventListener("unhandledrejection",function(e){fault("Unhandled rejection: "+said(e.reason,String(e.reason)));});
 function request(method,params){return new Promise(function(resolve,reject){if(!framed){reject(new Error("This page is not inside a chat."));return;}var id="intentic-"+(++n);pending[id]={resolve:resolve,reject:reject};post({jsonrpc:"2.0",id:id,method:method,params:params});});}
 window.addEventListener("message",function(e){if(e.source!==window.parent)return;var d=e.data;if(!d||d.jsonrpc!=="2.0")return;if(d.method===${JSON.stringify(PAGE_BRIDGE.hostContextChanged)}&&d.params){apply({appearance:d.params.theme,variables:d.params.styles&&d.params.styles.variables});return;}if(d.id!==undefined&&pending[d.id]){var p=pending[d.id];delete pending[d.id];if(d.error)p.reject(new Error(String(d.error.message||"Refused")));else p.resolve(d.result);}});
 if(framed){var h=-1,z=function(){var r=document.documentElement,b=document.body,v=Math.ceil(Math.max(r.scrollHeight>r.clientHeight?r.scrollHeight:r.getBoundingClientRect().height,b?b.getBoundingClientRect().bottom:0));if(v===h||v<=0)return;h=v;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.sizeChanged)},params:{height:v}});};if(window.ResizeObserver){var o=new ResizeObserver(z);o.observe(document.documentElement);document.addEventListener("DOMContentLoaded",function(){if(document.body)o.observe(document.body);z();});}window.addEventListener("load",z);setTimeout(z,50);}
@@ -207,6 +222,21 @@ export const pageHead = (theme: PageTheme, options: { readonly canvas?: boolean 
         `<script>${bootstrapScript(canvas).replace(`theme=null`, `theme=${JSON.stringify(theme).replace(/</g, `\\u003c`)}`)}</script>`
     );
 };
+
+// A sandboxed frame has an opaque origin, so it often runs in a process of its own and learns its size a beat after its
+// document starts: through parse, DOMContentLoaded and load it is 0×0, and a page that measures itself as it loads (a
+// chart sizing its SVG from clientWidth) draws into nothing and stays that way. Knowing its width is not enough either:
+// until the frame's first rendering pass, innerWidth can already say 720 while every box still measures 0 (Chromium
+// did so in about half of a few dozen runs, in-process frames included). So this shell holds the page until the frame
+// has rendered at a width (its first resize, or the first animation frame that finds one), then writes it into itself,
+// so the page's first script already sees the size it is drawn at. Only for a frame that runs scripts: in one that does
+// not, the shell would be all there is. The chat's frame and the file viewer draw a page through it, and the daemon's
+// check lays one out through it, so all three see the same start.
+export const sizedFirst = (html: string): string =>
+    `<!DOCTYPE html><script>(function(){var page=${JSON.stringify(html).replace(/</g, `\\u003c`)},done=false;` +
+    `function go(){if(done||window.innerWidth===0)return;done=true;removeEventListener("resize",go);` +
+    `document.open();document.write(page);document.close();}addEventListener("resize",go);` +
+    `function frame(){if(!done){go();if(!done)requestAnimationFrame(frame);}}requestAnimationFrame(frame);})()</script>`;
 
 // Where in a document its head's contents begin: just inside `<head>`, else a head made for it. Only the opening of the
 // document is scanned, and a comment or script holding something tag-shaped there is skipped over.

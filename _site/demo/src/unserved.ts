@@ -313,6 +313,8 @@ export const UNSERVED = {
     "loops.stop": UNSIMULATED_WRITE,
     // Only an MCP server's app calls it, and no fixture conversation shows one.
     "pages.appCall": UNSIMULATED_WRITE,
+    // Only a fixture page that throws would send it, and none does; a page's own line offers the ask either way.
+    "pages.reportErrors": UNSIMULATED_WRITE,
     "personas.remove": UNSIMULATED_WRITE,
     "personas.removeSkill": UNSIMULATED_WRITE,
     "personas.savePrompt": UNSIMULATED_WRITE,

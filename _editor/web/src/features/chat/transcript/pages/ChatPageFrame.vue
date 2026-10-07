@@ -1,9 +1,14 @@
+<script lang="ts">
+// Drawings whose errors this window already reported, and whether the agent heard: kept across mounts, so scrolling a
+// page out of the chat and back neither says it twice nor forgets that it was said.
+const toldPages = new Map<string, boolean>();
+</script>
+
 <script setup lang="ts">
-import { deliverableKindOf, type McpAppData, type Page, PAGE_MAX_HEIGHT } from "@intentic/sandbox-contract";
+import { deliverableKindOf, type McpAppData, type Page, PAGE_ERRORS_MAX, PAGE_MAX_HEIGHT, sizedFirst } from "@intentic/sandbox-contract";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useChatSurface } from "../../tools/chatToolSurface";
-import { sizedFirst } from "../../../workspace/viewers/html/htmlDocument";
 import { setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
@@ -27,6 +32,9 @@ const props = defineProps<{
     message?: (text: string) => void;
 }>();
 
+// What the page's own scripts threw so far, and whether the agent that showed it heard.
+const emit = defineEmits<{ fault: [errors: readonly string[], told: boolean] }>();
+
 const surface = useChatSurface();
 const theme = usePageTheme();
 
@@ -48,6 +56,38 @@ const loaded = ref(false);
 let app: McpAppData | undefined;
 let handedOver = false;
 let handOverTimer: ReturnType<typeof setTimeout> | undefined;
+
+// What the page's scripts threw, handed to the agent that showed it while the turn that showed it runs (the daemon's
+// page-errors.ts decides), once per drawing per window: a page mounted again, or drawn twice, is not said twice. The
+// pause lets a page that throws in a loop say its first few together.
+const errors = ref<readonly string[]>([]);
+const told = ref(false);
+const REPORT_AFTER_MS = 600;
+let reportTimer: ReturnType<typeof setTimeout> | undefined;
+const fault = (message: string): void => {
+    if (errors.value.length >= PAGE_ERRORS_MAX || errors.value.includes(message)) {
+        return;
+    }
+    errors.value = [...errors.value, message];
+    told.value = toldPages.get(props.page.path) ?? false;
+    emit(`fault`, errors.value, told.value);
+    if (reportTimer === undefined && !toldPages.has(props.page.path) && props.page.app === undefined && props.page.superseded !== true) {
+        reportTimer = setTimeout(() => void report(props.page.path), REPORT_AFTER_MS);
+    }
+};
+const report = async (path: string): Promise<void> => {
+    toldPages.set(path, false);
+    try {
+        const answer = await sandboxRpc.pages.reportErrors({ page: path, errors: [...errors.value] });
+        toldPages.set(path, answer.told);
+        if (path === props.page.path) {
+            told.value = answer.told;
+            emit(`fault`, errors.value, told.value);
+        }
+    } catch {
+        // allow(silent-catch): nobody heard, which the reader's line already says by offering the ask.
+    }
+};
 
 // Mounted once it comes within a screen or so, and kept: scrolling past must not reload a page someone is using.
 let sight: IntersectionObserver | undefined;
@@ -83,6 +123,10 @@ watch(
         failed.value = false;
         loaded.value = false;
         reported.value = undefined;
+        clearTimeout(reportTimer);
+        reportTimer = undefined;
+        errors.value = [];
+        told.value = false;
         try {
             const built = await buildPageDocument(props.page, theme.value);
             if (current) {
@@ -147,6 +191,9 @@ const act = async (ask: PageAsk): Promise<void> => {
     switch (ask.kind) {
         case `size`:
             reported.value = Math.ceil(ask.height);
+            return;
+        case `error`:
+            fault(ask.message);
             return;
         case `initialize`:
             post(pageResult(ask.id, initializeResult(theme.value, app?.tool)));
@@ -247,6 +294,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     sight?.disconnect();
     clearTimeout(handOverTimer);
+    clearTimeout(reportTimer);
     window.removeEventListener(`message`, onMessage);
     window.removeEventListener(`blur`, onWindowBlur);
     document.removeEventListener(`focusin`, noteFocus, true);

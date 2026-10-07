@@ -20,6 +20,18 @@ const surface = useChatSurface();
 const earlierOpen = ref(false);
 const folded = computed(() => props.page.superseded === true && !earlierOpen.value);
 
+// What the page's scripts threw, and whether the agent that showed it heard; when it did not, the reader may ask.
+const errors = ref<readonly string[]>([]);
+const told = ref(false);
+const onFault = (thrown: readonly string[], heard: boolean): void => {
+    errors.value = thrown;
+    told.value = heard;
+};
+const askFix = (): void => {
+    const listed = errors.value.map((error) => `- ${error}`).join(`\n`);
+    actions.message(t(`chat.chatPages.fixRequest`, { title: props.page.title, id: props.page.id, errors: listed }));
+};
+
 const confirming = ref(false);
 const confirmPublish = async (): Promise<void> => {
     await actions.publish();
@@ -39,7 +51,7 @@ const confirmPublish = async (): Promise<void> => {
         </div>
         <template v-else>
             <div class="px-3.5">
-                <ChatPageFrame :page="page" :message="actions.message" />
+                <ChatPageFrame :page="page" :message="actions.message" @fault="onFault" />
             </div>
             <!-- The caption: what it is, where it came from, and the two things to do with it beside using it. -->
             <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 px-3.5 text-2xs text-subtle">
@@ -55,6 +67,14 @@ const confirmPublish = async (): Promise<void> => {
                     @click="surface.openFile?.(page.source!)"
                 >
                     {{ t(`chat.chatPages.fromFile`, { path: page.source }) }}
+                </button>
+                <span v-if="errors.length > 0" class="flex min-w-0 items-center gap-1 text-danger" v-tooltip.top="errors.join(`\n`)">
+                    <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
+                    <span class="min-w-0 truncate">{{ t(`chat.chatPages.threw`, { count: errors.length }, errors.length) }}</span>
+                </span>
+                <span v-if="errors.length > 0 && told">{{ t(`chat.chatPages.agentTold`) }}</span>
+                <button v-else-if="errors.length > 0" type="button" class="cursor-pointer font-medium text-link hover:underline" @click="askFix">
+                    {{ t(`chat.chatPages.askFix`) }}
                 </button>
                 <button v-if="actions.canExpand" type="button" class="cursor-pointer font-medium hover:text-content" @click="actions.expand">
                     {{ t(`chat.chatPages.expand`) }}

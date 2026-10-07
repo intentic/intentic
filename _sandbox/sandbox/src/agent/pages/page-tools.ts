@@ -40,9 +40,10 @@ const PAGE_RULES =
     `${PAGE_LAYOUT_GUIDE} ${PAGE_THEME_GUIDE}`;
 
 const CHECK_RULE =
-    "Set `check: true` the first time you show anything with scripts or a chart: the page is laid out in a headless browser at " +
-    "the chat's width first, and you get back a picture of it, its height and its console. A page whose scripts throw is not " +
-    "shown, so read the errors, fix, and call again.";
+    "Set `check: true` the first time you show anything with scripts or a chart: the page is laid out first in a headless " +
+    "browser, inside a frame like the chat's at the chat's width, and you get back a picture of it, its height and its " +
+    "console. A page whose scripts throw is not shown, so read the errors, fix, and call again. What its scripts throw later " +
+    "in the reader's own chat is told to you while this turn runs.";
 
 const SHOW_DESCRIPTION =
     "Show the user a page right in the chat, drawn inline where your reply continues: a chart, a table, a diagram, a " +
@@ -51,7 +52,8 @@ const SHOW_DESCRIPTION =
     `${PAGE_RULES} ${CHECK_RULE} To change a page you showed, call again with \`replaces\` set to its id: the earlier one folds ` +
     "away, so iterating leaves one page behind. Inside the page, `window.intentic.send(text)` sends the chat a message as the " +
     'user, after their own click: use it for buttons like "Build this one" on a set of mock-ups. Charts are a claim: build ' +
-    "them from real data you read, never from numbers you guessed, and say where the numbers came from.";
+    "them from real data you read, never from numbers you guessed, and say where the numbers came from. A mock-up may " +
+    "hold sample content, labelled as sample on the page, so it never reads as measured.";
 
 const ASK_DESCRIPTION =
     "Ask the user something a page answers better than a list of options: pick one of several mock-ups, tune values with " +
@@ -148,6 +150,11 @@ const carriedNotes = (carried: CarriedPage): string[] => [
 const checkNotes = (check: PageCheck): string[] => [
     `Laid out at ${check.width}px wide: ${check.contentHeight}px tall${check.contentHeight > check.capturedHeight ? ` (the picture shows the top ${check.capturedHeight}px)` : ""}.`,
     ...(check.contentHeight < 24 ? ["The page laid out almost empty: check that its content is in the body and that its scripts ran."] : []),
+    ...(check.followsFrame
+        ? [
+              "Its height follows its frame's rather than its content's (100vh, or height:100% on html or body), so the chat cannot fit the frame to it: size it by its content.",
+          ]
+        : []),
     ...(check.errors.length === 0 ? [] : [`Uncaught errors:\n${check.errors.map((error) => `- ${error}`).join("\n")}`]),
     ...(check.messages.length === 0 ? [] : [`Console:\n${check.messages.map((message) => `- [${message.level}] ${message.text}`).join("\n")}`]),
 ];
@@ -168,7 +175,7 @@ const preparePage = async (
     let measured: number | undefined;
     let picture: Content | undefined;
     if (args.check === true) {
-        const checked = await checkPage(carried.html);
+        const checked = await checkPage(carried.html, { cap: args.height });
         if (checked.ok) {
             measured = checked.check.contentHeight;
             picture = { type: "image", data: checked.check.png, mimeType: "image/png" };
