@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import {
+    AddressField,
     Button,
     ui,
-    CopyButton,
     Icon,
     Notice,
     noticeOf,
@@ -73,11 +73,14 @@ const size = (bytes: number): string => {
             </div>
 
             <!-- Shown even with nothing published: makes the empty state actionable and gives something to copy. -->
-            <div v-if="url" class="mb-3 flex items-center gap-2 rounded-lg bg-card shadow-sm px-4 py-2">
-                <Icon name="globe" class="shrink-0 text-subtle" />
-                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" v-tooltip.bottom.overflow="url">{{ url }}</span>
-                <CopyButton :text="url" :label="t(`publicView.copyAddress`)" />
-            </div>
+            <AddressField
+                v-if="url"
+                :value="url"
+                openable
+                class="mb-3"
+                :copy-label="t(`publicView.copyAddress`)"
+                :open-label="t(`common.newTab`)"
+            />
             <div v-else class="mb-3 rounded-lg bg-card shadow-sm px-4 py-3 text-xs text-muted">
                 {{ t(`publicView.sandboxNoPublicAddress`) }}
             </div>

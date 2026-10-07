@@ -61,6 +61,8 @@ export { default as OverflowActions } from "./components/overlays/OverflowAction
 export { default as ActionSheet } from "./components/overlays/ActionSheet.vue";
 export { type ActionItem } from "./components/overlays/actionItem.js";
 export { default as CopyButton } from "./components/primitives/CopyButton.vue";
+// One address on one line, editable (a browser's address bar) or read-only (a link to copy or open), in the same box.
+export { default as AddressField } from "./components/forms/AddressField.vue";
 export { type TallyItem, default as StatusTally } from "./components/charts/StatusTally.vue";
 // THE TWO GRAPH COMPONENTS ARE FETCHED WHEN FIRST DRAWN. Each carries Vue Flow and dagre (~190 KB of JS), and exported
 // eagerly from this barrel they rode into every startup of the app — the extension host republishes the whole kit —

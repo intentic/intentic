@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
-import { AnchoredOverlay, Button, CopyButton, EmptyState, Icon, timeAgo, ui, vAction, vMiddleclick } from "@intentic/ui";
+import { AddressField, AnchoredOverlay, Button, EmptyState, Icon, timeAgo, ui, vAction, vMiddleclick } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "./activePage";
@@ -101,36 +101,14 @@ const sessionMeta = (session: BrowserSession): string =>
 // The address bar shows the active page's address until the owner types into it; Enter sends what they typed
 // (address.ts decides what that is), Escape puts the page's own back.
 const address = computed(() => activePage.value?.url ?? `about:blank`);
-const addressInput = ref<HTMLInputElement | undefined>();
-const addressDraft = ref<string | undefined>();
-const shownAddress = computed(() => addressDraft.value ?? (address.value === `about:blank` ? `` : address.value));
-const secure = computed<boolean | undefined>(() => {
-    try {
-        const url = new URL(address.value);
-        // about:blank, or anything else without an authority: no site to vouch for.
-        return url.host === `` ? undefined : url.protocol === `https:`;
-    } catch {
-        return undefined;
-    }
-});
-const focusAddress = (): void => {
-    addressDraft.value = shownAddress.value;
-    addressInput.value?.focus();
-    void nextTick(() => addressInput.value?.select());
-};
-const submitAddress = (): void => {
-    const url = toUrl(addressDraft.value ?? ``);
-    addressDraft.value = undefined;
-    addressInput.value?.blur();
+const addressField = ref<{ focus: () => void } | undefined>();
+const focusAddress = (): void => addressField.value?.focus();
+const submitAddress = (text: string): void => {
+    const url = toUrl(text);
     if (url !== undefined) {
         view.navigate(url);
         stageEl.value?.focus();
     }
-};
-const revertAddress = (): void => {
-    addressDraft.value = undefined;
-    addressInput.value?.blur();
-    stageEl.value?.focus();
 };
 
 // Two picture surfaces: a video canvas with a still canvas over it, or an img for frames when there's no display to
@@ -220,7 +198,6 @@ const queueOpen = ref(false);
 // Everything tied to the browser being left behind (picked page, draft note, open menus) resets with it.
 watch(selected, () => {
     pickedPage.value = undefined;
-    addressDraft.value = undefined;
     helpNote.value = ``;
     helpOpen.value = true;
     switcherOpen.value = false;
@@ -522,36 +499,16 @@ watch(
                     >
                         <Icon name="refresh" class="text-2xs" />
                     </button>
-                    <!-- The padlock reads off the page's real address, not the draft; typing changes nothing until Enter. -->
-                    <!-- The shell draws the frame and takes the focus; the field inside is bare, as the design system's inline fields are. -->
-                    <div class="ui-field-shell group flex min-w-0 flex-1 items-center gap-1 px-1.5">
-                        <Icon
-                            v-if="secure !== undefined"
-                            :name="secure ? 'lock' : 'unlock'"
-                            class="shrink-0 text-3xs"
-                            :class="secure ? 'text-muted' : 'text-warning'"
-                        />
-                        <input
-                            ref="addressInput"
-                            :value="shownAddress"
-                            type="text"
-                            spellcheck="false"
-                            autocomplete="off"
-                            :placeholder="t(`browsers.browsers.addressPlaceholder`)"
-                            class="field-bare min-w-0 flex-1 font-mono md:text-xs"
-                            @focus="focusAddress"
-                            @input="addressDraft = ($event.target as HTMLInputElement).value"
-                            @keydown.enter.prevent="submitAddress"
-                            @keydown.esc.prevent="revertAddress"
-                            @blur="addressDraft = undefined"
-                        />
-                        <!-- No tooltip of its own: the address line above already has one, and nesting tooltips would open a second box on the first. -->
-                        <CopyButton
-                            :text="address"
-                            class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                            :aria-label="t(`browsers.browsers.copyAddress`)"
-                        />
-                    </div>
+                    <AddressField
+                        ref="addressField"
+                        editable
+                        :value="address === `about:blank` ? `` : address"
+                        :placeholder="t(`browsers.browsers.addressPlaceholder`)"
+                        :copy-label="t(`browsers.browsers.copyAddress`)"
+                        class="flex-1"
+                        @submit="submitAddress"
+                        @cancel="stageEl?.focus()"
+                    />
                 </div>
 
                 <!-- The page: whatever the stage's box is, the daemon sizes the viewport to it. -->

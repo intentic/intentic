@@ -23,6 +23,7 @@ export const extensionUiNames = [
     "OverflowActions",
     "ActionSheet",
     "CopyButton",
+    "AddressField",
     "DagEditor",
     "DagGraph",
     "DiffStat",

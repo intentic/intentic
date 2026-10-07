@@ -53,6 +53,8 @@ export {
     ActionSheet,
     type ActionItem,
     CopyButton,
+    // A lone URL to read, copy or open; `editable` turns the same box into an address bar.
+    AddressField,
     StatusTally,
     type TallyItem,
     DagEditor,

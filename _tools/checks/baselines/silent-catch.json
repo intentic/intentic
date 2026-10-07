@@ -81,7 +81,6 @@
     "_editor/web/src/features/agents/fleet/agentActions.ts": 1,
     "_editor/web/src/features/agents/fleet/synthesizeSessions.ts": 1,
     "_editor/web/src/features/auth/DesktopAuth.vue": 2,
-    "_editor/web/src/features/browsers/Browsers.vue": 1,
     "_editor/web/src/features/browsers/useBrowserView.ts": 1,
     "_editor/web/src/features/browsers/videoSink.ts": 2,
     "_editor/web/src/features/capabilities/model/form.ts": 1,
