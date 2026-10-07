@@ -529,7 +529,7 @@ const environmentContents = (): EnvironmentContents => ({
             name: `pnpm`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `pnpm`, version: `12.9.1` }],
+            tools: [{ name: `pnpm`, version: `12.10.1` }],
             purpose: `Installs and runs workspace packages.`,
         },
         {
