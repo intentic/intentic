@@ -1,4 +1,4 @@
-import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { type FencedPlan, type HostView, SANDBOX_UID, sandboxArgs, sandboxEnv, sandboxLayout, type SandboxSources, shelfFolders } from "./turn-sandbox.js";
 
 // Pins what a fenced turn's sandbox is built from, as an argv, without a kernel: the fence is only as good as this
@@ -11,7 +11,7 @@ const plan: FencedPlan = {
     overlays: `${HISTORY_ROOT}/overlays/abc`,
     fence: {
         folders: ["support/web", "refs/sdk"],
-        hidden: [".intentic", "finance"],
+        hidden: [STATE_DIR, "finance"],
         sessions: `${HISTORY_ROOT}/conversations/abc/sessions`,
         gitPointers: ["", "intent"],
     },

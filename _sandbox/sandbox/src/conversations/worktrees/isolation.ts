@@ -332,7 +332,14 @@ export const mirrorAdmitted = (fence: readonly string[], worktree: string, rel: 
 export const hiddenIn = async (worktree: string, fence: readonly string[]): Promise<string[]> => {
     const hidden: string[] = [];
     const visit = async (rel: string): Promise<void> => {
-        const entries = await readdir(join(worktree, rel), { withFileTypes: true }).catch(() => []);
+        // A folder gone since the walk began holds nothing to cover; one that cannot be read might, so the plan fails
+        // and the turn is refused rather than run with part of the checkout left uncovered.
+        const entries = await readdir(join(worktree, rel), { withFileTypes: true }).catch((error: unknown) => {
+            if (isMissing(error)) {
+                return [];
+            }
+            throw error;
+        });
         for (const entry of entries) {
             if (!entry.isDirectory()) {
                 continue;

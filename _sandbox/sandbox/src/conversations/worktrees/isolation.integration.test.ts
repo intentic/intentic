@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { repoRoot } from "@intentic/constants/node";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
@@ -124,7 +124,7 @@ test("a fenced conversation's placement names its fence, its own session store, 
 test("whatever a fenced checkout holds outside its fence is listed for covering, however it got there", async () => {
     const worktree = await mkdtemp(join(tmpdir(), "fenced-wt-"));
     tempDirs.push(worktree);
-    for (const dir of ["support/web/src", "support/billing", "finance/q3", ".intentic/config", "refs/sdk", "refs/private"]) {
+    for (const dir of ["support/web/src", "support/billing", "finance/q3", `${STATE_DIR}/config`, "refs/sdk", "refs/private"]) {
         await mkdir(join(worktree, dir), { recursive: true });
     }
     await writeFile(join(worktree, "README.md"), "kept by cone mode");

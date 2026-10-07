@@ -69,10 +69,14 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
 # python-is-python3 for the rarer sibling: `python` unqualified is only 2 sessions in 1146, but both came
 # from runners that are not this image's usual agent (a delegated CLI, a loop attempt) writing `python -m`
 # out of habit, and Debian ships no such name. One package ends a whole class of no-such-command.
+# bubblewrap: a fenced conversation (one started by a member who holds areas) runs its turns and its watch checks in
+# a bwrap sandbox (conversations/worktrees/turn-sandbox.ts), and without one every fenced turn is refused. Here and
+# not in a pack, since who sees which areas is access control, not tooling; the desktop pack's WebKitGTK only pulled
+# it in by chance.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ bubblewrap
 # Standalone binaries must support both sandbox architectures without newer system libraries.
 ARG RIPGREP_VERSION=15.2.0
 ARG JQ_VERSION=1.8.2
