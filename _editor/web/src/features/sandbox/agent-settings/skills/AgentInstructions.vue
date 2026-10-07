@@ -110,22 +110,22 @@ const viewPromptTip = computed((): Tip => ({
                 <template v-else>{{ t(`sandbox.agentInstructions.intenticsOwnPromptTuned`) }}</template>
             </template>
             <template #control>
-                <SegmentedControl :model-value="promptMode" :options="PROMPT_MODES" @update:model-value="setPromptMode" />
-            </template>
-            <template #below>
-                <template v-if="promptMode !== `custom`">
+                <div class="flex items-center gap-3">
                     <Button
+                        v-if="promptMode !== `custom`"
                         :label="t(`sandbox.agentInstructions.viewPrompt`)"
                         size="small"
                         severity="secondary"
                         v-tooltip.bottom="viewPromptTip"
                         @click="viewBuiltin(promptMode)"
                     />
-                </template>
-
+                    <SegmentedControl :model-value="promptMode" :options="PROMPT_MODES" @update:model-value="setPromptMode" />
+                </div>
+            </template>
+            <template v-if="promptMode === `custom` || builtinError !== undefined" #below>
                 <!-- What the choice costs and where to start from belong to the row that makes it; the document itself
                      is a region of this same card, below. -->
-                <template v-else>
+                <template v-if="promptMode === `custom`">
                     <Notice tone="warning" class="text-2xs">
                         {{ t(`sandbox.agentInstructions.wholePromptOn`, { replaces: spokenList(reach.replaces) }) }}
                         <template v-if="reach.adds.length > 0">{{
