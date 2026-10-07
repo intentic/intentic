@@ -586,7 +586,6 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     <div class="flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center" ref="probeTile">
                         <span class="flex h-14 w-full items-center justify-center"></span>
                         <span class="h-[2.75em] w-full text-xs leading-snug"></span>
-                        <span v-if="querying || byDate" class="w-full text-2xs">&nbsp;</span>
                     </div>
                 </div>
                 <h3 ref="probeLabel" class="px-2 pt-3 pb-1 text-2xs text-muted">&nbsp;</h3>
