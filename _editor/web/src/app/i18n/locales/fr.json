@@ -1946,9 +1946,29 @@
             "foundTitle": "Trouvé sur cet ordinateur"
         },
         "localModelLane": {
-            "gpuOffered": "CPU seulement pour l'instant ; l'entrée de catalogue du modèle peut demander un GPU NVIDIA.",
+            "bestHere": "Meilleur choix",
+            "bestPitch": "Le plus grand modèle qui tourne bien ici. Convient aux discussions et aux tours d’agent.",
+            "factDownload": "{size} à télécharger",
+            "factDownloaded": "Téléchargé",
+            "factMemory": "utilise environ {total} en marche",
+            "factWindow": "contexte de {window}k",
+            "gpuGranted": "GPU NVIDIA, {vram} de VRAM",
+            "gpuOffered": "CPU uniquement",
+            "gpuOfferedHint": "Un GPU NVIDIA peut être activé dans les réglages du modèle.",
+            "gpuUnsupported": "CPU uniquement (aucun runtime GPU sur cet hôte)",
+            "memoryCapped": "{memory} de mémoire pour ce sandbox",
+            "memoryMachine": "{memory} de mémoire",
+            "moreModels": "Autres modèles, GGUF personnalisé, réglages GPU",
             "needsRebuild": "Cette image n'embarque pas encore llama-server. Reconstruisez le sandbox depuis Environnement sur la page Sandbox, puis revenez.",
-            "ready": "Prêt"
+            "openSettings": "Réglages du modèle",
+            "quickJobsOnly": "Petites tâches",
+            "quickJobsPitch": "Écrit les messages de commit et les titres de session. Trop petit pour discuter ou pour un tour d’agent.",
+            "ready": "Prêt",
+            "sizedForGpu": "Les suggestions tiennent dans les {free} qu’un modèle peut utiliser sur le GPU.",
+            "sizedForMemory": "Les suggestions tiennent dans les {free} de mémoire libres maintenant.",
+            "statusFailed": "N’a pas démarré",
+            "statusSlow": "Tourne lentement",
+            "windowUnderFloor": "Sa fenêtre est trop petite pour un tour d’agent, il ne convient donc qu’aux petites tâches. Plus de mémoire l’agrandirait."
         }
     },
     "desktop": {

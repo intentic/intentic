@@ -1954,9 +1954,29 @@
             "foundTitle": "Encontrado en este ordenador"
         },
         "localModelLane": {
-            "gpuOffered": "Solo CPU por ahora; la entrada del catálogo del modelo puede pedir una GPU NVIDIA.",
+            "bestHere": "Mejor opción",
+            "bestPitch": "El modelo más grande que funciona bien aquí. Sirve para chats y turnos de agente.",
+            "factDownload": "descarga de {size}",
+            "factDownloaded": "Descargado",
+            "factMemory": "usa unos {total} en ejecución",
+            "factWindow": "contexto de {window}k",
+            "gpuGranted": "GPU NVIDIA, {vram} de VRAM",
+            "gpuOffered": "Solo CPU",
+            "gpuOfferedHint": "Puedes activar una GPU NVIDIA en los ajustes del modelo.",
+            "gpuUnsupported": "Solo CPU (este host no tiene runtime de GPU)",
+            "memoryCapped": "{memory} de memoria para este sandbox",
+            "memoryMachine": "{memory} de memoria",
+            "moreModels": "Otros modelos, GGUF propio, ajustes de GPU",
             "needsRebuild": "Esta imagen aún no incluye llama-server. Reconstruye el sandbox desde Entorno en la página Sandbox y vuelve después.",
-            "ready": "Listo"
+            "openSettings": "Ajustes del modelo",
+            "quickJobsOnly": "Tareas rápidas",
+            "quickJobsPitch": "Escribe mensajes de commit y títulos de sesión. Demasiado pequeño para chatear o para turnos de agente.",
+            "ready": "Listo",
+            "sizedForGpu": "Las opciones caben en los {free} que un modelo puede usar en la GPU.",
+            "sizedForMemory": "Las opciones caben en los {free} de memoria libres ahora.",
+            "statusFailed": "No arrancó",
+            "statusSlow": "Va lento",
+            "windowUnderFloor": "Su ventana es demasiado pequeña para un turno de agente, así que solo sirve para tareas rápidas. Más memoria la ampliaría."
         }
     },
     "desktop": {

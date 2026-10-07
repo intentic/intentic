@@ -90,12 +90,23 @@ const held = computed(() =>
 
         <LocalModelLane :fit="fit" @ready="(provider) => emit(`ready`, provider)" @stop-prefetch="emit(`stopPrefetch`)" />
 
-        <!-- Somebody already running a server does not need a tour: named once, here, and sent to the card that points at it. -->
-        <RowNote variant="note" icon="server">
-            <span>{{ t(`connect.providerGrid.ownServer`) }}</span>
-            <RouterLink to="/capabilities/endpoint" :class="ui.linkButton(`ml-2 text-xs`)">
-                {{ t(`connect.providerGrid.pointAtServer`) }}<Icon name="arrow-right" class="text-2xs" />
-            </RouterLink>
+        <!-- The two ways past the curated pair, as one footer: the card that holds every other model and the GPU switch, and,
+             for somebody already running a server, the card that points at it. Named once, here, without a tour. -->
+        <RowNote variant="block">
+            <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+                <RouterLink to="/capabilities/localmodel" :class="ui.linkButton(`text-xs`)">
+                    <Icon name="sliders-h" class="text-2xs" />{{ t(`connect.localModelLane.moreModels`) }}<Icon
+                        name="arrow-right"
+                        class="text-2xs"
+                    />
+                </RouterLink>
+                <span class="flex flex-wrap items-center gap-x-2 text-muted">
+                    <Icon name="server" class="text-2xs text-subtle" />{{ t(`connect.providerGrid.ownServer`) }}
+                    <RouterLink to="/capabilities/endpoint" :class="ui.linkButton(`text-xs`)">
+                        {{ t(`connect.providerGrid.pointAtServer`) }}<Icon name="arrow-right" class="text-2xs" />
+                    </RouterLink>
+                </span>
+            </div>
         </RowNote>
     </RowGroup>
 </template>

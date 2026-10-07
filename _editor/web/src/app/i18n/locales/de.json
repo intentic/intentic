@@ -1945,9 +1945,29 @@
             "foundTitle": "Auf diesem Computer gefunden"
         },
         "localModelLane": {
-            "gpuOffered": "Vorerst nur CPU; der Katalogeintrag des Modells kann eine NVIDIA-GPU anfordern.",
+            "bestHere": "Beste Wahl",
+            "bestPitch": "Das größte Modell, das hier gut läuft. Geeignet für Chats und Agenten-Runden.",
+            "factDownload": "{size} Download",
+            "factDownloaded": "Heruntergeladen",
+            "factMemory": "belegt etwa {total} im Betrieb",
+            "factWindow": "{window}k Kontext",
+            "gpuGranted": "NVIDIA-GPU, {vram} VRAM",
+            "gpuOffered": "Nur CPU",
+            "gpuOfferedHint": "Eine NVIDIA-GPU lässt sich in den Modelleinstellungen einschalten.",
+            "gpuUnsupported": "Nur CPU (keine GPU-Laufzeit auf diesem Host)",
+            "memoryCapped": "{memory} Arbeitsspeicher für diese Sandbox",
+            "memoryMachine": "{memory} Arbeitsspeicher",
+            "moreModels": "Weitere Modelle, eigenes GGUF, GPU-Einstellungen",
             "needsRebuild": "Dieses Image enthält llama-server noch nicht. Bauen Sie die Sandbox unter „Umgebung“ auf der Sandbox-Seite neu und kommen Sie dann zurück.",
-            "ready": "Bereit"
+            "openSettings": "Modelleinstellungen",
+            "quickJobsOnly": "Kleine Aufgaben",
+            "quickJobsPitch": "Schreibt Commit-Nachrichten und Sitzungstitel. Zu klein für Chats oder Agenten-Runden.",
+            "ready": "Bereit",
+            "sizedForGpu": "Die Vorschläge passen in die {free}, die ein Modell auf der GPU nutzen kann.",
+            "sizedForMemory": "Die Vorschläge passen in die {free} Arbeitsspeicher, die gerade frei sind.",
+            "statusFailed": "Nicht gestartet",
+            "statusSlow": "Läuft langsam",
+            "windowUnderFloor": "Sein Fenster ist zu klein für eine Agenten-Runde, es taugt nur für kleine Aufgaben. Mehr Arbeitsspeicher würde es vergrößern."
         }
     },
     "desktop": {

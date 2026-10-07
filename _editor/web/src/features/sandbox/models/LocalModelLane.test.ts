@@ -78,6 +78,10 @@ it(`says a served model is ready rather than repeating the daemon's row detail`,
     const html = render([localModel(`localmodel`, WORK, { state: `active`, detail: `Qwen3.8 27B · 64k window` })]);
     expect(html).toContain(`Ready`);
     expect(html).not.toContain(`Run it`);
+    expect(html).not.toContain(`Qwen3.8 27B · 64k window`);
+    // Taken, its download is behind it: only the rung still on offer says where its weights are.
+    expect(html.match(/Downloaded/g)).toHaveLength(1);
+    expect(html).toContain(`64k context`);
 });
 
 it(`shows what a failed start said, in place of the button that would repeat it`, () => {
@@ -90,15 +94,18 @@ it(`shows what a failed start said, in place of the button that would repeat it`
 // it is and pointed at the list that uses it, never offered as the model to chat with.
 it(`says a served quick-jobs model is ready for quick jobs, and points at where it is used`, () => {
     const html = render([localModel(`localmodel`, QUICK, { state: `active`, detail: `Qwen3.5 2B · 64k window` })]);
-    expect(html).toContain(`Ready for quick jobs`);
+    expect(html).toContain(`Ready`);
     expect(html).toContain(`Choose it for commit messages and titles`);
 });
 
-// Ready and slow reads as broken without a reason: the daemon's words for where the layers went take the place of Ready.
+// Ready and slow reads as broken without a reason: the pill says slow, and the daemon's reason gets a line of its own,
+// without the weights and window the row already names.
 it(`shows why a serving model is marked instead of calling it ready`, () => {
     const detail = `Qwen3.8 27B · 64k window · only 20 of 49 layers fit on the GPU, the rest run on the CPU and set its pace`;
     const html = render([localModel(`localmodel`, WORK, { state: `active`, code: `gpu-partial`, detail })]);
-    expect(html).toContain(detail);
+    expect(html).toContain(`Running slow`);
+    expect(html).toContain(`Only 20 of 49 layers fit on the GPU, the rest run on the CPU and set its pace`);
+    expect(html).not.toContain(`Qwen3.8 27B · 64k window`);
     expect(html).not.toContain(`>Ready<`);
 });
 
@@ -129,7 +136,15 @@ it(`hands a served model on to chat only when it can run one`, async () => {
 
 it(`says what the offers were sized against: one device's free memory, not the sum`, () => {
     const html = renderWith({ ...FIT, fullSpeedBytes: 6 * 1024 ** 3, fullSpeedDevice: `gpu` }, []);
-    expect(html).toContain(`Offers are sized to run whole on the GPU, in the ${localModelGb(6 * 1024 ** 3)} a model can have there.`);
+    expect(html).toContain(`Picks below fit in the ${localModelGb(6 * 1024 ** 3)} a model can use on the GPU.`);
     const none = renderWith({ ...FIT, instant: undefined, best: undefined, fullSpeedBytes: 1024 ** 3, fullSpeedDevice: `host` }, []);
     expect(none).toContain(`Nothing on the curated list runs at full speed in the ${localModelGb(1024 ** 3)} free here.`);
+});
+
+// The costs of an offer read as short facts, not a sentence about them.
+it(`lists what an offer costs as facts`, () => {
+    const html = renderWith({ ...FIT, options: FIT.options.map((entry) => ({ ...entry, held: false })) }, []);
+    expect(html).toContain(`${localModelGb(1_280_835_840)} download`);
+    expect(html).toContain(`uses about ${localModelGb(6_000_000_000)} while running`);
+    expect(html).toContain(`64k context`);
 });
