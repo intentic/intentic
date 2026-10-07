@@ -1373,6 +1373,7 @@
             "goesAfterAnswer": "Entra en cuanto respondas a la solicitud de arriba",
             "goesAfterTurn": "Sale cuando termine este turno",
             "goesWhenFree": "Sale en cuanto el agente esté libre",
+            "goesWithHeldTurn": "Sale con el turno retenido cuando se restablezca el límite · {when}",
             "removeLabel": "Retirar el mensaje en espera",
             "reword": "Reformular",
             "rewordLabel": "Reformular el mensaje en espera",

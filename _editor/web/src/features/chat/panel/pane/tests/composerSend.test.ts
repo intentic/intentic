@@ -195,6 +195,32 @@ describe(`a scheduled send`, () => {
         expect(say).not.toHaveBeenCalled();
     });
 
+    // A watch fired after the limit refused the turn: its report waits with the held turn, so it must not take the strip's
+    // place (the one card that says the limit and when it reopens) nor give a bare press a queue it cannot send.
+    it(`keeps the limit strip and its Continue over a watch's report the limit holds`, () => {
+        const { chat, send } = composerOf(inHalfAnHour());
+        const resumed = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        chat.pickUp.value = { reason: `limit`, readyAt: Date.now() + 60_000, held: { ran: true } };
+        chat.queue.value = { items: [{ id: `w1`, text: `Watch fired`, voice: `sandbox`, queuedAt: 1, revision: 1 }], revision: 1 };
+
+        expect(send.continueStrip.value).toBe(true);
+        expect(send.continueOffer.value).toBe(true);
+        send.submit();
+        expect(continued).toHaveBeenCalledTimes(1);
+        expect(resumed).not.toHaveBeenCalled();
+
+        // A person's words beside it go the ordinary way, and the strip steps aside for them as before.
+        chat.queue.value = {
+            items: [
+                { id: `w1`, text: `Watch fired`, voice: `sandbox`, queuedAt: 1, revision: 1 },
+                { id: `m1`, text: `and the docs`, voice: `person`, queuedAt: 2, revision: 1 },
+            ],
+            revision: 2,
+        };
+        expect(send.continueStrip.value).toBe(false);
+    });
+
     it(`sends without arming anything when the caller has just made room itself`, () => {
         const { chat, host, say, send } = composerOf(inHalfAnHour());
         chat.draft.value = `ship it`;

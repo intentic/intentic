@@ -1365,6 +1365,7 @@
             "goesAfterAnswer": "Geht hinein, sobald du die Anfrage oben beantwortest",
             "goesAfterTurn": "Geht raus, wenn dieser Durchlauf endet",
             "goesWhenFree": "Geht raus, sobald der Agent frei ist",
+            "goesWithHeldTurn": "Geht mit dem angehaltenen Durchlauf raus, sobald das Limit zurückgesetzt ist · {when}",
             "removeLabel": "Wartende Nachricht zurücknehmen",
             "reword": "Umformulieren",
             "rewordLabel": "Wartende Nachricht umformulieren",

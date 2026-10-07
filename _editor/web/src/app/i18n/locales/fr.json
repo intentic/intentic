@@ -1367,6 +1367,7 @@
             "goesAfterAnswer": "Part dès que vous répondez à la demande ci-dessus",
             "goesAfterTurn": "Part à la fin de ce tour",
             "goesWhenFree": "Part dès que l’agent est libre",
+            "goesWithHeldTurn": "Part avec le tour en attente quand la limite se réinitialise · {when}",
             "removeLabel": "Reprendre le message en attente",
             "reword": "Reformuler",
             "rewordLabel": "Reformuler le message en attente",

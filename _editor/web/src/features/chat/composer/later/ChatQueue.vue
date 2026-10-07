@@ -2,10 +2,12 @@
 import type { QueuedMessage } from "@intentic/sandbox-contract";
 import { Button, Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import { attachmentPreview } from "../../drafts/attachmentPreviews";
 import { usePaneView } from "../../panel/useChat-view";
+import { pickUpWhen, wakesHeldUntil } from "../../run/pickUp";
 import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 // What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with
@@ -14,10 +16,19 @@ import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 // for later, which stands there too, with the time it goes.
 
 const t = useT();
-const { waiting, queuePaused, streaming, awaitingDecision, unqueue, reword, resumeQueue } = usePaneView();
+const { waiting, queuePaused, streaming, awaitingDecision, pickUp, unqueue, reword, resumeQueue } = usePaneView();
+
+// The sandbox's own words stranded behind a spent allowance go with the held turn when it reopens (wakesHeldUntil), and
+// not before: the agent is free, yet nothing can take them, so "as soon as the agent is free" and a Send now (which the
+// daemon would answer by letting nothing go) were both untrue. The strip above says the limit and offers its Continue.
+const now = useNow(() => pickUp.value?.readyAt !== undefined);
+const heldUntil = computed(() => wakesHeldUntil(pickUp.value, waiting.value, now.value));
 
 // What happens to what waits: a parked turn takes it once answered, a running one ends first.
 const hint = computed(() => {
+    if (heldUntil.value !== undefined) {
+        return t(`chat.chatQueue.goesWithHeldTurn`, { when: pickUpWhen(heldUntil.value, now.value) });
+    }
     if (!streaming.value) {
         return t(`chat.chatQueue.goesWhenFree`);
     }
@@ -113,8 +124,9 @@ const save = async (message: QueuedMessage): Promise<void> => {
         </div>
         <p class="flex items-center gap-2 px-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1">{{ hint }}</span>
-            <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. -->
-            <Button v-if="!streaming" size="small" :text="true" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. Not words a
+                 spent allowance holds: the press would let nothing go, and the strip's Continue is the way to try sooner. -->
+            <Button v-if="!streaming && heldUntil === undefined" size="small" :text="true" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </p>
     </div>
 </template>

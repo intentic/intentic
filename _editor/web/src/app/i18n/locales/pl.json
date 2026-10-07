@@ -2756,6 +2756,7 @@
             "goesAfterAnswer": "Trafi dalej, gdy odpowiesz na prośbę powyżej",
             "goesAfterTurn": "Wyjdzie, gdy ta tura się skończy",
             "goesWhenFree": "Wyjdzie, gdy tylko agent będzie wolny",
+            "goesWithHeldTurn": "Wyjdzie razem ze wstrzymaną turą, gdy limit się odnowi · {when}",
             "removeLabel": "Wycofaj oczekującą wiadomość",
             "reword": "Przeredaguj",
             "rewordLabel": "Przeredaguj oczekującą wiadomość",

@@ -2756,6 +2756,7 @@
             "goesAfterAnswer": "Goes in once you answer the request above",
             "goesAfterTurn": "Goes when this turn ends",
             "goesWhenFree": "Goes out as soon as the agent is free",
+            "goesWithHeldTurn": "Goes with the held turn when the limit resets · {when}",
             "removeLabel": "Take back waiting message",
             "reword": "Reword",
             "rewordLabel": "Reword waiting message",

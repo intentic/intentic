@@ -10,6 +10,7 @@ import {
     pickUpWhen,
     pressCost,
     repointedPickUp,
+    wakesHeldUntil,
     warmedPickUp,
 } from "./pickUp";
 
@@ -216,5 +217,29 @@ describe(`the rest after a refusal`, () => {
         const refused = cooledPickUp({ reason: `limit`, held: { ran: false } }, NOW);
         expect(warmedPickUp(refused)).toEqual({ reason: `limit`, held: { ran: false } });
         expect(pickUpReady(warmedPickUp(refused), NOW)).toBe(true);
+    });
+});
+
+describe(`wakesHeldUntil`, () => {
+    const wake = { id: `w1`, text: `Watch fired`, voice: `sandbox`, queuedAt: 1, revision: 1 } as const;
+    const report = { id: `r1`, text: `child report`, voice: `agent`, queuedAt: 1, revision: 1 } as const;
+    const typed = { id: `m1`, text: `and the docs`, voice: `person`, queuedAt: 1, revision: 1 } as const;
+    const held = { reason: `limit`, readyAt: NOW + 3_600_000, held: { ran: true } } as const;
+
+    it(`holds the sandbox's and an agent's words until a held limit reopens, as the daemon does`, () => {
+        expect(wakesHeldUntil(held, [wake, report], NOW)).toBe(NOW + 3_600_000);
+    });
+
+    it(`lets them go the ordinary way once anything a person typed waits with them: that turn is the person's call`, () => {
+        expect(wakesHeldUntil(held, [wake, typed], NOW)).toBeUndefined();
+    });
+
+    it(`holds nothing with no turn held, no reopen named, the reopen passed, another wall, or nothing waiting`, () => {
+        expect(wakesHeldUntil(undefined, [wake], NOW)).toBeUndefined();
+        expect(wakesHeldUntil({ reason: `limit`, readyAt: NOW + 60_000 }, [wake], NOW)).toBeUndefined();
+        expect(wakesHeldUntil({ reason: `limit`, held: { ran: true } }, [wake], NOW)).toBeUndefined();
+        expect(wakesHeldUntil({ ...held, readyAt: NOW - 1 }, [wake], NOW)).toBeUndefined();
+        expect(wakesHeldUntil({ reason: `outage`, readyAt: NOW + 60_000, held: { ran: true } }, [wake], NOW)).toBeUndefined();
+        expect(wakesHeldUntil(held, [], NOW)).toBeUndefined();
     });
 });

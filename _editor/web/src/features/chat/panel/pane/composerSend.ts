@@ -23,7 +23,7 @@ import type { InputHistory } from "../../drafts/inputHistory";
 import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { pickUpReady, pickUpShort } from "../../run/pickUp";
+import { pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/pickUp";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
 import { track } from "../../../../app/analytics";
@@ -208,7 +208,9 @@ export const useComposerSend = (host: SendHost) => {
         steerable: view.steerable.value,
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
         pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
-        queued: queued.value.length,
+        // Not the sandbox's own words a spent allowance holds (wakesHeldUntil): they go with the held turn, so they neither
+        // hide the strip that says the limit and offers Continue, nor give a bare press a queue to send that cannot go.
+        queued: queued.value.length - (wakesHeldUntil(pickUp.value, view.waiting.value, paneNow.value) === undefined ? 0 : view.waiting.value.length),
         // Everything waiting is booked for later: a bare press then has nothing it may send now.
         queueScheduled: view.waiting.value.length === 0 && view.bookedGroups.value.length > 0,
         connected: connected.value,

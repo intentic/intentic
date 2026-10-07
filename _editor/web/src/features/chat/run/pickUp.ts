@@ -1,4 +1,4 @@
-import type { AccountState, HeldEnding, RetryLadder, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import type { AccountState, HeldEnding, QueuedMessage, RetryLadder, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
@@ -103,6 +103,20 @@ export const warmedPickUp = ({ coolUntil: _rest, ...pickUp }: PickUp): PickUp =>
 
 // Whether the press is resting after a refusal (cooledPickUp).
 export const pickUpCooling = (pickUp: PickUp, now: number = Date.now()): boolean => pickUp.coolUntil !== undefined && now < pickUp.coolUntil;
+
+/**
+ * When the sandbox's own words waiting here can go (ms): the instant a spent allowance reopens, while the daemon holds the
+ * turn behind it and nobody typed anything that waits. The client's reading of the daemon's rule (turn-admission.ts,
+ * heldBehindLimit): a turn opened before then is refused at the door and would take the held work's place, so a watch's
+ * report or an agent's word waits for the window and goes with the held turn. Until then nothing lets them go early, so
+ * no press may offer that. Undefined when what waits goes the ordinary way.
+ */
+export const wakesHeldUntil = (pickUp: PickUp | undefined, waiting: readonly QueuedMessage[], now: number = Date.now()): number | undefined => {
+    if (pickUp?.reason !== `limit` || pickUp.held === undefined || pickUp.readyAt === undefined || pickUp.readyAt <= now) {
+        return undefined;
+    }
+    return waiting.length > 0 && waiting.every((message) => message.voice !== `person`) ? pickUp.readyAt : undefined;
+};
 
 // Past this, a wall-clock time reads better than a countdown nobody can act on; under it, the relative wait wins.
 const CLOCK_FROM_MS = 90 * 60 * 1_000;

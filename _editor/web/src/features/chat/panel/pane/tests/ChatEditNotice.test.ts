@@ -99,6 +99,25 @@ describe(`the queue`, () => {
         expect(element.textContent).toContain(`Goes out as soon as the agent is free`);
     });
 
+    // The agent is free, yet the daemon lets nothing of the sandbox's go while a spent allowance holds the turn: the row
+    // says when it goes instead, and offers no Send now that would let nothing go.
+    it(`says a watch's report goes with the turn a spent allowance holds, and offers no Send now`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.pickUp.value = { reason: `limit`, readyAt: Date.now() + 20 * 60_000, held: { ran: true } };
+        chat.queue.value = { items: [{ id: `w1`, text: `Watch fired`, voice: `sandbox`, queuedAt: 1, revision: 1 }], revision: 1 };
+        const { element } = mountOver(ChatQueue, chat);
+        await nextTick();
+
+        expect(element.textContent).toContain(`Goes with the held turn when the limit resets · about 20 min`);
+        expect(element.textContent).not.toContain(`Send now`);
+
+        // Once the allowance reopens nothing holds it, and the ordinary promise and press are back.
+        chat.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000, held: { ran: true } };
+        await nextTick();
+        expect(element.textContent).toContain(`Goes out as soon as the agent is free`);
+        expect(element.textContent).toContain(`Send now`);
+    });
+
     it(`draws a picture that waits with a message as one, and any other file by its name`, async () => {
         const chat = new Conversation(`c1`);
         const picture = `${STATE_DIR}/records/artifacts/attachments/a1/shot.png`;
