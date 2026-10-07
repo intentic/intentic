@@ -7,6 +7,7 @@ import MemoryRaise from "../notices/MemoryRaise.vue";
 import ChatHeldBooking from "./ChatHeldBooking.vue";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
 import ChatHeldStatus from "./ChatHeldStatus.vue";
+import { HELD_PRESS_ATTR } from "../../panel/pane/heldLineSeen";
 import { useHeldQueue } from "./heldQueue";
 import { sendAnywayTip } from "./memoryTip";
 
@@ -52,7 +53,8 @@ const press = computed((): HeldPress => {
     >
         <template v-if="held">
             <ChatHeldBubble v-for="message in waiting" :key="message.id" :message="message" :compact="compact" />
-            <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact">
+            <!-- Marked so the bar over the composer (ChatWaitingBar) repeats a memory hold only while this line is out of view. -->
+            <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
                 <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                     <Button size="small" v-tooltip.top="press.hint" @click="resumeQueue(heldIds)">{{ press.label }}</Button>

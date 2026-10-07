@@ -6,6 +6,7 @@ import { retryHydrate } from "../../run/useChat-sessions";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { memoryShare, sendAnywayTip } from "../../transcript/held/memoryTip";
 import { usePaneView } from "../useChat-view";
+import { useHeldLineSeen } from "./heldLineSeen";
 import { pendingDecisionOf, type WaitKind } from "./pendingDecision";
 import { showWaitingCard, waitingCardIn } from "./waitingCard";
 
@@ -22,7 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{ approve: []; keepPlanning: [] }>();
 
 const t = useT();
-const { conversation, messages, waitsOn, staged, ending, resumeQueue } = usePaneView();
+const { conversation, messages, waitsOn, staged, ending, waiting, resumeQueue } = usePaneView();
 const root = useTemplateRef<HTMLElement>(`root`);
 
 // A turn a person already ended owes nobody an answer, whatever it is still unwinding.
@@ -84,11 +85,16 @@ watch(
 );
 
 // A message held for memory, said as held with the figures, and the two ways on: send it now, or leave it held, which
-// only folds this notice away; the message stays held at the transcript's foot with its own press.
+// only folds this notice away; the message stays held at the transcript's foot with its own press. That line under the
+// message is the hold's home (ChatHeldMessages): this one stands in for it only while it is scrolled out of view, so
+// a reader never sees the same hold and the same press twice.
 const { held, reason, detail } = useHeldQueue();
 const leftHeld = ref<string | undefined>();
 const holdKey = computed(() => (held.value && reason.value === `memory` ? `${conversation.value.conversationId}:${detail.value ?? ``}` : undefined));
-const memoryShown = computed(() => holdKey.value !== undefined && holdKey.value !== leftHeld.value);
+const lineSeen = useHeldLineSeen(root, holdKey);
+const memoryShown = computed(() => holdKey.value !== undefined && holdKey.value !== leftHeld.value && !lineSeen.value);
+// Lets go only the messages the hold kept, as the line's own press does: a booking beside them stays on its time.
+const sendHeld = (): Promise<void> => resumeQueue(waiting.value.map((message) => message.id));
 const memoryLine = computed(() => {
     const share = memoryShare(detail.value);
     return share === undefined ? t(`chat.chatWaitingBar.heldMemory`) : t(`chat.chatWaitingBar.heldMemoryShare`, { share });
@@ -96,47 +102,50 @@ const memoryLine = computed(() => {
 </script>
 
 <template>
-    <div v-if="look !== undefined || memoryShown" ref="root" class="flex flex-col gap-2">
-        <div
-            v-if="decision !== undefined && look !== undefined"
-            role="status"
-            class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-primary-500/40 bg-card px-3 py-2 text-2xs shadow-sm"
-        >
-            <Icon :name="look.icon" class="shrink-0 text-primary-500" />
-            <!-- A floor, not `min-w-0`: every press beside it is `shrink-0`, and a squeezed line would lose what is asked. -->
-            <span class="min-w-[12rem] flex-1 truncate" v-tooltip.top.overflow="decision.title">
-                <span class="font-medium text-content">{{ look.label() }}</span>
-                <span v-if="decision.title" class="text-muted"> · {{ decision.title }}</span>
-                <span v-else-if="decision.requestId === undefined" class="text-muted"> · {{ t(`chat.chatWaitingBar.fetching`) }}</span>
-            </span>
-            <span class="flex shrink-0 flex-wrap items-center gap-1">
-                <!-- The plan's answers stand here alone, not on its card too: pinned, and beside the box whose notes they carry. -->
-                <template v-if="decision.kind === `plan` && decision.requestId !== undefined">
-                    <Button size="small" :disabled="!props.canDrive || replying" @click="emit(`approve`)">
-                        {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}
-                    </Button>
-                    <Button size="small" severity="secondary" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
-                        {{ t(`chat.chatWaitingBar.keepPlanning`) }}
-                    </Button>
+    <!-- `contents`: always in the tree, so the bar can find its pane's held line before it shows, yet no gap in the footer. -->
+    <div ref="root" class="contents">
+        <div v-if="look !== undefined || memoryShown" class="flex flex-col gap-2">
+            <div
+                v-if="decision !== undefined && look !== undefined"
+                role="status"
+                class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-primary-500/40 bg-card px-3 py-2 text-2xs shadow-sm"
+            >
+                <Icon :name="look.icon" class="shrink-0 text-primary-500" />
+                <!-- A floor, not `min-w-0`: every press beside it is `shrink-0`, and a squeezed line would lose what is asked. -->
+                <span class="min-w-[12rem] flex-1 truncate" v-tooltip.top.overflow="decision.title">
+                    <span class="font-medium text-content">{{ look.label() }}</span>
+                    <span v-if="decision.title" class="text-muted"> · {{ decision.title }}</span>
+                    <span v-else-if="decision.requestId === undefined" class="text-muted"> · {{ t(`chat.chatWaitingBar.fetching`) }}</span>
+                </span>
+                <span class="flex shrink-0 flex-wrap items-center gap-1">
+                    <!-- The plan's answers stand here alone, not on its card too: pinned, and beside the box whose notes they carry. -->
+                    <template v-if="decision.kind === `plan` && decision.requestId !== undefined">
+                        <Button size="small" :disabled="!props.canDrive || replying" @click="emit(`approve`)">
+                            {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}
+                        </Button>
+                        <Button size="small" severity="secondary" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
+                            {{ t(`chat.chatWaitingBar.keepPlanning`) }}
+                        </Button>
+                    </template>
+                    <Button size="small" severity="secondary" :text="true" @click="show">{{ showLabel }}</Button>
+                </span>
+            </div>
+            <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
+                {{ memoryLine }}
+                <template #actions>
+                    <Button size="small" :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="sendHeld()">{{
+                        t(`chat.chatHeld.sendAnyway`)
+                    }}</Button>
+                    <Button
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: t(`chat.chatWaitingBar.waitHint`) }"
+                        @click="leftHeld = holdKey"
+                        >{{ t(`chat.chatWaitingBar.wait`) }}</Button
+                    >
                 </template>
-                <Button size="small" severity="secondary" :text="true" @click="show">{{ showLabel }}</Button>
-            </span>
+            </Notice>
         </div>
-        <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
-            {{ memoryLine }}
-            <template #actions>
-                <Button size="small" :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="resumeQueue()">{{
-                    t(`chat.chatHeld.sendAnyway`)
-                }}</Button>
-                <Button
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: t(`chat.chatWaitingBar.waitHint`) }"
-                    @click="leftHeld = holdKey"
-                    >{{ t(`chat.chatWaitingBar.wait`) }}</Button
-                >
-            </template>
-        </Notice>
     </div>
 </template>

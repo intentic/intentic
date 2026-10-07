@@ -17,12 +17,13 @@ const { default: ChatWaitingBar } = await import("../ChatWaitingBar.vue");
 type Chat = InstanceType<typeof Conversation>;
 
 let unmount: (() => void) | undefined;
-const mountBar = (chat: Chat, card?: AgentStanding) => {
+const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement) => {
     const view = conversationView(
         computed(() => chat),
         () => card,
     );
     const element = document.createElement(`div`);
+    inside?.append(element);
     const approve = jest.fn();
     const keepPlanning = jest.fn();
     const app = createApp({ render: () => h(ChatWaitingBar, { canDrive: true, onApprove: approve, onKeepPlanning: keepPlanning }) });
@@ -142,10 +143,49 @@ describe(`a message held for low memory`, () => {
 
         expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Send anyway`, `Wait`]]);
         bar.press(`Send anyway`);
-        expect(resume).toHaveBeenCalledTimes(1);
+        // Only what the hold kept, as the held line's own press: a booking beside it stays on its time.
+        expect(resume.mock.calls).toEqual([[[`m-1`]]]);
 
         bar.press(`Wait`);
         await nextTick();
         expect(bar.rows()).toEqual([]);
+    });
+
+    // The held message's own line under it says the same hold with the same press: on screen, it is the one, and the bar
+    // only stands in for it once it is scrolled away.
+    it(`stays away while the held line is on screen, and stands in for it once it is scrolled out of view`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.queue.value = {
+            items: [{ id: `m-1`, text: `make it pass antivirus`, voice: `person`, queuedAt: 1_000, revision: 1 }],
+            revision: 1,
+            paused: `refused`,
+        };
+        const box = (top: number, bottom: number) => () =>
+            ({ top, bottom, height: bottom - top, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+        const scroller = document.createElement(`div`);
+        scroller.className = `chat-scroller`;
+        const line = document.createElement(`div`);
+        line.setAttribute(`data-held-press`, ``);
+        const footer = document.createElement(`div`);
+        footer.className = `chat-footer`;
+        scroller.append(line, footer);
+        document.body.append(scroller);
+        scroller.getBoundingClientRect = box(0, 800);
+        footer.getBoundingClientRect = box(600, 800);
+        line.getBoundingClientRect = box(560, 580);
+        try {
+            const bar = mountBar(chat, { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE }, footer);
+            await nextTick();
+            await nextTick();
+            expect(bar.rows()).toEqual([]);
+
+            line.getBoundingClientRect = box(900, 920);
+            scroller.dispatchEvent(new Event(`scroll`));
+            await new Promise((done) => requestAnimationFrame(() => done(undefined)));
+            await nextTick();
+            expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Send anyway`, `Wait`]]);
+        } finally {
+            scroller.remove();
+        }
     });
 });
