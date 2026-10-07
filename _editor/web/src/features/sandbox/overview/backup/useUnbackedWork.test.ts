@@ -1,6 +1,6 @@
 // jsdom mounts a component so vue-query's injection is in place; the import graph reads browser globals at load.
 import "@intentic/testing/dom";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { GitRemoteRepo } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor } from "@intentic/testing/bun";
@@ -113,7 +113,7 @@ const fresh = (more: boolean): string[] => {
         return {
             root: WORKSPACE_ROOT,
             tree: [
-                { path: `.intentic`, name: `.intentic`, type: `dir` },
+                { path: STATE_DIR, name: STATE_DIR, type: `dir` },
                 { path: `site`, name: `site`, type: `dir` },
             ],
             hidden: 0,

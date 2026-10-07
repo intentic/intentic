@@ -58,6 +58,9 @@ export const isEnglish = (locale: string | undefined): boolean => locale === "en
 
 const ESCAPES: Record<string, string> = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
 
+// The walk's own stop at the first token it cannot read, told apart from a fault in the walk itself.
+class Malformed extends Error {}
+
 // Every string value with its dotted key path and line. A hand-rolled walk rather than JSON.parse, because the parsed
 // object has no line numbers and the caller needs the line to anchor on; malformed input yields what was read before
 // the fault, which is enough to anchor anything above it.
@@ -107,7 +110,7 @@ export const parseCatalog = (text: string): CatalogEntry[] => {
             }
             at += 1;
         }
-        throw new Error("unterminated string");
+        throw new Malformed("unterminated string");
     };
     const value = (path: readonly string[]): void => {
         space();
@@ -122,12 +125,12 @@ export const parseCatalog = (text: string): CatalogEntry[] => {
             for (;;) {
                 space();
                 if (text[at] !== '"') {
-                    throw new Error("expected a key");
+                    throw new Malformed("expected a key");
                 }
                 const key = string();
                 space();
                 if (text[at] !== ":") {
-                    throw new Error("expected a colon");
+                    throw new Malformed("expected a colon");
                 }
                 at += 1;
                 value([...path, key]);
@@ -140,7 +143,7 @@ export const parseCatalog = (text: string): CatalogEntry[] => {
                     at += 1;
                     return;
                 }
-                throw new Error("expected , or }");
+                throw new Malformed("expected , or }");
             }
         }
         if (char === "[") {
@@ -161,7 +164,7 @@ export const parseCatalog = (text: string): CatalogEntry[] => {
                     at += 1;
                     return;
                 }
-                throw new Error("expected , or ]");
+                throw new Malformed("expected , or ]");
             }
         }
         if (char === '"') {
@@ -176,8 +179,11 @@ export const parseCatalog = (text: string): CatalogEntry[] => {
     };
     try {
         value([]);
-    } catch {
-        // Malformed: keep what was read.
+    } catch (error) {
+        // Malformed, or nested deeper than the stack (a RangeError): keep what was read. Anything else is a bug in the walk.
+        if (!(error instanceof Malformed) && !(error instanceof RangeError)) {
+            throw error;
+        }
     }
     return entries;
 };
@@ -197,6 +203,8 @@ export const loadCatalogs = async (entries: readonly FileEntry[]): Promise<Catal
                     if (cached !== undefined && cached.mtimeMs === entry.mtimeMs && cached.size === entry.size) {
                         return { path: entry.path, locale: localeOf(entry.path), entries: cached.entries };
                     }
+                    // allow(silent-catch): a catalog gone or unreadable since the sweep is skipped, and the others still
+                    // answer; failing here would drop the whole literal pass for one file.
                     const text = await readFile(entry.abs, "utf8").catch(() => undefined);
                     if (text === undefined) {
                         return undefined;

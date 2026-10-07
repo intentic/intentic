@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
-import type { SecretRow } from "../../sandbox/secrets/secretRows";
+import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { useCredentialGates, useSecretHosts } from "./useSecrets";
 
 // The host guard, the second half of a secret's "Needs approval" section, under the named approver: on, a use goes

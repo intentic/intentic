@@ -1,13 +1,13 @@
 import { waitFor } from "@intentic/testing/bun";
-import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // Pins the two halves of "never a press that can only fail": what the page can never do is found before the mic is
 // offered (voiceUnsupported), and what a press did hit stays on screen, counted when it repeats, and reaches analytics.
 
 const sandboxJson = jest.fn((path: string): Promise<unknown> => Promise.reject(new Error(`unexpected ${path}`)));
-jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson }));
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson }));
 const track = jest.fn();
-jest.mock(`../../../app/analytics`, () => ({ track }));
+jest.mock(`../../../../app/analytics`, () => ({ track }));
 
 const { useVoiceInput, voiceUnsupported } = await import(`./useVoiceInput`);
 

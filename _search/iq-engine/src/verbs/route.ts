@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { type RgOptions, rgSearch } from "../engines/lexical.js";
 import { jsxRoutes, matchRoutes, parseRouteAddress, type RouteAddress, type RouteDecl, type RouteMatch, routeTable } from "../engines/routes.js";
 import type { FileEntry, RankedGroup, RankedHit } from "../types.js";
@@ -146,7 +147,9 @@ const routerFiles = async (root: string, rgBase: RgBase): Promise<{ path: string
     const paths = [...new Set(markers.hits.map((hit) => hit.path))].filter((path) => CODE_FILE.test(path));
     const read = await Promise.all(
         paths.map(async (path) => {
-            const text = await readFile(join(root, path), "utf8").catch(() => undefined);
+            // Here and below, a file gone since the sweep is passed over; one that cannot be read fails the route answer,
+            // and the caller falls back to the ordinary search.
+            const text = await readFile(join(root, path), "utf8").catch(undefinedIfMissing);
             return text === undefined ? undefined : { path, text, routes: [...routeTable(text), ...jsxRoutes(text)] };
         }),
     );
@@ -214,7 +217,7 @@ export const routeAnswer = async (query: string, root: string, entries: readonly
     const steps: Located[] = [];
     const navs: Located[] = [];
     let current = view;
-    let text = current === undefined ? undefined : await readFile(join(root, current), "utf8").catch(() => undefined);
+    let text = current === undefined ? undefined : await readFile(join(root, current), "utf8").catch(undefinedIfMissing);
     for (const [name, value] of [...best.values, ...address.query]) {
         if (current === undefined || text === undefined) {
             break;
@@ -225,7 +228,7 @@ export const routeAnswer = async (query: string, root: string, entries: readonly
         } else {
             for (const spec of localImports(text)) {
                 const imported = resolveImport(current, spec, allowed);
-                const importedText = imported === undefined ? undefined : await readFile(join(root, imported), "utf8").catch(() => undefined);
+                const importedText = imported === undefined ? undefined : await readFile(join(root, imported), "utf8").catch(undefinedIfMissing);
                 const line = importedText === undefined ? undefined : navLine(importedText, value);
                 if (imported !== undefined && line !== undefined) {
                     navs.push({ path: imported, line, kind: "text" });
@@ -249,7 +252,7 @@ export const routeAnswer = async (query: string, root: string, entries: readonly
         );
         if (next !== undefined) {
             current = next;
-            text = await readFile(join(root, next), "utf8").catch(() => undefined);
+            text = await readFile(join(root, next), "utf8").catch(undefinedIfMissing);
         }
     }
     // The screen the address ends on: the last view descended into, anchored on the branch for the last value when
@@ -266,7 +269,7 @@ export const routeAnswer = async (query: string, root: string, entries: readonly
     const lineText = async (path: string, line: number): Promise<string> => {
         let lines = lineCache.get(path);
         if (lines === undefined) {
-            lines = ((await readFile(join(root, path), "utf8").catch(() => "")) as string).split("\n");
+            lines = ((await readFile(join(root, path), "utf8").catch(undefinedIfMissing)) ?? "").split("\n");
             lineCache.set(path, lines);
         }
         return (lines[line - 1] ?? "").trimEnd();

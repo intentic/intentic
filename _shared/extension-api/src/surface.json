@@ -2432,5 +2432,161 @@
             "sandboxValue",
             "satisfiesEngines"
         ]
+    },
+    "2.25.0": {
+        "manifest": [
+            "$schema",
+            "art",
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
+        "contributes": [
+            "agent",
+            "automationTemplates",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "sideViews",
+            "tools",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "audience",
+            "backend",
+            "chat",
+            "commands",
+            "documents",
+            "href",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "sideViews",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "previewAddress",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
+        "workspaceApi": [
+            "capabilities",
+            "file",
+            "fillDiff",
+            "inProject",
+            "onDidChange",
+            "onDidChangeFiles",
+            "onDidChangeProject",
+            "onDidChangeRefs",
+            "onDidChangeRepos",
+            "openDiff",
+            "project",
+            "readJson",
+            "repos",
+            "setProject",
+            "write"
+        ],
+        "chatApi": [
+            "composeLoop",
+            "composeWorkflow",
+            "openAgent",
+            "openSession"
+        ],
+        "daemonApi": [
+            "json",
+            "request",
+            "rpc"
+        ],
+        "serverApi": [
+            "apiVersion",
+            "daemon",
+            "extensionDir",
+            "log",
+            "routes",
+            "tools",
+            "workspaceRoot"
+        ],
+        "toolDefinition": [
+            "call",
+            "description",
+            "effect",
+            "inputSchema",
+            "name"
+        ],
+        "sideViewsApi": [
+            "open",
+            "register"
+        ],
+        "sideViewRegistration": [
+            "claim",
+            "describe",
+            "home",
+            "id",
+            "view"
+        ],
+        "viewRegistration": [
+            "asks",
+            "auxiliary",
+            "badge",
+            "detect",
+            "fallback",
+            "id",
+            "label",
+            "surface",
+            "view",
+            "warm"
+        ],
+        "manifestSchema": "752538b92724e78fe88bc4749fee773aa2c1a480053c42ea2643226a32b2181a",
+        "moduleExports": [
+            "conversions",
+            "extensionApiVersion",
+            "flattenQuery",
+            "hostSlot",
+            "mergeQuery",
+            "readDaemonStream",
+            "resetSandboxScope",
+            "sandboxDocument",
+            "sandboxLedger",
+            "sandboxPoll",
+            "sandboxRef",
+            "sandboxScopeGuard",
+            "sandboxShallowRef",
+            "sandboxValue",
+            "satisfiesEngines"
+        ]
     }
 }

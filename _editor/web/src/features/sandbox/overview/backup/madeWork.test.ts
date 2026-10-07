@@ -1,10 +1,11 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { GitChanges, GitLog } from "@intentic/sandbox-contract";
 import { holdsWork, madeEntries, onlyStarter, starterStateOf } from "./madeWork";
 
 // What counts as work for "No repository to push this work to". A phone that had just signed up was told its work had
 // nowhere to go before it had sent a message: the workspace held only the daemon's state and the seeded starter site.
 
-const FRESH = [`.intentic`, `site`];
+const FRESH = [STATE_DIR, `site`];
 
 const seedLog: GitLog = {
     repo: `site`,
@@ -53,14 +54,14 @@ describe(`a fresh workspace`, () => {
     });
 
     it(`holds nothing when the image seeded no starter at all`, () => {
-        expect(holdsWork([`.intentic`], `unread`)).toBe(false);
+        expect(holdsWork([STATE_DIR], `unread`)).toBe(false);
     });
 });
 
 describe(`work`, () => {
     it(`is anything else at the top of the workspace, whoever made it`, () => {
         expect(holdsWork([...FRESH, `notes.md`], `seed`)).toBe(true);
-        expect(holdsWork([`.intentic`, `my-app`], `unread`)).toBe(true);
+        expect(holdsWork([STATE_DIR, `my-app`], `unread`)).toBe(true);
         expect(onlyStarter([...FRESH, `notes.md`])).toBe(false);
     });
 

@@ -48,7 +48,7 @@ export const askAgentToResolve = (conversation: string | undefined) => {
 
 export const outcomeLine = (to: string, from: string) => t(\`agents.agentActions.keptFailing\`, { to, from });
 `,
-    "web/src/features/agents/picturePeek.ts": "export const peek = (url: string) => url;\n",
+    "web/src/features/agents/pictureQuickLook.ts": "export const quickLook = (url: string) => url;\n",
     "web/src/features/agents/agentStatus.ts": `import { t } from "../../i18n";
 
 export const statusLine = (state: string) => t(\`status.\${state}\`);
@@ -206,7 +206,7 @@ describe("routes", () => {
 describe("siblings", () => {
     test("the answer's neighbours are named, ranked first, within the budget", async () => {
         const outcome = await engine.run(request("q", "That agent has no conversation left to send to."));
-        expect(lineOf(outcome.text, "siblings: ")).toBe("siblings: AgentCard.vue · Agents.vue · agentStatus.ts · picturePeek.ts · updateOutcome.ts");
+        expect(lineOf(outcome.text, "siblings: ")).toBe("siblings: AgentCard.vue · Agents.vue · agentStatus.ts · pictureQuickLook.ts · updateOutcome.ts");
         for (const budget of [100, 200, 400]) {
             const tight = await engine.run(request("q", "That agent has no conversation left to send to.", budget));
             expect(estimateTokens(tight.text), `budget=${budget}`).toBeLessThanOrEqual(budget);

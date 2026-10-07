@@ -2,8 +2,8 @@
 import { Button, ui, Notice } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { devFillGet } from "../../setup/devFill";
-import { useCapabilitySecret } from "./useCapabilities";
+import { devFillGet } from "../../../setup/devFill";
+import { useCapabilitySecret } from "../useCapabilities";
 import { useSecrets } from "./useSecrets";
 import { useT } from "@intentic/ui/i18n";
 

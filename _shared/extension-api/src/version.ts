@@ -149,4 +149,9 @@
 // `webext` card stands for a browser family. Additive, but a manifest declaring one needs this version: an older host
 // knows no such kind and refuses the whole manifest at parse. No member or top-level key was added, so the manifest
 // digest is the only grain that records it.
-export const extensionApiVersion = "2.24.0";
+// 2.25.0 lets a capability card keep its credential out of the agent's hands: `broker`, the routes (an upstream, the
+// variable that carries the gateway's address, how the credential is attached) and the method and path rules by which
+// the sandbox's credential gateway forwards requests for it. It shipped inside 2.24.0 without a version: an older host's
+// parse drops the block, so there the credential reaches the agent's environment as it did before. No member or
+// top-level key was added, so the manifest digest is the only grain that records it.
+export const extensionApiVersion = "2.25.0";

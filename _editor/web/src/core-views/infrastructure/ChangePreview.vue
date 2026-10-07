@@ -2,7 +2,7 @@
 import { Button, Card, ui, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { type PlanStep, statusDot } from "../../features/extensions/reconcileStatus";
-import SecretField from "../../features/capabilities/connect/SecretField.vue";
+import SecretField from "../../features/capabilities/connect/secrets/SecretField.vue";
 import type { usePlanPreview } from "./usePlanPreview";
 import { useT } from "@intentic/ui/i18n";
 

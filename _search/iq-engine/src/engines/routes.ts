@@ -375,6 +375,9 @@ export interface RouteAddress {
     readonly query: readonly (readonly [string, string])[];
 }
 
+// What a bare path parses against; nothing is fetched from it.
+const ROUTE_BASE = "http://route.invalid";
+
 // An address as the browser shows it: a leading slash, no whitespace, optionally a query and a hash. A last segment with
 // a file extension is a file path, not a screen.
 export const parseRouteAddress = (query: string): RouteAddress | undefined => {
@@ -382,12 +385,11 @@ export const parseRouteAddress = (query: string): RouteAddress | undefined => {
     if (!/^\/[^\s]*$/.test(trimmed) || trimmed.startsWith("//")) {
         return undefined;
     }
-    let url: URL;
-    try {
-        url = new URL(trimmed, "http://route.invalid");
-    } catch {
+    // What URL cannot parse is not an address.
+    if (!URL.canParse(trimmed, ROUTE_BASE)) {
         return undefined;
     }
+    const url = new URL(trimmed, ROUTE_BASE);
     const segments = url.pathname
         .split("/")
         .filter((segment) => segment !== "")

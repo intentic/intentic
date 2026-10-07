@@ -3468,7 +3468,7 @@
             "intro": "Voyez ce qui remplit le disque de ce sandbox, et libérez ce qui peut partir sans risque. Une analyse lit chaque fichier des volumes du sandbox, elle peut donc prendre une minute.",
             "keptItems": "{count} élément est resté : en cours d'utilisation, ou modifié au cours du dernier jour. | {count} éléments sont restés : en cours d'utilisation, ou modifiés au cours du dernier jour.",
             "measured": "Mesuré {when}",
-            "staleNote": "Le disque a probablement changé depuis. Analysez à nouveau pour voir les tailles actuelles.",
+            "staleNote": "Analysez à nouveau pour les tailles actuelles.",
             "measuring": "Mesure en cours…",
             "otherUsage": "Autre usage",
             "partial": "L'analyse a atteint sa limite de temps avant de tout lire : chaque taille est donc au moins celle indiquée.",

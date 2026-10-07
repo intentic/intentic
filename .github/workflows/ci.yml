@@ -833,6 +833,9 @@ jobs:
   #                            cannot sit on the container's own overlayfs root. `exec` because checks run from
   #                            worktrees under it. Privileged adds nothing the host docker socket other jobs mount
   #                            does not already hand a job, and the fork boundary holds as everywhere (`needs`).
+  #   turn-sandbox             a fenced conversation's bubblewrap sandbox (user and pid namespaces, an overlay inside
+  #                            one) under the same /history; bwrap is baked into ci-base. The fenced watch check runs
+  #                            in one too, so watch-check needs it as well.
   #   claude-policy            CAP_SYS_ADMIN as above, to lay the image's Claude Code managed settings over /etc for
   #                            one probe (its own tmpfs holds the overlay's upper layer), with the bundled CLI.
   #   webq cli                 Playwright's Chromium, into the shared browser cache perf-browser also fills (the same
@@ -918,7 +921,7 @@ jobs:
           set -uo pipefail
           export IQ_MODEL_DIR="$PWD/.image-out/iq-models"
           failed=0
-          pnpm --filter @intentic/sandbox exec suites src/agent/verification/watch-check.integration.test.ts src/conversations/worktrees/isolation.integration.test.ts src/runtimes/cursor/cursor-host.integration.test.ts src/runtimes/claude/claude-policy.integration.test.ts || failed=1
+          pnpm --filter @intentic/sandbox exec suites src/agent/verification/watch-check.integration.test.ts src/conversations/worktrees/isolation.integration.test.ts src/conversations/worktrees/turn-sandbox.integration.test.ts src/runtimes/cursor/cursor-host.integration.test.ts src/runtimes/claude/claude-policy.integration.test.ts || failed=1
           pnpm --filter @intentic/webq exec suites src/cli.integration.test.ts || failed=1
           pnpm --filter @intentic/scaffold exec suites src/inject-template.integration.test.ts || failed=1
           pnpm --filter @intentic/iq-engine exec suites src/query/query-worker.integration.test.ts src/verbs/natural.integration.test.ts || failed=1

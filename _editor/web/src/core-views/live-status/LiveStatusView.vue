@@ -6,7 +6,7 @@ import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../PlanStepRow.vue";
 import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
 import { groupAccent } from "../../features/extensions/resourceVisual";
-import { reveal } from "../../features/capabilities/connect/useSecrets";
+import { reveal } from "../../features/capabilities/connect/secrets/useSecrets";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useDeployments } from "../../features/extensions/useDeployments";

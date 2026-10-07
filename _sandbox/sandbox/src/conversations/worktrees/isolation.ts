@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { sessionsDir } from "../../sessions/session-store.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract";
@@ -312,8 +313,12 @@ export const mirrorAdmitted = (fence: readonly string[], worktree: string, rel: 
     }
     try {
         return statSync(join(worktree, parent)).isDirectory();
-    } catch {
-        return false;
+    } catch (error) {
+        // Absent from the checkout is the answer; a parent it cannot read is not one.
+        if (isMissing(error)) {
+            return false;
+        }
+        throw error;
     }
 };
 

@@ -730,6 +730,129 @@
                                             "minLength": 1
                                         }
                                     },
+                                    "broker": {
+                                        "description": "Route the credential through the sandbox's credential gateway instead of handing it to the agent: per upstream, the variable carrying the gateway's address and how the credential is attached, plus optional method and path rules. Every `env` variable whose template names a secret field then holds an inert placeholder. Declare it on every card whose service is spoken to over HTTP.",
+                                        "type": "object",
+                                        "properties": {
+                                            "routes": {
+                                                "minItems": 1,
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "upstream": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The service's base URL, a template over the fields like `env` (`https://api.github.com`, `${url}`). What is sent to this route's gateway address goes here and nowhere else."
+                                                        },
+                                                        "env": {
+                                                            "description": "The variable the agent's shell finds this route's gateway address in (`GITHUB_API_URL`), suffixed per instance like `env`. Naming one of `env`'s own variables (`GITLAB_URL`) points it at the gateway instead of the service, so a skill written against it needs no change.",
+                                                            "type": "string",
+                                                            "pattern": "^[A-Z][A-Z0-9_]*$"
+                                                        },
+                                                        "headers": {
+                                                            "description": "The headers that carry the credential, templated over the fields (`{\"authorization\": \"Bearer ${token}\"}`). The gateway sets them on every request it forwards, replacing any the agent sent under the same name.",
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string"
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "basic": {
+                                                            "description": "HTTP Basic credentials, templated over the fields, for a service that takes them (git over HTTPS: `x-access-token` and `${token}`).",
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "username": {
+                                                                    "type": "string"
+                                                                },
+                                                                "password": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "username",
+                                                                "password"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        },
+                                                        "form": {
+                                                            "description": "Fields the gateway sets in a request's url-encoded form body, templated over the fields, for a service that takes its credential there: an OAuth token exchange's `client_secret` or `refresh_token`. What the exchange answers (a short-lived access token) is the agent's to use; the long-lived secret never is.",
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string"
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "pathPrefix": {
+                                                            "description": "A path the gateway puts before the agent's own, templated over the fields, for a service that takes its credential in the path (Telegram's `/bot${token}`).",
+                                                            "type": "string",
+                                                            "format": "starts_with",
+                                                            "pattern": "^\\/.*"
+                                                        },
+                                                        "git": {
+                                                            "description": "This upstream serves git over HTTP: the agent's git is pointed at the gateway for it (`url.<gateway>.insteadOf`), so a clone, fetch or push needs no credential in the agent's hands.",
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "upstream"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            },
+                                            "rules": {
+                                                "description": "What the credential may do, checked in order against each request the gateway forwards; the first rule covering a request decides, and one no rule covers is allowed. The owner's own rules for a card replace these.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "methods": {
+                                                            "description": "The HTTP methods it covers (`DELETE`, `PUT`); absent covers every method.",
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string",
+                                                                "pattern": "^[A-Z]+$"
+                                                            }
+                                                        },
+                                                        "paths": {
+                                                            "description": "The paths it covers, below the route's upstream: `*` matches one segment, `**` any number of them (`/repos/*/*/hooks/**`). Absent covers every path.",
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string",
+                                                                "format": "starts_with",
+                                                                "pattern": "^\\/.*"
+                                                            }
+                                                        },
+                                                        "action": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "allow",
+                                                                "ask",
+                                                                "deny"
+                                                            ],
+                                                            "description": "`allow` forwards it, `ask` holds it on a card for the owner, `deny` refuses it."
+                                                        },
+                                                        "why": {
+                                                            "description": "One line on what the rule protects, shown on the card or in the refusal.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "action"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "routes"
+                                        ],
+                                        "additionalProperties": false
+                                    },
                                     "mcp": {
                                         "description": "Deprecated: declare `contributes.tools` with `perCard` naming this card instead, and serve the tools with `api.tools.serve`. A path in this extension's backend (`server`) answering MCP over Streamable HTTP; every turn granted a card of this kind gets it as a server named by the card's id, each request arriving at `<path>/<card id>`.",
                                         "effect": "mcp",

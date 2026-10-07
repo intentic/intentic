@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import type { BrokerRule } from "@intentic/extension-manifest";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
-import type { SecretRow } from "../../sandbox/secrets/secretRows";
+import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { useCredentialGates, useCredentialPolicy } from "./useSecrets";
 
 // How a connection's credential reaches the agent, under its approver and host guard: held by the sandbox's credential
@@ -133,7 +133,7 @@ const ruleLine = (rule: BrokerRule): string =>
                 <textarea
                     v-if="editing"
                     v-model="draft"
-                    class="ui-input mt-1 w-full font-mono text-2xs"
+                    :class="ui.inputSm('mt-1 w-full resize-y font-mono')"
                     rows="8"
                     spellcheck="false"
                     :aria-label="t(`capabilities.secretCredentialPolicy.rulesJson`)"

@@ -159,7 +159,10 @@ export const createSshAgentSockets = (deps: SshAgentSocketsDeps): SshAgentSocket
             return (await listen(name, { kind: "conversation", conversationId })) === undefined ? undefined : join(deps.dir, name);
         },
         forget: async (conversationId) => {
-            const name = await nameFor(conversationId).catch(() => undefined);
+            const name = await nameFor(conversationId).catch((error: unknown) => {
+                deps.warn("ssh agent: a purged conversation's socket could not be named, so it stays bound until a restart", error);
+                return undefined;
+            });
             if (name !== undefined) {
                 await close(name);
                 bound.delete(name);

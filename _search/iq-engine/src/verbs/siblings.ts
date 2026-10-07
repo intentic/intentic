@@ -4,7 +4,7 @@ import { classOf } from "../workspace/scan.js";
 
 // SIBLINGS: the files beside the answer, named in one capsule line. Mined 2026-10-06 over ~640 sessions: the first iq
 // query named the file the session went on to edit 20% of the time, but that file's DIRECTORY 58% of the time. iq lands
-// in the right folder and names the wrong neighbour (ChatImageThumb.vue answered, picturePeek.ts edited), so the
+// in the right folder and names the wrong neighbour (ChatImageThumb.vue answered, pictureQuickLook.ts edited), so the
 // neighbours are listed where the reader can pick one without listing the folder.
 
 // What counts as a neighbour worth naming: source and its tests, not the folder's docs, configs or assets.
@@ -14,7 +14,7 @@ export const SIBLINGS_SHOWN = 6;
 
 const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
-// How many of the query's words a file's name is made of: picturePeek.ts names "picture" and "peek".
+// How many of the query's words a file's name is made of: pictureQuickLook.ts names "picture", "quick" and "look".
 const nameOverlap = (path: string, tokens: readonly string[]): number => {
     const parts = pathTokens(basename(path).replace(/\.[^.]+$/, ""));
     return tokens.filter((token) => parts.some((part) => part.startsWith(token) || token.startsWith(part))).length;

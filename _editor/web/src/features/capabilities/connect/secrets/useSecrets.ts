@@ -1,14 +1,14 @@
 import type { CredentialGate, CredentialGateKind, SecretInventoryEntry, CredentialPolicySet } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { devFillSet } from "../../setup/devFill";
-import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
-import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
-import { rpcQuery } from "../../../client/sandbox/rpcQuery";
-import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { rpcKey, SANDBOX_MEMBERS } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { useSandboxSession } from "../../../client/session/sandboxSession";
+import { devFillSet } from "../../../setup/devFill";
+import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { rpcKey, SANDBOX_MEMBERS } from "../../../../lib/queryKeys";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
+import { useSandboxSession } from "../../../../client/session/sandboxSession";
 
 // User-supplied env-var secrets, written straight to the daemon's /secrets routes, split by consumer so each
 // surface only observes the server state it reads (an observer mount refetches its query). `reveal` is the owner's and

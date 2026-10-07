@@ -1,7 +1,7 @@
 import type { NoticeTone, TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, type Ref, ref } from "vue";
-import { UPDATE_ACTION_ANCHOR } from "../../sandbox/overview/version/updateAnchor";
+import { UPDATE_ACTION_ANCHOR } from "../../../sandbox/overview/version/updateAnchor";
 import { useVoiceInput, type VoiceError, type VoicePage, type VoiceState, type VoiceUnsupported, voiceUnsupported } from "./useVoiceInput";
 
 // Composer-side half of hands-free voice: one mic tap arms it, and an utterance's pause is the send. Capture

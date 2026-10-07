@@ -313,6 +313,8 @@ export const literalAnswer = async (query: string, entries: readonly FileEntry[]
     if (keys.length === 0 && !directLeads) {
         return undefined;
     }
+    // allow(silent-catch): where code uses a key is the second hop; a usage search that fails (rg exits 2 on one
+    // unreadable file) still answers with the catalog line and the direct hits, and the fact points at `iq find`.
     const usages = ownUsages(keys, await usagesOf(keys, rgBase).catch(() => []));
     const homes = keys.flatMap((key) => key.hits.map((hit) => hit.catalog.path));
     const nearest = (path: string): number => Math.max(0, ...homes.map((home) => sharedDepth(home, path)));
@@ -379,6 +381,8 @@ export const catalogFacts = async (hits: readonly EngineHit[], entries: readonly
     }
     const english = matches.toSorted((a, b) => Number(isEnglish(b.catalog.locale)) - Number(isEnglish(a.catalog.locale)));
     const keys = keysOf(english);
+    // allow(silent-catch): a usage search that fails (rg exits 2 on one unreadable file) still names each key and
+    // points at `iq find` for the code using it.
     const usages = ownUsages(keys, await usagesOf(keys, rgBase).catch(() => []));
     return keys.map((key) => factOf(key, catalogs, usages));
 };

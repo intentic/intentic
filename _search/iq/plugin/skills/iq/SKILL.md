@@ -38,7 +38,7 @@ Every answer opens with a capsule (`answer:`, `candidates:`, `more:`). Read that
 
 - `key: agents.agentActions.noConversationLeft · …/en.json:8 (+4 locales) · used at …/agentActions.ts:178` — the translation key UI text matched, and where code uses it.
 - `route: /sandbox/:tab? at …/router/index.ts:375 loads …/SandboxHub.vue`, then one `tab=agent: …` line per value followed into the view.
-- `siblings: picturePeek.ts · ChatImageThumb.test.ts · …` — the other source files in the answer's folder, the ones iq ranked first. iq usually lands in the right folder; when the answer is a near miss, pick the neighbour from here instead of searching again. Scope with `--in`, `--repo`, `--lang`, `--glob`. Wrong grep habits (`iq search`, `iq ask`) are rewritten to `q`; use canonical forms next time. Full verb list: `iq --help`.
+- `siblings: pictureQuickLook.ts · ChatImageThumb.test.ts · …` — the other source files in the answer's folder, the ones iq ranked first. iq usually lands in the right folder; when the answer is a near miss, pick the neighbour from here instead of searching again. Scope with `--in`, `--repo`, `--lang`, `--glob`. Wrong grep habits (`iq search`, `iq ask`) are rewritten to `q`; use canonical forms next time. Full verb list: `iq --help`.
 
 A question's `answer:` line ends with a verdict:
 

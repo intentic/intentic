@@ -8,7 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, reactive, ref } from "vue";
 import CapabilityFieldRow from "../capabilities/connect/CapabilityFieldRow.vue";
 import { guideParts, guideTokenUrl } from "../capabilities/connect/credentialGuide";
-import SecretField from "../capabilities/connect/SecretField.vue";
+import SecretField from "../capabilities/connect/secrets/SecretField.vue";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { buildConfig, cleanName, fieldError, formComplete, inlineField, nameError, seedValues, shownFields } from "../capabilities/model/form";
 import { generatesKey } from "../capabilities/model/sshKey";

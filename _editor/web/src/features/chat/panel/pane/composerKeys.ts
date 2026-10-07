@@ -1,7 +1,7 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import type { ComposerVoice } from "../../composer/useComposerVoice";
+import type { ComposerVoice } from "../../composer/voice/useComposerVoice";
 import { type InputHistory, inputHistoryFor, recallStep } from "../../drafts/inputHistory";
 import type { Conversation } from "../../session/conversation";
 import type { ConversationView } from "../useChat-view";

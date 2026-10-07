@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { inspectSchema } from "@puristic/env/index.js";
 import { REPLAY_ENV, REPLAY_SECRET_ENV } from "@intentic/sandbox-run";
 import { CONFIG_SECRET_ENV, CONTAINER_SECRET_ENV, configSchema } from "../env.config.js";
@@ -42,9 +43,9 @@ describe("the container's secret environment", () => {
 
 describe("sealing the daemon's environment", () => {
     test("removes every secret name and keeps everything else", () => {
-        const env: NodeJS.ProcessEnv = { CONNECT_TOKEN: "c", HOST_SSH_KEY: "k", OPENAI_API_KEY: "o", PATH: "/usr/bin", WORKSPACE_ROOT: "/work" };
+        const env: NodeJS.ProcessEnv = { CONNECT_TOKEN: "c", HOST_SSH_KEY: "k", OPENAI_API_KEY: "o", PATH: "/usr/bin", WORKSPACE_ROOT };
         sealConfigSecrets({ secretEnv: CONTAINER_SECRET_ENV, keys }, env);
-        expect(env).toEqual({ PATH: "/usr/bin", WORKSPACE_ROOT: "/work" });
+        expect(env).toEqual({ PATH: "/usr/bin", WORKSPACE_ROOT });
     });
 
     test("hands each runtime its own fallback key and nothing else", () => {

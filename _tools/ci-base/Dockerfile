@@ -40,6 +40,9 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #   procps                  the self-kill guard rewrites pkill/pgrep patterns, and agent-terminals.integration
 #                           proves the rewrite with a real pgrep; the sandbox runtime installs the same package
 #   zstd                    transcripts are compressed logs, so the transcript/record suites verify with zstdcat
+#   bubblewrap              a fenced conversation's turns and watch checks run in a bwrap sandbox (turn-sandbox.ts),
+#                           so verify-machine's turn-sandbox and watch-check suites need a real one; without it a
+#                           fenced check reports itself broken and the suite fails
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
 #   poppler-utils, fonts-dejavu-core, python3-pil
 #                           fileq's OCR tier (pdftoppm's page images, read by the `ocr` command), proved by
@@ -48,7 +51,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
 # (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd \
+    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd bubblewrap \
         poppler-utils fonts-dejavu-core python3-pil \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \

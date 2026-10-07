@@ -17,14 +17,14 @@ import { noticeFrom } from "@intentic/ui/async";
 import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import SecretEntryRow from "../../capabilities/connect/SecretEntryRow.vue";
-import SecretField from "../../capabilities/connect/SecretField.vue";
+import SecretEntryRow from "../../capabilities/connect/secrets/SecretEntryRow.vue";
+import SecretField from "../../capabilities/connect/secrets/SecretField.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../extensions/useExtensions";
 import { readIntenticLines } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useSecretInventory } from "../../capabilities/connect/useSecrets";
+import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 import { useT } from "@intentic/ui/i18n";
 

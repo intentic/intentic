@@ -5,7 +5,7 @@ import { Notice } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
-import SecretField from "../capabilities/connect/SecretField.vue";
+import SecretField from "../capabilities/connect/secrets/SecretField.vue";
 import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
 import { useNeeds } from "./useNeeds";
 

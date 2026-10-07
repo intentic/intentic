@@ -7,7 +7,7 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { computed, createApp, h, nextTick, ref } from "vue";
 import type { CredentialGate } from "@intentic/sandbox-contract";
-import type { SecretRow } from "../../sandbox/secrets/secretRows";
+import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 
 const setGate = { mutateAsync: jest.fn(async () => undefined) };
@@ -23,6 +23,7 @@ jest.mock(`./useSecrets`, () => ({
     reveal: jest.fn(),
     useSecrets: () => ({ remove: { mutateAsync: jest.fn() } }),
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
+    useCredentialPolicy: () => ({ setPolicy: { mutateAsync: jest.fn() } }),
     useCredentialGates: () => ({
         gates: ref([]),
         gateFor: (subject: string) => (stored.value?.subject === subject ? stored.value : undefined),
@@ -33,7 +34,7 @@ jest.mock(`./useSecrets`, () => ({
     }),
 }));
 
-jest.mock(`../../../client/sandbox/useRole`, () => ({
+jest.mock(`../../../../client/sandbox/useRole`, () => ({
     useRole: () => ({ canShip: computed(() => role.value !== `collaborator`) }),
 }));
 

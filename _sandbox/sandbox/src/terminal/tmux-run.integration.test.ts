@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { packageRoot } from "@intentic/constants/node";
 
 // Runs the real bin/tmux-run with tmux and nsenter stubbed, pinning which namespace the wrapper's tmux client forks the
@@ -55,11 +56,12 @@ test("every tmux call is made from the namespace INTENTIC_TMUX_NS names: the ser
 test("a fenced turn's sandbox names its own tmux socket: every call goes to that server and none hops to the daemon's namespace", async () => {
     // Both set, as an anchored turn's env could carry: the sandbox's own server wins, since its user could not hop anyway
     // and the shared server is the one place it must not start a pane.
-    const calls = await run({ INTENTIC_TMUX_SOCKET: "/history/overlays/c/sandbox-1/tmux/default", INTENTIC_TMUX_NS: "/proc/9/ns/mnt" });
+    const socket = `${HISTORY_ROOT}/overlays/c/sandbox-1/tmux/default`;
+    const calls = await run({ INTENTIC_TMUX_SOCKET: socket, INTENTIC_TMUX_NS: "/proc/9/ns/mnt" });
     const tmux = calls.filter((call) => call.startsWith("tmux "));
     expect(tmux).not.toHaveLength(0);
     for (const call of tmux) {
-        expect(call.startsWith("tmux -S /history/overlays/c/sandbox-1/tmux/default ")).toBe(true);
+        expect(call.startsWith(`tmux -S ${socket} `)).toBe(true);
     }
     expect(calls.some((call) => call.startsWith("nsenter"))).toBe(false);
 });

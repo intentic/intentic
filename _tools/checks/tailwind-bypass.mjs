@@ -51,6 +51,15 @@ const ALLOWED = new Map([
             ],
         ]),
     ],
+    [
+        `_editor/web/src/features/sandbox/overview/storage/SandboxStorageCard.vue`,
+        new Map([
+            [
+                `rounded-[1px]`,
+                `softens the corners of the scan button's stop square (size-[0.3em], about 4px at text-sm) inside its spinner, as UpdateWhatsNew's lozenge does: --radius-2xs is 2px, half the side, which turns the square into a dot and the stop glyph into a record one.`,
+            ],
+        ]),
+    ],
 ]);
 
 /** Index of the brace closing the one at `start`; counts depth, since a JSX/Astro expression can nest another. */

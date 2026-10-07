@@ -1,13 +1,13 @@
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
-import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // Pins what the composer makes of voice's failures: a page that can never record disables the mic and says why, and a
 // failure stays on screen with the one page that fixes it, offered only to a reader who may act there.
 
 const sandboxJson = jest.fn((path: string): Promise<unknown> => Promise.reject(new Error(`unexpected ${path}`)));
-jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson }));
-jest.mock(`../../../app/analytics`, () => ({ track: jest.fn() }));
+jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson }));
+jest.mock(`../../../../app/analytics`, () => ({ track: jest.fn() }));
 
 const { useComposerVoice } = await import(`./useComposerVoice`);
 type Voice = ReturnType<typeof useComposerVoice>;

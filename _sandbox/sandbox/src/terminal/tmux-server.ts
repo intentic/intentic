@@ -64,11 +64,22 @@ export const withoutHeldNames = (updateEnvironment: string, held: readonly strin
 // from the server whoever made its session: the owner's ssh agent socket, which a turn's own pane overrides with its
 // conversation's (tmux-run -e). Idempotent, best-effort.
 export const prepareTmuxServer = async (logger: Logger, serverEnv: Readonly<Record<string, string>> = {}): Promise<void> => {
+    // Unsetting a name the server never had succeeds, so a failure here is no server yet (nothing holds the names) or a
+    // scrub that did not happen, which is worth a line: the names include the container's secrets.
     for (const name of SCRUBBED_SERVER_ENV) {
-        await forkedExec("tmux", ["set-environment", "-g", "-u", name], { timeout: 10_000 }).catch(() => undefined);
+        await forkedExec("tmux", ["set-environment", "-g", "-u", name], { timeout: 10_000 }).catch((err: unknown) => {
+            if (!isNoTmuxServer(err)) {
+                logger.warn({ err, name }, "tmux: a daemon-only variable could not be taken out of the server's environment");
+            }
+        });
     }
     for (const [name, value] of Object.entries(serverEnv)) {
-        await forkedExec("tmux", ["set-environment", "-g", name, value], { timeout: 10_000 }).catch(() => undefined);
+        await forkedExec("tmux", ["set-environment", "-g", name, value], { timeout: 10_000 }).catch((err: unknown) => {
+            // No server yet: the daemon's own pin starts one and sets it then.
+            if (!isNoTmuxServer(err)) {
+                logger.warn({ err, name }, "tmux: panes will not find this in the server's environment");
+            }
+        });
     }
     try {
         const { stdout } = await forkedExec("tmux", ["show-options", "-gv", "update-environment"], { timeout: 10_000 });

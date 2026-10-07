@@ -11,7 +11,7 @@ import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
-jest.mock(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
+jest.mock(`../../capabilities/connect/secrets/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
 jest.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
 // An approved recipe not yet built, only where a test says so; and the hosted build of it, none unless a test starts one.
 const pending: { value: { hash: string; content: string } | undefined } = { value: undefined };

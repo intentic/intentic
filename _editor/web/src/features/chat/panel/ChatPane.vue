@@ -12,7 +12,7 @@ import { useChatRoute } from "../routing/chatRoute";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useQueuedAttachments } from "../drafts/pendingAttachments";
-import { useComposerVoice } from "../composer/useComposerVoice";
+import { useComposerVoice } from "../composer/voice/useComposerVoice";
 import { useEditorContextChip } from "../composer/useEditorContextChip";
 import { useRunThrough } from "../models/run-settings/useRunThrough";
 import { isBlocked } from "../../../client/sandbox/connection";

@@ -3,7 +3,7 @@ import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../features/extensions/reconcileStatus";
-import { useSecretKeys } from "../../features/capabilities/connect/useSecrets";
+import { useSecretKeys } from "../../features/capabilities/connect/secrets/useSecrets";
 import { readIntenticLines } from "../../lib/intenticStream";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";

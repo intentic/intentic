@@ -2,7 +2,7 @@
 import { ui, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
 import { computed } from "vue";
 import { CF_TOKEN_KEY, type useCloudflareZones } from "../../extensions/useCloudflareZones";
-import SecretField from "./SecretField.vue";
+import SecretField from "./secrets/SecretField.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Shared token+zone flow between the setup wizard and the in-app Connect step, so the format warning and scopes

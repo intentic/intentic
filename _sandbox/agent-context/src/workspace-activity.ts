@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 
@@ -49,19 +49,14 @@ const changedFiles = (repoDir: string): string[][] => {
             .slice(1)
             .map((commit) => commit.split("\n").filter((line) => line !== ""));
     } catch {
-        // Not a repository, no git, or too slow: no history is a fact about this project, not a failure of the turn.
+        // allow(silent-catch): not a repository, no git, or too slow: no history is a fact about this project, not a
+        // failure of the turn.
         return [];
     }
 };
 
-const isRepo = (dir: string): boolean => {
-    try {
-        statSync(join(dir, ".git"));
-        return true;
-    } catch {
-        return false;
-    }
-};
+// A `.git` directory, or the file a worktree or submodule has in its place.
+const isRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
 
 const isQuiet = (path: string): boolean => {
     const segments = path.split("/");
@@ -99,7 +94,7 @@ export const workspaceActivityOf = ({ projectRoot, areas }: ActivityInput): Work
             const files = entries.filter((entry) => entry.isFile()).length;
             shelf = dirs >= SHELF_MIN_DIRS && files < dirs;
         } catch {
-            // Gone since the commit: no shape to judge, so no deeper.
+            // allow(silent-catch): gone since the commit, or unreadable: no shape to judge, so no deeper.
         }
         shelves.set(folder, shelf);
         return shelf;
@@ -128,7 +123,7 @@ export const workspaceActivityOf = ({ projectRoot, areas }: ActivityInput): Work
         for (const folder of folders) {
             byFolder.set(folder, (byFolder.get(folder) ?? 0) + 1);
         }
-        for (const feature of new Set(kept.map(featureOf).filter((feature) => feature !== undefined))) {
+        for (const feature of new Set(kept.map(featureOf).filter((folder) => folder !== undefined))) {
             byFeature.set(feature, (byFeature.get(feature) ?? 0) + 1);
         }
     }

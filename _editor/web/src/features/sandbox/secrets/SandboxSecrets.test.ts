@@ -11,7 +11,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const inventory = ref<SecretInventoryEntry[]>([]);
-jest.mock(`../../capabilities/connect/useSecrets`, () => ({
+jest.mock(`../../capabilities/connect/secrets/useSecrets`, () => ({
     useSecretInventory: () => ({
         inventory,
         missingRequiredCount: ref(0),
@@ -20,6 +20,7 @@ jest.mock(`../../capabilities/connect/useSecrets`, () => ({
     }),
     useSecrets: () => ({ set: { mutateAsync: jest.fn() }, remove: { mutateAsync: jest.fn() } }),
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
+    useCredentialPolicy: () => ({ setPolicy: { mutateAsync: jest.fn() } }),
     // Nothing gated, not the owner: keeps these cases about which rows show and how they're named. Gate behavior
     // itself is asserted in secretRows.test.ts.
     useCredentialGates: () => ({

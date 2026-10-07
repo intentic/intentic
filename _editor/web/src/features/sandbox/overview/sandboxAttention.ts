@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { acpProviders, endpointProviders } from "../../chat/accounts/providerCatalog";
 import { accessKnown, providerReady } from "../../chat/session/access";
-import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
+import { useMissingSecretCount } from "../../capabilities/connect/secrets/useSecrets";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { DEVICES_PATH } from "../devices/deviceLinks";

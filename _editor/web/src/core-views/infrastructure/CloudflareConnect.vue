@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import CloudflareTokenField from "../../features/capabilities/connect/CloudflareTokenField.vue";
 import { CF_TOKEN_KEY, useCloudflareZones } from "../../features/extensions/useCloudflareZones";
 import { useInventory } from "../../features/extensions/useInventory";
-import { useSecretKeys, useSecrets } from "../../features/capabilities/connect/useSecrets";
+import { useSecretKeys, useSecrets } from "../../features/capabilities/connect/secrets/useSecrets";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

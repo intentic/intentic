@@ -6659,7 +6659,7 @@
             "changedTodayOrInUse": "Changed today or in use",
             "heading": "Disk",
             "measured": "Measured {when}",
-            "staleNote": "The disk has likely changed since. Scan again for current sizes.",
+            "staleNote": "Scan again for current sizes.",
             "measuring": "Measuring…",
             "otherUsage": "Other usage",
             "stop": "Stop",

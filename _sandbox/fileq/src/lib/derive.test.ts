@@ -1,10 +1,11 @@
+import { STATE_DIR } from "@intentic/constants";
 import { isDeriveIgnored } from "./derive.js";
 
 describe("the derive floor (what never gets a shadow, whoever asks)", () => {
     test("machine subtrees, state, the reference shelf and agent worktrees are refused", () => {
         for (const path of [
             "node_modules/pkg/manual.pdf",
-            ".intentic/local/cache/derived/x.docx",
+            `${STATE_DIR}/local/cache/derived/x.docx`,
             "refs/other-repo/spec.docx",
             ".claude/worktrees/fix/docs/a.pdf",
         ]) {

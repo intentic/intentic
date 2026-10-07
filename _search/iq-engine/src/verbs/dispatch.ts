@@ -180,8 +180,9 @@ const relatedOf = async (db: SqliteDb, groups: readonly RankedGroup[], rgBase: O
     // Runs one rg per symbol concurrently; order does not matter here.
     const lines = await Promise.all(
         anchors.map(async (anchor) => {
+            // allow(silent-catch): this stage is best-effort; a lookup that fails (rg exits 2 on one unreadable file)
+            // drops only its own caller line, never the answer already computed.
             const refs = await refsOf(db, anchor.name, undefined, rgBase).catch(() => undefined);
-            // This stage is best-effort: a failed lookup drops only its own line, never the answer already computed.
             if (refs === undefined) {
                 return undefined;
             }
@@ -282,6 +283,8 @@ const packGroups = async (db: SqliteDb, root: string, groups: readonly RankedGro
             if (anchor === undefined) {
                 return group;
             }
+            // allow(silent-catch): a file gone or unreadable since it was ranked stays a pointer; packing shapes an
+            // answer already found, so it is never the reason the query fails.
             const content = await readFile(join(root, group.path), "utf8").catch(() => undefined);
             if (content === undefined) {
                 return group;
@@ -600,7 +603,8 @@ const naturalOrLiteral = async (
     rgBase: Omit<RgOptions, "pattern">,
 ): Promise<VerbPlan> => {
     const [literal, natural] = await Promise.all([
-        // Best effort: a literal pass that fails leaves the semantic answer, never no answer.
+        // allow(silent-catch): best effort; a literal pass that fails (rg exits 2 on one unreadable file) leaves the
+        // semantic answer, never no answer.
         literalAnswer(request.query, entries, rgBase).catch(() => undefined),
         naturalPlan(context, request, entries, allowed),
     ]);
@@ -686,6 +690,8 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             return { ...escalated, headerNote: escalated.verdict?.basis === "literal" ? escalated.headerNote! : "no exact phrase match, answered semantically" };
         }
         // A match in a translation catalog names its key and where code uses it (literal.ts, the second hop).
+        // allow(silent-catch): the facts are capsule lines beside matches already found; a second hop that fails drops
+        // those lines, never the matches.
         const facts = list === undefined ? await catalogFacts(found.hits, entries, rgBase).catch(() => []) : [];
         return {
             groups: exactGroups,
@@ -885,6 +891,8 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         // An address (`/agents`, `/sandbox/agent?section=tools`) is a route before it is a path: it names a screen,
         // and a file-name match for its words (AGENTS.md) is not where that screen is built.
         if (list === undefined && parseRouteAddress(request.query) !== undefined) {
+            // allow(silent-catch): an address the route reading fails on falls through to the search below, as one no
+            // route declares does; the route answer is a better lead, not the only one.
             const route = await routeAnswer(request.query, context.root, entries, rgBase).catch(() => undefined);
             if (route !== undefined) {
                 return {
