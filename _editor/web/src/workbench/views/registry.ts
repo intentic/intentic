@@ -196,8 +196,9 @@ export const railPolicy = (id: string): RailPolicy => {
 // The view a tile press on the home tile opens: the Project view when a maker has it, else the file tree.
 export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECTS_VIEW_ID) ? PROJECTS_VIEW_ID : WORKSPACE_VIEW_ID);
 
-// Whether a tile is on the rail now, in one predicate: the rail and the More menu ask its positive and
-// negative of the same list. `pinned` overrules the table; `active` keeps the current section on the rail while you're in it.
+// Whether a tile is on the rail now, in one predicate. `pinned` overrules the table; `active` keeps the current section
+// on the rail while you're in it. The More menu asks the negative with `active: false`, so a visited section shows in
+// both (marked current in the menu) and the menu's rows don't shift with where you stand.
 // A badge tiles a tile whatever it says, an errand or only that something is running there. The rail has always
 // on the rail live work (an open browser, a subagent, a workflow run), so a running pipeline earning no tile would be
 // arbitrary — and a tile that stays away until the run fails hides the half hour when watching it is the point.

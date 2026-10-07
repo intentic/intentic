@@ -344,7 +344,7 @@ const extensionTile = (active: ActiveExtension): SectionTile => {
     };
 };
 // Every nav tile, on the rail or not, in one run ranked by RAIL_GROUPS (core sections, then one tile per
-// extension activation); the on the rail and More lists both come from this run, so a section is never in both or neither.
+// extension activation); the on the rail and More lists both come from this run, so a section is never in neither (only the one you are visiting is in both).
 const tiles = computed<readonly SectionTile[]>(() =>
     [
         ...fixedTiles.value,
@@ -365,8 +365,12 @@ const pins = useRailPins();
 const onRailTiles = computed<readonly SectionTile[]>(() =>
     tiles.value.filter((tile) => onRail(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
 );
+// More lists what is off the rail AT REST: a section visited from here stays in the menu (marked as where you are)
+// while its tile also sits on the rail, so the menu keeps the same rows in the same places between openings.
 const moreTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => !onRailTiles.value.includes(tile)).toSorted((left, right) => left.label.localeCompare(right.label)),
+    tiles.value
+        .filter((tile) => !onRail(tile, { pinned: pins.pinned.value.has(tile.to), active: false }))
+        .toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
 // tileTip, plus one clause when a tile is on the rail only by the visit: says so once, while it can still
@@ -714,11 +718,23 @@ const wallpapered = useWallpaperedRoute();
                     <div
                         v-for="tile in moreTiles"
                         :key="tile.to"
-                        class="group flex items-center rounded-md text-xs text-content transition-colors hover:bg-content/5"
+                        class="group flex items-center rounded-md text-xs transition-colors"
+                        :class="isNavActive(tile.to) ? 'bg-primary-600/15 text-link' : 'text-content hover:bg-content/5'"
                     >
-                        <RouterLink :to="tile.to" class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left" @click="dismissMore">
+                        <RouterLink
+                            :to="tile.to"
+                            class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left"
+                            :aria-current="isNavActive(tile.to) ? 'page' : undefined"
+                            @click="dismissMore"
+                        >
                             <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                                <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" class="text-base text-muted" />
+                                <RailIcon
+                                    :section="tile.id"
+                                    :fallback="tile.icon"
+                                    :label="tile.label"
+                                    class="text-base"
+                                    :class="isNavActive(tile.to) ? 'text-link' : 'text-muted'"
+                                />
                             </span>
                             <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
                         </RouterLink>
