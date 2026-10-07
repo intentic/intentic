@@ -6,7 +6,7 @@
 # The toolkit comes from NVIDIA's own apt repo (the docker GPU fragment's keyring dance, kept in step with it),
 # nvcc and the dev headers are purged after the build, and the cuBLAS/cudart runtime halves stay: unlike the
 # host's driver libraries (which --gpus injects at run time), the CUDA runtime is the binary's own dependency.
-# Arch spread rather than `native` — there is no GPU at build time; Turing through Hopper covers the cards the
+# Arch spread rather than `native` — there is no GPU at build time; Turing through Blackwell covers the cards the
 # directive's nvidia-runtime host probe admits.
 # THE `rm -f` BEFORE THE INSTALL IS LOAD-BEARING. The CPU pack no longer puts a file at
 # /usr/local/bin/llama-server; it puts a SYMLINK there, into /opt/llamacpp where the prebuilt release keeps its
@@ -20,7 +20,7 @@
 # regardless; they are one upstream tag.
 #
 # THE MOST EXPENSIVE FRAGMENT IN THE PROJECT, and the reason the build-cache mounts exist: ~600MB of CUDA
-# toolkit and ~900 translation units across five architectures. Nothing about it depends on the sandbox's own
+# toolkit and ~900 translation units across six architectures. Nothing about it depends on the sandbox's own
 # source, yet it sits above it in the overlay, so it re-ran in full on every rebuild — 19 minutes of a
 # 40-minute one. The apt mounts keep the toolkit bytes and the ccache mount keeps the object files, so a
 # re-run after an image update recompiles almost nothing. ccache understands nvcc, hence the CUDA launcher.
@@ -35,21 +35,30 @@
 # The source arrives as the tag's archive rather than a clone, for the reason whisper.Dockerfile spells out:
 # GitHub answers an unauthenticated `git-upload-pack` from datacenter egress with a 401 Basic challenge, which
 # git turns into a username prompt no image build can answer. Plain HTTPS has no git auth path in it.
+#
+# THE TOOLKIT IS CUDA 13 FROM NVIDIA'S DEBIAN 13 REPO, the one CUDA line NVIDIA builds for this base, which is also
+# why the host needs driver R580 or newer for offload (an older one reports no CUDA device and llama-server runs on
+# CPU). The source and its key leave again at the end: the runtime packages are installed by then, and a source
+# whose signature apt one day refuses fails every later `apt-get update`, in the overlay and in the sandbox alike.
+# 2026-10-07: CUDA 12.6 from the ubuntu2404 repo stopped building. Its key 3bf863cc binds with a SHA1 self-signature
+# trixie's apt refuses since 2026-02-01, its nvcc rejects trixie's GCC 14, and every CUDA 12 (12.9 included)
+# collides with glibc 2.41's math declarations; keeping it meant overriding apt's signature policy and patching
+# NVIDIA's headers.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/ccache \
     install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub -o /etc/apt/keyrings/nvidia-cuda.asc \
-    && echo "deb [signed-by=/etc/apt/keyrings/nvidia-cuda.asc] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /" \
+    && curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/8793F200.pub -o /etc/apt/keyrings/nvidia-cuda.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/nvidia-cuda.asc] https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/ /" \
         > /etc/apt/sources.list.d/nvidia-cuda.list \
-    && apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
+    && apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 cuda-nvcc-13-4 cuda-cudart-dev-13-4 libcublas-dev-13-4 \
     && mkdir -p /tmp/llama.cpp \
     && curl -fsSL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b11146.tar.gz \
         | tar -xz -C /tmp/llama.cpp --strip-components=1 \
     && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+        -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90;120" -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
     && jobs="$(awk -v cpus="$(nproc)" '/^MemAvailable:/ { fits = int($2 / (2 * 1024 * 1024)); if (fits < 1) fits = 1; if (fits > cpus) fits = cpus; if (fits > 8) fits = 8; print fits }' /proc/meminfo)" \
     && echo "llamacpp CUDA pack: compiling llama.cpp with -j${jobs}" \
     && cmake --build /tmp/llama.cpp/build -j "${jobs}" --target llama-server \
@@ -57,6 +66,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -f /usr/local/bin/llama-server \
     && install /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server \
     && rm -rf /tmp/llama.cpp \
-    && apt-get purge -y cmake ccache cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
-    && apt-get install -y --no-install-recommends cuda-cudart-12-6 libcublas-12-6 \
-    && apt-get autoremove -y
+    && apt-get purge -y cmake ccache cuda-nvcc-13-4 cuda-cudart-dev-13-4 libcublas-dev-13-4 \
+    && apt-get install -y --no-install-recommends cuda-cudart-13-4 libcublas-13-4 \
+    && apt-get autoremove -y \
+    && rm -f /etc/apt/sources.list.d/nvidia-cuda.list /etc/apt/keyrings/nvidia-cuda.asc
