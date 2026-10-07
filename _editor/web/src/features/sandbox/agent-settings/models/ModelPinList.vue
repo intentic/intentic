@@ -24,8 +24,9 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
 <template>
     <div class="flex flex-col gap-1">
         <!-- A second entry is a fallback, not a second opinion: numbers alone read as a set, and a job was left on the model
-             its owner meant to replace. -->
-        <p v-if="entries.length > 1" class="text-2xs text-subtle">{{ t(`sandbox.modelPinList.triedInOrder`) }}</p>
+             its owner meant to replace. Said on hover over the rank numbers rather than as a caption, which repeated the same
+             sentence over every list on the page; screen readers still get it once per list. -->
+        <p v-if="entries.length > 1" class="sr-only">{{ t(`sandbox.modelPinList.triedInOrder`) }}</p>
         <ol class="flex flex-col gap-1">
             <li
                 v-for="entry in entries"
@@ -33,7 +34,13 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                 class="flex items-center gap-2 rounded-md border border-line bg-canvas px-2 py-1 text-xs"
                 :class="entry.ready ? `text-content` : `text-subtle`"
             >
-                <span class="w-3 shrink-0 text-2xs tabular-nums text-subtle">{{ entry.index + 1 }}</span>
+                <span
+                    class="w-3 shrink-0 text-2xs tabular-nums text-subtle"
+                    :class="entries.length > 1 && `cursor-help`"
+                    aria-hidden="true"
+                    v-tooltip.top="entries.length > 1 ? t(`sandbox.modelPinList.triedInOrder`) : undefined"
+                    >{{ entry.index + 1 }}</span
+                >
                 <!-- The whole name is the trigger (and the picker's anchor), not just an icon beside it. -->
                 <button
                     type="button"
