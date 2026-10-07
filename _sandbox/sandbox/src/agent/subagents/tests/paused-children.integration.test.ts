@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
-import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
+import type { PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import {
     filePausedChildren,
     type PausedChild,
@@ -12,7 +12,7 @@ import {
     restartPauseFate,
     restartPauseWords,
     settleRestartPauses,
-} from "./paused-children.js";
+} from "../paused-children.js";
 
 // A paused child's end check across a restart: the boot's decision for each pause an earlier process wrote down, and the
 // record itself.

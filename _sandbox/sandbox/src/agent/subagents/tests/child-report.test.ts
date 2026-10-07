@@ -1,11 +1,11 @@
 import { agentWordsOf } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { childActor } from "../../auth/principal.js";
-import { opt } from "../../opt.js";
-import type { DomainEventMap } from "../../seams/domain-events.js";
-import { type FakeTurns, fakeTurns, memoryFleet } from "../../testing.js";
-import { type ChildReportDeps, reportChildTurn } from "./child-report.js";
-import { openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "./subagents.js";
+import { childActor } from "../../../auth/principal.js";
+import { opt } from "../../../opt.js";
+import type { DomainEventMap } from "../../../seams/domain-events.js";
+import { type FakeTurns, fakeTurns, memoryFleet } from "../../../testing.js";
+import { type ChildReportDeps, reportChildTurn } from "../child-report.js";
+import { openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "../subagents.js";
 
 // A child's ending reaches its parent once, and only when it is the parent's news.
 

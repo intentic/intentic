@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { noteChildWork } from "./child-verification.js";
+import { noteChildWork } from "../child-verification.js";
 import {
     closeSubagents,
     listSubagentSessions,
@@ -22,12 +22,12 @@ import {
     waitForSubagent,
     type SubagentTaskMessage,
     type SubagentTurn,
-} from "./subagents.js";
-import { memoryFleet } from "../../testing.js";
-import { startTurnRun } from "../run/turn/turn-runs.js";
-import { createDomainEvents } from "../../seams/domain-events.js";
-import type { TurnStarter } from "../../seams/turn-starter.js";
-import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
+} from "../subagents.js";
+import { memoryFleet } from "../../../testing.js";
+import { startTurnRun } from "../../run/turn/turn-runs.js";
+import { createDomainEvents } from "../../../seams/domain-events.js";
+import type { TurnStarter } from "../../../seams/turn-starter.js";
+import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;

@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
-import { memoryFleet } from "../../testing.js";
-import { startTurnRun } from "../run/turn/turn-runs.js";
-import { createDomainEvents } from "../../seams/domain-events.js";
-import type { TurnStarter } from "../../seams/turn-starter.js";
-import { readSubagentTranscript, type SubagentTranscriptDeps } from "./subagent-transcript.js";
-import { noteSubagentTask, openSpawnedChild, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
+import { memoryFleet } from "../../../testing.js";
+import { startTurnRun } from "../../run/turn/turn-runs.js";
+import { createDomainEvents } from "../../../seams/domain-events.js";
+import type { TurnStarter } from "../../../seams/turn-starter.js";
+import { readSubagentTranscript, type SubagentTranscriptDeps } from "../subagent-transcript.js";
+import { noteSubagentTask, openSpawnedChild, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../subagents.js";
 
 // One in-process subagent read as a transcript of its own: the runtime's own record of it where it keeps one, else the
 // calls its delegation's card holds in the parent's live run or settled record.

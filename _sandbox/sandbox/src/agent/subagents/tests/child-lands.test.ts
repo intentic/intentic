@@ -1,9 +1,9 @@
 import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { childActor } from "../../auth/principal.js";
-import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
-import { conversationEntry, fakeTurns, type FakeTurns } from "../../testing.js";
-import { type ChildNewsDeps, reportChildConflict, reportChildLanded } from "./child-lands.js";
+import { childActor } from "../../../auth/principal.js";
+import type { PersistedAgent } from "../../../conversations/registry/agents-store.js";
+import { conversationEntry, fakeTurns, type FakeTurns } from "../../../testing.js";
+import { type ChildNewsDeps, reportChildConflict, reportChildLanded } from "../child-lands.js";
 
 // A child's land or conflict is its parent's news while the parent supervises, and nobody else's.
 

@@ -1,4 +1,4 @@
-import { type DeathWitness, killCauseOf, runtimeKilled } from "./child-death.js";
+import { type DeathWitness, killCauseOf, runtimeKilled } from "../child-death.js";
 
 // What the budget saw: the OOM count now, and whether a reading in the last few minutes was short.
 const witness = (shortRecently: boolean, oomKills: number | undefined): DeathWitness => ({ oomKills, shortRecently });

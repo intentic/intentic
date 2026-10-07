@@ -1,11 +1,11 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SteeringQueue } from "../checkpoints/agent-steering.js";
-import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../tools/jobs/background-jobs.js";
-import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "./subagents.js";
-import { noteQueuedReport } from "./queued-reports.js";
-import { waitForWork, workWaitAnswer } from "./work-wait.js";
-import { memoryFleet } from "../../testing.js";
+import { SteeringQueue } from "../../checkpoints/agent-steering.js";
+import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../../tools/jobs/background-jobs.js";
+import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "../subagents.js";
+import { noteQueuedReport } from "../queued-reports.js";
+import { waitForWork, workWaitAnswer } from "../work-wait.js";
+import { memoryFleet } from "../../../testing.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;

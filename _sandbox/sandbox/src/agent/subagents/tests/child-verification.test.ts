@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { childVerification, childVerificationNote, forgetChild, noteChildWork, resetChildVerification } from "./child-verification.js";
-import { memoryFleet } from "../../testing.js";
+import { childVerification, childVerificationNote, forgetChild, noteChildWork, resetChildVerification } from "../child-verification.js";
+import { memoryFleet } from "../../../testing.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;

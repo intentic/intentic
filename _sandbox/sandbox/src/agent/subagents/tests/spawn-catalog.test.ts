@@ -1,8 +1,8 @@
 import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract";
-import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
-import { spawnableProviders, spawnCatalogText } from "./spawn-catalog.js";
+import { codexConnectedProxy, services, withTranslator } from "../../../harness/route-services.testing.js";
+import { spawnableProviders, spawnCatalogText } from "../spawn-catalog.js";
 import { unstubbed } from "@intentic/testing";
-import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
+import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 
 // Pins the three account states this listing must tell apart: measured with room, measured and full (excluded, but
 // keeps the reopen instant), and unmeasured (listed, since no reading isn't no allowance).

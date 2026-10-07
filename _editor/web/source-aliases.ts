@@ -32,7 +32,19 @@ const extensionAliases = Object.fromEntries([
     ...extensionEntries.filter(([, , isBarrel]) => isBarrel).map(([specifier, file]) => [specifier, file] as const),
 ]);
 
+// Every subpath @intentic/base publishes, at the source file its `@intentic/src` condition names. Through its `dist`,
+// a workspace that keeps an older build (CI's does, and the local face's job builds no lib first) serves a module
+// missing whatever the source exported since, and the build fails on a missing export.
+const baseEntries = Object.entries(
+    (
+        JSON.parse(readFileSync(fromRoot(`_tools/base/package.json`), `utf8`)) as {
+            exports: Record<string, { import: { "@intentic/src": string } }>;
+        }
+    ).exports,
+).map(([subpath, target]) => [`@intentic/base/${subpath.replace(/^\.\//, ``)}`, fromRoot(`_tools/base/${target.import[`@intentic/src`].replace(/^\.\//, ``)}`)] as const);
+
 export const sourceAliases = (): Record<string, string> => ({
+    ...Object.fromEntries(baseEntries),
     // Alias order matters: a string alias also matches `<key>/…`, so a subpath must precede its own barrel, and a
     // prefix-sharing pair (`markdown-document` before `markdown`) must keep that order too, or the import resolves
     // into a directory and fails with ENOTDIR.

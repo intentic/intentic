@@ -1,8 +1,8 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as fileAppearsOriginal from "../tools/file-appears.js";
-import * as backgroundJobsOriginal from "../tools/jobs/background-jobs.js";
-import { memoryFleet } from "../../testing.js";
+import * as fileAppearsOriginal from "../../tools/file-appears.js";
+import * as backgroundJobsOriginal from "../../tools/jobs/background-jobs.js";
+import { memoryFleet } from "../../../testing.js";
 
 // What a wait on commands leaves behind once it has answered, however it answered. A job's watch is an inotify handle on
 // its directory, so one left open outlives the wait until the job ends; these count the watches still open.
@@ -11,7 +11,7 @@ const realWhenFileAppears = fileAppearsOriginal.whenFileAppears;
 const realJobInputWait = backgroundJobsOriginal.jobInputWait;
 
 const open = new Set<string>();
-jest.mock("../tools/file-appears.js", () => ({
+jest.mock("../../tools/file-appears.js", () => ({
     ...fileAppearsOriginal,
     whenFileAppears: (path: string, onAppear: () => void) => {
         const stop = realWhenFileAppears(path, onAppear);
@@ -29,14 +29,14 @@ jest.mock("../tools/file-appears.js", () => ({
 // The job already at a prompt, as the input-wait follower reports one; finding it for real takes a terminal and /proc
 // (input-wait.integration.test.ts).
 let prompting: string | undefined;
-jest.mock("../tools/jobs/background-jobs.js", () => ({
+jest.mock("../../tools/jobs/background-jobs.js", () => ({
     ...backgroundJobsOriginal,
     jobInputWait: (job: backgroundJobsOriginal.BackgroundJob) => (job.dir === prompting ? { since: 0, pid: 4242, program: "npx create-thing" } : realJobInputWait(job)),
 }));
 
-const { noteJobShell, openBackgroundJob } = await import("../tools/jobs/background-jobs.js");
-const { openSpawnedChild, resetSubagents, settleSpawnedChild } = await import("./subagents.js");
-const { waitForWork } = await import("./work-wait.js");
+const { noteJobShell, openBackgroundJob } = await import("../../tools/jobs/background-jobs.js");
+const { openSpawnedChild, resetSubagents, settleSpawnedChild } = await import("../subagents.js");
+const { waitForWork } = await import("../work-wait.js");
 
 const actors = memoryFleet().conversations;
 

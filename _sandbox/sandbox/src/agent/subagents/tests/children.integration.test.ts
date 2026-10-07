@@ -8,18 +8,18 @@ import {
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import type { MemoryReading } from "@intentic/constants/memory-room";
-import { listSubagentSessions, noteSubagentTask, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "./subagents.js";
-import type { Services } from "../../composition.js";
-import { spawnServices } from "../../harness/spawn-services.testing.js";
-import { startTurnRun } from "../run/turn/turn-runs.js";
-import { classifyFailure } from "../run/frames/classify-failure.js";
-import { conversationIdentity, mainTreePlacement, placedTurn } from "../run/placement/turn-placement.js";
-import { breakPolicyFor } from "../run/turn/turn-resume.js";
-import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
+import { listSubagentSessions, noteSubagentTask, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "../subagents.js";
+import type { Services } from "../../../composition.js";
+import { spawnServices } from "../../../harness/spawn-services.testing.js";
+import { startTurnRun } from "../../run/turn/turn-runs.js";
+import { classifyFailure } from "../../run/frames/classify-failure.js";
+import { conversationIdentity, mainTreePlacement, placedTurn } from "../../run/placement/turn-placement.js";
+import { breakPolicyFor } from "../../run/turn/turn-resume.js";
+import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
 import { unstubbed } from "@intentic/testing";
-import { reportChildTurn } from "./child-report.js";
-import { childLandingWords } from "./child-lands.js";
-import { filePausedChildren } from "./paused-children.js";
+import { reportChildTurn } from "../child-report.js";
+import { childLandingWords } from "../child-lands.js";
+import { filePausedChildren } from "../paused-children.js";
 import {
     adoptChildTurn,
     answerChild,
@@ -36,14 +36,14 @@ import {
     spawnChild,
     supervisorFor,
     type ChildSupervisor,
-} from "./children.js";
-import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
-import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import type { Fleet } from "../../conversations/registry/agents-registry.js";
-import { conversationProfile, type Postures } from "../../conversations/registry/agents-store.js";
-import { createDomainEvents, type DomainEventMap } from "../../seams/domain-events.js";
-import type { RoutedTurn, TurnInput, TurnStarter } from "../../seams/turn-starter.js";
-import { beginTurn, conversationEntry, drivenBy, fakeTurns, memoryFleet } from "../../testing.js";
+} from "../children.js";
+import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import { parkedCards } from "../../../conversations/actor/parked-cards.js";
+import type { Fleet } from "../../../conversations/registry/agents-registry.js";
+import { conversationProfile, type Postures } from "../../../conversations/registry/agents-store.js";
+import { createDomainEvents, type DomainEventMap } from "../../../seams/domain-events.js";
+import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import { beginTurn, conversationEntry, drivenBy, fakeTurns, memoryFleet } from "../../../testing.js";
 
 // One fleet's actors for every spawn here, and the cards parked in them: what a parent's own wait and answer read.
 const actors = memoryFleet().conversations;

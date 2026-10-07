@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { withRuntimeSubagents } from "./runtime-subagents.js";
-import { listSubagentSessions, resetSubagents, type SubagentTurn } from "./subagents.js";
-import { memoryFleet } from "../../testing.js";
+import { withRuntimeSubagents } from "../runtime-subagents.js";
+import { listSubagentSessions, resetSubagents, type SubagentTurn } from "../subagents.js";
+import { memoryFleet } from "../../../testing.js";
 
 // Pins that a subagent some runtime other than the Claude loop reports in its own frames lands on the same roster the
 // Claude loop's do: listed, moving, ended with a verdict on its work, and closed with the turn when the runtime never

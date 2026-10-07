@@ -11,7 +11,7 @@
     "_sandbox/sandbox/src/agent/models/role-answer.test.ts": 1,
     "_sandbox/sandbox/src/agent/models/role-model.test.ts": 1,
     "_sandbox/sandbox/src/agent/run/turn/tests/turn-plan.test.ts": 2,
-    "_sandbox/sandbox/src/agent/subagents/children.integration.test.ts": 3,
+    "_sandbox/sandbox/src/agent/subagents/tests/children.integration.test.ts": 3,
     "_sandbox/sandbox/src/agent/tools/agent-redaction.test.ts": 2,
     "_sandbox/sandbox/src/agent/verification/watchers.test.ts": 1,
     "_sandbox/sandbox/src/capabilities/handlers/localmodel.handler.integration.test.ts": 2,

@@ -242,6 +242,9 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
         },
         accounts: {
             accounts: { provider: `claude` },
+            start: { provider: `cursor` },
+            status: { provider: `cursor`, handshake: `demo-handshake-cursor` },
+            cancel: { provider: `cursor`, handshake: `demo-handshake-cursor` },
         },
         translator: {
             accounts: undefined,
