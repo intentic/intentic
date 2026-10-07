@@ -6,7 +6,7 @@
 # packs.integration.test.ts holds the two in step.
 # ponytail: bump together with @opencode-ai/sdk.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g opencode-ai@1.18.34 && opencode --version
+    npm install -g opencode-ai@1.18.35 && opencode --version
 # OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
 # auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. A repo's own
 # opencode.json merges over this file and can turn sharing back on, which is why the image also sets
