@@ -3341,7 +3341,6 @@
             "deleteHeader": "{label} löschen?",
             "everyoneSeesWhole": "Alle sehen den ganzen Workspace",
             "folderCount": "{count} Ordner | {count} Ordner",
-            "grantedOnAccess": "Wird unter Zugriff an Personen vergeben.",
             "nameIt": "Benennen Sie ihn — Frontend, Docs, Abrechnung",
             "nameTaken": "Es gibt bereits einen Bereich namens {id}.",
             "needsFolder": "Wähle mindestens einen Ordner. Ein Bereich ohne Ordner wäre eine Freigabe ohne Leser.",

@@ -3343,7 +3343,6 @@
             "deleteHeader": "Supprimer {label} ?",
             "everyoneSeesWhole": "Tout le monde voit tout l'espace de travail",
             "folderCount": "{count} dossier | {count} dossiers",
-            "grantedOnAccess": "Attribuées aux personnes dans Accès.",
             "nameIt": "Nommez-la — Frontend, Docs, Facturation",
             "nameTaken": "Il existe déjà une zone appelée {id}.",
             "needsFolder": "Choisissez au moins un dossier. Une zone sans dossier serait un droit sans lecteur.",

@@ -3354,7 +3354,6 @@
             "deleteHeader": "¿Eliminar {label}?",
             "everyoneSeesWhole": "Todos ven todo el espacio de trabajo",
             "folderCount": "{count} carpeta | {count} carpetas",
-            "grantedOnAccess": "Se conceden a las personas en Acceso.",
             "nameIt": "Ponle nombre: Frontend, Docs, Facturación",
             "nameTaken": "Ya existe un área llamada {id}.",
             "needsFolder": "Elige al menos una carpeta. Un área sin carpetas sería una concesión sin lector.",

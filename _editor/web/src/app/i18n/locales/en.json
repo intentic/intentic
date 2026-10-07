@@ -6737,7 +6737,6 @@
         },
         "sandboxAreas": {
             "areas": "Your areas",
-            "grantedOnAccess": "Granted to people on Access.",
             "everyoneSeesWhole": "Everyone sees the whole workspace",
             "whatAnAreaIs": "An area is a named slice of the workspace. Grant one and someone sees only those folders — in the tree, search, and conversations — and can talk only to people and assistants in that area. An assistant belongs to the area of its starting folder.",
             "readingAreas": "Reading this workspace’s areas.",

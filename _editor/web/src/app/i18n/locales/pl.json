@@ -5846,7 +5846,6 @@
             "deleteHeader": "Usunąć {label}?",
             "everyoneSeesWhole": "Wszyscy widzą całą przestrzeń roboczą",
             "folderCount": "{count} folder | {count} foldery | {count} folderów",
-            "grantedOnAccess": "Nadawane osobom w zakładce Dostęp.",
             "nameIt": "Nazwij go — Frontend, Docs, Rozliczenia",
             "nameTaken": "Obszar o nazwie {id} już istnieje.",
             "needsFolder": "Wybierz co najmniej jeden folder. Obszar bez folderów byłby nadaniem bez czytelnika.",

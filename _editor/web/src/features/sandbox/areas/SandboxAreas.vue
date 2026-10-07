@@ -287,7 +287,6 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                 v-else
                 v-skeleton-source="`sandbox.areas`"
                 :label="t(`sandbox.sandboxAreas.areas`)"
-                :caption="t(`sandbox.sandboxAreas.grantedOnAccess`)"
             >
                 <template #actions>
                     <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" severity="secondary" @click="startAdd">
