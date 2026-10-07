@@ -1,4 +1,5 @@
 import { AMBIGUOUS_EN, AMBIGUOUS_PL } from "./data/ambiguous.js";
+import { COMMON_WORDS } from "./data/common-words.js";
 import { FIRST_NAMES_PL, FIRST_NAMES_PL_RARE } from "./data/first-names-pl.js";
 import { FIRST_NAMES_EN, SURNAMES_EN } from "./data/names-en.js";
 import { SURNAMES_PL } from "./data/surnames-pl.js";
@@ -28,7 +29,8 @@ export interface WordInfo {
     readonly surnameSuffix: "strong" | "weak" | undefined;
     // Written as a form of a -ski, -cki, -dzki, -wicz or -czyk surname, listed or not: "Brzęczyszczykiewicza".
     readonly surnameForm: boolean;
-    // The word as written is an ordinary word too, so on its own it proves nothing.
+    // The word as written is an ordinary word too, in Polish, English or another language, so it proves nothing on its
+    // own and is no surname a first name can be paired with.
     readonly ambiguous: boolean;
     // Never part of a name: a function word, an institution, a title, an adjective of a place, a noun in -ska.
     readonly never: boolean;
@@ -63,7 +65,7 @@ const lexicon = (): Lexicon => {
         plainFirst: words(FIRST_NAMES_PL_RARE, FIRST_NAMES_EN, NICKNAMES_EN),
         declinedSurnames: words(SURNAMES_PL),
         plainSurnames: words(SURNAMES_EN),
-        ambiguous: words(AMBIGUOUS_EN, AMBIGUOUS_PL),
+        ambiguous: words(AMBIGUOUS_EN, AMBIGUOUS_PL, COMMON_WORDS),
         never: words(NEVER_NAMES),
         things: words(THING_NOUNS),
         notSurnames: words(NOT_SURNAMES),
@@ -130,23 +132,30 @@ export const wordInfo = (word: string): WordInfo => {
     return info;
 };
 
-// What a word says about the capitalized word after it: an honorific (any word after it is a person), a role (a person
-// if the lists know the word), or a place word (not a person: "ulica Grodzka"). Polish ones in any case ("pan",
-// "Pani", "prezes"), English ones capitalized. A dot after a whole word ends a sentence, so only abbreviations may
-// carry one.
-export type Announcer = "honorific" | "role" | "place";
+// What a word says about the capitalized word after it: an honorific (any word after it is a person), a title that is
+// also a word (Miss, Lady, Sir: a person if the lists know the word, "Miss Italia" is a pageant), a role (a person if
+// the word is a surname: "prezes Kowalski"), or a place word (not a person: "ulica Grodzka"). Polish ones in any case
+// ("pan", "Pani", "prezes"), English ones capitalized, none in capitals ("DR Congo"). A dot after a whole word ends a
+// sentence, so only abbreviations may carry one.
+export type Announcer = "honorific" | "title" | "role" | "place";
 
 export const announcerOf = (word: string, dotted: boolean): Announcer | undefined => {
     const sets = lexicon();
     const lower = word.toLowerCase();
+    if (word.length > 1 && word === word.toUpperCase()) {
+        return undefined;
+    }
     if (dotted) {
         if (sets.abbreviations.has(`${lower}.`) || sets.abbreviations.has(lower) || sets.abbreviationsEn.has(word)) {
             return "honorific";
         }
         return sets.roles.has(`${lower}.`) ? "role" : sets.places.has(`${lower}.`) ? "place" : undefined;
     }
-    if (sets.titles.has(lower) || sets.abbreviations.has(lower) || sets.titlesEn.has(word) || sets.abbreviationsEn.has(word)) {
+    if (sets.titles.has(lower) || sets.abbreviations.has(lower) || sets.abbreviationsEn.has(word)) {
         return "honorific";
+    }
+    if (sets.titlesEn.has(word)) {
+        return "title";
     }
     return sets.roles.has(lower) ? "role" : sets.places.has(lower) ? "place" : undefined;
 };

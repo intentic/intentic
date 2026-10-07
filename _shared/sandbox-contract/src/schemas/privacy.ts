@@ -187,7 +187,7 @@ export type PrivacyKnownSource = z.infer<typeof PrivacyKnownSourceSchema>;
 export const PrivacyNameListSchema = z.object({
     id: z.string().describe("Stable id of the list."),
     kind: z.enum(["first-name", "surname", "ambiguous", "title", "never"]).describe("What a word on it says about a name."),
-    languages: z.array(z.enum(["pl", "en"])).describe("The languages its words come from."),
+    languages: z.array(z.enum(["pl", "en", "multi"])).describe("The languages its words come from; multi: many languages at once."),
     count: z.number().int().describe("How many words it holds."),
     matching: z
         .enum(["inflected", "as-written"])
@@ -204,7 +204,7 @@ export const PrivacyNameWordSchema = z.object({
     firstName: z.boolean().describe("A listed first name, in this form or as an inflection of one."),
     surname: z.boolean().describe("A listed surname, in this form or as an inflection of one."),
     surnameForm: z.boolean().describe("Shaped like a Polish surname (-ski, -cki, -wicz…), listed or not."),
-    ambiguous: z.boolean().describe("Also an ordinary word, so found only beside other evidence (a surname, a title)."),
+    ambiguous: z.boolean().describe("Also an ordinary word in some language, so found only beside other evidence (a title, a name field) and no surname to pair a first name with."),
     never: z.boolean().describe("Never taken as part of a name (a title, an institution, a function word)."),
 });
 export type PrivacyNameWord = z.infer<typeof PrivacyNameWordSchema>;

@@ -3887,13 +3887,26 @@
             "startsIfStopped": "Starts it if stopped",
             "syncedSandbox": "Synced sandbox",
             "toggleFolder": "Toggle folder",
-            "reveal": "Reveal file",
+            "reveal": "Show in file manager",
             "withAgent": "Work on this with an agent",
             "openSandbox": "Open this folder's sandbox",
             "askAgent": "Ask an agent",
             "askAgentHint": "A conversation about this file",
             "dropFilesToAdd": "Drop files to add them to {name}",
             "machineSandbox": "This computer's sandbox"
+        },
+        "folderMenu": {
+            "switchFolder": "{name}: open another folder or file",
+            "openFolder": "Open a folder…",
+            "openFile": "Open a file…",
+            "recent": "Recent",
+            "movedOrDeleted": "Moved or deleted",
+            "hasSandbox": "Synced with its own sandbox",
+            "sandbox": "Sandbox",
+            "forget": "Remove {name} from this list",
+            "forgetNote": "Only from this list",
+            "goneOffer": "It isn't there any more. Remove it from this list?",
+            "newWindowHint": "{key}+click opens it in a new window"
         },
         "quickOpen": {
             "goToFile": "Go to a file",
@@ -4540,15 +4553,19 @@
             "dictionaryFound": "Capitalized on its own, “{word}” is masked as a name.",
             "dictionaryHandWritten": "written by hand",
             "dictionaryInflected": "every inflected form",
-            "dictionaryIntro": "Names are found by these lists, on this machine. A capitalized word on a name list is masked; one that is also an ordinary word only beside a title, a surname or a name field.",
+            "dictionaryIntro": "Names are found by these lists, on this machine. No word is masked on its own: a first name is masked only together with a surname that is no ordinary word in any language, in either order, or after a title (Mr, Dr, Pan) or in a name field.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Masked only beside other evidence: a title, a surname, a name field.",
+                    "note": "Never taken as the surname that completes a name; masked only after a title or in a name field.",
                     "title": "English names that are also words"
                 },
                 "ambiguousPl": {
-                    "note": "Masked only beside other evidence: a title, a surname, a name field.",
+                    "note": "Never taken as the surname that completes a name; masked only after a title or in a name field.",
                     "title": "Polish names that are also words"
+                },
+                "commonWords": {
+                    "note": "Names that news and Wikipedia text in 33 languages writes as ordinary lowercase words (Luna, Costa, Tom). Treated like the two lists above.",
+                    "title": "Names that are words in other languages"
                 },
                 "diminutivesPl": {
                     "note": "The familiar forms people go by, which the register of official names lacks.",
@@ -4592,7 +4609,7 @@
                 }
             },
             "dictionaryMore": "The first {count} are shown: type more letters to narrow them.",
-            "dictionaryNeedsContext": "On its own, “{word}” is not masked: it counts as a name only beside a title, a surname or a name field.",
+            "dictionaryNeedsContext": "On its own, “{word}” is not masked: it counts as a name only with a surname that is no ordinary word, after a title or in a name field.",
             "dictionaryNever": "“{word}” is never taken as part of a name.",
             "dictionaryNoMatches": "No listed word starts with “{query}”.",
             "dictionaryNotFound": "On its own, “{word}” is not masked as a name.",
@@ -9769,7 +9786,9 @@
             "closeAnyway": "Close anyway",
             "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone.",
             "closingTabsDiscardsUnsaved": "Closing these tabs discards their unsaved edits. This can't be undone.",
-            "closingWindowDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone."
+            "closingWindowDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
+            "openAnyway": "Open anyway",
+            "openingFolderDiscardsUnsaved": "Opening another folder here discards their unsaved edits. This can't be undone."
         },
         "changesAcross": {
             "pushFailed": "That push didn't work.",

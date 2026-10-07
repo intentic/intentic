@@ -67,6 +67,10 @@ const LISTS = computed<Readonly<Record<string, { readonly title: string; readonl
         title: t(`sandbox.agentPrivacyShield.dictionaryLists.ambiguousEn.title`),
         note: t(`sandbox.agentPrivacyShield.dictionaryLists.ambiguousEn.note`),
     },
+    "common-words": {
+        title: t(`sandbox.agentPrivacyShield.dictionaryLists.commonWords.title`),
+        note: t(`sandbox.agentPrivacyShield.dictionaryLists.commonWords.note`),
+    },
     "titles-pl": {
         title: t(`sandbox.agentPrivacyShield.dictionaryLists.titlesPl.title`),
         note: t(`sandbox.agentPrivacyShield.dictionaryLists.titlesPl.note`),

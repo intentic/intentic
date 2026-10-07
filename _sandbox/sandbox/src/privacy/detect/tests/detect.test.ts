@@ -102,11 +102,11 @@ describe("overlap resolution", () => {
     // The dictionary does not know Bożydar, so it finds the surname alone; the model finds the whole name, which
     // covers the surname and wins as the longer span.
     test("a model's longer span replaces the detector's shorter one inside it", () => {
-        const text = "Spotkałem Bożydara Kowalskiego wczoraj, potem Annę.";
+        const text = "Spotkałem Bożydara Jana Kowalskiego wczoraj, potem Anna Nowak.";
         const detector = detectPersonalData(text, { classes: everything });
-        expect(detector.map((found) => found.value)).toEqual(["Kowalskiego", "Annę"]);
-        const model = [span(10, 30, "person-name", text)];
-        expect(mergeSpans(detector, model).map((found) => found.value)).toEqual(["Bożydara Kowalskiego", "Annę"]);
+        expect(detector.map((found) => found.value)).toEqual(["Jana Kowalskiego", "Anna Nowak"]);
+        const model = [span(10, 35, "person-name", text)];
+        expect(mergeSpans(detector, model).map((found) => found.value)).toEqual(["Bożydara Jana Kowalskiego", "Anna Nowak"]);
         expect(mergeSpans([], model)).toEqual(model);
     });
 });

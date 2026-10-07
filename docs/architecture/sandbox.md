@@ -193,6 +193,14 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   what it cannot read. One that cannot be read (no pack yet, bytes that do not decode) is held back with a note, never
   sent unchecked, and an animation goes as the one frame that was read. The reader runs on a worker thread, so the half
   minute a phone photo takes to read no longer stalls the rest of the daemon. A PDF goes as its masked text where it can be read, and is otherwise withheld.
+- (2026-10-07) A name is masked only as a name: a first name with a surname that is no ordinary word, in either order
+  ([`names.ts`](../../_sandbox/sandbox/src/privacy/detect/names.ts)), or what a title, a field for a part of a name
+  (`lastName`, `nazwisko`) or a personal mail address vouches for. No single word is masked by the lists alone, and no
+  single word found once is matched from the vault again ([`standalone.ts`](../../_sandbox/sandbox/src/privacy/detect/standalone.ts));
+  the local name model's finds are held to the same rule. Nearly every first name is a word in some language, and the
+  shield's log showed list items, tool descriptions and sentence openings masked across ordinary text. An ordinary word
+  is one on the hand-written lists or in [`common-words.ts`](../../_sandbox/sandbox/src/privacy/detect/data/common-words.ts):
+  the names the Leipzig corpora of 33 languages write in lowercase, rebuilt by `generate-common-words.mjs` beside it.
 - A runtime it cannot stand in front of (Cursor's own wire, an ACP agent, Pi, Codex on the container's own key) is
   turned away on an untrusted provider before it starts (`privacy-unshielded`), a helper job steps over such a rung, a
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a

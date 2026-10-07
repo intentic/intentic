@@ -81,9 +81,19 @@ describe("first name and surname", () => {
         expect(names("Spotkanie z Katarzyną Wiśniewską i Pawłem Wójcikiem.")).toEqual(["Katarzyną Wiśniewską", "Pawłem Wójcikiem"]);
     });
 
-    test("an unambiguous first name takes any capitalized word after it as the surname", () => {
+    // A capitalized word nobody lists may be anything: a product, a heading, the next sentence.
+    test("the surname must be a listed one or a surname's form, never just any capitalized word", () => {
         expect(names("Zadzwonił Grzegorz Brzęczyszczykiewicz.")).toEqual(["Grzegorz Brzęczyszczykiewicz"]);
-        expect(names("Report by Jennifer Okafor attached.")).toEqual(["Jennifer Okafor"]);
+        expect(names("Zadzwonił Zbigniew Brzęczyszczykiewicz.")).toEqual(["Zbigniew Brzęczyszczykiewicz"]);
+        expect(names("Report by Jennifer Okafor attached.")).toEqual([]);
+        expect(names("Natalia Restaurant opens at noon.")).toEqual([]);
+    });
+
+    // "Costa" is a coast and "Luna" the moon in half of Europe's languages: neither completes a name.
+    test("a surname that is an ordinary word in some language does not complete a name", () => {
+        expect(names("Umowę podpisali Anna Costa i Marek Luna.")).toEqual([]);
+        expect(names("Lista: Costa, Anna; Luna, Marek")).toEqual([]);
+        expect(names("Luna Kowalska przyszła.")).toEqual(["Luna Kowalska"]);
     });
 
     test("English names", () => {
@@ -107,8 +117,8 @@ describe("titles", () => {
         expect(names("Mr. Darcy and Mrs. Bennet")).toEqual(["Darcy", "Bennet"]);
     });
 
-    test("an office or relation counts only before a word the lists know", () => {
-        expect(names("prezes Kowalski i kolega Marek")).toEqual(["Kowalski", "Marek"]);
+    test("an office or relation counts only before a surname no word or first name shares", () => {
+        expect(names("prezes Kowalski i kolega Marek")).toEqual(["Kowalski"]);
         expect(names("Identyfikator klienta Google")).toEqual([]);
     });
 
@@ -119,17 +129,26 @@ describe("titles", () => {
     });
 });
 
-describe("standalone names", () => {
-    test("an unambiguous first name alone, in any form", () => {
-        expect(names("Spotkałem wczoraj Zbigniewa.")).toEqual(["Zbigniewa"]);
-        expect(names("Małgorzata napisała, że Grzegorz będzie później.")).toEqual(["Małgorzata", "Grzegorz"]);
-        expect(names("Cześć, tu Kasia!")).toEqual(["Kasia"]);
+describe("a word alone", () => {
+    // Nearly every name is a word in some language, a button's label or the start of a sentence.
+    test("a first name alone is never masked, in any form", () => {
+        expect(names("Spotkałem wczoraj Zbigniewa.")).toEqual([]);
+        expect(names("Małgorzata napisała, że Grzegorz będzie później.")).toEqual([]);
+        expect(names("Cześć, tu Kasia!")).toEqual([]);
     });
 
-    test("a surname alone counts only with a surname's shape and a place in the register", () => {
-        expect(names("Dokument przygotował Wiśniewski.")).toEqual(["Wiśniewski"]);
-        expect(names("Zapytaj Kowalskiej.")).toEqual(["Kowalskiej"]);
+    test("nor is a surname alone, whatever its shape", () => {
+        expect(names("Dokument przygotował Wiśniewski.")).toEqual([]);
+        expect(names("Zapytaj Kowalskiej.")).toEqual([]);
         expect(names("Nowak przyszedł.")).toEqual([]);
+    });
+
+    // What the shield's own log showed masked: a list of single words, and tool descriptions that start with a verb.
+    test("words that are names somewhere stay as they are on their own", () => {
+        expect(names("False positives:\n- Mark\n- Any\n- Luna\n- Drop\n- Grace\nWe should never mask them.")).toEqual([]);
+        expect(names('{"name":"mark_connected","description":"Mark an account as connected"}')).toEqual([]);
+        expect(names('{"name":"browser_drop","description":"Drop files or MIME-typed data onto an element"}')).toEqual([]);
+        expect(names("Luna, Costa, Tom i Adam to też słowa.")).toEqual([]);
     });
 
     test("ordinary words that are also names need context", () => {
@@ -166,11 +185,22 @@ describe("context that says a value is a person", () => {
         expect(names('{"productName": "Intentic"}')).toEqual([]);
     });
 
-    test("mail and git headers, display names, greetings and signatures", () => {
+    test("mail and git headers and display names take a full name", () => {
         expect(names("Author: Jan Kowalski <jan@kowalski.pl>")).toEqual(["Jan Kowalski"]);
         expect(names("Mark Brown <mark@brown.dev>")).toEqual(["Mark Brown"]);
-        expect(names("Hi Mark, thanks!")).toEqual(["Mark"]);
-        expect(names("Dzięki za info.\nPozdrawiam,\nRóża")).toEqual(["Róża"]);
+        expect(names("From: Luna <mark@brown.dev>")).toEqual([]);
+    });
+
+    // What follows a greeting or closes a letter is as often a word as a name.
+    test("a greeting or a signature vouches for nothing on its own", () => {
+        expect(names("Hi Mark, thanks!")).toEqual([]);
+        expect(names("Dzięki za info.\nPozdrawiam,\nRóża")).toEqual([]);
+        expect(names("Hi Jan Kowalski, thanks!")).toEqual(["Jan Kowalski"]);
+    });
+
+    test("a field for a whole person takes a full name, not one word", () => {
+        expect(names('{"owner": "Luna", "author": "Grace"}')).toEqual([]);
+        expect(names('{"owner": "Luna Kowalska"}')).toEqual(["Luna Kowalska"]);
     });
 });
 
@@ -186,8 +216,8 @@ describe("data-shaped text", () => {
         expect(names("4\tTomasz\tWójcik")).toEqual(["Tomasz", "Wójcik"]);
     });
 
-    test("a city in the next cell is not taken for a surname", () => {
-        expect(names("Anna,Warszawa,2024")).toEqual(["Anna"]);
+    test("a city in the next cell is not taken for a surname, and a first name alone in a row is no find", () => {
+        expect(names("Anna,Warszawa,2024")).toEqual([]);
     });
 
     test("an upper-case row counts, an upper-case sentence of code does not", () => {
@@ -196,7 +226,7 @@ describe("data-shaped text", () => {
     });
 
     test("JSON values", () => {
-        expect(names('[{"first": "Jan", "last": "Kowalski"}, {"author": "Anna Maria Wiśniewska"}]')).toEqual([
+        expect(names('[{"firstName": "Jan", "lastName": "Kowalski"}, {"author": "Anna Maria Wiśniewska"}]')).toEqual([
             "Jan",
             "Kowalski",
             "Anna Maria Wiśniewska",
@@ -225,15 +255,16 @@ describe("text that is not prose", () => {
         }
     });
 
-    test("in a line of code a lone first name counts only as a quoted value", () => {
+    test("in a line of code a field names a person only as a quoted value", () => {
         expect(names("import { Adam } from 'torch';")).toEqual([]);
-        expect(names('const author = "Zbigniew";')).toEqual(["Zbigniew"]);
+        expect(names('const lastName = "Kowalski";')).toEqual(["Kowalski"]);
+        expect(names("const lastName = surname;")).toEqual([]);
         expect(names("optimizer = build(Adam)")).toEqual([]);
     });
 
     test("a sentence ending in a bracket or a semicolon is still prose", () => {
-        expect(names("Zadzwoń do Zbigniewa (pilne)")).toEqual(["Zbigniewa"]);
-        expect(names("1;Anna;Warszawa;")).toEqual(["Anna"]);
+        expect(names("Zadzwoń do Jan Kowalski (pilne)")).toEqual(["Jan Kowalski"]);
+        expect(names("1;Anna;Nowak;Warszawa;")).toEqual(["Anna", "Nowak"]);
     });
 });
 
@@ -279,7 +310,7 @@ describe("context that says no person is named", () => {
 
     test("a field in a line of code names a person only as a string", () => {
         expect(names("    def acquire(self, owner: Any, relay: Any) -> None:")).toEqual([]);
-        expect(names('const author = "Ewa";')).toEqual(["Ewa"]);
+        expect(names('const author = "Ewa Lewandowska";')).toEqual(["Ewa Lewandowska"]);
     });
 
     test("month abbreviations listed together are months", () => {
@@ -287,7 +318,7 @@ describe("context that says no person is named", () => {
         expect(names('{"headers": ["Product", "Jan", "Feb", "Mar"]}')).toEqual([]);
     });
 
-    test("a markdown heading capitalizes every word, so a first name there needs a real surname", () => {
+    test("a markdown heading capitalizes every word, so a first name there needs a real surname too", () => {
         expect(names("## Victoria Charts")).toEqual([]);
         expect(names("## Anna Kowalska")).toEqual(["Anna Kowalska"]);
     });

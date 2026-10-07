@@ -4200,15 +4200,19 @@
             "dictionaryFound": "Napisane samodzielnie wielką literą, „{word}” jest maskowane jako imię lub nazwisko.",
             "dictionaryHandWritten": "spisane ręcznie",
             "dictionaryInflected": "w każdej formie odmiany",
-            "dictionaryIntro": "Imiona i nazwiska są rozpoznawane według tych list, na tym komputerze. Słowo z listy napisane wielką literą jest maskowane; takie, które jest też zwykłym słowem, tylko obok tytułu, nazwiska lub pola z imieniem.",
+            "dictionaryIntro": "Imiona i nazwiska są rozpoznawane według tych list, na tym komputerze. Żadne słowo nie jest maskowane samo: imię jest maskowane tylko razem z nazwiskiem, które nie jest zwykłym słowem w żadnym języku, w dowolnej kolejności, albo po tytule (Pan, dr, Mr) lub w polu z imieniem.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Maskowane tylko obok innych przesłanek: tytułu, nazwiska, pola z imieniem.",
+                    "note": "Nigdy nie są nazwiskiem, które dopełnia imię; maskowane tylko po tytule lub w polu z imieniem.",
                     "title": "Angielskie imiona będące też słowami"
                 },
                 "ambiguousPl": {
-                    "note": "Maskowane tylko obok innych przesłanek: tytułu, nazwiska, pola z imieniem.",
+                    "note": "Nigdy nie są nazwiskiem, które dopełnia imię; maskowane tylko po tytule lub w polu z imieniem.",
                     "title": "Polskie imiona będące też słowami"
+                },
+                "commonWords": {
+                    "note": "Imiona i nazwiska, które teksty prasowe i Wikipedia w 33 językach piszą małą literą jako zwykłe słowa (Luna, Costa, Tom). Traktowane jak dwie listy powyżej.",
+                    "title": "Imiona będące słowami w innych językach"
                 },
                 "diminutivesPl": {
                     "note": "Formy, którymi ludzie się posługują, a których nie ma w rejestrze oficjalnych imion.",
@@ -4252,7 +4256,7 @@
                 }
             },
             "dictionaryMore": "Pokazano pierwsze {count}: wpisz więcej liter, aby zawęzić.",
-            "dictionaryNeedsContext": "Samodzielnie „{word}” nie jest maskowane: liczy się jako imię lub nazwisko tylko obok tytułu, nazwiska lub pola z imieniem.",
+            "dictionaryNeedsContext": "Samodzielnie „{word}” nie jest maskowane: liczy się jako imię lub nazwisko tylko z nazwiskiem, które nie jest zwykłym słowem, po tytule lub w polu z imieniem.",
             "dictionaryNever": "„{word}” nigdy nie jest brane za część imienia ani nazwiska.",
             "dictionaryNoMatches": "Żadne słowo z list nie zaczyna się od „{query}”.",
             "dictionaryNotFound": "Samodzielnie „{word}” nie jest maskowane jako imię lub nazwisko.",
@@ -9429,7 +9433,9 @@
             "closeAnyway": "Zamknij mimo to",
             "closingTabDiscardsUnsaved": "Zamknięcie tej karty odrzuci jej niezapisane zmiany. Tego nie można cofnąć.",
             "closingTabsDiscardsUnsaved": "Zamknięcie tych kart odrzuca ich niezapisane zmiany. Tego nie można cofnąć.",
-            "closingWindowDiscardsUnsaved": "Zamknięcie tego okna odrzuci ich niezapisane zmiany. Tego nie można cofnąć."
+            "closingWindowDiscardsUnsaved": "Zamknięcie tego okna odrzuci ich niezapisane zmiany. Tego nie można cofnąć.",
+            "openAnyway": "Otwórz mimo to",
+            "openingFolderDiscardsUnsaved": "Otwarcie tu innego folderu odrzuci ich niezapisane zmiany. Tego nie można cofnąć."
         },
         "changesAcross": {
             "pushFailed": "To wypchnięcie się nie udało.",
@@ -9673,7 +9679,7 @@
         },
         "localFiles": {
             "keepsFolderSynced": "Synchronizuje ten folder",
-            "reveal": "Pokaż plik",
+            "reveal": "Pokaż w menedżerze plików",
             "withAgent": "Popracuj nad tym z agentem",
             "openSandbox": "Otwórz sandbox tego folderu",
             "askAgent": "Zapytaj agenta",
@@ -9683,6 +9689,19 @@
             "toggleFolder": "Przełącz folder",
             "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}",
             "machineSandbox": "Sandbox tego komputera"
+        },
+        "folderMenu": {
+            "switchFolder": "{name}: otwórz inny folder lub plik",
+            "openFolder": "Otwórz folder…",
+            "openFile": "Otwórz plik…",
+            "recent": "Ostatnie",
+            "movedOrDeleted": "Przeniesiono lub usunięto",
+            "hasSandbox": "Synchronizowany z własnym sandboxem",
+            "sandbox": "Sandbox",
+            "forget": "Usuń {name} z tej listy",
+            "forgetNote": "Tylko z tej listy",
+            "goneOffer": "Tego już tam nie ma. Usunąć z tej listy?",
+            "newWindowHint": "{key}+klik otwiera w nowym oknie"
         },
         "quickOpen": {
             "goToFile": "Przejdź do pliku",

@@ -15,11 +15,10 @@ export interface Token {
     // A surname: in the register, or written as a -ski, -wicz or -czyk surname; and one that is not an ordinary word.
     readonly surname: boolean;
     readonly surnameStrong: boolean;
-    // A surname with a surname's suffix: Nowak, Kowalski, Wójcik, but not Rola.
+    // A listed surname with a surname's suffix: Nowak, Kowalski, Wójcik, but not Rola.
+    // An adjective in -ska no register lists is no guarantee: it stands before names of streets and parties too.
     readonly surnameSuffixed: boolean;
-    // A listed -ski, -wicz or -czyk surname written as one: a surname even alone.
-    readonly surnameAlone: boolean;
-    // Capitalized and nothing else: a surname only beside an unambiguous first name.
+    // Capitalized and nothing else: part of a name only where a title or a person's field says one follows.
     readonly unknown: boolean;
     readonly never: boolean;
     // A noun of a thing (lexicon.ts): a name right before it is the thing's.
@@ -69,8 +68,7 @@ const tokenOf = (start: number, end: number, parts: readonly string[], line: Lin
         firstStrong: first && !never && !ambiguous,
         surname,
         surnameStrong: surname && !ambiguous,
-        surnameSuffixed: !never && !ambiguous && infos.some((info) => info.surnameSuffix !== undefined || info.surnameForm),
-        surnameAlone: !never && !ambiguous && infos.some((info) => info.surnameSuffix === "strong" && info.surnameForm),
+        surnameSuffixed: !never && !ambiguous && infos.some((info) => info.surnameSuffix !== undefined),
         unknown: !first && !surname && !never && !ambiguous,
         never,
         thing: parts.length === 1 && infos.some((info) => info.thing),

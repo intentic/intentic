@@ -8,12 +8,13 @@ import { isDigit, isLetter, isWordChar } from "./text.js";
 export interface Line {
     readonly start: number;
     readonly end: number;
-    // Looks like source code: names there count only as quoted values.
+    // Looks like source code: a field's value there is a name only as a string.
     readonly code: boolean;
     // A row of upper-case data ("1|JAN|KOWALSKI|…"), the only place an all-caps word may be a name.
     readonly upperData: boolean;
-    // A markdown heading, whose words are capitalized whatever they are.
-    readonly heading: boolean;
+    // A row of cells (CSV, TSV, a table's row) rather than prose: as many separators as lowercase words, and at least
+    // two. Only there do neighbouring cells make one name; in a sentence a comma separates the people of a list.
+    readonly data: boolean;
 }
 
 // A line of source code, or of machine output about code: a statement or declaration, a line ending in a brace or a
@@ -31,7 +32,8 @@ const STATEMENT_END = /;\s*$/u;
 const UPPER = /\p{Lu}/gu;
 const LOWER = /\p{Ll}/gu;
 const CELL_SEPARATOR = /[|;,\t]/;
-const MARKDOWN_HEADING = /^\s{0,3}#{1,6}\s/u;
+const CELL_SEPARATORS = /[|;,\t]/gu;
+const LOWERCASE_WORD = /(?<!\p{L})\p{Ll}{2,}/gu;
 const MAX_UPPER_WORDS = 6;
 
 const describeLine = (text: string, start: number, end: number): Line => {
@@ -42,12 +44,13 @@ const describeLine = (text: string, start: number, end: number): Line => {
     // An assignment ending in ";" is a statement; tested apart because "=.*;$" in one pattern rescans a long minified
     // line from every "=".
     const statement = STATEMENT_END.test(line) && line.includes("=");
+    const separators = line.match(CELL_SEPARATORS)?.length ?? 0;
     return {
         start,
         end,
         code: statement || CODE_LINE.test(line),
         upperData: upper > 0 && lower * 10 <= upper && shortOrCells,
-        heading: MARKDOWN_HEADING.test(line),
+        data: separators >= 2 && (line.match(LOWERCASE_WORD)?.length ?? 0) <= separators,
     };
 };
 
@@ -125,37 +128,28 @@ export const announcedBy = (text: string, start: number): Announcer | undefined 
     return end - index > 1 && !isWordChar(text[index]) && text[index] !== "-" ? announcerOf(text.slice(index + 1, end), dotted) : undefined;
 };
 
-// A field, header or greeting that says the value after it is a person: lastName=…, "author": …, Author: …, From: …,
-// "Cześć Marek", "Dear Mark". A bare "name" field says less: sheets, products and builds have names too.
+// A field or header that says the value after it is a person. A field for one part of a name (firstName, lastName,
+// nazwisko, imię) says what its value is, so one word in it is enough. A field for a whole person (author, owner,
+// user, assignee, fullName) and a mail or commit header (From:, Author:) take a value of two words or more: one word
+// there is as often a handle, a team or a type as a name. A greeting ("Hi …", "Cześć …"), a signature and a bare
+// "name" field say too little: what follows them counts only as a first name with a surname.
+const NAME_PART_FIELD = /(?:(?:first|last|given|family|middle|sur)[ _-]?name|nazwisko|imi[eę]|imiona)["']?\s*[:=]\s*["']?$/iu;
 const PERSON_FIELD =
-    /(?:(?:first|last|full|display|given|family|middle|user|contact|customer|client|author|owner|person|patient|employee)[ _-]?name|surname|nazwisko|imi[eę]|imiona|author|autor|owner|w[łl]a[śs]ciciel|contact|kontakt|person|osoba|klient|customer|employee|pracownik|patient|pacjent|recipient|odbiorca|nadawca|sender|assignee|reviewer|signer|user|u[żz]ytkownik)["']?\s*[:=]\s*["']?$/iu;
-const NAME_FIELD = /name["']?\s*[:=]\s*["']?$/iu;
+    /(?:(?:full|display|user|contact|customer|client|author|owner|person|patient|employee)[ _-]?name|author|autor|owner|w[łl]a[śs]ciciel|contact|kontakt|person|osoba|klient|customer|employee|pracownik|patient|pacjent|recipient|odbiorca|nadawca|sender|assignee|reviewer|signer|user|u[żz]ytkownik)["']?\s*[:=]\s*["']?$/iu;
 const HEADER =
     /^\s*(?:from|to|cc|bcc|reply-to|od|do|dw|author|autor|committer|signed-off-by|co-authored-by|reviewed-by|acked-by|tested-by|reported-by)\s*:\s*$/iu;
-const GREETING =
-    /(?:^|[^\p{L}])(?:hi|hello|hey|dear|thanks|thank you|cheers|cześć|czesc|hej|witaj|witam|drogi|droga|drodzy|szanowny|szanowna|szanowni|pozdrawiam|dziękuję|dziekuje|dzięki|dzieki)[ ,!]*$/iu;
-// The closing line of a letter, after which a line of its own is the signature.
-const CLOSING = /(?:regards|pozdrawiam|pozdrowienia|cheers|thanks|dziękuję|sincerely|poważaniem|best|wishes),?\s*$/iu;
 
-// How firmly the text before a word says a person follows: "person" (a person's field, a header, a greeting, a
-// signature), "name" (a bare name field), or nothing.
-export type Label = "person" | "name";
+export type Field = "name-part" | "person";
 
-export const labelBefore = (text: string, start: number, line: Line): Label | undefined => {
+// The field or header before a word, if one says a person follows.
+export const fieldBefore = (text: string, start: number, line: Line): Field | undefined => {
     const before = text.slice(Math.max(line.start, start - 40), start);
+    if (NAME_PART_FIELD.test(before)) {
+        return "name-part";
+    }
     // A header starts its line, so only a token near the line's start can follow one.
     const header = start - line.start <= 40 && HEADER.test(text.slice(line.start, start));
-    if (header || PERSON_FIELD.test(before) || GREETING.test(before)) {
-        return "person";
-    }
-    if (NAME_FIELD.test(before)) {
-        return "name";
-    }
-    if (before.trim() !== "" || line.start < 2) {
-        return undefined;
-    }
-    const previous = text.slice(Math.max(0, line.start - 80), line.start - 1).trimEnd();
-    return CLOSING.test(previous.slice(previous.lastIndexOf("\n") + 1)) ? "person" : undefined;
+    return header || PERSON_FIELD.test(before) ? "person" : undefined;
 };
 
 // "Jan Kowalski <jan@firma.pl>": a display name before an address in angle brackets, as mail headers and git write it. Before an
@@ -171,9 +165,6 @@ export const addressAfter = (text: string, end: number): "personal" | "impersona
 };
 
 const QUOTES = new Set(['"', "'"]);
-
-// A quoted value of its own: "Anna" in a string literal, a JSON value, a CSV cell.
-export const quotedAlone = (text: string, start: number, end: number): boolean => QUOTES.has(text[start - 1] ?? "") && QUOTES.has(text[end] ?? "");
 
 // The first word of a string: `author: "Jan Kowalski <…>"`, a template literal's text.
 export const openedByQuote = (text: string, start: number): boolean => QUOTES.has(text[start - 1] ?? "") || text[start - 1] === "`";

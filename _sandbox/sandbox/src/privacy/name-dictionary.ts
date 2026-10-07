@@ -7,6 +7,7 @@ import {
     type PrivacyNameWord,
 } from "@intentic/sandbox-contract";
 import { AMBIGUOUS_EN, AMBIGUOUS_PL } from "./detect/data/ambiguous.js";
+import { COMMON_WORDS } from "./detect/data/common-words.js";
 import { FIRST_NAMES_PL, FIRST_NAMES_PL_RARE } from "./detect/data/first-names-pl.js";
 import { FIRST_NAMES_EN, SURNAMES_EN } from "./detect/data/names-en.js";
 import { SURNAMES_PL } from "./detect/data/surnames-pl.js";
@@ -88,6 +89,18 @@ const SOURCES: readonly ListSource[] = [
     },
     { list: { id: "ambiguous-pl", kind: "ambiguous", languages: ["pl"], matching: "as-written", ...HAND_WRITTEN }, words: AMBIGUOUS_PL },
     { list: { id: "ambiguous-en", kind: "ambiguous", languages: ["en"], matching: "as-written", ...HAND_WRITTEN }, words: AMBIGUOUS_EN },
+    {
+        list: {
+            id: "common-words",
+            kind: "ambiguous",
+            languages: ["multi"],
+            matching: "as-written",
+            source: "Leipzig Corpora Collection: names written as ordinary lowercase words in the corpora of 33 languages",
+            url: "https://wortschatz.uni-leipzig.de/en/download",
+            license: "CC BY",
+        },
+        words: COMMON_WORDS,
+    },
     {
         list: { id: "titles-pl", kind: "title", languages: ["pl"], matching: "as-written", ...HAND_WRITTEN },
         words: `${TITLES_PL} ${TITLE_ABBREVIATIONS_PL}`,

@@ -129,13 +129,15 @@ describe("what a found value is matched as alone", () => {
         expect(vault.resolve("PERSON", word.replace(/\D/g, ""))).toBe("Grace");
     });
 
-    test("a name, a full name with an ordinary word in it, and a phone are matched alone", async () => {
+    // One word is a name only in the context it was found in: nearly every name is a word somewhere.
+    test("a full name, one with an ordinary word in it, and a phone are matched alone; a single word is not", async () => {
         const vault = filePrivacyVault(join(dir, "vault.json"));
         await vault.load();
-        vault.tokenFor("Bożydar", "person-name");
+        const single = vault.tokenFor("Bożydar", "person-name");
         vault.tokenFor(["Grace", "Kowalska"].join(" "), "person-name");
         vault.tokenFor(["601", "234", "567"].join(" "), "phone");
-        expect(hits(vault, "Bożydar wrote")).toBe(1);
+        expect(hits(vault, "Bożydar wrote")).toBe(0);
+        expect(vault.resolve("PERSON", single.replace(/\D/g, ""))).toBe("Bożydar");
         expect(hits(vault, `signed ${["Grace", "Kowalska"].join(" ")}`)).toBe(1);
         expect(hits(vault, `call ${["601", "234", "567"].join(" ")}`)).toBe(1);
     });

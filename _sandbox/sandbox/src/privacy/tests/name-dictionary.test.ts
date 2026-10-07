@@ -51,9 +51,9 @@ describe("a query", () => {
         expect(nameDictionary("a").matches).toHaveLength(PRIVACY_DICTIONARY_SAMPLE_MAX);
     });
 
-    test("a listed first name, alone and capitalized, is masked; so is a first name with a listed surname", () => {
+    test("a listed first name alone is not masked; a first name with a listed surname is", () => {
         const single = lookUpName("anna");
-        expect(single).toMatchObject({ found: true, words: [{ firstName: true, never: false }] });
+        expect(single).toMatchObject({ found: false, words: [{ firstName: true, never: false }] });
         const full = lookUpName("jan   kowalski");
         expect(full.found).toBe(true);
         expect(full.words.map((word) => [word.firstName, word.surname])).toEqual([
