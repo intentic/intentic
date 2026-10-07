@@ -3,7 +3,7 @@
 import { computed } from "vue";
 import { hostEntry } from "./deviceFacts";
 import { capabilityRoute } from "./deviceLinks";
-import { deviceSyncingSandbox } from "./deviceRows";
+import { deviceNotListing, deviceSyncingSandbox } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useT } from "@intentic/ui/i18n";
 
@@ -20,6 +20,8 @@ const props = defineProps<{
 const { devices } = useDevices({ poll: false });
 const machine = computed(() => deviceSyncingSandbox(devices.value, props.slug));
 const card = computed(() => (machine.value === undefined ? undefined : hostEntry(machine.value.platform)));
+// Already connected, and the reason this is still a command is the machine's own: it did not list its sandboxes.
+const unlisted = computed(() => deviceNotListing(devices.value));
 </script>
 
 <template>
@@ -31,5 +33,10 @@ const card = computed(() => (machine.value === undefined ? undefined : hostEntry
             {{ t(`sandbox.connectDeviceHint.connect`) }}
         </RouterLink>
         {{ t(`sandbox.connectDeviceHint.and`) }} {{ gains }}
+    </p>
+    <p v-else-if="unlisted" class="text-2xs text-subtle">
+        <span class="font-mono">{{ unlisted.label }}</span>
+        {{ t(`sandbox.connectDeviceHint.connectedButNotListing`) }}
+        <span class="font-mono break-words">{{ unlisted.sandboxesUnread }}</span>
     </p>
 </template>

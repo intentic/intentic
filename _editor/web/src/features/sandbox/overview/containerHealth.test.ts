@@ -54,6 +54,22 @@ describe(`containerNotices`, () => {
         expect(notices.every(offersReconnect)).toBe(true);
     });
 
+    // Only a daemon without its grant reports `unreachable` at once; one probing or proven reachable holds it, so a
+    // reachability gap beside that verdict is the sealed-environment misreading of 2026-10-06 daemons, not a fact.
+    it(`stands behind a reachability gap only beside an unreachable verdict`, () => {
+        for (const reach of [`checking`, `reachable`] as const) {
+            expect(containerNotices({ bootReport: report({ reach, retrying: reach === `checking`, drift: [REACHABILITY_GAP] }), announceRefusal: null })).toEqual(
+                [],
+            );
+        }
+        const unknown = { ...REACHABILITY_GAP, key: `someday`, lost: `Something it needs is missing.` };
+        expect(
+            containerNotices({ bootReport: report({ reach: `reachable`, drift: [REACHABILITY_GAP, unknown] }), announceRefusal: null }).map(
+                (notice) => notice.detail,
+            ),
+        ).toEqual([`Something it needs is missing.`]);
+    });
+
     // A newer daemon's requirement the editor has no words for still says something true: the daemon's own sentence.
     it(`falls back to the daemon's sentence for a drift gap it does not know`, () => {
         const unknown = { ...REACHABILITY_GAP, key: `someday`, lost: `Something it needs is missing.` };

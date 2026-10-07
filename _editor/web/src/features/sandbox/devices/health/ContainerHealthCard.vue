@@ -6,6 +6,7 @@ import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
 import { containerNotices, offersReconnect, reconnectDoor } from "../../overview/containerHealth";
 import { manageDeviceSandbox, useDevices } from "../useDevices";
+import { deviceNotListing } from "../deviceRows";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
@@ -32,6 +33,10 @@ const host = computed<Device | undefined>(() =>
 
 // Owner-only: the platform rejects a non-owner's mint, so the button is hidden rather than left to fail.
 const canRepair = computed(() => isOwner.value && host.value !== undefined && ownSlug.value !== undefined);
+
+// No door lists this sandbox, yet a connected machine answered without listing and said why: naming it beats asking
+// for a connection that exists (2026-10-07, a PC whose `ic` predated `sandbox list --json`).
+const unlisted = computed(() => (host.value === undefined ? deviceNotListing(devices.value) : undefined));
 
 // The repair runs out on the machine and ends by replacing this container, so the machine's card and the Devices tile
 // say so for as long as it lasts. Asked first, inline: the press says what is replaced and what is kept.
@@ -141,6 +146,11 @@ const repair = async (): Promise<void> => {
                             </template>
                         </template>
                         <template v-else-if="!isOwner">{{ t(`sandbox.containerHealthCard.onlySandboxsOwnerReconnect`) }}</template>
+                        <template v-else-if="unlisted">
+                            <span class="font-mono">{{ unlisted.label }}</span>
+                            {{ t(`sandbox.containerHealthCard.machineNotListing`) }}
+                            <span class="font-mono break-words">{{ unlisted.sandboxesUnread }}</span>
+                        </template>
                         <template v-else>{{ t(`sandbox.containerHealthCard.connectComputerRunsSandbox`) }}</template>
                     </p>
                     <button

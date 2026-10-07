@@ -18,7 +18,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
-import { ensureCurrentIc, icCandidates } from "./ic-binary.js";
+import { ensureCurrentIc, icCandidates, icOutOfDate } from "./ic-binary.js";
 import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
@@ -92,9 +92,14 @@ export const fleet = async ({ current = true }: { readonly current?: boolean } =
                 if (error.code === "ENOENT" && index < candidates.length - 1) {
                     return undefined;
                 }
+                // An ic this agent failed to bring up to date is the likeliest reason, and its note names both versions:
+                // first, since the first line is what a card falling back to a command shows (Device.sandboxesUnread).
+                const stale = icOutOfDate();
                 throw error.code === "ENOENT"
                     ? new Error("This device has no `ic` command, so its sandboxes can't be listed or managed from here. Re-run the sandbox's install command on it to get one.")
-                    : new Error(`ic could not list this device's sandboxes: ${(error.stderr ?? error.message).trim()}`);
+                    : new Error(
+                          `${stale === undefined ? "" : `${stale}\n\n`}ic could not list this device's sandboxes: ${(error.stderr ?? error.message).trim()}`,
+                      );
             },
         );
         if (answer !== undefined) {

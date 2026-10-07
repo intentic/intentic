@@ -600,6 +600,10 @@ export const DeviceSchema = z.object({
     // report at all. Absent means nobody could look — a sync-only machine, a refusal, an unread device — never that
     // the machine holds none.
     sandboxes: z.array(DeviceSandboxSchema).optional(),
+    // Why `sandboxes` is absent, in the machine's own words, when it answered the listing with a refusal or a failure
+    // (a switch that is off, an `ic` too old to list). Absent when it listed, or when nothing answered at all. What a
+    // card falling back to a command says instead of "connect the computer": that computer IS connected (2026-10-07).
+    sandboxesUnread: z.string().optional(),
     gap: DeviceGapSchema.optional(),
 });
 export type Device = z.infer<typeof DeviceSchema>;

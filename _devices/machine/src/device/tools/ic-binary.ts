@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, rename, rm } from "node:fs/promises";
+import { chmod, rename, rm, stat } from "node:fs/promises";
 import { homeDir } from "@intentic/local-agent";
 import { promisify } from "node:util";
 import {
@@ -93,9 +93,48 @@ export const fetchIc = async (target: string, installed: string | undefined, age
     }
 };
 
-// One check per process when it succeeds; a failed fetch is tried again on the next call, since the next call is a
-// person pressing a button that needs it.
-let checked: Promise<void> | undefined;
+// Which ic file a check was about: the first candidate that exists, by path, size and modification time. Bare names
+// (PATH lookups) are not files this agent writes or can stat, so they read as none.
+const icSignature = async (): Promise<string> => {
+    for (const candidate of icCandidates(process.platform, homeDir())) {
+        // allow(silent-catch): a candidate that is not there is the next one's turn
+        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that exists wins
+        const info = await stat(candidate).catch(() => undefined);
+        if (info !== undefined) {
+            return `${candidate}:${info.size}:${info.mtimeMs}`;
+        }
+    }
+    return "none";
+};
+
+/**
+ * Runs `check` once per state of the ic file, as `signature` reads it. Once per PROCESS was the old rule, and it let a
+ * setup script that put a three-week-old ic back (2026-10-07: an `IC_URL` left by a desktop rehearsal) leave a current
+ * agent driving it for days, with every listing refused and every card falling back to a command. A replaced file is
+ * checked again; so is one whose check failed (`check` answers false), since the next call is a person pressing a
+ * button that needs it. Exported for its test; ensureCurrentIc is the one caller.
+ */
+export const checkPerIcFile = (signature: () => Promise<string>, check: () => Promise<boolean>): (() => Promise<void>) => {
+    let held: { signature: string; done: Promise<boolean> } | undefined;
+    return async () => {
+        const now = await signature();
+        if (held !== undefined && held.signature === now) {
+            await held.done;
+            return;
+        }
+        const entry = { signature: now, done: check() };
+        held = entry;
+        if (!(await entry.done)) {
+            if (held === entry) {
+                held = undefined;
+            }
+            return;
+        }
+        // A fetch rewrites the file: the check holds for the file it left behind.
+        entry.signature = await signature();
+    };
+};
+
 // The last failed fetch's note, until one lands.
 let staleNote: string | undefined;
 
@@ -108,21 +147,17 @@ const warn = (line: string): void => {
 
 // Put this agent's own release of ic in the per-user location when what is installed is older (or missing). A fetch
 // that fails leaves whatever is installed to answer for itself, and says so (icOutOfDate).
-export const ensureCurrentIc = async (): Promise<void> => {
-    checked ??= (async () => {
-        const target = userIcPath();
-        const installed = await installedVersion();
-        if (target === undefined || !icNeedsFetch(installed, MACHINE_VERSION)) {
-            staleNote = undefined;
-            return;
-        }
-        staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download, warn });
-        if (staleNote !== undefined) {
-            checked = undefined;
-        }
-    })();
-    await checked;
-};
+const ensureForFile = checkPerIcFile(icSignature, async () => {
+    const target = userIcPath();
+    const installed = await installedVersion();
+    if (target === undefined || !icNeedsFetch(installed, MACHINE_VERSION)) {
+        staleNote = undefined;
+        return true;
+    }
+    staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download, warn });
+    return staleNote === undefined;
+});
+export const ensureCurrentIc = (): Promise<void> => ensureForFile();
 
 /* WHAT THIS DEVICE CAN BE ASKED TO DO, derived from the `ic` it drives rather than written down beside the code: every
    optional op runs through ic, so an agent is only as capable as the ic under it. */

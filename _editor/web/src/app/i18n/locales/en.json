@@ -4980,6 +4980,7 @@
         "connectDeviceHint": {
             "and": "and",
             "connect": "Connect it",
+            "connectedButNotListing": "is connected, but did not list its sandboxes, so this stays a command. It said:",
             "syncsSandboxNotConnected": "syncs this sandbox but is not connected as a device."
         },
         "connectFlow": {
@@ -5070,9 +5071,10 @@
             "runFixOnItsComputer": "On the computer it runs on, run `ic sandbox fix`: it checks each link to the sandbox and repairs what it can."
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Or connect the computer it runs on to fix it from here.",
+            "connectComputerRunsSandbox": "Its setup command, run on the computer it runs on, recreates the container and keeps logins, files, history and Docker. Or connect that computer to do it from here.",
+            "machineNotListing": "is connected, but did not list its sandboxes, so it can't be reconnected from here. It said:",
             "onlySandboxsOwnerReconnect": "Only its owner can reconnect it.",
-            "openSetupScreen": "Open setup",
+            "openSetupScreen": "Re-run its setup",
             "reconnectSandbox": "Reconnect",
             "reconnecting": "Reconnecting…",
             "reconnectingSandbox": "Reconnecting this sandbox",

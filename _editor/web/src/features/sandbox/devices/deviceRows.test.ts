@@ -8,6 +8,7 @@ import {
     boardBody,
     type DeviceRow,
     deviceRow,
+    deviceNotListing,
     deviceState,
     deviceSwitches,
     deviceSyncingSandbox,
@@ -726,6 +727,18 @@ test(`ignores a machine that only mirrors the ports`, () => {
 // nothing true.
 test(`ignores a machine that is already a connected device`, () => {
     expect(deviceSyncingSandbox([device({ report: pairedTo(`work-abc`) })], `work-abc`)).toBeUndefined();
+});
+
+// Connected, and still no button: the machine did not list, and said why. That is what a command fallback names,
+// rather than asking for a connection that exists (2026-10-07).
+test(`names the connected machine that did not list its sandboxes, with its reason`, () => {
+    const stale = `ic could not list this device's sandboxes: error: unexpected argument '--json' found`;
+    const unlisted = device({ key: `rog-win`, label: `rog`, sandboxesUnread: stale });
+    expect(deviceNotListing([device({ key: `omen`, label: `omen`, sandboxes: [] }), unlisted])?.sandboxesUnread).toBe(stale);
+    // Silence, a listing, or a door that is down says nothing about why.
+    expect(deviceNotListing([device({ label: `quiet` })])).toBeUndefined();
+    expect(deviceNotListing([device({ sandboxes: [], sandboxesUnread: stale })])).toBeUndefined();
+    expect(deviceNotListing([device({ online: false, sandboxesUnread: stale })])).toBeUndefined();
 });
 
 test(`names nobody without a slug to match against`, () => {

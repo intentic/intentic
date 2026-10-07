@@ -2413,6 +2413,7 @@
         "connectDeviceHint": {
             "and": "y",
             "connect": "Conéctalo",
+            "connectedButNotListing": "está conectado, pero no listó sus sandboxes, así que esto sigue siendo un comando. Dijo:",
             "syncsSandboxNotConnected": "sincroniza este sandbox pero no está conectado como dispositivo."
         },
         "connectFlow": {
@@ -2491,9 +2492,10 @@
             "runFixOnItsComputer": "En el ordenador en el que se ejecuta, ejecuta `ic sandbox fix`: revisa cada enlace con el sandbox y repara lo que puede."
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "O conecta el ordenador en el que se ejecuta para repararlo desde aquí.",
+            "connectComputerRunsSandbox": "Su comando de configuración, ejecutado en el ordenador donde corre, recrea el contenedor y conserva inicios de sesión, archivos, historial y Docker. O conecta ese ordenador para hacerlo desde aquí.",
+            "machineNotListing": "está conectado, pero no listó sus sandboxes, así que no se puede reconectar desde aquí. Dijo:",
             "onlySandboxsOwnerReconnect": "Solo su propietario puede volver a conectarlo.",
-            "openSetupScreen": "Abrir configuración",
+            "openSetupScreen": "Volver a ejecutar su configuración",
             "reconnectSandbox": "Volver a conectar",
             "reconnecting": "Reconectando…",
             "confirmReconnect": "Vuelve a crear su contenedor en {host} a partir de su configuración. Se conservan los inicios de sesión, los archivos, el historial y Docker.",

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { stubGlobal, unstubAllGlobals, stubEnv, advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals, stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The platform post, mocked like announce.test.ts: every post succeeds and is recorded, since what matters is what gets
 // reported.
@@ -19,6 +19,7 @@ jest.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(..
 const { createReachReporter, probeSelf } = await import("./reach-report.js");
 const { sandboxIdFromToken } = await import("@intentic/sandbox-contract/tunnel-ids");
 const { readCgroup } = await import("../resources/cgroup.js");
+const { resetSealedEnvForTests, sealConfigSecrets } = await import("../../seams/sealed-env.js");
 
 // A cgroup with no files: the reading settles in microtasks, never on disk I/O the fake clock cannot drain.
 const noCgroup = () => readCgroup(async () => undefined);
@@ -47,6 +48,8 @@ beforeEach(() => {
 afterEach(() => {
     jest.useRealTimers();
     unstubAllGlobals();
+    unstubAllEnvs();
+    resetSealedEnvForTests();
 });
 
 // The only check that the sandbox's public address actually answers; every failure it can name surfaces on the setup
@@ -234,5 +237,23 @@ describe("createReachReporter", () => {
         await settle();
 
         expect(posted.map((post) => (post.body as { drift?: unknown }).drift)).toEqual([undefined]);
+    });
+
+    // Boot seals the grant out of process.env before this runs; reading what was left told every sandbox since 2026-10-06
+    // that its setup predated public addresses, while its own probe was proving it reachable.
+    it("counts a grant boot sealed out of the environment as given", async () => {
+        stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
+        stubEnv("SANDBOX_GRANT", "ig1.payload.sig");
+        stubEnv("INGRESS_URL", "https://ingress.intentic.dev");
+        sealConfigSecrets({ secretEnv: ["SANDBOX_GRANT"], keys: { claudeCodeOauthToken: "", anthropicApiKey: "", openaiApiKey: "" } });
+        expect(process.env["SANDBOX_GRANT"]).toBeUndefined();
+        stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, sandboxId: OWN_ID }), { status: 200 }));
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
+
+        reporter.start({ by: "tunnel" });
+        await settle();
+
+        expect(posted.map((post) => (post.body as { reach: string }).reach)).toEqual(["checking", "reachable"]);
+        expect(posted.map((post) => (post.body as { drift?: unknown }).drift)).toEqual([undefined, undefined]);
     });
 });

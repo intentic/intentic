@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { inspectSchema } from "@puristic/env/index.js";
 import { REPLAY_ENV, REPLAY_SECRET_ENV } from "@intentic/sandbox-run";
 import { CONFIG_SECRET_ENV, CONTAINER_SECRET_ENV, configSchema } from "../env.config.js";
-import { containerKeyEnv, resetSealedEnvForTests, sealConfigSecrets } from "./sealed-env.js";
+import { containerKeyEnv, resetSealedEnvForTests, sealConfigSecrets, startedEnv } from "./sealed-env.js";
 
 const keys = { claudeCodeOauthToken: "oauth-value", anthropicApiKey: "", openaiApiKey: "openai-value" };
 
@@ -52,6 +52,17 @@ describe("sealing the daemon's environment", () => {
         sealConfigSecrets({ secretEnv: CONTAINER_SECRET_ENV, keys }, {});
         expect(containerKeyEnv("claude")).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "oauth-value" });
         expect(containerKeyEnv("codex")).toEqual({ OPENAI_API_KEY: "openai-value" });
+    });
+
+    test("still says which secrets the container was started with, never their values", () => {
+        const env: NodeJS.ProcessEnv = { SANDBOX_GRANT: "ig1.payload.sig", CONNECT_TOKEN: "  ", PATH: "/usr/bin" };
+        sealConfigSecrets({ secretEnv: CONTAINER_SECRET_ENV, keys }, env);
+        const started = startedEnv(env);
+        expect(started["PATH"]).toBe("/usr/bin");
+        expect(started["SANDBOX_GRANT"]).not.toBe("ig1.payload.sig");
+        expect((started["SANDBOX_GRANT"] ?? "").trim()).not.toBe("");
+        // Blank was never given: it stays absent rather than reading as sealed.
+        expect(started["CONNECT_TOKEN"]).toBeUndefined();
     });
 
     test("an unsealed daemon hands no runtime anything", () => {

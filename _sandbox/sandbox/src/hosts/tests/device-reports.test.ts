@@ -12,7 +12,7 @@ import { ORPCError } from "@orpc/server";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../../peers/desktop-sync.js";
-import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool } from "../device-reports.js";
+import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool, unreadFromTool } from "../device-reports.js";
 import { HOST_CARD_RULE } from "../host-peer.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
@@ -72,6 +72,19 @@ test("an agent without the tool, or an answer that is not the fleet, is no readi
     expect(sandboxesFromTool("not json", false)).toBeUndefined();
     expect(sandboxesFromTool(`{"slug":"work"}`, false)).toBeUndefined();
     expect(sandboxesFromTool("[]", false)).toEqual([]);
+});
+
+// A connected machine that did not list is not one that is missing: its own first line says why, for the card that
+// would otherwise tell the owner to connect a computer that is connected (2026-10-07).
+test("keeps the machine's own reason for not listing, and only when it gave one", () => {
+    const failed = `ic could not list this device's sandboxes: error: unexpected argument '--json' found\n\nUsage: ic.exe sandbox list\n\nFor more information, try '--help'.`;
+    expect(unreadFromTool(failed, true)).toBe(`ic could not list this device's sandboxes: error: unexpected argument '--json' found`);
+    expect(unreadFromTool(`\n  Refused: "Manage sandboxes on this device" is switched off.  \n`, true)).toBe(
+        `Refused: "Manage sandboxes on this device" is switched off.`,
+    );
+    expect(unreadFromTool(``, true)).toBeUndefined();
+    expect(unreadFromTool(`[]`, false)).toBeUndefined();
+    expect(unreadFromTool(`x`.repeat(1000), true)).toHaveLength(300);
 });
 
 test("keeps an enrolled machine that has never reported, and says why it is empty", () => {
@@ -590,7 +603,10 @@ test("carries no container list at all when the machine refuses to list them", a
     const { services } = fakeServices("shy-pc", async (call) =>
         call.tool === "report" ? report("shy") : answer(`This device has no tool called "list_sandboxes".`, true),
     );
-    expect((await devices(services))[0]?.sandboxes).toBeUndefined();
+    const row = (await devices(services))[0];
+    expect(row?.sandboxes).toBeUndefined();
+    // Said, though: the card that falls back to a command names this connected machine and its reason.
+    expect(row?.sandboxesUnread).toBe(`This device has no tool called "list_sandboxes".`);
 });
 
 // Runner lifecycle: the two ops the daemon fills in for.

@@ -25,7 +25,7 @@ import {
     swapResult,
     tailSandboxLogs,
 } from "./sandboxes.js";
-import { featuresFrom, fetchIc, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
+import { checkPerIcFile, featuresFrom, fetchIc, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -381,6 +381,51 @@ test("a failed fetch of the current ic is logged with its reason and names the s
     expect(warned).toEqual([note!]);
     // No ic at all is said as such rather than as a version.
     expect(await fetchIc("/nonexistent-intentic-test/ic", undefined, "1.313.0", { download: async () => await Promise.reject(new Error("offline")), warn: () => {} })).toContain("none is installed");
+});
+
+// Once per process let a setup script that put an older ic back leave a current agent driving it for days, every
+// listing refused (2026-10-07). The check holds for the file it was about, and only for that file.
+test("checks ic again when the file is replaced, and after a check that failed, but not otherwise", async () => {
+    let file = "ic:5368832:1";
+    const checks: string[] = [];
+    let outcome = true;
+    const ensure = checkPerIcFile(
+        async () => file,
+        async () => {
+            checks.push(file);
+            return outcome;
+        },
+    );
+    await ensure();
+    await ensure();
+    expect(checks).toEqual(["ic:5368832:1"]);
+    // A rehearsal's setup script downloads a three-week-old build over it.
+    file = "ic:3988480:2";
+    await ensure();
+    expect(checks).toEqual(["ic:5368832:1", "ic:3988480:2"]);
+    // A fetch that failed is tried again on the next press.
+    file = "ic:3988480:3";
+    outcome = false;
+    await ensure();
+    await ensure();
+    expect(checks).toHaveLength(4);
+});
+
+// A fetch rewrites the file it checked: that is the file the check now holds for, not a replacement to check again.
+test("holds a check that fetched for the file the fetch left behind", async () => {
+    let file = "old";
+    let checks = 0;
+    const ensure = checkPerIcFile(
+        async () => file,
+        async () => {
+            checks += 1;
+            file = "fetched";
+            return true;
+        },
+    );
+    await ensure();
+    await ensure();
+    expect(checks).toBe(1);
 });
 
 test("a machine with no home still tries the rest", () => {

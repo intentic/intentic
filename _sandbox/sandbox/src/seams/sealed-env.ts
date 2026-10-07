@@ -21,6 +21,14 @@ const NO_KEYS: ContainerKeys = { claude: {}, codex: {} };
 
 let held: ContainerKeys = NO_KEYS;
 
+// Which secrets the container was started WITH, by name only. A sealed variable is gone from the environment, which a
+// reader asking "was this container given X" must not take as "it never was": the reach report checks the started env
+// for the grant, and reading the sealed one told every sandbox since 2026-10-06 that its setup predated public addresses.
+let sealedNames: ReadonlySet<string> = new Set();
+
+// What a sealed variable reads as in `startedEnv`: present, and not the value.
+const SEALED = "(sealed)";
+
 // Present-only: an empty config value is "not set", and an empty variable would read to a CLI as a set, empty key.
 const present = (entries: Record<string, string>): Record<string, string> =>
     Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== ""));
@@ -41,10 +49,20 @@ export const sealConfigSecrets = (input: SealInput, env: NodeJS.ProcessEnv = pro
         claude: present({ CLAUDE_CODE_OAUTH_TOKEN: input.keys.claudeCodeOauthToken, ANTHROPIC_API_KEY: input.keys.anthropicApiKey }),
         codex: present({ OPENAI_API_KEY: input.keys.openaiApiKey }),
     };
+    sealedNames = new Set(input.secretEnv.filter((name) => (env[name] ?? "").trim() !== ""));
     for (const name of input.secretEnv) {
         delete env[name];
     }
 };
+
+/**
+ * The container's environment as it was started, for asking what it was GIVEN: what is left, plus every sealed secret
+ * it was started with, standing in as a placeholder rather than its value. Presence checks only (containerDrift).
+ */
+export const startedEnv = (env: NodeJS.ProcessEnv = process.env): Readonly<Record<string, string | undefined>> => ({
+    ...env,
+    ...Object.fromEntries([...sealedNames].map((name) => [name, SEALED])),
+});
 
 /** The container's fallback key for one runtime, as the env that runtime reads it from; empty when none was given. */
 export const containerKeyEnv = (runtime: keyof ContainerKeys): Readonly<Record<string, string>> => held[runtime];
@@ -52,4 +70,5 @@ export const containerKeyEnv = (runtime: keyof ContainerKeys): Readonly<Record<s
 /** Test-only: forget what a previous seal kept. */
 export const resetSealedEnvForTests = (): void => {
     held = NO_KEYS;
+    sealedNames = new Set();
 };

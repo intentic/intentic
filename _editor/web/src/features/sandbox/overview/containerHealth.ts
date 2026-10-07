@@ -28,12 +28,21 @@ const DRIFT_COPY: Readonly<Partial<Record<string, () => { readonly title: string
 
 export type ContainerEvidence = Pick<SandboxSummary, "bootReport" | "announceRefusal"> & Partial<Pick<SandboxSummary, "duplicateCopies">>;
 
+type BootReport = NonNullable<SandboxSummary["bootReport"]>;
+
+// A daemon without its grant never dials the edge, so it reports `unreachable` the moment it boots (reach-report.ts,
+// the loopback posture); one that is `checking` or `reachable` holds the grant by construction. The reachability gap
+// stands only beside that verdict: daemons from 2026-10-06 read the grant from an environment boot had already sealed
+// it out of, and reported every sandbox, its own probe passing, as unreachable from other devices.
+const standingGaps = (report: BootReport | null | undefined): NonNullable<BootReport["drift"]> =>
+    (report?.drift ?? []).filter((gap) => gap.key !== `reachability` || report?.reach === `unreachable`);
+
 /** Returns only the deepest fault found, never a shallower one it explains; empty means healthy. */
 export const containerNotices = (sandbox: ContainerEvidence): readonly ContainerNotice[] => {
     const report = sandbox.bootReport;
 
     // Drift outranks the others: a recreate replays the same missing env, so restarting cannot clear it.
-    const drift: ContainerNotice[] = (report?.drift ?? []).map((gap) => ({
+    const drift: ContainerNotice[] = standingGaps(report).map((gap) => ({
         fault: "drift",
         ...(DRIFT_COPY[gap.key]?.() ?? { title: t(`sandbox.containerHealth.setupOutOfDate`), detail: gap.lost }),
         keys: gap.missing,

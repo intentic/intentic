@@ -7,6 +7,7 @@ import type { BootTracker } from "../boot/boot.js";
 import type { ReachPosture } from "./reach-posture.js";
 import { type CgroupReading, readCgroup } from "../resources/cgroup.js";
 import { reportToPlatform } from "../platform-client.js";
+import { startedEnv } from "../../seams/sealed-env.js";
 
 // Whether anybody can actually reach this sandbox, which announce next door does not answer: a daemon can boot and
 // register while its public tunnel serves nobody. Nothing else can check this from outside, so the box probes its own
@@ -119,8 +120,9 @@ export const createReachReporter = (
         const boot = bootSnapshot();
         const cpu = (await cgroup()).cpuThrottle;
         // Sent on every report: this is the only channel that still works when the tunnel itself is broken.
-        // Computed per post, not cached: a pure read of process.env, so nothing can go stale.
-        const drift = containerDrift(process.env);
+        // Read from the env the container was STARTED with: boot seals the grant out of process.env, and reading what is
+        // left reported every sandbox as missing it (sealed-env.ts, 2026-10-07).
+        const drift = containerDrift(startedEnv());
         const answer = await reportToPlatform(config, "bootReport", {
             reach,
             ...(detail === undefined ? {} : { detail }),

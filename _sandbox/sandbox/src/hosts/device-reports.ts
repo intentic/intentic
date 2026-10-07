@@ -57,6 +57,8 @@ const AGENT_FLOW_TIMEOUT_MS = 15 * 60 * 1000;
 // look, so an empty list stays the answer "none there".
 export type PullResult = ({ readonly report: DeviceReport } | { readonly gap: DeviceGap }) & {
     readonly sandboxes?: readonly DeviceSandbox[];
+    // The machine's own sentence for not listing, when it answered with one (Device.sandboxesUnread).
+    readonly sandboxesUnread?: string;
 };
 
 // One machine's last reading, plus any refresh currently in flight for it. `inflight` de-dupes concurrent readers into
@@ -128,6 +130,16 @@ export const sandboxesFromTool = (text: string, refused: boolean): DeviceSandbox
     return rows.success ? rows.data : undefined;
 };
 
+// Long enough for the machine's sentence and the reason it quotes; a usage dump after it is not for a card.
+const UNREAD_MAX_CHARS = 300;
+
+// Why a machine that answered did not list: the first line of its refusal or failure ("ic could not list this device's
+// sandboxes: …", a switch that is off). Undefined for a listing, and for silence, which says nothing about why.
+export const unreadFromTool = (text: string, refused: boolean): string | undefined => {
+    const line = refused ? text.split(/\r?\n/).find((part) => part.trim() !== "")?.trim() : undefined;
+    return line === undefined ? undefined : line.slice(0, UNREAD_MAX_CHARS);
+};
+
 // FORBIDDEN is the "Run commands" switch, any other refusal an agent without the call; a transport failure throws.
 const describeMachine = async (client: HostClient, signal: AbortSignal): Promise<{ readonly report: DeviceReport } | { readonly gap: DeviceGap }> => {
     try {
@@ -181,7 +193,8 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
     const sandboxes = sandboxesFromTool(fleet.text, fleet.refused);
-    return { ...described, ...(sandboxes === undefined ? {} : { sandboxes }) };
+    const unread = sandboxes === undefined ? unreadFromTool(fleet.text, fleet.refused) : undefined;
+    return { ...described, ...(sandboxes === undefined ? {} : { sandboxes }), ...(unread === undefined ? {} : { sandboxesUnread: unread }) };
 };
 
 const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);
@@ -272,6 +285,7 @@ const pulledHost = (
             ...(host.version === undefined ? {} : { agentVersion: host.version }),
             ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
             ...(result.sandboxes === undefined ? {} : { sandboxes: [...result.sandboxes] }),
+            ...(result.sandboxesUnread === undefined ? {} : { sandboxesUnread: result.sandboxesUnread }),
         },
         // A result with neither half is not representable; "offline" keeps the fallback a named gap rather than none.
         gap: "gap" in result ? result.gap : "offline",

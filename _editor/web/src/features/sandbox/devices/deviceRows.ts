@@ -287,6 +287,14 @@ export const deviceSyncingSandbox = (devices: readonly Device[], slug: string | 
                   (device.report?.pairings ?? []).some((pairing) => pairing.mode === `sync` && isSameSandbox(pairing.sandboxId, slug)),
           );
 
+// A connected machine that answered but did not list its containers, carrying its own reason (`sandboxesUnread`): when no
+// door lists a sandbox, the one that may well run it, and the honest thing for a card falling back to a command to name
+// instead of "connect the computer it runs on" (2026-10-07). The first such door; undefined when none said why.
+export const deviceNotListing = (devices: readonly Device[]): Device | undefined =>
+    devices.find(
+        (device) => device.hostId !== undefined && device.online === true && device.sandboxes === undefined && device.sandboxesUnread !== undefined,
+    );
+
 // Container verbs show only where a click can work: the machine is a reachable connected device, and the
 // row is a real container rather than a bare pairing.
 export const manageable = (device: Device, group: DeviceSandboxGroup): boolean =>

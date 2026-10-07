@@ -4573,6 +4573,7 @@
         "connectDeviceHint": {
             "and": "i",
             "connect": "Podłącz",
+            "connectedButNotListing": "jest podłączone, ale nie podało listy swoich sandboxów, więc to zostaje poleceniem. Odpowiedź:",
             "syncsSandboxNotConnected": "synchronizuje ten sandbox, ale nie jest podłączone jako urządzenie."
         },
         "connectFlow": {
@@ -4663,9 +4664,10 @@
             "runFixOnItsComputer": "Na komputerze, na którym działa, uruchom `ic sandbox fix`: sprawdzi każde połączenie z sandboxem i naprawi, co się da."
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Albo podłącz komputer, na którym działa, żeby naprawić go stąd.",
+            "connectComputerRunsSandbox": "Jego polecenie konfiguracji, uruchomione na komputerze, na którym działa, odtwarza kontener i zachowuje logowania, pliki, historię i Dockera. Albo podłącz ten komputer, żeby zrobić to stąd.",
+            "machineNotListing": "jest podłączone, ale nie podało listy swoich sandboxów, więc nie da się go stąd ponownie połączyć. Odpowiedź:",
             "onlySandboxsOwnerReconnect": "Tylko właściciel może go ponownie połączyć.",
-            "openSetupScreen": "Otwórz konfigurację",
+            "openSetupScreen": "Uruchom ponownie jego konfigurację",
             "reconnectSandbox": "Połącz ponownie",
             "reconnecting": "Ponowne łączenie…",
             "reconnectingSandbox": "Ponowne łączenie tego sandboxa",

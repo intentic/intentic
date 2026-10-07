@@ -2403,6 +2403,7 @@
         "connectDeviceHint": {
             "and": "und",
             "connect": "Verbinden",
+            "connectedButNotListing": "ist verbunden, hat seine Sandboxen aber nicht aufgelistet, daher bleibt dies ein Befehl. Die Meldung:",
             "syncsSandboxNotConnected": "synchronisiert diese Sandbox, ist aber nicht als Gerät verbunden."
         },
         "connectFlow": {
@@ -2481,9 +2482,10 @@
             "runFixOnItsComputer": "Führen Sie auf dem Computer, auf dem sie läuft, `ic sandbox fix` aus: Es prüft jede Verbindung zur Sandbox und repariert, was es kann."
         },
         "containerHealthCard": {
-            "connectComputerRunsSandbox": "Oder verbinden Sie den Computer, auf dem sie läuft, um sie von hier zu reparieren.",
+            "connectComputerRunsSandbox": "Ihr Einrichtungsbefehl, auf dem Computer ausgeführt, auf dem sie läuft, erstellt den Container neu und behält Anmeldungen, Dateien, Verlauf und Docker. Oder verbinden Sie diesen Computer, um es von hier zu tun.",
+            "machineNotListing": "ist verbunden, hat seine Sandboxen aber nicht aufgelistet, daher lässt sie sich nicht von hier neu verbinden. Die Meldung:",
             "onlySandboxsOwnerReconnect": "Nur ihr Eigentümer kann sie neu verbinden.",
-            "openSetupScreen": "Einrichtung öffnen",
+            "openSetupScreen": "Einrichtung erneut ausführen",
             "reconnectSandbox": "Neu verbinden",
             "reconnecting": "Wird neu verbunden…",
             "confirmReconnect": "Erstellt ihren Container auf {host} neu aus ihrer Einrichtung. Anmeldungen, Dateien, Historie und Docker bleiben.",
