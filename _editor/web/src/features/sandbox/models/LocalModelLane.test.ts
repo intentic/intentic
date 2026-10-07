@@ -13,7 +13,7 @@ const WORK = `unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf`;
 
 const capabilities = ref<CapabilitySummary[]>([]);
 const add = jest.fn(async () => undefined);
-jest.mock(`../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add }) }));
+jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add }) }));
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 
 const { default: LocalModelLane } = await import("./LocalModelLane.vue");

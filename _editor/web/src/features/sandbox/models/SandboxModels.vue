@@ -10,21 +10,24 @@ import {
     ProviderKeysSchema,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, Icon, Notice, Page, PageHeader, StatusBadge, ui } from "@intentic/ui";
+import { Button, Icon, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { defaultModelFor, endpointProviders } from "../chat/accounts/providerCatalog";
-import { refreshConnections } from "../chat/accounts/useChat-accounts";
-import { accessKnown, accessStateFor, providerReady } from "../chat/session/access";
-import { rememberPick } from "../chat/run/turnDefaults";
-import { useChat } from "../chat/run/useChat";
-import ProviderLogo from "../chat/accounts/ProviderLogo.vue";
-import { sandboxJson } from "../../client/sandbox/sandboxClient";
-import { useSandbox } from "../../client/sandbox/useSandbox";
-import { useRole } from "../../client/sandbox/useRole";
-import { foundToOffer } from "../../lib/foundOnComputer";
-import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
+import { defaultModelFor, endpointProviders } from "../../chat/accounts/providerCatalog";
+import { refreshConnections } from "../../chat/accounts/useChat-accounts";
+import { accessKnown, accessStateFor, providerReady } from "../../chat/session/access";
+import { rememberPick } from "../../chat/run/turnDefaults";
+import { useChat } from "../../chat/run/useChat";
+import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useRole } from "../../../client/sandbox/useRole";
+import { foundToOffer } from "../../../lib/foundOnComputer";
+import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
+import SandboxOutdatedNotice from "../overview/version/SandboxOutdatedNotice.vue";
+import ConnectionRow from "../secrets/ConnectionRow.vue";
+import EstatePicker from "../secrets/EstatePicker.vue";
 import { localPrefetchStopped } from "./localPrefetch";
 import {
     arrivalLane,
@@ -43,16 +46,24 @@ import {
 import ConnectAttempt from "./ConnectAttempt.vue";
 import ConnectLane from "./ConnectLane.vue";
 import LocalModelLane from "./LocalModelLane.vue";
+import ModelSources from "./ModelSources.vue";
 import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
+import { useModelSources } from "./useModelSources";
 import { useT } from "@intentic/ui/i18n";
 
-// The one place a first model is connected. Everything that used to offer a sign-in somewhere else — a strip over the
-// composer, a link in the model picker, a settings page that auto-started a handshake on arrival — sends the reader
-// here instead, because the decision (which of three ways in) was being made in surfaces built to report state, not to
-// hold a choice.
+// SANDBOX ▸ MODELS: everything this sandbox can run a model on, and the one place one is connected. It was two places
+// until 2026-10 — a page of its own at /connect that only links reached, for the first model, and an AI-account card
+// inside Agent ▸ Models that showed one provider's accounts at a time — and the reader had to know which was which.
+// Everything that offers a sign-in elsewhere (the chat's strip, the model picker, setup's landing, a job whose model is
+// not connected) sends the reader here (lib/routes/modelsPath.ts), because the decision is a choice, not a setting.
 //
-// Three lanes, in cost order, one open at a time. The Agent tab keeps managing accounts; this view makes the first one.
+// Top to bottom: the sign-in card when one runs, what is CONNECTED (ModelSources: every source, what needs a person
+// first, each provider opening onto its accounts), what was FOUND on this computer, then the ways to ADD one. With
+// nothing connected the page is the first-run one: the connected list is not drawn, and the free lane opens.
+//
+// Three lanes, in cost order, one open at a time. Which model does which job is Agent ▸ Jobs: how the agent uses what
+// is here, not what is here.
 //
 // One sign-in at a time, and it has one place: the card at the top (ConnectAttempt), whichever lane or row started it.
 // The lanes never give their tiles up to it, so trying a different provider is one press on its tile, which replaces
@@ -75,7 +86,15 @@ const {
     setManagedProvider,
     startConnect,
     connectTranslator,
+    loadUsage,
 } = useChat();
+const { reachable } = useSandbox();
+
+// Every source, what needs a person first. Empty is the first visit: nothing above the ways in.
+const sources = useModelSources();
+// A provider a link named that is already connected (a reconnect from the chat): its row opens, rather than a second
+// sign-in starting over the account it already holds (linkArrival).
+const focus = ref<AgentProvider | undefined>(undefined);
 
 const { fit, startPrefetch, stopPrefetch } = useLocalModelFit();
 
@@ -125,7 +144,7 @@ const toggleLane = (key: ConnectLaneKey): void => {
 // lane opens under the card, so a different provider is one press away. Anything else opens the free lane, and only for
 // a reader who has connected nothing (arrivalLane).
 const settleLane = (): void => {
-    if (!accessKnown.value || openLane.value !== undefined) {
+    if (!accessKnown.value || openLane.value !== undefined || focus.value !== undefined) {
         return;
     }
     const asked = String(route.query[`provider`] ?? ``);
@@ -133,10 +152,14 @@ const settleLane = (): void => {
     // One already signing in is not started over: the card above already holds it.
     const arrival = linkArrival(asked, providerReady);
     if (arrival !== undefined) {
-        openLane.value = arrival.lane;
-        if (arrival.signIn && live.value?.provider !== asked) {
-            // SAFETY: linkArrival answers only for a provider some lane connects, and every lane's providers are native.
-            void connect(asked as NativeProvider);
+        if (!arrival.signIn) {
+            focus.value = asked;
+        } else {
+            openLane.value = arrival.lane;
+            if (live.value?.provider !== asked) {
+                // SAFETY: linkArrival answers only for a provider some lane connects, and every lane's providers are native.
+                void connect(asked as NativeProvider);
+            }
         }
         // Acted on once: a reload or a step back to this address must not start the sign-in a second time.
         void router.replace({ query: { ...route.query, provider: undefined } });
@@ -176,7 +199,9 @@ const routed = (provider: NativeProvider): provider is KeyedProvider => provider
 const starting = ref<NativeProvider | undefined>(undefined);
 const attemptCard = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemptCard`);
 
-const connect = async (provider: NativeProvider, variant?: string): Promise<void> => {
+// `via` picks the mechanism where a provider has two (Grok's own xAI account, or its subscription under Claude Code);
+// left out, the provider's own auth kind decides, which is what every tile means.
+const connect = async (provider: NativeProvider, { variant, via }: { variant?: string; via?: `native` | `routed` } = {}): Promise<void> => {
     if (starting.value !== undefined) {
         return;
     }
@@ -188,7 +213,9 @@ const connect = async (provider: NativeProvider, variant?: string): Promise<void
     await nextTick();
     void attemptCard.value?.reveal();
     try {
-        await (routed(provider) ? connectTranslator(provider) : startConnect(variant));
+        const routedHere = via === undefined ? routed(provider) : via === `routed`;
+        // SAFETY: only a translator-held provider is asked for its subscription, by its own tile or by its account rows.
+        await (routedHere ? connectTranslator(provider as KeyedProvider) : startConnect(variant));
     } finally {
         starting.value = undefined;
     }
@@ -215,8 +242,19 @@ const pick = (provider: NativeProvider): void => {
 const connectChosen = (): void => {
     const provider = chosen.value;
     if (provider !== undefined) {
-        void connect(provider, estate.value);
+        void connect(provider, { variant: estate.value });
     }
+};
+
+// A provider's account rows asking for a sign-in (another account, a reconnect): the one already running for it is
+// shown rather than started over, as a tile's press is.
+const connectFrom = (provider: AgentProvider, request: { via: `native` | `routed`; variant?: string }): void => {
+    if (live.value?.provider === provider) {
+        void attemptCard.value?.reveal();
+        return;
+    }
+    // SAFETY: the rows that ask are a native provider's own accounts (ModelSources lists no other kind with rows).
+    void connect(provider as NativeProvider, request);
 };
 
 // Again, as it was: the same estate when it was the one picked here.
@@ -224,7 +262,7 @@ const retry = (): void => {
     const provider = signInFailure.value?.provider;
     if (provider !== undefined) {
         // SAFETY: a failure is only ever recorded by a sign-in, and only native providers have one.
-        void connect(provider as NativeProvider, provider === chosen.value ? estate.value : undefined);
+        void connect(provider as NativeProvider, { variant: provider === chosen.value ? estate.value : undefined });
     }
 };
 
@@ -242,6 +280,18 @@ const attempt = computed<{ provider: AgentProvider; phase: `starting` | `live` |
     }
     return undefined;
 });
+
+// What went wrong that is not a sign-in's own (a refused disconnect, an unreachable account list): a sign-in's failure
+// has the card, and a live one says its own trouble inside it.
+const accountsNotice = computed<NoticeModel | undefined>(() =>
+    error.value === null || live.value !== undefined || signInFailure.value !== undefined
+        ? undefined
+        : { tone: `danger`, title: t(`sandbox.aiAccountSection.couldntReachAiAccounts`), detail: error.value },
+);
+
+const dismissAccountsNotice = (): void => {
+    error.value = null;
+};
 
 // Landing on a connection is a state, not a redirect: the lane says who it signed in as and offers the one next move.
 const landed = ref<AgentProvider | undefined>(undefined);
@@ -375,6 +425,8 @@ const laneHolds = (key: ConnectLaneKey): string | undefined => {
 onMounted(() => {
     // Fetched on open rather than waiting for the reachable seam, which lags a probe plus a tunnel round-trip.
     void refreshConnections();
+    // Each account's spend, for the meter's card on its row; the rows draw without it until it lands.
+    void loadUsage();
     settleLane();
     if (canShip.value) {
         void readKeys();
@@ -384,14 +436,13 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
 </script>
 
 <template>
-    <Page width="content">
-        <PageHeader :title="t(`connect.connect.title`)" :description="t(`connect.connect.description`)" />
+    <!-- `@container`: the docked chat can leave this pane a third of the window, and the rows below thin against it. -->
+    <div class="@container flex flex-col gap-4">
 
         <!-- The sign-in in flight, or how the last one ended: first on the page, since it is the reader's turn. -->
         <ConnectAttempt
             v-if="attempt"
             ref="attemptCard"
-            class="mb-4"
             :provider="attempt.provider"
             :phase="attempt.phase"
             :kind="live?.kind"
@@ -403,14 +454,45 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
         />
 
         <!-- The one thing that just happened, above the lanes that are still offering to do it again. -->
-        <div v-if="landed" class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-4 py-3">
+        <div v-if="landed" class="flex flex-wrap items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-4 py-3">
             <Icon name="check" class="shrink-0 text-success" />
             <span class="min-w-0 flex-1 text-sm text-content">{{ landedText }}</span>
             <Button :label="t(`connect.connect.startChatting`)" @click="startChatting" />
         </div>
 
+        <Notice v-if="accountsNotice" :of="accountsNotice" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissAccountsNotice" />
+
+        <!-- CONNECTED: nothing read yet holds the list's place (offline says so and stops); then every source, if any. -->
+        <RowGroup v-if="!accessKnown" :label="t(`connect.modelSources.title`)">
+            <ConnectionRow
+                v-if="!reachable"
+                :title="t(`sandbox.aiAccountSection.connectionsUnavailable`)"
+                state="missing"
+                :description="t(`sandbox.aiAccountSection.sandboxOfflineAccountsCant`)"
+            />
+            <template v-else>
+                <ConnectionRow v-for="placeholder in 2" :key="`loading-${placeholder}`" state="unknown" pending aria-hidden="true" />
+            </template>
+        </RowGroup>
+        <template v-else-if="sources.length > 0">
+            <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
+            <RowNote v-if="accountsOutdated" variant="block">
+                <SandboxOutdatedNotice :missing="t(`sandbox.aiAccountSection.outdatedMissing`)" />
+            </RowNote>
+            <ModelSources :sources="sources" :live="starting ?? live?.provider" :focus="focus" @connect="connectFrom" />
+        </template>
+
+        <!-- The ways in, named for what this visit is: the first model, or one more. The promise about where it is kept
+             stands either way, since it is the whole argument for connecting anything here. -->
+        <header class="flex flex-col gap-1" :class="sources.length > 0 ? `mt-2` : ``">
+            <h2 class="text-lg font-medium leading-tight text-content">
+                {{ sources.length > 0 ? t(`connect.connect.addTitle`) : t(`connect.connect.title`) }}
+            </h2>
+            <p class="text-xs text-muted">{{ t(`connect.connect.description`) }}</p>
+        </header>
+
         <!-- What this computer already holds, above the ways in: the first thing to do when there is any of it. -->
-        <section v-if="foundRows.length > 0 || keyRows.length > 0" class="ui-card mb-3 flex flex-col gap-3 p-4 sm:p-5">
+        <section v-if="foundRows.length > 0 || keyRows.length > 0" class="ui-card flex flex-col gap-3 p-4 sm:p-5">
             <h2 class="font-medium leading-tight">{{ t(`connect.connect.foundTitle`) }}</h2>
             <div v-for="provider in foundRows" :key="provider" class="flex items-center gap-3 rounded-xl border border-line bg-card p-3">
                 <ProviderLogo :provider="provider" class="shrink-0 text-base text-muted" />
@@ -493,13 +575,13 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
         </div>
 
         <!-- The power path, named once and sent sideways: somebody already running a server does not need a tour. -->
-        <RouterLink to="/capabilities/endpoint" :class="ui.linkButton(`mt-4 text-xs`)">
+        <RouterLink to="/capabilities/endpoint" :class="ui.linkButton(`text-xs`)">
             {{ t(`connect.connect.ownServer`) }}<Icon name="arrow-right" class="text-2xs" />
         </RouterLink>
 
-        <!-- Managing what is already here is a different job from making the first connection, and keeps its own page. -->
-        <RouterLink to="/sandbox/agent" :class="ui.textAction(`mt-1 text-xs`)">
-            {{ t(`connect.connect.allAccounts`) }}
+        <!-- The other half of models: which one does which job is how the agent uses what is here, so it stays with the agent. -->
+        <RouterLink v-if="sources.length > 0" to="/sandbox/agent" :class="ui.textAction(`-mt-2 text-xs`)">
+            {{ t(`connect.connect.jobsLink`) }}
         </RouterLink>
-    </Page>
+    </div>
 </template>

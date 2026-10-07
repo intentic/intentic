@@ -2307,13 +2307,11 @@
         "aiAccountSection": {
             "account": "Cuenta de {managedLabel}",
             "addAnotherAccount": "Añadir otra cuenta",
-            "aiAccount": "Cuenta de IA",
             "allowanceUsedUp": "Cuota agotada.",
             "allowanceUsedUpReopens": "Cuota agotada, se reabre {when}.",
             "chatgptSubscription": "Suscripción de ChatGPT",
             "connectionsUnavailable": "Conexiones no disponibles",
             "couldntReachAiAccounts": "No se pudo llegar a tus cuentas de IA.",
-            "free": "Gratis",
             "googleAccount": "Cuenta de Google",
             "kimiCodeSubscription": "Suscripción de Kimi Code",
             "outdatedMissing": "Hasta que se actualice, estas cuentas no pueden indicar si pueden atender un turno: un inicio de sesión o puesto perdido, o un cupo agotado o en pausa, aparece como desconocido.",

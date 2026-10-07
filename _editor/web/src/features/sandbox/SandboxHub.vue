@@ -18,6 +18,11 @@ import type { HubTab } from "../../workbench/hub/hubNav";
 import { hubWorkKey, hubWorkRunning } from "../../workbench/hub/hubWork";
 import SandboxAccess from "./access/SandboxAccess.vue";
 import SandboxAgent from "./overview/SandboxAgent.vue";
+import SandboxModels from "./models/SandboxModels.vue";
+import { sourcesNeedingSomeone } from "./models/modelSources";
+import { useModelSources } from "./models/useModelSources";
+import { providerDisplayLabel } from "../chat/accounts/providerCatalog";
+import { useChat } from "../chat/run/useChat";
 import SandboxDeleted from "./deleted/SandboxDeleted.vue";
 import SandboxEnvironment from "./environment/SandboxEnvironment.vue";
 import SandboxExtensions from "./extensions/SandboxExtensions.vue";
@@ -45,14 +50,27 @@ const openPersona = computed(() => (typeof route.query[`open`] === `string` ? ro
 const HUB = `sandbox`;
 
 // The count the index carries, and whatever is running behind the row. Extensions counts installed extensions with a
-// newer registry commit; info, not warning, since nothing here auto-updates. A run is not an errand, so it adds no
-// count of its own: it rides `running`, which the row draws as a turning mark.
-const sectionBadge = (slug: string, updates: number, running: string | undefined): ViewBadge | undefined => {
-    const count = slug === `extensions` ? updates : 0;
+// newer registry commit; info, not warning, since nothing here auto-updates. Models counts what needs a person (an
+// account to sign in again or verify, a seat only an admin can restore, a sign-in that ended without connecting) as a
+// warning, since a model that cannot serve is a turn that will not run. A run is not an errand, so it adds no count of
+// its own: it rides `running`, which the row draws as a turning mark, and a sign-in waiting on the reader is one.
+const sectionBadge = (slug: string, counts: { updates: number; models: number }, running: string | undefined): ViewBadge | undefined => {
+    const count = slug === `extensions` ? counts.updates : slug === `models` ? counts.models : 0;
     if (count === 0 && running === undefined) {
         return undefined;
     }
-    return { ...(count > 0 ? { count, tone: `info` as const } : {}), ...(running === undefined ? {} : { running }) };
+    const badge: { -readonly [K in keyof ViewBadge]: ViewBadge[K] } = {};
+    if (count > 0) {
+        badge.count = count;
+        badge.tone = slug === `models` ? `warning` : `info`;
+        if (slug === `models`) {
+            badge.tooltip = t(`connect.modelSources.badgeNeedsYou`, { count }, count);
+        }
+    }
+    if (running !== undefined) {
+        badge.running = running;
+    }
+    return badge;
 };
 
 const sandbox = useSandbox();
@@ -67,6 +85,12 @@ const { entries: listedExtensions } = useRegistry({ read: false });
 const { extensions: installedExtensions } = useExtensions();
 const updatable = computed(() => updateCount(listedExtensions.value.map((entry) => toListing(entry, installedExtensions.value))));
 
+// What Models' row says without being opened: sources that need a person, plus a sign-in that ended badly, and the one in
+// flight as the row's turning mark.
+const sources = useModelSources();
+const { liveSignIn, signInFailure } = useChat();
+const modelsNeedingSomeone = computed(() => sourcesNeedingSomeone(sources.value) + (signInFailure.value === undefined ? 0 : 1));
+
 // The environment build the platform runs for a hosted sandbox: minutes long, server-side, and followed here rather
 // than by the section, since the row has to keep saying so while the section is closed. Everything else a section
 // starts reports itself through the ledger as it runs (hubWork.ts).
@@ -74,7 +98,10 @@ const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.val
 const { build: hostedBuild } = useHostedBuild(() => hosted.value);
 const runningIn = (slug: string): string | undefined =>
     hubWorkRunning(hubWorkKey(HUB, slug), sandbox.activeSandboxId.value) ??
-    (slug === `environment` && hostedBuild.value?.state === `building` ? t(`sandbox.useHostedBuild.buildingEnvironment`) : undefined);
+    (slug === `environment` && hostedBuild.value?.state === `building` ? t(`sandbox.useHostedBuild.buildingEnvironment`) : undefined) ??
+    (slug === `models` && liveSignIn.value !== undefined
+        ? t(`connect.modelSources.signingInTo`, { provider: providerDisplayLabel(liveSignIn.value.provider) })
+        : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
 const contributed = computed<readonly ActiveExtension[]>(() =>
@@ -104,7 +131,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
                 .filter((section) => (isGuest.value ? section.slug === GUEST_SECTION : canShip.value || section.maintainer !== true))
                 .map((section) => ({
                     ...section,
-                    badge: sectionBadge(section.slug, updatable.value, runningIn(section.slug)),
+                    badge: sectionBadge(section.slug, { updates: updatable.value, models: modelsNeedingSomeone.value }, runningIn(section.slug)),
                 })),
         }))
         .filter((group) => group.items.length > 0),
@@ -131,6 +158,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxAccess v-else-if="slug === `access`" />
             <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
             <SandboxAreas v-else-if="slug === `areas`" />
+            <SandboxModels v-else-if="slug === `models`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
             <SandboxDeleted v-else-if="slug === `deleted`" />

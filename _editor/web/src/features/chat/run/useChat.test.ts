@@ -717,6 +717,58 @@ describe(`one sign-in at a time`, () => {
         expect(chat.signInFailure.value).toBeUndefined();
     });
 
+    // The reported shape: "Add another account" on a provider that already held one came down on its first tick, and
+    // "Connected" was announced over a sign-in nobody had finished, because the list it polled was simply not empty.
+    it(`waits for a second account to land, rather than reading the first as this sign-in finishing`, async () => {
+        jest.useFakeTimers();
+        const chat = useChat();
+        const first = { id: `first`, label: `Work`, connectedAt: 1000 };
+        const second = { id: `second`, label: `Home`, connectedAt: 2000 };
+        let accounts: unknown[] = [first];
+        mockConnections({ accounts: (provider) => (provider === `claude` ? accounts : []) });
+        daemonAnswers((procedure) =>
+            procedure === `accounts.start`
+                ? Promise.resolve({ url: `https://claude.ai/device`, code: `ABCD`, state: ``, flow: `device`, variant: ``, handshake: `h2`, expiresAt: Date.now() + 900_000 })
+                : undefined,
+        );
+        await refreshConnections(true);
+        chat.setManagedProvider(`claude`);
+
+        await chat.startConnect();
+        await advanceTimersByTimeAsync(3_000);
+        expect(chat.liveSignIn.value).toEqual({ kind: `native`, provider: `claude` });
+        expect(chat.signInLanded.value).toBeUndefined();
+
+        accounts = [first, second];
+        await advanceTimersByTimeAsync(3_000);
+        expect(chat.liveSignIn.value).toBeUndefined();
+        expect(chat.signInLanded.value?.provider).toBe(`claude`);
+    });
+
+    it(`counts a reconnect as landed when the account that needed it serves again, on the same id`, async () => {
+        jest.useFakeTimers();
+        const chat = useChat();
+        const signedOut = { id: `only`, label: `Work`, connectedAt: 1000, needsReauth: true };
+        let accounts: unknown[] = [signedOut];
+        mockConnections({ accounts: (provider) => (provider === `claude` ? accounts : []) });
+        daemonAnswers((procedure) =>
+            procedure === `accounts.start`
+                ? Promise.resolve({ url: `https://claude.ai/device`, code: `ABCD`, state: ``, flow: `device`, variant: ``, handshake: `h3`, expiresAt: Date.now() + 900_000 })
+                : undefined,
+        );
+        await refreshConnections(true);
+        chat.setManagedProvider(`claude`);
+
+        await chat.startConnect();
+        await advanceTimersByTimeAsync(3_000);
+        expect(chat.liveSignIn.value).toEqual({ kind: `native`, provider: `claude` });
+
+        accounts = [{ ...signedOut, needsReauth: false }];
+        await advanceTimersByTimeAsync(3_000);
+        expect(chat.liveSignIn.value).toBeUndefined();
+        expect(chat.signInLanded.value?.provider).toBe(`claude`);
+    });
+
     it(`records a sign-in the provider refused, with the provider's reason`, async () => {
         jest.useFakeTimers();
         const chat = useChat();

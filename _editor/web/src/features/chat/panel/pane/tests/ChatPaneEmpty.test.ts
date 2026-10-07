@@ -48,7 +48,7 @@ it(`opens a trial chat on what it costs, and offers the way off the cap under it
 
     expect(element.textContent).toContain(`this chat is free and needs nothing connected`);
     expect(element.textContent).toContain(`Already pay for an AI plan, or run a model on this machine?`);
-    expect(offerLink(element)?.getAttribute(`href`)).toBe(`/connect`);
+    expect(offerLink(element)?.getAttribute(`href`)).toBe(`/sandbox/models`);
 });
 
 it(`names the provider a non-trial chat runs on, and offers nothing`, () => {
@@ -65,7 +65,7 @@ it(`says nothing about the cap until both reads have landed`, async () => {
 
     endpointsLoaded.value = true;
     await nextTick();
-    expect(offerLink(element)?.getAttribute(`href`)).toBe(`/connect`);
+    expect(offerLink(element)?.getAttribute(`href`)).toBe(`/sandbox/models`);
 });
 
 it(`leaves the offer to the trial strip once half the allowance is gone`, () => {

@@ -102,7 +102,7 @@ const reader = { mobile, inApp: desktop, installer };
 
 // Lands on `/`, which differs by form factor (a phone has no docked chat, so it opens straight into one). A project's
 // sandbox opens on its folder, the one the reader asked about, rather than on the `/work` around it (projectScope.ts).
-// Where the desktop app found AI tools already signed in on this computer (`?found=`), it lands on `/connect` instead,
+// Where the desktop app found AI tools already signed in on this computer (`?found=`), it lands on Sandbox ▸ Models instead,
 // which offers each of them as one press (lib/foundOnComputer.ts).
 const enterWorkspace = async (): Promise<void> => {
     const entered = activeSandboxId.value;

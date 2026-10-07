@@ -27,7 +27,7 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
 - **What this computer is already signed in to.** The desktop app opens the page as `/setup?found=claude,codex`, the
   providers it found signed in on the computer. `lib/foundOnComputer.ts` keeps the list in the tab's session storage as the
   router first sees it, since a signed-out app's sign-in comes back at `/` without the query, and the finished setup
-  opens `/connect?found=…` instead of `/`, which offers each one as a single press. No login is copied: the sandbox signs
+  opens Sandbox ▸ Models (`/sandbox/models?found=…`) instead of `/`, which offers each one as a single press. No login is copied: the sandbox signs
   in afresh, and the browser already signed in answers it.
 
 ## Key files

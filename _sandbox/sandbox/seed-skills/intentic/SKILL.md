@@ -166,7 +166,7 @@ applies from every conversation's next turn, with no restart.
                                      terminals/ (every pane's lossless log)
 ```
 
-Settings and config are the owner's to change from the editor (Sandbox ▸ Agent, ▸ Secrets, ▸ Personas,
+Settings and config are the owner's to change from the editor (Sandbox ▸ Models, ▸ Agent, ▸ Secrets, ▸ Personas,
 ▸ Extensions, ▸ Environment). Read them to answer questions; edit them only when asked to.
 
 ## Diagnostics playbook (read-only)

@@ -2297,13 +2297,11 @@
         "aiAccountSection": {
             "account": "Compte {managedLabel}",
             "addAnotherAccount": "Ajouter un autre compte",
-            "aiAccount": "Compte d'IA",
             "allowanceUsedUp": "Quota épuisé.",
             "allowanceUsedUpReopens": "Quota épuisé, rouvre {when}.",
             "chatgptSubscription": "Abonnement ChatGPT",
             "connectionsUnavailable": "Connexions indisponibles",
             "couldntReachAiAccounts": "Impossible de joindre vos comptes d'IA.",
-            "free": "Gratuit",
             "googleAccount": "Compte Google",
             "kimiCodeSubscription": "Abonnement Kimi Code",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, ces comptes ne peuvent pas dire s'ils peuvent prendre un tour : une connexion ou un siège perdu, ou un quota épuisé ou suspendu, apparaît comme inconnu.",

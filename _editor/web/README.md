@@ -65,7 +65,7 @@ flowchart LR
   installed by hand. The persona rail and the chat's accounts read "older" off the routes the daemon advertises
   (`supportsRoute`, `accountsOutdated`): `agent.switchAccount` arrived in v1.313, the same release as the `lastActsAs`
   the rail groups chats by. Such a sandbox's account rows carry no verdict (`state`) and read as unknown, no held turn
-  is offered another account, and the model picker, the continue card and the AI account section say it needs an
+  is offered another account, and the model picker, the continue card and Sandbox ▸ Models say it needs an
   update. The editor sends a session id only for a conversation the daemon has no record of (a past session opened
   from the history menu), and reads the account a failed turn ran on only off its error frame. Nothing else is guessed
   either: a card without `awaitingWake` is not waiting on a wake, a reading without `memoryRoom` warns of nothing, and a

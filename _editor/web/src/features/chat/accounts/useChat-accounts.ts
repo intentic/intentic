@@ -254,8 +254,8 @@ const replaceAccount = (target: AgentProvider, next: OauthAccount): void => {
 // on response. Doesn't use `accountBusy`, which gates Disconnect/startConnect, not renames.
 // THROWS rather than posting to `error`: the row that asked is holding an open field, and a sentence beside that
 // field beats a notice at the top of the section, over a list where every row looks alike.
-export const renameAccount = async (id: string, label: string): Promise<void> => {
-    const target = managedProvider.value;
+// Names its provider: Sandbox ▸ Models lists every provider's accounts at once, so the managed one is only a default.
+export const renameAccount = async (id: string, label: string, target: AgentProvider = managedProvider.value): Promise<void> => {
     const typed = label.trim();
     const current = accountsOf(target).find((entry) => entry.id === id);
     if (current === undefined) {
@@ -283,12 +283,11 @@ export const renameAccount = async (id: string, label: string): Promise<void> =>
     replaceAccount(target, renamed);
 };
 
-// Disconnect one account of the managed provider by id; drop it from the list and fix the selection. Busy for
-// the round-trip, like every other account write, the row's own button says so. A refused disconnect keeps the row: the
-// account is still signed in, and a list without it would say otherwise.
-export const disconnect = async (id: string): Promise<void> => {
-    const target = managedProvider.value;
-    accountBusy.value = target;
+// Disconnect one account by id; drop it from the list and fix the selection. Busy for the round-trip, like every other
+// account write, keyed by the account so only that row's button spins. A refused disconnect keeps the row: the account is
+// still signed in, and a list without it would say otherwise.
+export const disconnect = async (id: string, target: AgentProvider = managedProvider.value): Promise<void> => {
+    accountBusy.value = id;
     error.value = null;
     const current = sandboxScopeGuard();
     try {

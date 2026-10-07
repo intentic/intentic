@@ -4,6 +4,7 @@ import { namesThinking } from "@intentic/sandbox-contract";
 import type { DescribedPin } from "../../../chat/models/modelPins";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
+import { modelsPath } from "../../../../lib/routes/modelsPath";
 
 // Ordered list of pinned models (numbered in try order, and said to be one once there are two); the shared body of every
 // role row in Sandbox > Agent > Models.
@@ -61,7 +62,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                      is the one place that state is ever seen: it carries the way out rather than only naming the fault. -->
                 <RouterLink
                     v-if="!entry.ready && entry.choice"
-                    :to="{ path: `/sandbox/agent`, query: { connect: entry.choice.provider } }"
+                    :to="modelsPath({ provider: entry.choice.provider })"
                     class="shrink-0 text-2xs text-warning underline-offset-2 hover:underline"
                 >
                     {{ t(`sandbox.modelPinList.notConnected`) }}

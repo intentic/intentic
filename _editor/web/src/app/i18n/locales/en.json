@@ -2187,6 +2187,7 @@
             "didntConnect": "{provider} didn't connect.",
             "finishSignIn": "Finish sign-in",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
+            "maintainerConnects": "A maintainer of this sandbox can connect one.",
             "noModelYet": "No model is connected in this sandbox yet.",
             "signInWaiting": "Your {provider} sign-in isn't finished yet."
         },
@@ -3669,7 +3670,7 @@
     },
     "connect": {
         "connect": {
-            "allAccounts": "Manage the accounts this sandbox already holds",
+            "addTitle": "Add a model",
             "connecting": "Connecting {provider}",
             "description": "It is stored in your sandbox and never on the platform. Pick whichever of these you already have.",
             "foundKeyAdded": "Added",
@@ -3681,6 +3682,7 @@
             "free": "Free",
             "freeSubtitle": "A sign-in, no card, no subscription",
             "freeTitle": "Free, with a Google account",
+            "jobsLink": "Choose which model does each job",
             "landed": "Connected. This workspace can run turns now.",
             "landedIn": "{provider} connected to \"{sandbox}\". Chats in this sandbox can use it now.",
             "localSubtitle": "Free forever, private, works offline",
@@ -3729,6 +3731,25 @@
             "stop": "Stop",
             "useForQuickJobs": "Choose it for commit messages and titles",
             "windowUnderFloor": "This window is under what one agent turn costs, so it is a quick-jobs rung too. More memory would raise it."
+        },
+        "modelSources": {
+            "accounts": "{count} account | {count} accounts",
+            "admin": "{account}: an organisation admin has to restore the seat",
+            "allWaiting": "Resting for now: it serves again by itself",
+            "allWaitingUntil": "Resting until {when}",
+            "badgeNeedsYou": "{count} needs you | {count} need you",
+            "endpoint": "Your own server",
+            "local": "Runs on this machine",
+            "manage": "Manage",
+            "manyNeedAdmin": "An organisation admin has to restore these seats",
+            "manyNeedYou": "{count} account needs you | {count} accounts need you",
+            "signInAgain": "{account}: sign in again",
+            "signingInTo": "signing in to {provider}",
+            "someWaiting": "{count} of {total} resting for now",
+            "title": "Connected",
+            "trialLeft": "{count} free message left today | {count} free messages left today",
+            "trialSpent": "Today's free messages are used up",
+            "verify": "{account}: verify it on the provider's page"
         },
         "providerTile": {
             "connected": "Connected",
@@ -4806,17 +4827,13 @@
         "aiAccountSection": {
             "account": "{managedLabel} account",
             "addAnotherAccount": "Add another account",
-            "aiAccount": "AI account",
             "allowanceUsedUp": "Allowance used up.",
             "allowanceUsedUpReopens": "Allowance used up, reopens {when}.",
             "cachedShare": "{tokens} cached ({pct}%)",
             "chatgptSubscription": "ChatGPT subscription",
-            "checking": "checking",
-            "connected": "connected",
             "connectedAgo": "connected {ago}",
             "connectionsUnavailable": "Connections unavailable",
             "couldntReachAiAccounts": "Couldn't reach your AI accounts.",
-            "free": "Free",
             "geminiFinishSetup": "{reason}. Disconnect it, open antigravity.google.com with that account to finish Google's setup, then connect it again.",
             "googleAccount": "Google account",
             "kimiCodeSubscription": "Kimi Code subscription",
@@ -4828,13 +4845,11 @@
             "sandboxOfflineAccountsCant": "Your sandbox is offline: its accounts can't be read or changed from here.",
             "showMoreAccounts": "Show {collapsedCount} more accounts",
             "signedOutReconnectTo": "Signed out, reconnect to keep using it.",
-            "signingIn": "signing in…",
             "turnsInOut": "{count} turn · {input} in / {output} out | {count} turns · {input} in / {output} out",
             "underClaudeCode": "Grok under Claude Code",
             "verify": "Verify",
             "verifyThisAccount": "Google wants its owner to confirm this account before it takes turns again: press Verify, sign in as {label}, and it rejoins the rotation on the next retry.",
-            "viaClaudeCode": "via Claude Code",
-            "waitingForYou": "waiting for you"
+            "viaClaudeCode": "via Claude Code"
         },
         "arrivalPanel": {
             "alreadyHere": "already here",
@@ -6139,6 +6154,9 @@
             "agentSettingsCategory": "Agent settings category",
             "couldntReadSandboxsSettings": "Couldn't read this sandbox's settings.",
             "finishing": "Finishing",
+            "jobs": "Jobs",
+            "jobsFromModels": "Each job picks from the models this sandbox has connected.",
+            "manageModels": "Models",
             "safety": "Safety",
             "sandboxOfflineSettingsCant": "Your sandbox is offline, its settings can't be read or changed from here.",
             "tools": "Tools"

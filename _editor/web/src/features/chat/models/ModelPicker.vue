@@ -24,6 +24,7 @@ import { useSandboxVersion } from "../../sandbox/overview/version/useSandboxVers
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
+import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
 
 const t = useT();
 
@@ -212,9 +213,9 @@ const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true
 // hold a credential, so asking would lock a mode that is always available and make it read as refused.
 const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider);
 
-// Deep link to the connect view, opened on this provider's lane with its sign-in already starting. A real link, not a
+// Deep link to Sandbox ▸ Models, opened on this provider's lane with its sign-in already starting. A real link, not a
 // button click, so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
-const connectTo = (target: AgentProvider) => ({ path: `/connect`, query: { provider: target } });
+const connectTo = (target: AgentProvider) => modelsPath({ provider: target });
 
 // A plain click closes the picker; a modified one opens elsewhere and must leave this list untouched.
 const closeOnPlainClick = (event: MouseEvent): void => {
@@ -567,7 +568,7 @@ onMounted(() => {
                 <!-- The door to everything this list can only badge: connecting a first model, a second account, dropping one. -->
                 <RouterLink
                     v-if="!searching"
-                    to="/connect"
+                    :to="MODELS_PATH"
                     class="ui-row-select flex w-full items-center gap-2 border-t border-line px-3 py-2 text-2xs text-subtle hover:text-content max-md:min-h-11"
                     @click="closeOnPlainClick"
                 >

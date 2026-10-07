@@ -23,6 +23,9 @@ const signInFailure = ref<{ provider: AgentProvider; message: string } | undefin
 const cancelSignIn = jest.fn(() => {
     nativeConnectFlow.value = undefined;
 });
+// Connecting is a maintainer's; most of these tests read as one.
+const canShip = ref(true);
+jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip }) }));
 const dismissSignInFailure = jest.fn(() => {
     signInFailure.value = undefined;
 });
@@ -116,6 +119,7 @@ beforeEach(() => {
     endpointProviders.value = [];
     nativeConnectFlow.value = undefined;
     signInFailure.value = undefined;
+    canShip.value = true;
     cancelSignIn.mockClear();
     dismissSignInFailure.mockClear();
     selectModel.mockClear();
@@ -140,7 +144,7 @@ it(`names what this chat is pointed at, and pitches nothing`, () => {
     // What is offered instead: the model list, plus the door to the view that connects one. No sign-in starts here —
     // a handshake is a trip to another tab and back, which eighty pixels over a composer is the wrong host for.
     expect(buttonNamed(element, `Choose a model`)).toEqual(expect.any(Object));
-    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
+    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
 });
 
 // The reported bug: a brand-new sandbox told its owner that Claude was missing, and offered to connect a Claude
@@ -202,7 +206,7 @@ it(`starts no handshake of its own, for either credential mechanism`, () => {
         provider.value = target;
         turnDefaults.provider.value = target;
         const element = mount();
-        expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
+        expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
         app?.unmount();
         element.remove();
     }
@@ -221,7 +225,7 @@ it(`points back at a sign-in already under way instead of offering another`, asy
     await nextTick();
     expect(element.textContent).toContain(`Your Claude Code sign-in isn't finished yet.`);
     expect(element.textContent).not.toContain(`isn't connected`);
-    expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/connect`);
+    expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
 
     // Abandoned elsewhere, the line comes back rather than leaving a dead pointer.
     nativeConnectFlow.value = undefined;
@@ -250,12 +254,23 @@ it(`says a sign-in ended without connecting, until tried again or dismissed`, as
     expect(element.textContent).toContain(`Cursor didn't connect.`);
     expect(element.textContent).toContain(`The Cursor sign-in expired`);
     // Back to the connect view, naming the provider, which is what starts its sign-in there (linkArrival).
-    expect(linkNamed(element, `Try again`)?.getAttribute(`href`)).toBe(`/connect?provider=cursor`);
+    expect(linkNamed(element, `Try again`)?.getAttribute(`href`)).toBe(`/sandbox/models?provider=cursor`);
 
     buttonNamed(element, `Dismiss`)!.click();
     await nextTick();
     expect(dismissSignInFailure).toHaveBeenCalledTimes(1);
     expect(element.textContent).not.toContain(`didn't connect`);
+});
+
+// The daemon refuses anyone else's sign-in and the hub withholds the section that holds it, so a reader below maintainer
+// is told who can connect one rather than handed a door that opens on nothing.
+it(`names who can connect a model, for a reader who cannot`, () => {
+    canShip.value = false;
+    const element = mount();
+
+    expect(element.textContent).toContain(`No model is connected in this sandbox yet.`);
+    expect(linkNamed(element, `Connect a model`)).toBeUndefined();
+    expect(element.textContent).toContain(`A maintainer of this sandbox can connect one.`);
 });
 
 // A spent trial is connected but out of allowance, not missing a connection, so this gate stands down

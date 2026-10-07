@@ -176,7 +176,7 @@ it(`turns into the way out once today's allowance is gone`, () => {
     const element = mount();
 
     expect(element.textContent).toContain(`Free trial used up for today`);
-    expect(named(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
+    expect(named(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
     expect(named(element, `Choose a model`)).toBeUndefined();
 });
 

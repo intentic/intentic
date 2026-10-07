@@ -36,6 +36,7 @@ import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { noteFound } from "../lib/foundOnComputer";
+import { MODELS_PATH } from "../lib/routes/modelsPath";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
@@ -338,15 +339,10 @@ const routes: RouteRecordRaw[] = [
                 beforeEnter: [mobileOnly],
                 component: asyncView(() => import(`../features/terminal/MobileTerminal.vue`)),
             },
-            // The one place a first model is connected. `?provider=` continues a press made somewhere else (a picker
-            // row, the trial strip), which is why it is a query rather than a segment: the lane is the page, the
-            // provider is only what it opens on.
-            {
-                path: `connect`,
-                name: `connect`,
-                meta: { title: () => t(`chat.words.connectAModel`) },
-                component: asyncView(() => import(`../features/connect/Connect.vue`)),
-            },
+            // The connect page's address until it became Sandbox ▸ Models (lib/routes/modelsPath.ts). Kept, query and all,
+            // for the links an older build or a desktop app still opens: `?provider=` continues a press made elsewhere and
+            // `?found=` names what was found signed in on this computer, and both mean the same thing there.
+            { path: `connect`, redirect: (to) => ({ path: MODELS_PATH, query: to.query, hash: to.hash }) },
             {
                 path: `capabilities/:entry?`,
                 name: `capabilities`,

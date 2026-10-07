@@ -15,15 +15,15 @@ import {
     takeFound,
 } from "./foundOnComputer";
 
-/* `?found=`: the AI tools the desktop app found signed in on this computer, carried from setup to /connect. */
+/* `?found=`: the AI tools the desktop app found signed in on this computer, carried from setup to Sandbox ▸ Models. */
 
 beforeEach(() => {
     sessionStorage.clear();
     localStorage.clear();
 });
 
-test("a finished setup lands on /connect with what was found, and on / with nothing", () => {
-    expect(landingAfterSetup([`claude`, `codex`])).toEqual({ path: `/connect`, query: { found: `claude,codex` } });
+test("a finished setup lands on Sandbox ▸ Models with what was found, and on / with nothing", () => {
+    expect(landingAfterSetup([`claude`, `codex`])).toEqual({ path: `/sandbox/models`, query: { found: `claude,codex` } });
     expect(landingAfterSetup([])).toBe(`/`);
 });
 
@@ -42,8 +42,8 @@ test("the address wins over the kept list, and the kept one is dropped either wa
     expect(sessionStorage.getItem(FOUND_KEY)).toBeNull();
 });
 
-test("only setup's address is kept: /connect carries the same query once setup handed it over", () => {
-    noteFound({ path: `/connect`, query: { found: `claude` } });
+test("only setup's address is kept: Sandbox ▸ Models carries the same query once setup handed it over", () => {
+    noteFound({ path: `/sandbox/models`, query: { found: `claude` } });
     expect(sessionStorage.getItem(FOUND_KEY)).toBeNull();
     // A setup visit with nothing found keeps nothing, and leaves what was kept alone.
     keepFound([`codex`]);
@@ -69,7 +69,7 @@ test("any address the desktop app opens with a found list is remembered as Conne
     expect(foundToOffer(undefined)).toEqual([`claude`, `codex`]);
     // Connect's own address wins, and an address naming nothing leaves the offer alone.
     expect(foundToOffer(`gemini`)).toEqual([`gemini`]);
-    noteFound({ path: `/connect`, query: {} });
+    noteFound({ path: `/sandbox/models`, query: {} });
     expect(rememberedOffer()).toEqual([`claude`, `codex`]);
 });
 

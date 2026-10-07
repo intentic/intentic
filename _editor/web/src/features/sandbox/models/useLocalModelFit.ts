@@ -1,10 +1,10 @@
 import type { LocalModelFitResponse, LocalModelPrefetch } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { queryClient } from "../../lib/queryPersistence";
-import { rpcKey } from "../../lib/queryKeys";
-import { rpcQuery } from "../../client/sandbox/rpcQuery";
-import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
-import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import { queryClient } from "../../../lib/queryPersistence";
+import { rpcKey } from "../../../lib/queryKeys";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // What this machine can run, read from the daemon rather than reasoned about here: a cgroup cap, a GPU that may not
 // have been passed through, and weights already on disk are all facts only the sandbox holds. The connect view's local

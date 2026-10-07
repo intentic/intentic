@@ -15,6 +15,7 @@ import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import { useT } from "@intentic/ui/i18n";
+import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
 // (archived; then what it can send with — account gate, trial, expired credential), each with its one answering
@@ -159,7 +160,7 @@ const activeAccountReauth = computed(() => {
                  arrived at sideways. Standing whenever this strip does, not only once spent — somebody halfway through
                  the day's allowance who wants to connect now should not have to run out first. A place, so a link drawn
                  as a button: Ctrl/Cmd-click keeps this conversation. -->
-            <Button :as="RouterLink" to="/connect" size="small" :text="true" v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }">
+            <Button :as="RouterLink" :to="MODELS_PATH" size="small" :text="true" v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }">
                 {{ t(`chat.words.connectAModel`) }}
             </Button>
         </div>
@@ -167,7 +168,7 @@ const activeAccountReauth = computed(() => {
     <!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
     <RouterLink
         v-if="activeAccountReauth"
-        :to="{ path: '/connect', query: { provider } }"
+        :to="modelsPath({ provider })"
         class="flex items-start gap-2 rounded-xl border border-warning/40 bg-card px-3 py-2 text-left text-2xs text-warning"
     >
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />

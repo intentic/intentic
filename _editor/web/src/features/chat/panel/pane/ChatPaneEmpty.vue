@@ -2,10 +2,11 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { CONNECT_LANES } from "../../../connect/connectLanes";
+import { CONNECT_LANES } from "../../../sandbox/models/connectLanes";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { endpointProviders } from "../../accounts/providerCatalog";
 import { accessKnown, providerReady, trialPhase } from "../../session/access";
+import { MODELS_PATH } from "../../../../lib/routes/modelsPath";
 
 const t = useT();
 
@@ -41,7 +42,7 @@ const offerUncapped = computed(
         </p>
         <p v-if="offerUncapped" class="max-w-[22rem] text-2xs leading-relaxed text-subtle">
             {{ t(`chat.chatPane.uncappedQuestion`) }}
-            <RouterLink to="/connect" class="whitespace-nowrap text-link hover:underline">{{ t(`chat.chatPane.uncappedLink`) }}</RouterLink>
+            <RouterLink :to="MODELS_PATH" class="whitespace-nowrap text-link hover:underline">{{ t(`chat.chatPane.uncappedLink`) }}</RouterLink>
         </p>
     </div>
 </template>

@@ -6,7 +6,7 @@ A conversation's title has a source, and a higher one replaces a lower one, neve
 
 1. `derived`: the first message, cut to a line (openers like "can you please" and code blocks dropped, cut on a
    sentence or word boundary, at most 80 characters).
-2. `model`: the naming pass. When **Session titles** has a model (Sandbox ▸ Agent ▸ Models), it names the
+2. `model`: the naming pass. When **Session titles** has a model (Sandbox ▸ Agent ▸ Jobs), it names the
    conversation a moment into its first turn, in a few words. With no model on that job the pass does not run and
    the title stays the cut of the first message. A spawned subagent is named by the parent's description of it.
 3. `plan`: the agent's own plan heading.

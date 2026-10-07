@@ -2298,13 +2298,11 @@
         "aiAccountSection": {
             "account": "{managedLabel}-Konto",
             "addAnotherAccount": "Ein weiteres Konto hinzufügen",
-            "aiAccount": "KI-Konto",
             "allowanceUsedUp": "Kontingent aufgebraucht.",
             "allowanceUsedUpReopens": "Kontingent aufgebraucht, wieder frei {when}.",
             "chatgptSubscription": "ChatGPT-Abo",
             "connectionsUnavailable": "Verbindungen nicht verfügbar",
             "couldntReachAiAccounts": "Ihre KI-Konten waren nicht erreichbar.",
-            "free": "Gratis",
             "googleAccount": "Google-Konto",
             "kimiCodeSubscription": "Kimi-Code-Abo",
             "outdatedMissing": "Bis zur Aktualisierung können diese Konten nicht anzeigen, ob sie einen Zug übernehmen können: eine verlorene Anmeldung oder Lizenz oder ein aufgebrauchtes oder gesperrtes Kontingent erscheint als unbekannt.",

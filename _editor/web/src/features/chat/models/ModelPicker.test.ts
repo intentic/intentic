@@ -131,7 +131,7 @@ it(`carries the way out to the connect view, and drops it while searching`, asyn
     const element = mount();
 
     const door = [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`Connect a model`));
-    expect(door?.getAttribute(`href`)).toBe(`/connect`);
+    expect(door?.getAttribute(`href`)).toBe(`/sandbox/models`);
 
     // Searching turns the panel into one flat result set, where a standing footer reads as a result.
     const search = element.querySelector(`input`)!;

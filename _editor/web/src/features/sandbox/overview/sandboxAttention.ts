@@ -20,6 +20,7 @@ import { useSandboxBackup } from "./backup/useSandboxBackup";
 import { PUBLISH_ANCHOR } from "../access/publishAnchor";
 import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
+import { MODELS_PATH } from "../../../lib/routes/modelsPath";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the rail chip and the mobile menu so they agree. Lives as a badge on the chip, not a dismissible bar, since
@@ -128,7 +129,7 @@ export function useSandboxAttention() {
                     icon: `sparkles`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.noAiAccountConnected`),
-                    to: `/sandbox/agent`,
+                    to: MODELS_PATH,
                     kind: `needs`,
                 },
             },

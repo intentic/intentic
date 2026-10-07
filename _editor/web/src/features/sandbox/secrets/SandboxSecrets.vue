@@ -38,7 +38,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const FILTERABLE_FROM = 8;
-// Same truncation as AiAccountSection, applied to capability credentials alone.
+// Same truncation as a provider's account rows (models/ProviderAccounts.vue), applied to capability credentials alone.
 const COLLAPSE_THRESHOLD = 5;
 const VISIBLE_WHEN_COLLAPSED = 3;
 
@@ -83,7 +83,7 @@ const credentials = computed(() => held(`credential`));
 // Empty groups keep their informative note at rest, but drop out entirely while filtering.
 const groupVisible = (list: readonly SecretRow[]): boolean => !filtering.value || list.length > 0;
 
-// Same collapse pattern as AiAccountSection; filtering shows every match and hides the toggle.
+// Same collapse pattern as models/ProviderAccounts.vue; filtering shows every match and hides the toggle.
 const credentialsExpanded = ref(false);
 const shouldCollapseCredentials = computed(() => credentials.value.length > COLLAPSE_THRESHOLD);
 const collapsedCredentialCount = computed(() => credentials.value.length - VISIBLE_WHEN_COLLAPSED);

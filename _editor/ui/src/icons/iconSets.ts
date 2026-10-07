@@ -192,6 +192,7 @@ const AREA_ICONS: Readonly<Record<string, IconName>> = {
     usage: `usage`,
     environment: `box`,
     secrets: `key`,
+    models: `sparkles`,
     agent: `robot`,
     extensions: `extensions`,
     access: `shield`,

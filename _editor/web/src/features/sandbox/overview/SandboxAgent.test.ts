@@ -1,4 +1,5 @@
-// Pins which groups render in which category, and how the `section`/`connect` query params interact.
+// Pins which groups render in which category, how the `section` query param picks one, and that an old `connect` link
+// is forwarded to Sandbox ▸ Models, where accounts live now.
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
@@ -14,8 +15,7 @@ jest.mock(`./useSandboxSettings`, () => ({
 
 // A mock.module specifier must be a literal string, so the group list cannot be looped over.
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`section`, { "data-group": name }) }) });
-jest.mock(`../secrets/AiAccountSection.vue`, () => stub(`AI account`));
-jest.mock(`../agent-settings/models/AgentModels.vue`, () => stub(`Models`));
+jest.mock(`../agent-settings/models/AgentModels.vue`, () => stub(`Jobs`));
 jest.mock(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instructions`));
 jest.mock(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
 jest.mock(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
@@ -36,12 +36,11 @@ jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finis
 jest.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
 
 // Categories the strip offers; the coverage test walks this array instead of a hand-copied list.
-const EVERY_SECTION = [`models`, `instructions`, `tools`, `safety`, `finishing`];
+const EVERY_SECTION = [`jobs`, `instructions`, `tools`, `safety`, `finishing`];
 
 // Every group name, used to check each lands in exactly one category.
 const EVERY_GROUP = [
-    `AI account`,
-    `Models`,
+    `Jobs`,
     `Instructions`,
     `Skills`,
     `Memory`,
@@ -98,9 +97,11 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`opens on the models category alone`, async () => {
+it(`opens on the jobs category alone, and holds no accounts`, async () => {
     const { el } = await mount();
-    expect(shown(el)).toEqual([`AI account`, `Models`]);
+    expect(shown(el)).toEqual([`Jobs`]);
+    // The way to what the jobs choose among, since the accounts are not on this tab any more.
+    expect(el.querySelector(`a[href="/sandbox/models"]`)).not.toBeNull();
 });
 
 it(`puts each group in exactly one category`, async () => {
@@ -119,12 +120,18 @@ it(`puts each group in exactly one category`, async () => {
 it(`opens the category a link named`, async () => {
     const { el } = await mount({ section: `tools` });
     expect(shown(el)).toContain(`Code search`);
-    expect(shown(el)).not.toContain(`AI account`);
+    expect(shown(el)).not.toContain(`Jobs`);
 });
 
-it(`falls back to models when the address names a category that does not exist`, async () => {
+it(`falls back to jobs when the address names a category that does not exist`, async () => {
     const { el } = await mount({ section: `nonsense` });
-    expect(shown(el)).toEqual([`AI account`, `Models`]);
+    expect(shown(el)).toEqual([`Jobs`]);
+});
+
+// Links written before the category was named for what it holds.
+it(`opens jobs for the category's old name`, async () => {
+    const { el } = await mount({ section: `models` });
+    expect(shown(el)).toEqual([`Jobs`]);
 });
 
 it(`opens the safety category with the gate rules alone`, async () => {
@@ -143,10 +150,11 @@ it(`holds delegation under tools, not under the gate rules`, async () => {
     expect(shown(safety)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Privacy shield`, `Recent decisions`]);
 });
 
-it(`shows accounts for a sign-in link even while another category is named`, async () => {
-    const { el } = await mount({ section: `finishing`, connect: `anthropic` });
-    expect(shown(el)).toContain(`AI account`);
-    expect(shown(el)).not.toContain(`After work lands`);
+// `?connect=` opened a provider's accounts here when they lived on this tab; a link from then lands on them now.
+it(`forwards an old sign-in link to Sandbox ▸ Models, naming the same provider`, async () => {
+    const { router } = await mount({ section: `finishing`, connect: `claude` });
+    await waitFor(() => expect(router.currentRoute.value.path).toBe(`/sandbox/models`));
+    expect(router.currentRoute.value.query).toEqual({ provider: `claude` });
 });
 
 // Waits for the navigation, not a render tick, since the strip reads its category back off the address.
@@ -156,14 +164,7 @@ it(`writes the picked category to the address, and the default writes no param`,
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
     expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Changelog`, `When a turn breaks`]);
 
-    pill(el, `Models`).click();
+    pill(el, `Jobs`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());
-    expect(shown(el)).toEqual([`AI account`, `Models`]);
-});
-
-it(`lets a pill escape a sign-in link`, async () => {
-    const { el, router } = await mount({ connect: `anthropic` });
-    pill(el, `Instructions`).click();
-    await waitFor(() => expect(router.currentRoute.value.query[`connect`]).toBeUndefined());
-    expect(shown(el)).toEqual([`Instructions`, `Skills`, `Memory`, `Memory import`]);
+    expect(shown(el)).toEqual([`Jobs`]);
 });

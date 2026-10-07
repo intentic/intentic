@@ -52,7 +52,7 @@ account, the wrong folder), not against a determined agent with a shell.
   persona: every connected account and the full toolbox. The pick travels with each message. The chat list's
   **Personas** view has **New chat as <name>**.
 - **By routing**: with **Match new chats to a persona** on (Sandbox ▸ Personas; `personaRouting` in settings,
-  on by default) AND a model set for **New chat routing** (Sandbox ▸ Agent ▸ Models), a new chat's first message
+  on by default) AND a model set for **New chat routing** (Sandbox ▸ Agent ▸ Jobs), a new chat's first message
   is read against each card's one line when it is sent, and the chat says in its transcript which persona it
   landed on. A pick by hand wins. Never for a guest, and never for an unattended run.
 - **Automations** name their own persona. An unattended turn that names none reaches no signed-in account and
@@ -72,11 +72,15 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
 - For a turn that names no model (a Fix, a chore, another job the sandbox starts), the daemon fills it from the
   persona's list first, then from the job's own list, stepping over a model whose account is recorded as spent
   or failing in a row. An automation names its own models, required on the automation itself.
-- The jobs' lists are `modelRoles` in settings, edited on Sandbox ▸ Agent ▸ Models: helpers (**Commit messages**,
+- The jobs' lists are `modelRoles` in settings, edited on Sandbox ▸ Agent ▸ Jobs: helpers (**Commit messages**,
   **Session titles**, **Safety judge**, **Loop verdicts**, **New chat routing**) and runs (**Pipeline fixes**,
   **Deployment fixes**, **Maintenance chores**, **Documentation runs**, **Acceptance runs**, **Approvals queue**,
   **Extension update reviews**, **Loop iterations**). A helper with no list does not run; a run with no list
   opens on a connected provider.
+- What is connected at all is Sandbox ▸ Models (`/sandbox/models`): every account, subscription, model on this
+  machine and endpoint the sandbox can run on, what needs a person (sign in again, verify, an admin's seat), and the
+  one place a model is connected. `/connect` is an old address for it. Connecting is the owner's (a maintainer's);
+  send them there rather than describing the steps.
 
 "An orchestrator on one model that delegates to cheaper subagents": the orchestrator is whatever its conversation
 runs on (the pill, or the persona's **Runs on**). A spawned subagent's provider and model are named by the parent

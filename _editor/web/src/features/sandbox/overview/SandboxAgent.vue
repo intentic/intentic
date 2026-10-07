@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Notice, type NoticeModel, SegmentedControl } from "@intentic/ui";
-import { computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { Icon, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
+import { computed, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "./useSandboxSettings";
-import AiAccountSection from "../secrets/AiAccountSection.vue";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";
 import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
 import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
@@ -27,16 +27,20 @@ import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
 import AgentOffload from "../agent-settings/behaviour/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Agent tab: every AI-related setting for this sandbox. Each group reads and writes the same settings object via
+// Agent tab: how the agent works in this sandbox. Each group reads and writes the same settings object via
 // useSandboxSettings; only page-level state (which category, blocked/dropped notices) lives here. Categories are one
 // axis, grouped by part of the agent rather than by subject and phase.
+//
+// What it runs on is not here: accounts, subscriptions, local models and endpoints are Sandbox ▸ Models, since they are
+// what this box holds rather than how the agent behaves. Jobs, first, is the hinge between the two: which of those
+// models does which job.
 
 const t = useT();
 
 const SECTIONS = computed(
     () =>
         [
-            { label: t(`shared.models`), value: `models` },
+            { label: t(`sandbox.sandboxAgent.jobs`), value: `jobs` },
             { label: t(`sandbox.words.instructions`), value: `instructions` },
             { label: t(`sandbox.sandboxAgent.tools`), value: `tools` },
             { label: t(`sandbox.sandboxAgent.safety`), value: `safety` },
@@ -44,23 +48,34 @@ const SECTIONS = computed(
         ] as const,
 );
 type Section = (typeof SECTIONS.value)[number][`value`];
-const DEFAULT: Section = `models`;
+const DEFAULT: Section = `jobs`;
+// The first category's address before it was named for what it holds; an older link still lands on it.
+const aliasOf = (named: string): Section | undefined => (named === `models` ? `jobs` : undefined);
 
 const route = useRoute();
 const router = useRouter();
 
-// Category lives in the query so external links land on the right one; the default writes no param. A `connect`
-// param outranks the remembered section, and picking a category clears it so pills don't look stuck.
+// Category lives in the query so external links land on the right one; the default writes no param.
 const section = computed<Section>({
     get: () => {
-        if (typeof route.query[`connect`] === `string`) {
-            return `models`;
-        }
-        return SECTIONS.value.find((entry) => entry.value === route.query[`section`])?.value ?? DEFAULT;
+        const named = String(route.query[`section`] ?? ``);
+        return SECTIONS.value.find((entry) => entry.value === named)?.value ?? aliasOf(named) ?? DEFAULT;
     },
     // Pushed, not replaced, so Back returns to the prior category instead of leaving the page.
-    set: (value) => void router.push({ query: { ...route.query, connect: undefined, section: value === DEFAULT ? undefined : value } }),
+    set: (value) => void router.push({ query: { ...route.query, section: value === DEFAULT ? undefined : value } }),
 });
+
+// `?connect=<provider>` opened a provider's accounts here, back when they lived on this tab. They are Sandbox ▸ Models
+// now, which reads the same request as `?provider=`, so the old link is forwarded there rather than broken.
+watch(
+    () => String(route.query[`connect`] ?? ``),
+    (asked) => {
+        if (asked !== ``) {
+            void router.replace(modelsPath({ provider: asked }));
+        }
+    },
+    { immediate: true },
+);
 
 const sandbox = useSandbox();
 const { settings, error: settingsError, dropped: settingsDropped } = useSandboxSettings();
@@ -91,9 +106,14 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- Daemon accepted the save but dropped a field; the control already reverted, so without this it looks like a rejected input. -->
         <Notice v-if="settingsDropped" tone="warning">{{ settingsDropped }}</Notice>
 
-        <!-- Accounts first: every model choice below depends on a signed-in provider. -->
-        <template v-if="section === `models`">
-            <AiAccountSection />
+        <!-- Every pick below chooses among what Models holds; said once, where the pick is made, with the way there. -->
+        <template v-if="section === `jobs`">
+            <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
+                <RouterLink :to="MODELS_PATH" :class="ui.linkButton(`text-xs`)">
+                    {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
+                </RouterLink>
+            </p>
             <AgentModels />
         </template>
 

@@ -4,16 +4,17 @@ As someone whose sandbox is up but cannot yet do anything, I want to sign it in 
 
 A sandbox with no AI account is a very good box with nothing in it, so this is the step that decides whether setup succeeded. Whatever I connect is stored inside my sandbox and never on the platform: that is the whole argument, and any screen that handles it has to be able to say so.
 
-The first one happens in one place, on its own screen, because the question is which of three ways in I want — a free sign-in, a model on this machine, or a subscription I am already paying for — and that is a choice, not a setting. Each way is a lane, and picking one opens it where it stands; the others stay on screen, because a reader who opened the wrong door should not have to go back anywhere. Nothing connects because I looked at it.
+Every model this sandbox can run on lives in one place, Sandbox ▸ Models, beside its environment and its secrets, because what I connect is something the box holds. The first one happens there too, because the question is which of three ways in I want — a free sign-in, a model on this machine, or a subscription I am already paying for — and that is a choice, not a setting. Each way is a lane, and picking one opens it where it stands; the others stay on screen, because a reader who opened the wrong door should not have to go back anywhere. Nothing connects because I looked at it.
 
 A sign-in is two steps with a trip to another tab in between, so it gets a card of its own at the top of that screen, whichever lane or row started it. If I wander off before finishing, the chat says so above the composer, with one press back to that card and one to cancel it there and then. Only one sign-in runs at a time, and the lanes keep their providers on screen while it does: trying a different one is a press on it, which replaces the sign-in, not a Cancel followed by a hunt. A sign-in that does not start, expires or is refused says which provider it was and why, on the screen and in the chat, until I try again or dismiss it.
 
 If I already use an AI tool on this computer (Claude Code, Codex, Gemini CLI, opencode, Hermes, OpenClaw), the desktop app has noticed, and that screen leads with what it found. A subscription is one press: the sandbox signs in on its own and my browser, already signed in, only asks me to allow it. Nothing is copied out of the tool, because these logins renew with a token that works once, and a copy would sign either the tool or the sandbox out. A plain API key in those tools' files is different: it is copied into the sandbox as a model I can pick, and the screen shows only its last four characters.
 
-Afterwards, the sandbox's Agent tab is where the accounts I have live: who each one signed in as, what it is spending, how to add another or drop one. That tab does not start a first connection any more, and nothing about a connection is kept anywhere but here.
+Afterwards the same page leads with what is connected: one row per provider, model on this machine or endpoint, whatever needs me first (an account to sign in to again, one to verify, a seat only an admin can restore). A provider's row opens onto its accounts: who each one signed in as, what it is spending, how to add another or drop one, and adding one runs in the same card a first sign-in does. The sandbox's menu shows a count on Models when something there needs me, so I do not have to open it to find out. Which model does which job (commit messages, titles, the safety judge) is the Agent's Jobs tab, which picks from what Models holds and links back to it.
 
 ## Acceptance criteria
 
+- [ ] Sandbox ▸ Models is in the sandbox's menu and the command palette, and every place that offers to connect a model leads there; an old `/connect` link still arrives
 - [ ] One screen offers the ways in — a free sign-in, a model that runs on this machine, and the subscriptions I might already pay for — with what each costs readable before I connect anything
 - [ ] The free sign-in leads only until my first model is connected; after that the model list keeps it in its usual place with a plain price chip, and the connect screen opens with every lane shut
 - [ ] Every surface that offers to connect a model (the composer's line, the model list, the spent-trial notice) leads to that one screen rather than starting a sign-in of its own
@@ -28,8 +29,12 @@ Afterwards, the sandbox's Agent tab is where the accounts I have live: who each 
 - [ ] A provider sold under several plans asks which one before its sign-in starts
 - [ ] The machine's own lane names a model this machine can actually hold, says what it will download and what it will hold while running, and says plainly where a small one is not good enough
 - [ ] Connecting ends on this screen saying so, with one press that starts a conversation on what I just connected
-- [ ] The sandbox's Agent tab lists the accounts the sandbox holds, naming who each one signed in as, and lets a second be added or one dropped
+- [ ] Once anything is connected, the page leads with one row per source (accounts by provider, models on this machine, endpoints), whatever needs a person first, each provider opening onto its accounts, naming who each one signed in as, and letting a second be added or one dropped
+- [ ] Adding a second account finishes only when that account arrives, never because the provider already had one
+- [ ] The sandbox's menu counts what on Models needs a person, and marks a sign-in in progress
+- [ ] Agent ▸ Jobs chooses which model does each job from what Models holds, and links to it
 - [ ] A provider that supports several accounts lets a second one be added, and the two rows can be told apart
 - [ ] With no account connected, the product says the agent cannot run yet rather than failing at the first message
-- [ ] While the sandbox is unreachable, the tab says so instead of showing controls that silently do nothing
+- [ ] While the sandbox is unreachable, the page says so instead of showing controls that silently do nothing
+- [ ] Someone who may not connect models (below maintainer) is told who can, rather than sent to a page that will not open
 - [ ] After connecting, starting a conversation and sending a message gets a reply from that provider's model

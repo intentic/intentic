@@ -7,6 +7,7 @@ import {
     type KeyedProvider,
     type LoginFlow,
     type NativeProvider,
+    type OauthAccount,
     providerLabel,
     providerSpec,
     type SignInCatcher,
@@ -15,7 +16,15 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { hasSignIn } from "../session/access";
 import { active } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
-import { accountBusy, addAccount, error, managedProvider, refreshAccounts, refreshTranslatorAccounts } from "../accounts/useChat-accounts";
+import {
+    accountBusy,
+    accountsOf,
+    addAccount,
+    error,
+    managedProvider,
+    refreshAccounts,
+    refreshTranslatorAccounts,
+} from "../accounts/useChat-accounts";
 import { translatorAccounts } from "../accounts/providerAccounts";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
@@ -250,9 +259,34 @@ export const cancelConnect = (): void => {
     settleConnect();
 };
 
-// One poll tick for sign-ins that finish out of band: checks whether an account appeared (paste finishes via
-// completeConnect instead). Checked against the flow object it started for, so a restarted handshake retires old ticks.
-const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<void> => {
+// The account list as a sign-in found it, so a poll can tell this sign-in landing from accounts that were already there.
+// Without it, "Add another account" on a provider that already held one read as connected on the first tick: the list
+// was not empty, so the panel came down and "Connected" was announced over a sign-in nobody had finished.
+export interface AccountsBefore {
+    readonly connectedAt: ReadonlyMap<string, number>;
+    // Accounts that could not serve until somebody signed in again: a reconnect lands on the same id (the daemon's one
+    // connect rule), so for one of those the sign-in landing is the account recovering, not a new row.
+    readonly stale: ReadonlySet<string>;
+}
+const unservable = (account: OauthAccount): boolean =>
+    account.needsReauth === true || (account.state?.kind === `blocked` && account.state.fix === `reconnect`);
+export const accountsBefore = (accounts: readonly OauthAccount[]): AccountsBefore => ({
+    connectedAt: new Map(accounts.map((account) => [account.id, account.connectedAt])),
+    stale: new Set(accounts.filter(unservable).map((account) => account.id)),
+});
+// Landed: an account that was not there, one connected again since, or one that needed a new sign-in and now serves.
+export const landedSince = (before: AccountsBefore, now: readonly OauthAccount[]): boolean =>
+    now.some(
+        (account) =>
+            !before.connectedAt.has(account.id) ||
+            before.connectedAt.get(account.id) !== account.connectedAt ||
+            (before.stale.has(account.id) && !unservable(account)),
+    );
+
+// One poll tick for sign-ins that finish out of band: checks whether an account landed since the sign-in started (paste
+// finishes via completeConnect instead). Checked against the flow object it started for, so a restarted handshake
+// retires old ticks.
+const pollNativeOnce = async (target: AgentProvider, deadline: number, before: AccountsBefore): Promise<void> => {
     const flow = nativeConnectFlow.value;
     if (flow?.provider !== target) {
         return;
@@ -269,7 +303,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
         if (nativeConnectFlow.value?.handshake !== flow.handshake) {
             return;
         }
-        if (connectedAccounts.length > 0) {
+        if (landedSince(before, connectedAccounts)) {
             settleConnect();
             error.value = null;
             landSignIn(target);
@@ -284,7 +318,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
     if (nativeConnectFlow.value?.handshake !== flow.handshake) {
         return;
     }
-    nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, deadline), 3000);
+    nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, deadline, before), 3000);
 };
 
 // One poll tick for a sign-in the daemon keeps a record of (every one somebody of the owner's is watching the landing
@@ -343,6 +377,8 @@ export const startConnect = async (variant?: string): Promise<void> => {
     if (accountBusy.value !== undefined) {
         return;
     }
+    // What was already here, read before anything changes it, so the poll below knows what landing looks like.
+    const before = accountsBefore(accountsOf(target));
     // One sign-in at a time, of either mechanism (connectTranslator).
     cancelConnect();
     settleTranslator();
@@ -385,7 +421,7 @@ export const startConnect = async (variant?: string): Promise<void> => {
         if ((body.catchers ?? []).length > 0) {
             nativePollTimer.value = setTimeout(() => void pollNativeStatusOnce(target, body.expiresAt), 3000);
         } else if (body.flow !== `paste`) {
-            nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, body.expiresAt), 3000);
+            nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, body.expiresAt, before), 3000);
         }
     } finally {
         accountBusy.value = undefined;

@@ -1,9 +1,10 @@
 import { type NativeProvider, nativeProvidersIn } from "@intentic/sandbox-contract";
 import type { LocationQuery, LocationQueryValue, RouteLocationRaw } from "vue-router";
 import { z } from "zod";
+import { modelsPath } from "./routes/modelsPath";
 
 // THE AI TOOLS ALREADY SIGNED IN ON THIS COMPUTER, as the desktop app found them. The app opens setup as
-// `/setup?found=claude,codex` (provider ids, comma-separated); a finished setup lands on `/connect?found=…`, where each
+// `/setup?found=claude,codex` (provider ids, comma-separated); a finished setup lands on Sandbox ▸ Models (`?found=…`), where each
 // one is a single "Connect" press: the sandbox signs in afresh, and the browser that is already signed in answers it.
 // Nothing is copied: a login's refresh token is single-use, so a copy would sign one side out.
 //
@@ -30,7 +31,7 @@ const tabStorage = (): Storage | undefined => {
     try {
         return sessionStorage;
     } catch {
-        // allow(silent-catch): a browser that refuses storage keeps no list, which only costs the /connect landing.
+        // allow(silent-catch): a browser that refuses storage keeps no list, which only costs the Sandbox ▸ Models landing.
         return undefined;
     }
 };
@@ -108,7 +109,7 @@ export const rememberedOffer = (now: number = Date.now()): NativeProvider[] => {
     }
 };
 
-/** What Connect offers as found on this computer: what its address names, else the remembered offer. */
+/** What Sandbox ▸ Models offers as found on this computer: what its address names, else the remembered offer. */
 export const foundToOffer = (value: QueryValue, now: number = Date.now()): NativeProvider[] => {
     const named = nativeProvidersIn(value);
     return named.length > 0 ? named : rememberedOffer(now);
@@ -116,7 +117,7 @@ export const foundToOffer = (value: QueryValue, now: number = Date.now()): Nativ
 
 /**
  * The router's half, for every navigation: a `?found=` on the way into setup is kept for the landing, and any address
- * that names one is remembered as the offer. Only setup's is kept for the landing, since `/connect` carries the same
+ * that names one is remembered as the offer. Only setup's is kept for the landing, since Sandbox ▸ Models carries the same
  * query once setup has handed it over, and keeping it again there would steer the next setup this tab runs.
  */
 export const noteFound = (to: { readonly path: string; readonly query: LocationQuery }): true => {
@@ -135,7 +136,7 @@ export const foundAfterSetup = (value: QueryValue, now: number = Date.now()): Na
     return named.length > 0 ? named : kept;
 };
 
-/** Where a finished setup opens the workspace: `/connect` with what was found, else `/` as it always has. */
+/** Where a finished setup opens the workspace: Sandbox ▸ Models with what was found, else `/` as it always has. */
 export const landingAfterSetup = (found: readonly NativeProvider[]): RouteLocationRaw =>
-    found.length === 0 ? `/` : { path: `/connect`, query: { [FOUND_QUERY]: found.join(`,`) } };
+    found.length === 0 ? `/` : modelsPath({ [FOUND_QUERY]: found.join(`,`) });
 

@@ -2,10 +2,10 @@
 import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
 import { Icon } from "@intentic/ui";
 import { computed } from "vue";
-import { accessStateFor, connectPitch } from "../chat/session/access";
-import { turnDefaults } from "../chat/run/turnDefaults";
-import ProviderLogo from "../chat/accounts/ProviderLogo.vue";
-import { requirementWords, runsWords } from "../chat/accounts/providerWords";
+import { accessStateFor, connectPitch } from "../../chat/session/access";
+import { turnDefaults } from "../../chat/run/turnDefaults";
+import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import { requirementWords, runsWords } from "../../chat/accounts/providerWords";
 import { useT } from "@intentic/ui/i18n";
 
 // One provider as a pressable tile in the connect view: its mark, what it is called, what it needs, and whether this

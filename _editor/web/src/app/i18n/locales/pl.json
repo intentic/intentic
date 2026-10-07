@@ -2187,6 +2187,7 @@
             "didntConnect": "Nie udało się podłączyć: {provider}.",
             "finishSignIn": "Dokończ logowanie",
             "isntConnectedInSandbox": "{providerName} nie jest podłączony w tym sandboxie.",
+            "maintainerConnects": "Model może podłączyć opiekun tego sandboxa.",
             "noModelYet": "W tym sandboxie nie podłączono jeszcze żadnego modelu.",
             "signInWaiting": "Logowanie do {provider} nie zostało jeszcze dokończone."
         },
@@ -3669,7 +3670,7 @@
     },
     "connect": {
         "connect": {
-            "allAccounts": "Zarządzaj kontami, które ten sandbox już ma",
+            "addTitle": "Dodaj model",
             "connecting": "Podłączanie: {provider}",
             "description": "Dane logowania są przechowywane w Twoim sandboxie, nigdy na platformie. Wybierz to, co już masz.",
             "foundKeyAdded": "Dodano",
@@ -3681,6 +3682,7 @@
             "free": "Za darmo",
             "freeSubtitle": "Wystarczy się zalogować: bez karty, bez subskrypcji",
             "freeTitle": "Za darmo, z kontem Google",
+            "jobsLink": "Wybierz, który model wykonuje każde zadanie",
             "landed": "Połączono. Ta przestrzeń robocza może już uruchamiać tury.",
             "landedIn": "Połączono {provider} z sandboxem „{sandbox}”. Czaty w tym sandboxie mogą już z tego korzystać.",
             "localSubtitle": "Za darmo na zawsze, prywatnie, działa offline",
@@ -3729,6 +3731,25 @@
             "sizedForGpu": "Propozycje są dobrane tak, żeby w całości działały na GPU, w {free}, które model może tam dostać.",
             "sizedForMemory": "Propozycje są dobrane tak, żeby działały z pełną prędkością przy {free} wolnej teraz pamięci.",
             "useForQuickJobs": "Wybierz go do opisów commitów i tytułów"
+        },
+        "modelSources": {
+            "accounts": "{count} konto | {count} konta | {count} kont",
+            "admin": "{account}: administrator organizacji musi przywrócić miejsce",
+            "allWaiting": "Na razie odpoczywa: wróci do pracy samo",
+            "allWaitingUntil": "Odpoczywa do {when}",
+            "badgeNeedsYou": "{count} czeka na Ciebie | {count} czekają na Ciebie | {count} czeka na Ciebie",
+            "endpoint": "Twój własny serwer",
+            "local": "Działa na tym komputerze",
+            "manage": "Zarządzaj",
+            "manyNeedAdmin": "Administrator organizacji musi przywrócić te miejsca",
+            "manyNeedYou": "{count} konto czeka na Ciebie | {count} konta czekają na Ciebie | {count} kont czeka na Ciebie",
+            "signInAgain": "{account}: zaloguj się ponownie",
+            "signingInTo": "logowanie do {provider}",
+            "someWaiting": "{count} z {total} na razie odpoczywa",
+            "title": "Podłączone",
+            "trialLeft": "Zostało {count} darmowa wiadomość na dziś | Zostały {count} darmowe wiadomości na dziś | Zostało {count} darmowych wiadomości na dziś",
+            "trialSpent": "Dzisiejsze darmowe wiadomości się skończyły",
+            "verify": "{account}: zweryfikuj je na stronie dostawcy"
         },
         "providerTile": {
             "connected": "Połączono",
@@ -4454,17 +4475,13 @@
         "aiAccountSection": {
             "account": "Konto {managedLabel}",
             "addAnotherAccount": "Dodaj kolejne konto",
-            "aiAccount": "Konto AI",
             "allowanceUsedUp": "Limit wyczerpany.",
             "allowanceUsedUpReopens": "Limit wyczerpany, odnawia się {when}.",
             "cachedShare": "{tokens} z cache ({pct}%)",
             "chatgptSubscription": "Subskrypcja ChatGPT",
-            "checking": "sprawdzanie",
-            "connected": "podłączone",
             "connectedAgo": "połączone {ago}",
             "connectionsUnavailable": "Połączenia niedostępne",
             "couldntReachAiAccounts": "Nie udało się sięgnąć do Twoich kont AI.",
-            "free": "Darmowe",
             "geminiFinishSetup": "{reason}. Odłącz je, otwórz antigravity.google.com na tym koncie, żeby dokończyć konfigurację Google, a potem połącz je ponownie.",
             "googleAccount": "Konto Google",
             "kimiCodeSubscription": "Subskrypcja Kimi Code",
@@ -4476,13 +4493,11 @@
             "sandboxOfflineAccountsCant": "Twój sandbox jest offline: jego kont nie da się stąd odczytać ani zmienić.",
             "showMoreAccounts": "Pokaż więcej kont ({collapsedCount})",
             "signedOutReconnectTo": "Wylogowane, połącz ponownie, żeby dalej z niego korzystać.",
-            "signingIn": "logowanie…",
             "turnsInOut": "{count} tura · {input} wejścia / {output} wyjścia | {count} tury · {input} wejścia / {output} wyjścia | {count} tur · {input} wejścia / {output} wyjścia",
             "underClaudeCode": "Grok w Claude Code",
             "verify": "Zweryfikuj",
             "verifyThisAccount": "Google chce, żeby właściciel potwierdził to konto, zanim znów przyjmie tury: naciśnij Zweryfikuj, zaloguj się jako {label}, a konto wróci do rotacji przy następnej próbie.",
-            "viaClaudeCode": "przez Claude Code",
-            "waitingForYou": "czeka na Ciebie"
+            "viaClaudeCode": "przez Claude Code"
         },
         "arrivalPanel": {
             "alreadyHere": "już tutaj",
@@ -5793,6 +5808,9 @@
             "agentSettingsCategory": "Kategoria ustawień agenta",
             "couldntReadSandboxsSettings": "Nie udało się odczytać ustawień tego sandboxa.",
             "finishing": "Kończenie",
+            "jobs": "Zadania",
+            "jobsFromModels": "Każde zadanie wybiera spośród modeli podłączonych w tym sandboxie.",
+            "manageModels": "Modele",
             "safety": "Bezpieczeństwo",
             "sandboxOfflineSettingsCant": "Twój sandbox jest offline, jego ustawień nie da się stąd odczytać ani zmienić.",
             "tools": "Narzędzia"

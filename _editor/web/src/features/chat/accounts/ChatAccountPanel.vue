@@ -9,6 +9,8 @@ import { turnDefaults } from "../run/turnDefaults";
 import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
+import { useRole } from "../../../client/sandbox/useRole";
+import { MODELS_PATH, modelsHref } from "../../../lib/routes/modelsPath";
 import { useT } from "@intentic/ui/i18n";
 
 // The one line above the composer when this chat has nothing to send with. It sits beside a composer that stands
@@ -17,9 +19,9 @@ import { useT } from "@intentic/ui/i18n";
 // unanswered read can make. Stands down for a spent trial, which is connected but metered out.
 //
 // It does NOT host a sign-in. A handshake is two steps with a trip to another tab between them, and eighty pixels over
-// a composer is not where that belongs; /connect owns it, and this strip's job is to point at it — including when a
+// a composer is not where that belongs; Sandbox ▸ Models owns it, and this strip's job is to point at it — including when a
 // sign-in started there is still waiting to be finished, or ended without connecting anything. Either way it can be put
-// down from here: a reader who changed their mind should not have to go to /connect only to press Cancel.
+// down from here: a reader who changed their mind should not have to go to Sandbox ▸ Models only to press Cancel.
 
 const t = useT();
 
@@ -29,9 +31,13 @@ const { connected, provider } = view;
 const trialSpent = computed(() => trialExhausted(provider.value));
 const { liveSignIn: live, cancelSignIn, signInFailure: failure, dismissSignInFailure } = useChat();
 
-// The way back to a sign-in that ended badly starts it again: /connect starts a provider's sign-in when a link names
-// one that is not connected yet (linkArrival).
-const retryTo = computed(() => (failure.value === undefined ? `/connect` : `/connect?provider=${encodeURIComponent(failure.value.provider)}`));
+// The way back to a sign-in that ended badly starts it again: Sandbox ▸ Models starts a provider's sign-in when a link
+// names one that is not connected yet (linkArrival).
+const retryTo = computed(() => modelsHref({ provider: failure.value?.provider }));
+
+// Connecting is a maintainer's: the daemon refuses anyone else's sign-in, and the hub withholds the section that holds
+// it. Below that tier the strip says who can, rather than offering a door that opens on nothing.
+const { canShip } = useRole();
 
 // Whether a vendor may be named at all: only a provider the owner actually chose. With nothing stored this chat is
 // sitting on a floor the app picked (turnDefaults.ts), and naming it would tell a first-run reader that some
@@ -56,13 +62,13 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
             <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelSignIn">
                 {{ t(`ui.action.cancel`) }}
             </button>
-            <RouterLink to="/connect" :class="ui.linkButton(`text-2xs font-semibold`)">
+            <RouterLink :to="MODELS_PATH" :class="ui.linkButton(`text-2xs font-semibold`)">
                 {{ t(`chat.chatAccountPanel.finishSignIn`) }}
             </RouterLink>
         </span>
     </div>
 
-    <!-- A sign-in that ended without connecting anything says so once, here as on /connect, until tried again or put away. -->
+    <!-- A sign-in that ended without connecting anything says so once, here as in Sandbox ▸ Models, until tried again or put away. -->
     <div
         v-else-if="accessKnown && failure"
         role="alert"
@@ -96,8 +102,9 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
             chosen ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) : t(`chat.chatAccountPanel.noModelYet`)
         }}</span>
         <ChatChooseModelButton />
-        <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
+        <RouterLink v-if="canShip" :to="MODELS_PATH" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
             {{ t(`chat.words.connectAModel`) }}
         </RouterLink>
+        <span v-else class="shrink-0 text-2xs text-subtle">{{ t(`chat.chatAccountPanel.maintainerConnects`) }}</span>
     </div>
 </template>

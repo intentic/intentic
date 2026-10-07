@@ -3,9 +3,9 @@ import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
 import { Button, Icon, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId, useTemplateRef } from "vue";
-import ProviderLogo from "../chat/accounts/ProviderLogo.vue";
-import { requirementWords } from "../chat/accounts/providerWords";
-import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
+import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import { requirementWords } from "../../chat/accounts/providerWords";
+import ConnectFlow from "../secrets/ConnectFlow.vue";
 
 // The one sign-in on the connect view, wherever it was started: a tile in a lane, a row found on this computer, a link
 // from the chat. It stands at the top of the page rather than inside the lane that started it, so a reader sent back
