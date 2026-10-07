@@ -3395,14 +3395,16 @@
             "stillHereRun": "¿Sigue aquí? Ejecuta",
             "updateSandboxImage": "Actualiza la imagen del sandbox."
         },
-        "sandboxDeleted": {
+        "recentlyDeleted": {
             "comesBackAsName": "Vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina donde se ejecutaba",
             "comesBackWithMachine": "Vuelve con su máquina y sus archivos",
             "couldntRead": "No se pudieron leer los sandboxes eliminados",
             "couldntRestore": "No se pudo restaurar ese sandbox",
             "daysLeftToRestore": "queda {count} día | quedan {count} días",
             "nothingToRestore": "Nada que restaurar",
-            "reading": "Leyendo los sandboxes eliminados"
+            "reading": "Leyendo los sandboxes eliminados",
+            "keptForDays": "Se conservan {count} día tras eliminarlos | Se conservan {count} días tras eliminarlos",
+            "paletteTitle": "Sandboxes eliminados recientemente"
         },
         "sandboxDevices": {
             "couldntListDevices": "No se pudieron listar tus dispositivos."
@@ -3444,8 +3446,7 @@
             "overview": "Resumen",
             "reach": "Alcance",
             "secrets": "Secretos",
-            "usage": "Uso",
-            "yourSandboxes": "Tus sandboxes"
+            "usage": "Uso"
         },
         "sandboxOutdatedNotice": {
             "manual": "¿Lo instalaste tú? Reinstálalo o ejecuta esto en la máquina donde corre:",
@@ -3562,7 +3563,7 @@
             "removeHostedMachineDestroyed": "¿Eliminar «{name}»? Su máquina se detiene ahora y todos aquí pierden el acceso.",
             "restorableHostedDays": "Puedes restaurarlo durante {count} día; su máquina y sus archivos se conservan hasta entonces. | Puedes restaurarlo durante {count} días; su máquina y sus archivos se conservan hasta entonces.",
             "restorableOwnDays": "Puedes restaurarlo durante {count} día, aunque vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina de allí. | Puedes restaurarlo durante {count} días, aunque vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina de allí.",
-            "restoreWhere": "Puedes restaurarlo desde Ajustes del sandbox ▸ Eliminados recientemente.",
+            "restoreWhere": "Puedes restaurarlo desde Dispositivos ▸ Eliminados recientemente.",
             "rollBack": "Revertir",
             "runsOn": "Corre en",
             "sandboxes": "Sandboxes",

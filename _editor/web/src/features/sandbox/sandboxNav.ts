@@ -63,12 +63,8 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             { slug: `personas`, label: t(`shared.personas`), icon: `user`, maintainer: true },
         ],
     },
-    {
-        // The account's other boxes, not this one; last, since nothing here is about the sandbox the hub is named for.
-        key: `account`,
-        label: t(`sandbox.sandboxNav.yourSandboxes`),
-        items: [{ slug: `deleted`, label: t(`sandbox.words.recentlyDeleted`), icon: `trash` }],
-    },
+    // Recently deleted was a last `account` group here until 2026-10-07; it is the foot of the Devices board now
+    // (devices/deleted), since nothing in it is about the sandbox this hub is named for.
 ];
 
 /**

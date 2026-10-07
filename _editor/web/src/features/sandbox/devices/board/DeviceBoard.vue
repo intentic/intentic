@@ -15,6 +15,7 @@ import {
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import PhoneRows from "../phones/PhoneRows.vue";
+import RecentlyDeleted from "../deleted/RecentlyDeleted.vue";
 import { type MachineRow, rowMatches, showFilter } from "../deviceRows";
 import { desktopApp } from "../../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
@@ -104,6 +105,9 @@ const inDesktopApp = desktopApp() !== undefined;
 
             <!-- The owner's phones: no folders or sandboxes on them, so a row each rather than a machine's card. -->
             <PhoneRows />
+
+            <!-- The account's deleted sandboxes, last: boxes that left this board, drawn only while one can come back. -->
+            <RecentlyDeleted />
         </div>
     </RowGroup>
 </template>

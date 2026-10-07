@@ -37,6 +37,7 @@ import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
+import { DELETED_PATH } from "../features/sandbox/devices/deviceLinks";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
@@ -367,6 +368,8 @@ const routes: RouteRecordRaw[] = [
                 component: asyncView(() => import(`../features/sandbox/devices/DevicesView.vue`)),
             },
             { path: `sandbox/devices`, redirect: (to) => ({ name: `devices`, query: to.query, hash: to.hash }) },
+            // Recently deleted was a hub section until 2026-10-07; it is the Devices board's foot now, by its anchor.
+            { path: `sandbox/deleted`, redirect: () => DELETED_PATH },
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,
@@ -490,7 +493,9 @@ export const router = createRouter({
     routes: localFace() === undefined ? routes : localRoutes(),
     // Makes a hash like `/sandbox/usage#accounts` actually scroll into view; vue-router ignores a fragment on its
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
-    scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
+    // Only to an anchor already drawn: one inside data still being read (Devices' `#deleted`) scrolls itself once it lands,
+    // and handing the router a selector that matches nothing yet only earns a warning.
+    scrollBehavior: (to) => (to.hash === `` || document.querySelector(to.hash) === null ? false : { el: to.hash, behavior: `smooth` }),
 });
 
 // A PRESS PAINTS BEFORE THE SCREEN IT OPENS, on a phone. Everything a navigation does (guards, the old screen torn down,

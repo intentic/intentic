@@ -6,7 +6,7 @@ import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../../features/extensions/usePanels";
 import { openPreview } from "../../features/preview/previewSurface";
-import { DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
+import { DELETED_PATH, DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
 import { sandboxBuiltInSlugs, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
 import { useRole } from "../../client/sandbox/useRole";
 import { useHostedPlan } from "../../features/settings/hosted-plan/useHostedPlan";
@@ -57,6 +57,8 @@ export function useNavigationCommands(): void {
         { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
         // A rail view of its own since it left the sandbox hub; maintainer and up, as its tile is.
         ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: DEVICES_PATH }] : []),
+        // The account's deleted sandboxes, at the board's foot; for every member, as the restore is the account's own.
+        { command: `view.deletedSandboxes`, title: t(`sandbox.recentlyDeleted.paletteTitle`), category: GO_TO, icon: `trash`, to: DELETED_PATH },
         // The daemon lets only a maintainer open the sandbox's desktop, since driving it is operating the sandbox.
         ...(canShip.value ? [{ command: `view.desktop`, title: t(`shared.desktop`), category: GO_TO, icon: `screen`, to: `/desktop` }] : []),
     ]);

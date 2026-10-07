@@ -32,3 +32,7 @@ export const capabilityRoute = (entry: string, query?: LocationQueryRaw): RouteL
 // here rather than in each surface that draws a concern, since a fix is an address and addresses live in one file.
 export const cardRoute = (fix: DeviceCardFix): RouteLocationRaw =>
     capabilityRoute(fix.card, fix.connection === undefined ? undefined : { edit: fix.connection });
+
+/** The board's Recently deleted section, by its anchor: the hash is what marks a reader who came for it. */
+export const DELETED_ANCHOR = `deleted`;
+export const DELETED_PATH = `${DEVICES_PATH}#${DELETED_ANCHOR}`;

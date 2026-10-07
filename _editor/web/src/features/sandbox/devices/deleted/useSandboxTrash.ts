@@ -1,10 +1,10 @@
 import type { SandboxSummary, TrashedSandbox } from "@intentic/api-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
-import { SANDBOX_TRASH } from "../../../lib/queryKeys";
-import { apiClient } from "../../../lib/useApi";
+import { SANDBOX_TRASH } from "../../../../lib/queryKeys";
+import { apiClient } from "../../../../lib/useApi";
 import { daysLeft } from "./trashWindow";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 
 // Sandboxes this account deleted and can still have back. Account-wide, like the sandbox list itself, and never
 // persisted to disk: a row here names a machine the platform is still holding.

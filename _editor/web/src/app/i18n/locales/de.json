@@ -3382,14 +3382,16 @@
             "stillHereRun": "Immer noch da? Führen Sie",
             "updateSandboxImage": "Aktualisieren Sie das Sandbox-Image."
         },
-        "sandboxDeleted": {
+        "recentlyDeleted": {
             "comesBackAsName": "Kommt mit einer neuen Adresse zurück, die Maschine, auf der sie lief, muss also erneut verbunden werden",
             "comesBackWithMachine": "Kommt mit Maschine und Dateien zurück",
             "couldntRead": "Gelöschte Sandboxes konnten nicht gelesen werden",
             "couldntRestore": "Diese Sandbox konnte nicht wiederhergestellt werden",
             "daysLeftToRestore": "noch {count} Tag | noch {count} Tage",
             "nothingToRestore": "Nichts wiederherzustellen",
-            "reading": "Gelöschte Sandboxes werden gelesen"
+            "reading": "Gelöschte Sandboxes werden gelesen",
+            "keptForDays": "Nach dem Löschen {count} Tag aufbewahrt | Nach dem Löschen {count} Tage aufbewahrt",
+            "paletteTitle": "Kürzlich gelöschte Sandboxes"
         },
         "sandboxDevices": {
             "couldntListDevices": "Ihre Geräte ließen sich nicht auflisten."
@@ -3431,8 +3433,7 @@
             "overview": "Überblick",
             "reach": "Reichweite",
             "secrets": "Geheimnisse",
-            "usage": "Nutzung",
-            "yourSandboxes": "Deine Sandboxes"
+            "usage": "Nutzung"
         },
         "sandboxOutdatedNotice": {
             "manual": "Selbst installiert? Installiere sie neu oder führe dies auf dem Rechner aus, auf dem sie läuft:",
@@ -3549,7 +3550,7 @@
             "removeHostedMachineDestroyed": "„{name}“ entfernen? Die Maschine wird jetzt gestoppt, und alle hier verlieren den Zugriff.",
             "restorableHostedDays": "Du kannst sie {count} Tag lang wiederherstellen; Maschine und Dateien bleiben bis dahin erhalten. | Du kannst sie {count} Tage lang wiederherstellen; Maschine und Dateien bleiben bis dahin erhalten.",
             "restorableOwnDays": "Du kannst sie {count} Tag lang wiederherstellen, sie kommt aber mit einer neuen Adresse zurück, die Maschine dort muss also erneut verbunden werden. | Du kannst sie {count} Tage lang wiederherstellen, sie kommt aber mit einer neuen Adresse zurück, die Maschine dort muss also erneut verbunden werden.",
-            "restoreWhere": "Wiederherstellen kannst du sie unter Sandbox-Einstellungen ▸ Kürzlich gelöscht.",
+            "restoreWhere": "Wiederherstellen kannst du sie unter Geräte ▸ Kürzlich gelöscht.",
             "rollBack": "Zurückrollen",
             "runsOn": "Läuft auf",
             "sandboxes": "Sandboxes",

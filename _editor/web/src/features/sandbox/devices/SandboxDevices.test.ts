@@ -147,6 +147,8 @@ jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities
 // ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
 jest.mock(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+// The account's deleted sandboxes read the platform, which this suite does not stand up; trashWindow.test.ts covers when it shows.
+jest.mock(`./deleted/RecentlyDeleted.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Which machine is on screen lives in the URL, so the harness carries a real (reactive) one: the tab reads
 // `?device=`, and its own auto-select writes it back through `replace`.

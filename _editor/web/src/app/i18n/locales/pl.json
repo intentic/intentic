@@ -5918,14 +5918,16 @@
             "restartBecomesButton": "restart stanie się tutaj przyciskiem.",
             "restartingTheSandbox": "Restart sandboxa"
         },
-        "sandboxDeleted": {
+        "recentlyDeleted": {
             "comesBackAsName": "Wraca z nowym adresem, więc maszynę, na której działało, trzeba połączyć ponownie",
             "comesBackWithMachine": "Wraca razem z maszyną i plikami",
             "couldntRead": "Nie udało się odczytać usuniętych sandboxów",
             "couldntRestore": "Nie udało się przywrócić tego sandboxa",
             "daysLeftToRestore": "został {count} dzień | zostało {count} dni",
             "nothingToRestore": "Nic do przywrócenia",
-            "reading": "Odczytywanie usuniętych sandboxów"
+            "reading": "Odczytywanie usuniętych sandboxów",
+            "keptForDays": "Przechowywane przez {count} dzień od usunięcia | Przechowywane przez {count} dni od usunięcia",
+            "paletteTitle": "Ostatnio usunięte sandboxy"
         },
         "sandboxDevices": {
             "couldntListDevices": "Nie udało się wypisać Twoich urządzeń."
@@ -5974,8 +5976,7 @@
             "overview": "Przegląd",
             "reach": "Zasięg",
             "secrets": "Sekrety",
-            "usage": "Zużycie",
-            "yourSandboxes": "Twoje sandboxy"
+            "usage": "Zużycie"
         },
         "sandboxOutdatedNotice": {
             "manual": "Instalacja własna? Zainstaluj ponownie albo uruchom to na maszynie, na której działa:",
@@ -6117,7 +6118,7 @@
             "removeHostedMachineDestroyed": "Usunąć „{name}”? Maszyna zostanie teraz zatrzymana, a wszyscy tutaj stracą dostęp.",
             "restorableHostedDays": "Możesz je przywrócić przez {count} dzień; maszyna i pliki są przechowywane do tego czasu. | Możesz je przywrócić przez {count} dni; maszyna i pliki są przechowywane do tego czasu.",
             "restorableOwnDays": "Możesz je przywrócić przez {count} dzień, ale wróci z nowym adresem, więc tamtą maszynę trzeba będzie połączyć ponownie. | Możesz je przywrócić przez {count} dni, ale wróci z nowym adresem, więc tamtą maszynę trzeba będzie połączyć ponownie.",
-            "restoreWhere": "Przywrócisz je w Ustawienia sandboxa ▸ Ostatnio usunięte.",
+            "restoreWhere": "Przywrócisz je w Urządzenia ▸ Ostatnio usunięte.",
             "rollBack": "Wycofaj",
             "runsOn": "Działa na",
             "sandboxes": "Sandboksy",

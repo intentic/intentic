@@ -23,7 +23,6 @@ import { sourcesNeedingSomeone } from "./models/modelSources";
 import { useModelSources } from "./models/useModelSources";
 import { providerDisplayLabel } from "../chat/accounts/providerCatalog";
 import { useChat } from "../chat/run/useChat";
-import SandboxDeleted from "./deleted/SandboxDeleted.vue";
 import SandboxEnvironment from "./environment/SandboxEnvironment.vue";
 import SandboxExtensions from "./extensions/SandboxExtensions.vue";
 import { toListing, updateCount } from "./extensions/discoverListing";
@@ -161,7 +160,6 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxModels v-else-if="slug === `models`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
-            <SandboxDeleted v-else-if="slug === `deleted`" />
             <!-- Extension-contributed sections, with the same error boundary and lazy-view cache the rail's routed host uses. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />
         </template>

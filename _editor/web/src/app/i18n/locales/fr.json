@@ -3384,14 +3384,16 @@
             "stillHereRun": "Toujours là ? Lancez",
             "updateSandboxImage": "Mettez à jour l'image du sandbox."
         },
-        "sandboxDeleted": {
+        "recentlyDeleted": {
             "comesBackAsName": "Revient avec une nouvelle adresse : la machine sur laquelle il tournait devra être reconnectée",
             "comesBackWithMachine": "Revient avec sa machine et ses fichiers",
             "couldntRead": "Impossible de lire les sandboxes supprimés",
             "couldntRestore": "Impossible de restaurer ce sandbox",
             "daysLeftToRestore": "{count} jour restant | {count} jours restants",
             "nothingToRestore": "Rien à restaurer",
-            "reading": "Lecture des sandboxes supprimés"
+            "reading": "Lecture des sandboxes supprimés",
+            "keptForDays": "Conservés {count} jour après leur suppression | Conservés {count} jours après leur suppression",
+            "paletteTitle": "Sandboxes supprimés récemment"
         },
         "sandboxDevices": {
             "couldntListDevices": "Impossible de lister vos appareils."
@@ -3429,8 +3431,7 @@
         "sandboxNav": {
             "box": "Cette boîte",
             "overview": "Vue d'ensemble",
-            "reach": "Portée",
-            "yourSandboxes": "Vos sandboxes"
+            "reach": "Portée"
         },
         "sandboxOutdatedNotice": {
             "manual": "Installée vous-même ? Réinstallez-la, ou lancez ceci sur la machine qui l'exécute :",
@@ -3547,7 +3548,7 @@
             "removeHostedMachineDestroyed": "Supprimer « {name} » ? Sa machine s'arrête maintenant et tout le monde ici perd l'accès.",
             "restorableHostedDays": "Vous pouvez le restaurer pendant {count} jour ; sa machine et ses fichiers sont conservés jusque-là. | Vous pouvez le restaurer pendant {count} jours ; sa machine et ses fichiers sont conservés jusque-là.",
             "restorableOwnDays": "Vous pouvez le restaurer pendant {count} jour, mais il revient avec une nouvelle adresse : la machine là-bas devra être reconnectée. | Vous pouvez le restaurer pendant {count} jours, mais il revient avec une nouvelle adresse : la machine là-bas devra être reconnectée.",
-            "restoreWhere": "Vous pouvez le restaurer depuis Paramètres du sandbox ▸ Supprimés récemment.",
+            "restoreWhere": "Vous pouvez le restaurer depuis Appareils ▸ Supprimés récemment.",
             "rollBack": "Revenir en arrière",
             "runsOn": "Tourne sur",
             "sandboxes": "Sandboxes",

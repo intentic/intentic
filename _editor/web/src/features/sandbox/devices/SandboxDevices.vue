@@ -6,7 +6,7 @@ import AddDeviceDialog from "./AddDeviceDialog.vue";
 import ContainerHealthCard from "./health/ContainerHealthCard.vue";
 import DeviceBoard from "./board/DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
-import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
+import { boardRoute, DELETED_ANCHOR, deviceRoute, selectedKey } from "./deviceLinks";
 import { machineRows, slugOfDaemonUrl, withSandboxNames } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -16,7 +16,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-// The Sandbox hub's Devices tab: what is on the other end of this sandbox. Two screens, one URL — the
+// The Devices view's body: what is on the other end of this sandbox. Two screens, one URL — the
 // board of every machine, and `?device=<key>` for one of them — so a machine is deep-linkable and the back
 // button works, instead of the reader's place living in four sets of accordion state.
 
@@ -70,7 +70,9 @@ watch(
         }
         chosen.value = true;
         const only = known.length === 1 ? known[0] : undefined;
-        if (only !== undefined && selectedKey(route.query[`device`]) === undefined) {
+        // Not for a reader who came for the deleted sandboxes (`#deleted`): those sit at the board's foot, and the
+        // machine's page has no place for boxes that are no longer on it.
+        if (only !== undefined && selectedKey(route.query[`device`]) === undefined && route.hash !== `#${DELETED_ANCHOR}`) {
             void router.replace(deviceRoute(only.key));
         }
     },

@@ -76,7 +76,7 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
     },
 };
 
-// One of each lane, so Sandbox ▸ Recently deleted shows both sentences a restore can promise.
+// One of each lane, so Devices ▸ Recently deleted shows both sentences a restore can promise.
 const DEMO_TRASH: readonly TrashedSandbox[] = [
     {
         id: `trash-staging`,

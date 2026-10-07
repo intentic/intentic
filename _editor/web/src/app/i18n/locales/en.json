@@ -6237,14 +6237,16 @@
             "restartBecomesButton": "this becomes a button.",
             "restartingTheSandbox": "Restarting the sandbox"
         },
-        "sandboxDeleted": {
+        "recentlyDeleted": {
             "comesBackAsName": "Comes back with a new address, so the machine it ran on has to be connected again",
             "comesBackWithMachine": "Comes back with its machine and files",
             "couldntRead": "Couldn't read deleted sandboxes",
             "couldntRestore": "Couldn't restore that sandbox",
             "daysLeftToRestore": "{count} day left | {count} days left",
             "nothingToRestore": "Nothing to restore",
-            "reading": "Reading deleted sandboxes"
+            "reading": "Reading deleted sandboxes",
+            "keptForDays": "Kept for {count} day after you delete them | Kept for {count} days after you delete them",
+            "paletteTitle": "Recently deleted sandboxes"
         },
         "sandboxDevices": {
             "couldntListDevices": "Couldn't list your devices."
@@ -6293,8 +6295,7 @@
             "overview": "Overview",
             "reach": "Reach",
             "secrets": "Secrets",
-            "usage": "Usage",
-            "yourSandboxes": "Your sandboxes"
+            "usage": "Usage"
         },
         "sandboxOutdatedNotice": {
             "manual": "Installed it yourself? Reinstall it, or run this on the machine that runs it:",
@@ -6399,7 +6400,7 @@
             "removeHostedMachineDestroyed": "Remove \"{name}\"? Its machine stops now, and everyone here loses access.",
             "restorableHostedDays": "You can restore it for {count} day; its machine and its files are kept until then. | You can restore it for {count} days; its machine and its files are kept until then.",
             "restorableOwnDays": "You can restore it for {count} day, though it comes back with a new address, so the box out there has to be connected again. | You can restore it for {count} days, though it comes back with a new address, so the box out there has to be connected again.",
-            "restoreWhere": "Restore it from Sandbox settings ▸ Recently deleted.",
+            "restoreWhere": "Restore it from Devices ▸ Recently deleted.",
             "rollBack": "Roll back",
             "runsOn": "Runs on",
             "sandboxes": "Sandboxes",
