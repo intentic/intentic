@@ -40,6 +40,7 @@ const FONTS: Partial<Readonly<Record<PageThemeVariable, string>>> = {
 
 // Bumped whenever <html> changes what the roles resolve to: the scheme (`data-mode`), the accent (inline custom
 // properties) or a skin (its class or data attributes). One observer for every page in every chat.
+// allow(module-state): the editor's own appearance, which no sandbox switch changes
 const look = shallowRef(0);
 let watching = false;
 const watchLook = (): void => {

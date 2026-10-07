@@ -276,7 +276,7 @@ test("an archive answers like the folder it holds, nothing writes into one, and 
 
     // The archive is a folder here: `site/` was its own name, so its contents sit one level in, as Extract lands them.
     expect(await client.workspace.children({ path: "drops/site.tar.gz" })).toEqual({
-        entries: [{ name: "index.html", path: "drops/site.tar.gz/index.html", type: "file", size: 11 }],
+        entries: [{ name: "index.html", path: "drops/site.tar.gz/index.html", type: "file", size: 11, mtime: expect.any(Number) }],
         hidden: 0,
     });
 

@@ -46,7 +46,7 @@ import { useT } from "@intentic/ui/i18n";
 // unreadable as colour alone to a red-weak reader.
 
 // Refreshes on arrival since plan pools are account-wide (other clients spend the same allowance), so a stale
-// read looks confidently wrong. Same pattern as the account rows' rings in Sandbox ▸ Models (models/ProviderAccounts.vue).
+// read looks confidently wrong.
 const t = useT();
 
 onMounted(() => void refreshConnections());

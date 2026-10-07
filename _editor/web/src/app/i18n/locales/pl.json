@@ -6732,6 +6732,10 @@
                     "label": "Panele",
                     "where": "panele operatora na pasku bocznym"
                 },
+                "pages": {
+                    "label": "Strony w czacie",
+                    "where": "interaktywne strony, które agent pokazuje w czacie"
+                },
                 "personas": {
                     "label": "Persony",
                     "where": "tożsamości, w imieniu których mówi agent"

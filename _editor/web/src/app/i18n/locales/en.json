@@ -7084,6 +7084,10 @@
                     "label": "Panels",
                     "where": "the operator panels in the sidebar"
                 },
+                "pages": {
+                    "label": "Pages in chat",
+                    "where": "the interactive pages an agent shows in a chat"
+                },
                 "personas": {
                     "label": "Personas",
                     "where": "the identities the agent speaks as"

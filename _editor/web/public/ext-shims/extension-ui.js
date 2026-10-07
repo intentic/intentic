@@ -2,6 +2,7 @@
 // Re-exports the host's "@intentic/extension-ui" instance (src/extension-host/hostModules.ts).
 const m = globalThis.__intenticHost.modules["@intentic/extension-ui"];
 export const ActionSheet = m["ActionSheet"];
+export const AddressField = m["AddressField"];
 export const AgentRunButton = m["AgentRunButton"];
 export const AnchoredOverlay = m["AnchoredOverlay"];
 export const Avatar = m["Avatar"];

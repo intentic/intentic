@@ -305,7 +305,7 @@
             "verb": "q",
             "query": "No turns on this account yet.",
             "slices": ["ui-copy"],
-            "expected": [{ "file": "_editor/web/src/features/sandbox/secrets/AiAccountSection.vue", "line": 161 }],
+            "expected": [{ "file": "_editor/web/src/features/sandbox/models/ProviderPanel.vue", "line": 152 }],
             "notes": "en.json sandbox.aiAccountSection.noTurnsYet."
         },
         {

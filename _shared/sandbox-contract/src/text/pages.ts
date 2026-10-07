@@ -294,9 +294,10 @@ export interface McpAppData {
 }
 export const mcpAppDataScript = (data: McpAppData): string =>
     `<script type="application/json" id="${MCP_APP_DATA_ID}">${JSON.stringify(data).replace(/</g, `\\u003c`)}</script>`;
+const MCP_APP_DATA_BLOCK = new RegExp(`<script type="application/json" id="${MCP_APP_DATA_ID}">([\\s\\S]*?)</script>`);
 // Read back out of a stored page's text; undefined for a page that is not an app's, or a block that does not parse.
 export const readMcpAppData = (html: string): McpAppData | undefined => {
-    const match = new RegExp(`<script type="application/json" id="${MCP_APP_DATA_ID}">([\\s\\S]*?)</script>`).exec(html);
+    const match = MCP_APP_DATA_BLOCK.exec(html);
     if (match === null) {
         return undefined;
     }

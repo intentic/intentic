@@ -1,4 +1,4 @@
-// The 43 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 44 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -87,6 +87,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         label: "Past sessions",
         summary: "Conversations that have finished, and their transcripts",
         description: "Two reads. The list of past conversations, and one conversation's full record by id.",
+    },
+    {
+        name: "pages",
+        shelf: "agents",
+        label: "Pages in chat",
+        summary: "Tool calls an MCP app makes while a reader uses it in a chat",
+        description:
+            "An agent can show an MCP server's app inside a chat. The app's frame reaches no network of its own, so when a reader uses it and it asks its server for something, the sandbox carries that call. Only a tool the server marks as callable by its app is answered, and without a press only a read-only one.",
     },
     {
         name: "workflows",
